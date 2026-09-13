@@ -267,8 +267,17 @@ class _RenderSingleChildViewport extends RenderBox
     // kills a rubber band the moment anything inside relayouts — see the class
     // doc above. Leaving it out hands the same job to the physics, via
     // applyContentDimensions below, exactly as sliver viewports do.
+    //
+    // Like them, it re-applies until the position accepts: a false return
+    // means the physics corrected the offset and left its last-known metrics
+    // stale. Stop at the first call and the next frame compares against those
+    // stale metrics, reads the correction as a deliberate jump, and stops
+    // holding the offset in range — content shrinking under a scrolled view
+    // (a drawer collapsing) then overscrolls and springs back long after the
+    // viewport itself has settled. Child layout doesn't depend on the offset,
+    // so there is nothing to lay out again between tries.
     offset.applyViewportDimension(_viewportExtent);
-    offset.applyContentDimensions(_minScrollExtent, _maxScrollExtent);
+    while (!offset.applyContentDimensions(_minScrollExtent, _maxScrollExtent)) {}
   }
 
   Offset get _paintOffset => _paintOffsetForPosition(offset.pixels);

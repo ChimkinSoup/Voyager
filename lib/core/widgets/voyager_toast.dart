@@ -66,6 +66,10 @@ class VoyagerToast {
   /// there is no moment at which to let go of it.
   Future<void> get done => _done.future;
 
+  /// Whether the toast is on its way out — or gone — and so will ignore
+  /// [update]. True from the moment it is dismissed, before [done] completes.
+  bool get isDismissed => _dismissed;
+
   void _finish() {
     if (_removed) return;
     _removed = true;

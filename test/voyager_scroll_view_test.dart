@@ -114,6 +114,58 @@ void main() {
     },
   );
 
+  testWidgets('content shrinking under a scrolled view stays in range', (
+    tester,
+  ) async {
+    // The inbox's Hidden drawer collapsing while scrolled: the offset has to
+    // follow the content down frame by frame. If it slips out of range it
+    // springs back ballistically, long after the viewport has finished
+    // shrinking, so the panel and its text settle apart.
+    final scrollController = ScrollController();
+    addTearDown(scrollController.dispose);
+    final expanded = ValueNotifier(true);
+    addTearDown(expanded.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topCenter,
+          child: ScrollConfiguration(
+            behavior: const _BouncingBehavior(),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 400),
+              child: VoyagerScrollView(
+                controller: scrollController,
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: expanded,
+                  builder: (context, open, _) => AnimatedSize(
+                    duration: const Duration(milliseconds: 220),
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(width: 100, height: open ? 1200 : 150),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    scrollController.jumpTo(300);
+    await tester.pump();
+
+    expanded.value = false;
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      final position = scrollController.position;
+      expect(
+        position.pixels,
+        lessThanOrEqualTo(position.maxScrollExtent),
+        reason: 'offset left its range on frame $i',
+      );
+    }
+    expect(tester.getSize(find.byType(VoyagerScrollView)).height, 150);
+  });
+
   testWidgets('lets its cross axis shrink-wrap the child', (tester) async {
     // Horizontal scrollers in the app sit in Columns and rely on the viewport
     // taking its height from the content, which a sliver viewport would not do.

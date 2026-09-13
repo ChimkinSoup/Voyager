@@ -56,11 +56,22 @@ const double kNotificationPopoverWidth = 532;
 /// The notification bell's popover content: pinned quick-reminders, the
 /// unified urgency-sorted feed, a hidden/dismissed browser, and an embedded
 /// daily-stats logger.
-class NotificationInboxPopover extends ConsumerWidget {
+class NotificationInboxPopover extends ConsumerStatefulWidget {
   const NotificationInboxPopover({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NotificationInboxPopover> createState() =>
+      _NotificationInboxPopoverState();
+}
+
+class _NotificationInboxPopoverState
+    extends ConsumerState<NotificationInboxPopover> {
+  /// How the header's Show hidden reaches the drawer at the bottom of the
+  /// panel — a sibling, not an ancestor.
+  final _hiddenKey = GlobalKey<_HiddenSectionState>();
+
+  @override
+  Widget build(BuildContext context) {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.75;
     return Material(
       type: MaterialType.transparency,
@@ -76,13 +87,13 @@ class NotificationInboxPopover extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _Header(
-                onClearAll: () => _clearAll(ref),
-                onRestoreAll: () => _restoreAll(ref),
+                onClearAll: _clearAll,
+                onShowHidden: () => _hiddenKey.currentState?.reveal(),
               ),
               const _PinnedNotesSection(),
               const _FeedSection(),
               const _AnalyticsSection(),
-              const _HiddenSection(),
+              _HiddenSection(key: _hiddenKey),
             ],
           ),
         ),
@@ -90,33 +101,61 @@ class NotificationInboxPopover extends ConsumerWidget {
     );
   }
 
-  Future<void> _clearAll(WidgetRef ref) async {
+  Future<void> _clearAll() async {
+    // Captured before the write: the popover may close while it runs, and
+    // the undo has to outlive it.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
     final visible = await ref.read(visibleNotificationFeedProvider.future);
     if (visible.isEmpty) return;
-    final repo = ref.read(notificationRepositoryProvider);
+    final repo = container.read(notificationRepositoryProvider);
     for (final item in visible) {
       await repo.dismiss(item.dismissalKey);
     }
-    ref.invalidate(notificationDismissalsProvider);
-  }
-
-  /// The inverse of [_clearAll]: puts every hidden item back in the feed.
-  Future<void> _restoreAll(WidgetRef ref) async {
-    final hidden = await ref.read(hiddenNotificationFeedProvider.future);
-    if (hidden.isEmpty) return;
-    final repo = ref.read(notificationRepositoryProvider);
-    for (final item in hidden) {
-      await repo.undismiss(item.dismissalKey);
-    }
-    ref.invalidate(notificationDismissalsProvider);
+    container.invalidate(notificationDismissalsProvider);
+    _offerHideUndo(overlay: overlay, container: container, items: visible);
   }
 }
 
+/// The title a feed item goes by — a bill's is its name.
+String _feedTitle(NotificationFeedItem item) => switch (item.type) {
+  NotificationItemType.task => item.task!.title,
+  NotificationItemType.event => item.event!.title,
+  NotificationItemType.bill => item.bill!.name,
+};
+
+/// Offers Undo for [items], whose dismissals have already been written.
+///
+/// Undo brings back only what is still dismissed: a key restored from Hidden
+/// in the meantime is skipped rather than tombstoned a second time, which
+/// would bump its version and push a sync write for nothing.
+void _offerHideUndo({
+  required OverlayState overlay,
+  required ProviderContainer container,
+  required List<NotificationFeedItem> items,
+}) {
+  final first = items.first;
+  showHideUndoToast(
+    overlay: overlay,
+    keys: [for (final item in items) item.dismissalKey],
+    message: hiddenMessage(_feedTitle(first), fallback: first.type.name),
+    restore: (keys) async {
+      final repo = container.read(notificationRepositoryProvider);
+      for (final key in keys) {
+        final dismissal = await repo.getDismissal(key);
+        if (dismissal == null || !dismissal.isDismissed) continue;
+        await repo.undismiss(key);
+      }
+      container.invalidate(notificationDismissalsProvider);
+    },
+  );
+}
+
 class _Header extends ConsumerWidget {
-  const _Header({required this.onClearAll, required this.onRestoreAll});
+  const _Header({required this.onClearAll, required this.onShowHidden});
 
   final VoidCallback onClearAll;
-  final VoidCallback onRestoreAll;
+  final VoidCallback onShowHidden;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -162,18 +201,17 @@ class _Header extends ConsumerWidget {
             ),
           ),
           // Each action only appears where it has something to act on: no
-          // restoring from an empty hidden list, no clearing an empty feed.
+          // opening an empty hidden list, no clearing an empty feed.
           if (hidden.isNotEmpty)
             Semantics(
               button: true,
-              label: 'Restore all',
+              label: 'Show hidden',
               child: GlassButton(
-                onPressed: onRestoreAll,
-                icon: const Icon(
-                  PhosphorIconsRegular.arrowCounterClockwise,
-                  size: 14,
-                ),
-                tooltip: 'Restore all',
+                onPressed: onShowHidden,
+                // An eye, not the restore arrow: this only opens the list.
+                // Putting items back is done from inside it.
+                icon: const Icon(PhosphorIconsRegular.eye, size: 14),
+                tooltip: 'Show hidden',
                 dense: true,
               ),
             ),
@@ -1076,12 +1114,20 @@ class _FeedRowState extends ConsumerState<_FeedRow>
   }
 
   Future<void> _dismiss() async {
-    await _exit.forward();
-    if (!mounted) return;
-    await ref
+    // Captured before the write: the popover may close while it runs, and the
+    // toast offering the undo has to outlive the row.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final item = widget.item;
+    // Stored on press — the exit animation must not gate the hide, or closing
+    // the popover mid-animation would cancel a dismiss the user already asked
+    // for.
+    await container
         .read(notificationRepositoryProvider)
-        .dismiss(widget.item.dismissalKey);
-    ref.invalidate(notificationDismissalsProvider);
+        .dismiss(item.dismissalKey);
+    container.invalidate(notificationDismissalsProvider);
+    _offerHideUndo(overlay: overlay, container: container, items: [item]);
+    if (mounted) await _exit.forward();
   }
 
   Future<void> _complete() async {
@@ -1369,7 +1415,7 @@ class _FeedRowState extends ConsumerState<_FeedRow>
                       // No gap after it: the leading slot is wider than what
                       // it holds, so the spacing is already inside the box.
                       _leading(theme),
-                      Expanded(child: _titleAndSubtitle(theme)),
+                      Expanded(child: _FeedItemText(item: widget.item)),
                       const SizedBox(width: 6),
                       // Fixed-width slot, same as the tracker rows below —
                       // keeps the row's width constant whether or not the
@@ -1432,13 +1478,20 @@ class _FeedRowState extends ConsumerState<_FeedRow>
     );
   }
 
-  Widget _titleAndSubtitle(ThemeData theme) {
-    final item = widget.item;
-    final title = switch (item.type) {
-      NotificationItemType.task => item.task!.title,
-      NotificationItemType.event => item.event!.title,
-      NotificationItemType.bill => item.bill!.name,
-    };
+}
+
+/// A feed item's title over its due / date · time / amount · due line — the
+/// same two lines in the live feed and in Hidden, so a hidden item can be told
+/// apart from its namesake the way it could before it was hidden.
+class _FeedItemText extends StatelessWidget {
+  const _FeedItemText({required this.item});
+
+  final NotificationFeedItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = _feedTitle(item);
     final isOverdue = _isOverdueItem(item.dueAt);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1471,7 +1524,6 @@ class _FeedRowState extends ConsumerState<_FeedRow>
   }
 
   String _subtitle() {
-    final item = widget.item;
     switch (item.type) {
       case NotificationItemType.task:
         return _dueLabel(item.dueAt);
@@ -1604,16 +1656,48 @@ class _FooterTrigger extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _HiddenSection extends ConsumerStatefulWidget {
-  const _HiddenSection();
+  const _HiddenSection({super.key});
 
   @override
   ConsumerState<_HiddenSection> createState() => _HiddenSectionState();
 }
 
-class _HiddenSectionState extends ConsumerState<_HiddenSection> {
+class _HiddenSectionState extends ConsumerState<_HiddenSection>
+    with SingleTickerProviderStateMixin {
   final GlobalKey _headerKey = GlobalKey();
   bool _expanded = false;
   final Set<String> _selected = {};
+
+  /// Drives the rows' clip. The rows stay mounted until it is fully closed,
+  /// so collapsing slides them under the drawer's bottom edge instead of
+  /// dropping them on the first frame and animating only the empty space.
+  late final AnimationController _drawer;
+  late final CurvedAnimation _drawerCurve;
+
+  @override
+  void initState() {
+    super.initState();
+    _drawer = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    );
+    _drawerCurve = CurvedAnimation(
+      parent: _drawer,
+      curve: VoyagerSpring.moveCurve,
+    );
+  }
+
+  @override
+  void dispose() {
+    _drawerCurve.dispose();
+    _drawer.dispose();
+    super.dispose();
+  }
+
+  void _setExpanded(bool expanded) {
+    setState(() => _expanded = expanded);
+    expanded ? _drawer.forward() : _drawer.reverse();
+  }
 
   void _toggleSelected(String key) {
     setState(() {
@@ -1622,18 +1706,48 @@ class _HiddenSectionState extends ConsumerState<_HiddenSection> {
   }
 
   Future<void> _restoreSelected() async {
-    final repo = ref.read(notificationRepositoryProvider);
-    for (final key in _selected) {
+    // Captured before the awaits: closing the popover mid-restore must not
+    // skip the invalidate on a keepAlive dismissals cache.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final selected = _selected.toList();
+    final repo = container.read(notificationRepositoryProvider);
+    for (final key in selected) {
       await repo.undismiss(key);
     }
-    setState(_selected.clear);
-    ref.invalidate(notificationDismissalsProvider);
+    if (mounted) setState(_selected.clear);
+    container.invalidate(notificationDismissalsProvider);
+  }
+
+  /// Puts every hidden item back in the feed.
+  Future<void> _restoreAll() async {
+    // Captured before the awaits: closing the popover mid-restore must not
+    // skip the invalidate on a keepAlive dismissals cache.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final hidden =
+        await container.read(hiddenNotificationFeedProvider.future);
+    if (hidden.isEmpty) return;
+    final repo = container.read(notificationRepositoryProvider);
+    for (final item in hidden) {
+      await repo.undismiss(item.dismissalKey);
+    }
+    container.invalidate(notificationDismissalsProvider);
   }
 
   void _toggleExpanded() {
     final expanding = !_expanded;
-    setState(() => _expanded = expanding);
-    if (!expanding) return;
+    _setExpanded(expanding);
+    if (expanding) _scrollIntoView();
+  }
+
+  /// Opens the drawer and brings it on screen — the header's Show hidden.
+  ///
+  /// Never closes it: pressed with the drawer already open, it only scrolls.
+  void reveal() {
+    if (!_expanded) _setExpanded(true);
+    _scrollIntoView();
+  }
+
+  void _scrollIntoView() {
     // Wait for the newly revealed rows to lay out, then scroll the popover
     // so the header lands at the top of the visible area — or as far down
     // as the content allows, if there isn't enough below it to do that.
@@ -1657,6 +1771,14 @@ class _HiddenSectionState extends ConsumerState<_HiddenSection> {
     // Drop selections for items that are no longer hidden (e.g. restored
     // elsewhere, or escalated back into the main feed).
     _selected.retainAll(hidden.map((i) => i.dismissalKey).toSet());
+    final curve = VoyagerMotion.reduced(context)
+        ? Curves.easeOut
+        : VoyagerSpring.moveCurve;
+    // Flipped for the close, so it leaves fast and settles the way the open
+    // does, rather than creeping out and snapping shut.
+    _drawerCurve
+      ..curve = curve
+      ..reverseCurve = curve.flipped;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1665,40 +1787,51 @@ class _HiddenSectionState extends ConsumerState<_HiddenSection> {
           expanded: _expanded,
           label: 'Hidden (${hidden.length})',
           onTap: _toggleExpanded,
-          trailing: _expanded && _selected.isNotEmpty
+          // Nothing to restore from a closed drawer. Open, it is one button or
+          // the other — never Restore all beside a selection, where a mis-tap
+          // would dump the rest of the list back into the feed.
+          trailing: !_expanded
+              ? null
+              : _selected.isNotEmpty
               ? GlassButton(
                   onPressed: _restoreSelected,
                   label: 'Restore (${_selected.length})',
                   dense: true,
                 )
-              : null,
+              : GlassButton(
+                  onPressed: _restoreAll,
+                  label: 'Restore all',
+                  dense: true,
+                ),
         ),
         // Animates both ways — growing open and shrinking closed — instead
         // of the row list just appearing/disappearing and snapping the
-        // scroll view around it.
-        AnimatedSize(
-          duration: const Duration(milliseconds: 220),
-          curve: VoyagerMotion.reduced(context)
-              ? Curves.easeOut
-              : VoyagerSpring.moveCurve,
-          alignment: Alignment.topCenter,
-          child: _expanded
-              ? Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final item in hidden)
-                        _HiddenRow(
-                          key: ValueKey(item.dismissalKey),
-                          item: item,
-                          selected: _selected.contains(item.dismissalKey),
-                          onToggle: () => _toggleSelected(item.dismissalKey),
-                        ),
-                    ],
+        // scroll view around it. Top-aligned, so closing clips from the
+        // bottom and the rows slip under the panel's edge.
+        AnimatedBuilder(
+          animation: _drawer,
+          builder: (context, rows) => _drawer.isDismissed
+              ? const SizedBox.shrink()
+              : SizeTransition(
+                  sizeFactor: _drawerCurve,
+                  alignment: Alignment.topCenter,
+                  child: rows,
+                ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final item in hidden)
+                  _HiddenRow(
+                    key: ValueKey(item.dismissalKey),
+                    item: item,
+                    selected: _selected.contains(item.dismissalKey),
+                    onToggle: () => _toggleSelected(item.dismissalKey),
                   ),
-                )
-              : const SizedBox.shrink(),
+              ],
+            ),
+          ),
         ),
       ],
     );
@@ -1720,10 +1853,22 @@ class _HiddenRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final title = switch (item.type) {
-      NotificationItemType.task => item.task!.title,
-      NotificationItemType.event => item.event!.title,
-      NotificationItemType.bill => item.bill!.name,
+    // Static, and no urgency dot: Hidden is archival, not a second feed.
+    final (IconData glyph, Color color) = switch (item.type) {
+      // A round tick rather than the feed's checkbox — beside the selection
+      // box it would read as a second checkbox, and one that does nothing.
+      NotificationItemType.task => (
+        PhosphorIconsRegular.checkCircle,
+        theme.colorScheme.primary,
+      ),
+      NotificationItemType.event => (
+        PhosphorIconsRegular.calendarDot,
+        Color(resolvePaletteColor(item.event!.colorValue, theme.brightness)),
+      ),
+      NotificationItemType.bill => (
+        PhosphorIconsRegular.currencyDollar,
+        Color(resolvePaletteColor(item.bill!.colorValue, theme.brightness)),
+      ),
     };
     return InkWell(
       onTap: onToggle,
@@ -1733,15 +1878,10 @@ class _HiddenRow extends StatelessWidget {
         child: Row(
           children: [
             _MiniCheckbox(value: selected, accent: theme.colorScheme.primary),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                title.isEmpty ? '(untitled)' : title,
-                style: theme.textTheme.bodySmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+            const SizedBox(width: 10),
+            Icon(glyph, size: 18, color: color),
+            const SizedBox(width: 10),
+            Expanded(child: _FeedItemText(item: item)),
           ],
         ),
       ),
