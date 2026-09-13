@@ -1415,8 +1415,8 @@
     "semantic_hash": ""
   },
   "lib/domain/services/finance_analytics.dart": {
-    "mtime": 1789246456.2743647,
-    "ast_hash": "2ec48cb268e9d7ff223301b61015b0c3",
+    "mtime": 1789253842.7452128,
+    "ast_hash": "b5e9c6a4e7daa4534a03ff17dc90d0a3",
     "semantic_hash": ""
   },
   "lib/features/analytics/sparkline_touch.dart": {
@@ -1480,8 +1480,8 @@
     "semantic_hash": ""
   },
   "lib/features/finance/finance_page.dart": {
-    "mtime": 1789251381.8750744,
-    "ast_hash": "973655cc568822c586bab9f153fc610a",
+    "mtime": 1789254534.6573417,
+    "ast_hash": "ea37d4e2ff78c8bacb90af7bcf2afce1",
     "semantic_hash": ""
   },
   "lib/features/finance/finance_subscription_modal.dart": {
@@ -4925,8 +4925,8 @@
     "semantic_hash": ""
   },
   "lib/features/finance/finance_ui_prefs.dart": {
-    "mtime": 1789248345.4390945,
-    "ast_hash": "f1a7d546c44dd5cb596c8463657c29e0",
+    "mtime": 1789253850.4022856,
+    "ast_hash": "dab6b3bbebaf6981120ab54fa0f7a71f",
     "semantic_hash": ""
   },
   "test/finance_breakdown_focus_test.dart": {
@@ -4945,8 +4945,8 @@
     "semantic_hash": ""
   },
   "test/finance_ui_prefs_test.dart": {
-    "mtime": 1789248427.9700005,
-    "ast_hash": "8ab005b58a838cd61f643b0fbd77fa0b",
+    "mtime": 1789254322.8480115,
+    "ast_hash": "859e90419713fb021315971ff6818150",
     "semantic_hash": ""
   },
   "test/tag_palette_test.dart": {
@@ -4992,6 +4992,31 @@
   "test/finance_upcoming_ledger_test.dart": {
     "mtime": 1789250272.2484918,
     "ast_hash": "71930dbcc1347f5dc0704d93a66bf110",
+    "semantic_hash": ""
+  },
+  "lib/features/finance/finance_net_flow_calendar.dart": {
+    "mtime": 1789254052.901407,
+    "ast_hash": "a9c76f94de7fda5c5efb2adf9c3d349a",
+    "semantic_hash": ""
+  },
+  "lib/features/finance/finance_net_flow_chart.dart": {
+    "mtime": 1789254670.3382826,
+    "ast_hash": "30e36298f74c942e1ce196f73dbe9436",
+    "semantic_hash": ""
+  },
+  "lib/features/finance/finance_net_flow_hero.dart": {
+    "mtime": 1789254670.3567967,
+    "ast_hash": "ac6228518317dfd8eaf4cb63b392b6c3",
+    "semantic_hash": ""
+  },
+  "test/finance_net_flow_test.dart": {
+    "mtime": 1789254670.360803,
+    "ast_hash": "2aae1af64472c69920d9b54eebac4242",
+    "semantic_hash": ""
+  },
+  "test/finance_net_flow_view_test.dart": {
+    "mtime": 1789254670.3638065,
+    "ast_hash": "eede081183cca7c70e60f8f53e452d17",
     "semantic_hash": ""
   }
 }
