@@ -285,7 +285,7 @@ void main() {
     final children = await harness.repo.listChildren(parent.id);
     await RankingsActions.detached(
       harness.container,
-    ).averageFromChildren(parent, category, children);
+    ).averageFromChildren(parent.id, category, children);
 
     // 8.3 and 8.4 mean 8.35, which on halves is 8.5. The unscored unit is not
     // a zero.

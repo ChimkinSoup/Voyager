@@ -69,7 +69,14 @@ class BackupCollection {
 /// Excluded from [backupContentEquals] so that re-importing a backup of
 /// records the database already holds is recognised as a no-op, even though
 /// the local copy has since been bumped by an unrelated sync round trip.
-const _metadataFields = {'version', 'updatedAt', 'settingsUpdatedAt'};
+const _metadataFields = {
+  'version',
+  'updatedAt',
+  'settingsUpdatedAt',
+  // Rankings' per-field merge stamps, and the version they were written at.
+  'fieldUpdatedAt',
+  'fieldStampsVersion',
+};
 
 /// Whether two payloads describe the same record content, ignoring sync
 /// bookkeeping. `deletedAt` is content: a tombstone differs from a live row.

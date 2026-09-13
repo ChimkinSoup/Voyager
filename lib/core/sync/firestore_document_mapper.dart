@@ -3163,25 +3163,146 @@ RankingCategory mergeRankingCategoryFromRemote(
   );
 }
 
+/// Every value written whole, a cleared half as an explicit null, and every
+/// field the row has ever stamped written even once it is empty.
+///
+/// Uploads merge into the stored document, and a merge keeps any nested key
+/// the payload leaves out. A score cleared by leaving it out was never
+/// cleared remotely, and the next device to read the document put it back.
 Map<String, dynamic> _fieldValuesToFirestore(
   Map<String, RankingFieldValue> values,
-) => {
-  for (final entry in values.entries)
-    if (!entry.value.isEmpty) entry.key: entry.value.toJson(),
-};
+  RankingFieldStamps stamps,
+) {
+  final ids = {...values.keys, ..._stampedFieldIds(stamps)};
+  return {
+    for (final id in ids)
+      id: {'score': values[id]?.score, 'notes': values[id]?.notes ?? ''},
+  };
+}
+
+Iterable<String> _stampedFieldIds(RankingFieldStamps stamps) sync* {
+  for (final key in stamps.keys) {
+    if (key.startsWith('fv:')) yield key.substring(3, key.lastIndexOf(':'));
+  }
+}
 
 Map<String, RankingFieldValue> _fieldValuesFromRemote(
   dynamic value,
   Map<String, RankingFieldValue> fallback,
 ) {
   if (value is! Map) return fallback;
-  return {
-    for (final entry in value.entries)
-      if (entry.value is Map)
-        entry.key as String: RankingFieldValue.fromJson(
-          Map<String, dynamic>.from(entry.value as Map),
+  final values = <String, RankingFieldValue>{};
+  for (final entry in value.entries) {
+    if (entry.value is! Map) continue;
+    final parsed = RankingFieldValue.fromJson(
+      Map<String, dynamic>.from(entry.value as Map),
+    );
+    // Written as nulls so a merge clears them remotely; not a value here.
+    if (!parsed.isEmpty) values[entry.key as String] = parsed;
+  }
+  return values;
+}
+
+Map<String, String> _fieldStampsToFirestore(RankingFieldStamps stamps) => {
+  for (final entry in stamps.entries)
+    entry.key: _dateToFirestoreRequired(entry.value),
+};
+
+/// The remote's field stamps, or null when it has none this device can trust.
+///
+/// A build that predates stamps writes none. It can also write over a document
+/// a newer build stamped, and because uploads merge, the old stamps survive
+/// that write while describing an earlier version. `fieldStampsVersion` is
+/// the version the stamps were written with, so a mismatch gives that case
+/// away.
+RankingFieldStamps? _fieldStampsFromRemote(Map<String, dynamic> data) {
+  if (data['fieldUpdatedAt'] is! Map) return null;
+  final stampedVersion = (data['fieldStampsVersion'] as num?)?.toInt();
+  if (stampedVersion != parseVersion(data)) return null;
+  return decodeRankingFieldStamps(data['fieldUpdatedAt']);
+}
+
+/// What merging a remote entry or unit into the local one produced.
+///
+/// [localWon] is true when the local row held a newer value for some field
+/// than the remote document did. That device is then the only one holding
+/// the merged row, so the caller has to upload it or the other devices never
+/// see it.
+typedef RankingMergeResult<T> = ({T merged, bool localWon});
+
+/// Picks each field from whichever side changed it last, and keeps the stamps
+/// to match. An equal stamp goes to the remote, the same tie-break
+/// `remoteVersionWins` makes, so two devices that merged the same pair agree.
+class _RankingFieldPicker {
+  _RankingFieldPicker({
+    required this.localStamps,
+    required this.localUpdated,
+    required this.localValues,
+    required this.remoteStamps,
+    required this.remoteUpdated,
+    required this.remoteValues,
+  });
+
+  final RankingFieldStamps localStamps;
+  final DateTime localUpdated;
+  final Map<String, Object?> localValues;
+  final RankingFieldStamps remoteStamps;
+  final DateTime remoteUpdated;
+  final Map<String, Object?> remoteValues;
+
+  final stamps = <String, DateTime>{};
+  var localWon = false;
+
+  T call<T>(String key, T local, T remote) {
+    final l = localStamps[key] ?? localUpdated;
+    final r = remoteStamps[key] ?? remoteUpdated;
+    if (!r.isBefore(l)) {
+      stamps[key] = r.toUtc();
+      return remote;
+    }
+    stamps[key] = l.toUtc();
+    if (localValues[key] != remoteValues[key]) localWon = true;
+    return local;
+  }
+
+  Map<String, RankingFieldValue> fieldValues(
+    Map<String, RankingFieldValue> local,
+    Map<String, RankingFieldValue> remote,
+  ) {
+    final ids = {
+      ...local.keys,
+      ...remote.keys,
+      ..._stampedFieldIds(localStamps),
+      ..._stampedFieldIds(remoteStamps),
+    };
+    final result = <String, RankingFieldValue>{};
+    for (final id in ids) {
+      final value = RankingFieldValue(
+        score: call(
+          rankingFieldValueScoreKey(id),
+          local[id]?.score,
+          remote[id]?.score,
         ),
-  };
+        notes: call(
+          rankingFieldValueNotesKey(id),
+          local[id]?.notes ?? '',
+          remote[id]?.notes ?? '',
+        ),
+      );
+      if (!value.isEmpty) result[id] = value;
+    }
+    return result;
+  }
+
+  DateTime get updatedAt =>
+      remoteUpdated.isBefore(localUpdated) ? localUpdated : remoteUpdated;
+
+  int version(int local, int remote) {
+    final newest = local > remote ? local : remote;
+    // A merged row that differs from the remote one is a new revision, and has
+    // to outrank it for a device still comparing whole documents.
+    return localWon ? newest + 1 : newest;
+  }
 }
 
 Map<String, dynamic> rankingParentToFirestore(RankingParent parent) => {
@@ -3190,11 +3311,16 @@ Map<String, dynamic> rankingParentToFirestore(RankingParent parent) => {
   'title': parent.title,
   'overallScore': parent.overallScore,
   'notes': parent.notes,
-  'fieldValues': _fieldValuesToFirestore(parent.fieldValues),
+  'fieldValues': _fieldValuesToFirestore(
+    parent.fieldValues,
+    parent.fieldUpdatedAt,
+  ),
   'tags': parent.tags,
   'status': parent.status.name,
   'starred': parent.starred,
   'queueSortOrder': parent.queueSortOrder,
+  'fieldUpdatedAt': _fieldStampsToFirestore(parent.fieldUpdatedAt),
+  'fieldStampsVersion': parent.version,
   'createdAt': _dateToFirestoreRequired(parent.createdAt),
   'updatedAt': _dateToFirestoreRequired(parent.updatedAt),
   'version': parent.version,
@@ -3205,20 +3331,35 @@ RankingParent mergeRankingParentFromRemote(
   Map<String, dynamic> data,
   String id, {
   RankingParent? local,
+}) => resolveRankingParentFromRemote(data, id, local: local).merged;
+
+/// Merges a remote entry into [local] field by field when both sides carry
+/// stamps, and falls back to whole-document version-wins when the remote has
+/// none it can vouch for (see [_fieldStampsFromRemote]).
+///
+/// Whole-document merging took every field from whichever side had the higher
+/// version. A note typed offline on one device and a score set on another
+/// could not both survive, and the one that lost had no say in it.
+RankingMergeResult<RankingParent> resolveRankingParentFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  RankingParent? local,
 }) {
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
   final remoteVersion = parseVersion(data);
+  final remoteStamps = _fieldStampsFromRemote(data);
   if (local != null &&
+      remoteStamps == null &&
       !remoteVersionWins(
         remoteVersion: remoteVersion,
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
       )) {
-    return local;
+    return (merged: local, localWon: false);
   }
 
-  return RankingParent(
+  final remote = RankingParent(
     id: id,
     categoryId: data['categoryId'] as String? ?? local?.categoryId ?? '',
     title: data['title'] as String? ?? local?.title ?? '',
@@ -3253,7 +3394,42 @@ RankingParent mergeRankingParentFromRemote(
     updatedAt: remoteUpdated,
     version: remoteVersion,
     deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+    fieldUpdatedAt: remoteStamps ?? const {},
   );
+  if (local == null || remoteStamps == null) {
+    return (merged: remote, localWon: false);
+  }
+
+  final pick = _RankingFieldPicker(
+    localStamps: local.fieldUpdatedAt,
+    localUpdated: local.updatedAt,
+    localValues: rankingParentStampValues(local),
+    remoteStamps: remote.fieldUpdatedAt,
+    remoteUpdated: remote.updatedAt,
+    remoteValues: rankingParentStampValues(remote),
+  );
+  final merged = RankingParent(
+    id: id,
+    categoryId: remote.categoryId,
+    title: pick('title', local.title, remote.title),
+    overallScore: pick('overallScore', local.overallScore, remote.overallScore),
+    notes: pick('notes', local.notes, remote.notes),
+    fieldValues: pick.fieldValues(local.fieldValues, remote.fieldValues),
+    tags: pick('tags', local.tags, remote.tags),
+    status: pick('status', local.status, remote.status),
+    starred: pick('starred', local.starred, remote.starred),
+    queueSortOrder: pick(
+      'queueSortOrder',
+      local.queueSortOrder,
+      remote.queueSortOrder,
+    ),
+    createdAt: pick('createdAt', local.createdAt, remote.createdAt),
+    deletedAt: pick('deletedAt', local.deletedAt, remote.deletedAt),
+    updatedAt: pick.updatedAt,
+    version: pick.version(local.version, remote.version),
+    fieldUpdatedAt: pick.stamps,
+  );
+  return (merged: merged, localWon: pick.localWon);
 }
 
 Map<String, dynamic> rankingChildToFirestore(RankingChild child) => {
@@ -3262,8 +3438,13 @@ Map<String, dynamic> rankingChildToFirestore(RankingChild child) => {
   'name': child.name,
   'overallScore': child.overallScore,
   'notes': child.notes,
-  'fieldValues': _fieldValuesToFirestore(child.fieldValues),
+  'fieldValues': _fieldValuesToFirestore(
+    child.fieldValues,
+    child.fieldUpdatedAt,
+  ),
   'sortOrder': child.sortOrder,
+  'fieldUpdatedAt': _fieldStampsToFirestore(child.fieldUpdatedAt),
+  'fieldStampsVersion': child.version,
   'createdAt': _dateToFirestoreRequired(child.createdAt),
   'updatedAt': _dateToFirestoreRequired(child.updatedAt),
   'version': child.version,
@@ -3274,20 +3455,29 @@ RankingChild mergeRankingChildFromRemote(
   Map<String, dynamic> data,
   String id, {
   RankingChild? local,
+}) => resolveRankingChildFromRemote(data, id, local: local).merged;
+
+/// [resolveRankingParentFromRemote] for a unit.
+RankingMergeResult<RankingChild> resolveRankingChildFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  RankingChild? local,
 }) {
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
   final remoteVersion = parseVersion(data);
+  final remoteStamps = _fieldStampsFromRemote(data);
   if (local != null &&
+      remoteStamps == null &&
       !remoteVersionWins(
         remoteVersion: remoteVersion,
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
       )) {
-    return local;
+    return (merged: local, localWon: false);
   }
 
-  return RankingChild(
+  final remote = RankingChild(
     id: id,
     parentId: data['parentId'] as String? ?? local?.parentId ?? '',
     name: data['name'] as String? ?? local?.name ?? '',
@@ -3307,5 +3497,33 @@ RankingChild mergeRankingChildFromRemote(
     updatedAt: remoteUpdated,
     version: remoteVersion,
     deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+    fieldUpdatedAt: remoteStamps ?? const {},
   );
+  if (local == null || remoteStamps == null) {
+    return (merged: remote, localWon: false);
+  }
+
+  final pick = _RankingFieldPicker(
+    localStamps: local.fieldUpdatedAt,
+    localUpdated: local.updatedAt,
+    localValues: rankingChildStampValues(local),
+    remoteStamps: remote.fieldUpdatedAt,
+    remoteUpdated: remote.updatedAt,
+    remoteValues: rankingChildStampValues(remote),
+  );
+  final merged = RankingChild(
+    id: id,
+    parentId: remote.parentId,
+    name: pick('name', local.name, remote.name),
+    overallScore: pick('overallScore', local.overallScore, remote.overallScore),
+    notes: pick('notes', local.notes, remote.notes),
+    fieldValues: pick.fieldValues(local.fieldValues, remote.fieldValues),
+    sortOrder: pick('sortOrder', local.sortOrder, remote.sortOrder),
+    createdAt: pick('createdAt', local.createdAt, remote.createdAt),
+    deletedAt: pick('deletedAt', local.deletedAt, remote.deletedAt),
+    updatedAt: pick.updatedAt,
+    version: pick.version(local.version, remote.version),
+    fieldUpdatedAt: pick.stamps,
+  );
+  return (merged: merged, localWon: pick.localWon);
 }

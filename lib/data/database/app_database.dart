@@ -1365,6 +1365,10 @@ class RankingParentsTable extends Table {
   TextColumn get status => text().withDefault(const Constant('queued'))();
   BoolColumn get starred => boolean().withDefault(const Constant(false))();
   IntColumn get queueSortOrder => integer().withDefault(const Constant(0))();
+
+  /// `stampKey -> ISO instant`, one per field — see `RankingFieldStamps`.
+  TextColumn get fieldUpdatedAtJson =>
+      text().withDefault(const Constant('{}'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -1385,6 +1389,10 @@ class RankingChildrenTable extends Table {
   TextColumn get notes => text().withDefault(const Constant(''))();
   TextColumn get fieldValuesJson => text().withDefault(const Constant('{}'))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  /// Same as [RankingParentsTable.fieldUpdatedAtJson].
+  TextColumn get fieldUpdatedAtJson =>
+      text().withDefault(const Constant('{}'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -1451,7 +1459,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 109;
+  int get schemaVersion => 110;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2662,6 +2670,22 @@ class AppDatabase extends _$AppDatabase {
           'transactions_table',
           transactionsTable,
           transactionsTable.origin,
+        );
+      }
+      if (from < 110) {
+        // No backfill: a missing stamp already reads as the row's updatedAt,
+        // which is as much as anything knows about when an old field changed.
+        await _addColumnIfNotExists(
+          migrator,
+          'ranking_parents_table',
+          rankingParentsTable,
+          rankingParentsTable.fieldUpdatedAtJson,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'ranking_children_table',
+          rankingChildrenTable,
+          rankingChildrenTable.fieldUpdatedAtJson,
         );
       }
     },

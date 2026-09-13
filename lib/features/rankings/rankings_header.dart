@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
@@ -170,6 +172,9 @@ class _CategoryMenu extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final counts =
+        ref.watch(rankingParentCountsProvider).valueOrNull ??
+        const <String, int>{};
     return ConstrainedBox(
       constraints: const BoxConstraints(maxHeight: 320),
       child: ListView(
@@ -209,7 +214,7 @@ class _CategoryMenu extends ConsumerWidget {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      '${ref.watch(rankingParentsProvider(entry.id)).valueOrNull?.length ?? 0}',
+                      '${counts[entry.id] ?? 0}',
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -714,8 +719,18 @@ class _FilterMenu extends ConsumerWidget {
     if (category == null) return const SizedBox.shrink();
 
     final max = category.parentScoreMax.toDouble();
-    final start = filters.scoreMin ?? 0;
-    final end = filters.scoreMax ?? max;
+    // Clamped: a range set before the scale was lowered would otherwise hand
+    // RangeSlider values past its max, which it asserts against.
+    final end = math.min(filters.scoreMax ?? max, max);
+    final start = math.min(filters.scoreMin ?? 0, end);
+    // The slider lands on `max * k / divisions`, which in floating point is
+    // often a hair off the stored grid — 1.4000000000000001 against 1.4 — and
+    // the filter compares exactly, so an entry sitting on the bound fell out.
+    double snap(double value) => roundRankingScore(
+      value,
+      scoreMax: category.parentScoreMax,
+      precision: category.parentScorePrecision,
+    );
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -739,14 +754,18 @@ class _FilterMenu extends ConsumerWidget {
               (category.parentScoreMax /
                       rankingScoreStep(category.parentScorePrecision))
                   .round(),
-          onChanged: (values) => onChanged(
-            filters.copyWith(
-              scoreMin: values.start,
-              scoreMax: values.end,
-              clearScoreMin: values.start == 0,
-              clearScoreMax: values.end == max,
-            ),
-          ),
+          onChanged: (values) {
+            final low = snap(values.start);
+            final high = snap(values.end);
+            onChanged(
+              filters.copyWith(
+                scoreMin: low,
+                scoreMax: high,
+                clearScoreMin: low == 0,
+                clearScoreMax: high == max,
+              ),
+            );
+          },
         ),
         const Divider(height: 1),
         _CheckTile(

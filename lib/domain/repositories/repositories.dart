@@ -677,6 +677,13 @@ abstract class JobRepository {
 /// their children in one transaction, and restoring it brings back exactly
 /// what that cascade tombstoned — which is why the cascade records nothing
 /// beyond `deletedAt`, leaving the content intact to come back to.
+/// A category written together with the rows a change to it rewrote.
+typedef RankingCategoryRewrite = ({
+  RankingCategory category,
+  List<RankingParent> parents,
+  List<RankingChild> children,
+});
+
 abstract class RankingRepository {
   Future<List<RankingCategory>> listCategories({bool includeDeleted = false});
   Future<RankingCategory?> getCategory(String id);
@@ -712,10 +719,34 @@ abstract class RankingRepository {
   >
   restoreCategory(String id);
 
+  /// Moves one template field onto [scoreMax] and carries every stored value
+  /// with it, deleted rows included, in one transaction.
+  ///
+  /// Reads the category fresh inside that transaction and returns null —
+  /// writing nothing — when the field is already on [scoreMax]. That is what
+  /// makes a second confirm, or a rescale another device already made, a no-op
+  /// instead of a second halving.
+  Future<RankingCategoryRewrite?> rescaleTemplateField(
+    String categoryId,
+    String fieldId, {
+    required int scoreMax,
+    required bool isParentTemplate,
+  });
+
+  /// [rescaleTemplateField] for the entry ([isParent]) or unit overall score.
+  Future<RankingCategoryRewrite?> rescaleOverall(
+    String categoryId, {
+    required int scoreMax,
+    required bool isParent,
+  });
+
   Future<List<RankingParent>> listParents(
     String categoryId, {
     bool includeDeleted = false,
   });
+  /// Live entries per category id, in one grouped query. A category with none
+  /// is absent.
+  Future<Map<String, int>> countParentsByCategory();
   Future<RankingParent?> getParent(String id);
   Future<void> upsertParent(
     RankingParent parent, {
@@ -738,6 +769,11 @@ abstract class RankingRepository {
 
   Future<List<RankingChild>> listChildren(
     String parentId, {
+    bool includeDeleted = false,
+  });
+  /// Every unit under every entry in [categoryId], in one query.
+  Future<List<RankingChild>> listChildrenOfCategory(
+    String categoryId, {
     bool includeDeleted = false,
   });
   Future<RankingChild?> getChild(String id);

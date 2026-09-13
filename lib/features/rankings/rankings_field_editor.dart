@@ -79,7 +79,13 @@ class _RankingFieldEditorState extends State<RankingFieldEditor>
 
   @override
   void dispose() {
-    _saveTimer?.cancel();
+    // A pending note is flushed, not dropped: closing the panel or clicking
+    // another row inside the debounce used to lose it. The editor unmounts
+    // before the panel holding it, so the panel is still there to take it.
+    if (_saveTimer?.isActive ?? false) {
+      _saveTimer!.cancel();
+      widget.onChanged(widget.value.copyWith(notes: _notesController.text));
+    }
     _notesController.dispose();
     _notesFocusNode.dispose();
     super.dispose();

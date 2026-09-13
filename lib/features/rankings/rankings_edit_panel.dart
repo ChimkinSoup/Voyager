@@ -74,9 +74,22 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
   /// against a stale copy would re-apply the in-progress promotion.
   late RankingParent _current;
 
+  /// Resolved while the panel is alive. `dispose` flushes pending text, and by
+  /// then the panel's `ref` throws, so the flush used to fail silently and the
+  /// last 400ms of typing was lost on every close.
+  late final RankingsActions _actions;
+
+  /// Saves started and not yet finished. While any are, a rebuild can carry a
+  /// reload started by an *earlier* save, and adopting it would drop the edits
+  /// still on their way to disk — see [didUpdateWidget].
+  var _savesInFlight = 0;
+
   @override
   void initState() {
     super.initState();
+    _actions = RankingsActions.detached(
+      ProviderScope.containerOf(context, listen: false),
+    );
     _current = widget.parent;
     _titleController = TextEditingController(text: _current.title);
     _notesController = TextEditingController(text: _current.notes);
@@ -88,8 +101,11 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.parent.id == widget.parent.id) {
       // Same entry: keep whatever the user is typing, but take everything the
-      // list or the quick-rate may have changed underneath.
-      _current = widget.parent;
+      // list or the quick-rate may have changed underneath — unless a save is
+      // still out and this copy predates it.
+      if (_savesInFlight == 0 || widget.parent.version >= _current.version) {
+        _current = widget.parent;
+      }
       return;
     }
     // A different entry: flush the old one's pending text before the
@@ -141,15 +157,21 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
   Future<void> _save(RankingParent next, {bool rebuild = true}) async {
     final previous = _current;
     _current = next;
-    final saved = await RankingsActions(
-      ref,
-    ).saveParent(next, previous: previous);
-    if (!mounted) return;
+    _savesInFlight++;
+    final RankingParent? saved;
+    try {
+      saved = await _actions.saveParent(next, previous: previous);
+    } finally {
+      _savesInFlight--;
+    }
+    // Only the last save's result is adopted: an earlier one finishing while a
+    // later is still out would put back the row without the later edit.
+    if (!mounted || saved == null || _savesInFlight > 0) return;
     if (!rebuild) {
       _current = saved;
       return;
     }
-    setState(() => _current = saved);
+    setState(() => _current = saved!);
   }
 
   Future<void> _pickCreatedAt(BuildContext pillContext) async {
@@ -286,18 +308,9 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                             fillWhenActive: true,
                             onTap: widget.readOnly
                                 ? () {}
-                                : () async {
-                                    await RankingsActions(
-                                      ref,
-                                    ).setStatus(_current, status);
-                                    if (mounted) {
-                                      setState(
-                                        () => _current = _current.copyWith(
-                                          status: status,
-                                        ),
-                                      );
-                                    }
-                                  },
+                                : () => _save(
+                                    _current.copyWith(status: status),
+                                  ),
                           ),
                           const SizedBox(width: 6),
                         ],
@@ -374,16 +387,13 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                       readOnly: widget.readOnly,
                       scoredChildren: scoredChildren,
                       onAverageFromChildren: () async {
-                        final saved = await RankingsActions(
-                          ref,
-                        ).averageFromChildren(
-                          _current,
-                          category,
+                        final average = rankingAverageFromChildren(
                           widget.children,
+                          scoreMax: category.parentScoreMax,
+                          precision: category.parentScorePrecision,
                         );
-                        if (saved != null && mounted) {
-                          setState(() => _current = saved);
-                        }
+                        if (average == null) return;
+                        await _save(_current.copyWith(overallScore: average));
                       },
                     ),
                   ],

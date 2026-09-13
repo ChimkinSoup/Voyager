@@ -1598,11 +1598,14 @@ class RemoteSyncService {
       resolveCrdt: false,
       apply: (id, data, {required fromCrdt}) async {
         final local = await _rankingRepository.getParent(id);
-        final merged = mergeRankingParentFromRemote(data, id, local: local);
+        final result = resolveRankingParentFromRemote(data, id, local: local);
         await _rankingRepository.upsertParent(
-          merged,
+          result.merged,
           recordLocalActivity: false,
         );
+        // This device kept a field the document did not have, so it is the
+        // only one holding the merged row until it uploads it.
+        if (result.localWon) pushRankingParent(result.merged);
       },
     );
   }
@@ -1618,11 +1621,13 @@ class RemoteSyncService {
       resolveCrdt: false,
       apply: (id, data, {required fromCrdt}) async {
         final local = await _rankingRepository.getChild(id);
-        final merged = mergeRankingChildFromRemote(data, id, local: local);
+        final result = resolveRankingChildFromRemote(data, id, local: local);
         await _rankingRepository.upsertChild(
-          merged,
+          result.merged,
           recordLocalActivity: false,
         );
+        // See [pullRankingParents].
+        if (result.localWon) pushRankingChild(result.merged);
       },
     );
   }
@@ -2550,10 +2555,9 @@ class RemoteSyncService {
         entry.value,
       );
     }
-    await _syncEngine.syncDocumentsImmediately(
-      collection: FirestoreCollections.rankingCategories,
-      payloadsByDocumentId: payloads,
-      logOperation: false,
+    await _runRemoteBatchSave(
+      FirestoreCollections.rankingCategories,
+      payloads,
     );
   }
 
@@ -2589,11 +2593,7 @@ class RemoteSyncService {
         entry.value,
       );
     }
-    await _syncEngine.syncDocumentsImmediately(
-      collection: FirestoreCollections.rankingParents,
-      payloadsByDocumentId: payloads,
-      logOperation: false,
-    );
+    await _runRemoteBatchSave(FirestoreCollections.rankingParents, payloads);
   }
 
   void pushRankingChild(RankingChild child) {
@@ -2628,11 +2628,7 @@ class RemoteSyncService {
         entry.value,
       );
     }
-    await _syncEngine.syncDocumentsImmediately(
-      collection: FirestoreCollections.rankingChildren,
-      payloadsByDocumentId: payloads,
-      logOperation: false,
-    );
+    await _runRemoteBatchSave(FirestoreCollections.rankingChildren, payloads);
   }
 
   void pushJobCompany(JobCompany company) {
@@ -2917,6 +2913,40 @@ class RemoteSyncService {
         documentId: documentId,
         error: error,
       );
+    }
+  }
+
+  /// [_runRemoteSave] for a batch: the rows are already written locally at a
+  /// higher version, so a batch that failed without reaching the outbox would
+  /// never be uploaded, and no later pull would repair the difference.
+  Future<void> _runRemoteBatchSave(
+    String collection,
+    Map<String, Map<String, dynamic>> payloads,
+  ) async {
+    try {
+      await _syncEngine.syncDocumentsImmediately(
+        collection: collection,
+        payloadsByDocumentId: payloads,
+        logOperation: false,
+      );
+      for (final documentId in payloads.keys) {
+        await OutboxSyncWorker.recordSuccess(
+          collection: collection,
+          documentId: documentId,
+        );
+      }
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[sync] batch upload failed for $collection '
+        '(${payloads.length} documents): $error\n$stackTrace',
+      );
+      for (final documentId in payloads.keys) {
+        await OutboxSyncWorker.recordFailure(
+          collection: collection,
+          documentId: documentId,
+          error: error,
+        );
+      }
     }
   }
 

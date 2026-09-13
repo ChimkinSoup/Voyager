@@ -177,7 +177,6 @@ class _RankingsChildListState extends ConsumerState<RankingsChildList> {
                   index: index,
                   child: child,
                   category: widget.category,
-                  parent: widget.parent,
                   accent: accent,
                   draggable: isSavedOrder && !widget.readOnly,
                   readOnly: widget.readOnly,
@@ -289,7 +288,6 @@ class _ChildRow extends ConsumerStatefulWidget {
     required this.index,
     required this.child,
     required this.category,
-    required this.parent,
     required this.accent,
     required this.draggable,
     required this.readOnly,
@@ -299,7 +297,6 @@ class _ChildRow extends ConsumerStatefulWidget {
   final int index;
   final RankingChild child;
   final RankingCategory category;
-  final RankingParent parent;
   final Color accent;
   final bool draggable;
   final bool readOnly;
@@ -338,10 +335,8 @@ class _ChildRowState extends ConsumerState<_ChildRow>
           ContextMenuItem(
             label: 'Clear score',
             icon: PhosphorIconsRegular.eraser,
-            onTap: () => RankingsActions(ref).saveChild(
-              child.copyWith(clearOverallScore: true),
-              parent: widget.parent,
-            ),
+            onTap: () =>
+                RankingsActions(ref).setChildOverallScore(child.id, null),
           ),
         if (!widget.readOnly)
           ContextMenuItem(
@@ -378,7 +373,6 @@ class _ChildRowState extends ConsumerState<_ChildRow>
                   onTap: () => showRankingChildEditor(
                     context,
                     child: child,
-                    parent: widget.parent,
                     category: widget.category,
                     readOnly: widget.readOnly,
                   ),
@@ -434,14 +428,9 @@ class _ChildRowState extends ConsumerState<_ChildRow>
                           onChanged: holdingWrites(
                             widget.readOnly
                                 ? null
-                                : (score) => RankingsActions(ref).saveChild(
-                                    score == null
-                                        ? child.copyWith(
-                                            clearOverallScore: true,
-                                          )
-                                        : child.copyWith(overallScore: score),
-                                    parent: widget.parent,
-                                  ),
+                                : (score) => RankingsActions(
+                                    ref,
+                                  ).setChildOverallScore(child.id, score),
                           ),
                         ),
                       ],
@@ -470,7 +459,6 @@ class _ChildRowState extends ConsumerState<_ChildRow>
 Future<void> showRankingChildEditor(
   BuildContext context, {
   required RankingChild child,
-  required RankingParent parent,
   required RankingCategory category,
   bool readOnly = false,
 }) {
@@ -478,7 +466,6 @@ Future<void> showRankingChildEditor(
     context: context,
     builder: (context) => _ChildEditorDialog(
       child: child,
-      parent: parent,
       category: category,
       readOnly: readOnly,
     ),
@@ -488,13 +475,11 @@ Future<void> showRankingChildEditor(
 class _ChildEditorDialog extends ConsumerStatefulWidget {
   const _ChildEditorDialog({
     required this.child,
-    required this.parent,
     required this.category,
     required this.readOnly,
   });
 
   final RankingChild child;
-  final RankingParent parent;
   final RankingCategory category;
   final bool readOnly;
 
@@ -511,9 +496,16 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
   late final FocusNode _notesFocusNode;
   Timer? _saveTimer;
 
+  /// Resolved up front for [dispose]'s flush — see the entry panel's
+  /// `_actions`.
+  late final RankingsActions _actions;
+
   @override
   void initState() {
     super.initState();
+    _actions = RankingsActions.detached(
+      ProviderScope.containerOf(context, listen: false),
+    );
     _current = widget.child;
     _nameController = TextEditingController(text: _current.name);
     _notesController = TextEditingController(text: _current.notes);
@@ -576,9 +568,12 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
     );
   }
 
+  /// Writes only what changed since [_current] — the unit and its entry may
+  /// both have moved on since this dialog opened, on this device or another.
   Future<void> _save(RankingChild next) async {
+    final previous = _current;
     _current = next;
-    await RankingsActions(ref).saveChild(next, parent: widget.parent);
+    await _actions.saveChild(next, previous: previous);
     if (mounted) setState(() {});
   }
 

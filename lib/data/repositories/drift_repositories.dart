@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:voyager/core/constants/job_constants.dart';
 import 'package:voyager/core/constants/workout_constants.dart';
+import 'package:voyager/core/soft_delete/restore_contract.dart';
 import 'package:voyager/core/spellcheck/word_token.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
@@ -29,6 +30,7 @@ import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/workout_models.dart';
+import 'package:voyager/domain/rankings/ranking_queries.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
@@ -5275,16 +5277,21 @@ class DriftRankingRepository implements RankingRepository {
   softDeleteCategory(String id) async {
     final existing = await getCategory(id);
     if (existing == null) throw StateError('no ranking category $id');
+    // A second delete would stamp the category with a new instant while its
+    // entries keep the first one, and the restore — which matches instants
+    // exactly — would then bring back none of them.
+    if (existing.isDeleted) throw StateError('ranking category $id is deleted');
     final now = utcNow();
     final category = existing.copyWith(deletedAt: now);
 
     final parents = [
-      for (final parent in await listParents(id)) parent.copyWith(deletedAt: now),
+      for (final parent in await listParents(id))
+        parent.copyWith(deletedAt: now, touch: false),
     ];
     final children = <RankingChild>[];
     for (final parent in parents) {
       for (final child in await listChildren(parent.id)) {
-        children.add(child.copyWith(deletedAt: now));
+        children.add(child.copyWith(deletedAt: now, touch: false));
       }
     }
 
@@ -5310,13 +5317,14 @@ class DriftRankingRepository implements RankingRepository {
 
     final parents = [
       for (final parent in await listParents(id, includeDeleted: true))
-        if (parent.deletedAt == cascade) parent.copyWith(clearDeletedAt: true),
+        if (parent.deletedAt == cascade)
+          parent.copyWith(clearDeletedAt: true, touch: false),
     ];
     final children = <RankingChild>[];
     for (final parent in parents) {
       for (final child in await listChildren(parent.id, includeDeleted: true)) {
         if (child.deletedAt == cascade) {
-          children.add(child.copyWith(clearDeletedAt: true));
+          children.add(child.copyWith(clearDeletedAt: true, touch: false));
         }
       }
     }
@@ -5325,32 +5333,194 @@ class DriftRankingRepository implements RankingRepository {
     return (category: category, parents: parents, children: children);
   }
 
+  @override
+  Future<RankingCategoryRewrite?> rescaleTemplateField(
+    String categoryId,
+    String fieldId, {
+    required int scoreMax,
+    required bool isParentTemplate,
+  }) {
+    return _db.transaction(() async {
+      final category = await getCategory(categoryId);
+      if (category == null) throw StateError('no ranking category $categoryId');
+      final template = isParentTemplate
+          ? category.parentTemplate
+          : category.childTemplate;
+      final field = template.where((f) => f.id == fieldId).firstOrNull;
+      // Already there — a second confirm, or a rescale another device made.
+      // Rescaling again from the old max would halve the values twice.
+      if (field == null || field.scoreMax == scoreMax) return null;
+
+      final precision = rankingFieldPrecision(
+        field,
+        overallPrecision: isParentTemplate
+            ? category.parentScorePrecision
+            : category.childScorePrecision,
+      );
+      Map<String, RankingFieldValue>? rescaled(
+        Map<String, RankingFieldValue> values,
+      ) {
+        final value = values[fieldId];
+        if (value?.score == null) return null;
+        return {
+          ...values,
+          fieldId: value!.copyWith(
+            score: rescaleRankingScore(
+              value.score!,
+              fromMax: field.scoreMax,
+              toMax: scoreMax,
+              precision: precision,
+            ),
+          ),
+        };
+      }
+
+      // Deleted rows too: anything in the trash comes back on this category's
+      // scale, not the one it was deleted under.
+      final parents = <RankingParent>[];
+      final children = <RankingChild>[];
+      if (isParentTemplate) {
+        for (final parent in await listParents(
+          categoryId,
+          includeDeleted: true,
+        )) {
+          final values = rescaled(parent.fieldValues);
+          if (values == null) continue;
+          parents.add(parent.copyWith(fieldValues: values, touch: false));
+        }
+      } else {
+        for (final child in await listChildrenOfCategory(
+          categoryId,
+          includeDeleted: true,
+        )) {
+          final values = rescaled(child.fieldValues);
+          if (values == null) continue;
+          children.add(child.copyWith(fieldValues: values, touch: false));
+        }
+      }
+
+      final nextTemplate = [
+        for (final existing in template)
+          if (existing.id == fieldId)
+            existing.copyWith(scoreMax: scoreMax)
+          else
+            existing,
+      ];
+      final next = isParentTemplate
+          ? category.copyWith(parentTemplate: nextTemplate)
+          : category.copyWith(childTemplate: nextTemplate);
+      await _writeCascadeRows(next, parents, children);
+      return (category: next, parents: parents, children: children);
+    }).then((result) {
+      if (result != null) _recordCascadeSave(result.parents, result.children);
+      return result;
+    });
+  }
+
+  @override
+  Future<RankingCategoryRewrite?> rescaleOverall(
+    String categoryId, {
+    required int scoreMax,
+    required bool isParent,
+  }) {
+    return _db.transaction(() async {
+      final category = await getCategory(categoryId);
+      if (category == null) throw StateError('no ranking category $categoryId');
+      final fromMax = isParent
+          ? category.parentScoreMax
+          : category.childScoreMax;
+      if (fromMax == scoreMax) return null;
+      final precision = isParent
+          ? category.parentScorePrecision
+          : category.childScorePrecision;
+
+      double? rescaled(double? score) {
+        if (score == null) return null;
+        final next = rescaleRankingScore(
+          score,
+          fromMax: fromMax,
+          toMax: scoreMax,
+          precision: precision,
+        );
+        return next == score ? null : next;
+      }
+
+      final parents = <RankingParent>[];
+      final children = <RankingChild>[];
+      if (isParent) {
+        for (final parent in await listParents(
+          categoryId,
+          includeDeleted: true,
+        )) {
+          final score = rescaled(parent.overallScore);
+          if (score == null) continue;
+          parents.add(parent.copyWith(overallScore: score, touch: false));
+        }
+      } else {
+        for (final child in await listChildrenOfCategory(
+          categoryId,
+          includeDeleted: true,
+        )) {
+          final score = rescaled(child.overallScore);
+          if (score == null) continue;
+          children.add(child.copyWith(overallScore: score, touch: false));
+        }
+      }
+
+      final next = isParent
+          ? category.copyWith(parentScoreMax: scoreMax)
+          : category.copyWith(childScoreMax: scoreMax);
+      await _writeCascadeRows(next, parents, children);
+      return (category: next, parents: parents, children: children);
+    }).then((result) {
+      if (result != null) _recordCascadeSave(result.parents, result.children);
+      return result;
+    });
+  }
+
   Future<void> _writeCascade(
     RankingCategory category,
     List<RankingParent> parents,
     List<RankingChild> children,
   ) async {
-    await _db.transaction(() async {
-      await _db
-          .into(_db.rankingCategoriesTable)
-          .insertOnConflictUpdate(_categoryCompanion(category));
-      await _db.batch((batch) {
-        for (final parent in parents) {
-          batch.update(
-            _db.rankingParentsTable,
-            _parentCompanion(parent),
-            where: (t) => t.id.equals(parent.id),
-          );
-        }
-        for (final child in children) {
-          batch.update(
-            _db.rankingChildrenTable,
-            _childCompanion(child),
-            where: (t) => t.id.equals(child.id),
-          );
-        }
-      });
+    await _db.transaction(
+      () => _writeCascadeRows(category, parents, children),
+    );
+    _recordCascadeSave(parents, children);
+  }
+
+  /// [_writeCascade] without its own transaction, for a caller already
+  /// inside one.
+  Future<void> _writeCascadeRows(
+    RankingCategory category,
+    List<RankingParent> parents,
+    List<RankingChild> children,
+  ) async {
+    await _db
+        .into(_db.rankingCategoriesTable)
+        .insertOnConflictUpdate(_categoryCompanion(category));
+    await _db.batch((batch) {
+      for (final parent in parents) {
+        batch.update(
+          _db.rankingParentsTable,
+          _parentCompanion(parent),
+          where: (t) => t.id.equals(parent.id),
+        );
+      }
+      for (final child in children) {
+        batch.update(
+          _db.rankingChildrenTable,
+          _childCompanion(child),
+          where: (t) => t.id.equals(child.id),
+        );
+      }
     });
+  }
+
+  void _recordCascadeSave(
+    List<RankingParent> parents,
+    List<RankingChild> children,
+  ) {
     _syncActivity?.recordLocalSave(FirestoreCollections.rankingCategories);
     if (parents.isNotEmpty) {
       _syncActivity?.recordLocalSave(FirestoreCollections.rankingParents);
@@ -5372,6 +5542,21 @@ class DriftRankingRepository implements RankingRepository {
       for (final row in rows)
         if (includeDeleted || row.deletedAt == null) _mapParent(row),
     ];
+  }
+
+  @override
+  Future<Map<String, int>> countParentsByCategory() async {
+    final table = _db.rankingParentsTable;
+    final count = table.id.count();
+    final rows =
+        await (_db.selectOnly(table)
+              ..addColumns([table.categoryId, count])
+              ..where(table.deletedAt.isNull())
+              ..groupBy([table.categoryId]))
+            .get();
+    return {
+      for (final row in rows) row.read(table.categoryId)!: row.read(count)!,
+    };
   }
 
   @override
@@ -5401,10 +5586,13 @@ class DriftRankingRepository implements RankingRepository {
   ) async {
     final existing = await getParent(id);
     if (existing == null) throw StateError('no ranking parent $id');
+    // See [softDeleteCategory]: a second stamp would strand the children.
+    if (existing.isDeleted) throw StateError('ranking parent $id is deleted');
     final now = utcNow();
-    final parent = existing.copyWith(deletedAt: now);
+    final parent = existing.copyWith(deletedAt: now, touch: false);
     final children = [
-      for (final child in await listChildren(id)) child.copyWith(deletedAt: now),
+      for (final child in await listChildren(id))
+        child.copyWith(deletedAt: now, touch: false),
     ];
     await _writeParentCascade(parent, children);
     return (parent: parent, children: children);
@@ -5418,11 +5606,19 @@ class DriftRankingRepository implements RankingRepository {
     if (existing == null || existing.deletedAt == null) {
       throw StateError('no deleted ranking parent $id');
     }
+    // An entry brought back into a deleted category would never be shown,
+    // would still sync, and — live, so never past the purge cutoff — would
+    // never be purged either.
+    final category = await getCategory(existing.categoryId);
+    if (category == null || category.isDeleted) {
+      throw StateError('ranking parent $id is in a deleted category');
+    }
     final cascade = existing.deletedAt!;
-    final parent = existing.copyWith(clearDeletedAt: true);
+    final parent = existing.copyWith(clearDeletedAt: true, touch: false);
     final children = [
       for (final child in await listChildren(id, includeDeleted: true))
-        if (child.deletedAt == cascade) child.copyWith(clearDeletedAt: true),
+        if (child.deletedAt == cascade)
+          child.copyWith(clearDeletedAt: true, touch: false),
     ];
     await _writeParentCascade(parent, children);
     return (parent: parent, children: children);
@@ -5463,7 +5659,7 @@ class DriftRankingRepository implements RankingRepository {
     for (var i = 0; i < orderedIds.length; i++) {
       final parent = byId[orderedIds[i]];
       if (parent == null || parent.queueSortOrder == i) continue;
-      written.add(parent.copyWith(queueSortOrder: i));
+      written.add(parent.copyWith(queueSortOrder: i, touch: false));
     }
     if (written.isEmpty) return const [];
     await _db.batch((batch) {
@@ -5487,6 +5683,25 @@ class DriftRankingRepository implements RankingRepository {
     final rows =
         await (_db.select(_db.rankingChildrenTable)
               ..where((t) => t.parentId.equals(parentId))
+              ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
+            .get();
+    return [
+      for (final row in rows)
+        if (includeDeleted || row.deletedAt == null) _mapChild(row),
+    ];
+  }
+
+  @override
+  Future<List<RankingChild>> listChildrenOfCategory(
+    String categoryId, {
+    bool includeDeleted = false,
+  }) async {
+    final parentIds = _db.selectOnly(_db.rankingParentsTable)
+      ..addColumns([_db.rankingParentsTable.id])
+      ..where(_db.rankingParentsTable.categoryId.equals(categoryId));
+    final rows =
+        await (_db.select(_db.rankingChildrenTable)
+              ..where((t) => t.parentId.isInQuery(parentIds))
               ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
             .get();
     return [
@@ -5529,6 +5744,15 @@ class DriftRankingRepository implements RankingRepository {
   Future<RankingChild> restoreChild(String id) async {
     final existing = await getChild(id);
     if (existing == null) throw StateError('no ranking child $id');
+    // Back already — another device restored it, or a pull did — and clearing
+    // it again would write this stale copy over whatever that brought.
+    if (existing.deletedAt == null) throw const RestoreSuperseded();
+    // See [restoreParent]: a unit live under a deleted entry is never shown
+    // and never purged.
+    final parent = await getParent(existing.parentId);
+    if (parent == null || parent.isDeleted) {
+      throw StateError('ranking child $id is under a deleted parent');
+    }
     final child = existing.copyWith(clearDeletedAt: true);
     await upsertChild(child);
     return child;
@@ -5545,7 +5769,7 @@ class DriftRankingRepository implements RankingRepository {
     for (var i = 0; i < orderedIds.length; i++) {
       final child = byId[orderedIds[i]];
       if (child == null || child.sortOrder == i) continue;
-      written.add(child.copyWith(sortOrder: i));
+      written.add(child.copyWith(sortOrder: i, touch: false));
     }
     if (written.isEmpty) return const [];
     await _db.batch((batch) {
@@ -5639,6 +5863,9 @@ class DriftRankingRepository implements RankingRepository {
         status: Value(parent.status.name),
         starred: Value(parent.starred),
         queueSortOrder: Value(parent.queueSortOrder),
+        fieldUpdatedAtJson: Value(
+          encodeRankingFieldStamps(parent.fieldUpdatedAt),
+        ),
         createdAt: Value(parent.createdAt),
         updatedAt: Value(parent.updatedAt),
         version: Value(parent.version),
@@ -5654,6 +5881,7 @@ class DriftRankingRepository implements RankingRepository {
         notes: Value(child.notes),
         fieldValuesJson: Value(encodeRankingFieldValues(child.fieldValues)),
         sortOrder: Value(child.sortOrder),
+        fieldUpdatedAtJson: Value(encodeRankingFieldStamps(child.fieldUpdatedAt)),
         createdAt: Value(child.createdAt),
         updatedAt: Value(child.updatedAt),
         version: Value(child.version),
@@ -5702,6 +5930,7 @@ class DriftRankingRepository implements RankingRepository {
     status: RankingStatus.fromName(row.status),
     starred: row.starred,
     queueSortOrder: row.queueSortOrder,
+    fieldUpdatedAt: decodeRankingFieldStamps(row.fieldUpdatedAtJson),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -5716,6 +5945,7 @@ class DriftRankingRepository implements RankingRepository {
     notes: row.notes,
     fieldValues: decodeRankingFieldValues(row.fieldValuesJson),
     sortOrder: row.sortOrder,
+    fieldUpdatedAt: decodeRankingFieldStamps(row.fieldUpdatedAtJson),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,

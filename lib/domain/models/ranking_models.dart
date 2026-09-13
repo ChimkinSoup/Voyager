@@ -430,6 +430,104 @@ List<String> normalizeRankingTags(Iterable<String> raw) {
 
 String encodeRankingTags(List<String> tags) => jsonEncode(tags);
 
+/// When each field of an entry or unit last changed, keyed as
+/// [rankingParentStampValues] and [rankingChildStampValues] key them — what
+/// lets two devices that edited different
+/// fields of the same row both keep their edit (see
+/// `mergeRankingParentFromRemote`).
+///
+/// A key with no stamp falls back to the row's `updatedAt`: a row written
+/// before stamps existed has none, and the last thing known to have touched
+/// every field of it is its last save.
+typedef RankingFieldStamps = Map<String, DateTime>;
+
+String encodeRankingFieldStamps(RankingFieldStamps stamps) => jsonEncode({
+  for (final entry in stamps.entries)
+    entry.key: entry.value.toUtc().toIso8601String(),
+});
+
+RankingFieldStamps decodeRankingFieldStamps(Object? value) {
+  final decoded = value is String
+      ? (value.isEmpty ? null : jsonDecode(value))
+      : value;
+  if (decoded is! Map) return const {};
+  final stamps = <String, DateTime>{};
+  for (final entry in decoded.entries) {
+    final raw = entry.value;
+    final stamp = raw is String ? DateTime.tryParse(raw)?.toUtc() : null;
+    if (stamp != null) stamps[entry.key as String] = stamp;
+  }
+  return stamps;
+}
+
+/// The stamp key for one half of a template field's value. Score and notes are
+/// stamped apart so a score set on one device and a note typed on another
+/// both survive.
+String rankingFieldValueScoreKey(String fieldId) => 'fv:$fieldId:score';
+String rankingFieldValueNotesKey(String fieldId) => 'fv:$fieldId:notes';
+
+/// [previous]'s stamps with every key whose value differs in [next] moved to
+/// now. Keys [previous] never stamped are pinned to its `updatedAt` first, so
+/// editing one field of an unstamped row does not make every other field look
+/// as new as the edit.
+RankingFieldStamps _restamp({
+  required RankingFieldStamps stamps,
+  required DateTime previousUpdatedAt,
+  required Map<String, Object?> previousValues,
+  required Map<String, Object?> nextValues,
+}) {
+  final now = utcNow();
+  final result = <String, DateTime>{};
+  for (final key in {...previousValues.keys, ...nextValues.keys}) {
+    final changed = previousValues[key] != nextValues[key];
+    result[key] = changed ? now : (stamps[key] ?? previousUpdatedAt);
+  }
+  // A stamp for a key neither side holds a value for any more — a field value
+  // since emptied — still records when that happened.
+  for (final entry in stamps.entries) {
+    result.putIfAbsent(entry.key, () => entry.value);
+  }
+  return result;
+}
+
+Map<String, Object?> _fieldValueStampValues(
+  Map<String, RankingFieldValue> values,
+) => {
+  // Empty notes read as null, the same as a value that is not there at all:
+  // an empty value is never written, so the two are one state on disk.
+  for (final entry in values.entries) ...{
+    rankingFieldValueScoreKey(entry.key): entry.value.score,
+    rankingFieldValueNotesKey(entry.key): entry.value.notes.isEmpty
+        ? null
+        : entry.value.notes,
+  },
+};
+
+/// The stamped values of [parent], by stamp key.
+Map<String, Object?> rankingParentStampValues(RankingParent parent) => {
+  'title': parent.title,
+  'overallScore': parent.overallScore,
+  'notes': parent.notes,
+  'tags': parent.tags.join(' '),
+  'status': parent.status.name,
+  'starred': parent.starred,
+  'queueSortOrder': parent.queueSortOrder,
+  'createdAt': parent.createdAt.toUtc(),
+  'deletedAt': parent.deletedAt?.toUtc(),
+  ..._fieldValueStampValues(parent.fieldValues),
+};
+
+/// The stamped values of [child], by stamp key.
+Map<String, Object?> rankingChildStampValues(RankingChild child) => {
+  'name': child.name,
+  'overallScore': child.overallScore,
+  'notes': child.notes,
+  'sortOrder': child.sortOrder,
+  'createdAt': child.createdAt.toUtc(),
+  'deletedAt': child.deletedAt?.toUtc(),
+  ..._fieldValueStampValues(child.fieldValues),
+};
+
 List<String> decodeRankingTags(String? json) {
   if (json == null || json.isEmpty) return const [];
   final decoded = jsonDecode(json);
@@ -460,6 +558,7 @@ class RankingParent extends SoftDeletable {
     this.status = RankingStatus.queued,
     this.starred = false,
     this.queueSortOrder = 0,
+    this.fieldUpdatedAt = const {},
   });
 
   /// Immutable after create: entries do not move between categories, and their
@@ -491,8 +590,17 @@ class RankingParent extends SoftDeletable {
   /// own rules and ignore it.
   final int queueSortOrder;
 
+  /// See [RankingFieldStamps]. Kept up to date by [copyWith], which stamps
+  /// whichever fields it actually changed.
+  final RankingFieldStamps fieldUpdatedAt;
+
   bool get isRanked => overallScore != null;
 
+  /// [touch] false keeps [updatedAt] where it was, for writes that are not an
+  /// edit — a queue drag, a rescale, a cascade. `updatedAt` is what "Last
+  /// updated" and the in-progress order read, and a reorder is not an update
+  /// to anything the user would recognise. The version still moves, so sync
+  /// still sees the write.
   RankingParent copyWith({
     String? title,
     double? overallScore,
@@ -508,24 +616,38 @@ class RankingParent extends SoftDeletable {
     bool clearDeletedAt = false,
     int? version,
     bool bumpVersion = true,
-  }) => RankingParent(
-    id: id,
-    createdAt: createdAt ?? this.createdAt,
-    updatedAt: utcNow(),
-    version: version ?? (bumpVersion ? this.version + 1 : this.version),
-    deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
-    categoryId: categoryId,
-    title: title ?? this.title,
-    overallScore: clearOverallScore
-        ? null
-        : (overallScore ?? this.overallScore),
-    notes: notes ?? this.notes,
-    fieldValues: fieldValues ?? this.fieldValues,
-    tags: tags ?? this.tags,
-    status: status ?? this.status,
-    starred: starred ?? this.starred,
-    queueSortOrder: queueSortOrder ?? this.queueSortOrder,
-  );
+    bool touch = true,
+  }) {
+    RankingParent build(RankingFieldStamps stamps) => RankingParent(
+      id: id,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: touch ? utcNow() : updatedAt,
+      version: version ?? (bumpVersion ? this.version + 1 : this.version),
+      deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+      categoryId: categoryId,
+      title: title ?? this.title,
+      overallScore: clearOverallScore
+          ? null
+          : (overallScore ?? this.overallScore),
+      notes: notes ?? this.notes,
+      fieldValues: fieldValues ?? this.fieldValues,
+      tags: tags ?? this.tags,
+      status: status ?? this.status,
+      starred: starred ?? this.starred,
+      queueSortOrder: queueSortOrder ?? this.queueSortOrder,
+      fieldUpdatedAt: stamps,
+    );
+
+    final next = build(const {});
+    return build(
+      _restamp(
+        stamps: fieldUpdatedAt,
+        previousUpdatedAt: updatedAt,
+        previousValues: rankingParentStampValues(this),
+        nextValues: rankingParentStampValues(next),
+      ),
+    );
+  }
 }
 
 /// Whether [a] and [b] are the same version of the same entry, field for
@@ -586,6 +708,7 @@ class RankingChild extends SoftDeletable {
     this.notes = '',
     this.fieldValues = const {},
     this.sortOrder = 0,
+    this.fieldUpdatedAt = const {},
   });
 
   final String parentId;
@@ -601,6 +724,10 @@ class RankingChild extends SoftDeletable {
   /// Saved manual order. A view sort never writes it.
   final int sortOrder;
 
+  /// See [RankingParent.fieldUpdatedAt].
+  final RankingFieldStamps fieldUpdatedAt;
+
+  /// [touch] as on [RankingParent.copyWith].
   RankingChild copyWith({
     String? name,
     double? overallScore,
@@ -613,19 +740,33 @@ class RankingChild extends SoftDeletable {
     bool clearDeletedAt = false,
     int? version,
     bool bumpVersion = true,
-  }) => RankingChild(
-    id: id,
-    createdAt: createdAt ?? this.createdAt,
-    updatedAt: utcNow(),
-    version: version ?? (bumpVersion ? this.version + 1 : this.version),
-    deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
-    parentId: parentId,
-    name: name ?? this.name,
-    overallScore: clearOverallScore
-        ? null
-        : (overallScore ?? this.overallScore),
-    notes: notes ?? this.notes,
-    fieldValues: fieldValues ?? this.fieldValues,
-    sortOrder: sortOrder ?? this.sortOrder,
-  );
+    bool touch = true,
+  }) {
+    RankingChild build(RankingFieldStamps stamps) => RankingChild(
+      id: id,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: touch ? utcNow() : updatedAt,
+      version: version ?? (bumpVersion ? this.version + 1 : this.version),
+      deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
+      parentId: parentId,
+      name: name ?? this.name,
+      overallScore: clearOverallScore
+          ? null
+          : (overallScore ?? this.overallScore),
+      notes: notes ?? this.notes,
+      fieldValues: fieldValues ?? this.fieldValues,
+      sortOrder: sortOrder ?? this.sortOrder,
+      fieldUpdatedAt: stamps,
+    );
+
+    final next = build(const {});
+    return build(
+      _restamp(
+        stamps: fieldUpdatedAt,
+        previousUpdatedAt: updatedAt,
+        previousValues: rankingChildStampValues(this),
+        nextValues: rankingChildStampValues(next),
+      ),
+    );
+  }
 }

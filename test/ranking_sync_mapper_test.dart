@@ -285,6 +285,192 @@ void main() {
     });
   });
 
+  group('Per-field merge', () {
+    final base = DateTime.utc(2026, 3, 1);
+    final t1 = DateTime.utc(2026, 3, 2);
+    final t2 = DateTime.utc(2026, 3, 3);
+
+    /// One entry as both devices started from it, stamped at [base].
+    RankingParent start() => RankingParent(
+      id: 'p1',
+      categoryId: 'cat',
+      title: 'Severance',
+      notes: '',
+      createdAt: base,
+      updatedAt: base,
+      version: 3,
+    );
+
+    /// Every stamp a row carries once `copyWith` has touched it: [base] for
+    /// each field, with [changed] moved on.
+    RankingFieldStamps stampsFor(
+      Map<String, Object?> values,
+      Map<String, DateTime> changed,
+    ) => {for (final key in values.keys) key: base, ...changed};
+
+    test('a note typed on one device and a score set on another both '
+        'survive', () {
+      // This device typed a note at t1, and wrote a lot doing it.
+      final localRow = RankingParent(
+        id: 'p1',
+        categoryId: 'cat',
+        title: 'Severance',
+        notes: 'slow burn',
+        createdAt: base,
+        updatedAt: t1,
+        version: 9,
+      );
+      final local = RankingParent(
+        id: 'p1',
+        categoryId: 'cat',
+        title: 'Severance',
+        notes: 'slow burn',
+        createdAt: base,
+        updatedAt: t1,
+        version: 9,
+        fieldUpdatedAt: stampsFor(rankingParentStampValues(localRow), {
+          'notes': t1,
+        }),
+      );
+      // The other device scored a field at t2, in one write.
+      const scored = {'plot': RankingFieldValue(score: 4)};
+      final remoteRow = RankingParent(
+        id: 'p1',
+        categoryId: 'cat',
+        title: 'Severance',
+        fieldValues: scored,
+        createdAt: base,
+        updatedAt: t2,
+        version: 4,
+      );
+      final remote = rankingParentToFirestore(
+        RankingParent(
+          id: 'p1',
+          categoryId: 'cat',
+          title: 'Severance',
+          fieldValues: scored,
+          createdAt: base,
+          updatedAt: t2,
+          version: 4,
+          fieldUpdatedAt: stampsFor(rankingParentStampValues(remoteRow), {
+            'fv:plot:score': t2,
+          }),
+        ),
+      );
+
+      final result = resolveRankingParentFromRemote(remote, 'p1', local: local);
+
+      expect(result.merged.notes, 'slow burn');
+      expect(result.merged.fieldValues['plot']!.score, 4);
+      // The note is only here, so this device has to upload the merge.
+      expect(result.localWon, isTrue);
+      expect(result.merged.version, greaterThan(9));
+    });
+
+    test('nothing newer here means nothing to upload', () {
+      final local = start();
+      final remote = rankingParentToFirestore(
+        start().copyWith(title: 'Severance S2'),
+      );
+      final result = resolveRankingParentFromRemote(remote, 'p1', local: local);
+      expect(result.merged.title, 'Severance S2');
+      expect(result.localWon, isFalse);
+    });
+
+    test('a score cleared on another device clears here', () {
+      final scored = start().copyWith(
+        fieldValues: const {'plot': RankingFieldValue(score: 4, notes: 'ok')},
+      );
+      final cleared = scored.copyWith(
+        fieldValues: const {'plot': RankingFieldValue(notes: 'ok')},
+      );
+      final payload = rankingParentToFirestore(cleared);
+      // Written as an explicit null: uploads merge into the stored document,
+      // and a key left out would keep the old score there.
+      expect(
+        (payload['fieldValues'] as Map)['plot'],
+        {'score': null, 'notes': 'ok'},
+      );
+
+      final merged = mergeRankingParentFromRemote(payload, 'p1', local: scored);
+      expect(merged.fieldValues['plot']!.score, isNull);
+      expect(merged.fieldValues['plot']!.notes, 'ok');
+    });
+
+    test('a field value emptied entirely is still written, as nulls', () {
+      final scored = start().copyWith(
+        fieldValues: const {'plot': RankingFieldValue(score: 4)},
+      );
+      final emptied = scored.copyWith(fieldValues: const {});
+      final payload = rankingParentToFirestore(emptied);
+      expect(
+        (payload['fieldValues'] as Map)['plot'],
+        {'score': null, 'notes': ''},
+      );
+      final merged = mergeRankingParentFromRemote(payload, 'p1', local: scored);
+      expect(merged.fieldValues, isEmpty);
+    });
+
+    test('stamps an older build wrote over fall back to the version', () {
+      final local = start().copyWith(notes: 'local', version: 10);
+      // A newer build stamped version 4; an older one then wrote version 5
+      // over it, and the merge kept the stale stamps on the document.
+      final payload = {
+        ...rankingParentToFirestore(
+          start().copyWith(notes: 'remote', version: 4),
+        ),
+        'version': 5,
+      };
+      final merged = mergeRankingParentFromRemote(payload, 'p1', local: local);
+      // Whole-document version-wins, as before stamps: the local 10 wins.
+      expect(merged.notes, 'local');
+    });
+
+    test('editing one field of an unstamped row does not freshen the rest', () {
+      final unstamped = start();
+      final edited = unstamped.copyWith(title: 'Severance S2');
+      expect(edited.fieldUpdatedAt['notes'], base);
+      expect(edited.fieldUpdatedAt['title']!.isAfter(base), isTrue);
+    });
+
+    test('a unit merges field by field too', () {
+      RankingChild unit({
+        String notes = '',
+        double? score,
+        required DateTime updated,
+        Map<String, DateTime> changed = const {},
+      }) {
+        RankingChild build(RankingFieldStamps stamps) => RankingChild(
+          id: 'c1',
+          parentId: 'p1',
+          name: 'Pilot',
+          notes: notes,
+          overallScore: score,
+          createdAt: base,
+          updatedAt: updated,
+          version: 2,
+          fieldUpdatedAt: stamps,
+        );
+        return build(
+          stampsFor(rankingChildStampValues(build(const {})), changed),
+        );
+      }
+
+      final local = unit(
+        notes: 'cold open',
+        updated: t1,
+        changed: {'notes': t1},
+      );
+      final remote = rankingChildToFirestore(
+        unit(score: 4.5, updated: t2, changed: {'overallScore': t2}),
+      );
+      final result = resolveRankingChildFromRemote(remote, 'c1', local: local);
+      expect(result.merged.notes, 'cold open');
+      expect(result.merged.overallScore, 4.5);
+      expect(result.localWon, isTrue);
+    });
+  });
+
   group('Child merge', () {
     test('a cleared score comes across as cleared', () {
       final local = RankingChild(

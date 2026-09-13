@@ -1,5 +1,18 @@
 import 'package:voyager/domain/models/ranking_models.dart';
 
+/// Where a new category goes: after the last one.
+///
+/// Not the count — a delete leaves a gap, so with 0, 1, 2 and the first
+/// deleted, the count put a new category on 2 alongside the last, and the
+/// strip order between the two was left to chance on every device.
+int rankingNextCategorySortOrder(Iterable<RankingCategory> categories) {
+  var next = 0;
+  for (final category in categories) {
+    if (category.sortOrder >= next) next = category.sortOrder + 1;
+  }
+  return next;
+}
+
 /// The smallest move a score can make under [precision].
 double rankingScoreStep(RankingScorePrecision precision) => switch (precision) {
   RankingScorePrecision.integers => 1.0,
@@ -25,7 +38,9 @@ double roundRankingScore(
   required int scoreMax,
   required RankingScorePrecision precision,
 }) {
-  if (value.isNaN) return 0;
+  // A pasted run of 400 digits parses to infinity, and `.round()` on that
+  // throws rather than clamping.
+  if (!value.isFinite) return value.isNaN || value < 0 ? 0 : scoreMax.toDouble();
   final steps = _stepsPerPoint(precision);
   // Multiply-round-divide rather than `(value / step).round() * step`: the
   // division is exact for these three denominators, so 84 / 10 is the double
@@ -366,22 +381,26 @@ List<RankingParent> filterUnrankedByStatus(
 /// down. A tier therefore states its rank exactly once however the pinning
 /// splits it.
 List<int?> rankingDisplayRanks(List<RankingParent> rankedInListOrder) {
-  final scores = [
-    for (final parent in rankedInListOrder) parent.overallScore!,
-  ];
+  // Counted once per distinct score and walked from the top, rather than
+  // comparing every score with every other on each build: this runs on every
+  // search keystroke.
+  final counts = <double, int>{};
+  for (final parent in rankedInListOrder) {
+    counts.update(parent.overallScore!, (n) => n + 1, ifAbsent: () => 1);
+  }
+  final rankOf = <double, int>{};
+  var better = 0;
+  for (final score in counts.keys.toList()..sort((a, b) => b.compareTo(a))) {
+    // 1-based by descending score: how many entries beat this one, plus one.
+    rankOf[score] = better + 1;
+    better += counts[score]!;
+  }
+
   final ranks = <int?>[];
   final seen = <double>{};
-  for (final score in scores) {
-    if (!seen.add(score)) {
-      ranks.add(null);
-      continue;
-    }
-    // 1-based by descending score: how many entries beat this one, plus one.
-    var better = 0;
-    for (final other in scores) {
-      if (other > score) better++;
-    }
-    ranks.add(better + 1);
+  for (final parent in rankedInListOrder) {
+    final score = parent.overallScore!;
+    ranks.add(seen.add(score) ? rankOf[score] : null);
   }
   return ranks;
 }
@@ -405,17 +424,130 @@ RankingParent applyRankingEditRules(
 ) {
   var result = next;
 
+  // Without a version bump: these ride along with the edit that tripped them,
+  // and one save counting as three writes outranked a real edit made on
+  // another device in the meantime.
   if (result.isRanked != previous.isRanked) {
-    result = result.copyWith(starred: false);
+    result = result.copyWith(starred: false, bumpVersion: false);
     if (!result.isRanked) {
-      result = result.copyWith(status: RankingStatus.inProgress);
+      result = result.copyWith(
+        status: RankingStatus.inProgress,
+        bumpVersion: false,
+      );
     }
   }
 
   if (_promotesToInProgress(previous, result)) {
-    result = result.copyWith(status: RankingStatus.inProgress);
+    result = result.copyWith(
+      status: RankingStatus.inProgress,
+      bumpVersion: false,
+    );
   }
   return result;
+}
+
+/// The fields an editor changed between [previous] and [next], laid over
+/// [fresh] — the row as it stands on disk now.
+///
+/// An editor holds the row it last saw, and a save built wholly from that
+/// copy would put back everything anyone else changed since: a note the panel
+/// saved a moment ago, a score another device set. Only what this edit
+/// touched is its to write.
+RankingParent rankingParentEditOnto(
+  RankingParent fresh, {
+  required RankingParent previous,
+  required RankingParent next,
+}) {
+  // Handed back as is when the edit changed nothing, so the caller can tell
+  // there is nothing to write.
+  if (_sameStampValues(
+    rankingParentStampValues(previous),
+    rankingParentStampValues(next),
+  )) {
+    return fresh;
+  }
+  final fieldValues = _fieldValuesEditOnto(
+    fresh.fieldValues,
+    previous: previous.fieldValues,
+    next: next.fieldValues,
+  );
+  final overallChanged = next.overallScore != previous.overallScore;
+  return fresh.copyWith(
+    title: next.title != previous.title ? next.title : null,
+    overallScore: overallChanged ? next.overallScore : null,
+    clearOverallScore: overallChanged && next.overallScore == null,
+    notes: next.notes != previous.notes ? next.notes : null,
+    fieldValues: fieldValues,
+    tags: _sameList(next.tags, previous.tags) ? null : next.tags,
+    status: next.status != previous.status ? next.status : null,
+    starred: next.starred != previous.starred ? next.starred : null,
+    createdAt: next.createdAt != previous.createdAt ? next.createdAt : null,
+  );
+}
+
+/// [rankingParentEditOnto] for a unit.
+RankingChild rankingChildEditOnto(
+  RankingChild fresh, {
+  required RankingChild previous,
+  required RankingChild next,
+}) {
+  if (_sameStampValues(
+    rankingChildStampValues(previous),
+    rankingChildStampValues(next),
+  )) {
+    return fresh;
+  }
+  final overallChanged = next.overallScore != previous.overallScore;
+  return fresh.copyWith(
+    name: next.name != previous.name ? next.name : null,
+    overallScore: overallChanged ? next.overallScore : null,
+    clearOverallScore: overallChanged && next.overallScore == null,
+    notes: next.notes != previous.notes ? next.notes : null,
+    fieldValues: _fieldValuesEditOnto(
+      fresh.fieldValues,
+      previous: previous.fieldValues,
+      next: next.fieldValues,
+    ),
+    createdAt: next.createdAt != previous.createdAt ? next.createdAt : null,
+  );
+}
+
+/// Null when the edit changed no field value, so the fresh map is kept as is.
+Map<String, RankingFieldValue>? _fieldValuesEditOnto(
+  Map<String, RankingFieldValue> fresh, {
+  required Map<String, RankingFieldValue> previous,
+  required Map<String, RankingFieldValue> next,
+}) {
+  Map<String, RankingFieldValue>? result;
+  for (final id in {...previous.keys, ...next.keys}) {
+    final before = previous[id] ?? const RankingFieldValue();
+    final after = next[id] ?? const RankingFieldValue();
+    final scoreChanged = before.score != after.score;
+    final notesChanged = before.notes != after.notes;
+    if (!scoreChanged && !notesChanged) continue;
+    result ??= {...fresh};
+    final current = result[id] ?? const RankingFieldValue();
+    result[id] = RankingFieldValue(
+      score: scoreChanged ? after.score : current.score,
+      notes: notesChanged ? after.notes : current.notes,
+    );
+  }
+  return result;
+}
+
+bool _sameStampValues(Map<String, Object?> a, Map<String, Object?> b) {
+  for (final key in {...a.keys, ...b.keys}) {
+    if (a[key] != b[key]) return false;
+  }
+  return true;
+}
+
+bool _sameList(List<String> a, List<String> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }
 
 bool _promotesToInProgress(RankingParent previous, RankingParent next) {

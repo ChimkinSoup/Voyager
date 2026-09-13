@@ -37587,6 +37587,18 @@ class $RankingParentsTableTable extends RankingParentsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _fieldUpdatedAtJsonMeta =
+      const VerificationMeta('fieldUpdatedAtJson');
+  @override
+  late final GeneratedColumn<String> fieldUpdatedAtJson =
+      GeneratedColumn<String>(
+        'field_updated_at_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('{}'),
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -37644,6 +37656,7 @@ class $RankingParentsTableTable extends RankingParentsTable
     status,
     starred,
     queueSortOrder,
+    fieldUpdatedAtJson,
     createdAt,
     updatedAt,
     version,
@@ -37733,6 +37746,15 @@ class $RankingParentsTableTable extends RankingParentsTable
         ),
       );
     }
+    if (data.containsKey('field_updated_at_json')) {
+      context.handle(
+        _fieldUpdatedAtJsonMeta,
+        fieldUpdatedAtJson.isAcceptableOrUnknown(
+          data['field_updated_at_json']!,
+          _fieldUpdatedAtJsonMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -37813,6 +37835,10 @@ class $RankingParentsTableTable extends RankingParentsTable
         DriftSqlType.int,
         data['${effectivePrefix}queue_sort_order'],
       )!,
+      fieldUpdatedAtJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}field_updated_at_json'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -37859,6 +37885,9 @@ class RankingParentsTableData extends DataClass
   final String status;
   final bool starred;
   final int queueSortOrder;
+
+  /// `stampKey -> ISO instant`, one per field — see `RankingFieldStamps`.
+  final String fieldUpdatedAtJson;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -37874,6 +37903,7 @@ class RankingParentsTableData extends DataClass
     required this.status,
     required this.starred,
     required this.queueSortOrder,
+    required this.fieldUpdatedAtJson,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -37894,6 +37924,7 @@ class RankingParentsTableData extends DataClass
     map['status'] = Variable<String>(status);
     map['starred'] = Variable<bool>(starred);
     map['queue_sort_order'] = Variable<int>(queueSortOrder);
+    map['field_updated_at_json'] = Variable<String>(fieldUpdatedAtJson);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -37917,6 +37948,7 @@ class RankingParentsTableData extends DataClass
       status: Value(status),
       starred: Value(starred),
       queueSortOrder: Value(queueSortOrder),
+      fieldUpdatedAtJson: Value(fieldUpdatedAtJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -37942,6 +37974,9 @@ class RankingParentsTableData extends DataClass
       status: serializer.fromJson<String>(json['status']),
       starred: serializer.fromJson<bool>(json['starred']),
       queueSortOrder: serializer.fromJson<int>(json['queueSortOrder']),
+      fieldUpdatedAtJson: serializer.fromJson<String>(
+        json['fieldUpdatedAtJson'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -37962,6 +37997,7 @@ class RankingParentsTableData extends DataClass
       'status': serializer.toJson<String>(status),
       'starred': serializer.toJson<bool>(starred),
       'queueSortOrder': serializer.toJson<int>(queueSortOrder),
+      'fieldUpdatedAtJson': serializer.toJson<String>(fieldUpdatedAtJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -37980,6 +38016,7 @@ class RankingParentsTableData extends DataClass
     String? status,
     bool? starred,
     int? queueSortOrder,
+    String? fieldUpdatedAtJson,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -37995,6 +38032,7 @@ class RankingParentsTableData extends DataClass
     status: status ?? this.status,
     starred: starred ?? this.starred,
     queueSortOrder: queueSortOrder ?? this.queueSortOrder,
+    fieldUpdatedAtJson: fieldUpdatedAtJson ?? this.fieldUpdatedAtJson,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -38020,6 +38058,9 @@ class RankingParentsTableData extends DataClass
       queueSortOrder: data.queueSortOrder.present
           ? data.queueSortOrder.value
           : this.queueSortOrder,
+      fieldUpdatedAtJson: data.fieldUpdatedAtJson.present
+          ? data.fieldUpdatedAtJson.value
+          : this.fieldUpdatedAtJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -38040,6 +38081,7 @@ class RankingParentsTableData extends DataClass
           ..write('status: $status, ')
           ..write('starred: $starred, ')
           ..write('queueSortOrder: $queueSortOrder, ')
+          ..write('fieldUpdatedAtJson: $fieldUpdatedAtJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -38060,6 +38102,7 @@ class RankingParentsTableData extends DataClass
     status,
     starred,
     queueSortOrder,
+    fieldUpdatedAtJson,
     createdAt,
     updatedAt,
     version,
@@ -38079,6 +38122,7 @@ class RankingParentsTableData extends DataClass
           other.status == this.status &&
           other.starred == this.starred &&
           other.queueSortOrder == this.queueSortOrder &&
+          other.fieldUpdatedAtJson == this.fieldUpdatedAtJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -38097,6 +38141,7 @@ class RankingParentsTableCompanion
   final Value<String> status;
   final Value<bool> starred;
   final Value<int> queueSortOrder;
+  final Value<String> fieldUpdatedAtJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -38113,6 +38158,7 @@ class RankingParentsTableCompanion
     this.status = const Value.absent(),
     this.starred = const Value.absent(),
     this.queueSortOrder = const Value.absent(),
+    this.fieldUpdatedAtJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -38130,6 +38176,7 @@ class RankingParentsTableCompanion
     this.status = const Value.absent(),
     this.starred = const Value.absent(),
     this.queueSortOrder = const Value.absent(),
+    this.fieldUpdatedAtJson = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -38151,6 +38198,7 @@ class RankingParentsTableCompanion
     Expression<String>? status,
     Expression<bool>? starred,
     Expression<int>? queueSortOrder,
+    Expression<String>? fieldUpdatedAtJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -38168,6 +38216,8 @@ class RankingParentsTableCompanion
       if (status != null) 'status': status,
       if (starred != null) 'starred': starred,
       if (queueSortOrder != null) 'queue_sort_order': queueSortOrder,
+      if (fieldUpdatedAtJson != null)
+        'field_updated_at_json': fieldUpdatedAtJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -38187,6 +38237,7 @@ class RankingParentsTableCompanion
     Value<String>? status,
     Value<bool>? starred,
     Value<int>? queueSortOrder,
+    Value<String>? fieldUpdatedAtJson,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -38204,6 +38255,7 @@ class RankingParentsTableCompanion
       status: status ?? this.status,
       starred: starred ?? this.starred,
       queueSortOrder: queueSortOrder ?? this.queueSortOrder,
+      fieldUpdatedAtJson: fieldUpdatedAtJson ?? this.fieldUpdatedAtJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -38245,6 +38297,9 @@ class RankingParentsTableCompanion
     if (queueSortOrder.present) {
       map['queue_sort_order'] = Variable<int>(queueSortOrder.value);
     }
+    if (fieldUpdatedAtJson.present) {
+      map['field_updated_at_json'] = Variable<String>(fieldUpdatedAtJson.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -38276,6 +38331,7 @@ class RankingParentsTableCompanion
           ..write('status: $status, ')
           ..write('starred: $starred, ')
           ..write('queueSortOrder: $queueSortOrder, ')
+          ..write('fieldUpdatedAtJson: $fieldUpdatedAtJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -38366,6 +38422,18 @@ class $RankingChildrenTableTable extends RankingChildrenTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _fieldUpdatedAtJsonMeta =
+      const VerificationMeta('fieldUpdatedAtJson');
+  @override
+  late final GeneratedColumn<String> fieldUpdatedAtJson =
+      GeneratedColumn<String>(
+        'field_updated_at_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('{}'),
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -38420,6 +38488,7 @@ class $RankingChildrenTableTable extends RankingChildrenTable
     notes,
     fieldValuesJson,
     sortOrder,
+    fieldUpdatedAtJson,
     createdAt,
     updatedAt,
     version,
@@ -38486,6 +38555,15 @@ class $RankingChildrenTableTable extends RankingChildrenTable
       context.handle(
         _sortOrderMeta,
         sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('field_updated_at_json')) {
+      context.handle(
+        _fieldUpdatedAtJsonMeta,
+        fieldUpdatedAtJson.isAcceptableOrUnknown(
+          data['field_updated_at_json']!,
+          _fieldUpdatedAtJsonMeta,
+        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -38556,6 +38634,10 @@ class $RankingChildrenTableTable extends RankingChildrenTable
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
+      fieldUpdatedAtJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}field_updated_at_json'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -38590,6 +38672,9 @@ class RankingChildrenTableData extends DataClass
   final String notes;
   final String fieldValuesJson;
   final int sortOrder;
+
+  /// Same as [RankingParentsTable.fieldUpdatedAtJson].
+  final String fieldUpdatedAtJson;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -38602,6 +38687,7 @@ class RankingChildrenTableData extends DataClass
     required this.notes,
     required this.fieldValuesJson,
     required this.sortOrder,
+    required this.fieldUpdatedAtJson,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -38619,6 +38705,7 @@ class RankingChildrenTableData extends DataClass
     map['notes'] = Variable<String>(notes);
     map['field_values_json'] = Variable<String>(fieldValuesJson);
     map['sort_order'] = Variable<int>(sortOrder);
+    map['field_updated_at_json'] = Variable<String>(fieldUpdatedAtJson);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -38639,6 +38726,7 @@ class RankingChildrenTableData extends DataClass
       notes: Value(notes),
       fieldValuesJson: Value(fieldValuesJson),
       sortOrder: Value(sortOrder),
+      fieldUpdatedAtJson: Value(fieldUpdatedAtJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -38661,6 +38749,9 @@ class RankingChildrenTableData extends DataClass
       notes: serializer.fromJson<String>(json['notes']),
       fieldValuesJson: serializer.fromJson<String>(json['fieldValuesJson']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      fieldUpdatedAtJson: serializer.fromJson<String>(
+        json['fieldUpdatedAtJson'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -38678,6 +38769,7 @@ class RankingChildrenTableData extends DataClass
       'notes': serializer.toJson<String>(notes),
       'fieldValuesJson': serializer.toJson<String>(fieldValuesJson),
       'sortOrder': serializer.toJson<int>(sortOrder),
+      'fieldUpdatedAtJson': serializer.toJson<String>(fieldUpdatedAtJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -38693,6 +38785,7 @@ class RankingChildrenTableData extends DataClass
     String? notes,
     String? fieldValuesJson,
     int? sortOrder,
+    String? fieldUpdatedAtJson,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -38705,6 +38798,7 @@ class RankingChildrenTableData extends DataClass
     notes: notes ?? this.notes,
     fieldValuesJson: fieldValuesJson ?? this.fieldValuesJson,
     sortOrder: sortOrder ?? this.sortOrder,
+    fieldUpdatedAtJson: fieldUpdatedAtJson ?? this.fieldUpdatedAtJson,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -38725,6 +38819,9 @@ class RankingChildrenTableData extends DataClass
           ? data.fieldValuesJson.value
           : this.fieldValuesJson,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      fieldUpdatedAtJson: data.fieldUpdatedAtJson.present
+          ? data.fieldUpdatedAtJson.value
+          : this.fieldUpdatedAtJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -38742,6 +38839,7 @@ class RankingChildrenTableData extends DataClass
           ..write('notes: $notes, ')
           ..write('fieldValuesJson: $fieldValuesJson, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('fieldUpdatedAtJson: $fieldUpdatedAtJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -38759,6 +38857,7 @@ class RankingChildrenTableData extends DataClass
     notes,
     fieldValuesJson,
     sortOrder,
+    fieldUpdatedAtJson,
     createdAt,
     updatedAt,
     version,
@@ -38775,6 +38874,7 @@ class RankingChildrenTableData extends DataClass
           other.notes == this.notes &&
           other.fieldValuesJson == this.fieldValuesJson &&
           other.sortOrder == this.sortOrder &&
+          other.fieldUpdatedAtJson == this.fieldUpdatedAtJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -38790,6 +38890,7 @@ class RankingChildrenTableCompanion
   final Value<String> notes;
   final Value<String> fieldValuesJson;
   final Value<int> sortOrder;
+  final Value<String> fieldUpdatedAtJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -38803,6 +38904,7 @@ class RankingChildrenTableCompanion
     this.notes = const Value.absent(),
     this.fieldValuesJson = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.fieldUpdatedAtJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -38817,6 +38919,7 @@ class RankingChildrenTableCompanion
     this.notes = const Value.absent(),
     this.fieldValuesJson = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.fieldUpdatedAtJson = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -38835,6 +38938,7 @@ class RankingChildrenTableCompanion
     Expression<String>? notes,
     Expression<String>? fieldValuesJson,
     Expression<int>? sortOrder,
+    Expression<String>? fieldUpdatedAtJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -38849,6 +38953,8 @@ class RankingChildrenTableCompanion
       if (notes != null) 'notes': notes,
       if (fieldValuesJson != null) 'field_values_json': fieldValuesJson,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (fieldUpdatedAtJson != null)
+        'field_updated_at_json': fieldUpdatedAtJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -38865,6 +38971,7 @@ class RankingChildrenTableCompanion
     Value<String>? notes,
     Value<String>? fieldValuesJson,
     Value<int>? sortOrder,
+    Value<String>? fieldUpdatedAtJson,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -38879,6 +38986,7 @@ class RankingChildrenTableCompanion
       notes: notes ?? this.notes,
       fieldValuesJson: fieldValuesJson ?? this.fieldValuesJson,
       sortOrder: sortOrder ?? this.sortOrder,
+      fieldUpdatedAtJson: fieldUpdatedAtJson ?? this.fieldUpdatedAtJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -38911,6 +39019,9 @@ class RankingChildrenTableCompanion
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
+    if (fieldUpdatedAtJson.present) {
+      map['field_updated_at_json'] = Variable<String>(fieldUpdatedAtJson.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -38939,6 +39050,7 @@ class RankingChildrenTableCompanion
           ..write('notes: $notes, ')
           ..write('fieldValuesJson: $fieldValuesJson, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('fieldUpdatedAtJson: $fieldUpdatedAtJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -56854,6 +56966,7 @@ typedef $$RankingParentsTableTableCreateCompanionBuilder =
       Value<String> status,
       Value<bool> starred,
       Value<int> queueSortOrder,
+      Value<String> fieldUpdatedAtJson,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -56872,6 +56985,7 @@ typedef $$RankingParentsTableTableUpdateCompanionBuilder =
       Value<String> status,
       Value<bool> starred,
       Value<int> queueSortOrder,
+      Value<String> fieldUpdatedAtJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -56935,6 +57049,11 @@ class $$RankingParentsTableTableFilterComposer
 
   ColumnFilters<int> get queueSortOrder => $composableBuilder(
     column: $table.queueSortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fieldUpdatedAtJson => $composableBuilder(
+    column: $table.fieldUpdatedAtJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -57018,6 +57137,11 @@ class $$RankingParentsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get fieldUpdatedAtJson => $composableBuilder(
+    column: $table.fieldUpdatedAtJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -57083,6 +57207,11 @@ class $$RankingParentsTableTableAnnotationComposer
 
   GeneratedColumn<int> get queueSortOrder => $composableBuilder(
     column: $table.queueSortOrder,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get fieldUpdatedAtJson => $composableBuilder(
+    column: $table.fieldUpdatedAtJson,
     builder: (column) => column,
   );
 
@@ -57152,6 +57281,7 @@ class $$RankingParentsTableTableTableManager
                 Value<String> status = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<int> queueSortOrder = const Value.absent(),
+                Value<String> fieldUpdatedAtJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -57168,6 +57298,7 @@ class $$RankingParentsTableTableTableManager
                 status: status,
                 starred: starred,
                 queueSortOrder: queueSortOrder,
+                fieldUpdatedAtJson: fieldUpdatedAtJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -57186,6 +57317,7 @@ class $$RankingParentsTableTableTableManager
                 Value<String> status = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<int> queueSortOrder = const Value.absent(),
+                Value<String> fieldUpdatedAtJson = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -57202,6 +57334,7 @@ class $$RankingParentsTableTableTableManager
                 status: status,
                 starred: starred,
                 queueSortOrder: queueSortOrder,
+                fieldUpdatedAtJson: fieldUpdatedAtJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -57246,6 +57379,7 @@ typedef $$RankingChildrenTableTableCreateCompanionBuilder =
       Value<String> notes,
       Value<String> fieldValuesJson,
       Value<int> sortOrder,
+      Value<String> fieldUpdatedAtJson,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -57261,6 +57395,7 @@ typedef $$RankingChildrenTableTableUpdateCompanionBuilder =
       Value<String> notes,
       Value<String> fieldValuesJson,
       Value<int> sortOrder,
+      Value<String> fieldUpdatedAtJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -57309,6 +57444,11 @@ class $$RankingChildrenTableTableFilterComposer
 
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fieldUpdatedAtJson => $composableBuilder(
+    column: $table.fieldUpdatedAtJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -57377,6 +57517,11 @@ class $$RankingChildrenTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get fieldUpdatedAtJson => $composableBuilder(
+    column: $table.fieldUpdatedAtJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -57431,6 +57576,11 @@ class $$RankingChildrenTableTableAnnotationComposer
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<String> get fieldUpdatedAtJson => $composableBuilder(
+    column: $table.fieldUpdatedAtJson,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -57495,6 +57645,7 @@ class $$RankingChildrenTableTableTableManager
                 Value<String> notes = const Value.absent(),
                 Value<String> fieldValuesJson = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<String> fieldUpdatedAtJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -57508,6 +57659,7 @@ class $$RankingChildrenTableTableTableManager
                 notes: notes,
                 fieldValuesJson: fieldValuesJson,
                 sortOrder: sortOrder,
+                fieldUpdatedAtJson: fieldUpdatedAtJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -57523,6 +57675,7 @@ class $$RankingChildrenTableTableTableManager
                 Value<String> notes = const Value.absent(),
                 Value<String> fieldValuesJson = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<String> fieldUpdatedAtJson = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -57536,6 +57689,7 @@ class $$RankingChildrenTableTableTableManager
                 notes: notes,
                 fieldValuesJson: fieldValuesJson,
                 sortOrder: sortOrder,
+                fieldUpdatedAtJson: fieldUpdatedAtJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
