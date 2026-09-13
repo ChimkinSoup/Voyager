@@ -18,6 +18,9 @@ enum FinanceBreakdownMode { category, tag, store }
 /// Which chart the breakdown card's title dropdown is showing.
 enum FinanceBreakdownChart { spending, income }
 
+/// The window the expanded hero net-flow chart covers, each ending today.
+enum FinanceHeroRange { month, d7, d30, d90, ytd }
+
 /// The finance page's chrome — which tab, which grouping, which cash-flow
 /// bucket — as it was left last time.
 ///
@@ -32,6 +35,7 @@ class FinanceUiPrefs {
     this.breakdownMode = FinanceBreakdownMode.category,
     this.breakdownChart = FinanceBreakdownChart.spending,
     this.cashFlowGranularity = CashFlowGranularity.monthly,
+    this.heroExpandRange = FinanceHeroRange.month,
   });
 
   static const defaults = FinanceUiPrefs();
@@ -40,18 +44,21 @@ class FinanceUiPrefs {
   final FinanceBreakdownMode breakdownMode;
   final FinanceBreakdownChart breakdownChart;
   final CashFlowGranularity cashFlowGranularity;
+  final FinanceHeroRange heroExpandRange;
 
   FinanceUiPrefs copyWith({
     FinanceViewMode? viewMode,
     FinanceBreakdownMode? breakdownMode,
     FinanceBreakdownChart? breakdownChart,
     CashFlowGranularity? cashFlowGranularity,
+    FinanceHeroRange? heroExpandRange,
   }) {
     return FinanceUiPrefs(
       viewMode: viewMode ?? this.viewMode,
       breakdownMode: breakdownMode ?? this.breakdownMode,
       breakdownChart: breakdownChart ?? this.breakdownChart,
       cashFlowGranularity: cashFlowGranularity ?? this.cashFlowGranularity,
+      heroExpandRange: heroExpandRange ?? this.heroExpandRange,
     );
   }
 
@@ -84,6 +91,11 @@ class FinanceUiPrefs {
         json['financeCashFlowGranularity'],
         defaults.cashFlowGranularity,
       ),
+      heroExpandRange: _byName(
+        FinanceHeroRange.values,
+        json['financeHeroExpandRange'],
+        defaults.heroExpandRange,
+      ),
     );
   }
 
@@ -92,6 +104,7 @@ class FinanceUiPrefs {
     'financeBreakdownMode': breakdownMode.name,
     'financeBreakdownChart': breakdownChart.name,
     'financeCashFlowGranularity': cashFlowGranularity.name,
+    'financeHeroExpandRange': heroExpandRange.name,
   };
 
   static T _byName<T extends Enum>(List<T> values, Object? name, T fallback) {
@@ -108,11 +121,17 @@ class FinanceUiPrefs {
       other.viewMode == viewMode &&
       other.breakdownMode == breakdownMode &&
       other.breakdownChart == breakdownChart &&
-      other.cashFlowGranularity == cashFlowGranularity;
+      other.cashFlowGranularity == cashFlowGranularity &&
+      other.heroExpandRange == heroExpandRange;
 
   @override
-  int get hashCode =>
-      Object.hash(viewMode, breakdownMode, breakdownChart, cashFlowGranularity);
+  int get hashCode => Object.hash(
+    viewMode,
+    breakdownMode,
+    breakdownChart,
+    cashFlowGranularity,
+    heroExpandRange,
+  );
 }
 
 abstract class FinanceUiPrefsStore {
@@ -233,6 +252,9 @@ class FinanceUiPrefsNotifier extends StateNotifier<FinanceUiPrefs> {
 
   void setCashFlowGranularity(CashFlowGranularity granularity) =>
       update(state.copyWith(cashFlowGranularity: granularity));
+
+  void setHeroExpandRange(FinanceHeroRange range) =>
+      update(state.copyWith(heroExpandRange: range));
 }
 
 final financeUiPrefsProvider =
@@ -246,3 +268,24 @@ final financeUiPrefsProvider =
 /// budget's "View expenses" as a way of asking a question, and a question that
 /// survived a restart would just be a ledger mysteriously missing rows.
 final financeLedgerTagFilterProvider = StateProvider<String?>((_) => null);
+
+/// A request, from the hero's expanded view, to scroll the ledger to [day].
+///
+/// Deliberately not const and without `==`: asking for the same day twice is
+/// two requests, and the provider only notifies on a change.
+class FinanceLedgerJump {
+  FinanceLedgerJump(this.day, {this.ready});
+
+  /// Local midnight.
+  final DateTime day;
+
+  /// Completes once the ledger is uncovered; the scroll waits for it. The
+  /// page lays out the day's placeholder straight away, while still covered.
+  final Future<void>? ready;
+}
+
+/// The latest ledger jump request. The finance page listens for it; nothing
+/// reads the stored value back.
+final financeLedgerJumpProvider = StateProvider<FinanceLedgerJump?>(
+  (_) => null,
+);

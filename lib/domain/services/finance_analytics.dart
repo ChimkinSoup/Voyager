@@ -1,3 +1,4 @@
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 
@@ -490,6 +491,129 @@ List<NetWorthPoint> netWorthSeries(
     );
   }
   return points;
+}
+
+/// One calendar day's money in and out, for the hero net-flow chart and its
+/// year heatmap.
+class DailyFlow {
+  const DailyFlow({
+    required this.day,
+    this.incomeCents = 0,
+    this.expenseCents = 0,
+  });
+
+  /// Local midnight.
+  final DateTime day;
+  final int incomeCents;
+  final int expenseCents;
+
+  /// Deposits minus expenses — the sum of that day's
+  /// [FinancialTransaction.signedCents].
+  int get netCents => incomeCents - expenseCents;
+
+  int valueFor(NetFlowSeries series) => switch (series) {
+    NetFlowSeries.net => netCents,
+    NetFlowSeries.income => incomeCents,
+    NetFlowSeries.expense => expenseCents,
+  };
+}
+
+/// The three lines the expanded hero chart can plot.
+enum NetFlowSeries { net, income, expense }
+
+/// One [DailyFlow] for every calendar day from [from] through [to], both
+/// inclusive and oldest first. Quiet days are zeros, not gaps.
+///
+/// Days are bucketed by the local y/m/d of [FinancialTransaction.occurredAt],
+/// the same key the ledger's day headers use. [where] narrows which
+/// transactions count (the expand view's category filter); it never changes
+/// which days are emitted.
+List<DailyFlow> dailyNetSeries(
+  List<FinancialTransaction> transactions, {
+  required DateTime from,
+  required DateTime to,
+  bool Function(FinancialTransaction transaction)? where,
+}) {
+  final start = DateTime(from.year, from.month, from.day);
+  final length = calendarDaysBetween(start, to) + 1;
+  if (length <= 0) return const [];
+  final income = List<int>.filled(length, 0);
+  final expense = List<int>.filled(length, 0);
+  for (final t in transactions) {
+    if (where != null && !where(t)) continue;
+    // Differenced by calendar day, not by Duration — see
+    // [calendarDaysBetween]: two local midnights either side of a DST
+    // transition are 23h or 25h apart.
+    final index = calendarDaysBetween(start, t.occurredAt);
+    if (index < 0 || index >= length) continue;
+    if (t.type == TransactionType.deposit) {
+      income[index] += t.amountCents;
+    } else {
+      expense[index] += t.amountCents;
+    }
+  }
+  return [
+    for (var i = 0; i < length; i++)
+      DailyFlow(
+        day: addCalendarDays(start, i),
+        incomeCents: income[i],
+        expenseCents: expense[i],
+      ),
+  ];
+}
+
+/// Net of every transaction from the 1st of [today]'s month through the end
+/// of [today].
+int monthToDateNet(List<FinancialTransaction> transactions, DateTime today) =>
+    _netBetween(
+      transactions,
+      DateTime(today.year, today.month, 1),
+      DateTime(today.year, today.month, today.day),
+    );
+
+/// Net over the same day-of-month span one calendar month earlier: the
+/// previous month's 1st through `today.day`, clamped to that month's length
+/// (the 31st of March compares against all of February).
+int priorMonthToDateNet(
+  List<FinancialTransaction> transactions,
+  DateTime today,
+) {
+  final start = DateTime(today.year, today.month - 1, 1);
+  // Day 0 of this month is the last day of the previous one.
+  final lastDay = DateTime(today.year, today.month, 0).day;
+  final endDay = today.day < lastDay ? today.day : lastDay;
+  return _netBetween(
+    transactions,
+    start,
+    DateTime(start.year, start.month, endDay),
+  );
+}
+
+int _netBetween(
+  List<FinancialTransaction> transactions,
+  DateTime firstDay,
+  DateTime lastDay,
+) {
+  final end = addCalendarDays(lastDay, 1);
+  var net = 0;
+  for (final t in transactions) {
+    if (t.occurredAt.isBefore(firstDay) || !t.occurredAt.isBefore(end)) {
+      continue;
+    }
+    net += t.signedCents;
+  }
+  return net;
+}
+
+/// The largest magnitude [series] reaches on any of [flows] — the top of a
+/// heatmap's intensity scale, so a quiet year still shows contrast.
+int busiestDailyFlow(Iterable<DailyFlow> flows, NetFlowSeries series) {
+  var max = 0;
+  for (final flow in flows) {
+    final value = flow.valueFor(series).abs();
+    if (value > max) max = value;
+  }
+  return max;
 }
 
 /// The most recent valuation for [assetId], or null when never valued.

@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +22,7 @@ import 'package:voyager/features/finance/finance_analytics_view.dart';
 import 'package:voyager/features/finance/finance_bill_radar.dart';
 import 'package:voyager/features/finance/finance_budget_panel.dart';
 import 'package:voyager/features/finance/finance_goals_view.dart';
+import 'package:voyager/features/finance/finance_net_flow_hero.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart';
 import 'package:voyager/features/finance/finance_ui_prefs.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
@@ -113,6 +112,11 @@ class _LedgerSpacer {
   const _LedgerSpacer();
 }
 
+/// Stands in for the rows of a day a ledger jump landed on that has none.
+class _LedgerEmptyDay {
+  const _LedgerEmptyDay();
+}
+
 /// The flattened ledger plus the position of every transaction in it, built
 /// once per build by `_FinanceViewState._ledgerModel`.
 class _LedgerModel {
@@ -126,6 +130,7 @@ class _LedgerModel {
 }
 
 const _ledgerSpacer = _LedgerSpacer();
+const _ledgerEmptyDay = _LedgerEmptyDay();
 const _ledgerUpcomingHeader = _LedgerUpcomingHeader();
 
 class _FinanceViewState extends ConsumerState<_FinanceView> {
@@ -138,6 +143,141 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
   // id; pruned to the ids actually present at the end of every build.
   final _rowWidgetCache = <String, _TransactionRow>{};
   final _rowSignatureCache = <String, _TxnRowSignature>{};
+
+  // Ledger jumps (from the hero's expanded view). Only one of the two
+  // scrollers is attached at a time, depending on the split breakpoint.
+  final _wideScroll = ScrollController();
+  final _narrowScroll = ScrollController();
+  final _headerKeys = <DateTime, GlobalKey>{};
+  _LedgerModel _ledger = const _LedgerModel();
+
+  /// The day the last jump landed on, when it has no rows — see
+  /// [_ledgerModel]. Cleared by the next jump or by leaving the Ledger tab.
+  DateTime? _emptyJumpDay;
+
+  /// Bumped per jump so a slow search gives way to a newer request.
+  var _jumpGeneration = 0;
+
+  /// The tab the last build showed. A jump arrives with the Ledger tab
+  /// already requested but not yet built.
+  var _builtMode = FinanceViewMode.ledger;
+
+  @override
+  void dispose() {
+    _wideScroll.dispose();
+    _narrowScroll.dispose();
+    super.dispose();
+  }
+
+  void _jumpToDay(DateTime day, {Future<void>? ready}) {
+    final hasRows = widget.transactions.any(
+      (t) =>
+          t.occurredAt.year == day.year &&
+          t.occurredAt.month == day.month &&
+          t.occurredAt.day == day.day,
+    );
+    setState(() => _emptyJumpDay = hasRows ? null : day);
+    _scrollToDay(
+      day,
+      ++_jumpGeneration,
+      switchingTabs: _builtMode != FinanceViewMode.ledger,
+      ready: ready,
+    );
+  }
+
+  /// Scrolls the ledger until [day]'s header is at the top of it.
+  ///
+  /// The ledger is a lazy sliver of rows with different heights, so there is
+  /// no offset to compute up front. Instead this bisects: jump, let a frame
+  /// build, see whether the headers now on screen are newer or older than
+  /// [day], and halve the range. Once the header itself has been built,
+  /// [Scrollable.ensureVisible] finishes the move.
+  ///
+  /// Nothing moves until [ready] completes (the hero's view closing).
+  ///
+  /// When the jump also switches tabs, it waits the crossfade out first.
+  /// [VoyagerCrossfadeIndex] wraps the arriving page in an opacity and a scale
+  /// only while it animates, so the ledger's scroll view is rebuilt from
+  /// scratch when those wrappers come off. A scroll started before that is
+  /// disposed half-way, and the new view restores the half-way offset.
+  Future<void> _scrollToDay(
+    DateTime day,
+    int generation, {
+    required bool switchingTabs,
+    Future<void>? ready,
+  }) async {
+    if (ready != null) await ready;
+    if (!mounted || generation != _jumpGeneration) return;
+    if (switchingTabs) {
+      await Future<void>.delayed(
+        (VoyagerMotion.reduced(context)
+                ? VoyagerMotion.crossfade
+                : kVoyagerCrossfadeDuration) +
+            const Duration(milliseconds: 100),
+      );
+    }
+    double? lower;
+    double? upper;
+    for (var attempt = 0; attempt < 40; attempt++) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || generation != _jumpGeneration) return;
+
+      final target = _headerKeys[day]?.currentContext;
+      if (target != null && target.mounted) {
+        await Scrollable.ensureVisible(
+          target,
+          duration: VoyagerMotion.reduced(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+        );
+        return;
+      }
+
+      final controller = _wideScroll.hasClients
+          ? _wideScroll
+          : _narrowScroll.hasClients
+          ? _narrowScroll
+          : null;
+      // Not laid out yet (the tab is still switching in); try next frame.
+      if (controller == null) continue;
+      final position = controller.position;
+
+      final built = [
+        for (final entry in _headerKeys.entries)
+          if (entry.value.currentContext != null) entry.key,
+      ];
+      // Newest day first, so a target older than everything built lies
+      // further down.
+      if (built.isNotEmpty && built.every((d) => d.isAfter(day))) {
+        lower = position.pixels;
+      } else if (built.isNotEmpty && built.every((d) => d.isBefore(day))) {
+        upper = position.pixels;
+      } else if (built.isNotEmpty) {
+        // Built on both sides but not itself: it isn't in the ledger.
+        return;
+      }
+
+      final double next;
+      if (lower == null && upper == null) {
+        final index = _ledger.entries.indexWhere(
+          (e) => e is _LedgerDayHeader && e.day == day,
+        );
+        if (index < 0) return;
+        next = position.maxScrollExtent * index / _ledger.entries.length;
+      } else {
+        final lo = lower ?? position.minScrollExtent;
+        final hi = upper ?? position.maxScrollExtent;
+        next = (lo + hi) / 2;
+      }
+      final clamped = next.clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      if ((clamped - position.pixels).abs() < 1) return;
+      position.jumpTo(clamped);
+    }
+  }
 
   _TransactionRow _rowFor(
     FinancialTransaction transaction,
@@ -177,10 +317,15 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
   /// row topping the feed reads as scheduled rather than as the latest
   /// spend. [_LedgerModel.indexById] records where each transaction landed so
   /// `findChildIndexCallback` can look a row up without scanning.
+  ///
+  /// [emptyDay] is a day a ledger jump landed on that holds no rows: it gets a
+  /// header and a "no transactions" line in its date slot, so the jump shows
+  /// the day it was asked for rather than a neighbour.
   _LedgerModel _ledgerModel(
     List<FinancialTransaction> transactions,
-    DateTime now,
-  ) {
+    DateTime now, {
+    DateTime? emptyDay,
+  }) {
     if (transactions.isEmpty) return const _LedgerModel();
     final groups = <DateTime, List<FinancialTransaction>>{};
     for (final t in transactions) {
@@ -191,6 +336,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
       );
       groups.putIfAbsent(day, () => []).add(t);
     }
+    if (emptyDay != null) groups.putIfAbsent(emptyDay, () => []);
     final days = groups.keys.toList()..sort((a, b) => b.compareTo(a));
 
     final today = DateTime(now.year, now.month, now.day);
@@ -205,6 +351,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
         (sum, t) => sum + t.signedCents,
       );
       entries.add(_LedgerDayHeader(day: day, netCents: dayNet));
+      if (dayTransactions.isEmpty) entries.add(_ledgerEmptyDay);
       for (final t in dayTransactions) {
         indexById[t.id] = entries.length;
         entries.add(t);
@@ -221,10 +368,17 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
   ) {
     final entry = entries[index];
     if (entry is _LedgerDayHeader) {
-      return _DayHeader(day: entry.day, netCents: entry.netCents);
+      // Keyed so a ledger jump can find the header once it is built.
+      return KeyedSubtree(
+        key: _headerKeys.putIfAbsent(entry.day, GlobalKey.new),
+        child: _DayHeader(day: entry.day, netCents: entry.netCents),
+      );
     }
     if (entry is _LedgerSpacer) {
       return const SizedBox(height: 12);
+    }
+    if (entry is _LedgerEmptyDay) {
+      return const _EmptyDayRow();
     }
     if (entry is _LedgerUpcomingHeader) {
       return const _UpcomingHeader();
@@ -272,19 +426,23 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
     final mode = ref.watch(
       financeUiPrefsProvider.select((prefs) => prefs.viewMode),
     );
+    _builtMode = mode;
     final tagFilter = ref.watch(financeLedgerTagFilterProvider);
     final now = DateTime.now();
-    final monthStart = DateTime(now.year, now.month, 1);
-    final nextMonth = DateTime(now.year, now.month + 1, 1);
-    final monthNet = settledTransactions(transactions, now)
-        .where(
-          (t) =>
-              !t.occurredAt.isBefore(monthStart) &&
-              t.occurredAt.isBefore(nextMonth),
-        )
-        .fold<int>(0, (sum, t) => sum + t.signedCents);
 
-    final spark = _sparklineSeries(transactions, days: 30);
+    ref.listen<FinanceLedgerJump?>(financeLedgerJumpProvider, (_, jump) {
+      if (jump != null) _jumpToDay(jump.day, ready: jump.ready);
+    });
+    // The placeholder header a jump left behind belongs to that visit to the
+    // ledger, not to the ledger.
+    ref.listen<FinanceViewMode>(
+      financeUiPrefsProvider.select((prefs) => prefs.viewMode),
+      (_, next) {
+        if (next != FinanceViewMode.ledger && _emptyJumpDay != null) {
+          setState(() => _emptyJumpDay = null);
+        }
+      },
+    );
 
     // Grouped once here rather than inside the LayoutBuilder below: it
     // doesn't depend on the constraints, and the builder re-runs on every
@@ -305,13 +463,16 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
                 )
                 .toList(),
       now,
+      emptyDay: _emptyJumpDay,
     );
+    _ledger = ledger;
+    final ledgerDays = {
+      for (final entry in ledger.entries)
+        if (entry is _LedgerDayHeader) entry.day,
+    };
+    _headerKeys.removeWhere((day, _) => !ledgerDays.contains(day));
 
-    final hero = _HeroSection(
-      monthNet: monthNet,
-      monthLabel: DateFormat.MMMM().format(now),
-      sparkline: spark,
-    );
+    final hero = FinanceNetFlowHero(transactions: transactions);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -387,6 +548,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
                 flex: 6,
                 child: KeepAliveCustomScrollView(
                   storageKey: ShellPageStorageKeys.financeLedgerWide,
+                  controller: _wideScroll,
                   slivers: [
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(20, 4, 12, 96),
@@ -406,6 +568,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
         } else {
           ledgerBody = KeepAliveCustomScrollView(
             storageKey: ShellPageStorageKeys.financeLedgerNarrow,
+            controller: _narrowScroll,
             slivers: [
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(horizontal, 4, horizontal, 0),
@@ -450,184 +613,6 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
       },
     );
   }
-}
-
-/// Cumulative net-flow (in cents) for each of the last [days] days, oldest
-/// first — the trajectory drawn by the hero sparkline.
-List<double> _sparklineSeries(
-  List<FinancialTransaction> transactions, {
-  required int days,
-}) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  // Calendar days, not a Duration: an absolute 29 days back from a wall-clock
-  // midnight lands at 01:00 across the autumn transition, which pushes the
-  // oldest day of the window out of it and leaves that slot unwritten.
-  final start = DateTime(today.year, today.month, today.day - (days - 1));
-
-  final perDay = List<int>.filled(days, 0);
-  for (final t in transactions) {
-    final d = DateTime(t.occurredAt.year, t.occurredAt.month, t.occurredAt.day);
-    if (d.isBefore(start) || d.isAfter(today)) continue;
-    // Differenced in UTC: two local midnights are 23h or 25h apart when a
-    // transition falls between them, and inDays truncates that to one day
-    // short — the oldest day would land on top of its neighbour.
-    final index = DateTime.utc(d.year, d.month, d.day)
-        .difference(DateTime.utc(start.year, start.month, start.day))
-        .inDays;
-    if (index < 0 || index >= days) continue;
-    perDay[index] += t.signedCents;
-  }
-
-  final cumulative = <double>[];
-  var running = 0;
-  for (final value in perDay) {
-    running += value;
-    cumulative.add(running.toDouble());
-  }
-  return cumulative;
-}
-
-// ---------------------------------------------------------------------------
-// Hero section — Net Flow + minimalist trajectory sparkline
-// ---------------------------------------------------------------------------
-
-class _HeroSection extends StatelessWidget {
-  const _HeroSection({
-    required this.monthNet,
-    required this.monthLabel,
-    required this.sparkline,
-  });
-
-  final int monthNet;
-  final String monthLabel;
-  final List<double> sparkline;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final accent = theme.colorScheme.primary;
-    final positive = monthNet >= 0;
-    final valueColor = positive ? kIncomeGreen : accent;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(
-          alpha: 0.35,
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: accent.withValues(alpha: 0.12)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Net flow · $monthLabel',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    formatCents(monthNet, signed: true),
-                    style: theme.textTheme.displaySmall?.copyWith(
-                      color: valueColor,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          SizedBox(
-            width: 180,
-            height: 56,
-            child: CustomPaint(
-              painter: _SparklinePainter(values: sparkline, color: accent),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Draws a smooth curve through [values] with no axes or gridlines — just the
-/// line and a soft gradient fill beneath it.
-class _SparklinePainter extends CustomPainter {
-  _SparklinePainter({required this.values, required this.color});
-
-  final List<double> values;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (values.length < 2) return;
-
-    var minV = values.first;
-    var maxV = values.first;
-    for (final v in values) {
-      minV = math.min(minV, v);
-      maxV = math.max(maxV, v);
-    }
-    final range = (maxV - minV).abs() < 1e-9 ? 1.0 : (maxV - minV);
-
-    final dx = size.width / (values.length - 1);
-    Offset pointAt(int i) {
-      final x = dx * i;
-      final norm = (values[i] - minV) / range;
-      // Leave a little vertical breathing room top and bottom.
-      final y = size.height - (norm * (size.height - 6)) - 3;
-      return Offset(x, y);
-    }
-
-    final points = [for (var i = 0; i < values.length; i++) pointAt(i)];
-
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (var i = 0; i < points.length - 1; i++) {
-      final p0 = points[i];
-      final p1 = points[i + 1];
-      final midX = (p0.dx + p1.dx) / 2;
-      path.cubicTo(midX, p0.dy, midX, p1.dy, p1.dx, p1.dy);
-    }
-
-    // Gradient fill beneath the curve.
-    final fillPath = Path.from(path)
-      ..lineTo(points.last.dx, size.height)
-      ..lineTo(points.first.dx, size.height)
-      ..close();
-    final fillPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [color.withValues(alpha: 0.22), color.withValues(alpha: 0.0)],
-      ).createShader(Offset.zero & size);
-    canvas.drawPath(fillPath, fillPaint);
-
-    final linePaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    canvas.drawPath(path, linePaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _SparklinePainter oldDelegate) =>
-      oldDelegate.values != values || oldDelegate.color != color;
 }
 
 // ---------------------------------------------------------------------------
@@ -688,6 +673,25 @@ class _DayHeader extends StatelessWidget {
       return 'TOMORROW';
     }
     return DateFormat('EEEE, MMM d').format(day).toUpperCase();
+  }
+}
+
+/// The body of a day a ledger jump landed on that has no transactions.
+class _EmptyDayRow extends StatelessWidget {
+  const _EmptyDayRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: Text(
+        'No transactions',
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+        ),
+      ),
+    );
   }
 }
 

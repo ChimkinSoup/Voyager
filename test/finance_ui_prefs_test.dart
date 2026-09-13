@@ -38,6 +38,7 @@ void main() {
         breakdownMode: FinanceBreakdownMode.store,
         breakdownChart: FinanceBreakdownChart.income,
         cashFlowGranularity: CashFlowGranularity.yearly,
+        heroExpandRange: FinanceHeroRange.d90,
       ),
     );
 
@@ -50,6 +51,16 @@ void main() {
     expect(reopened.breakdownMode, FinanceBreakdownMode.store);
     expect(reopened.breakdownChart, FinanceBreakdownChart.income);
     expect(reopened.cashFlowGranularity, CashFlowGranularity.yearly);
+    expect(reopened.heroExpandRange, FinanceHeroRange.d90);
+  });
+
+  test('the expand range defaults to Month, and falls back to it', () async {
+    expect((await store.load()).heroExpandRange, FinanceHeroRange.month);
+
+    await prefsFile().writeAsString(
+      jsonEncode({'financeHeroExpandRange': 'd365'}),
+    );
+    expect((await store.load()).heroExpandRange, FinanceHeroRange.month);
   });
 
   test('an unreadable file falls back to defaults rather than throwing',
@@ -98,6 +109,7 @@ void main() {
       'financeBreakdownMode',
       'financeBreakdownChart',
       'financeCashFlowGranularity',
+      'financeHeroExpandRange',
     });
   });
 
