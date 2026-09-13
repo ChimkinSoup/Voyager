@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/job_constants.dart';
@@ -74,39 +77,105 @@ class JobsActions {
       title: title.trim(),
       status:
           status ?? (stages.isNotEmpty ? stages.first.name : jobDefaultStage),
-      dateApplied: dateApplied ?? jobDayKey(DateTime.now()),
+      dateApplied: jobCalendarDay(dateApplied ?? DateTime.now()),
       applicationUrl: applicationUrl,
       notes: notes,
       seasonIds: seasonIds,
       createdAt: now,
       updatedAt: now,
     );
-    await _repository.upsertApplication(application);
-    _sync.pushJobApplication(application);
-    await _recordStatusEvent(application, from: null, to: application.status);
-    await _registerCompany(application.company);
-    _refreshApplications();
+    await _writeApplication(
+      application,
+      events: [_statusEvent(application, from: null, to: application.status)],
+      registerCompany: application.company,
+    );
     return application;
   }
 
-  /// Saves an edited application. When [previous] carried a different status
-  /// this also appends the timeline entry for the move, and when the company
-  /// changed it adds the new name to the typeahead.
-  Future<void> saveApplication(
+  /// Saves the fields [application] changed relative to [previous], and only
+  /// those, onto the application as it is on disk now.
+  ///
+  /// The caller's copy can be stale — the editor panel holds the row it
+  /// opened with, and a row's menu holds the row it was built with — so
+  /// writing it whole would put back whatever changed underneath it since:
+  /// a status set from the table, a season toggled, an edit pulled from
+  /// another device. Nothing is written for an application deleted in the
+  /// meantime, which a pending autosave would otherwise resurrect.
+  ///
+  /// A status move appends its timeline entry (from the status on disk), and
+  /// a new company is added to the typeahead. Returns what was written, or
+  /// null when nothing was.
+  Future<JobApplication?> saveApplication(
     JobApplication application, {
     required JobApplication previous,
   }) async {
-    await _repository.upsertApplication(application);
+    final onDisk = await _repository.getApplication(application.id);
+    if (onDisk == null || onDisk.deletedAt != null) return null;
+
+    bool changed<T>(T Function(JobApplication a) field) =>
+        field(application) != field(previous);
+    final urlChanged = changed((a) => a.applicationUrl);
+    final notesChanged = changed((a) => a.notes);
+    final seasonsChanged = !listEquals(
+      application.seasonIds,
+      previous.seasonIds,
+    );
+    final updated = onDisk.copyWith(
+      company: changed((a) => a.company) ? application.company : null,
+      title: changed((a) => a.title) ? application.title : null,
+      status: changed((a) => a.status) ? application.status : null,
+      dateApplied: changed((a) => a.dateApplied)
+          ? jobCalendarDay(application.dateApplied)
+          : null,
+      applicationUrl: urlChanged ? application.applicationUrl : null,
+      clearApplicationUrl: urlChanged && application.applicationUrl == null,
+      notes: notesChanged ? application.notes : null,
+      clearNotes: notesChanged && application.notes == null,
+      seasonIds: seasonsChanged ? application.seasonIds : null,
+    );
+    final before = jobApplicationStampValues(onDisk);
+    final after = jobApplicationStampValues(updated);
+    if (after.keys.every((key) => before[key] == after[key])) return null;
+
+    await _writeApplication(
+      updated,
+      events: [
+        if (updated.status != onDisk.status)
+          _statusEvent(updated, from: onDisk.status, to: updated.status),
+      ],
+      registerCompany:
+          jobCompanyKey(updated.company) != jobCompanyKey(onDisk.company)
+          ? updated.company
+          : null,
+    );
+    return updated;
+  }
+
+  /// Writes an application, its new timeline entries and its company
+  /// suggestion together (see [JobRepository.writeApplication]), and only
+  /// then hands them to sync — a failed write pushes nothing.
+  Future<void> _writeApplication(
+    JobApplication application, {
+    List<JobStatusEvent> events = const [],
+    String? registerCompany,
+  }) async {
+    final company = await _repository.writeApplication(
+      application,
+      events: events,
+      registerCompany: registerCompany,
+    );
     _sync.pushJobApplication(application);
-    if (application.status != previous.status) {
-      await _recordStatusEvent(
-        application,
-        from: previous.status,
-        to: application.status,
-      );
+    if (events.length == 1) {
+      _sync.pushJobStatusEvent(events.single);
+    } else if (events.isNotEmpty) {
+      await _sync.pushJobStatusEventsBatch(events);
     }
-    if (jobCompanyKey(application.company) != jobCompanyKey(previous.company)) {
-      await _registerCompany(application.company);
+    if (events.isNotEmpty) {
+      _invalidate(jobStatusEventsProvider(application.id));
+    }
+    if (company != null) {
+      _sync.pushJobCompany(company);
+      _invalidate(jobCompaniesProvider);
     }
     _refreshApplications();
   }
@@ -128,10 +197,10 @@ class JobsActions {
       createdAt: now,
       updatedAt: now,
     );
-    await _repository.upsertApplication(copy);
-    _sync.pushJobApplication(copy);
-    await _recordStatusEvent(copy, from: null, to: copy.status);
-    _refreshApplications();
+    await _writeApplication(
+      copy,
+      events: [_statusEvent(copy, from: null, to: copy.status)],
+    );
     return copy;
   }
 
@@ -186,9 +255,8 @@ class JobsActions {
       applicationUrl: application.applicationUrl,
       notes: application.notes,
       seasonIds: application.seasonIds,
+      fieldUpdatedAt: application.fieldUpdatedAt,
     );
-    await _repository.upsertApplication(restored);
-    _sync.pushJobApplication(restored);
 
     final onDisk = {
       for (final event in await _repository.listStatusEvents(
@@ -213,13 +281,7 @@ class JobsActions {
           changedAt: event.changedAt,
         ),
     ];
-    for (final event in events) {
-      await _repository.upsertStatusEvent(event);
-    }
-    await _sync.pushJobStatusEventsBatch(events);
-
-    _invalidate(jobStatusEventsProvider(application.id));
-    _refreshApplications();
+    await _writeApplication(restored, events: events);
   }
 
   /// Files [application] under exactly [seasonIds] — the whole set, not a
@@ -229,19 +291,19 @@ class JobsActions {
     JobApplication application,
     List<String> seasonIds,
   ) async {
-    final updated = application.copyWith(seasonIds: seasonIds);
-    await _repository.upsertApplication(updated);
-    _sync.pushJobApplication(updated);
-    _refreshApplications();
+    await saveApplication(
+      application.copyWith(seasonIds: seasonIds),
+      previous: application,
+    );
   }
 
-  Future<void> _recordStatusEvent(
+  JobStatusEvent _statusEvent(
     JobApplication application, {
     required String? from,
     required String to,
-  }) async {
+  }) {
     final now = utcNow();
-    final event = JobStatusEvent(
+    return JobStatusEvent(
       id: newId(),
       applicationId: application.id,
       fromStatus: from,
@@ -250,44 +312,48 @@ class JobsActions {
       createdAt: now,
       updatedAt: now,
     );
-    await _repository.upsertStatusEvent(event);
-    _sync.pushJobStatusEvent(event);
-    _invalidate(jobStatusEventsProvider(application.id));
-  }
-
-  Future<void> _registerCompany(String name) async {
-    final added = await _repository.ensureCompany(name);
-    if (added == null) return;
-    _sync.pushJobCompany(added);
-    _invalidate(jobCompaniesProvider);
   }
 
   // ---- Stages -------------------------------------------------------------
 
-  Future<void> addStage(String name) async {
+  /// Adds a stage at the end of the list. False, with nothing written, when a
+  /// live stage already has this name (case and surrounding space ignored):
+  /// a status is matched by name, so two stages sharing one would both claim
+  /// every application on it.
+  Future<bool> addStage(String name) async {
     final trimmed = name.trim();
-    if (trimmed.isEmpty) return;
-    final stages = await _read(jobStagesProvider.future);
+    if (trimmed.isEmpty) return true;
+    final stages = await _repository.listStages();
+    if (_stageNameTaken(stages, trimmed)) return false;
     final now = utcNow();
     final stage = JobStage(
       id: newId(),
       name: trimmed,
-      sortOrder: stages.length,
+      sortOrder: _nextSortOrder(stages.map((s) => s.sortOrder)),
       createdAt: now,
       updatedAt: now,
     );
     await _repository.upsertStage(stage);
     _sync.pushJobStage(stage);
     _invalidate(jobStagesProvider);
+    return true;
   }
 
   /// Renames the stage for future selections only. Applications keep the
   /// status string they were set to and the timeline keeps its recorded
   /// strings (§4.2), so an application on the old name becomes an orphan —
   /// which the table and the Sankey both render as its own entry.
-  Future<void> renameStage(JobStage stage, String name) async {
+  ///
+  /// False, with nothing written, when another live stage already has the
+  /// name — see [addStage].
+  Future<bool> renameStage(JobStage stage, String name) async {
     final trimmed = name.trim();
-    if (trimmed.isEmpty || trimmed == stage.name) return;
+    if (trimmed.isEmpty || trimmed == stage.name) return true;
+    final others = [
+      for (final other in await _repository.listStages())
+        if (other.id != stage.id) other,
+    ];
+    if (_stageNameTaken(others, trimmed)) return false;
     final updated = stage.copyWith(name: trimmed);
     await _repository.upsertStage(updated);
     _sync.pushJobStage(updated);
@@ -295,7 +361,18 @@ class JobsActions {
     // The rename can strand applications on the old string, and whether a
     // status is an orphan is what decides where it sorts.
     _refreshApplications();
+    return true;
   }
+
+  bool _stageNameTaken(Iterable<JobStage> stages, String name) {
+    final key = jobCompanyKey(name);
+    return stages.any((stage) => jobCompanyKey(stage.name) == key);
+  }
+
+  /// One past the highest order in use. Not the list's length: deleting never
+  /// renumbers the survivors, so the length can name an order still taken.
+  int _nextSortOrder(Iterable<int> orders) =>
+      orders.isEmpty ? 0 : orders.reduce(math.max) + 1;
 
   /// Sets the stage's colour, or clears it back to the position-derived one.
   /// Applications are untouched: a stage's colour is a display property of the
@@ -312,9 +389,8 @@ class JobsActions {
   }
 
   Future<void> deleteStage(JobStage stage) async {
-    await _repository.softDeleteStage(stage.id);
-    final tombstoned = stage.copyWith(deletedAt: utcNow());
-    _sync.pushJobStage(tombstoned);
+    final tombstone = await _repository.softDeleteStage(stage.id);
+    if (tombstone != null) _sync.pushJobStage(tombstone);
     _invalidate(jobStagesProvider);
     _refreshApplications();
   }
@@ -341,21 +417,21 @@ class JobsActions {
   }
 
   Future<void> deleteCompany(JobCompany company) async {
-    await _repository.softDeleteCompany(company.id);
-    _sync.pushJobCompany(company.copyWith(deletedAt: utcNow()));
+    final tombstone = await _repository.softDeleteCompany(company.id);
+    if (tombstone != null) _sync.pushJobCompany(tombstone);
     _invalidate(jobCompaniesProvider);
   }
 
   Future<void> addCategory(String name, int colorValue) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
-    final categories = await _read(jobCategoriesProvider.future);
+    final categories = await _repository.listCategories();
     final now = utcNow();
     final category = JobCategory(
       id: newId(),
       name: trimmed,
       colorValue: colorValue,
-      sortOrder: categories.length,
+      sortOrder: _nextSortOrder(categories.map((c) => c.sortOrder)),
       createdAt: now,
       updatedAt: now,
     );
@@ -376,9 +452,11 @@ class JobsActions {
   }
 
   Future<void> deleteCategory(JobCategory category) async {
-    final orphaned = await _repository.softDeleteCategory(category.id);
-    _sync.pushJobCategory(category.copyWith(deletedAt: utcNow()));
-    await _sync.pushJobCompaniesBatch(orphaned);
+    final result = await _repository.softDeleteCategory(category.id);
+    if (result.tombstone case final tombstone?) {
+      _sync.pushJobCategory(tombstone);
+    }
+    await _sync.pushJobCompaniesBatch(result.orphaned);
     _invalidate(jobCategoriesProvider);
     _invalidate(jobCompaniesProvider);
   }
@@ -386,12 +464,12 @@ class JobsActions {
   Future<void> addSeason(String name) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
-    final seasons = await _read(jobSeasonsProvider.future);
+    final seasons = await _repository.listSeasons();
     final now = utcNow();
     final season = JobSeason(
       id: newId(),
       name: trimmed,
-      sortOrder: seasons.length,
+      sortOrder: _nextSortOrder(seasons.map((s) => s.sortOrder)),
       createdAt: now,
       updatedAt: now,
     );
@@ -433,9 +511,9 @@ class JobsActions {
   }
 
   Future<void> deleteSeason(JobSeason season) async {
-    final released = await _repository.softDeleteSeason(season.id);
-    _sync.pushJobSeason(season.copyWith(deletedAt: utcNow()));
-    await _sync.pushJobApplicationsBatch(released);
+    final result = await _repository.softDeleteSeason(season.id);
+    if (result.tombstone case final tombstone?) _sync.pushJobSeason(tombstone);
+    await _sync.pushJobApplicationsBatch(result.released);
     _invalidate(jobSeasonsProvider);
     _refreshApplications();
   }

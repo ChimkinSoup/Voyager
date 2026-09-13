@@ -592,9 +592,10 @@ abstract class SettingsRepository {
 /// [purgeExpiredDeleted] drops it for good once it has had time to reach every
 /// device.
 abstract class JobRepository {
-  /// Creates the seed stages and the seed company list the first time the page
-  /// is opened. Gated on each table being completely empty, tombstones
-  /// included, so deleting every stage does not resurrect the seeds. Idempotent.
+  /// Adds each seed stage and seed company under its name-derived id unless a
+  /// row with that id is already here, tombstones included — so deleting a
+  /// seed does not resurrect it, and a seed pulled from another device is not
+  /// doubled. Idempotent.
   Future<void> ensureSeeded();
 
   Future<List<JobApplication>> listApplications({bool includeDeleted = false});
@@ -602,6 +603,15 @@ abstract class JobRepository {
   Future<void> upsertApplication(
     JobApplication application, {
     bool recordLocalActivity = true,
+  });
+
+  /// Writes [application], its [events] and — when [registerCompany] is given
+  /// — the company suggestion in one transaction, so a failure part-way
+  /// leaves none of them behind. Returns the company it added, if any.
+  Future<JobCompany?> writeApplication(
+    JobApplication application, {
+    List<JobStatusEvent> events = const [],
+    String? registerCompany,
   });
 
   /// Soft-deletes the application and its status timeline with it. Content is
@@ -622,7 +632,10 @@ abstract class JobRepository {
 
   Future<List<JobStage>> listStages({bool includeDeleted = false});
   Future<void> upsertStage(JobStage stage, {bool recordLocalActivity = true});
-  Future<void> softDeleteStage(String id);
+
+  /// Tombstones the stage at a bumped version and returns the tombstone as
+  /// written, for the caller to push. Null when there was no live stage.
+  Future<JobStage?> softDeleteStage(String id);
 
   /// Rewrites [sortOrder] across [orderedIds] in one transaction. Returns the
   /// stages it wrote so the caller can push them.
@@ -633,7 +646,8 @@ abstract class JobRepository {
     JobCompany company, {
     bool recordLocalActivity = true,
   });
-  Future<void> softDeleteCompany(String id);
+  /// See [softDeleteStage].
+  Future<JobCompany?> softDeleteCompany(String id);
 
   /// Adds [name] to the suggestion list unless an entry already matches it
   /// case-insensitively. Returns the new entry, or null when one already
@@ -647,8 +661,10 @@ abstract class JobRepository {
   });
 
   /// Tombstones the category and clears it off every company filed under it.
-  /// Returns the companies it rewrote so the caller can push them.
-  Future<List<JobCompany>> softDeleteCategory(String id);
+  /// Returns the tombstone (see [softDeleteStage]) and the companies it
+  /// rewrote, so the caller can push them.
+  Future<({JobCategory? tombstone, List<JobCompany> orphaned})>
+  softDeleteCategory(String id);
 
   Future<List<JobSeason>> listSeasons({bool includeDeleted = false});
   Future<void> upsertSeason(JobSeason season, {bool recordLocalActivity = true});
@@ -659,8 +675,10 @@ abstract class JobRepository {
 
   /// Tombstones the season and clears it off every application filed under it,
   /// so no application is ever stranded pointing at a season that no longer
-  /// exists. Returns the applications it rewrote.
-  Future<List<JobApplication>> softDeleteSeason(String id);
+  /// exists. Returns the tombstone (see [softDeleteStage]) and the
+  /// applications it rewrote.
+  Future<({JobSeason? tombstone, List<JobApplication> released})>
+  softDeleteSeason(String id);
 
   Future<void> purgeExpiredDeleted(DateTime now);
   Future<List<JobApplication>> getAllApplications({bool includeDeleted = true});

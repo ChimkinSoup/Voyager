@@ -19,12 +19,14 @@ import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/features/jobs/jobs_actions.dart';
 import 'package:voyager/features/jobs/job_clipboard_parser.dart';
 import 'package:voyager/features/jobs/jobs_company_field.dart';
 import 'package:voyager/features/jobs/jobs_option_list.dart';
+import 'package:voyager/features/jobs/jobs_providers.dart';
 import 'package:voyager/features/jobs/jobs_track_draft.dart';
 import 'package:voyager/features/jobs/jobs_track_draft_store.dart';
 
@@ -301,6 +303,9 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     });
     _lastWritten = null;
     _baseline = _snapshot();
+    // Start over is a fresh open (JOBS_SMART_PASTE_HLD §5.3), and a fresh open
+    // reads the clipboard.
+    if (mounted) unawaited(_sniffClipboard());
     await _draftStore.clear();
   }
 
@@ -510,11 +515,19 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
         notes: notes.isEmpty ? null : notes,
         seasonIds: _seasonIds,
       );
-    } catch (_) {
+    } catch (error) {
+      debugPrint('Jobs application could not be saved: $error');
       // The latch has to come off or the Save button is dead for the life of
       // the sheet, and closing would be the only way out — taking the form
-      // with it.
-      if (mounted) setState(() => _saving = false);
+      // with it. Said out loud, so a retry is a choice rather than a guess.
+      if (mounted) {
+        setState(() => _saving = false);
+        showVoyagerToast(
+          context,
+          message: 'Could not save the application',
+          icon: PhosphorIconsRegular.warningCircle,
+        );
+      }
       return;
     }
 
@@ -533,13 +546,23 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
-    final stages =
-        ref.watch(jobStagesProvider).valueOrNull ?? const <JobStage>[];
+    final stagesAsync = ref.watch(jobStagesProvider);
+    final stages = stagesAsync.valueOrNull ?? const <JobStage>[];
     final companies =
         ref.watch(jobCompaniesProvider).valueOrNull ?? const <JobCompany>[];
     final applications =
         ref.watch(jobApplicationsProvider).valueOrNull ??
         const <JobApplication>[];
+
+    // The same for the stage a draft was left on: renamed or deleted since, it
+    // is a name the picker no longer offers, and saving would file the
+    // application under an orphan. Empty falls back to the first stage, as a
+    // fresh form does.
+    if (stagesAsync.hasValue &&
+        _status.isNotEmpty &&
+        !stages.any((stage) => stage.name == _status)) {
+      _status = '';
+    }
     final seasonsAsync = ref.watch(jobSeasonsProvider);
     final seasons = seasonsAsync.valueOrNull ?? const <JobSeason>[];
     final selectableSeasons = jobSelectableSeasons(seasons);
@@ -602,7 +625,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
                       controller: _companyController,
                       focusNode: _companyFocusNode,
                       companies: companies,
-                      recentKeys: jobRecentCompanyKeys(applications),
+                      recentKeys: ref.watch(jobRecentCompanyKeysProvider),
                       accentColor: accent,
                       contentPadding: jobsFieldContentPadding,
                       autofocus: true,
@@ -722,7 +745,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
                       child: Builder(
                         builder: (pillContext) => SelectorPill(
                           label: DateFormat.yMMMd().format(
-                            (_dateApplied ?? DateTime.now()).toLocal(),
+                            jobDayKey(_dateApplied ?? DateTime.now()),
                           ),
                           icon: PhosphorIconsRegular.calendarBlank,
                           dense: true,
@@ -792,7 +815,8 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       tapThroughContext: context,
       builder: (context) => JobsOptionList(
         options: [
-          for (final stage in stages) (value: stage.name, label: stage.name),
+          for (final name in {for (final stage in stages) stage.name})
+            (value: name, label: name),
         ],
         selected: current,
       ),
@@ -803,7 +827,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
   }
 
   Future<void> _pickDate(BuildContext pillContext) async {
-    final initial = (_dateApplied ?? DateTime.now()).toLocal();
+    final initial = jobDayKey(_dateApplied ?? DateTime.now());
     final picked = await showContextualPopover<DateTime>(
       context: context,
       buttonContext: pillContext,
@@ -824,11 +848,11 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       ),
     );
     if (picked == null) return;
-    // Date-only: the sparkline buckets by calendar day, and carrying a
-    // wall-clock time here would make "the same day" depend on the hour the
-    // picker happened to return.
+    // Date-only, at UTC midnight: the sparkline buckets by calendar day, and
+    // any other instant reads as a different day somewhere — see
+    // [jobCalendarDay].
     setState(
-      () => _dateApplied = DateTime(picked.year, picked.month, picked.day),
+      () => _dateApplied = DateTime.utc(picked.year, picked.month, picked.day),
     );
     _handleDraftEdit();
   }

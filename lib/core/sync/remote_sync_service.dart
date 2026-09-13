@@ -1452,11 +1452,13 @@ class RemoteSyncService {
       resolveCrdt: false,
       apply: (id, data, {required fromCrdt}) async {
         final local = await _jobRepository.getApplication(id);
-        final merged = mergeJobApplicationFromRemote(data, id, local: local);
+        final result = resolveJobApplicationFromRemote(data, id, local: local);
         await _jobRepository.upsertApplication(
-          merged,
+          result.merged,
           recordLocalActivity: false,
         );
+        // See [pullRankingParents].
+        if (result.localWon) pushJobApplication(result.merged);
       },
     );
   }

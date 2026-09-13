@@ -4587,40 +4587,32 @@ class DriftJobRepository implements JobRepository {
 
   @override
   Future<void> ensureSeeded() async {
-    final now = utcNow();
-
-    // Tombstones count as "present": clearing the stage list out is a choice,
-    // and re-seeding on next launch would silently undo it.
-    final stageRows = await _db.select(_db.jobStagesTable).get();
-    if (stageRows.isEmpty) {
-      for (var i = 0; i < jobSeedStages.length; i++) {
-        await upsertStage(
-          JobStage(
-            id: newId(),
+    // Each seed by its own name-derived id rather than "only into an empty
+    // table": a first pull that lands one stage from another device must not
+    // stop the rest being seeded, and the same seed on two devices has to be
+    // the same document. insertOrIgnore leaves a seed that is already here —
+    // edited, pulled, or tombstoned — alone, so deleting one is not undone.
+    await _db.batch((batch) {
+      batch.insertAll(_db.jobStagesTable, [
+        for (var i = 0; i < jobSeedStages.length; i++)
+          JobStagesTableCompanion.insert(
+            id: jobSeedStageId(jobSeedStages[i]),
             name: jobSeedStages[i],
-            sortOrder: i,
-            createdAt: now,
-            updatedAt: now,
+            sortOrder: Value(i),
+            createdAt: jobSeedEpoch,
+            updatedAt: jobSeedEpoch,
           ),
-          recordLocalActivity: false,
-        );
-      }
-    }
-
-    final companyRows = await _db.select(_db.jobCompaniesTable).get();
-    if (companyRows.isEmpty) {
-      await _db.batch((batch) {
-        batch.insertAll(_db.jobCompaniesTable, [
-          for (final name in jobSeedCompanies)
-            JobCompaniesTableCompanion.insert(
-              id: newId(),
-              name: name,
-              createdAt: now,
-              updatedAt: now,
-            ),
-        ]);
-      });
-    }
+      ], mode: InsertMode.insertOrIgnore);
+      batch.insertAll(_db.jobCompaniesTable, [
+        for (final name in jobSeedCompanies)
+          JobCompaniesTableCompanion.insert(
+            id: jobSeedCompanyId(name),
+            name: name,
+            createdAt: jobSeedEpoch,
+            updatedAt: jobSeedEpoch,
+          ),
+      ], mode: InsertMode.insertOrIgnore);
+    });
   }
 
   @override
@@ -4653,6 +4645,21 @@ class DriftJobRepository implements JobRepository {
     if (recordLocalActivity) {
       _syncActivity?.recordLocalSave(FirestoreCollections.jobApplications);
     }
+  }
+
+  @override
+  Future<JobCompany?> writeApplication(
+    JobApplication application, {
+    List<JobStatusEvent> events = const [],
+    String? registerCompany,
+  }) {
+    return _db.transaction(() async {
+      await upsertApplication(application);
+      for (final event in events) {
+        await upsertStatusEvent(event);
+      }
+      return registerCompany == null ? null : ensureCompany(registerCompany);
+    });
   }
 
   @override
@@ -4727,9 +4734,13 @@ class DriftJobRepository implements JobRepository {
 
   @override
   Future<List<JobStage>> listStages({bool includeDeleted = false}) async {
+    // createdAt breaks a sortOrder tie, which SQLite would otherwise order
+    // differently from one read to the next.
     final rows =
-        await (_db.select(_db.jobStagesTable)
-              ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
+        await (_db.select(_db.jobStagesTable)..orderBy([
+              (t) => OrderingTerm.asc(t.sortOrder),
+              (t) => OrderingTerm.asc(t.createdAt),
+            ]))
             .get();
     return [
       for (final row in rows)
@@ -4751,16 +4762,16 @@ class DriftJobRepository implements JobRepository {
   }
 
   @override
-  Future<void> softDeleteStage(String id) async {
-    await (_db.update(
-      _db.jobStagesTable,
-    )..where((t) => t.id.equals(id))).write(
-      JobStagesTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
-    _syncActivity?.recordLocalSave(FirestoreCollections.jobStages);
+  Future<JobStage?> softDeleteStage(String id) async {
+    // Written through copyWith so the tombstone carries a bumped version, and
+    // returned so the caller pushes exactly what is on disk.
+    final current = (await listStages(
+      includeDeleted: true,
+    )).where((s) => s.id == id).firstOrNull;
+    if (current == null || current.deletedAt != null) return null;
+    final tombstone = current.copyWith(deletedAt: utcNow());
+    await upsertStage(tombstone);
+    return tombstone;
   }
 
   @override
@@ -4814,16 +4825,15 @@ class DriftJobRepository implements JobRepository {
   }
 
   @override
-  Future<void> softDeleteCompany(String id) async {
-    await (_db.update(
-      _db.jobCompaniesTable,
-    )..where((t) => t.id.equals(id))).write(
-      JobCompaniesTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
-    _syncActivity?.recordLocalSave(FirestoreCollections.jobCompanies);
+  Future<JobCompany?> softDeleteCompany(String id) async {
+    // See [softDeleteStage].
+    final current = (await listCompanies(
+      includeDeleted: true,
+    )).where((c) => c.id == id).firstOrNull;
+    if (current == null || current.deletedAt != null) return null;
+    final tombstone = current.copyWith(deletedAt: utcNow());
+    await upsertCompany(tombstone);
+    return tombstone;
   }
 
   @override
@@ -4848,9 +4858,12 @@ class DriftJobRepository implements JobRepository {
   Future<List<JobCategory>> listCategories({
     bool includeDeleted = false,
   }) async {
+    // See [listStages].
     final rows =
-        await (_db.select(_db.jobCategoriesTable)
-              ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
+        await (_db.select(_db.jobCategoriesTable)..orderBy([
+              (t) => OrderingTerm.asc(t.sortOrder),
+              (t) => OrderingTerm.asc(t.createdAt),
+            ]))
             .get();
     return [
       for (final row in rows)
@@ -4872,17 +4885,17 @@ class DriftJobRepository implements JobRepository {
   }
 
   @override
-  Future<List<JobCompany>> softDeleteCategory(String id) async {
-    final now = utcNow();
-    await (_db.update(
-      _db.jobCategoriesTable,
-    )..where((t) => t.id.equals(id))).write(
-      JobCategoriesTableCompanion(
-        deletedAt: Value(now),
-        updatedAt: Value(now),
-      ),
-    );
-    _syncActivity?.recordLocalSave(FirestoreCollections.jobCategories);
+  Future<({JobCategory? tombstone, List<JobCompany> orphaned})>
+  softDeleteCategory(String id) async {
+    // See [softDeleteStage].
+    final current = (await listCategories(
+      includeDeleted: true,
+    )).where((c) => c.id == id).firstOrNull;
+    if (current == null || current.deletedAt != null) {
+      return (tombstone: null, orphaned: const <JobCompany>[]);
+    }
+    final tombstone = current.copyWith(deletedAt: utcNow());
+    await upsertCategory(tombstone);
 
     // Companies are cleared rather than left pointing at a tombstone: an
     // unresolvable categoryId and no categoryId render identically (neutral),
@@ -4897,14 +4910,17 @@ class DriftJobRepository implements JobRepository {
     if (orphaned.isNotEmpty) {
       _syncActivity?.recordLocalSave(FirestoreCollections.jobCompanies);
     }
-    return orphaned;
+    return (tombstone: tombstone, orphaned: orphaned);
   }
 
   @override
   Future<List<JobSeason>> listSeasons({bool includeDeleted = false}) async {
+    // See [listStages].
     final rows =
-        await (_db.select(_db.jobSeasonsTable)
-              ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
+        await (_db.select(_db.jobSeasonsTable)..orderBy([
+              (t) => OrderingTerm.asc(t.sortOrder),
+              (t) => OrderingTerm.asc(t.createdAt),
+            ]))
             .get();
     return [
       for (final row in rows)
@@ -4952,14 +4968,17 @@ class DriftJobRepository implements JobRepository {
   }
 
   @override
-  Future<List<JobApplication>> softDeleteSeason(String id) async {
-    final now = utcNow();
-    await (_db.update(
-      _db.jobSeasonsTable,
-    )..where((t) => t.id.equals(id))).write(
-      JobSeasonsTableCompanion(deletedAt: Value(now), updatedAt: Value(now)),
-    );
-    _syncActivity?.recordLocalSave(FirestoreCollections.jobSeasons);
+  Future<({JobSeason? tombstone, List<JobApplication> released})>
+  softDeleteSeason(String id) async {
+    // See [softDeleteStage].
+    final current = (await listSeasons(
+      includeDeleted: true,
+    )).where((s) => s.id == id).firstOrNull;
+    if (current == null || current.deletedAt != null) {
+      return (tombstone: null, released: const <JobApplication>[]);
+    }
+    final tombstone = current.copyWith(deletedAt: utcNow());
+    await upsertSeason(tombstone);
 
     // Back to active rather than stranded: an application whose season is gone
     // would otherwise be hidden from the default list with nothing left in the
@@ -4981,7 +5000,7 @@ class DriftJobRepository implements JobRepository {
     if (released.isNotEmpty) {
       _syncActivity?.recordLocalSave(FirestoreCollections.jobApplications);
     }
-    return released;
+    return (tombstone: tombstone, released: released);
   }
 
   @override
@@ -4993,11 +5012,19 @@ class DriftJobRepository implements JobRepository {
     await (_db.delete(_db.jobApplicationsTable)
           ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
         .go();
-    await (_db.delete(_db.jobStagesTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+    // A seed's tombstone is kept for good: it is the only thing telling
+    // ensureSeeded that the seed was deleted rather than never added.
+    await (_db.delete(_db.jobStagesTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              t.id.like('seed-%').not(),
+        ))
         .go();
-    await (_db.delete(_db.jobCompaniesTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+    await (_db.delete(_db.jobCompaniesTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              t.id.like('seed-%').not(),
+        ))
         .go();
     await (_db.delete(_db.jobCategoriesTable)
           ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
@@ -5046,10 +5073,13 @@ class DriftJobRepository implements JobRepository {
     company: Value(application.company),
     title: Value(application.title),
     status: Value(application.status),
-    dateApplied: Value(application.dateApplied),
+    dateApplied: Value(jobCalendarDay(application.dateApplied)),
     applicationUrl: Value(application.applicationUrl),
     notes: Value(application.notes),
     seasonIdsJson: Value(jsonEncode(application.seasonIds)),
+    fieldUpdatedAtJson: Value(
+      encodeJobFieldStamps(application.fieldUpdatedAt),
+    ),
     createdAt: Value(application.createdAt),
     updatedAt: Value(application.updatedAt),
     version: Value(application.version),
@@ -5122,10 +5152,11 @@ class DriftJobRepository implements JobRepository {
         company: row.company,
         title: row.title,
         status: row.status,
-        dateApplied: row.dateApplied,
+        dateApplied: jobCalendarDay(row.dateApplied),
         applicationUrl: row.applicationUrl,
         notes: row.notes,
         seasonIds: List<String>.from(jsonDecode(row.seasonIdsJson) as List),
+        fieldUpdatedAt: decodeJobFieldStamps(row.fieldUpdatedAtJson),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         version: row.version,

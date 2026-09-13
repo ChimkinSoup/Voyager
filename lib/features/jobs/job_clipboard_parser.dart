@@ -167,6 +167,12 @@ String _unwrap(String text) {
 String _trimTrailingPunctuation(String token) {
   var end = token.length;
   while (end > 0 && _trailingPunctuation.contains(token[end - 1])) {
+    // A `)` that closes a `(` inside the link is part of its path —
+    // `…/wiki/Mercury_(planet)` — and only an unbalanced one is prose.
+    if (token[end - 1] == ')') {
+      final head = token.substring(0, end);
+      if ('('.allMatches(head).length >= ')'.allMatches(head).length) break;
+    }
     end--;
   }
   return token.substring(0, end);

@@ -14,7 +14,6 @@ import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
-import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/jobs/jobs_actions.dart';
 import 'package:voyager/features/jobs/jobs_edit_panel.dart';
 import 'package:voyager/features/jobs/jobs_header.dart';
@@ -38,6 +37,11 @@ class _JobsPageState extends ConsumerState<JobsPage>
   late final Animation<double> _panelAnimation;
   final _searchController = TextEditingController();
 
+  /// Rebuilds the page as the day turns over. Shell branches stay mounted, so
+  /// a page left open overnight would otherwise keep yesterday as the
+  /// sparkline's last day until something else rebuilt it.
+  Timer? _midnightTimer;
+
   @override
   void initState() {
     super.initState();
@@ -50,10 +54,22 @@ class _JobsPageState extends ConsumerState<JobsPage>
       curve: Curves.easeOutCubic,
       reverseCurve: Curves.easeInCubic,
     );
+    _scheduleMidnightRebuild();
+  }
+
+  void _scheduleMidnightRebuild() {
+    final now = DateTime.now();
+    final midnight = DateTime(now.year, now.month, now.day + 1);
+    _midnightTimer = Timer(midnight.difference(now), () {
+      if (!mounted) return;
+      setState(() {});
+      _scheduleMidnightRebuild();
+    });
   }
 
   @override
   void dispose() {
+    _midnightTimer?.cancel();
     _panelController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -91,7 +107,9 @@ class _JobsPageState extends ConsumerState<JobsPage>
       for (final column in JobColumn.values)
         if (!hiddenColumns.contains(column.id)) column,
     ];
-    final query = ref.watch(jobSearchQueryProvider);
+    // The search query is watched only where it is used — the table body and
+    // the Clear button — so a keystroke does not re-derive the header, the
+    // counts and the editor panel.
     final statusFilter = ref.watch(jobStatusFilterProvider);
     final selectedId = ref.watch(jobSelectedApplicationProvider);
 
@@ -118,6 +136,7 @@ class _JobsPageState extends ConsumerState<JobsPage>
             final statusColors = JobStageColors(
               stages: stages,
               fallback: Theme.of(context).colorScheme.primary,
+              brightness: Theme.of(context).brightness,
             );
 
             // Archived-ness lives on the seasons, not on the application: a
@@ -133,14 +152,6 @@ class _JobsPageState extends ConsumerState<JobsPage>
             // active-only, whatever the toggle says. Only the list and the
             // sparkline follow the toggle.
             final inScope = includeArchived ? applications : active;
-            final rows = filterJobApplications(
-              applications,
-              includeArchived: includeArchived,
-              archivedSeasonIds: archivedSeasonIds,
-              statuses: statusFilter,
-              query: query,
-            )..sort(compareJobApplications);
-            final duplicates = jobDuplicateIds(rows);
             // Named in the user's own season order rather than in the order
             // the ids happen to sit in on the application, so two rows in the
             // same pair of cycles read identically.
@@ -169,8 +180,7 @@ class _JobsPageState extends ConsumerState<JobsPage>
                   ],
                   stages: stages,
                   includeArchived: includeArchived,
-                  onIncludeArchivedChanged: (value) =>
-                      _saveIncludeArchived(settings, value),
+                  onIncludeArchivedChanged: _saveIncludeArchived,
                   activeStatuses: statusFilter,
                   onStatusTapped: _toggleStatusFilter,
                   statusColors: statusColors.of,
@@ -180,18 +190,25 @@ class _JobsPageState extends ConsumerState<JobsPage>
                   experienceSnippets:
                       settings?.jobExperienceSnippets ?? const [],
                 ),
-                _Toolbar(
-                  searchController: _searchController,
-                  onQueryChanged: (value) =>
-                      ref.read(jobSearchQueryProvider.notifier).state = value,
-                  statusFilter: statusFilter,
-                  onClearFilters: statusFilter.isEmpty && query.isEmpty
-                      ? null
-                      : _clearFilters,
-                  hiddenColumns: hiddenColumns,
-                  onToggleColumn: (column) =>
-                      _toggleColumn(settings, hiddenColumns, column),
-                  onManage: () => showJobsManageSheet(context, ref),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final queryEmpty = ref.watch(
+                      jobSearchQueryProvider.select((query) => query.isEmpty),
+                    );
+                    return _Toolbar(
+                      searchController: _searchController,
+                      onQueryChanged: (value) =>
+                          ref.read(jobSearchQueryProvider.notifier).state =
+                              value,
+                      statusFilter: statusFilter,
+                      onClearFilters: statusFilter.isEmpty && queryEmpty
+                          ? null
+                          : _clearFilters,
+                      hiddenColumns: hiddenColumns,
+                      onToggleColumn: _toggleColumn,
+                      onManage: () => showJobsManageSheet(context, ref),
+                    );
+                  },
                 ),
                 Expanded(
                   child: Stack(
@@ -207,76 +224,89 @@ class _JobsPageState extends ConsumerState<JobsPage>
                           ),
                           child: child,
                         ),
-                        child: rows.isEmpty
-                            ? _EmptyState(
+                        child: Consumer(
+                          builder: (context, ref, _) {
+                            final rows = filterJobApplications(
+                              applications,
+                              includeArchived: includeArchived,
+                              archivedSeasonIds: archivedSeasonIds,
+                              statuses: statusFilter,
+                              query: ref.watch(jobSearchQueryProvider),
+                            )..sort(compareJobApplications);
+                            final duplicates = jobDuplicateIds(rows);
+                            if (rows.isEmpty) {
+                              return _EmptyState(
                                 hasApplications: applications.isNotEmpty,
                                 onClearFilters: _clearFilters,
-                              )
-                            : Column(
-                                children: [
-                                  JobsTableHeader(columns: columns),
-                                  Expanded(
-                                    child: ListView.builder(
-                                      itemCount: rows.length,
-                                      itemBuilder: (context, index) {
-                                        final application = rows[index];
-                                        return JobsTableRow(
-                                          key: ValueKey(application.id),
-                                          application: application,
-                                          columns: columns,
-                                          color: colors.of(application.company),
-                                          statusColor: statusColors.of(
-                                            application.status,
-                                          ),
-                                          isDuplicate: duplicates.contains(
-                                            application.id,
-                                          ),
-                                          isSelected:
-                                              application.id == selectedId,
-                                          isArchived: jobIsArchived(
-                                            application,
-                                            archivedSeasonIds,
-                                          ),
-                                          seasonNames: namesFor(application),
-                                          onTap: () =>
-                                              _openPanel(application.id),
-                                          onStatusTap: (pillContext) =>
-                                              _editStatus(
-                                                pillContext,
-                                                application,
-                                                stages,
+                              );
+                            }
+                            return Column(
+                              children: [
+                                JobsTableHeader(columns: columns),
+                                Expanded(
+                                  child: ListView.builder(
+                                    itemCount: rows.length,
+                                    itemBuilder: (context, index) {
+                                      final application = rows[index];
+                                      return JobsTableRow(
+                                        key: ValueKey(application.id),
+                                        application: application,
+                                        columns: columns,
+                                        color: colors.of(application.company),
+                                        statusColor: statusColors.of(
+                                          application.status,
+                                        ),
+                                        isDuplicate: duplicates.contains(
+                                          application.id,
+                                        ),
+                                        isSelected:
+                                            application.id == selectedId,
+                                        isArchived: jobIsArchived(
+                                          application,
+                                          archivedSeasonIds,
+                                        ),
+                                        seasonNames: namesFor(application),
+                                        onTap: () =>
+                                            _openPanel(application.id),
+                                        onStatusTap: (pillContext) =>
+                                            _editStatus(
+                                              pillContext,
+                                              application,
+                                              stages,
+                                            ),
+                                        menuItems: () =>
+                                            jobApplicationMenuItems(
+                                              application: application,
+                                              stages: stages,
+                                              seasons: jobSelectableSeasons(
+                                                seasons,
                                               ),
-                                          menuItems: () =>
-                                              jobApplicationMenuItems(
-                                                application: application,
-                                                stages: stages,
-                                                seasons: jobSelectableSeasons(
-                                                  seasons,
-                                                ),
-                                                onChangeStatus: (status) =>
-                                                    _setStatus(
-                                                      application,
-                                                      status,
-                                                    ),
-                                                onSetSeasons: (seasonIds) =>
-                                                    _setSeasons(
-                                                      application,
-                                                      seasonIds,
-                                                    ),
-                                                onOpenUrl: () => _openUrl(
-                                                  application.applicationUrl!,
-                                                ),
-                                                onDuplicate: () =>
-                                                    _duplicate(application),
-                                                onDelete: () =>
-                                                    _confirmDelete(application),
+                                              onChangeStatus: (status) =>
+                                                  _setStatus(
+                                                    application,
+                                                    status,
+                                                  ),
+                                              onSetSeasons: (seasonIds) =>
+                                                  _setSeasons(
+                                                    application,
+                                                    seasonIds,
+                                                  ),
+                                              onOpenUrl: () => _openUrl(
+                                                application.applicationUrl!,
                                               ),
-                                        );
-                                      },
-                                    ),
+                                              onDuplicate: () =>
+                                                  _duplicate(application),
+                                              onDelete: () =>
+                                                  _confirmDelete(application),
+                                            ),
+                                      );
+                                    },
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
                       ),
                       Positioned(
                         top: 0,
@@ -300,8 +330,8 @@ class _JobsPageState extends ConsumerState<JobsPage>
                                       stages: stages,
                                       companies: companies,
                                       seasons: seasons,
-                                      recentCompanyKeys: jobRecentCompanyKeys(
-                                        applications,
+                                      recentCompanyKeys: ref.watch(
+                                        jobRecentCompanyKeysProvider,
                                       ),
                                       accentColor: colors.of(selected.company),
                                       categoryColorFor: colors.forCompany,
@@ -349,12 +379,10 @@ class _JobsPageState extends ConsumerState<JobsPage>
     // Orphans included: a status whose stage was deleted still has to be
     // selectable back onto itself, and visible as an option so the user can
     // see what the application is actually on.
-    final names = [
+    final names = {
       for (final stage in stages) stage.name,
-      if (application.status.isNotEmpty &&
-          !stages.any((s) => s.name == application.status))
-        application.status,
-    ];
+      if (application.status.isNotEmpty) application.status,
+    };
     final picked = await showContextualPopover<String>(
       context: context,
       buttonContext: pillContext,
@@ -447,20 +475,23 @@ class _JobsPageState extends ConsumerState<JobsPage>
     ref.read(jobStatusFilterProvider.notifier).state = const {};
   }
 
-  Future<void> _saveIncludeArchived(AppSettings? settings, bool value) async {
+  // Both read settings when the click lands rather than when the page last
+  // built: the Columns popover is a route that never rebuilds with new props,
+  // so a second toggle made from it would otherwise start from the settings
+  // it was opened with and undo the first. saveSettings sets the provider's
+  // state synchronously, so each click sees the one before it.
+  Future<void> _saveIncludeArchived(bool value) async {
+    final settings = ref.read(settingsProvider).valueOrNull;
     if (settings == null) return;
     await ref
         .read(settingsProvider.notifier)
         .saveSettings(settings.copyWith(jobsIncludeArchived: value));
   }
 
-  Future<void> _toggleColumn(
-    AppSettings? settings,
-    Set<String> hidden,
-    JobColumn column,
-  ) async {
+  Future<void> _toggleColumn(JobColumn column) async {
+    final settings = ref.read(settingsProvider).valueOrNull;
     if (settings == null || jobRequiredColumns.contains(column)) return;
-    final next = {...hidden};
+    final next = settings.jobsHiddenColumns.toSet();
     if (!next.remove(column.id)) next.add(column.id);
     await ref
         .read(settingsProvider.notifier)

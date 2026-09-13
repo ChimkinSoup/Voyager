@@ -88,16 +88,44 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
   @override
   void didUpdateWidget(JobsEditPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.application.id == widget.application.id) return;
-    // A different application: flush whatever the old one had pending before
-    // the controllers are pointed at new text.
-    _saveTimer?.cancel();
-    _commit();
-    _current = widget.application;
-    _companyController.text = _current.company;
-    _titleController.text = _current.title;
-    _urlController.text = _current.applicationUrl ?? '';
-    _notesController.text = _current.notes ?? '';
+    if (oldWidget.application.id != widget.application.id) {
+      // A different application: flush whatever the old one had pending
+      // before the controllers are pointed at new text.
+      _saveTimer?.cancel();
+      _commit();
+      _current = widget.application;
+      _companyController.text = _current.company;
+      _titleController.text = _current.title;
+      _urlController.text = _current.applicationUrl ?? '';
+      _notesController.text = _current.notes ?? '';
+      return;
+    }
+
+    // The same application, changed by something other than this panel — the
+    // table's status capsule, a row menu, a pull from another device. Adopted,
+    // or the capsules keep showing the old values. An older copy, or this
+    // panel's own save coming back, is not newer and is left alone.
+    final incoming = widget.application;
+    if (incoming.version < _current.version ||
+        (incoming.version == _current.version &&
+            !incoming.updatedAt.isAfter(_current.updatedAt))) {
+      return;
+    }
+    // A box the user has typed past keeps their text; its pending save only
+    // writes the fields they changed.
+    void adopt(TextEditingController controller, String before, String after) {
+      if (controller.text == before && before != after) controller.text = after;
+    }
+
+    adopt(_companyController, _current.company, incoming.company);
+    adopt(_titleController, _current.title, incoming.title);
+    adopt(
+      _urlController,
+      _current.applicationUrl ?? '',
+      incoming.applicationUrl ?? '',
+    );
+    adopt(_notesController, _current.notes ?? '', incoming.notes ?? '');
+    _current = incoming;
   }
 
   @override
@@ -292,12 +320,10 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
     // Orphans included: a status whose stage was deleted still has to be
     // selectable back onto itself, and it has to be visible as an option so the
     // user can see what the application is actually on.
-    final names = [
+    final names = {
       for (final stage in widget.stages) stage.name,
-      if (_current.status.isNotEmpty &&
-          !widget.stages.any((s) => s.name == _current.status))
-        _current.status,
-    ];
+      if (_current.status.isNotEmpty) _current.status,
+    };
     final picked = await showContextualPopover<String>(
       context: context,
       buttonContext: pillContext,
@@ -315,7 +341,7 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
   Widget _datePill(Color accent) {
     return Builder(
       builder: (pillContext) => SelectorPill(
-        label: DateFormat.yMMMd().format(_current.dateApplied.toLocal()),
+        label: DateFormat.yMMMd().format(jobDayKey(_current.dateApplied)),
         icon: PhosphorIconsRegular.calendarBlank,
         dense: true,
         accentColor: accent,
@@ -326,7 +352,7 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
   }
 
   Future<void> _pickDate(BuildContext pillContext) async {
-    final initial = _current.dateApplied.toLocal();
+    final initial = jobDayKey(_current.dateApplied);
     final picked = await showContextualPopover<DateTime>(
       context: context,
       buttonContext: pillContext,
@@ -346,12 +372,12 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
       ),
     );
     if (picked == null) return;
-    // Date-only: the sparkline buckets by calendar day, and carrying a
-    // wall-clock time here would make "the same day" depend on the hour the
-    // picker happened to return.
+    // Date-only, at UTC midnight: the sparkline buckets by calendar day, and
+    // any other instant reads as a different day somewhere — see
+    // [jobCalendarDay].
     await _save(
       _current.copyWith(
-        dateApplied: DateTime(picked.year, picked.month, picked.day),
+        dateApplied: DateTime.utc(picked.year, picked.month, picked.day),
       ),
     );
     if (mounted) setState(() {});

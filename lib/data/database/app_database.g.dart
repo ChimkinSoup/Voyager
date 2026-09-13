@@ -31438,6 +31438,18 @@ class $JobApplicationsTableTable extends JobApplicationsTable
     requiredDuringInsert: false,
     defaultValue: const Constant('[]'),
   );
+  static const VerificationMeta _fieldUpdatedAtJsonMeta =
+      const VerificationMeta('fieldUpdatedAtJson');
+  @override
+  late final GeneratedColumn<String> fieldUpdatedAtJson =
+      GeneratedColumn<String>(
+        'field_updated_at_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('{}'),
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -31493,6 +31505,7 @@ class $JobApplicationsTableTable extends JobApplicationsTable
     applicationUrl,
     notes,
     seasonIdsJson,
+    fieldUpdatedAtJson,
     createdAt,
     updatedAt,
     version,
@@ -31574,6 +31587,15 @@ class $JobApplicationsTableTable extends JobApplicationsTable
         ),
       );
     }
+    if (data.containsKey('field_updated_at_json')) {
+      context.handle(
+        _fieldUpdatedAtJsonMeta,
+        fieldUpdatedAtJson.isAcceptableOrUnknown(
+          data['field_updated_at_json']!,
+          _fieldUpdatedAtJsonMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -31646,6 +31668,10 @@ class $JobApplicationsTableTable extends JobApplicationsTable
         DriftSqlType.string,
         data['${effectivePrefix}season_ids_json'],
       )!,
+      fieldUpdatedAtJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}field_updated_at_json'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -31685,6 +31711,9 @@ class JobApplicationsTableData extends DataClass
   /// Empty array for "no season". Replaced the single `season_id` column in
   /// migration 99 — an application can sit in more than one cycle at once.
   final String seasonIdsJson;
+
+  /// `stampKey -> ISO instant`, one per field — see `JobFieldStamps`.
+  final String fieldUpdatedAtJson;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -31698,6 +31727,7 @@ class JobApplicationsTableData extends DataClass
     this.applicationUrl,
     this.notes,
     required this.seasonIdsJson,
+    required this.fieldUpdatedAtJson,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -31718,6 +31748,7 @@ class JobApplicationsTableData extends DataClass
       map['notes'] = Variable<String>(notes);
     }
     map['season_ids_json'] = Variable<String>(seasonIdsJson);
+    map['field_updated_at_json'] = Variable<String>(fieldUpdatedAtJson);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -31741,6 +31772,7 @@ class JobApplicationsTableData extends DataClass
           ? const Value.absent()
           : Value(notes),
       seasonIdsJson: Value(seasonIdsJson),
+      fieldUpdatedAtJson: Value(fieldUpdatedAtJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -31764,6 +31796,9 @@ class JobApplicationsTableData extends DataClass
       applicationUrl: serializer.fromJson<String?>(json['applicationUrl']),
       notes: serializer.fromJson<String?>(json['notes']),
       seasonIdsJson: serializer.fromJson<String>(json['seasonIdsJson']),
+      fieldUpdatedAtJson: serializer.fromJson<String>(
+        json['fieldUpdatedAtJson'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -31782,6 +31817,7 @@ class JobApplicationsTableData extends DataClass
       'applicationUrl': serializer.toJson<String?>(applicationUrl),
       'notes': serializer.toJson<String?>(notes),
       'seasonIdsJson': serializer.toJson<String>(seasonIdsJson),
+      'fieldUpdatedAtJson': serializer.toJson<String>(fieldUpdatedAtJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -31798,6 +31834,7 @@ class JobApplicationsTableData extends DataClass
     Value<String?> applicationUrl = const Value.absent(),
     Value<String?> notes = const Value.absent(),
     String? seasonIdsJson,
+    String? fieldUpdatedAtJson,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -31813,6 +31850,7 @@ class JobApplicationsTableData extends DataClass
         : this.applicationUrl,
     notes: notes.present ? notes.value : this.notes,
     seasonIdsJson: seasonIdsJson ?? this.seasonIdsJson,
+    fieldUpdatedAtJson: fieldUpdatedAtJson ?? this.fieldUpdatedAtJson,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -31836,6 +31874,9 @@ class JobApplicationsTableData extends DataClass
       seasonIdsJson: data.seasonIdsJson.present
           ? data.seasonIdsJson.value
           : this.seasonIdsJson,
+      fieldUpdatedAtJson: data.fieldUpdatedAtJson.present
+          ? data.fieldUpdatedAtJson.value
+          : this.fieldUpdatedAtJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -31854,6 +31895,7 @@ class JobApplicationsTableData extends DataClass
           ..write('applicationUrl: $applicationUrl, ')
           ..write('notes: $notes, ')
           ..write('seasonIdsJson: $seasonIdsJson, ')
+          ..write('fieldUpdatedAtJson: $fieldUpdatedAtJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -31872,6 +31914,7 @@ class JobApplicationsTableData extends DataClass
     applicationUrl,
     notes,
     seasonIdsJson,
+    fieldUpdatedAtJson,
     createdAt,
     updatedAt,
     version,
@@ -31889,6 +31932,7 @@ class JobApplicationsTableData extends DataClass
           other.applicationUrl == this.applicationUrl &&
           other.notes == this.notes &&
           other.seasonIdsJson == this.seasonIdsJson &&
+          other.fieldUpdatedAtJson == this.fieldUpdatedAtJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -31905,6 +31949,7 @@ class JobApplicationsTableCompanion
   final Value<String?> applicationUrl;
   final Value<String?> notes;
   final Value<String> seasonIdsJson;
+  final Value<String> fieldUpdatedAtJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -31919,6 +31964,7 @@ class JobApplicationsTableCompanion
     this.applicationUrl = const Value.absent(),
     this.notes = const Value.absent(),
     this.seasonIdsJson = const Value.absent(),
+    this.fieldUpdatedAtJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -31934,6 +31980,7 @@ class JobApplicationsTableCompanion
     this.applicationUrl = const Value.absent(),
     this.notes = const Value.absent(),
     this.seasonIdsJson = const Value.absent(),
+    this.fieldUpdatedAtJson = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -31955,6 +32002,7 @@ class JobApplicationsTableCompanion
     Expression<String>? applicationUrl,
     Expression<String>? notes,
     Expression<String>? seasonIdsJson,
+    Expression<String>? fieldUpdatedAtJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -31970,6 +32018,8 @@ class JobApplicationsTableCompanion
       if (applicationUrl != null) 'application_url': applicationUrl,
       if (notes != null) 'notes': notes,
       if (seasonIdsJson != null) 'season_ids_json': seasonIdsJson,
+      if (fieldUpdatedAtJson != null)
+        'field_updated_at_json': fieldUpdatedAtJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -31987,6 +32037,7 @@ class JobApplicationsTableCompanion
     Value<String?>? applicationUrl,
     Value<String?>? notes,
     Value<String>? seasonIdsJson,
+    Value<String>? fieldUpdatedAtJson,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -32002,6 +32053,7 @@ class JobApplicationsTableCompanion
       applicationUrl: applicationUrl ?? this.applicationUrl,
       notes: notes ?? this.notes,
       seasonIdsJson: seasonIdsJson ?? this.seasonIdsJson,
+      fieldUpdatedAtJson: fieldUpdatedAtJson ?? this.fieldUpdatedAtJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -32037,6 +32089,9 @@ class JobApplicationsTableCompanion
     if (seasonIdsJson.present) {
       map['season_ids_json'] = Variable<String>(seasonIdsJson.value);
     }
+    if (fieldUpdatedAtJson.present) {
+      map['field_updated_at_json'] = Variable<String>(fieldUpdatedAtJson.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -32066,6 +32121,7 @@ class JobApplicationsTableCompanion
           ..write('applicationUrl: $applicationUrl, ')
           ..write('notes: $notes, ')
           ..write('seasonIdsJson: $seasonIdsJson, ')
+          ..write('fieldUpdatedAtJson: $fieldUpdatedAtJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -53938,6 +53994,7 @@ typedef $$JobApplicationsTableTableCreateCompanionBuilder =
       Value<String?> applicationUrl,
       Value<String?> notes,
       Value<String> seasonIdsJson,
+      Value<String> fieldUpdatedAtJson,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -53954,6 +54011,7 @@ typedef $$JobApplicationsTableTableUpdateCompanionBuilder =
       Value<String?> applicationUrl,
       Value<String?> notes,
       Value<String> seasonIdsJson,
+      Value<String> fieldUpdatedAtJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -54007,6 +54065,11 @@ class $$JobApplicationsTableTableFilterComposer
 
   ColumnFilters<String> get seasonIdsJson => $composableBuilder(
     column: $table.seasonIdsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fieldUpdatedAtJson => $composableBuilder(
+    column: $table.fieldUpdatedAtJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -54080,6 +54143,11 @@ class $$JobApplicationsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get fieldUpdatedAtJson => $composableBuilder(
+    column: $table.fieldUpdatedAtJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -54137,6 +54205,11 @@ class $$JobApplicationsTableTableAnnotationComposer
 
   GeneratedColumn<String> get seasonIdsJson => $composableBuilder(
     column: $table.seasonIdsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get fieldUpdatedAtJson => $composableBuilder(
+    column: $table.fieldUpdatedAtJson,
     builder: (column) => column,
   );
 
@@ -54204,6 +54277,7 @@ class $$JobApplicationsTableTableTableManager
                 Value<String?> applicationUrl = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<String> seasonIdsJson = const Value.absent(),
+                Value<String> fieldUpdatedAtJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -54218,6 +54292,7 @@ class $$JobApplicationsTableTableTableManager
                 applicationUrl: applicationUrl,
                 notes: notes,
                 seasonIdsJson: seasonIdsJson,
+                fieldUpdatedAtJson: fieldUpdatedAtJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -54234,6 +54309,7 @@ class $$JobApplicationsTableTableTableManager
                 Value<String?> applicationUrl = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
                 Value<String> seasonIdsJson = const Value.absent(),
+                Value<String> fieldUpdatedAtJson = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -54248,6 +54324,7 @@ class $$JobApplicationsTableTableTableManager
                 applicationUrl: applicationUrl,
                 notes: notes,
                 seasonIdsJson: seasonIdsJson,
+                fieldUpdatedAtJson: fieldUpdatedAtJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

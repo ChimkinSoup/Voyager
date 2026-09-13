@@ -318,4 +318,40 @@ void main() {
     final stored = await harness.container.read(jobApplicationsProvider.future);
     expect(stored, hasLength(2));
   });
+
+  // AUDIT.md: §5.3 says Start over is a fresh open, and a fresh open sniffs.
+  testWidgets('Start over reads the clipboard again', (tester) async {
+    clipboardText = 'Software Engineer https://acme.com/jobs/1';
+    await pumpJobs(
+      tester,
+      draft: JobsTrackDraft(title: 'Data Scientist', savedAt: utcNow()),
+    );
+    await openForm(tester);
+    expect(fieldText(tester, 'Role title'), 'Data Scientist');
+
+    await tester.tap(find.text('Start over'));
+    await tester.pumpAndSettle();
+
+    expect(fieldText(tester, 'Role title'), 'Software Engineer');
+    expect(fieldText(tester, 'Application URL'), 'https://acme.com/jobs/1');
+  });
+
+  // AUDIT.md: a draft's stage is checked against the live list, like its
+  // seasons, so a stage deleted meanwhile is not saved as an orphan.
+  testWidgets('a draft left on a stage that is gone opens on the first one', (
+    tester,
+  ) async {
+    await pumpJobs(
+      tester,
+      draft: JobsTrackDraft(
+        title: 'Data Scientist',
+        status: 'Phone Screen',
+        savedAt: utcNow(),
+      ),
+    );
+    await openForm(tester);
+
+    expect(find.text('Phone Screen'), findsNothing);
+    expect(find.text('Applied'), findsWidgets);
+  });
 }

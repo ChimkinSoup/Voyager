@@ -1,5 +1,70 @@
+import 'dart:convert';
+
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
+
+/// The calendar day [value] names, as UTC midnight — the one form
+/// [JobApplication.dateApplied] is stored and synced in.
+///
+/// A date-only field stored as a local-midnight instant reads as the previous
+/// day on any device west of the one that wrote it. UTC midnight carries the
+/// day in its own y/m/d, so it reads the same everywhere.
+///
+/// A value already at UTC midnight is taken as that day. Anything else — a
+/// picker's local date, `DateTime.now()`, or a legacy local-midnight instant
+/// such as `…T04:00:00Z` — is read in this device's zone.
+DateTime jobCalendarDay(DateTime value) {
+  if (value.isUtc &&
+      value.hour == 0 &&
+      value.minute == 0 &&
+      value.second == 0 &&
+      value.millisecond == 0 &&
+      value.microsecond == 0) {
+    return value;
+  }
+  final local = value.toLocal();
+  return DateTime.utc(local.year, local.month, local.day);
+}
+
+/// When each field of a [JobApplication] last changed, keyed as
+/// [jobApplicationStampValues] keys them — what lets two devices that edited
+/// different fields of one application both keep their edit.
+///
+/// A key with no stamp falls back to the row's `updatedAt`, the last thing
+/// known to have touched every field of a row written before stamps existed.
+typedef JobFieldStamps = Map<String, DateTime>;
+
+String encodeJobFieldStamps(JobFieldStamps stamps) => jsonEncode({
+  for (final entry in stamps.entries)
+    entry.key: entry.value.toUtc().toIso8601String(),
+});
+
+JobFieldStamps decodeJobFieldStamps(Object? value) {
+  final decoded = value is String
+      ? (value.isEmpty ? null : jsonDecode(value))
+      : value;
+  if (decoded is! Map) return const {};
+  final stamps = <String, DateTime>{};
+  for (final entry in decoded.entries) {
+    final raw = entry.value;
+    final stamp = raw is String ? DateTime.tryParse(raw)?.toUtc() : null;
+    if (stamp != null) stamps[entry.key as String] = stamp;
+  }
+  return stamps;
+}
+
+/// The stamped values of [application], by stamp key. A field added to
+/// [JobApplication] belongs here and in the sync merge's pick list, or it is
+/// neither restamped nor merged.
+Map<String, Object?> jobApplicationStampValues(JobApplication application) => {
+  'company': application.company,
+  'title': application.title,
+  'status': application.status,
+  'dateApplied': application.dateApplied.toUtc(),
+  'applicationUrl': application.applicationUrl,
+  'notes': application.notes,
+  'seasonIds': application.seasonIds.join(','),
+};
 
 /// A job application.
 ///
@@ -21,6 +86,7 @@ class JobApplication extends SoftDeletable {
     this.applicationUrl,
     this.notes,
     this.seasonIds = const [],
+    this.fieldUpdatedAt = const {},
   });
 
   final String company;
@@ -32,6 +98,8 @@ class JobApplication extends SoftDeletable {
 
   /// The day the application went out. The sparkline buckets on this, not on
   /// [createdAt], so backdating an application moves its tally.
+  ///
+  /// Stored as UTC midnight of that day — see [jobCalendarDay].
   final DateTime dateApplied;
 
   final String? applicationUrl;
@@ -45,6 +113,10 @@ class JobApplication extends SoftDeletable {
   /// *seasons'* [JobSeason.archivedAt], and only once every one of them is
   /// retired. See [jobIsArchived].
   final List<String> seasonIds;
+
+  /// See [JobFieldStamps]. Kept up to date by [copyWith], which stamps
+  /// whichever fields it actually changed.
+  final JobFieldStamps fieldUpdatedAt;
 
   JobApplication copyWith({
     String? company,
@@ -60,7 +132,7 @@ class JobApplication extends SoftDeletable {
     int? version,
     bool bumpVersion = true,
   }) {
-    return JobApplication(
+    JobApplication build(JobFieldStamps stamps) => JobApplication(
       id: id,
       createdAt: createdAt,
       updatedAt: utcNow(),
@@ -75,7 +147,22 @@ class JobApplication extends SoftDeletable {
           : (applicationUrl ?? this.applicationUrl),
       notes: clearNotes ? null : (notes ?? this.notes),
       seasonIds: seasonIds ?? this.seasonIds,
+      fieldUpdatedAt: stamps,
     );
+
+    final next = build(const {});
+    final previousValues = jobApplicationStampValues(this);
+    final nextValues = jobApplicationStampValues(next);
+    final now = utcNow();
+    // A key this row never stamped is pinned to its old updatedAt first, so
+    // editing one field of an unstamped row does not make every other field
+    // look as new as the edit.
+    return build({
+      for (final key in nextValues.keys)
+        key: previousValues[key] != nextValues[key]
+            ? now
+            : (fieldUpdatedAt[key] ?? updatedAt),
+    });
   }
 }
 

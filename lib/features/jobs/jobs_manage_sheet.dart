@@ -11,6 +11,7 @@ import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/prompt_name_dialog.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/features/jobs/jobs_actions.dart';
@@ -110,21 +111,76 @@ class _JobsManageDialogState extends ConsumerState<_JobsManageDialog> {
 // Stages
 // ---------------------------------------------------------------------------
 
-class _StagesTab extends ConsumerWidget {
+/// A dragged order, shown until the list it was written to has reloaded.
+///
+/// The reorder is written asynchronously. Until the provider reloads, the
+/// list would snap back to its old order, and a second drag in that window
+/// would be computed from the old order and overwrite the first. Writes are
+/// chained, so each one starts from the one before it.
+class _PendingOrder {
+  List<String>? _ids;
+  var _generation = 0;
+  Future<void> _chain = Future<void>.value();
+
+  /// [items] in the pending order when there is one. Anything the order does
+  /// not name, such as a row added meanwhile, keeps its place at the end.
+  List<T> apply<T>(List<T> items, String Function(T item) idOf) {
+    final ids = _ids;
+    if (ids == null) return items;
+    final byId = {for (final item in items) idOf(item): item};
+    final named = ids.toSet();
+    return [
+      for (final id in ids) ?byId[id],
+      for (final item in items)
+        if (!named.contains(idOf(item))) item,
+    ];
+  }
+
+  /// Shows [ids] at once, and runs [save] (the write plus the reload) after
+  /// any earlier one. [onSettled] runs once the newest drag has landed.
+  void write(
+    List<String> ids,
+    Future<void> Function() save,
+    VoidCallback onSettled,
+  ) {
+    _ids = ids;
+    final generation = ++_generation;
+    _chain = _chain
+        .then((_) => save())
+        .whenComplete(() {
+          if (generation != _generation) return;
+          _ids = null;
+          onSettled();
+        })
+        .catchError((Object _) {});
+  }
+}
+
+class _StagesTab extends ConsumerStatefulWidget {
   const _StagesTab({required this.actions});
 
   final JobsActions actions;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_StagesTab> createState() => _StagesTabState();
+}
+
+class _StagesTabState extends ConsumerState<_StagesTab> {
+  final _order = _PendingOrder();
+
+  JobsActions get actions => widget.actions;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final stages = ref.watch(jobStagesProvider).valueOrNull;
+    final loaded = ref.watch(jobStagesProvider).valueOrNull;
     final applications =
         ref.watch(jobApplicationsProvider).valueOrNull ??
         const <JobApplication>[];
-    if (stages == null) {
+    if (loaded == null) {
       return const Center(child: CircularProgressIndicator());
     }
+    final stages = _order.apply(loaded, (stage) => stage.id);
 
     final usageByStatus = <String, int>{};
     for (final application in applications) {
@@ -134,6 +190,7 @@ class _StagesTab extends ConsumerWidget {
     final stageColors = JobStageColors(
       stages: stages,
       fallback: theme.colorScheme.primary,
+      brightness: theme.brightness,
     );
 
     return Column(
@@ -161,7 +218,14 @@ class _StagesTab extends ConsumerWidget {
               onReorderItem: (oldIndex, newIndex) {
                 final ids = [for (final stage in stages) stage.id];
                 ids.insert(newIndex, ids.removeAt(oldIndex));
-                actions.reorderStages(ids);
+                setState(() {
+                  _order.write(ids, () async {
+                    await actions.reorderStages(ids);
+                    await ref.read(jobStagesProvider.future);
+                  }, () {
+                    if (mounted) setState(() {});
+                  });
+                });
               },
               itemBuilder: (context, index) {
                 final stage = stages[index];
@@ -183,7 +247,7 @@ class _StagesTab extends ConsumerWidget {
                       _StageSwatch(
                         color: stageColors.forStage(stage),
                         explicit: stageColors.isExplicit(stage),
-                        onTap: () => _recolor(context, ref, stage),
+                        onTap: () => _recolor(stage),
                       ),
                     ],
                   ),
@@ -201,21 +265,21 @@ class _StagesTab extends ConsumerWidget {
                             : 'Change colour',
                         iconSize: 15,
                         visualDensity: VisualDensity.compact,
-                        onPressed: () => _recolor(context, ref, stage),
+                        onPressed: () => _recolor(stage),
                         icon: const Icon(PhosphorIconsRegular.palette),
                       ),
                       IconButton(
                         tooltip: 'Rename',
                         iconSize: 15,
                         visualDensity: VisualDensity.compact,
-                        onPressed: () => _rename(context, stage),
+                        onPressed: () => _rename(stage),
                         icon: const Icon(PhosphorIconsRegular.pencilSimple),
                       ),
                       IconButton(
                         tooltip: 'Delete',
                         iconSize: 15,
                         visualDensity: VisualDensity.compact,
-                        onPressed: () => _delete(context, stage, inUse),
+                        onPressed: () => _delete(stage, inUse),
                         icon: Icon(
                           PhosphorIconsRegular.trash,
                           color: theme.colorScheme.error,
@@ -234,38 +298,43 @@ class _StagesTab extends ConsumerWidget {
             dense: true,
             icon: const Icon(PhosphorIconsRegular.plus),
             label: 'New stage',
-            onPressed: () => _add(context),
+            onPressed: _add,
           ),
         ),
       ],
     );
   }
 
-  Future<void> _add(BuildContext context) async {
+  Future<void> _add() async {
     final name = await showPromptNameDialog(context, title: 'New stage');
     if (name == null) return;
-    await actions.addStage(name);
+    if (!await actions.addStage(name)) _showNameTaken(name);
   }
 
-  Future<void> _rename(BuildContext context, JobStage stage) async {
+  Future<void> _rename(JobStage stage) async {
     final name = await showPromptNameDialog(
       context,
       title: 'Rename stage',
       initial: stage.name,
     );
     if (name == null) return;
-    await actions.renameStage(stage, name);
+    if (!await actions.renameStage(stage, name)) _showNameTaken(name);
+  }
+
+  void _showNameTaken(String name) {
+    if (!mounted) return;
+    showVoyagerToast(
+      context,
+      message: 'A stage named "${name.trim()}" already exists',
+      icon: PhosphorIconsRegular.warningCircle,
+    );
   }
 
   /// Colours the stage from the app palette. Unlike categories, other stages'
   /// colours are not passed as `usedColors`: two stages sharing a colour is
   /// the user's business, and the derived colours the uncoloured ones are
   /// showing are not choices anyone made.
-  Future<void> _recolor(
-    BuildContext context,
-    WidgetRef ref,
-    JobStage stage,
-  ) async {
+  Future<void> _recolor(JobStage stage) async {
     final color = await pickPaletteColorWithRef(
       ref,
       context,
@@ -275,7 +344,7 @@ class _StagesTab extends ConsumerWidget {
     await actions.setStageColor(stage, color);
   }
 
-  Future<void> _delete(BuildContext context, JobStage stage, int inUse) async {
+  Future<void> _delete(JobStage stage, int inUse) async {
     final confirmed = await showConfirmDialog(
       context,
       title: 'Delete "${stage.name}"?',
@@ -741,21 +810,31 @@ class _CompanyRow extends StatelessWidget {
 // Seasons
 // ---------------------------------------------------------------------------
 
-class _SeasonsTab extends ConsumerWidget {
+class _SeasonsTab extends ConsumerStatefulWidget {
   const _SeasonsTab({required this.actions});
 
   final JobsActions actions;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SeasonsTab> createState() => _SeasonsTabState();
+}
+
+class _SeasonsTabState extends ConsumerState<_SeasonsTab> {
+  final _order = _PendingOrder();
+
+  JobsActions get actions => widget.actions;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final seasons = ref.watch(jobSeasonsProvider).valueOrNull;
+    final loaded = ref.watch(jobSeasonsProvider).valueOrNull;
     final applications =
         ref.watch(jobApplicationsProvider).valueOrNull ??
         const <JobApplication>[];
-    if (seasons == null) {
+    if (loaded == null) {
       return const Center(child: CircularProgressIndicator());
     }
+    final seasons = _order.apply(loaded, (season) => season.id);
 
     // An application filed under several cycles counts once in each of them,
     // so the totals here add up to more than the table's row count — each one
@@ -800,7 +879,15 @@ class _SeasonsTab extends ConsumerWidget {
                     onReorderItem: (oldIndex, newIndex) {
                       final ids = [for (final season in seasons) season.id];
                       ids.insert(newIndex, ids.removeAt(oldIndex));
-                      actions.reorderSeasons(ids);
+                      // See [_PendingOrder].
+                      setState(() {
+                        _order.write(ids, () async {
+                          await actions.reorderSeasons(ids);
+                          await ref.read(jobSeasonsProvider.future);
+                        }, () {
+                          if (mounted) setState(() {});
+                        });
+                      });
                     },
                     itemBuilder: (context, index) {
                       final season = seasons[index];
@@ -868,7 +955,7 @@ class _SeasonsTab extends ConsumerWidget {
                               tooltip: 'Rename',
                               iconSize: 15,
                               visualDensity: VisualDensity.compact,
-                              onPressed: () => _rename(context, season),
+                              onPressed: () => _rename(season),
                               icon: const Icon(
                                 PhosphorIconsRegular.pencilSimple,
                               ),
@@ -877,7 +964,7 @@ class _SeasonsTab extends ConsumerWidget {
                               tooltip: 'Delete',
                               iconSize: 15,
                               visualDensity: VisualDensity.compact,
-                              onPressed: () => _delete(context, season, count),
+                              onPressed: () => _delete(season, count),
                               icon: Icon(
                                 PhosphorIconsRegular.trash,
                                 color: theme.colorScheme.error,
@@ -896,14 +983,14 @@ class _SeasonsTab extends ConsumerWidget {
             dense: true,
             icon: const Icon(PhosphorIconsRegular.plus),
             label: 'New season',
-            onPressed: () => _add(context),
+            onPressed: _add,
           ),
         ),
       ],
     );
   }
 
-  Future<void> _add(BuildContext context) async {
+  Future<void> _add() async {
     final name = await showPromptNameDialog(
       context,
       title: 'New season',
@@ -913,7 +1000,7 @@ class _SeasonsTab extends ConsumerWidget {
     await actions.addSeason(name);
   }
 
-  Future<void> _rename(BuildContext context, JobSeason season) async {
+  Future<void> _rename(JobSeason season) async {
     final name = await showPromptNameDialog(
       context,
       title: 'Rename season',
@@ -923,11 +1010,7 @@ class _SeasonsTab extends ConsumerWidget {
     await actions.renameSeason(season, name);
   }
 
-  Future<void> _delete(
-    BuildContext context,
-    JobSeason season,
-    int count,
-  ) async {
+  Future<void> _delete(JobSeason season, int count) async {
     final confirmed = await showConfirmDialog(
       context,
       title: 'Delete "${season.name}"?',
