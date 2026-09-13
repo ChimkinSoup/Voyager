@@ -18,6 +18,8 @@ import 'package:voyager/features/leetcode/leetcode_cram_page.dart';
 import 'package:voyager/features/leetcode/leetcode_session_page.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 
+import 'fakes/input_order_random.dart';
+
 class _RecordingLeetCodeRepository implements LeetCodeRepository {
   _RecordingLeetCodeRepository(this.problems);
 
@@ -82,6 +84,7 @@ Future<_RecordingLeetCodeRepository> _pump(
       overrides: [
         leetCodeRepositoryProvider.overrideWithValue(repo),
         remoteSyncServiceProvider.overrideWithValue(_NoopRemoteSync()),
+        noSessionShuffle,
       ],
       child: MaterialApp(home: page),
     ),

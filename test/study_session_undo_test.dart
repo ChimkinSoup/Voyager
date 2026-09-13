@@ -22,6 +22,8 @@ import 'package:voyager/features/study/study_cram_page.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 import 'package:voyager/features/study/study_session_page.dart';
 
+import 'fakes/input_order_random.dart';
+
 const _deckId = 'session-deck';
 
 class _RecordingStudyRepository implements StudyRepository {
@@ -119,6 +121,7 @@ Future<_RecordingStudyRepository> _pump(
       overrides: [
         studyRepositoryProvider.overrideWithValue(repo),
         remoteSyncServiceProvider.overrideWithValue(_NoopRemoteSync()),
+        noSessionShuffle,
       ],
       child: MaterialApp(home: page),
     ),

@@ -9,6 +9,7 @@ import 'package:voyager/core/utils/live_snapshot.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/domain/services/leetcode_srs_engine.dart';
 import 'package:voyager/features/leetcode/leetcode_actions.dart';
 import 'package:voyager/features/leetcode/leetcode_detail_view.dart';
 import 'package:voyager/features/leetcode/leetcode_flashcard.dart';
@@ -124,11 +125,12 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
   void _syncProblems(List<LeetCodeProblem> problems) {
     final held = _problemsById;
     if (held == null) {
-      final included = problems
-          .where((p) => widget.problemIds.contains(p.id))
-          .toList();
+      final included = orderLeetCodeCramQueue([
+        for (final p in problems)
+          if (widget.problemIds.contains(p.id)) p,
+      ], random: ref.read(sessionShuffleRandomProvider));
       _problemsById = {for (final p in included) p.id: p};
-      _bucket0 = included.map((p) => p.id).toList();
+      _bucket0 = [for (final p in included) p.id];
       return;
     }
     // Same reason a review session re-reads its queue: these problems are a

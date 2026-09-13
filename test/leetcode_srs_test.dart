@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
@@ -109,27 +111,123 @@ void main() {
     });
   });
 
-  test('dueLeetCodeProblems skips the scheduled and leads with the oldest', () {
-    final fresh = _problem(id: 'fresh', solvedAt: _now);
-    final old = _problem(
-      id: 'old',
-      solvedAt: _now.subtract(const Duration(days: 200)),
-    );
-    final overdue = _problem(
-      id: 'overdue',
-      dueAt: _now.subtract(const Duration(days: 1)),
-      interval: 2,
-      reviewCount: 1,
-    );
-    final later = _problem(
-      id: 'later',
-      dueAt: _now.add(const Duration(days: 4)),
-      interval: 4,
-      reviewCount: 1,
-    );
+  group('dueLeetCodeProblems', () {
+    test('skips the scheduled and leads with the oldest due day', () {
+      final fresh = _problem(id: 'fresh', solvedAt: _now);
+      final old = _problem(
+        id: 'old',
+        solvedAt: _now.subtract(const Duration(days: 200)),
+      );
+      final overdue = _problem(
+        id: 'overdue',
+        dueAt: _now.subtract(const Duration(days: 1)),
+        interval: 2,
+        reviewCount: 1,
+      );
+      final later = _problem(
+        id: 'later',
+        dueAt: _now.add(const Duration(days: 4)),
+        interval: 4,
+        reviewCount: 1,
+      );
 
-    final queue = dueLeetCodeProblems([fresh, later, old, overdue], now: _now);
-    expect(queue.map((p) => p.id), ['old', 'overdue', 'fresh']);
+      // One problem per day — order is fixed regardless of shuffle seed.
+      final queue = dueLeetCodeProblems(
+        [fresh, later, old, overdue],
+        now: _now,
+        random: Random(1),
+      );
+      expect(queue.map((p) => p.id), ['old', 'overdue', 'fresh']);
+    });
+
+    test('same-day problems are shuffled, not left in input order', () {
+      final problems = [
+        for (var i = 0; i < 8; i++)
+          _problem(
+            id: 'p$i',
+            solvedAt: DateTime(2026, 8, 9, i).toUtc(),
+          ),
+      ];
+
+      final queue = dueLeetCodeProblems(
+        problems,
+        now: _now,
+        random: Random(1),
+      );
+
+      expect(queue.map((p) => p.id).toSet(), problems.map((p) => p.id).toSet());
+      expect(
+        queue.map((p) => p.id),
+        isNot(problems.map((p) => p.id).toList()),
+      );
+    });
+
+    test('shuffle stays inside each due day', () {
+      // Local midnights via DateTime(...).toUtc() so bucketing by
+      // dueAt.toLocal() lands back on the same calendar days. [_now] is the
+      // next UTC day so every card is already due regardless of offset.
+      final dayOld = [
+        _problem(
+          id: 'a',
+          dueAt: DateTime(2026, 8, 7, 8).toUtc(),
+          interval: 2,
+          reviewCount: 1,
+        ),
+        _problem(
+          id: 'b',
+          dueAt: DateTime(2026, 8, 7, 20).toUtc(),
+          interval: 2,
+          reviewCount: 1,
+        ),
+      ];
+      final dayRecent = [
+        _problem(
+          id: 'c',
+          dueAt: DateTime(2026, 8, 9, 9).toUtc(),
+          interval: 2,
+          reviewCount: 1,
+        ),
+        _problem(
+          id: 'd',
+          dueAt: DateTime(2026, 8, 9, 15).toUtc(),
+          interval: 2,
+          reviewCount: 1,
+        ),
+      ];
+
+      final queue = dueLeetCodeProblems(
+        [...dayRecent, ...dayOld],
+        now: DateTime.utc(2026, 8, 10, 12),
+        random: Random(7),
+      );
+      final ids = queue.map((p) => p.id).toList();
+
+      expect(ids.take(2).toSet(), {'a', 'b'});
+      expect(ids.skip(2).toSet(), {'c', 'd'});
+    });
+  });
+
+  group('orderLeetCodeCramQueue', () {
+    test('returns a shuffled permutation', () {
+      final problems = [for (var i = 0; i < 8; i++) _problem(id: 'p$i')];
+
+      final ordered = orderLeetCodeCramQueue(problems, random: Random(1));
+
+      expect(
+        ordered.map((p) => p.id).toSet(),
+        problems.map((p) => p.id).toSet(),
+      );
+      expect(
+        ordered.map((p) => p.id),
+        isNot(problems.map((p) => p.id).toList()),
+      );
+    });
+
+    test('leaves the input list alone', () {
+      final input = [_problem(id: 'a'), _problem(id: 'b'), _problem(id: 'c')];
+      orderLeetCodeCramQueue(input, random: Random(1));
+      expect(input.map((p) => p.id), ['a', 'b', 'c']);
+    });
   });
 
   test('sortLeetCodeProblemsByMastery puts the least-known first', () {

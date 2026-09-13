@@ -25,6 +25,8 @@ import 'package:voyager/features/leetcode/leetcode_session_page.dart';
 import 'package:voyager/features/study/study_cram_page.dart';
 import 'package:voyager/features/study/study_session_page.dart';
 
+import 'fakes/input_order_random.dart';
+
 const _deckId = 'focus-deck';
 
 class _RecordingStudyRepository implements StudyRepository {
@@ -130,6 +132,7 @@ List<LeetCodeProblem> _problems() {
 List<Override> _studyOverrides() => [
   studyRepositoryProvider.overrideWithValue(_RecordingStudyRepository(_cards(3))),
   remoteSyncServiceProvider.overrideWithValue(_NoopRemoteSync()),
+  noSessionShuffle,
 ];
 
 List<Override> _leetCodeOverrides() => [
@@ -141,6 +144,7 @@ List<Override> _leetCodeOverrides() => [
     MemoryLeetCodeScratchDraftStore(),
   ),
   settingsProvider.overrideWith(_FixedSettings.new),
+  noSessionShuffle,
 ];
 
 /// Opens [page] the way the deck view does — pushed over it — so a session
