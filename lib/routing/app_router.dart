@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/motion/modal_scrim_observer.dart';
 import 'package:voyager/core/widgets/desktop_window_frame.dart';
 import 'package:voyager/features/auth/login_page.dart';
 import 'package:voyager/features/shell/app_shell.dart';
@@ -26,6 +27,9 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/login',
     refreshListenable: auth,
+    // A fresh instance per router: this provider rebuilds on auth changes, and
+    // an observer can't be shared with the navigator it is replacing.
+    observers: [ModalScrimObserver()],
     routes: [
       ShellRoute(
         builder: (_, _, child) => DesktopWindowFrame(child: child),
