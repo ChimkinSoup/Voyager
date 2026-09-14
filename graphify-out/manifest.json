@@ -130,8 +130,8 @@
     "semantic_hash": ""
   },
   "lib/app/voyager_app.dart": {
-    "mtime": 1788663180.4370584,
-    "ast_hash": "da10009aecca28e5ff34bf79fab1da7b",
+    "mtime": 1789359270.555857,
+    "ast_hash": "fe57150423650634bab878f71c80a51f",
     "semantic_hash": ""
   },
   "lib/core/auth/firebase_auth_errors.dart": {
@@ -990,9 +990,9 @@
     "semantic_hash": ""
   },
   "lib/routing/app_router.dart": {
-    "mtime": 1786836611.9581685,
-    "ast_hash": "ea23243ee57ab26f36b510c18b630f14",
-    "semantic_hash": "ea23243ee57ab26f36b510c18b630f14"
+    "mtime": 1789359263.1890068,
+    "ast_hash": "ade7fd0a651a201a65a88f9cdebd2a06",
+    "semantic_hash": ""
   },
   "merger_test.dart": {
     "mtime": 1783048367.3917181,
@@ -3170,27 +3170,27 @@
     "semantic_hash": "7ec35caedbfe35b37bd7aa66dab7219b"
   },
   "windows/flutter/ephemeral/flutter_export.h": {
-    "mtime": 1787868678.825141,
+    "mtime": 1787868681.8144124,
     "ast_hash": "51d6ddd086e800d34c1d143004c474fd",
     "semantic_hash": "51d6ddd086e800d34c1d143004c474fd"
   },
   "windows/flutter/ephemeral/flutter_messenger.h": {
-    "mtime": 1787868678.825141,
+    "mtime": 1787868681.8154116,
     "ast_hash": "9c15531692496dbfcb820431343d92fa",
     "semantic_hash": "9c15531692496dbfcb820431343d92fa"
   },
   "windows/flutter/ephemeral/flutter_plugin_registrar.h": {
-    "mtime": 1787868678.8261435,
+    "mtime": 1787868681.8154116,
     "ast_hash": "205b172dd4be89df08a835c5afcd2c1a",
     "semantic_hash": "205b172dd4be89df08a835c5afcd2c1a"
   },
   "windows/flutter/ephemeral/flutter_texture_registrar.h": {
-    "mtime": 1787868678.8261435,
+    "mtime": 1787868681.8154116,
     "ast_hash": "4ffbfcf8b88a9690e82543b1761e81d5",
     "semantic_hash": "4ffbfcf8b88a9690e82543b1761e81d5"
   },
   "windows/flutter/ephemeral/flutter_windows.h": {
-    "mtime": 1787868678.825141,
+    "mtime": 1787868681.8144124,
     "ast_hash": "96a7e6f061d615f678c5c00b30f04fb5",
     "semantic_hash": "96a7e6f061d615f678c5c00b30f04fb5"
   },
@@ -5057,6 +5057,16 @@
   "SCHEDULED_REMINDERS_HLD.md": {
     "mtime": 1789338259.4262927,
     "ast_hash": "581e6dc569e13aea649c1a55f96975cc",
+    "semantic_hash": ""
+  },
+  "lib/core/motion/modal_scrim_observer.dart": {
+    "mtime": 1789359258.9242654,
+    "ast_hash": "fec1a3653864fd46057ab5fc2ec6f425",
+    "semantic_hash": ""
+  },
+  "test/modal_scrim_observer_test.dart": {
+    "mtime": 1789359408.42106,
+    "ast_hash": "daa9bc1ac248e8f76a1064b29e7ce5ba",
     "semantic_hash": ""
   }
 }

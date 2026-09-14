@@ -569,24 +569,33 @@ class _Toolbar extends StatelessWidget {
         children: [
           Expanded(
             child: SizedBox(
-              height: 38,
-              // Not under [VimTextScope] like the app's prose fields, so the
-              // Caps Lock mark is opted into by hand here.
-              child: CapsLockCaretIndicator(
-                child: TextField(
-                  controller: searchController,
-                  onChanged: onQueryChanged,
-                  style: theme.textTheme.bodySmall,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    hintText: 'Search company, title, notes or status',
-                    prefixIcon: const Icon(
-                      PhosphorIconsRegular.magnifyingGlass,
-                      size: 14,
+              // The height the field's border draws at under the theme's
+              // compact density, so the Clear button beside it can match.
+              height: 36,
+              // Centred, not stretched: a field handed a taller slot than its
+              // border pins that border to the top, leaving the Clear and icon
+              // buttons hanging below it.
+              child: Align(
+                // Not under [VimTextScope] like the app's prose fields, so the
+                // Caps Lock mark is opted into by hand here.
+                child: CapsLockCaretIndicator(
+                  child: TextField(
+                    controller: searchController,
+                    onChanged: onQueryChanged,
+                    style: theme.textTheme.bodySmall,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: 'Search company, title, notes or status',
+                      prefixIcon: const Icon(
+                        PhosphorIconsRegular.magnifyingGlass,
+                        size: 14,
+                      ),
+                      prefixIconConstraints: const BoxConstraints(
+                        minWidth: 32,
+                      ),
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     ),
-                    prefixIconConstraints: const BoxConstraints(minWidth: 32),
-                    border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
                   ),
                 ),
               ),
@@ -596,7 +605,7 @@ class _Toolbar extends StatelessWidget {
             const SizedBox(width: 6),
             GlassButton(
               dense: true,
-              height: 38,
+              height: 28,
               label: 'Clear',
               onPressed: onClearFilters,
             ),
