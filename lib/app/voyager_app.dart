@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/caps_lock/caps_lock_indicator_scope.dart';
+import 'package:voyager/core/motion/modal_scrim_observer.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
@@ -161,16 +162,23 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
 ///
 /// Dark = the triangle grid shader with its wave animation. Light = a static
 /// paper-grain shader with a falling petal field drawn over it.
+///
+/// Both animations pause while a sheet or dialog is open — see
+/// [modalScrimOpen] for why that is a GPU cost and not a style choice.
 class _AppBackground extends ConsumerWidget {
   const _AppBackground();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
-    if (themeMode == AppThemeMode.light) {
-      return const _PaperBackground();
-    }
-    return const _GeometricBackground();
+    return ValueListenableBuilder<bool>(
+      valueListenable: modalScrimOpen,
+      builder: (context, covered, child) =>
+          TickerMode(enabled: !covered, child: child!),
+      child: themeMode == AppThemeMode.light
+          ? const _PaperBackground()
+          : const _GeometricBackground(),
+    );
   }
 }
 
