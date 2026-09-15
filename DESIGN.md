@@ -382,6 +382,9 @@ Recipe:
 
 - Three-stop diagonal fill gradient, dual-gradient specular border stroke, and a top gloss
   reflection (18px tall, or 45% of an explicit height).
++ Flat fill at a single opacity (no diagonal fade), dual-gradient specular border stroke, and a
+  top gloss reflection (18px tall, or 45% of an explicit height). Sheen comes from gloss + edge,
+  not from thinning the plate.
 - Press drives a 0.96 scale over 100 ms in `easeOutCubic`, releasing over 150. Glass opacity
   multiplies by state: 1.25× hovered, 1.4× pressed, 0.5× disabled. Focus adds an accent ring
   at 50% alpha with a 2px spread (crisp, not a glow — `shadowBlurScale` must not widen it).
