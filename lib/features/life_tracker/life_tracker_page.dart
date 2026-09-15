@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/life_tracker/blossom_stat_popup.dart';
 import 'package:voyager/features/life_tracker/bucket_list_popup.dart';
@@ -142,7 +143,7 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
     ];
     final accent = Color(settings?.accentColor ?? 0xFF7C9EFF);
 
-    return LayoutBuilder(
+    final canvas = LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         if (size.isEmpty) return const SizedBox.shrink();
@@ -259,6 +260,41 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
           ],
         );
       },
+    );
+
+    // The paper stays paper in dark too (see the class doc), but full-bleed
+    // it read as a cream poster slapped over the night grid. Dark frames it
+    // instead: inset, rounded, hairline-edged and shadowed like a card, so
+    // the theme's chrome holds the island. The wrapper is the same widgets in
+    // both themes, so switching theme does not remount the canvas.
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final vc = VoyagerColors.of(context);
+    const frameRadius = BorderRadius.all(Radius.circular(18));
+
+    return Padding(
+      padding: EdgeInsets.all(isDark ? 12 : 0),
+      child: DecoratedBox(
+        decoration: isDark
+            ? BoxDecoration(
+                borderRadius: frameRadius,
+                boxShadow: vc.surfaceShadow(),
+              )
+            : const BoxDecoration(),
+        child: DecoratedBox(
+          decoration: isDark
+              ? BoxDecoration(
+                  borderRadius: frameRadius,
+                  border: Border.all(color: vc.strongHairline),
+                )
+              : const BoxDecoration(),
+          position: DecorationPosition.foreground,
+          child: ClipRRect(
+            borderRadius: isDark ? frameRadius : BorderRadius.zero,
+            clipBehavior: isDark ? Clip.antiAlias : Clip.none,
+            child: canvas,
+          ),
+        ),
+      ),
     );
   }
 }

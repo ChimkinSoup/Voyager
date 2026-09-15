@@ -5,6 +5,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/tag_chip.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -131,7 +132,11 @@ class _LeetCodeDetailOverlayState extends State<_LeetCodeDetailOverlay>
                   child: GestureDetector(
                     onTap: _close,
                     child: ColoredBox(
-                      color: Colors.black.withValues(alpha: 0.5 * raw),
+                      color: Color.lerp(
+                        Colors.transparent,
+                        VoyagerColors.of(context).scrim,
+                        raw,
+                      )!,
                     ),
                   ),
                 );

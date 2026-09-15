@@ -1099,7 +1099,9 @@ class _SparklineRow extends ConsumerWidget {
                               verticalInterval: verticalGridInterval,
                               horizontalInterval: yStep,
                               getDrawingVerticalLine: (_) => FlLine(
-                                color: Colors.grey.withValues(alpha: 0.15),
+                                color: theme.colorScheme.outline.withValues(
+                                  alpha: 0.1,
+                                ),
                                 strokeWidth: 1,
                               ),
                               getDrawingHorizontalLine: (_) => FlLine(

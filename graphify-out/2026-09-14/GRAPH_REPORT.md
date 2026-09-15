@@ -1,16 +1,16 @@
-# Graph Report - Voyager  (2026-09-13)
+# Graph Report - Voyager  (2026-09-14)
 
 ## Corpus Check
-- 990 files · ~1,377,751 words
+- 993 files · ~1,378,793 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 24826 nodes · 39384 edges · 639 communities (590 shown, 49 thin omitted)
+- 24864 nodes · 39423 edges · 660 communities (612 shown, 48 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 297 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c9c24072`
+- Built from commit: `416761be`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -603,17 +603,42 @@
 - Timer?
 - _MonthWeekMorphLayer
 - <MultiFactorUserHostApi>
-- PopupRoute
+- prompt_name_dialog.dart
 - newline_normalization_test.dart
 - MorphDayEventStack
 - package:voyager/features/analytics/stat_number_format.dart
 - <MultiFactorTotpSecretHostApi>
 - _QuickDelayedDragStartListener
 - -registerAuthStateListenerAppcompletion
+- create_name_color_dialog.dart
 - weather_chart_curve_test.dart
-- accentColor
+- exercise_target_inline_edit_test.dart
+- study_card_delete_undo_test.dart
+- flagged_word_rules.dart
+- SoftDeletable
+- snippet_enabled_scope.dart
+- study_card_bulk_import.dart
+- InternalMultiFactorInfo
+- DateTime?
+- recurrence_engine_test.dart
+- calendar_event_delete.dart
+- journal_entry_actions.dart
+- spell_check_squiggle_layer_test.dart
+- PluginRegistrarManager
+- life_tracker_models.dart
+- package:voyager/core/widgets/voyager_dialog.dart
+- AuthPigeonFirebaseApp
 - TEST
 - googleCalendarSyncProvider
+- periodic_prompt_service.dart
+- TextureRegistrarImpl
+- _DreamJournalPageState
+- SingleChildRenderObjectWidget
+- CustomClipper
+- _revealEvent
+- FinanceUiPrefsStore
+- dictionary_search_test.dart
+- TEST
 - Firebase Auth (android) — FlutterFirebaseAuthPlugin
 - Uncategorized — Map
 - Uncategorized — Rect
@@ -631,22 +656,18 @@
 - Firebase Auth (lib) — firebase_auth
 - Firebase Auth (lib) — firebase_auth
 - Firebase Auth (lib) — firebase_auth
-- SyncConflictRepository
 - _TaskRowState
 - Override
 - -verifyPhoneNumberApprequestcompletion
 - -registerAuthStateListenerAppcompletion
 - -verifyPhoneNumberApprequestcompletion
-- life_tracker_stat_popup_width_test.dart
 - <MultiFactorTotpHostApi>
-- CustomClipper
 - package:voyager/core/dev/dev_flags.dart
-- SyncConflictRepository
 
 ## God Nodes (most connected - your core abstractions)
 1. `_State` - 124 edges
-2. `settingsProvider` - 94 edges
-3. `remoteSyncServiceProvider` - 89 edges
+2. `remoteSyncServiceProvider` - 87 edges
+3. `settingsProvider` - 87 edges
 4. `FLTFirebaseAuthPlugin` - 87 edges
 5. `FLTFirebaseAuthPlugin` - 87 edges
 6. `Builder` - 86 edges
@@ -664,13 +685,13 @@
   test/leetcode_rename_identity_test.dart → lib/app/providers.dart
 - `pumpWidget` --references--> `settingsProvider`  [EXTRACTED]
   test/leetcode_retrack_test.dart → lib/app/providers.dart
-- `pumpWidget` --references--> `settingsProvider`  [EXTRACTED]
-  test/leetcode_track_draft_test.dart → lib/app/providers.dart
+- `main` --references--> `settingsProvider`  [EXTRACTED]
+  test/snippet_quick_add_test.dart → lib/app/providers.dart
 
 ## Import Cycles
 - None detected.
 
-## Communities (639 total, 49 thin omitted)
+## Communities (660 total, 48 thin omitted)
 
 ### Community 0 - "Drift Database Schema — app_database"
 Cohesion: 0.00
@@ -698,23 +719,23 @@ Nodes (237): accentColor, adjacentBorderT, adjacentTextT, alpha, _animatingEvent
 
 ### Community 6 - "Analytics Feature — analytics_page"
 Cohesion: 0.01
-Nodes (231): accent, _addOption, all, analytics, anchor, anchorDateRect, anchorIndex, anchorRect (+223 more)
+Nodes (237): accent, _addOption, all, analytics, anchor, anchorDateRect, anchorIndex, anchorRect (+229 more)
 
 ### Community 7 - "Sync Engine — remote_sync_service"
 Cohesion: 0.01
-Nodes (231): CharacterOpRegistry, CharacterOpRegistry get, CharacterSequenceCrdtMerger, CrdtDocumentResolver, _activeDebouncers, _activelyEditedDocuments, addPendingTextMergeListener, applyPendingDreamEntryTextMerge (+223 more)
+Nodes (227): CharacterOpRegistry, CharacterOpRegistry get, CharacterSequenceCrdtMerger, CrdtDocumentResolver, _activeDebouncers, _activelyEditedDocuments, addPendingTextMergeListener, applyPendingDreamEntryTextMerge (+219 more)
 
 ### Community 8 - "Todo Feature — todo_page"
 Cohesion: 0.01
-Nodes (206): AsyncValue, accent, accentColor, activeCount, _activeInList, _activeMatchKey, _activeSectionHeight, _addingTask (+198 more)
+Nodes (208): AsyncValue, accent, accentColor, activeCount, _activeInList, _activeMatchKey, _activeSectionHeight, _addingTask (+200 more)
 
 ### Community 9 - "Journal Feature — journal_page"
 Cohesion: 0.01
-Nodes (167): accent, accentColor, allEntriesCount, _appliedSavedPreferences, _applySavedPreferencesIfReady, _attachedEntryId, _bodyFocusNode, bodyPreview (+159 more)
+Nodes (173): journalListEntriesProvider, accent, accentColor, allEntriesCount, _appliedSavedPreferences, _applySavedPreferencesIfReady, _attachedEntryId, _bodyFocusNode (+165 more)
 
 ### Community 10 - "Firebase Auth (windows) — messages.g.cpp"
 Cohesion: 0.02
-Nodes (192): string_view, AuthPigeonFirebaseApp, app_name_, AuthPigeonFirebaseApp::AuthPigeonFirebaseApp(), custom_auth_domain, Hash, set_app_name, set_custom_auth_domain (+184 more)
+Nodes (200): GenerateInterfaces, string_view, AuthPigeonFirebaseApp::AuthPigeonFirebaseApp(), EncodableMap, EncodableValue, FirebaseAuthHostApi, FirebaseAuthUserHostApi, FlutterError (+192 more)
 
 ### Community 11 - "Finance Feature — finance_transaction_modal"
 Cohesion: 0.06
@@ -722,15 +743,15 @@ Nodes (36): amountCents, _amountController, container, createState, _date, _date
 
 ### Community 12 - "Life Tracker Feature — life_tree_canvas"
 Cohesion: 0.01
-Nodes (172): Float32List, ImageShader?, a, accentColor, _animation, apply, _atlas, _atlasColors (+164 more)
+Nodes (170): Float32List, ImageShader?, a, accentColor, _animation, apply, _atlas, _atlasColors (+162 more)
 
 ### Community 13 - "Domain Models — settings_models"
 Cohesion: 0.01
 Nodes (163): accentColor, alertOnPeriodicPrompts, alertTimeHour, autocorrectEnabled, birthDate, birthYear, calendarNavigateLeftKey, calendarNavigateRightKey (+155 more)
 
 ### Community 14 - "Test Suite — study_card_editor_images_tes"
-Cohesion: 0.01
-Nodes (217): dart:io, dart:typed_data, Directory, publishAsset, publishReference, _remoteSync, DriftMediaRepository, cacheSizeBytes (+209 more)
+Cohesion: 0.02
+Nodes (107): publishAsset, publishReference, _remoteSync, MediaImage, _MediaImageState, MediaFileStore, package:image/image.dart, package:voyager/core/media/media_service.dart (+99 more)
 
 ### Community 15 - "Sync Engine — firestore_document_mapper"
 Cohesion: 0.01
@@ -746,22 +767,22 @@ Nodes (145): ActionCodeInfoOperationBox, -initWithValue, AuthPigeonFirebaseApp, 
 
 ### Community 18 - "Study Feature — ConsumerState"
 Cohesion: 0.01
-Nodes (163): calendarsProvider, class, colorPaletteProvider, EdgeInsets, hiddenNotificationFeedProvider, kVoyagerFieldScrollPadding, accent, _addNote (+155 more)
+Nodes (135): class, accent, _AnalyticsSection, _AnalyticsSectionState, _body, child, color, _completingNow (+127 more)
 
 ### Community 19 - "Journal Feature — journal_page"
 Cohesion: 0.01
-Nodes (166): AppThemeMode, AuthNotifier, AutocorrectScopeData, CacheStatusSnapshot, ChangeNotifierProvider, ConnectivityStatusController, DataExportService, DataImportService (+158 more)
+Nodes (194): AppThemeMode, AuthNotifier, AutocorrectScopeData, CacheStatusSnapshot, ChangeNotifierProvider, ConnectivityStatusController, DataExportService, DataImportService (+186 more)
 
 ### Community 20 - "Shell Feature — weather_forecast_chart"
 Cohesion: 0.02
-Nodes (127): Iterable, allowOverflow, allowVerticalOverflow, axisMaxY, axisMinY, belowPath, bottom, bottomAxisHeight (+119 more)
+Nodes (125): allowOverflow, allowVerticalOverflow, axisMaxY, axisMinY, belowPath, bottom, bottomAxisHeight, bucket (+117 more)
 
 ### Community 21 - "Vim Editing — vim_text_ops"
 Cohesion: 0.02
 Nodes (124): 0, big, body, _bracketObject, c, caret, caseSensitive, character (+116 more)
 
 ### Community 22 - "Firebase Auth (android) — NonNull"
-Cohesion: 0.06
+Cohesion: 0.07
 Nodes (4): get, NonNull, Builder, CanIgnoreReturnValue
 
 ### Community 23 - "Vim Editing — vim_session"
@@ -770,7 +791,7 @@ Nodes (119): _alwaysFocused, _applyCaseOverRange, _applyMotion, _applyOperatorRa
 
 ### Community 24 - "Analytics Feature — ConsumerWidget"
 Cohesion: 0.04
-Nodes (70): rankingChildrenByParentProvider, rankingParentsProvider, RankingFilters, actionLabel, _ArchivedBanner, build, categories, category (+62 more)
+Nodes (47): actionLabel, _ArchivedBanner, categories, category, children, childrenByParent, collapsed, count (+39 more)
 
 ### Community 25 - "Jobs Feature — StatelessWidget"
 Cohesion: 0.03
@@ -782,31 +803,31 @@ Nodes (113): AdditionalUserInfo? get, AuthCredential? get, additionalUserInfo, a
 
 ### Community 27 - "Todo Feature — todo_page"
 Cohesion: 0.02
-Nodes (113): todoRepositoryProvider, _addSubtask, _applyPendingNotesMerge, _beginEditingSession, build, _buildFields, _buildSubtaskList, _clearDueDate (+105 more)
+Nodes (101): _applyPendingNotesMerge, _beginEditingSession, build, _buildFields, _buildSubtaskList, _clearDueDate, _close, color (+93 more)
 
 ### Community 28 - "Study Feature — ConsumerState"
 Cohesion: 0.03
-Nodes (63): _accentColor, _activeQuery, _baseline, body, _bodyController, _bodyFocusNode, _changeEntryDateAndTime, _coordinator (+55 more)
+Nodes (58): _accentColor, _activeQuery, _baseline, body, _bodyController, _bodyFocusNode, _changeEntryDateAndTime, _coordinator (+50 more)
 
 ### Community 29 - "Test Suite — journal_settings_dialog_test"
 Cohesion: 0.05
 Nodes (38): package:voyager/features/todo/todo_settings_dialog.dart, SwitchListTile, closeSettings, container, db, _firstId, firstWhere, journals (+30 more)
 
 ### Community 30 - "Finance Feature — finance_analytics_view"
-Cohesion: 0.02
-Nodes (107): assetsProvider, assetValuationsProvider, budgetsProvider, financeCategoriesProvider, tagColorsProvider, transactionsProvider, abs, accent (+99 more)
+Cohesion: 0.03
+Nodes (70): abs, accent, _AnalyticsCard, anchor, _arcMidpoint, asset, _barsSpace, _bottomReserved (+62 more)
 
 ### Community 31 - "Firebase Auth (windows) — messages.g.cpp"
 Cohesion: 0.03
-Nodes (116): InternalActionCodeInfoData, InternalAuthCredentialInput, K, FromEncodableList, operator==, AuthPigeonFirebaseApp, EncodableList, InternalActionCodeInfo (+108 more)
+Nodes (102): InternalAuthCredentialInput, K, EncodableList, InternalActionCodeSettings, InternalAdditionalUserInfo, InternalAuthCredential, InternalFirebaseAuthSettings, InternalIdTokenResult (+94 more)
 
 ### Community 32 - "Test Suite — jobs_track_flow_test"
-Cohesion: 0.07
-Nodes (26): AutocorrectSession, _addSnippet, anchor, _applySuggestion, autocorrectSession, build, createState, editableTextState (+18 more)
+Cohesion: 0.03
+Nodes (74): SyncEngine, InMemorySyncRepository, DriftJournalRepository, searchEntries, SearchService, package:voyager/core/sync/debouncer.dart, package:voyager/core/sync/soft_delete_policy.dart, package:voyager/core/sync/sync_engine.dart (+66 more)
 
 ### Community 33 - "Journal Feature — journal_list_actions"
-Cohesion: 0.06
-Nodes (34): RemoteSyncService, _NoopRemoteSync, button, db, ensureVisible, examples, _exampleText, field (+26 more)
+Cohesion: 0.05
+Nodes (42): package:voyager/features/settings/services/data_export_service.dart, package:voyager/features/settings/services/data_import_service.dart, _calendar, _collectionsFor, deletedAt, _event, id, main (+34 more)
 
 ### Community 34 - "Test Suite — study_card_editor_images_tes"
 Cohesion: 0.03
@@ -814,15 +835,15 @@ Nodes (68): accentColor, build, cancelled, _canPop, _clear, _close, commit, crea
 
 ### Community 35 - "Calendar Feature — calendar_week_timeline"
 Cohesion: 0.02
-Nodes (100): accentColor, allDayAreaTop, _AllDayShelfColumn, allDayShelfHeight, borderedClipRects, borderedDayColumnRect, borderedRects, borderRadius (+92 more)
+Nodes (98): accentColor, allDayAreaTop, _AllDayShelfColumn, allDayShelfHeight, borderedClipRects, borderedDayColumnRect, borderedRects, borderRadius (+90 more)
 
 ### Community 36 - "Study Feature — ConsumerState"
 Cohesion: 0.02
-Nodes (107): allDreamEntriesProvider, dreamRepositoryProvider, dreamWriteCoordinatorProvider, accentColor, _appliedSavedWidth, _bodyEditorKey, _bodyFocusNode, bodyPreview (+99 more)
+Nodes (100): accentColor, _appliedSavedWidth, _bodyEditorKey, _bodyFocusNode, bodyPreview, _buildEditorArea, _buildEntryList, _changeEntryDate (+92 more)
 
 ### Community 37 - "Firebase Auth (windows) — messages.g.cpp"
 Cohesion: 0.03
-Nodes (57): FlutterDesktopMessage, TextureVariant, ErrorOr, v_, FlutterError, code_, details_, message_ (+49 more)
+Nodes (64): FlutterDesktopMessage, TextureVariant, ErrorOr, v_, FlutterError, code_, details_, message_ (+56 more)
 
 ### Community 38 - "Life Tracker Feature — life_tree_geometry"
 Cohesion: 0.02
@@ -834,48 +855,48 @@ Nodes (101): AssetsTableCompanion, AssetsTableData, AssetValuationsTableCompanio
 
 ### Community 40 - "Media Handling — media_fan_stack"
 Cohesion: 0.03
-Nodes (80): studyDecksProvider, studyFoldersProvider, studyStatsProvider, build, build, createState, excludeFolderIds, _moveHere (+72 more)
+Nodes (66): studyStatsProvider, borderColor, build, child, _closeDeck, _closeGeneration, _closing, _create (+58 more)
 
 ### Community 41 - "Test Suite — package:voyager/domain/repos"
-Cohesion: 0.04
-Nodes (49): build, CalendarTodoPanel, _CalendarTodoPanelState, _closingAfterSave, _completed, createState, didUpdateWidget, _discard (+41 more)
+Cohesion: 0.06
+Nodes (35): CalendarTodoPanel, _CalendarTodoPanelState, _closingAfterSave, _completed, createState, didUpdateWidget, _discard, dispose (+27 more)
 
 ### Community 42 - "Test Suite — package:flutter_test/flutter"
 Cohesion: 0.02
-Nodes (97): class MockDocumentReference extends, Exception, MediaStoragePermanentFailure, SyncPayloadTooLargeException, MediaIngestException, BackupFormatException, package:voyager/data/remote/firestore_sync_repository.dart, ../test/fakes/fake_weather_api_client.dart (+89 more)
+Nodes (89): class MockDocumentReference extends, package:voyager/data/remote/firestore_sync_repository.dart, ../test/fakes/fake_weather_api_client.dart, addCustomWord, authStateChanges, batch, batchCreatedCount, batches (+81 more)
 
 ### Community 43 - "Test Suite — package:flutter_test/flutter"
 Cohesion: 0.04
-Nodes (51): AnalyticsService, booleanTrueCount, completedTasks, countWords, heatmapIntensity, integerSeries, interpolateConsecutive, rollingMax (+43 more)
+Nodes (43): StatisticTracker, AnalyticsService, booleanTrueCount, completedTasks, countWords, heatmapIntensity, integerSeries, interpolateConsecutive (+35 more)
 
 ### Community 44 - "Study Feature — ConsumerState"
 Cohesion: 0.02
-Nodes (90): LeetCodeTrackDraft? draft,
-  LeetCodeTrackDraftOutcome, accentColor, _addExample, _addSolution, algorithm, _applyRetrack, _attachDraftListeners, _attachSolutionListeners (+82 more)
+Nodes (97): LeetCodeTrackDraft? draft,
+  LeetCodeTrackDraftOutcome, leetCodeApiClientProvider, startLeetCodeTrackFlow, leetCodeTrackDraftStoreProvider, accentColor, _addExample, _addSolution, algorithm (+89 more)
 
 ### Community 45 - "Jobs Feature — jobs_page"
-Cohesion: 0.02
-Nodes (101): @DriftDatabase, _Device, _buffered, _maxBuffered, notify, notifyOne, onWrite, SyncedWriteNotifier (+93 more)
+Cohesion: 0.10
+Nodes (31): assetsProvider, assetValuationsProvider, budgetsProvider, financeCategoriesProvider, tagColorsProvider, transactionsProvider, _BreakdownCard, _breakdownFocusProvider (+23 more)
 
 ### Community 46 - "Shared Widgets — petal_field"
 Cohesion: 0.02
 Nodes (87): _advance, _advancePetal, approachLogDt, baseOpacity, build, burstAt, center, _clock (+79 more)
 
 ### Community 47 - "Firebase Auth (android) — NonNull"
-Cohesion: 0.04
-Nodes (9): InternalFirebaseAuthSettings, InternalAdditionalUserInfo, InternalFirebaseAuthSettings, InternalIdTokenResult, InternalUserInfo, Nullable, AdditionalUserInfo, InternalAdditionalUserInfo (+1 more)
+Cohesion: 0.03
+Nodes (9): InternalAdditionalUserInfo, InternalFirebaseAuthSettings, InternalIdTokenResult, InternalUserInfo, InternalVerifyPhoneNumberRequest, Nullable, AdditionalUserInfo, InternalAdditionalUserInfo (+1 more)
 
 ### Community 48 - "Test Suite — package:voyager/domain/model"
-Cohesion: 0.02
-Nodes (86): AnimatedContainer, package:drift/drift.dart, package:flutter/gestures.dart, package:voyager/core/constants/todo_constants.dart, package:voyager/core/theme/voyager_list_item_surface.dart, package:voyager/features/study/study_session_page.dart, package:voyager/features/todo/todo_edit_panel.dart, package:voyager/features/todo/todo_list_search_bar.dart (+78 more)
+Cohesion: 0.03
+Nodes (66): AnimatedContainer, package:flutter/gestures.dart, package:voyager/core/theme/voyager_list_item_surface.dart, package:voyager/features/todo/todo_edit_panel.dart, package:voyager/features/todo/todo_list_search_bar.dart, support/todo_page_harness.dart, deleteTaskFromRow, gesture (+58 more)
 
 ### Community 49 - "Test Suite — package:flutter/services"
-Cohesion: 0.08
-Nodes (30): cacheStatusSnapshotProvider, devSettingsProvider, fpsMonitorProvider, CacheStatusSnapshot, _scaledMorphDuration, build, _CacheStatusItemList, CacheStatusOverlay (+22 more)
+Cohesion: 0.05
+Nodes (76): journalAllEntryIdsProvider, journalEntryCacheInvalidatorProvider, journalEntryCountsProvider, journalRepositoryProvider, journalsProvider, journalWriteCoordinatorProvider, quoteBankProvider, quotesLoadedProvider (+68 more)
 
 ### Community 50 - "Finance Feature — finance_analytics_view"
-Cohesion: 0.09
-Nodes (20): buildOverscrollIndicator, buildScrollbar, createState, didChangeAppLifecycleState, dispose, _flushAllPendingEdits, getScrollPhysics, initState (+12 more)
+Cohesion: 0.05
+Nodes (38): AppLifecycleListener?, buildOverscrollIndicator, buildScrollbar, createState, didChangeAppLifecycleState, dispose, _flushAllPendingEdits, getScrollPhysics (+30 more)
 
 ### Community 51 - "Vim Editing — vim_text_overlay"
 Cohesion: 0.02
@@ -883,20 +904,21 @@ Nodes (84): accentColor, _advanceWidth, autocorrectSession, boxes, build, _caret
 
 ### Community 52 - "Test Suite — notification_inbox_wrap_mark"
 Cohesion: 0.04
-Nodes (56): Finder get, _dreamRepository, DreamWriteCoordinator, _findTask, _journalRepository, _remoteSync, saveEntry, saveTask (+48 more)
+Nodes (43): Finder get, package:voyager/features/dream_journal/dream_journal_page.dart, _bodyField, container, db, _delegate, getAllEntries, getAllEntriesCalls (+35 more)
 
 ### Community 53 - "Calendar Feature — calendar_grid"
 Cohesion: 0.02
-Nodes (82): calendar_day_entries.dart, calendar_day_grid.dart, calendar_todo_markers.dart, calendar_week_timeline.dart, CalendarEntryMenuBuilder, accentColor, allDay, base (+74 more)
+Nodes (81): calendar_day_entries.dart, calendar_day_grid.dart, calendar_todo_markers.dart, calendar_week_timeline.dart, CalendarEntryMenuBuilder, accentColor, allDay, base (+73 more)
 
 ### Community 54 - "Study Feature — ConsumerState"
-Cohesion: 0.03
-Nodes (75): StudyCard, StudyDeckLink, backImages, build, card, _face, frontImages, keywords (+67 more)
+Cohesion: 0.04
+Nodes (52): DateTime? dueAt,
+  double, StudyDeckLink, build, createState, didChangeDependencies, didUpdateWidget, dispose, ease (+44 more)
 
 ### Community 55 - "Ephemeral — string"
 Cohesion: 0.05
-Nodes (40): _FakeLeetCodeApi, LeetCodeTrackDraft? draft,
-  String?, _RecordingLeetCodeRepository, _algorithmField, api, _close, db, _defaultLatency (+32 more)
+Nodes (39): _FakeLeetCodeApi, LeetCodeTrackDraft? draft,
+  String?, _RecordingLeetCodeRepository, _algorithmField, api, _close, db, _defaultLatency (+31 more)
 
 ### Community 56 - "Text — list_text_editing"
 Cohesion: 0.03
@@ -912,7 +934,7 @@ Nodes (86): applyRankingEditRules, ascending, better, byKey, _compareNullableDes
 
 ### Community 59 - "Dev — remote_sync_compare_service"
 Cohesion: 0.03
-Nodes (63): _addInstantDiff, allMatched, _charMerger, compareAllJournalEntries, compareAllTodoLists, comparedAt, _compareJournalEntry, compareTodoList (+55 more)
+Nodes (66): _addInstantDiff, allMatched, _charMerger, compareAllJournalEntries, compareAllTodoLists, comparedAt, _compareJournalEntry, compareTodoList (+58 more)
 
 ### Community 60 - "Shared Widgets — _State"
 Cohesion: 0.03
@@ -927,8 +949,8 @@ Cohesion: 0.09
 Nodes (8): AuthPigeonFirebaseApp, FirebaseAuthHostApi, FirebaseAuthUserHostApi, InternalUserCredential, InternalUserDetails, MultiFactorUserHostApi, Result, VoidResult
 
 ### Community 63 - "Shared Widgets — settingsProvider"
-Cohesion: 0.04
-Nodes (47): accentColor, alignLabelToTop, allowShortHeight, autocorrectAllowed, autofocus, borderRadius, build, _buildField (+39 more)
+Cohesion: 0.02
+Nodes (89): InputCounterWidgetBuilder?, accentColor, alignLabelToTop, allowShortHeight, autocorrectAllowed, autofocus, borderRadius, build (+81 more)
 
 ### Community 64 - "Todo"
 Cohesion: 0.03
@@ -940,11 +962,11 @@ Nodes (70): JobsTrackDraft?, JobsTrackDraftStore, jobsTrackDraftStoreProvider, a
 
 ### Community 66 - "Firebase Auth (android) — NonNull"
 Cohesion: 0.05
-Nodes (8): GeneratedAndroidFirebaseAuth, InternalAuthCredentialInput, InternalMultiFactorSession, InternalPhoneMultiFactorAssertion, InternalSignInProvider, InternalUserProfile, Override, SuppressWarnings
+Nodes (7): GeneratedAndroidFirebaseAuth, InternalMultiFactorSession, InternalPhoneMultiFactorAssertion, InternalSignInProvider, InternalUserProfile, Override, SuppressWarnings
 
 ### Community 67 - "Firebase Auth (android) — Nullable"
 Cohesion: 0.08
-Nodes (27): ActivityAware, ActivityPluginBinding, FlutterFirebasePlugin, FlutterPlugin, FlutterPluginBinding, Task, FlutterFirebaseAuthPlugin, Activity (+19 more)
+Nodes (28): ActivityAware, ActivityPluginBinding, FlutterFirebasePlugin, FlutterPlugin, FlutterPluginBinding, Task, FlutterFirebaseAuthPlugin, Activity (+20 more)
 
 ### Community 68 - "Ephemeral — standard_codec"
 Cohesion: 0.06
@@ -952,11 +974,11 @@ Nodes (47): EncodedType, flutter::StandardCodecSerializer, PigeonInternalCodecSe
 
 ### Community 69 - "Firebase Auth (windows) — messages.g.cpp"
 Cohesion: 0.06
-Nodes (48): authNotifierProvider, backgroundSyncOrchestratorProvider, connectivityStatusProvider, databaseProvider, deviceIdProvider, lazyLoadProvider, liveSyncProvider, quoteBankProvider (+40 more)
+Nodes (44): authNotifierProvider, backgroundSyncOrchestratorProvider, connectivityStatusProvider, databaseProvider, lazyLoadProvider, liveSyncProvider, mediaTransferWorkerProvider, shellDataWarmupProvider (+36 more)
 
 ### Community 70 - "Shared Widgets — context_menu"
 Cohesion: 0.03
-Nodes (67): anchor, _anim, borderRadius, build, _buildRootMenu, _buildSubmenu, capturedThemes, child (+59 more)
+Nodes (73): anchor, _anim, borderRadius, build, _buildRootMenu, _buildSubmenu, capturedThemes, child (+65 more)
 
 ### Community 71 - "Shared Widgets — _State"
 Cohesion: 0.03
@@ -964,35 +986,35 @@ Nodes (61): accentColor, animates, _animating, baseColor, build, _clock, copyWit
 
 ### Community 72 - "Test Suite — package:flutter_test/flutter"
 Cohesion: 0.03
-Nodes (76): BackgroundSyncOrchestrator, backoffMultiplier, _bucketListRepository, _calendarRepository, cancelScheduledDocumentSync, _crdtResolver, _debouncer, _debouncerFor (+68 more)
+Nodes (70): BackgroundSyncOrchestrator, backoffMultiplier, _bucketListRepository, _calendarRepository, cancelScheduledDocumentSync, _crdtResolver, _debouncer, _debouncerFor (+62 more)
 
 ### Community 73 - "Shared Widgets — _State"
-Cohesion: 0.12
-Nodes (17): HotKey?, key, keyToken, modifiers, parseHotKey, parts, _physicalKey, createHotkeyService (+9 more)
+Cohesion: 0.09
+Nodes (22): HotKey?, body, build, floatingActionButton, PlatformAdaptiveScaffold, key, keyToken, modifiers (+14 more)
 
 ### Community 74 - "Rankings Feature — rankings_edit_panel"
 Cohesion: 0.05
-Nodes (36): RankingsActions, _accent, _actions, build, category, children, _commitText, createState (+28 more)
+Nodes (37): RankingsActions, _accent, _actions, build, category, children, _commitText, createState (+29 more)
 
 ### Community 75 - "Test Suite — dart:ui"
-Cohesion: 0.04
-Nodes (47): leetcodeProblemsProvider, build, build, build, _kLeetCodeActivityBreakpoint, _kLeetCodeActivityCardWidth, _kLeetCodeSplitBreakpoint, LeetCodeDashboard (+39 more)
+Cohesion: 0.03
+Nodes (56): from typing import List, colorForLeetCodeDifficulty, key, kLeetCodeEasyColor, kLeetCodeHardColor, kLeetCodeMediumColor, labelForLeetCodeDifficulty, labelForLeetCodeLanguage (+48 more)
 
 ### Community 76 - "Workout Feature — exercise_detail_view"
 Cohesion: 0.03
-Nodes (72): exerciseSetLogsProvider, workoutCacheInvalidatorProvider, workoutRepositoryProvider, workoutSessionsProvider, anchorRect, anchorRectFor, box, build (+64 more)
+Nodes (70): exerciseSetLogsProvider, workoutCacheInvalidatorProvider, workoutRepositoryProvider, workoutSessionsProvider, anchorRect, anchorRectFor, box, build (+62 more)
 
 ### Community 77 - "Shared Widgets — _State"
-Cohesion: 0.11
-Nodes (19): arrowsNavigateHistory, build, child, createState, dispose, _enabled, _handleGradeKey, _handleHistoryKey (+11 more)
+Cohesion: 0.06
+Nodes (35): IgnorePointer, arrowsNavigateHistory, build, child, createState, dispose, _enabled, _handleGradeKey (+27 more)
 
 ### Community 78 - "Study Feature — ConsumerState"
-Cohesion: 0.04
-Nodes (44): InputCounterWidgetBuilder?, accentColor, autocorrectAllowed, autofocus, borderRadius, build, buildCounter, _buildField (+36 more)
+Cohesion: 0.05
+Nodes (40): AppSettings, AsyncNotifier, SettingsNotifier, build, LeetCodePage, _LeetCodeViewMode, _leetCodeViewModeProvider, package:voyager/features/leetcode/leetcode_actions.dart (+32 more)
 
 ### Community 79 - "Shared Widgets — _State"
-Cohesion: 0.03
-Nodes (62): bucketListItemsProvider, bucketListRepositoryProvider, BucketListItem, completed, completedAt, copyWith, createdAt, deletedAt (+54 more)
+Cohesion: 0.04
+Nodes (50): bucketListItemsProvider, bucketListRepositoryProvider, accentColor, _adding, _addItem, BucketListPopup, _BucketListPopupState, _BucketListRow (+42 more)
 
 ### Community 80 - "Test Suite — package:voyager/domain/model"
 Cohesion: 0.08
@@ -1004,56 +1026,55 @@ Nodes (62): 0, apostrophe, at, backspace, bare, base, caret, char (+54 more)
 
 ### Community 82 - "Shared Widgets — _State"
 Cohesion: 0.03
-Nodes (68): CodeController, LeetCodeCodeController, build, code, _codeContentPadding, _codeDecoration, _codeEditorShortcuts, _codeFocusNode (+60 more)
+Nodes (62): build, code, _codeContentPadding, _codeDecoration, _codeEditorShortcuts, _codeFocusNode, _codeGutterPad, _codeTextStyle (+54 more)
 
 ### Community 83 - "Test Suite — package:voyager/domain/repos"
-Cohesion: 0.04
-Nodes (58): anchorRect, build, _close, _closing, _comparing, controller, _copy, createState (+50 more)
+Cohesion: 0.03
+Nodes (60): CodeController, LeetCodeCodeController, anchorRect, build, _close, _closing, _comparing, controller (+52 more)
 
 ### Community 84 - "Caps Lock — caps_lock_caret_indicator"
 Cohesion: 0.03
-Nodes (60): CurvedAnimation, accentColor, allowed, attach, _blockCaret, build, capsLockBadgeVisible, CapsLockCaretIndicator (+52 more)
+Nodes (57): CurvedAnimation, accentColor, allowed, attach, _blockCaret, build, capsLockBadgeVisible, capsLockMarkInk (+49 more)
 
 ### Community 85 - "Journal Feature — journal_list_actions"
-Cohesion: 0.10
-Nodes (28): leetCodeDeckDifficultyFilterProvider, leetCodeDeckSearchIndexProvider, leetCodeDeckSearchQueryProvider, leetCodeDeckTagFilterProvider, build, _ControlBar, _ControlBarState, createState (+20 more)
+Cohesion: 0.09
+Nodes (29): leetCodeDeckDifficultyFilterProvider, leetCodeDeckSearchIndexProvider, leetCodeDeckSearchQueryProvider, leetCodeDeckTagFilterProvider, build, _ControlBar, _ControlBarState, createState (+21 more)
 
 ### Community 86 - "Todo Feature — todo_list_actions"
-Cohesion: 0.03
-Nodes (60): todoListsProvider, allLists, assigner, changeTodoListColor, choice, color, container, context (+52 more)
+Cohesion: 0.04
+Nodes (47): allLists, assigner, choice, color, container, context, deletedList, deleteTodoList (+39 more)
 
 ### Community 87 - "Study Feature — ConsumerState"
 Cohesion: 0.04
 Nodes (55): card, cards, childDecks, childFolders, color, confirmed, container, contents (+47 more)
 
 ### Community 88 - "Test Suite — leetcode_session_hides_test"
-Cohesion: 0.04
-Nodes (47): package:flutter_code_editor/flutter_code_editor.dart, package:voyager/core/vim/vim_enabled_scope.dart, package:voyager/core/vim/vim_text_overlay.dart, package:voyager/core/vim/vim_text_scope.dart, package:voyager/core/widgets/field_scroll_padding.dart, package:voyager/core/widgets/labeled_text_field.dart, package:voyager/core/widgets/notched_field_border.dart, package:voyager/features/dream_journal/dream_sticky_note.dart (+39 more)
+Cohesion: 0.03
+Nodes (66): createState, dispose, _entryIdController, _purgeEntry, _purging, package:flutter_code_editor/flutter_code_editor.dart, package:voyager/core/caps_lock/caps_lock_caret_indicator.dart, package:voyager/core/caps_lock/caps_lock_indicator_scope.dart (+58 more)
 
 ### Community 89 - "Firebase Auth (android) — NonNull"
-Cohesion: 0.02
-Nodes (125): MemoryFinanceUiPrefsStore? prefsStore,
-  bool, package:voyager/core/utils/ids.dart, package:voyager/domain/models/enums.dart, package:voyager/domain/models/finance_models.dart, package:voyager/domain/services/finance_analytics.dart, package:voyager/features/finance/finance_budget_panel.dart, package:voyager/features/finance/finance_net_flow_chart.dart, package:voyager/features/finance/finance_net_flow_hero.dart (+117 more)
+Cohesion: 0.03
+Nodes (85): fakes/fake_weather_api_client.dart, currentWeatherProvider, deleteBudgetWithUndo, deleteSubscriptionWithUndo, softDeleteWithUndo, package:flutter_riverpod/flutter_riverpod.dart, package:voyager/app/providers.dart, package:voyager/app/voyager_app.dart (+77 more)
 
 ### Community 90 - "Test Suite — scroll_offset_isolate_test"
-Cohesion: 0.04
-Nodes (57): ProseSpanBuilder, build, color, controller, createState, didUpdateWidget, dispose, initState (+49 more)
+Cohesion: 0.06
+Nodes (31): _bandAt, build, color, controller, createState, didUpdateWidget, dispose, focusNode (+23 more)
 
 ### Community 91 - "Shared Widgets — _State"
-Cohesion: 0.03
-Nodes (58): FlutterDesktopViewControllerRef, FlutterDesktopViewRef, _set, WindowProcDelegate, function, TextureRegistrarImpl::UnregisterTexture(), FlutterViewController, controller_ (+50 more)
+Cohesion: 0.06
+Nodes (31): FlutterDesktopViewControllerRef, FlutterDesktopViewRef, WindowProcDelegate, FlutterViewController, controller_, ForceRedraw, HandleTopLevelWindowProc, view_id (+23 more)
 
 ### Community 92 - "Domain Services — weather_service"
 Cohesion: 0.03
-Nodes (66): EditableText, context, focus, isTextInputFocused, subtreeIsVisible, package:voyager/core/snippets/snippet_enabled_scope.dart, package:voyager/core/snippets/snippet_index.dart, package:voyager/core/snippets/snippet_session.dart (+58 more)
+Nodes (78): EditableText, context, focus, isTextInputFocused, subtreeIsVisible, build, canManage, createState (+70 more)
 
 ### Community 93 - "Test Suite — package:flutter_test/flutter"
 Cohesion: 0.04
 Nodes (44): 10. Error handling, 11. Implementation phases, 12. Testing plan, 13. Constants and API surface, 14. Open questions (resolved), 15.1 `softDeleteWithUndo` has no `container` parameter (§6.1, §13), 15.2 The media detach has to report its own stamp (§6.2), 15.3 One standing offer per overlay is new behaviour (§5.4) (+36 more)
 
 ### Community 94 - "Shared Widgets — _State"
-Cohesion: 0.06
-Nodes (36): brightness, _categoryById, _ColumnMenu, _ColumnMenuState, _companyByKey, _CompanyColors, _createApplication, createState (+28 more)
+Cohesion: 0.05
+Nodes (53): jobApplicationsProvider, jobCategoriesProvider, jobCompaniesProvider, jobRecentCompanyKeysProvider, jobSearchQueryProvider, jobSeasonsProvider, jobSelectedApplicationProvider, jobStagesProvider (+45 more)
 
 ### Community 95 - "Shared Widgets — _State"
 Cohesion: 0.03
@@ -1064,28 +1085,28 @@ Cohesion: 0.05
 Nodes (43): 10. Settings, 11.1 New module, 11.2 Pure engine, 11.3 Token spans, 11.4 Field wiring, 11.5 Highlight overlay, 11.6 Ordering with SnippetSession, 11. Architecture (intended) (+35 more)
 
 ### Community 97 - "Test Suite — secondary_collections_migrat"
-Cohesion: 0.11
-Nodes (16): App, Credential, Future, AdditionalUserInfo, EncodableMap, InternalAdditionalUserInfo, map, Variant (+8 more)
+Cohesion: 0.22
+Nodes (9): AdditionalUserInfo, InternalAdditionalUserInfo, map, Variant, firebase_auth_windows::FirebaseAuthPlugin::ConvertToEncodableMap(), firebase_auth_windows::FirebaseAuthPlugin::ConvertToEncodableValue(), ConvertToEncodableMap, ConvertToEncodableValue (+1 more)
 
 ### Community 98 - "Shared Widgets — _State"
-Cohesion: 0.08
-Nodes (23): IconData? get, buildCatalogMenu, calendarManageMenuEntries, configurableManageMenuEntries, defaultCalendarManageMenuEntries, defaultCatalogMenuChild, defaultConfigurableManageMenuEntries, defaultEntityManageMenuEntries (+15 more)
+Cohesion: 0.09
+Nodes (22): IconData? get, Iterable, buildCatalogMenu, calendarManageMenuEntries, configurableManageMenuEntries, defaultCalendarManageMenuEntries, defaultCatalogMenuChild, defaultConfigurableManageMenuEntries (+14 more)
 
 ### Community 99 - "Finance Feature — finance_transaction_modal"
 Cohesion: 0.03
 Nodes (65): _addMonths, allocatedAt, amountCents, anchorDueDate, annualCents, annualCentsFor, asOf, assetId (+57 more)
 
 ### Community 100 - "Firebase Auth (android) — FlutterFirebaseAuthPlugin"
-Cohesion: 0.19
-Nodes (12): FlutterFirebaseAuthPluginException, FlutterError, FlutterFirebaseAuthUser, AuthPigeonFirebaseApp, InternalActionCodeSettings, InternalIdTokenResult, InternalSignInProvider, InternalUserCredential (+4 more)
+Cohesion: 0.10
+Nodes (25): ActionCodeSettings, GetTokenResult, MultiFactorInfo, FlutterFirebaseAuthPluginException, FlutterError, FlutterFirebaseAuthUser, Activity, AuthPigeonFirebaseApp (+17 more)
 
 ### Community 101 - "Test Suite — package:flutter_test/flutter"
-Cohesion: 0.05
-Nodes (40): Completer, http.BaseClient, SettingsRepository, StreamedResponse, db, ensureVisible, enterText, failWrites (+32 more)
+Cohesion: 0.04
+Nodes (47): anchor, _BreakdownRow, build, child, count, counts, date, difficulty (+39 more)
 
 ### Community 102 - "App Wiring & Providers — voyager_app"
-Cohesion: 0.04
-Nodes (43): dart:async, applySettings, devForceConflictUi, disableCache, loadFromSettings, _persist, setDevForceConflictUi, setDisableCache (+35 more)
+Cohesion: 0.05
+Nodes (37): _Repaint, CapsLockState, applySettings, devForceConflictUi, DevSettingsController, disableCache, loadFromSettings, _persist (+29 more)
 
 ### Community 103 - "Jobs Feature — StatelessWidget"
 Cohesion: 0.04
@@ -1109,17 +1130,16 @@ Cohesion: 0.04
 Nodes (55): _, _asterisk, available, _backtick, buffer, canClose, canOpen, closed (+47 more)
 
 ### Community 108 - "Shared Widgets — voyager_text_field"
-Cohesion: 0.07
-Nodes (28): LeetCodeScratchPad, package:voyager/features/study/study_grading_row.dart, required String title,
-  List, addTwo, build, card, _focusPad, id (+20 more)
+Cohesion: 0.05
+Nodes (42): _asOf, _AssetModal, _AssetModalState, _canSave, _colorValue, container, createState, _datePopoverOpen (+34 more)
 
 ### Community 109 - "Study Feature — ConsumerState"
 Cohesion: 0.04
-Nodes (64): sessionShuffleRandomProvider, studyAllCardsProvider, studyAllDecksProvider, studyCardImagesProvider, _syncProblems, _syncQueue, build, _applyDecision (+56 more)
+Nodes (46): _applyDecision, bucket0, bucket1, bucket2, _BucketProgressBar, _canRedo, _canUndo, cardIds (+38 more)
 
 ### Community 110 - "Sync Engine — sync_conflict_detector"
-Cohesion: 0.04
-Nodes (44): bool get, _auth, AuthNotifier, dispose, _isAuthenticated, _subscription, isCompactWidth, kCompactWidthBreakpoint (+36 more)
+Cohesion: 0.06
+Nodes (31): applicationUrl, company, dateApplied, fromJson, hasText, JobsTrackDraft, kJobsTrackDraftVersion, notes (+23 more)
 
 ### Community 111 - "Sync Engine — firestore_collections"
 Cohesion: 0.04
@@ -1130,16 +1150,16 @@ Cohesion: 0.06
 Nodes (32): RankingStatus, accent, build, category, children, createState, _decoration, _hasProgress (+24 more)
 
 ### Community 113 - "Runner — win32_window.cpp"
-Cohesion: 0.06
-Nodes (35): accent, color, createState, didChangeDependencies, dispose, _formatRemaining, _LiveDot, _LiveDotState (+27 more)
+Cohesion: 0.05
+Nodes (46): leetcodeQuestionCountsProvider, lifeTrackerStatsProvider, paperShaderProvider, settingsProvider, _StatisticDetailPopup, _defaultEventColor, initState, build (+38 more)
 
 ### Community 114 - "Firebase Auth (windows) — firebase_auth_plugin.cpp"
-Cohesion: 0.14
-Nodes (63): AuthError, FederatedOAuthProvider, FutureBase, AuthPigeonFirebaseApp, AuthResult, FlutterError, function, InternalActionCodeSettings (+55 more)
+Cohesion: 0.13
+Nodes (69): AuthError, Credential, FederatedOAuthProvider, FutureBase, AuthPigeonFirebaseApp, AuthResult, EncodableMap, FlutterError (+61 more)
 
 ### Community 115 - "Test Suite — package:flutter_riverpod/flu"
 Cohesion: 0.04
-Nodes (33): ActionCodeResult, ByteBuffer, Retention, Target, ActionCodeInfoOperation, EMAIL_SIGN_IN, PASSWORD_RESET, RECOVER_EMAIL (+25 more)
+Nodes (40): ByteBuffer, MessageHandler, Retention, Target, FlutterError, GenerateInterfaces, MultiFactoResolverHostApi, MultiFactorTotpHostApi (+32 more)
 
 ### Community 116 - "Test Suite — package:voyager/domain/repos"
 Cohesion: 0.04
@@ -1151,31 +1171,34 @@ Nodes (52): _absorbEdit, _advanceTabstop, _alwaysFocused, _applying, _applyValue
 
 ### Community 118 - "Study Feature — ConsumerState"
 Cohesion: 0.04
-Nodes (52): autofocus, boxH, boxW, cappedMaxHeight, cappedMaxWidth, cell, clipPartialNextRow, ColorPaletteGrid (+44 more)
+Nodes (54): autofocus, boxH, boxW, cappedMaxHeight, cappedMaxWidth, cell, clipPartialNextRow, ColorPaletteGrid (+46 more)
 
 ### Community 119 - "Domain Models — analytics_models"
-Cohesion: 0.04
-Nodes (52): boolValue, buildDreamLoggedTracker, buildJournalEntriesTracker, buildStreakTracker, buildWordCountTracker, buildWorkedOutTracker, cadence, cap (+44 more)
+Cohesion: 0.03
+Nodes (62): boolValue, buildDreamLoggedTracker, buildJournalEntriesTracker, buildStreakTracker, buildWordCountTracker, buildWorkedOutTracker, cadence, cap (+54 more)
 
 ### Community 120 - "Study Feature — ConsumerState"
-Cohesion: 0.03
-Nodes (86): financeRepositoryProvider, subscriptionsProvider, Budget, Subscription, _save, _delete, _save, BillRadarPanel (+78 more)
+Cohesion: 0.02
+Nodes (156): DateTimeRange, financeRepositoryProvider, subscriptionsProvider, build, CompactBackBar, label, onBack, Budget (+148 more)
 
 ### Community 121 - "Test Suite — todo_page_perf_test"
-Cohesion: 0.04
-Nodes (52): build, QuickJournalPopup, QuickTodoPopup, getOrderedDestinations, icon, index, label, order (+44 more)
+Cohesion: 0.08
+Nodes (24): required int done,
+  bool, required int done,
+  Set, String? defaultTodoListId,
+  bool, active, completedExpanded, container, db, done (+16 more)
 
 ### Community 122 - "Study Feature — ConsumerState"
-Cohesion: 0.03
-Nodes (78): isExpired, purgeCutoff, purgeEligibleAfter, SoftDeletePolicy, accent, axis, _bottomFade, branchIndex (+70 more)
+Cohesion: 0.04
+Nodes (48): cachedCurrentWeatherProvider, accent, axis, _bottomFade, branchIndex, build, child, color (+40 more)
 
 ### Community 123 - "Constants — leetcode_constants"
 Cohesion: 0.05
-Nodes (43): JobsActions get, JobsActions, _actions, category, _CategoryTile, _chain, color, companies (+35 more)
+Nodes (54): JobsActions get, jobApplicationsProvider, jobCategoriesProvider, jobCompaniesProvider, jobSeasonsProvider, jobStagesProvider, _actions, build (+46 more)
 
 ### Community 124 - "Remote API Clients — firestore_sync_repository"
-Cohesion: 0.06
-Nodes (34): appendOperation, appendOperationGroup, appendOperationsBatch, claimCalendarLock, claimWeatherFetchLock, _collection, deleteDocument, deleteOperations (+26 more)
+Cohesion: 0.05
+Nodes (38): DocumentReference, FirebaseFirestore, appendOperation, appendOperationGroup, appendOperationsBatch, claimCalendarLock, claimWeatherFetchLock, _collection (+30 more)
 
 ### Community 125 - "Shared Widgets — tag_suggestion_overlay"
 Cohesion: 0.03
@@ -1186,8 +1209,8 @@ Cohesion: 0.04
 Nodes (51): at, _blockTags, _boldTags, close, contentFrom, _declaration, _decodeEntities, decoration (+43 more)
 
 ### Community 127 - "Test Suite — package:voyager/domain/repos"
-Cohesion: 0.03
-Nodes (74): VoyagerSpellCheckService, package:voyager/core/spellcheck/flagged_word_rules.dart, package:voyager/core/spellcheck/voyager_spell_check_service.dart, package:voyager/core/tags/tag_suggestions.dart, package:voyager/core/theme/app_fonts.dart, package:voyager/core/widgets/tag_highlighted_text_field.dart, package:voyager/features/rankings/rankings_field_editor.dart, SpellCheckService (+66 more)
+Cohesion: 0.04
+Nodes (49): VoyagerSpellCheckService, package:voyager/core/spellcheck/flagged_word_rules.dart, package:voyager/core/spellcheck/voyager_spell_check_service.dart, package:voyager/core/tags/tag_suggestions.dart, package:voyager/core/widgets/voyager_text_field.dart, SpellCheckService, checkedWords, editorHighlights (+41 more)
 
 ### Community 128 - "Leetcode Feature — leetcode_inline_code"
 Cohesion: 0.04
@@ -1210,24 +1233,25 @@ Cohesion: 0.04
 Nodes (52): @DataClassName, @TableIndex, AssetsTable, AssetValuationsTable, BucketListItemsTable, BudgetsTable, CalendarEventsTable, CalendarsTable (+44 more)
 
 ### Community 133 - "Test Suite — leetcode_sync_durability_tes"
-Cohesion: 0.18
-Nodes (10): from typing import List, package:voyager/features/leetcode/leetcode_scratch_starter.dart, CACHE, main, now, _problem, Solution, solutions (+2 more)
+Cohesion: 0.04
+Nodes (45): MemoryFinanceUiPrefsStore? prefsStore,
+  bool, package:voyager/domain/services/finance_analytics.dart, package:voyager/features/finance/finance_net_flow_chart.dart, package:voyager/features/finance/finance_net_flow_hero.dart, package:voyager/features/finance/finance_ui_prefs.dart, SegmentedButton, main, tx (+37 more)
 
 ### Community 134 - "Study Feature — ConsumerState"
-Cohesion: 0.06
-Nodes (34): confirmed, container, context, copyLeetCodeCode, current, deleteLeetCodeProblem, dismiss, draft (+26 more)
+Cohesion: 0.05
+Nodes (42): _authorizationEndpoint, DesktopGoogleOAuth, redirectUri, _tokenEndpoint, confirmed, container, context, copyLeetCodeCode (+34 more)
 
 ### Community 135 - "Test Suite — package:voyager/domain/repos"
 Cohesion: 0.07
-Nodes (42): journalAllEntryIdsProvider, journalEntryCacheInvalidatorProvider, journalEntryCountsProvider, journalListEntriesProvider, journalRepositoryProvider, journalsProvider, journalWriteCoordinatorProvider, quotePoolProvider (+34 more)
+Nodes (25): IconData, autofocus, build, child, CtrlEnterToSubmitScope, isSubmitChord, key, keyboard (+17 more)
 
 ### Community 136 - "Study Feature — ConsumerState"
 Cohesion: 0.03
-Nodes (75): rankingCategoriesProvider, accent, _actions, _active, affected, _all, build, busy (+67 more)
+Nodes (73): accent, _actions, _active, affected, _all, build, busy, categories (+65 more)
 
 ### Community 137 - "Ephemeral — string"
-Cohesion: 0.06
-Nodes (35): MethodCallHandler, vector, ReplyManager::SendResponseData(), EngineMethodResult, codec_, reply_manager_, BinaryReply, string (+27 more)
+Cohesion: 0.07
+Nodes (33): vector, ReplyManager::SendResponseData(), EngineMethodResult, codec_, reply_manager_, BinaryReply, string, T (+25 more)
 
 ### Community 138 - "Vim Editing — vim_anchored_chrome"
 Cohesion: 0.04
@@ -1251,33 +1275,32 @@ Nodes (70): DateTime? now,
   bool, amountCents, assetCents, best, BreakdownFocusResult, BreakdownSlice, busiestDailyFlow, byAsset (+62 more)
 
 ### Community 143 - "Test Suite — recurrence_editing_test"
-Cohesion: 0.02
-Nodes (135): Axis, BackdropFilter, srsMasteryColor, copyWith, fieldHintStyle, theme, roundedDragProxy, WeightUnit (+127 more)
+Cohesion: 0.08
+Nodes (26): _accept, active, allEntries, build, createState, dayIndex, _edit, _EmptyDayHint (+18 more)
 
 ### Community 144 - "Media Handling — media_paste_scope"
 Cohesion: 0.06
-Nodes (33): MediaClipboard, _attachFromClipboard, build, _busy, child, clipboard, collection, createState (+25 more)
+Nodes (31): MediaClipboard, _attachFromClipboard, build, _busy, child, clipboard, collection, createState (+23 more)
 
 ### Community 145 - "Test Suite — leetcode_sync_durability_tes"
 Cohesion: 0.06
 Nodes (31): bytes, character, charOps, charOpsKey, chunkCount, chunkCountKey, chunkIndex, chunkIndexKey (+23 more)
 
 ### Community 146 - "Test Suite — package:voyager/domain/repos"
-Cohesion: 0.04
-Nodes (46): _applyDecision, bucket0, bucket1, bucket2, _BucketProgressBar, _canRedo, _canUndo, _cardKey (+38 more)
+Cohesion: 0.02
+Nodes (94): leetCodeRepositoryProvider, sessionShuffleRandomProvider, _save, _applyDecision, bucket0, bucket1, bucket2, _BucketProgressBar (+86 more)
 
 ### Community 147 - "Shared Widgets — _State"
-Cohesion: 0.06
-Nodes (35): LeetCodeCramPage, LeetCodeSessionPage, package:voyager/features/leetcode/leetcode_cram_page.dart, package:voyager/features/leetcode/leetcode_session_page.dart, _button, enterText, getProblem, listProblems (+27 more)
+Cohesion: 0.04
+Nodes (50): RemoteSyncService, package:voyager/features/leetcode/leetcode_track_modal.dart, _NoopRemoteSync, button, db, ensureVisible, examples, _exampleText (+42 more)
 
 ### Community 148 - "Study Feature — ConsumerState"
-Cohesion: 0.03
-Nodes (61): int? current,
-  Set, assign, nextColor, palette, PaletteAssigner, paletteFromItems, pickColorFromPalette, pickPaletteColorWithRef (+53 more)
+Cohesion: 0.04
+Nodes (48): _allDayFocusNode, build, _buildPayload, CalendarEventPanel, _CalendarEventPanelState, _calendarFlagColor, _calendarId, calendars (+40 more)
 
 ### Community 149 - "Test Suite — journal_autosave_provider_re"
-Cohesion: 0.02
-Nodes (88): Archive, archive, backupFormatVersion, backupManifestFileName, backupMediaDirectory, buildArchiveContents, _collections, DataExportService (+80 more)
+Cohesion: 0.04
+Nodes (55): Archive, DriftMediaRepository, MediaRepository, SettingsRepository, archive, backupFormatVersion, backupManifestFileName, backupMediaDirectory (+47 more)
 
 ### Community 150 - "Shared Widgets — voyager_text_field"
 Cohesion: 0.05
@@ -1308,18 +1331,18 @@ Cohesion: 0.08
 Nodes (28): RankingScoreHold, accentColor, build, createState, emptyColor, fill, filledColor, fraction (+20 more)
 
 ### Community 157 - "Firebase Auth (windows) — firebase_auth_plugin.cpp"
-Cohesion: 0.11
-Nodes (40): leetCodeRepositoryProvider, remoteSyncServiceProvider, studyCardsProvider, studyDeckByIdProvider, studyDeckGraphProvider, studyDeckStatsProvider, studyRepositoryProvider, _save (+32 more)
+Cohesion: 0.06
+Nodes (31): MediaPasteScope, _MediaPasteScopeState, _RecordingStudyRepository, attach, back, _card, cards, db (+23 more)
 
 ### Community 158 - "Shared Widgets — voyager_toast"
 Cohesion: 0.05
-Nodes (44): Duration? dwell,
+Nodes (42): Duration? dwell,
   Duration, IconData? icon,
-  List, actions, build, _controller, createState, didChangeAppLifecycleState, didUpdateWidget (+36 more)
+  List, actions, build, _controller, createState, didChangeAppLifecycleState, didUpdateWidget (+34 more)
 
 ### Community 159 - "Leetcode Feature — leetcode_track_draft"
-Cohesion: 0.07
-Nodes (26): a, algorithm, b, code, codeLanguage, description, difficulty, examples (+18 more)
+Cohesion: 0.05
+Nodes (39): a, algorithm, b, code, codeLanguage, description, difficulty, examples (+31 more)
 
 ### Community 160 - "Uncategorized — Study Card Images — High-Lev"
 Cohesion: 0.05
@@ -1330,8 +1353,8 @@ Cohesion: 0.06
 Nodes (32): AccessibilityMode, GpuPreference, _In_, _In_opt_, UIThreadPolicy, FlutterViewId, HWND, LPARAM (+24 more)
 
 ### Community 162 - "Ephemeral — PluginRegistrarWindows"
-Cohesion: 0.05
-Nodes (37): accentColor, build, maxLines, overflow, style, text, textAlign, VoyagerProseText (+29 more)
+Cohesion: 0.07
+Nodes (29): accentColor, build, maxLines, overflow, style, text, textAlign, VoyagerProseText (+21 more)
 
 ### Community 163 - "Shared Widgets — datetime_picker_dialog"
 Cohesion: 0.05
@@ -1342,24 +1365,24 @@ Cohesion: 0.05
 Nodes (42): ForecastPeriod?, 0, bucketHours, buckets, buildDayForecastChartSeries, chartBucketHour, chartBucketRangeCenteredOn, currentTimeChartHour (+34 more)
 
 ### Community 165 - "Test Suite — tracker_model_invariants_tes"
-Cohesion: 0.08
-Nodes (25): NavigatorState, build, cards, _deckId, _expectStillInSession, focus, getAllCards, getCard (+17 more)
+Cohesion: 0.05
+Nodes (46): build, child, collection, documentId, _dropTargetsSupported, facet, _formats, _hasImage (+38 more)
 
 ### Community 166 - "Effects"
 Cohesion: 0.05
 Nodes (42): build, burst, burstFromContext, color, colors, _ConfettiBurst, _ConfettiBurstState, ConfettiOverlay (+34 more)
 
 ### Community 167 - "Shared Widgets — _State"
-Cohesion: 0.05
-Nodes (39): build, child, EnterToSubmitScope, onSubmit, _textFieldHasFocus, autoExpand, build, card (+31 more)
+Cohesion: 0.08
+Nodes (24): autoExpand, build, card, createState, dispose, error, focusReplacement, initialTrigger (+16 more)
 
 ### Community 168 - "Domain Models — notification_models"
 Cohesion: 0.05
 Nodes (39): bill, buildNotificationFeed, copyWith, createdAt, _dayKey, days, daysUntil, deletedAt (+31 more)
 
 ### Community 169 - "Settings Feature — settingsRepositoryProvider"
-Cohesion: 0.05
-Nodes (43): mediaDiskLowProvider, _controller, createState, dispose, divisions, _field, _focusNode, _formatBytes (+35 more)
+Cohesion: 0.04
+Nodes (51): colorPaletteProvider, build, _changeEventColor, _add, pickAccentColor, _addMinorPetalColor, _controller, createState (+43 more)
 
 ### Community 170 - "Theming — voyager_theme"
 Cohesion: 0.05
@@ -1367,7 +1390,7 @@ Nodes (40): accentLineAmount, accentLineTarget, appBar, blurScale, brightness, _
 
 ### Community 171 - "Analytics Feature — analytics_page"
 Cohesion: 0.03
-Nodes (98): WindowVisibility, VimTextOverlay, _VimTextOverlayState, _VimFieldOverlay, _VimFieldOverlayState, VimTextScope, _VimTextScopeState, AutocorrectFlashLayer (+90 more)
+Nodes (109): CapsLockCaretIndicator, _CapsLockCaretIndicatorState, WindowVisibility, PreserveSelectionOnAppResume, VimTextOverlay, _VimTextOverlayState, _VimFieldOverlay, _VimFieldOverlayState (+101 more)
 
 ### Community 172 - "Shared Widgets — tag_suggestion_overlay"
 Cohesion: 0.05
@@ -1379,16 +1402,16 @@ Nodes (43): accent, _actions, _add, _addController, _addFocusNode, build, catego
 
 ### Community 174 - "Workout Feature — workout_island"
 Cohesion: 0.05
-Nodes (41): ActiveWorkoutState, cancelRest, collapse, completeCurrentSet, completedCount, copyWith, currentSet, cursor (+33 more)
+Nodes (39): cancelRest, collapse, completeCurrentSet, completedCount, copyWith, currentSet, cursor, discard (+31 more)
 
 ### Community 175 - "Test Suite — package:voyager/domain/repos"
 Cohesion: 0.07
 Nodes (27): accent, accentColor, asset, collection, count, createState, didUpdateWidget, documentId (+19 more)
 
 ### Community 176 - "Workout Feature — workout_island"
-Cohesion: 0.06
-Nodes (30): Color? highlightColor,
-  List, applyStyledRanges, best, collapsed, colorFor, cursor, emphasis, end (+22 more)
+Cohesion: 0.05
+Nodes (37): Color? highlightColor,
+  List, defaultColorPalette, paletteColor, resolvePaletteColor, applyStyledRanges, best, collapsed, colorFor (+29 more)
 
 ### Community 177 - "Shared Widgets — voyager_time_picker_spinner"
 Cohesion: 0.05
@@ -1399,8 +1422,8 @@ Cohesion: 0.05
 Nodes (40): accentColor, _attachFocusNode, autofocus, build, companies, contentPadding, controller, createState (+32 more)
 
 ### Community 179 - "Test Suite — vim_overlay_wrap_alignment_t"
-Cohesion: 0.06
-Nodes (38): _ActivityDetailCard, _ActivityDetailCardState, anchorRect, _close, _closing, _controller, createState, dispose (+30 more)
+Cohesion: 0.04
+Nodes (49): leetcodeProblemsProvider, _ActivityDetailCard, _ActivityDetailCardState, anchorRect, build, _close, _closing, _controller (+41 more)
 
 ### Community 180 - "Uncategorized — Rankings — High Level Design"
 Cohesion: 0.05
@@ -1411,20 +1434,20 @@ Cohesion: 0.07
 Nodes (26): 10. Test plan, 11. Open follow-ups (explicitly out of v1), 1. Goals, 2. Non-goals (v1), 3. Product decisions (locked), 4.1 Shared UX, 4.2 Tag mode — co-tag drill-down, 4.3 Category mode — all tags in category (+18 more)
 
 ### Community 182 - "Shared Widgets — _State"
-Cohesion: 0.09
-Nodes (23): PreserveSelectionOnAppResume, build, buttonHeight, buttonRadius, buttonWidth, createState, DesktopWindowTitleBar, _DesktopWindowTitleBarState (+15 more)
+Cohesion: 0.10
+Nodes (21): build, buttonHeight, buttonRadius, buttonWidth, createState, DesktopWindowTitleBar, _DesktopWindowTitleBarState, dispose (+13 more)
 
 ### Community 183 - "Jobs Feature — jobs_edit_panel"
 Cohesion: 0.05
 Nodes (41): jobStatusEventsProvider, accentColor, application, applicationId, build, _commit, companies, _companyController (+33 more)
 
 ### Community 184 - "Test Suite — study_card_editor_images_tes"
-Cohesion: 0.03
-Nodes (77): FirebaseStorage, addReference, asset, assetsFor, attachBytes, bytesFor, _decodeHeic, deleteAssetEverywhere (+69 more)
+Cohesion: 0.05
+Nodes (40): addReference, asset, assetsFor, attachBytes, bytesFor, _decodeHeic, deleteAssetEverywhere, _downloadScheduler (+32 more)
 
 ### Community 185 - "Shared Widgets — contextual_popover"
 Cohesion: 0.04
-Nodes (52): _accentBorderWidth, accentColor, barrierColor, barrierDismissible, barrierLabel, box, build, builder (+44 more)
+Nodes (50): _accentBorderWidth, accentColor, barrierColor, barrierDismissible, barrierLabel, box, build, builder (+42 more)
 
 ### Community 186 - "Firebase Auth (ios) — FLTFirebaseAuthPlugin"
 Cohesion: 0.07
@@ -1450,23 +1473,23 @@ Nodes (42): Drag?, assets, build, captions, _controllerFor, _copyImage, createSt
 
 ### Community 191 - "Jobs Feature — jobs_actions"
 Cohesion: 0.05
-Nodes (37): JobRepository get, addCategory, addSeason, addStage, application, _container, createApplication, deleteApplication (+29 more)
+Nodes (39): JobRepository get, addCategory, addSeason, addStage, application, _container, createApplication, deleteApplication (+31 more)
 
 ### Community 192 - "Autocorrect — autocorrect_engine"
 Cohesion: 0.05
 Nodes (38): applyAutocorrectCase, at, autocorrectBoundaryTokenEnd, autocorrectEditSpan, autocorrectFor, autocorrectTokenAt, character, _deletions (+30 more)
 
 ### Community 193 - "Test Suite — package:flutter_test/flutter"
-Cohesion: 0.17
-Nodes (11): googleOAuthClientId, _googleOAuthClientIdRaw, googleOAuthClientSecret, _googleOAuthClientSecretRaw, googleOAuthRedirectPort, id, isGoogleOAuthClientSecretConfigured, isGoogleOAuthConfigured (+3 more)
+Cohesion: 0.11
+Nodes (16): bool get, googleOAuthClientId, _googleOAuthClientIdRaw, googleOAuthClientSecret, _googleOAuthClientSecretRaw, googleOAuthRedirectPort, id, isGoogleOAuthClientSecretConfigured (+8 more)
 
 ### Community 194 - "Shared Widgets — _State"
-Cohesion: 0.03
-Nodes (60): FirebaseAuthMultiFactorException, FirebaseAuthException, studyFolderByIdProvider, accent, build, color, count, items (+52 more)
+Cohesion: 0.09
+Nodes (21): application, build, _cell, color, _colorColumnWidth, _columnFlex, columns, isArchived (+13 more)
 
 ### Community 195 - "Test Suite — package:flutter_riverpod/flu"
 Cohesion: 0.05
-Nodes (38): _accent, accentColor, anchor, build, _buildCustomPage, _buildPresetPage, _commit, createState (+30 more)
+Nodes (40): _accent, accentColor, anchor, build, _buildCustomPage, _buildPresetPage, _commit, createState (+32 more)
 
 ### Community 196 - "Todo Feature — todo_list_actions"
 Cohesion: 0.11
@@ -1477,8 +1500,9 @@ Cohesion: 0.11
 Nodes (31): -applyActionCodeAppcodecompletion, -authorizationControllerdidCompleteWithError, -confirmPasswordResetAppcodenewPasswordcompletion, +convertToFlutterError, -createUserWithEmailAndPasswordAppemailpasswordcompletion, -deleteAppcompletion, -fetchSignInMethodsForEmailAppemailcompletion, -getFIRAuthFromAppNameFromPigeon (+23 more)
 
 ### Community 198 - "Test Suite — package:voyager/core/vim/vim"
-Cohesion: 0.07
-Nodes (28): RankingFieldValue, RankingTemplateField, accent, accentColor, build, child, createState, didUpdateWidget (+20 more)
+Cohesion: 0.03
+Nodes (61): ClipRect, double? initial,
+  int, VoyagerSpinnerWheel, RankingFieldValue, RankingScorePrecision, RankingTemplateField, accent, accentColor (+53 more)
 
 ### Community 199 - "Uncategorized — Jobs — High Level Design"
 Cohesion: 0.05
@@ -1493,8 +1517,8 @@ Cohesion: 0.05
 Nodes (37): appendOperation, appendOperationGroup, appendOperationsBatch, _calendarLock, claimCalendarLock, claimWeatherFetchLock, _collectionWatchers, _currentWeather (+29 more)
 
 ### Community 202 - "Domain Models — weather_models"
-Cohesion: 0.05
-Nodes (37): buildDailyForecastSummaries, byDay, conditionCode, dailySummaries, date, day, days, description (+29 more)
+Cohesion: 0.04
+Nodes (47): buildDailyForecastSummaries, byDay, conditionCode, dailySummaries, date, day, days, description (+39 more)
 
 ### Community 203 - "Study Feature — study_keyboard_shortcuts"
 Cohesion: 0.05
@@ -1502,23 +1526,23 @@ Nodes (39): fakes/input_order_random.dart, package:voyager/features/study/study_
 
 ### Community 204 - "Dev Feature — dev_geometric_wave_tile"
 Cohesion: 0.03
-Nodes (70): Icon, IconButton, byId, refreshed, RepeatIconButton, package:voyager/core/media/widgets/media_gallery_strip.dart, package:voyager/core/widgets/repeat_selector_popover.dart, package:voyager/domain/models/recurrence_rule.dart (+62 more)
+Nodes (57): package:voyager/core/constants/todo_sort_constants.dart, package:voyager/core/media/widgets/media_gallery_strip.dart, package:voyager/domain/models/recurrence_rule.dart, package:voyager/domain/models/todo_models.dart, package:voyager/domain/todo/todo_recurring_completion.dart, db, journalRepo, main (+49 more)
 
 ### Community 205 - "Domain Models — SoftDeletable"
 Cohesion: 0.06
 Nodes (38): applicationId, applicationUrl, archivedAt, categoryId, changedAt, colorValue, company, copyWith (+30 more)
 
 ### Community 206 - "Rankings Feature — rankings_score_stars"
-Cohesion: 0.06
-Nodes (33): accentColor, _attach, build, controller, createState, _detach, didUpdateWidget, dispose (+25 more)
+Cohesion: 0.05
+Nodes (44): build, child, createState, didUpdateWidget, _entry, initState, LocalOverlayWrapper, _LocalOverlayWrapperState (+36 more)
 
 ### Community 207 - "Motion System — AnimationController"
-Cohesion: 0.06
-Nodes (34): Curve, double get, animateTo, controller, defaultSpring, dispose, jumpTo, _spring (+26 more)
+Cohesion: 0.07
+Nodes (30): Curve, double get, animateTo, controller, defaultSpring, dispose, jumpTo, _spring (+22 more)
 
 ### Community 208 - "Prose Markup — prose_markup"
 Cohesion: 0.06
-Nodes (33): anchorRect, _categoryButtonKey, _categoryId, _categoryMenuKey, _close, _closing, _controller, createState (+25 more)
+Nodes (31): anchorRect, _categoryButtonKey, _categoryId, _categoryMenuKey, _close, _closing, _controller, createState (+23 more)
 
 ### Community 209 - "Sync Engine — outbox_sync_worker"
 Cohesion: 0.06
@@ -1526,7 +1550,7 @@ Nodes (35): Delay, _authRepo, clearFor, _clearPending, data, _db, drainableColle
 
 ### Community 210 - "Spell Check — voyager_spell_check_service"
 Cohesion: 0.06
-Nodes (31): _boundaryBackward, _boundaryChar, _boundaryForwardPad, checkIncremental, checkTextSync, _customWords, _dictionary, dictionaryLoaded (+23 more)
+Nodes (34): _boundaryBackward, _boundaryChar, _boundaryForwardPad, checkIncremental, checkTextSync, _customWords, _dictionary, dictionaryLoaded (+26 more)
 
 ### Community 211 - "Shared Widgets — spell_check_squiggle_layer"
 Cohesion: 0.04
@@ -1557,9 +1581,8 @@ Cohesion: 0.07
 Nodes (25): FLTAuthStateChannelStreamHandler, -initWithAuth, -onCancelWithArguments, -onListenWithArgumentseventSink, FLTIdTokenChannelStreamHandler, -initWithAuth, -onCancelWithArguments, -onListenWithArgumentseventSink (+17 more)
 
 ### Community 218 - "Dev — ChangeNotifier"
-Cohesion: 0.03
-Nodes (64): IconData, int? initialColor,
-  String, accentColor, build, child, dense, ellipsize, fillWhenActive (+56 more)
+Cohesion: 0.04
+Nodes (44): FirebaseAuthMultiFactorException, FirebaseAuthException, kCycleWorkoutPlanId, kMaxReps, kMaxSets, kMaxWeightKg, kMaxWeightLb, kStarterExercises (+36 more)
 
 ### Community 219 - "Dev — journal_debug_logger"
 Cohesion: 0.06
@@ -1574,8 +1597,8 @@ Cohesion: 0.05
 Nodes (40): a, _areConsecutiveCalendarDays, b, calendarEventBarEndsOnDay, calendarEventBarsBridge, calendarEventBarStartsOnDay, calendarEventOccursOnDay, calendarEventOccursOnDayNormalized (+32 more)
 
 ### Community 222 - "Analytics Feature — sparkline_touch"
-Cohesion: 0.08
-Nodes (25): _addSolution, _algorithmField, _algorithmHint, _algorithmText, _bruteForce, button, db, ensureVisible (+17 more)
+Cohesion: 0.07
+Nodes (26): isExpired, purgeCutoff, purgeEligibleAfter, SoftDeletePolicy, accent, build, createState, destination (+18 more)
 
 ### Community 223 - "Domain Services — recurrence_engine"
 Cohesion: 0.06
@@ -1598,16 +1621,16 @@ Cohesion: 0.06
 Nodes (33): DayForecastChartSeries, _animation, _beginTransition, build, _controller, createState, _currentTimeHour, didUpdateWidget (+25 more)
 
 ### Community 228 - "Calendar Feature — calendar_overlap_engine"
-Cohesion: 0.04
-Nodes (53): CalendarDayEntry, build, CalendarDayEntryBar, date, entry, fontSize, height, onTap (+45 more)
+Cohesion: 0.06
+Nodes (33): assigned, _buildClusters, CalendarOverlapSlot, clusterColumns, clusters, column, columnEnds, dayEnd (+25 more)
 
 ### Community 229 - "Shared Widgets — _State"
 Cohesion: 0.06
 Nodes (33): backtickStrings, blockComments, char, charLiterals, closer, _closesAsCharLiteral, _cStyle, false (+25 more)
 
 ### Community 230 - "Life Tracker Feature — life_tracker_page"
-Cohesion: 0.08
-Nodes (32): build, _canvasController, createState, dispose, geometry, getClip, _globalCenterFor, _grassColor (+24 more)
+Cohesion: 0.06
+Nodes (35): _canvasController, createState, dispose, geometry, getClip, _globalCenterFor, _grassColor, _groundedLeavesFor (+27 more)
 
 ### Community 231 - "Shell Feature — shell_keyboard_shortcuts"
 Cohesion: 0.07
@@ -1618,25 +1641,24 @@ Cohesion: 0.06
 Nodes (33): _bleed, build, _buildPath, _cachedPath, _cachedSize, _clear, color, controller (+25 more)
 
 ### Community 233 - "Media Handling — media_gallery_strip"
-Cohesion: 0.06
-Nodes (34): accent, accentColor, _AddButton, asset, _assets, _busy, collection, createState (+26 more)
+Cohesion: 0.04
+Nodes (65): mediaDiskLowProvider, mediaServiceProvider, mediaStorageProvider, mediaStorageUsageProvider, build, _reload, build, _reload (+57 more)
 
 ### Community 234 - "Leetcode Feature — leetcode_scratch_starter"
 Cohesion: 0.06
 Nodes (31): brace, _braceDelta, cleaned, delta, _deriveBraces, deriveLeetCodeStarter, deriveLeetCodeStarterFromCode, _derivePython (+23 more)
 
 ### Community 235 - "Settings Feature — settingsRepositoryProvider"
-Cohesion: 0.10
-Nodes (21): customQuotesProvider, CustomQuote, build, _controller, createState, _CustomQuotesDialog, _CustomQuotesDialogState, dispose (+13 more)
+Cohesion: 0.08
+Nodes (30): customQuotesProvider, journalDebugLoggerProvider, quotePoolProvider, CustomQuote, build, DevJournalDebugSection, _logDialogOpen, _showLogDialog (+22 more)
 
 ### Community 236 - "Shell Feature — weather_chart_plot_cache"
-Cohesion: 0.08
-Nodes (31): Auth, auth::AuthStateListener, auth::IdTokenListener, mutex, StreamHandler<flutter::EncodableValue>, AuthStateStreamHandler, auth_, listener_ (+23 more)
+Cohesion: 0.07
+Nodes (34): AuthStateListener, FirebaseAuth, FirebasePluginPlatform, FirebaseService, IdTokenListener, StreamHandlerCancel, StreamHandlerListen, AuthStateChannelStreamHandler (+26 more)
 
 ### Community 237 - "Study Feature — study_flip_card"
 Cohesion: 0.04
-Nodes (53): Alignment, bool? enableDrag,
-  BorderRadius, BorderRadius, body, build, floatingActionButton, PlatformAdaptiveScaffold, autofocus (+45 more)
+Nodes (46): Completer, http.BaseClient, DriftLeetCodeRepository, LeetCodeRepository, StreamedResponse, db, ensureVisible, enterText (+38 more)
 
 ### Community 238 - "Uncategorized — Media / Images — High-Level "
 Cohesion: 0.06
@@ -1648,35 +1670,35 @@ Nodes (26): AutomaticKeepAliveClientMixin, ChildIndexGetter?, EdgeInsetsGeometry
 
 ### Community 240 - "Shared Widgets — spell_check_squiggle_layer"
 Cohesion: 0.07
-Nodes (42): ConsumerState, ConsumerStatefulWidget, ColorPickerField, _ColorPickerFieldState, CalendarEventPanel, _CalendarEventPanelState, _DreamBodyEditor, _DreamBodyEditorState (+34 more)
+Nodes (28): SavingsGoal, allocatedCents, _EmptyGoals, goal, _GoalCard, _milestoneLabel, onCreate, caption (+20 more)
 
 ### Community 241 - "Domain Models — leetcode_api_models"
-Cohesion: 0.07
-Nodes (27): _deviceId, fetchForecastIfNeeded, isCacheStale, isForecastCacheStale, _lockDuration, mergeForecastLocally, _persistCache, _persistForecast (+19 more)
+Cohesion: 0.06
+Nodes (35): CloudFunctionWeatherClient, DevOpenWeatherClient, refreshForecast, refreshWeather, WeatherApiClient, _deviceId, fetchForecastIfNeeded, isCacheStale (+27 more)
 
 ### Community 242 - "Test Suite — leetcode_sync_durability_tes"
-Cohesion: 0.06
-Nodes (31): MediaImageFormat, bytes, byteSize, contentHash, _decode, decoded, encoded, false (+23 more)
+Cohesion: 0.05
+Nodes (41): Exception, abortIfAlreadyRestored, floor, RestoreSuperseded, restoreVersionFrom, toString, MediaImageFormat, MediaStoragePermanentFailure (+33 more)
 
 ### Community 243 - "Test Suite — study_session_undo_test"
-Cohesion: 0.03
-Nodes (58): colorPaletteProvider, build, _changeEventColor, _add, affectedEntryIds, allJournals, assigner, choice (+50 more)
+Cohesion: 0.04
+Nodes (48): affectedEntryIds, allJournals, assigner, choice, color, context, created, defaultColor (+40 more)
 
 ### Community 244 - "Test Suite — package:voyager/domain/repos"
 Cohesion: 0.04
-Nodes (51): FadeTransition, DriftStudyRepository, StudyRepository, Opacity, package:voyager/features/study/study_deck_workbench_page.dart, package:voyager/features/study/study_page.dart, _RecordingStudyRepository, countCardsReviewedToday (+43 more)
+Nodes (44): FadeTransition, Opacity, package:voyager/features/study/study_deck_workbench_page.dart, package:voyager/features/study/study_page.dart, countCardsReviewedToday, countCardsReviewedTotal, countDueCards, _folder (+36 more)
 
 ### Community 245 - "Ephemeral — string"
-Cohesion: 0.04
-Nodes (41): crossfade, reduced, VoyagerMotion, AppFonts, applyTo, family, leadingFor, monoFamily (+33 more)
+Cohesion: 0.20
+Nodes (9): after, before, between, _digits, first, FractionalIndex, _keyAfter, _keyBefore (+1 more)
 
 ### Community 246 - "Shared Widgets — search_highlight_text"
-Cohesion: 0.05
-Nodes (36): class ConnectivityStatusController extends, Duration, _consecutiveFailures, didChangeAppLifecycleState, dispose, _disposed, _failuresBeforeOffline, _isOnline (+28 more)
+Cohesion: 0.10
+Nodes (20): class ConnectivityStatusController extends, _consecutiveFailures, didChangeAppLifecycleState, dispose, _disposed, _failuresBeforeOffline, _isOnline, offlineInterval (+12 more)
 
 ### Community 247 - "Test Suite — vim_text_scope_test"
 Cohesion: 0.06
-Nodes (38): _, authRepositoryProvider, build, createState, dispose, _emailController, _error, _formatAuthError (+30 more)
+Nodes (37): authRepositoryProvider, build, createState, dispose, _emailController, _error, _formatAuthError, _googleSignIn (+29 more)
 
 ### Community 248 - "Domain Models — int?"
 Cohesion: 0.08
@@ -1692,43 +1714,43 @@ Nodes (30): _activeEditRange, build, _cachedSpans, controller, createState, desc
 
 ### Community 251 - "Shared Widgets — notched_field_border"
 Cohesion: 0.07
-Nodes (27): accentColor, alignLabelToTop, borderRadius, borderWidth, build, child, color, contentPadding (+19 more)
+Nodes (30): accentColor, alignLabelToTop, borderRadius, borderWidth, build, child, color, contentPadding (+22 more)
 
 ### Community 252 - "Leetcode Feature — leetcode_review_deck"
-Cohesion: 0.08
-Nodes (25): clearLog, _enqueue, log, _logFileName, logFilePath, _maxLogBytes, readLog, SyncCompareLogger (+17 more)
+Cohesion: 0.04
+Nodes (55): dart:io, Directory, clearLog, _enqueue, log, _logFileName, logFilePath, _maxLogBytes (+47 more)
 
 ### Community 253 - "Firebase Auth (ios) — FLTFirebaseAuthPlugin"
-Cohesion: 0.20
-Nodes (9): enabled, _isFreeTextKeyboard, obscureText, of, readOnly, true, updateShouldNotify, VimEnabledScope (+1 more)
+Cohesion: 0.08
+Nodes (24): InheritedWidget, CapsLockIndicatorScope, enabled, of, updateShouldNotify, MediaPasteOwnerScope, SnippetEnabledScope, AutocorrectEnabledScope (+16 more)
 
 ### Community 254 - "Firebase Auth (macos) — FLTFirebaseAuthPlugin"
 Cohesion: 0.05
-Nodes (46): GeometricTextureParams, GeometricWaveParams, GeometricTextureParamsNotifier, GeometricWaveParamsNotifier, CashFlowGranularity, breakdownChart, breakdownMode, cashFlowGranularity (+38 more)
+Nodes (37): CashFlowGranularity, breakdownChart, breakdownMode, cashFlowGranularity, _chain, copyWith, day, defaults (+29 more)
 
 ### Community 255 - "Shell Feature — weather_forecast_sheet"
-Cohesion: 0.07
-Nodes (29): DateFormat, weatherForecastLastDayProvider, DailyForecastSummary, createState, _DailyCard, day, dayFormat, forecast (+21 more)
+Cohesion: 0.04
+Nodes (56): DateFormat, weatherForecastLastDayProvider, weatherForecastProvider, DailyForecastSummary, _advance, build, createState, dispose (+48 more)
 
 ### Community 256 - "Workout Feature — workout_island"
-Cohesion: 0.08
-Nodes (26): _AddImageButton, _AddImageButtonState, autofocus, _back, _busy, _cardId, _CardSide, controller (+18 more)
+Cohesion: 0.07
+Nodes (29): _AddImageButton, _AddImageButtonState, autofocus, _back, build, _busy, _cardId, _CardSide (+21 more)
 
 ### Community 257 - "Leetcode Feature — leetcode_mini_flashcard"
-Cohesion: 0.06
-Nodes (28): appSettingsWithGeometricTextureParams, appSettingsWithGeometricWaveParams, copyWith, geometricTextureParamsFromSettings, geometricWaveParamsFromSettings, GeometricWaveShape, display, divisions (+20 more)
+Cohesion: 0.05
+Nodes (38): studyFolderByIdProvider, display, divisions, _GeometricTextureSlider, label, max, min, onChanged (+30 more)
 
 ### Community 258 - "Test Suite — study_card_editor_images_tes"
-Cohesion: 0.12
-Nodes (31): build, customWordsProvider, dictionaryProvider, flaggedWordsProvider, saveSettings, settingsRepositoryProvider, voyagerSpellCheckServiceProvider, build (+23 more)
+Cohesion: 0.10
+Nodes (34): build, customWordsProvider, dictionaryProvider, flaggedWordsProvider, saveSettings, settingsRepositoryProvider, voyagerSpellCheckServiceProvider, build (+26 more)
 
 ### Community 259 - "Media Handling — media_image"
 Cohesion: 0.04
 Nodes (49): class _RenderTagFlow extends RenderBox, accent, accentColor, build, _buildSuggestions, _commit, _contentPadding, _controller (+41 more)
 
 ### Community 260 - "Caps Lock — package:flutter/widgets"
-Cohesion: 0.11
-Nodes (18): Duration get, _branch, build, children, createState, currentIndex, didChangeDependencies, didUpdateWidget (+10 more)
+Cohesion: 0.05
+Nodes (36): Duration, Duration get, cancel, DebouncedCallback, debounceDelay, Debouncer, delay, dispose (+28 more)
 
 ### Community 261 - "Shared Widgets — spell_check_field_support"
 Cohesion: 0.06
@@ -1743,8 +1765,8 @@ Cohesion: 0.07
 Nodes (28): assetCount, byteSize, collection, contentHash, copyWith, displayWidthPx, documentId, downloadState (+20 more)
 
 ### Community 264 - "Rankings Feature — rankings_field_editor"
-Cohesion: 0.04
-Nodes (49): ClipRect, VoyagerSpinnerWheel, package:voyager/core/widgets/voyager_spinner_wheel.dart, package:voyager/domain/models/ranking_models.dart, package:voyager/domain/rankings/ranking_queries.dart, package:voyager/features/rankings/rankings_edit_panel.dart, package:voyager/features/rankings/rankings_header.dart, package:voyager/features/rankings/rankings_providers.dart (+41 more)
+Cohesion: 0.06
+Nodes (29): package:voyager/domain/rankings/ranking_queries.dart, package:voyager/features/rankings/rankings_edit_panel.dart, package:voyager/features/rankings/rankings_header.dart, package:voyager/features/rankings/rankings_providers.dart, package:voyager/features/rankings/rankings_row.dart, _base, child, ids (+21 more)
 
 ### Community 265 - "Test Suite — journal_autosave_provider_re"
 Cohesion: 0.06
@@ -1755,24 +1777,25 @@ Cohesion: 0.07
 Nodes (27): allOps, CharacterOpRegistry, CharacterOpSession, clear, clientId, ensureSession, _insertOp, key (+19 more)
 
 ### Community 267 - "Test Suite — package:voyager/domain/repos"
-Cohesion: 0.08
-Nodes (24): bool?, LeetCodeProblem? get, buildScratchArea, dispose, _expanding, _expandScratch, flushScratch, focusScratch (+16 more)
+Cohesion: 0.07
+Nodes (28): bool?, LeetCodeProblem? get, buildScratchArea, dispose, _expanding, _expandScratch, flushScratch, focusScratch (+20 more)
 
 ### Community 268 - "Study Feature — ConsumerState"
-Cohesion: 0.11
-Nodes (18): FinanceCategory, build, _canSave, _CategoryModal, _CategoryModalState, _colorValue, container, createState (+10 more)
+Cohesion: 0.05
+Nodes (38): Brightness, int? current,
+  Set, build, color, ColorCornerFlag, colorValue, _CornerFlagPainter, JournalBookmarkFlag (+30 more)
 
 ### Community 269 - "Test Suite — leetcode_inline_code_test"
 Cohesion: 0.06
-Nodes (33): _add, _cleanPaste, count, createState, _delete, _description, _descriptionFocus, _DescriptionStatus (+25 more)
+Nodes (36): _add, build, _cleanPaste, count, createState, _delete, _description, _descriptionFocus (+28 more)
 
 ### Community 270 - "Life Tracker Feature — life_tree_popover"
-Cohesion: 0.06
-Nodes (28): build, color, counts, JobsSparkline, active, _barFor, build, _clearHover (+20 more)
+Cohesion: 0.03
+Nodes (76): formatTime12Hour, formatTimeOfDay12Hour, jm, local, now, 90, active, _BubbleRow (+68 more)
 
 ### Community 271 - "Sync Engine — dart:async"
-Cohesion: 0.02
-Nodes (113): File, package:drift/native.dart, package:flutter_test/flutter_test.dart, package:voyager/core/widgets/notification_urgency_dot.dart, package:voyager/domain/models/analytics_models.dart, package:voyager/domain/models/life_tracker_models.dart, package:voyager/domain/services/analytics_service.dart, package:voyager/domain/services/periodic_prompt_service.dart (+105 more)
+Cohesion: 0.03
+Nodes (68): File, package:drift/native.dart, package:voyager/core/widgets/notification_urgency_dot.dart, package:voyager/domain/models/ranking_models.dart, package:voyager/features/analytics/tracker_entry_row.dart, close, customStatement, db (+60 more)
 
 ### Community 272 - "Dev — fps_monitor_controller"
 Cohesion: 0.07
@@ -1795,16 +1818,15 @@ Cohesion: 0.06
 Nodes (31): _anyScheme, _bareHost, clipped, closing, end, glue, _gluedPrefix, hasMatch (+23 more)
 
 ### Community 277 - "Firebase Auth (windows) — messages.g.cpp"
-Cohesion: 0.10
-Nodes (21): double? initial,
-  int, RankingScorePrecision, build, _clickOutside, createState, _Host, _HostState, initial (+13 more)
+Cohesion: 0.05
+Nodes (41): build, QuickJournalPopup, QuickTodoPopup, getOrderedDestinations, icon, index, label, order (+33 more)
 
 ### Community 278 - "Shared Widgets — keep_alive_scroll"
-Cohesion: 0.07
-Nodes (28): _Repaint, CapsLockState, DevSettingsController, FpsMonitorController, JournalDebugLogger, TodoSortDebugLogger, begin, complete (+20 more)
+Cohesion: 0.14
+Nodes (12): CacheStatusSnapshot, begin, complete, fail, stateFor, _states, WarmupTracker, _CacheStatusItemList (+4 more)
 
 ### Community 279 - "Firebase Auth (android) — NonNull"
-Cohesion: 0.10
+Cohesion: 0.09
 Nodes (7): TotpSecret, FlutterFirebaseTotpMultiFactor, InternalTotpSecret, Override, FlutterFirebaseTotpSecret, Override, InternalTotpSecret
 
 ### Community 280 - "Uncategorized — Components"
@@ -1813,27 +1835,27 @@ Nodes (28): Buttons, Cards / Containers, Checkbox, Colors, Components, Design Sy
 
 ### Community 281 - "Leetcode Feature — leetcode_scratch_session"
 Cohesion: 0.07
-Nodes (26): LeetCodeScratchSession? get, clear, controllerFor, _controllers, _debounce, discardRecoverable, dispose, end (+18 more)
+Nodes (27): LeetCodeScratchSession? get, clear, controllerFor, _controllers, _debounce, discardRecoverable, dispose, end (+19 more)
 
 ### Community 282 - "Auth Feature"
 Cohesion: 0.06
 Nodes (32): 10. Persistence & sync, 11. Analytics / net worth interaction, 12. Testing plan (acceptance), 13. Implementation sketch (ordered), 14. Open implementation choices (non-blocking), 15. Summary formula (cheat sheet), 1. Goals, 2. Non-goals (v1) (+24 more)
 
 ### Community 283 - "Journal Feature — journal_list_actions"
-Cohesion: 0.07
-Nodes (29): build, color, controller, createState, didUpdateWidget, dispose, em, getClip (+21 more)
+Cohesion: 0.04
+Nodes (55): ProseSpanBuilder, build, color, controller, createState, didUpdateWidget, dispose, em (+47 more)
 
 ### Community 284 - "Shared Widgets — _State"
-Cohesion: 0.04
-Nodes (46): AppLifecycleListener?, dispose, _handleLifecycleState, initState, _isVisible, _lifecycle, _lifecycleVisible, _minimized (+38 more)
+Cohesion: 0.07
+Nodes (26): dispose, _handleLifecycleState, initState, _isVisible, _lifecycle, _lifecycleVisible, _minimized, onWindowBlur (+18 more)
 
 ### Community 285 - "Shared Widgets — date_selector_popover"
-Cohesion: 0.05
-Nodes (39): journalDebugLoggerProvider, accentColor, build, _canPop, createState, didUpdateWidget, dispose, _firstSelected (+31 more)
+Cohesion: 0.07
+Nodes (28): accentColor, build, _canPop, createState, DateSelectorPopover, _DateSelectorPopoverState, didUpdateWidget, dispose (+20 more)
 
 ### Community 286 - "Leetcode Feature — leetcode_activity_chart"
-Cohesion: 0.08
-Nodes (23): bestDistance, day, false, first, label, last, null, period (+15 more)
+Cohesion: 0.12
+Nodes (15): bestDistance, day, false, first, label, last, null, period (+7 more)
 
 ### Community 287 - "Life Tracker Feature — life_tracker_stats"
 Cohesion: 0.07
@@ -1844,48 +1866,49 @@ Cohesion: 0.07
 Nodes (26): addExerciseToDay, createExercise, currentExercise, deleted, deletePlanEntry, exercise, ExerciseDeletion, id (+18 more)
 
 ### Community 289 - "Sync Feature"
-Cohesion: 0.05
-Nodes (40): syncConflictsProvider, collection, detectedAt, documentId, fromStorage, id, localPayloadJson, localText (+32 more)
+Cohesion: 0.09
+Nodes (25): syncConflictsProvider, build, _confirmPermanentRemoteDelete, conflict, _ConflictDocumentIds, createState, _DiffColumn, dispose (+17 more)
 
 ### Community 290 - "Remote API Clients — firebase_auth_repository"
 Cohesion: 0.10
 Nodes (19): 10. Open follow-ups (not this HLD), 1. Goals, 2. Non-goals, 3. Shortcut policy, 4. Shared helper, 5.1 Rules, 5.2 Per-sheet chains, 5. Finance Enter focus chains (finance-only Enter change) (+11 more)
 
 ### Community 291 - "Test Suite — vim_chrome_placement_test"
-Cohesion: 0.10
-Nodes (28): autocorrectScopeProvider, devGeometricTexturePanelOpenProvider, devGeometricWavePanelOpenProvider, geometricDebugRowFadeProvider, geometricShaderProvider, geometricTextureParamsProvider, geometricWaveParamsProvider, snippetScopeProvider (+20 more)
+Cohesion: 0.05
+Nodes (38): _Device, _buffered, _maxBuffered, notify, notifyOne, onWrite, SyncedWriteNotifier, DriftBucketListRepository (+30 more)
 
 ### Community 292 - "Test Suite — scroll_offset_isolate_test"
-Cohesion: 0.06
-Nodes (32): package:voyager/core/widgets/scroll_offset_isolate.dart, ScrollBehavior, _arrivingPaneOffset, _BouncingBehavior, _Bucket, build, buildOverscrollIndicator, createState (+24 more)
+Cohesion: 0.07
+Nodes (30): package:voyager/core/widgets/scroll_offset_isolate.dart, ScrollBehavior, _arrivingPaneOffset, _BouncingBehavior, _Bucket, build, buildOverscrollIndicator, createState (+22 more)
 
 ### Community 293 - "Test Suite — package:voyager/domain/repos"
-Cohesion: 0.04
-Nodes (78): ConsumerWidget, activeWorkoutPlanProvider, devLeafGalleryPanelOpenProvider, exercisesProvider, leetcodeQuestionCountsProvider, paperShaderProvider, petalFieldParamsProvider, rankingParentCountsProvider (+70 more)
+Cohesion: 0.05
+Nodes (58): ConsumerState, ConsumerStatefulWidget, geometricShaderProvider, studyAllCardsProvider, studyAllDecksProvider, studyCardImagesProvider, _QuickAddSnippetPanel, _QuickAddSnippetPanelState (+50 more)
 
 ### Community 294 - "Firebase Auth (android) — NonNull"
 Cohesion: 0.07
 Nodes (27): 10. Implementation sketch, 11. Edge cases (accepted), 12. Optional features (this pass), 13. Open implementation details (non-blocking), 14. Success criteria, 1. Goals, 2. Non-goals (v1), 3. Product decisions (locked) (+19 more)
 
 ### Community 295 - "Study Feature — ConsumerState"
-Cohesion: 0.07
-Nodes (28): JournalRepository, _bodyField, countEntriesByJournal, countEntriesCalls, _CountingJournalRepository, _delegate, deleteAllEntries, deleteAllJournals (+20 more)
+Cohesion: 0.03
+Nodes (60): DateTime? deletedAt,
+  int, MoodGradientSlider, package:drift/drift.dart, package:flutter_test/flutter_test.dart, package:voyager/core/constants/journal_constants.dart, package:voyager/core/constants/todo_constants.dart, package:voyager/core/widgets/keep_alive_scroll.dart, package:voyager/core/widgets/mood_gradient_slider.dart (+52 more)
 
 ### Community 296 - "Calendar Feature — calendar_overlap_engine"
 Cohesion: 0.08
 Nodes (24): _, allDay, allDayEvent, available, calendarDayEntriesForDay, CalendarDayEntryKind, calendarVisibleEntryCount, clamp (+16 more)
 
 ### Community 297 - "Caps Lock — caps_lock_state"
-Cohesion: 0.04
-Nodes (48): dart:ffi, addListener, _cachedGetKeyState, _canProbe, capsLockIndicatorSupportsPlatform, debugProbe, getKeyState, _GetKeyStateDart (+40 more)
+Cohesion: 0.08
+Nodes (24): dart:ffi, addListener, _cachedGetKeyState, _canProbe, capsLockIndicatorSupportsPlatform, debugProbe, getKeyState, _GetKeyStateDart (+16 more)
 
 ### Community 298 - "Test Suite — package:voyager/domain/repos"
-Cohesion: 0.02
-Nodes (106): Brightness, DateTimeRange, goalAllocationsProvider, savingsGoalsProvider, formatTime12Hour, formatTimeOfDay12Hour, jm, local (+98 more)
+Cohesion: 0.06
+Nodes (35): Exercise, controller, count, createState, _CurrentExerciseTitle, didUpdateWidget, _discard, dispose (+27 more)
 
 ### Community 299 - "Shell Feature — weather_chart_transition_war"
-Cohesion: 0.04
-Nodes (48): DriftLeetCodeRepository, LeetCodeRepository, package:voyager/features/leetcode/leetcode_track_draft_store.dart, package:voyager/features/leetcode/leetcode_track_modal.dart, _FakeLeetCodeRepository, _MutableLeetCodeRepository, _RecordingLeetCodeRepository, db (+40 more)
+Cohesion: 0.08
+Nodes (24): InMemorySyncRepository, package:voyager/core/soft_delete/restore_contract.dart, package:voyager/features/rankings/rankings_actions.dart, RestoreSuperseded, _category, container, db, main (+16 more)
 
 ### Community 300 - "Shared Widgets — voyager_checkbox"
 Cohesion: 0.08
@@ -1896,16 +1919,16 @@ Cohesion: 0.07
 Nodes (29): 2, applyStudyGrade, byDay, _clampEase, copyWith, _dateOnly, days, due (+21 more)
 
 ### Community 302 - "Calendar Feature — calendar_list_actions"
-Cohesion: 0.06
-Nodes (40): calendarRepositoryProvider, calendarsProvider, allCalendars, assigner, changeCalendarListColor, choice, color, context (+32 more)
+Cohesion: 0.05
+Nodes (48): allTodoTasksProvider, calendarRepositoryProvider, calendarsProvider, calendarViewEventsProvider, googleCalendarSyncProvider, allCalendars, assigner, changeCalendarListColor (+40 more)
 
 ### Community 303 - "Leetcode Feature — leetcode_activity_bubble"
-Cohesion: 0.12
-Nodes (24): syncActivityProvider, build, devDisablePetalFieldProvider, devForceOfflineProvider, DevPage, devShowTimeSelectorHitboxesProvider, devSlowHeatmapPopoverAnimationProvider, devSlowTodoEditPanelAnimationProvider (+16 more)
+Cohesion: 0.10
+Nodes (32): deviceIdProvider, syncActivityProvider, build, devDisablePetalFieldProvider, devForceOfflineProvider, DevPage, devShowTimeSelectorHitboxesProvider, devSlowHeatmapPopoverAnimationProvider (+24 more)
 
 ### Community 304 - "Study Feature — ConsumerState"
-Cohesion: 0.05
-Nodes (44): AppSettings, AsyncNotifier, SettingsNotifier, AppSettings, package:voyager/features/leetcode/leetcode_providers.dart, package:voyager/features/leetcode/leetcode_review_deck.dart, package:voyager/features/life_tracker/blossom_stat_popup.dart, static AppSettings? (+36 more)
+Cohesion: 0.12
+Nodes (15): build, count, _countRebuilds, difficulty, id, main, _now, _openExpanded (+7 more)
 
 ### Community 305 - "Leetcode Feature — leetcode_session_page"
 Cohesion: 0.06
@@ -1917,12 +1940,12 @@ Nodes (27): CapturedThemes, Color get, _ContextualPopoverRoute, VoyagerPopupMenu
 
 ### Community 307 - "Shared Widgets — _State"
 Cohesion: 0.02
-Nodes (138): dart:convert, DateTime? stamp,
-  int, FirebaseException, CrdtDocumentResolver, _merger, _mergeSyncOperations, resolvePayload, detectDreamEntryConflict (+130 more)
+Nodes (117): @DriftDatabase, DateTime? stamp,
+  int, AppDatabase, DriftSettingsRepository, ListView, package:voyager/core/sync/firestore_document_mapper.dart, package:voyager/core/tags/tag_palette.dart, package:voyager/data/database/app_database.dart (+109 more)
 
 ### Community 308 - "Test Suite — shell_destinations"
-Cohesion: 0.01
-Nodes (162): ByteData, fakes/fake_weather_api_client.dart, Image, InMemorySyncRepository, _Await, deleteBudgetWithUndo, deleteSubscriptionWithUndo, softDeleteWithUndo (+154 more)
+Cohesion: 0.03
+Nodes (81): ByteData, Image, _Await, package:voyager/core/sync/crdt_document_resolver.dart, package:voyager/data/remote/in_memory_sync.dart, package:voyager/domain/models/notification_models.dart, package:voyager/features/notifications/notification_inbox_popover.dart, main (+73 more)
 
 ### Community 309 - "Firebase Auth (ios) — firebase_auth_messages.g"
 Cohesion: 0.08
@@ -1934,23 +1957,23 @@ Nodes (25): <FirebaseAuthHostApi>, -applyActionCodeAppcodecompletion, -checkActi
 
 ### Community 311 - "Shared Widgets — paper_texture"
 Cohesion: 0.09
-Nodes (21): FragmentProgram?, FragmentShader?, baseColor, build, createState, defaults, didUpdateWidget, dispose (+13 more)
+Nodes (23): FragmentProgram?, FragmentShader?, baseColor, build, createState, defaults, didUpdateWidget, dispose (+15 more)
 
 ### Community 312 - "Leetcode Feature — leetcode_scratch_diff"
-Cohesion: 0.08
-Nodes (22): int?, build, colorValue, tag, TagChip, i, j, kind (+14 more)
+Cohesion: 0.11
+Nodes (17): i, j, kind, _kLcsLineLimit, LeetCodeDiffKind, leetCodeDiffLines, LeetCodeDiffRow, left (+9 more)
 
 ### Community 313 - "Uncategorized — crdt_scramble_test"
-Cohesion: 0.05
-Nodes (41): abortIfAlreadyRestored, floor, RestoreSuperseded, restoreVersionFrom, toString, alsoVia, before, confirmed (+33 more)
+Cohesion: 0.04
+Nodes (46): alsoVia, before, confirmed, container, copies, count, current, existing (+38 more)
 
 ### Community 314 - "Sync Engine — pending_text_merge"
-Cohesion: 0.07
-Nodes (25): addListener, advance, applyToLocalText, bufferWhileEditing, clearDocument, collection, documentId, documentKey (+17 more)
+Cohesion: 0.08
+Nodes (23): addListener, advance, applyToLocalText, bufferWhileEditing, clearDocument, collection, documentId, documentKey (+15 more)
 
 ### Community 315 - "Shared Widgets — resizable_pane_divider"
-Cohesion: 0.20
-Nodes (9): kCycleWorkoutPlanId, kMaxReps, kMaxSets, kMaxWeightKg, kMaxWeightLb, kStarterExercises, kWeeklyWorkoutPlanId, kWeightStepKg (+1 more)
+Cohesion: 0.10
+Nodes (24): auth::AuthStateListener, auth::IdTokenListener, User, mutex, EncodableList, InternalUserDetails, InternalUserInfo, shared_ptr (+16 more)
 
 ### Community 316 - "Domain Models — SoftDeletable"
 Cohesion: 0.06
@@ -1977,8 +2000,8 @@ Cohesion: 0.09
 Nodes (22): 10. Open implementation notes (non-blocking), 1. Goals, 2.1 Setting, 2.2 Where it may appear, 2. Product model, 3. Visibility rules (normative), 4.1 Horizontal flip at the right edge, 4. Visual design (+14 more)
 
 ### Community 322 - "Autocorrect — autocorrect_flash_layer"
-Cohesion: 0.08
-Nodes (23): classifySyncFailure, describeSyncFailure, _permanentFirestoreCodes, SyncFailureKind, toString, package:voyager/core/sync/char_ops_encoder.dart, package:voyager/domain/services/character_op_session.dart, package:voyager/domain/services/character_operation.dart (+15 more)
+Cohesion: 0.02
+Nodes (96): dart:convert, FirebaseException, CrdtDocumentResolver, _merger, _mergeSyncOperations, resolvePayload, detectDreamEntryConflict, detectJournalEntryConflict (+88 more)
 
 ### Community 323 - "Domain Models — int?"
 Cohesion: 0.09
@@ -1989,8 +2012,8 @@ Cohesion: 0.12
 Nodes (17): trackerRepositoryProvider, _createTracker, _editTracker, _handleTap, _HeatmapBucket, _HeatmapBucketState, _heatmapDraggingProvider, _HoverEditPopover (+9 more)
 
 ### Community 325 - "Shared Widgets — settingsProvider"
-Cohesion: 0.07
-Nodes (28): weatherForecastProvider, _advance, build, createState, dispose, _done, _frame, initState (+20 more)
+Cohesion: 0.06
+Nodes (33): package:voyager/features/leetcode/leetcode_cram_page.dart, package:voyager/features/leetcode/leetcode_session_page.dart, _button, enterText, getProblem, listProblems, main, _now (+25 more)
 
 ### Community 326 - "Uncategorized — crdt_scramble_test"
 Cohesion: 0.07
@@ -2009,29 +2032,28 @@ Cohesion: 0.13
 Nodes (15): chartBucketHour(), firestore_1, forecastBucketKey(), formatDateKey(), localPartsFromUtc(), localTodayKey(), mergeForecastArchive(), parseBucketDateKey() (+7 more)
 
 ### Community 330 - "Firebase Auth (windows) — messages.g.cpp"
-Cohesion: 0.14
-Nodes (15): todoSortDebugLoggerProvider, build, DevTodoSortDebugSection, _logDialogOpen, _showLogDialog, _promoteSubtask, _addTask, _applyOptimisticActiveOrder (+7 more)
+Cohesion: 0.08
+Nodes (26): todoSortDebugLoggerProvider, DevFlags, disableCache, disablePetalField, forceOffline, showLifeTrackerRestore, showLifeTreeSegmentDebug, showTimeSelectorHitboxes (+18 more)
 
 ### Community 331 - "Spell Check — dictionary_search"
 Cohesion: 0.08
 Nodes (24): bundled, candidates, candidatesComplete, complete, contains, custom, customMatches, dictionarySearchLimit (+16 more)
 
 ### Community 332 - "Shared Widgets — desktop_window_title_bar"
-Cohesion: 0.02
-Nodes (104): Container, ContextMenuRegion, DateTime? dateApplied,
-  List, package:voyager/core/constants/job_constants.dart, package:voyager/core/widgets/date_selector_popover.dart, package:voyager/domain/models/job_models.dart, package:voyager/features/jobs/job_clipboard_parser.dart, package:voyager/features/jobs/jobs_actions.dart (+96 more)
+Cohesion: 0.08
+Nodes (23): application, clipboardText, container, controllerFor, db, ensureSeeded, fieldLabelled, fieldText (+15 more)
 
 ### Community 333 - "Calendar Feature — calendar_overlap_engine"
-Cohesion: 0.07
-Nodes (25): _buildForm, _buildOffer, canReplaceHere, _controller, createState, dispose, _error, _FlagOutcome (+17 more)
+Cohesion: 0.06
+Nodes (28): dart:ui, Error, colorForTag, extractTags, index, journalTagPattern, kTagPaletteDark, kTagPaletteLight (+20 more)
 
 ### Community 334 - "Leetcode Feature — leetcode_activity_data"
 Cohesion: 0.08
 Nodes (23): package:voyager/core/widgets/spell_check_field_support.dart, controller, decoratorLeft, editable, _inputGap, main, _pad, pump (+15 more)
 
 ### Community 335 - "Shared Widgets — _State"
-Cohesion: 0.09
-Nodes (24): _, GoRouter, Key? get, auth, child, _preloadedShellPaths, settingsRepo, package:go_router/go_router.dart (+16 more)
+Cohesion: 0.06
+Nodes (32): GoRouter, Key? get, auth, _preloadedShellPaths, settingsRepo, package:fake_async/fake_async.dart, package:go_router/go_router.dart, package:voyager/core/motion/modal_scrim_observer.dart (+24 more)
 
 ### Community 336 - "Test Suite — package:voyager/domain/model"
 Cohesion: 0.06
@@ -2050,24 +2072,24 @@ Cohesion: 0.07
 Nodes (28): Algorithm (v1), Architecture, Autosave, Collapsed session layout, Compare mode, Cram (`LeetCodeCramPage`), Edge cases, Entry points (+20 more)
 
 ### Community 340 - "Core Utilities — key_binding"
-Cohesion: 0.10
-Nodes (20): alt, binding, control, _displayToken, formatKeyBinding, join, KeyBinding, keyBindingFromKeyEvent (+12 more)
+Cohesion: 0.04
+Nodes (42): loadDictionaryFromAssets, raw, alt, binding, control, _displayToken, formatKeyBinding, join (+34 more)
 
 ### Community 341 - "Domain Services — calendar_recurrence_editing"
 Cohesion: 0.10
 Nodes (20): copyWith, deleteRecurringEvent, editedStart, editRecurringEvent, isFirstOccurrence, local, masterStart, newStartDate (+12 more)
 
 ### Community 342 - "Shell Feature — weather_chart_curve"
-Cohesion: 0.10
-Nodes (20): belowCurvePath, curvedLinePath, hourAtPixelX, matchesScale, maxX, maxY, minX, minY (+12 more)
+Cohesion: 0.08
+Nodes (22): EdgeInsets, kVoyagerFieldScrollPadding, belowCurvePath, curvedLinePath, hourAtPixelX, matchesScale, maxX, maxY (+14 more)
 
 ### Community 343 - "Workout Feature — package:phosphoricons_flutte"
 Cohesion: 0.12
 Nodes (15): JournalEntry, current, entry, JournalEntryDeletion, media, mediaDeletedAt, remoteSync, repository (+7 more)
 
 ### Community 344 - "Dev Feature — dev_sync_compare_tile"
-Cohesion: 0.07
-Nodes (31): remoteSyncCompareServiceProvider, syncCompareLoggerProvider, DevFlags, disableCache, disablePetalField, forceOffline, showLifeTrackerRestore, showLifeTreeSegmentDebug (+23 more)
+Cohesion: 0.12
+Nodes (20): remoteSyncCompareServiceProvider, syncCompareLoggerProvider, build, _compareAllTodoLists, _compareJournalEntries, _compareTodoList, _comparing, createState (+12 more)
 
 ### Community 345 - "Motion System — voyager_crossfade"
 Cohesion: 0.11
@@ -2075,11 +2097,11 @@ Nodes (19): build, _buildLayer, children, createState, didChangeDependencies, di
 
 ### Community 346 - "Theming — voyager_menu_theme"
 Cohesion: 0.08
-Nodes (22): defaultColorPalette, JournalWriteCoordinator, paletteColor, resolvePaletteColor, coordinator, journalRepository, remoteSync, saveEntry (+14 more)
+Nodes (24): _armed, _cachedGetAsyncKeyState, _canProbe, exception, getAsyncKeyState, _GetAsyncKeyStateDart, _GetAsyncKeyStateNative, _handleKey (+16 more)
 
 ### Community 347 - "Shared Widgets — desktop_window_frame"
 Cohesion: 0.03
-Nodes (59): FocusNode, FocusNode get, buildTextSpan, dispose, _emphasis, focusNode, _forward, _markupFor (+51 more)
+Nodes (68): FocusNode, FocusNode get, buildTextSpan, dispose, _emphasis, focusNode, _forward, _markupFor (+60 more)
 
 ### Community 348 - "Domain Models — int?"
 Cohesion: 0.08
@@ -2090,70 +2112,70 @@ Cohesion: 0.06
 Nodes (30): 10. Right-click menu summary (linked placeholder), 11. Implementation sketch (non-binding), 12. Open implementation details (non-product), 13. Decision log, 1. Goals, 2. Non-goals (v1), 3. Product decisions (locked), 4.1 `StudyDeckLink` (new) (+22 more)
 
 ### Community 350 - "Firebase Auth (android) — NonNull"
-Cohesion: 0.05
-Nodes (37): double? contentWidth,
-  bool, build, _CreateNameColorDialog, _CreateNameColorDialogState, createState, dispose, initialColor, initState (+29 more)
+Cohesion: 0.09
+Nodes (22): int? initialColor,
+  String, accent, build, _CategoryDialog, _CategoryDialogState, _color, createState, dispose (+14 more)
 
 ### Community 351 - "Test Suite — package:voyager/domain/model"
 Cohesion: 0.08
 Nodes (25): FirebaseAuthHostApi, ApplyActionCode, CheckActionCode, ConfirmPasswordReset, CreateUserWithEmailAndPassword, FetchSignInMethodsForEmail, InitializeRecaptchaConfig, RegisterAuthStateListener (+17 more)
 
 ### Community 352 - "Shell Feature — shell_page_transition"
-Cohesion: 0.04
-Nodes (45): Color, Key? dateKey,
-  double, alphaBlend, base, build, ChartHoverBubble, chartTooltipBubbleColor, chartTooltipDateStyle (+37 more)
+Cohesion: 0.12
+Nodes (15): Key? dateKey,
+  double, alphaBlend, base, build, ChartHoverBubble, chartTooltipBubbleColor, chartTooltipDateStyle, chartTooltipDateValueColumn (+7 more)
 
 ### Community 353 - "Firebase Auth (windows) — firebase_auth_plugin.cpp"
-Cohesion: 0.13
-Nodes (14): DWORD, queue, HWND, LPARAM, LRESULT, UINT, WPARAM, RegisterWithRegistrar (+6 more)
+Cohesion: 0.14
+Nodes (13): DWORD, queue, HWND, LPARAM, LRESULT, UINT, WPARAM, RegisterWithRegistrar (+5 more)
 
 ### Community 354 - "Hotkeys Feature"
-Cohesion: 0.22
-Nodes (10): allTodoTasksProvider, calendarViewEventsProvider, googleCalendarSyncProvider, build, CalendarPage, _CalendarPageState, _deleteTodoTask, _openTodoSidebar (+2 more)
+Cohesion: 0.10
+Nodes (32): rankingCategoriesProvider, rankingChildrenByParentProvider, rankingParentCountsProvider, rankingParentsProvider, RankingFilters, build, _CategoryMenu, _FilterMenu (+24 more)
 
 ### Community 355 - "Uncategorized — NEETCODE150"
 Cohesion: 0.11
 Nodes (18): 1-D Dynamic Programming, 2-D Dynamic Programming, Advanced Graphs, Arrays & Hashing, Backtracking, Binary Search, Bit Manipulation, Graphs (+10 more)
 
 ### Community 356 - "Shared Widgets — glass_surface"
-Cohesion: 0.08
-Nodes (24): accentColor, blossoms, build, createState, _dashed, _dashOff, _dashOn, haloColor (+16 more)
+Cohesion: 0.03
+Nodes (58): Color, dart:math, indices, main, r, sorted, accent, build (+50 more)
 
 ### Community 357 - "Firebase Auth (windows) — firebase_auth_plugin.cpp"
-Cohesion: 0.12
-Nodes (14): flaggedWordShapeError, hits, naming, null, pairsPointingAt, pointing, validateFlagReplacement, validateFlagWord (+6 more)
+Cohesion: 0.09
+Nodes (30): todoListsProvider, todoListStatsProvider, todoRepositoryProvider, todoTasksProvider, revealRequestProvider, _addSubtask, _deleteSubtask, _onNotesChanged (+22 more)
 
 ### Community 358 - "Shared Widgets — local_overlay_wrapper"
-Cohesion: 0.02
-Nodes (114): DailyFlow, NetFlowSeries, 1, build, busiest, _CalendarHover, _columnsFor, createState (+106 more)
+Cohesion: 0.07
+Nodes (29): DailyFlow, NetFlowSeries, 1, build, busiest, _CalendarHover, _columnsFor, createState (+21 more)
 
 ### Community 359 - "Remote API Clients — desktop_google_oauth"
 Cohesion: 0.05
-Nodes (36): at, buffer, composing, formatEditUpdate, i, mapped, normalizeNewlines, NormalizeNewlinesFormatter (+28 more)
+Nodes (37): at, buffer, composing, formatEditUpdate, i, mapped, normalizeNewlines, NormalizeNewlinesFormatter (+29 more)
 
 ### Community 360 - "Remote API Clients — leetcode_content"
 Cohesion: 0.09
 Nodes (22): build, _canImport, _controller, createState, deckId, dispose, importedCount, _importing (+14 more)
 
 ### Community 361 - "Calendar Feature — calendar_keyboard_shortcuts"
-Cohesion: 0.12
-Nodes (17): build, CalendarKeyboardShortcuts, _CalendarKeyboardShortcutsState, calendarNavShortcutsEnabled, child, createState, dispose, _handleKeyEvent (+9 more)
+Cohesion: 0.11
+Nodes (18): build, CalendarKeyboardShortcuts, _CalendarKeyboardShortcutsState, calendarNavShortcutsEnabled, calendarNavShortcutsEnabledForState, child, createState, dispose (+10 more)
 
 ### Community 362 - "Study Feature — package:voyager/core/motion/"
-Cohesion: 0.04
-Nodes (45): applyStyledRanges, at, base, buildStyledRuns, children, cursor, next, out (+37 more)
+Cohesion: 0.05
+Nodes (36): applyStyledRanges, at, base, buildStyledRuns, children, cursor, next, out (+28 more)
 
 ### Community 363 - "Uncategorized — Right-click Add Snippet — Hi"
 Cohesion: 0.11
 Nodes (17): Acceptance criteria, Architecture (implementation sketch), Context menu, Data & validation, Decisions log (from product), Edge-case summary, Field scope, Goal (+9 more)
 
 ### Community 364 - "Test Suite — package:flutter_riverpod/flu"
-Cohesion: 0.09
-Nodes (22): _blocked, createState, _link, _linking, parentDeckId, showStudyLinkDeckModal, _stack, _StudyLinkDeckModal (+14 more)
+Cohesion: 0.03
+Nodes (67): _, BackdropFilter, studyDeckGraphProvider, studyDecksProvider, studyFoldersProvider, _cramSession, createState, deckId (+59 more)
 
 ### Community 365 - "Firebase Auth (ios) — CustomPigeonHeader"
-Cohesion: 0.03
-Nodes (71): CustomPaint, color, createRenderObject, paint, _paintFill, _paragraphOf, updateRenderObject, package:flutter/rendering.dart (+63 more)
+Cohesion: 0.02
+Nodes (103): CustomPaint, GlobalKey, GlobalKey get, _RenderCapsLockCaret, empty, hasImage, hasText, imageBytes (+95 more)
 
 ### Community 366 - "Firebase Auth (ios) — CustomPigeonHeader"
 Cohesion: 0.07
@@ -2168,43 +2190,40 @@ Cohesion: 0.12
 Nodes (16): 1. Shader asset, 2. Loading, 3. Tunable parameters, 4. Widget → painter → GPU, 5. App-level composition, 6. UI that interacts with the background, 7. GPU warmup (avoid first-frame jank), 8. Failure modes (+8 more)
 
 ### Community 369 - "Life Tracker Feature — blossom_stat_popup"
-Cohesion: 0.07
-Nodes (15): ActionCodeSettings, GetTokenResult, MultiFactorInfo, Activity, FirebaseUser, InternalMultiFactorInfo, AuthCredential, AuthResult (+7 more)
+Cohesion: 0.10
+Nodes (12): ActionCodeResult, ActionCodeInfoOperation, EMAIL_SIGN_IN, PASSWORD_RESET, RECOVER_EMAIL, REVERT_SECOND_FACTOR_ADDITION, UNKNOWN, VERIFY_AND_CHANGE_EMAIL (+4 more)
 
 ### Community 370 - "Analytics Feature — analytics_page"
 Cohesion: 0.03
-Nodes (65): LeetCodeProblem, LeetCodeSolution, anchorRect, build, _close, _closing, _ComplexityTile, _controller (+57 more)
+Nodes (70): int?, build, colorValue, tag, TagChip, LeetCodeProblem, LeetCodeSolution, anchorRect (+62 more)
 
 ### Community 371 - "Media Handling — media_clipboard"
-Cohesion: 0.08
-Nodes (24): package:voyager/core/widgets/spell_check_squiggle_layer.dart, RenderParagraph, combined, count, false, main, out, pumpLayer (+16 more)
+Cohesion: 0.17
+Nodes (12): build, _controller, createState, dispose, hintText, initialValue, showStudyNameModal, _StudyNameModal (+4 more)
 
 ### Community 372 - "Shared Widgets — create_name_color_dialog"
-Cohesion: 0.13
-Nodes (14): required String exerciseId,
-  int, required WorkoutPlanMode mode,
-  int, completed, cycleLength, exerciseOrder, _log, main, now (+6 more)
+Cohesion: 0.05
+Nodes (45): WeightUnit, formatDisplay, formatKilograms, formatKilogramsWithUnit, fromKilograms, kilogramsForWheelIndex, label, max (+37 more)
 
 ### Community 373 - "Calendar Feature — calendar_manage_sheet"
 Cohesion: 0.08
 Nodes (26): FixedExtentScrollController, FixedExtentScrollPhysics, applyTo, build, _controller, createBallisticSimulation, createState, didUpdateWidget (+18 more)
 
 ### Community 374 - "Leetcode Feature — leetcode_scratch_session"
-Cohesion: 0.12
-Nodes (16): code, copyWith, endedNormally, expanded, fromJson, hasText, isOrphan, kLeetCodeScratchSessionVersion (+8 more)
+Cohesion: 0.11
+Nodes (17): code, copyWith, endedNormally, expanded, fromJson, hasText, isOrphan, kLeetCodeScratchSessionVersion (+9 more)
 
 ### Community 375 - "Study Feature — study_debug_generator"
-Cohesion: 0.08
-Nodes (24): CustomPainter, _ConfettiPainter, _VimOverlayPainter, _AutocorrectFlashPainter, _ClockDialPainter, GeometricTexturePainter, _GlassBorderPainter, _LineBreakMarkPainter (+16 more)
+Cohesion: 0.09
+Nodes (23): CustomPainter, _ConfettiPainter, _VimOverlayPainter, _AutocorrectFlashPainter, _ClockDialPainter, GeometricTexturePainter, _GlassBorderPainter, _LineBreakMarkPainter (+15 more)
 
 ### Community 376 - "Workout Feature — workout_day_column"
-Cohesion: 0.03
-Nodes (66): DateTime? deletedAt,
-  int, MoodGradientSlider, searchEntries, SearchService, package:voyager/core/constants/journal_constants.dart, package:voyager/core/constants/todo_sort_constants.dart, package:voyager/data/repositories/drift_repositories.dart, package:voyager/domain/models/journal_models.dart (+58 more)
+Cohesion: 0.06
+Nodes (30): ProviderContainer?, Size, container, db, _journalA, _journalB, main, readMood (+22 more)
 
 ### Community 377 - "Test Suite — package:flutter_riverpod/flu"
-Cohesion: 0.09
-Nodes (20): android, DefaultFirebaseOptions, windows, package:fake_cloud_firestore/fake_cloud_firestore.dart, package:firebase_core/firebase_core.dart, package:voyager/core/sync/outbox_sync_worker.dart, static const FirebaseOptions, currentUserId (+12 more)
+Cohesion: 0.10
+Nodes (19): CalendarEvent, day, event, RevealRequest, RevealTargetType, task, type, package:voyager/domain/models/calendar_models.dart (+11 more)
 
 ### Community 378 - "Uncategorized — App-wide dictionary (HLD)"
 Cohesion: 0.12
@@ -2215,52 +2234,52 @@ Cohesion: 0.12
 Nodes (14): Before running `flutter upgrade`, Day-to-day development, Flutter toolchain, Per command (dev and release builds), Permanent (native project), Pinned version, Release builds (.exe) and Flutter version, Why we are pinned (+6 more)
 
 ### Community 380 - "Test Suite — workout_test"
-Cohesion: 0.12
-Nodes (15): build, count, _countRebuilds, difficulty, id, main, _now, _openExpanded (+7 more)
+Cohesion: 0.11
+Nodes (21): InternalActionCodeInfoData, InternalActionCodeInfo, unique_ptr, InternalActionCodeInfo, data_, FromEncodableList, Hash, operation_ (+13 more)
 
 ### Community 381 - "Shared Widgets — color_picker_field"
-Cohesion: 0.11
-Nodes (17): LeetCodeDifficulty, description, difficulty, easy, examples, hard, LeetCodeApiQuestion, LeetCodeQuestionCounts (+9 more)
+Cohesion: 0.12
+Nodes (16): description, difficulty, easy, examples, hard, LeetCodeApiQuestion, LeetCodeQuestionCounts, medium (+8 more)
 
 ### Community 382 - "Sync Engine — Timer?"
-Cohesion: 0.04
-Nodes (62): GenerateInterfaces, EncodableValue, FirebaseAuthHostApi, FirebaseAuthUserHostApi, FlutterError, MultiFactoResolverHostApi, MultiFactorTotpHostApi, MultiFactorTotpSecretHostApi (+54 more)
+Cohesion: 0.12
+Nodes (15): FirebaseAuthUserHostApi, Delete, GetIdToken, LinkWithCredential, LinkWithProvider, ReauthenticateWithCredential, ReauthenticateWithProvider, Reload (+7 more)
 
 ### Community 383 - "Shared Widgets — tag_suggestion_overlay"
 Cohesion: 0.07
 Nodes (26): 10. Acceptance criteria, 11. Implementation sketch (non-binding), 12. Decision log (this feature), 1. Goals, 2. Non-goals (v1), 3. Product decisions (locked), 4.1 `RankingParent`, 4.2 Normalization (+18 more)
 
 ### Community 384 - "Domain Models — SoftDeletable"
-Cohesion: 0.12
-Nodes (15): body, byCreated, byDate, compareDreamEntriesNewestFirst, copyWith, DreamEntry, entryDate, fromJson (+7 more)
+Cohesion: 0.11
+Nodes (17): byId, refreshed, body, byCreated, byDate, compareDreamEntriesNewestFirst, copyWith, DreamEntry (+9 more)
 
 ### Community 385 - "Domain Models — DateTime?"
-Cohesion: 0.15
-Nodes (27): jobApplicationsProvider, jobCategoriesProvider, jobCompaniesProvider, jobSeasonsProvider, jobStagesProvider, build, _CategoriesTab, _CategoriesTabState (+19 more)
+Cohesion: 0.08
+Nodes (29): activeWorkoutPlanProvider, exercisesProvider, workoutPlanEntriesProvider, workoutPlansProvider, build, _dateForDay, entries, exerciseCount (+21 more)
 
 ### Community 386 - "Domain Models — sync_conflict"
 Cohesion: 0.07
 Nodes (48): Point, HWND, LPARAM, LRESULT, UINT, WPARAM, FlutterWindow, flutter_controller_ (+40 more)
 
 ### Community 387 - "Workout Feature — workout_target_editor"
-Cohesion: 0.10
-Nodes (20): _attempts, _downloadDraining, _downloadOne, _downloadWakeupPending, drain, drainDownloads, drainUploads, isTransferring (+12 more)
+Cohesion: 0.04
+Nodes (52): dart:typed_data, FirebaseStorage, _attempts, _downloadDraining, _downloadOne, _downloadWakeupPending, drain, drainDownloads (+44 more)
 
 ### Community 388 - "Analytics Feature — stat_number_format"
-Cohesion: 0.10
-Nodes (23): mediaStorageProvider, mediaStorageUsageProvider, asset, build, _busy, createState, _deleteAll, _deleteOne (+15 more)
+Cohesion: 0.07
+Nodes (27): SpringMotion, build, _controller, createState, dispose, hintText, initialValue, showWorkoutNameModal (+19 more)
 
 ### Community 389 - "Study Feature — study_keyboard_shortcuts"
-Cohesion: 0.09
-Nodes (21): build, _CalendarManageDialog, _CalendarManageDialogState, _calendars, _counts, _createCalendar, _createdCalendarId, createdId (+13 more)
+Cohesion: 0.11
+Nodes (18): build, _CalendarManageDialog, _CalendarManageDialogState, _calendars, _counts, _createCalendar, _createdCalendarId, createdId (+10 more)
 
 ### Community 390 - "Study Feature — ConsumerState"
-Cohesion: 0.07
-Nodes (28): cacheGeneration, clear, degreeGridArgb, _entries, from, generation, gradientStartHour, hashCode (+20 more)
+Cohesion: 0.06
+Nodes (31): cacheGeneration, clear, degreeGridArgb, _entries, from, generation, gradientStartHour, hashCode (+23 more)
 
 ### Community 391 - "Test Suite — workout_test"
-Cohesion: 0.13
-Nodes (15): @visibleForTesting, renderEditableOf, sync, reconcile, restoreIfSelectAll, handleCharacter, calendarNavDeltaForEvent, calendarNavShortcutsEnabledForState (+7 more)
+Cohesion: 0.14
+Nodes (14): @visibleForTesting, renderEditableOf, sync, reconcile, restoreIfSelectAll, handleCharacter, calendarNavDeltaForEvent, zeroStopFraction (+6 more)
 
 ### Community 392 - "Uncategorized — Snippet undo vs Vim `u`"
 Cohesion: 0.12
@@ -2275,9 +2294,9 @@ Cohesion: 0.08
 Nodes (20): EncodableValueVariant, any, decodeColorPaletteJson, encodeColorPaletteJson, formatColorHex, jsonEncode, normalizeColorValue, normalized (+12 more)
 
 ### Community 395 - "Uncategorized — crdt_scramble_test"
-Cohesion: 0.09
-Nodes (21): int? integerCap,
-  int, AppThemeMode, BillingPeriod, CalendarViewMode, HeatmapMode, SnippetExpandKey, StartupPageMode, TrackerCadence (+13 more)
+Cohesion: 0.17
+Nodes (11): int? integerCap,
+  int, boolValue, defaultInt, enumValue, epoch, integerCap, intValue, main (+3 more)
 
 ### Community 396 - "Functions — package.json"
 Cohesion: 0.13
@@ -2289,27 +2308,29 @@ Nodes (15): NSArray, NSDictionary, InternalAdditionalUserInfo, -init, +makeWithI
 
 ### Community 398 - "Todo Feature — todo_page"
 Cohesion: 0.07
-Nodes (29): _attach, back, build, controller, createState, _detach, didUpdateWidget, dispose (+21 more)
+Nodes (27): _attach, back, build, controller, createState, _detach, didUpdateWidget, dispose (+19 more)
 
 ### Community 399 - "Life Tracker Feature — life_tree_figure"
 Cohesion: 0.13
 Nodes (14): close, kProseHighlightMark, kProseHighlightRadius, offset, open, paintProseHighlights, path, ProseBoxesFor (+6 more)
 
 ### Community 400 - "Study Feature — study_import_text_modal"
-Cohesion: 0.14
-Nodes (15): LeetCodeScratchSession, _chain, clear, _deleteQuietly, _file, FileLeetCodeScratchDraftStore, LeetCodeScratchDraftStore, leetCodeScratchDraftStoreProvider (+7 more)
+Cohesion: 0.07
+Nodes (28): LeetCodeScratchPad, package:voyager/features/study/study_grading_row.dart, required String title,
+  List, addTwo, build, card, _focusPad, id (+20 more)
 
 ### Community 401 - "Test Suite — prose_highlight_rounding_test"
-Cohesion: 0.08
-Nodes (28): BoxFit, mediaTransferWorkerProvider, asset, borderRadius, build, byHeight, _bytes, byWidth (+20 more)
+Cohesion: 0.04
+Nodes (44): Alignment, bool? enableDrag,
+  BorderRadius, BorderRadius, BoxFit, asset, borderRadius, byHeight, _bytes (+36 more)
 
 ### Community 402 - "Firebase Auth (android) — NonNull"
 Cohesion: 0.15
 Nodes (15): NSArray, NSDictionary, InternalAdditionalUserInfo, -init, +makeWithIsNewUserproviderIdusernameauthorizationCodeprofile, InternalIdTokenResult, +makeWithTokenexpirationTimestampauthTimestampissuedAtTimestampsignInProviderclaimssignInSecondFactor, InternalSignInProvider (+7 more)
 
 ### Community 403 - "Firebase Auth (android) — NonNull"
-Cohesion: 0.13
-Nodes (14): back, cards, front, inBack, lineNumber, lines, normalized, parseStudyBulkImportText (+6 more)
+Cohesion: 0.11
+Nodes (17): accent, build, color, count, items, label, maxWidth, onSelected (+9 more)
 
 ### Community 404 - "Firebase Auth (ios) — firebase_auth_messages.g"
 Cohesion: 0.13
@@ -2340,10 +2361,6 @@ Nodes (18): BaseSliderTrackShape, accent, build, fillColor, getPreferredRect, ge
 Cohesion: 0.13
 Nodes (14): BackupCollection, backupContentEquals, backupLiveCalendarIds, BackupRecord, buildBackupCollections, content, data, fromJson (+6 more)
 
-### Community 412 - "Demo Feature"
-Cohesion: 0.18
-Nodes (14): User, EncodableList, InternalUserCredential, InternalUserDetails, InternalUserInfo, vector, ParseProviderData, ParseUserDetails (+6 more)
-
 ### Community 413 - "Uncategorized — Text box widget: `NotchedFie"
 Cohesion: 0.14
 Nodes (13): Files touched by this migration, How it works, Intentional exception: the inline todo-item rename field, Known limitations / non-goals, `LabeledTextField` (`lib/core/widgets/labeled_text_field.dart`), `TagHighlightedTextField` (`lib/core/widgets/tag_highlighted_text_field.dart`), Text box widget: `NotchedFieldBorder`, The notch math (+5 more)
@@ -2353,12 +2370,12 @@ Cohesion: 0.15
 Nodes (12): compileOnSave, compilerOptions, esModuleInterop, module, noImplicitReturns, noUnusedLocals, outDir, skipLibCheck (+4 more)
 
 ### Community 415 - "Auth"
-Cohesion: 0.08
-Nodes (27): mediaServiceProvider, build, _reload, build, _reload, _reorder, _load, _currentBytes (+19 more)
+Cohesion: 0.13
+Nodes (17): hiddenNotificationFeedProvider, _addNote, build, _clearAll, _deleteNote, _FeedSection, _Header, _HiddenSection (+9 more)
 
 ### Community 416 - "Text — typedef"
-Cohesion: 0.07
-Nodes (25): dart:math, indices, main, r, sorted, nextQuote, QuoteBank, _quotes (+17 more)
+Cohesion: 0.12
+Nodes (15): axisReservedSize, chars, compactNumberLabel, intervals, magnitude, magnitudeSuffixes, mantissa, mantissas (+7 more)
 
 ### Community 417 - "Settings Feature — package:voyager/domain/model"
 Cohesion: 0.08
@@ -2373,8 +2390,8 @@ Cohesion: 0.11
 Nodes (19): Animation, _animDuration, _barVisible, build, child, _controller, createState, DesktopWindowFrame (+11 more)
 
 ### Community 420 - "Ephemeral — string"
-Cohesion: 0.14
-Nodes (15): ResultHandlerError, ResultHandlerNotImplemented, ResultHandlerSuccess, string, T, MethodResultFunctions, on_error_, on_not_implemented_ (+7 more)
+Cohesion: 0.27
+Nodes (9): ResultHandlerError, ResultHandlerNotImplemented, ResultHandlerSuccess, string, T, MethodResultFunctions, on_error_, on_not_implemented_ (+1 more)
 
 ### Community 421 - "Uncategorized — Studying Page"
 Cohesion: 0.15
@@ -2385,16 +2402,16 @@ Cohesion: 0.26
 Nodes (13): FIRActionCodeSettings, PigeonParser, +getManualList, +getPigeonAdditionalUserInfoauthorizationCode, +getPigeonAuthCredentialtoken, +getPigeonDetails, +getPigeonTotpSecret, +getPigeonUserCredentialFromAuthResultauthorizationCode (+5 more)
 
 ### Community 423 - "Firebase Auth (macos) — firebase_auth_messages.g"
-Cohesion: 0.10
-Nodes (19): GlobalKey, GlobalKey get, _RenderCapsLockCaret, RenderVimAnchoredChrome, attach, createRenderObject, detach, _handleScroll (+11 more)
+Cohesion: 0.07
+Nodes (26): package:voyager/core/media/media_transfer_worker.dart, attach, currentUid, db, delete, deletes, download, downloads (+18 more)
 
 ### Community 424 - "Firebase Auth (macos) — CustomPigeonHeader"
 Cohesion: 0.26
 Nodes (13): FIRActionCodeSettings, PigeonParser, +getManualList, +getPigeonAdditionalUserInfoauthorizationCode, +getPigeonAuthCredentialtoken, +getPigeonDetails, +getPigeonTotpSecret, +getPigeonUserCredentialFromAuthResultauthorizationCode (+5 more)
 
 ### Community 425 - "Shell Feature — shell_keyboard_shortcuts"
-Cohesion: 0.06
-Nodes (29): calendar, debug, journal, manage, search, VoyagerIcons, kMinTouchTarget, AutocorrectEnabledScope (+21 more)
+Cohesion: 0.08
+Nodes (20): calendar, debug, journal, manage, search, VoyagerIcons, kMinTouchTarget, didChangeAppLifecycleState (+12 more)
 
 ### Community 426 - "Shell Feature — app_shell"
 Cohesion: 0.10
@@ -2409,8 +2426,8 @@ Cohesion: 0.11
 Nodes (19): _Badge, build, createState, _editError, _editingId, label, _newRowId, onEdit (+11 more)
 
 ### Community 429 - "Dev — dev_flags"
-Cohesion: 0.11
-Nodes (18): build, _counts, createdId, _createdJournalId, _createJournal, createState, _deleteJournal, initState (+10 more)
+Cohesion: 0.05
+Nodes (52): Axis, ConsumerWidget, cacheStatusSnapshotProvider, devSettingsProvider, fpsMonitorProvider, _HeatmapGrid, _scaledMorphDuration, build (+44 more)
 
 ### Community 430 - "Sync Engine — char_ops_encoder"
 Cohesion: 0.10
@@ -2429,22 +2446,20 @@ Cohesion: 0.11
 Nodes (17): 1. Goals, 2. Non-goals (this pass), 3. Product decisions (locked), 4.1 Kinds, 4.2 Rules, 4.3 API shape (implementation target), 4.4 Future callers checklist, 4.5 What not to do globally (yet) (+9 more)
 
 ### Community 434 - "Firebase Auth (macos) — FLTFirebaseAuthPlugin"
-Cohesion: 0.11
-Nodes (12): ForceResendingToken, Locale?, PhoneMultiFactorInfo, InternalVerifyPhoneNumberRequest, Activity, AuthPigeonFirebaseApp, InternalVerifyPhoneNumberRequest, MultiFactorSession (+4 more)
+Cohesion: 0.23
+Nodes (11): ForceResendingToken, Locale?, PhoneMultiFactorInfo, Activity, AuthPigeonFirebaseApp, InternalVerifyPhoneNumberRequest, MultiFactorSession, Override (+3 more)
 
 ### Community 435 - "Firebase Auth (macos) — CustomPigeonHeader"
-Cohesion: 0.12
-Nodes (16): IgnorePointer, package:voyager/features/study/study_keyboard_shortcuts.dart, cards, container, _deckId, _dueCards, _gradeButton, _gradingArmed (+8 more)
+Cohesion: 0.07
+Nodes (24): package:voyager/core/media/widgets/media_paste_scope.dart, package:voyager/core/widgets/tag_highlighted_text_field.dart, field, main, pump, _pumpBody, pumpJournalPage, tap (+16 more)
 
 ### Community 436 - "Uncategorized — FEEDBACK"
 Cohesion: 0.20
 Nodes (9): Calendar, FEEDBACK, Global Inbox, Job Tracker, LeetCode, Miscellaneous, Ranking, Study (+1 more)
 
 ### Community 437 - "Constants — String get"
-Cohesion: 0.11
-Nodes (16): applications, id, JobColumn, jobRequiredColumns, label, package:voyager/domain/jobs/job_queries.dart, String? applicationUrl,
-  List, String? id,
-  String (+8 more)
+Cohesion: 0.03
+Nodes (56): applications, id, JobColumn, jobRequiredColumns, jobSearchQueryProvider, jobSelectedApplicationProvider, jobStatusFilterProvider, label (+48 more)
 
 ### Community 438 - "Constants — hotkey_defaults"
 Cohesion: 0.18
@@ -2455,12 +2470,12 @@ Cohesion: 0.08
 Nodes (23): buffer, _bullets, cleaned, cleanExperienceText, _cr, _dashes, _doubleSpaces, endsWith (+15 more)
 
 ### Community 440 - "Snippets — snippet_enabled_scope"
-Cohesion: 0.13
-Nodes (16): startLeetCodeTrackFlow, LeetCodeTrackDraft, _chain, clear, _deleteQuietly, draft, _draftFileName, _file (+8 more)
+Cohesion: 0.12
+Nodes (15): collection, detectedAt, documentId, fromStorage, id, localPayloadJson, localText, localTitle (+7 more)
 
 ### Community 441 - "Domain Services — weather_service"
-Cohesion: 0.13
-Nodes (15): build, canManage, createState, _error, initialTrigger, messenger, openSettings, outcome (+7 more)
+Cohesion: 0.15
+Nodes (14): devGeometricWavePanelOpenProvider, geometricWaveParamsProvider, GeometricWaveShape, build, DevGeometricWaveSection, display, divisions, label (+6 more)
 
 ### Community 442 - "Settings Feature — settingsRepositoryProvider"
 Cohesion: 0.10
@@ -2483,28 +2498,28 @@ Cohesion: 0.10
 Nodes (19): 1. Goals, 2. Product decisions (locked), 3. Problem, 4.1 Viewing, 4.2 Creating and editing, 4.3 Configure, 4.4 Delete, move, restore, 4.5 Reveal (+11 more)
 
 ### Community 447 - "Jobs"
-Cohesion: 0.12
-Nodes (16): TrackerValue, Asset, AssetValuation, FinancialTransaction, GoalAllocation, Journal, MediaReference, SoftDeletable (+8 more)
+Cohesion: 0.11
+Nodes (28): autocorrectScopeProvider, calendarsProvider, colorPaletteProvider, geometricDebugRowFadeProvider, geometricShaderProvider, geometricTextureParamsProvider, geometricWaveParamsProvider, _AppBackground (+20 more)
 
 ### Community 448 - "Spell Check — spell_check_suggestions"
 Cohesion: 0.20
 Nodes (9): candidates, edits1, generateSuggestions, _letterChars, list, lower, _maxDistance2Explored, maxResults (+1 more)
 
 ### Community 449 - "Shared Widgets — context_menu"
-Cohesion: 0.13
-Nodes (14): _accent, _expectRoundedCorners, _fillProfile, _fillRows, _fillWidthAt, inset, _isFill, left (+6 more)
+Cohesion: 0.08
+Nodes (24): _buildForm, _buildOffer, canReplaceHere, _controller, createState, dispose, _error, _FlagOutcome (+16 more)
 
 ### Community 450 - "Test Suite — package:voyager/domain/model"
-Cohesion: 0.15
-Nodes (13): lifeTrackerStatsProvider, accentColor, BlossomStatPopup, build, _lineWidth, _padding, painter, stat (+5 more)
+Cohesion: 0.18
+Nodes (10): accentColor, _lineWidth, _padding, painter, stat, statPopupMaxWidth, statPopupWidth, width (+2 more)
 
 ### Community 451 - "Ephemeral — string"
-Cohesion: 0.12
-Nodes (15): AuthStateListener, FirebaseAuth, FirebasePluginPlatform, FirebaseService, IdTokenListener, AuthStateChannelStreamHandler, Override, IdTokenChannelStreamHandler (+7 more)
+Cohesion: 0.15
+Nodes (12): _attachedToastDwell, attachImagesForOwner, count, facet, fileStore, images, pickImageFiles, result (+4 more)
 
 ### Community 452 - "Firebase Auth (ios) — CustomPigeonHeader"
-Cohesion: 0.12
-Nodes (15): CharOpsPayload, applyMergedPayload, applyMergedText, _completeCharOpPayloads, _latestSnapshot, _legacySnapshot, mergeOperations, _mergeParsed (+7 more)
+Cohesion: 0.08
+Nodes (25): NavigatorState, build, cards, _deckId, _expectStillInSession, focus, getAllCards, getCard (+17 more)
 
 ### Community 453 - "Uncategorized — delta_scramble_test"
 Cohesion: 0.22
@@ -2519,13 +2534,13 @@ Cohesion: 0.22
 Nodes (8): Dashboard, Detailed View, LeetCode Tracker, Page Architecture & Layout, Review Deck, Review Sessions, The Flashcard, Tracking Flow
 
 ### Community 456 - "Test Suite — package:flutter_riverpod/flu"
-Cohesion: 0.06
-Nodes (34): package:voyager/domain/models/leetcode_models.dart, package:voyager/features/leetcode/leetcode_detail_view.dart, package:voyager/features/leetcode/leetcode_flashcard.dart, package:voyager/features/leetcode/leetcode_mini_flashcard.dart, String? description,
-  String, algorithm, _allText, codeLanguage (+26 more)
+Cohesion: 0.03
+Nodes (66): Container, ContextMenuRegion, DateTime? dateApplied,
+  List, package:voyager/core/widgets/selector_pill.dart, package:voyager/features/jobs/jobs_edit_panel.dart, package:voyager/features/jobs/jobs_page.dart, package:voyager/features/jobs/jobs_providers.dart, package:voyager/features/jobs/jobs_table.dart (+58 more)
 
 ### Community 457 - "Settings Feature — settingsRepositoryProvider"
-Cohesion: 0.09
-Nodes (21): CloudFunctionWeatherClient, DevOpenWeatherClient, WeatherForecast, WeatherSnapshot, refreshForecast, refreshWeather, WeatherApiClient, package:voyager/domain/models/weather_models.dart (+13 more)
+Cohesion: 0.06
+Nodes (33): Client, FirebaseFunctions?, _call, _firestore, FirestoreWeatherReader, _functions, getCurrentWeather, _httpCallable (+25 more)
 
 ### Community 458 - "Theming — voyager_spacing"
 Cohesion: 0.12
@@ -2540,8 +2555,8 @@ Cohesion: 0.22
 Nodes (8): 11.1 Gallery "Add images" hover gap, 11. Global media fix, 12. Archived category, 13. Settings & persistence, 14. Explicitly out of scope, 16. Relationship to `RANKINGS.md`, 1. Goals, Rankings — UI/UX Redesign HLD
 
 ### Community 461 - "Firebase Auth (windows) — messages.g.cpp"
-Cohesion: 0.05
-Nodes (37): Client, DocumentReference, FirebaseFirestore, FirebaseFunctions?, _call, _firestore, FirestoreWeatherReader, _functions (+29 more)
+Cohesion: 0.08
+Nodes (25): _addSolution, _algorithmField, _algorithmHint, _algorithmText, _bruteForce, button, db, ensureVisible (+17 more)
 
 ### Community 462 - "Uncategorized — VIM"
 Cohesion: 0.22
@@ -2576,8 +2591,8 @@ Cohesion: 0.24
 Nodes (12): -getFIRAuthCredentialFromArgumentsappcompletion, -handleInternalErrorwithError, -handleMultiFactorErrorcompletionwithError, -linkWithCredentialAppinputcompletion, -reauthenticateWithCredentialAppinputcompletion, -sendSignInLinkToEmailAppemailactionCodeSettingscompletion, -signInWithCredentialAppinputcompletion, -signInWithCustomTokenApptokencompletion (+4 more)
 
 ### Community 470 - "Test Suite — todo_list_search_test"
-Cohesion: 0.15
-Nodes (12): build, child, collection, documentId, _dropTargetsSupported, facet, _formats, _hasImage (+4 more)
+Cohesion: 0.10
+Nodes (19): build, child, EnterToSubmitScope, onSubmit, _textFieldHasFocus, Calendar, build, _CalendarOverlayDialog (+11 more)
 
 ### Community 471 - "Firebase Auth (android) — FlutterFirebaseAuthRegistrar"
 Cohesion: 0.24
@@ -2589,11 +2604,11 @@ Nodes (9): ADR 002: Sync Protocol Boundaries, Amendment: Jobs hard delete (2026-
 
 ### Community 473 - "Motion System — AnimationController"
 Cohesion: 0.15
-Nodes (12): assets, captions, collect, context, messenger, ordered, rankingsLightboxViewportFraction, service (+4 more)
+Nodes (12): didPop, didPush, didRemove, didReplace, _isScrimmed, ModalScrimObserver, modalScrimOpen, _open (+4 more)
 
 ### Community 474 - "Shared Widgets — tag_suggestion_overlay"
-Cohesion: 0.21
-Nodes (8): MessageHandler, BasicMessageChannel, codec_, messenger_, name_, BinaryReply, string, T
+Cohesion: 0.15
+Nodes (12): analyticsList, devList, financeInsights, financeLedgerNarrow, financeLedgerWide, journalEntryList, journalEntryListAll, journalPreview (+4 more)
 
 ### Community 475 - "Uncategorized — Rankings — UI/UX Redesign HL"
 Cohesion: 0.29
@@ -2604,8 +2619,8 @@ Cohesion: 0.29
 Nodes (7): 9.1 Panel chrome (match Jobs), 9.2 Average-from-children control, 9.3 Overall score row (`RankingOverallRow`), 9.4 Custom template fields (`rankings_field_editor`), 9.5 Notes field, 9.6 Text autosave, vim, snippets, 9. Editor panel
 
 ### Community 477 - "Firebase Auth (ios) — firebase_auth_messages.g"
-Cohesion: 0.15
-Nodes (12): package:voyager/features/jobs/jobs_company_field.dart, required List, company, controller, focusField, main, now, pumpAndSettle (+4 more)
+Cohesion: 0.22
+Nodes (8): MethodCallHandler, string, T, unique_ptr, MethodChannel, codec_, messenger_, name_
 
 ### Community 478 - "Uncategorized — Workout Tracker"
 Cohesion: 0.29
@@ -2631,6 +2646,10 @@ Nodes (5): ADR 003: Module Structure, Consequences, Context, Decision, Status
 Cohesion: 0.33
 Nodes (5): Analytics, Dream Editor & Collapsible Scratchpad UX, Dream Journal, Global Theme & Visual Identity, Split-Pane Dashboard
 
+### Community 484 - "Caps Lock — caps_lock_caret_indicator"
+Cohesion: 0.08
+Nodes (24): AutocorrectSession, _addSnippet, anchor, _applySuggestion, autocorrectSession, build, createState, editableTextState (+16 more)
+
 ### Community 485 - "Spell Check — word_token"
 Cohesion: 0.33
 Nodes (5): isCustomWordToken, normalizeCustomWord, _wholeWordToken, wordTokenPattern, RegExp
@@ -2640,8 +2659,8 @@ Cohesion: 0.33
 Nodes (5): Blossoms, Bucket List Popup, Fallen Leaves, Swing And Bubble, Unified Canvas
 
 ### Community 487 - "Shell Feature — weather_chart_plot_cache"
-Cohesion: 0.04
-Nodes (47): EditableTextState, loadDictionaryFromAssets, raw, VimSession, package:flutter/services.dart, package:voyager/core/caps_lock/caps_lock_caret_indicator.dart, package:voyager/core/caps_lock/caps_lock_indicator_scope.dart, package:voyager/core/media/widgets/media_paste_scope.dart (+39 more)
+Cohesion: 0.03
+Nodes (72): EditableTextState, srsMasteryColor, copyWith, fieldHintStyle, theme, roundedDragProxy, build, _controller (+64 more)
 
 ### Community 488 - "Firebase Auth — CHANGELOG"
 Cohesion: 0.33
@@ -2652,13 +2671,13 @@ Cohesion: 0.33
 Nodes (6): ActionCodeSettings, Email Sign-in Methods, Email Updates, FirebaseAuth Instance, Microsoft Authentication, Migration Guide
 
 ### Community 490 - "Firebase Auth (ios) — firebase_auth_messages.g"
-Cohesion: 0.05
-Nodes (37): DateTime? dueAt,
-  int, _back, build, createState, _face, _footer, _front, keywords (+29 more)
+Cohesion: 0.06
+Nodes (31): DateTime? dueAt,
+  int, _back, build, createState, _face, _footer, _front, keywords (+23 more)
 
 ### Community 491 - "Text — list_text_editing"
-Cohesion: 0.14
-Nodes (13): formatDisplay, formatKilograms, formatKilogramsWithUnit, fromKilograms, kilogramsForWheelIndex, label, max, step (+5 more)
+Cohesion: 0.17
+Nodes (11): charOpEncodeIsolateThreshold, charOps, CharOpsEncodeRequest, chunks, compute, encodeCharOpPayloads, encodeCharOpPayloadsSync, groupId (+3 more)
 
 ### Community 492 - "Android — gradlew"
 Cohesion: 0.60
@@ -2673,23 +2692,21 @@ Cohesion: 0.40
 Nodes (4): evens, main, odds, s
 
 ### Community 495 - "Caps Lock — caps_lock_caret_indicator"
-Cohesion: 0.12
-Nodes (15): DateTime? recurrenceEndDate,
-  List, daily, deletedAt, end, _event, exceptionDates, false, _feed (+7 more)
+Cohesion: 0.13
+Nodes (14): daily, deletedAt, end, _event, exceptionDates, false, _feed, id (+6 more)
 
 ### Community 496 - "Core Utilities — journal_tags"
-Cohesion: 0.17
-Nodes (11): required String title,
-  String, support/search_page_harness.dart, body, _entry, id, main, now, searchHarnessJournalId (+3 more)
+Cohesion: 0.14
+Nodes (12): crossfade, reduced, VoyagerMotion, AppFonts, applyTo, family, leadingFor, monoFamily (+4 more)
 
 ### Community 497 - "Uncategorized — Rankings — UI/UX Redesign HL"
 Cohesion: 0.40
 Nodes (5): 6.1 Queue, 6.2 Ranked, 6.3 Rank numbers (overall-score sort only), 6.4 Section header styling, 6. List sections
 
 ### Community 498 - "Firebase Auth (macos) — CustomPigeonHeader"
-Cohesion: 0.05
-Nodes (44): DateTime? recurrenceEndDate,
-  String, CalendarEvent, day, event, RevealRequest, RevealTargetType, task, type (+36 more)
+Cohesion: 0.07
+Nodes (26): DateTime? recurrenceEndDate,
+  String, cancelLabel, confirmed, confirmLabel, deleteAllLabel, DeleteContainerChoice, moveLabel, result (+18 more)
 
 ### Community 499 - "Firebase Auth — Firebase Auth for Flutter"
 Cohesion: 0.40
@@ -2728,12 +2745,13 @@ Cohesion: 0.15
 Nodes (12): contains, embedded, firebaseAuthErrorMessage, invalidCredentialHints, _isGenericInternalMessage, lower, _messageFromEmbeddedDetails, normalizedCode (+4 more)
 
 ### Community 508 - "Shared Widgets — voyager_scroll_view"
-Cohesion: 0.11
-Nodes (18): _addColor, build, createState, dispose, _hexController, _hexError, _hexFocusNode, palette (+10 more)
+Cohesion: 0.08
+Nodes (22): package:voyager/core/sync/pending_flush_registry.dart, required String title,
+  String, support/search_page_harness.dart, entry, _entryId, main, _openEntryDialog, _readEntry (+14 more)
 
 ### Community 509 - "Test Suite — dictionary_search_test"
-Cohesion: 0.07
-Nodes (26): cancelLabel, confirmed, confirmLabel, deleteAllLabel, DeleteContainerChoice, moveLabel, result, showConfirmDialog (+18 more)
+Cohesion: 0.09
+Nodes (20): android, DefaultFirebaseOptions, windows, package:fake_cloud_firestore/fake_cloud_firestore.dart, package:firebase_core/firebase_core.dart, package:voyager/core/sync/outbox_sync_worker.dart, static const FirebaseOptions, currentUserId (+12 more)
 
 ### Community 510 - "Uncategorized — Rankings — UI/UX Redesign HL"
 Cohesion: 0.50
@@ -2756,25 +2774,24 @@ Cohesion: 0.17
 Nodes (12): FLTFirebaseAuthPlugin, +convertToFlutterError, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding, FirebaseAuthHostApi, FirebaseAuthUserHostApi, FLTFirebasePlugin, FlutterPlugin (+4 more)
 
 ### Community 515 - "Firebase Auth (macos) — FLTFirebaseAuthPlugin"
-Cohesion: 0.38
-Nodes (7): StreamHandlerCancel, StreamHandlerListen, T, unique_ptr, StreamHandlerFunctions, on_cancel_, on_listen_
+Cohesion: 0.09
+Nodes (21): _NoScrollbarScrollBehavior, MaterialScrollBehavior, attach, attachMany, db, encodePng, fileStore, gesture (+13 more)
 
 ### Community 517 - "Calendar Feature — calendar_day_grid"
 Cohesion: 0.17
 Nodes (11): 10. Surface coverage matrix, 11. Edge cases & resolved behavior, 12. Logic risks & mitigations, 13. Implementation phases (suggested), 15. Decisions log, 16. Open questions, 1. Goals, 7. Paste — smart paste (+3 more)
 
 ### Community 520 - "Test Suite — package:voyager/core/sync/te"
-Cohesion: 0.18
-Nodes (10): colorForLeetCodeDifficulty, key, kLeetCodeEasyColor, kLeetCodeHardColor, kLeetCodeMediumColor, labelForLeetCodeDifficulty, labelForLeetCodeLanguage, leetCodeCodeLanguages (+2 more)
+Cohesion: 0.22
+Nodes (8): decoration, focusBorderColor, focusShape, hoverColor, _restingBorderColor, restingColor, selectedColor, VoyagerListItemSurface
 
 ### Community 521 - "Test Suite — package:flutter/services"
-Cohesion: 0.04
-Nodes (45): @immutable, CacheItemStatus get, CacheItemStatus, ConfettiEffect, SnippetMarks, AutocorrectFlash, charOpEncodeIsolateThreshold, charOps (+37 more)
+Cohesion: 0.06
+Nodes (35): @immutable, CacheItemStatus get, CacheItemStatus, ConfettiEffect, SnippetMarks, AutocorrectFlash, EmphasisSpan, ProseMarkup (+27 more)
 
 ### Community 522 - "Todo Feature — todo_page"
-Cohesion: 0.05
-Nodes (38): Card, DateTime? dueAt,
-  double, package:voyager/core/theme/srs_mastery_color.dart, package:voyager/core/widgets/voyager_time_picker_spinner.dart, package:voyager/features/study/study_card_tile.dart, algorithm, card, difficulty (+30 more)
+Cohesion: 0.11
+Nodes (18): Card, package:voyager/core/theme/srs_mastery_color.dart, algorithm, card, difficulty, explanation, frontendId, interval (+10 more)
 
 ### Community 523 - "InternalPhoneMultiFactorAssertion"
 Cohesion: 0.14
@@ -2798,8 +2815,8 @@ Cohesion: 0.14
 Nodes (13): candidates, filterTransactionOrigins, LedgerTitle, ledgerTransactionTitle, n, needle, o, recentTransactionOrigins (+5 more)
 
 ### Community 532 - "Journal Feature — journal_page"
-Cohesion: 0.12
-Nodes (15): copyWith, EventRecurrence, frequency, hashCode, interval, isCustom, none, operator (+7 more)
+Cohesion: 0.13
+Nodes (14): copyWith, EventRecurrence, frequency, hashCode, interval, isCustom, none, operator (+6 more)
 
 ### Community 534 - "Constants — default_color_palette"
 Cohesion: 0.50
@@ -2810,24 +2827,24 @@ Cohesion: 0.50
 Nodes (4): FLTAuthStateChannelStreamHandler, -initWithAuth, FlutterStreamHandler, NSObject
 
 ### Community 537 - "Calendar Feature — calendar_day_grid"
-Cohesion: 0.17
-Nodes (12): _apiKeyController, build, createState, DevWeatherApiTile, _DevWeatherApiTileState, didUpdateWidget, dispose, initState (+4 more)
+Cohesion: 0.06
+Nodes (31): AppSettings, _apiKeyController, build, createState, DevWeatherApiTile, _DevWeatherApiTileState, didUpdateWidget, dispose (+23 more)
 
 ### Community 539 - "Calendar Feature — calendar_page"
-Cohesion: 0.29
-Nodes (7): _CapsLockCaretPainter, VimAnchoredChrome, ClampToTargetBounds, _TapThroughBarrier, ProseHighlightUnderlay, _SingleChildViewport, SingleChildRenderObjectWidget
+Cohesion: 0.22
+Nodes (8): compactListVerticalDensity, lg, md, sm, VoyagerSpacing, xl, xs, xxs
 
 ### Community 540 - "Calendar Feature — calendar_page"
-Cohesion: 0.05
-Nodes (40): int get, active, data, disabled, enabled, expandKey, hashCode, index (+32 more)
+Cohesion: 0.09
+Nodes (21): int get, AutocorrectScopeData, data, disabled, enabled, hashCode, of, operator (+13 more)
 
 ### Community 541 - "Calendar Feature — calendar_page"
 Cohesion: 0.47
 Nodes (4): CopyBufferCallback, FlutterDesktopPixelBuffer, PixelBufferTexture, copy_buffer_callback_
 
 ### Community 543 - "newline_normalization_test.dart"
-Cohesion: 0.20
-Nodes (10): _ContextMenuLayoutDelegate, _SubmenuLayoutDelegate, _PopoverLayoutDelegate, _TextFieldContextMenuLayoutDelegate, VoyagerPopupMenuRouteLayout, _SparklineBubbleLayout, _ChartBubbleLayout, _BubbleLayout (+2 more)
+Cohesion: 0.10
+Nodes (20): CalendarDayEntry, build, CalendarDayEntryBar, date, entry, fontSize, height, onTap (+12 more)
 
 ### Community 544 - "Todo Feature — todo_page"
 Cohesion: 0.14
@@ -2836,6 +2853,10 @@ Nodes (14): _accentColor, build, _controller, createState, DemoPage, _DemoPageSt
 ### Community 545 - "package:voyager/domain/services/color_palette_codec.dart"
 Cohesion: 0.40
 Nodes (5): Action, _SuspendingRedoAction, _SuspendingUndoAction, RedoTextIntent, UndoTextIntent
+
+### Community 547 - "Firebase Auth (ios) — FLTFirebaseAuthPlugin"
+Cohesion: 0.33
+Nodes (5): appSettingsWithGeometricTextureParams, appSettingsWithGeometricWaveParams, copyWith, geometricTextureParamsFromSettings, geometricWaveParamsFromSettings
 
 ### Community 548 - "Firebase Auth (ios) — FLTFirebaseAuthPlugin"
 Cohesion: 0.12
@@ -2846,16 +2867,16 @@ Cohesion: 0.40
 Nodes (5): FLTPhoneNumberVerificationStreamHandler, -initWithAuthrequest, -initWithAuthrequestsessionfactorInfo, -onCancelWithArguments, -onListenWithArgumentseventSink
 
 ### Community 550 - "Firebase Auth (macos) — FLTFirebaseAuthPlugin"
-Cohesion: 0.22
-Nodes (9): build, child, createState, didUpdateWidget, _entry, initState, LocalOverlayWrapper, _LocalOverlayWrapperState (+1 more)
+Cohesion: 0.11
+Nodes (19): build, _counts, createdId, _createdJournalId, _createJournal, createState, _deleteJournal, initState (+11 more)
 
 ### Community 554 - "Uncategorized — AUDIT"
 Cohesion: 0.10
 Nodes (20): [High] Concurrent edits to one application on two devices lose all but one side (whole-document last-writer-wins), [High] Seeded stages and companies get random ids on every device, so they duplicate across devices and deletes don't reach the others, [High] The open edit panel writes a stale copy over newer changes to the same application, Job Tracker Audit, [Low] A failed save partway through creation can leave a half-written application, and pressing Save again creates a duplicate, [Low] A resumed draft keeps a stage that has since been renamed or deleted, [Low] Each opened application's timeline stays cached for the rest of the session, [Low] Every search keystroke rebuilds the whole page and re-sorts the full list twice (+12 more)
 
 ### Community 558 - "Drift Database Schema — app_database"
-Cohesion: 0.17
-Nodes (12): build, _controller, createState, didUpdateWidget, dispose, _error, initState, _lastUpdatedLabel (+4 more)
+Cohesion: 0.10
+Nodes (18): package:voyager/core/widgets/voyager_time_picker_spinner.dart, package:voyager/features/jobs/jobs_company_field.dart, company, controller, focusField, main, now, pumpAndSettle (+10 more)
 
 ### Community 559 - "Drift Database Schema — app_database"
 Cohesion: 0.50
@@ -2898,32 +2919,32 @@ Cohesion: 0.50
 Nodes (4): 9.1 Vim, 9.2 Snippets, 9.3 List editing, 9. Vim, snippets, lists
 
 ### Community 569 - "recurrence_engine_test.dart"
-Cohesion: 0.28
-Nodes (8): cachedCurrentWeatherProvider, currentWeatherProvider, build, _WeatherButton, _WeatherButtonState, build, main, _WeatherRailProbe
+Cohesion: 0.10
+Nodes (19): container, db, disposeJournalPage, harnessJournal, journalHarnessId, journalHarnessName, journalHarnessSecondId, journalHarnessSecondName (+11 more)
 
 ### Community 570 - "AuthPigeonFirebaseApp"
-Cohesion: 0.22
-Nodes (8): decoration, focusBorderColor, focusShape, hoverColor, _restingBorderColor, restingColor, selectedColor, VoyagerListItemSurface
+Cohesion: 0.11
+Nodes (17): _dreamRepository, DreamWriteCoordinator, _findTask, _journalRepository, _remoteSync, saveEntry, saveTask, _todoRepository (+9 more)
 
 ### Community 571 - "fractional_index.dart"
-Cohesion: 0.02
-Nodes (106): build, color, ColorCornerFlag, colorValue, _CornerFlagPainter, JournalBookmarkFlag, JournalTitleCornerFlag, onSelected (+98 more)
+Cohesion: 0.03
+Nodes (85): LeafDesign, _AnalyticsToolbar, _EmptyTrackersCard, _GridView, _HeatmapGroupDivider, _HeatmapMonthTile, _MacroStatsRow, _SectionLabel (+77 more)
 
 ### Community 572 - "Drift Database Schema — app_database"
 Cohesion: 0.50
 Nodes (4): -checkActionCodeAppcodecompletion, +operationFromRequestType, -parseActionCode, -resolveActionCodeOperationForAppcodefallbackInfocompletion
 
 ### Community 573 - "journal_constants.dart"
-Cohesion: 0.18
-Nodes (10): firestoreId, firestoreJournalId, journalDocumentIdForFirestore, journalDocumentIdFromFirestore, journalReferenceIdForFirestore, journalReferenceIdFromFirestore, legacyJournalFirestoreId, legacyJournalId (+2 more)
+Cohesion: 0.03
+Nodes (67): Icon, IconButton, firestoreId, firestoreJournalId, journalDocumentIdForFirestore, journalDocumentIdFromFirestore, journalReferenceIdForFirestore, journalReferenceIdFromFirestore (+59 more)
 
 ### Community 574 - "soft_delete_undo_toast_test.dart"
-Cohesion: 0.10
-Nodes (17): _authorizationEndpoint, DesktopGoogleOAuth, redirectUri, _tokenEndpoint, OverlayState, package:oauth2/oauth2.dart, package:url_launcher/url_launcher.dart, package:voyager/core/constants/google_auth_config.dart (+9 more)
+Cohesion: 0.13
+Nodes (13): dart:async, _auth, AuthNotifier, dispose, _isAuthenticated, _subscription, _callbacks, flushAll (+5 more)
 
 ### Community 575 - "Intent"
-Cohesion: 0.22
-Nodes (8): isDue, kTrackerStorageWeekStartsMonday, longestJournalStreak, missedPeriods, _nextPeriod, PeriodicPromptService, periodStartFor, trackerPeriodStartFor
+Cohesion: 0.11
+Nodes (17): container, db, _listId, main, _now, _parent, pumpAndSettle, pumpPanel (+9 more)
 
 ### Community 576 - "Drift Database Schema — app_database"
 Cohesion: 0.50
@@ -2934,8 +2955,8 @@ Cohesion: 0.50
 Nodes (4): -checkActionCodeAppcodecompletion, +operationFromRequestType, -parseActionCode, -resolveActionCodeOperationForAppcodefallbackInfocompletion
 
 ### Community 578 - "firebase_auth_errors.dart"
-Cohesion: 0.25
-Nodes (7): byId, main, merger, opsA, opsB, sessionLocal, sessionRemote
+Cohesion: 0.29
+Nodes (6): MultiFactorUserHostApi, EnrollPhone, EnrollTotp, GetEnrolledFactors, GetSession, Unenroll
 
 ### Community 579 - "_TaskRowState"
 Cohesion: 0.13
@@ -2950,16 +2971,16 @@ Cohesion: 0.25
 Nodes (7): package:voyager/features/todo/todo_list_search.dart, id, main, notes, now, _task, title
 
 ### Community 583 - "dev_geometric_wave_tile.dart"
-Cohesion: 0.09
-Nodes (19): dart:ui, Error, colorForTag, extractTags, index, journalTagPattern, kTagPaletteDark, kTagPaletteLight (+11 more)
+Cohesion: 0.29
+Nodes (7): _CompanyAssignment, _CompanyAssignmentState, NotificationPopoverWarmup, _NotificationPopoverWarmupState, _PinnedNoteRow, _PinnedNoteRowState, State
 
 ### Community 584 - "MultiFactorUserHostApi"
 Cohesion: 0.43
 Nodes (5): Component, ComponentRegistrar, FlutterFirebaseAuthRegistrar, Keep, Override
 
 ### Community 585 - "TextureRegistrarImpl"
-Cohesion: 0.29
-Nodes (6): firestoreId, legacyTodoListFirestoreId, legacyTodoListId, localId, todoListDocumentIdForFirestore, todoListDocumentIdFromFirestore
+Cohesion: 0.40
+Nodes (4): MultiFactorTotpHostApi, GenerateSecret, GetAssertionForEnrollment, GetAssertionForSignIn
 
 ### Community 586 - "InternalUserDetails"
 Cohesion: 0.33
@@ -2970,70 +2991,155 @@ Cohesion: 0.29
 Nodes (6): motion_prefs.dart, rubber_band.dart, spring_motion.dart, voyager_crossfade.dart, voyager_spring.dart, window_visibility.dart
 
 ### Community 589 - "MultiFactorTotpHostApi"
-Cohesion: 0.50
-Nodes (3): package:voyager/core/spellcheck/dictionary_search.dart, _bundled, main
+Cohesion: 0.15
+Nodes (11): App, Auth, Future, StreamHandler<flutter::EncodableValue>, AuthStateStreamHandler, auth_, listener_, GetPluginConstantsForFirebaseApp (+3 more)
 
-### Community 590 - "Timer?"
-Cohesion: 0.10
-Nodes (18): DateTime?, StatisticTracker, copyWithDeleted, createdAt, deletedAt, id, isDeleted, updatedAt (+10 more)
-
-### Community 592 - "<MultiFactorUserHostApi>"
-Cohesion: 0.11
-Nodes (16): InheritedWidget, CapsLockIndicatorScope, enabled, of, updateShouldNotify, MediaPasteOwnerScope, SnippetEnabledScope, SnippetSettingsLauncher (+8 more)
+### Community 593 - "prompt_name_dialog.dart"
+Cohesion: 0.12
+Nodes (16): double? contentWidth,
+  bool, build, contentWidth, _controller, createState, dispose, enterToSubmit, initial (+8 more)
 
 ### Community 597 - "<MultiFactorTotpSecretHostApi>"
 Cohesion: 0.50
 Nodes (4): SingleChildRenderObjectElement, _SingleChildViewportElement, NotifiableElementMixin, ViewportElementMixin
 
+### Community 598 - "_QuickDelayedDragStartListener"
+Cohesion: 0.12
+Nodes (16): _auto, empty, from, hasAuto, hashCode, hasManual, hasTrigger, isEmpty (+8 more)
+
+### Community 600 - "create_name_color_dialog.dart"
+Cohesion: 0.12
+Nodes (16): build, _CreateNameColorDialog, _CreateNameColorDialogState, createState, dispose, initialColor, initState, _nameController (+8 more)
+
 ### Community 601 - "weather_chart_curve_test.dart"
 Cohesion: 0.67
 Nodes (3): calendarTodoMarkersProvider, build, CalendarDayTodoPopover
 
+### Community 602 - "exercise_target_inline_edit_test.dart"
+Cohesion: 0.12
+Nodes (16): package:voyager/features/workout/exercise_detail_view.dart, container, db, exercise, _exerciseId, found, main, now (+8 more)
+
+### Community 603 - "study_card_delete_undo_test.dart"
+Cohesion: 0.12
+Nodes (16): container, db, _deckId, _deleteShownCard, gesture, main, now, _pump (+8 more)
+
+### Community 604 - "flagged_word_rules.dart"
+Cohesion: 0.12
+Nodes (14): flaggedWordShapeError, hits, naming, null, pairsPointingAt, pointing, validateFlagReplacement, validateFlagWord (+6 more)
+
+### Community 605 - "SoftDeletable"
+Cohesion: 0.12
+Nodes (16): TrackerValue, Asset, AssetValuation, FinancialTransaction, GoalAllocation, Journal, MediaReference, SoftDeletable (+8 more)
+
+### Community 606 - "snippet_enabled_scope.dart"
+Cohesion: 0.13
+Nodes (14): active, data, disabled, enabled, expandKey, hashCode, index, of (+6 more)
+
+### Community 607 - "study_card_bulk_import.dart"
+Cohesion: 0.13
+Nodes (14): back, cards, front, inBack, lineNumber, lines, normalized, parseStudyBulkImportText (+6 more)
+
+### Community 609 - "DateTime?"
+Cohesion: 0.14
+Nodes (12): DateTime?, copyWithDeleted, createdAt, deletedAt, id, isDeleted, updatedAt, version (+4 more)
+
+### Community 610 - "recurrence_engine_test.dart"
+Cohesion: 0.14
+Nodes (13): DateTime? recurrenceEndDate,
+  List, package:voyager/domain/services/recurrence_engine.dart, coveredDays, d, end, event, exceptionDates, main (+5 more)
+
+### Community 611 - "calendar_event_delete.dart"
+Cohesion: 0.14
+Nodes (13): all, CalendarEventDeletion, confirmed, deleteCalendarEventInteractive, deletion, events, message, _orphanedOverrideIds (+5 more)
+
+### Community 612 - "journal_entry_actions.dart"
+Cohesion: 0.14
+Nodes (13): accent, chars, formattedDate, formattedTime, paragraphs, readingTimeMin, sentences, showMoveToJournalDialog (+5 more)
+
+### Community 613 - "spell_check_squiggle_layer_test.dart"
+Cohesion: 0.14
+Nodes (13): RichText, combined, count, false, main, out, pumpLayer, richText (+5 more)
+
+### Community 614 - "PluginRegistrarManager"
+Cohesion: 0.15
+Nodes (10): ClearPlugins, PluginRegistrarManager, GetInstance, OnRegistrarDestroyed, FlutterDesktopPluginRegistrarRef, FlutterDesktopPluginRegistrarRef, PluginRegistrar::PluginRegistrar(), PluginRegistrarManager::GetInstance() (+2 more)
+
+### Community 615 - "life_tracker_models.dart"
+Cohesion: 0.15
+Nodes (12): BucketListItem, completed, completedAt, copyWith, createdAt, deletedAt, id, note (+4 more)
+
+### Community 616 - "package:voyager/core/widgets/voyager_dialog.dart"
+Cohesion: 0.17
+Nodes (10): BuildContext, isCompactWidth, kCompactWidthBreakpoint, WindowSizeClass, WindowSizeClassX, package:voyager/core/widgets/voyager_dialog.dart, context, main (+2 more)
+
+### Community 617 - "AuthPigeonFirebaseApp"
+Cohesion: 0.18
+Nodes (12): AuthPigeonFirebaseApp, app_name_, custom_auth_domain, FromEncodableList, Hash, operator==, set_app_name, set_custom_auth_domain (+4 more)
+
 ### Community 618 - "TEST"
 Cohesion: 0.04
-Nodes (46): id, OutOfSyncJournalEntryPurge, OutOfSyncJournalEntryTarget, purgeAll, purgeOne, searchHint, targets, title (+38 more)
+Nodes (53): id, OutOfSyncJournalEntryPurge, OutOfSyncJournalEntryTarget, purgeAll, purgeOne, searchHint, targets, title (+45 more)
 
 ### Community 619 - "googleCalendarSyncProvider"
-Cohesion: 0.12
-Nodes (17): build, createState, didChangeDependencies, didUpdateWidget, dispose, ease, enabled, initState (+9 more)
-
-### Community 939 - "SyncConflictRepository"
-Cohesion: 0.25
-Nodes (7): BuildContext, WindowSizeClassX, package:voyager/core/widgets/voyager_toast.dart, ctx, main, pumpHost, pumpWidget
-
-### Community 951 - "life_tracker_stat_popup_width_test.dart"
 Cohesion: 0.08
-Nodes (22): package:voyager/features/life_tracker/bucket_list_popup.dart, package:voyager/features/life_tracker/life_tree_popover.dart, required String id,
-  String, container, db, main, now, pumpAndSettle (+14 more)
+Nodes (23): StudyCard, backImages, build, card, _face, frontImages, keywords, matches (+15 more)
+
+### Community 620 - "periodic_prompt_service.dart"
+Cohesion: 0.22
+Nodes (8): isDue, kTrackerStorageWeekStartsMonday, longestJournalStreak, missedPeriods, _nextPeriod, PeriodicPromptService, periodStartFor, trackerPeriodStartFor
+
+### Community 621 - "TextureRegistrarImpl"
+Cohesion: 0.22
+Nodes (8): function, TextureRegistrarImpl::UnregisterTexture(), FlutterDesktopTextureRegistrarRef, TextureRegistrarImpl, MarkTextureFrameAvailable, RegisterTexture, texture_registrar_ref_, UnregisterTexture
+
+### Community 622 - "_DreamJournalPageState"
+Cohesion: 0.29
+Nodes (7): allDreamEntriesProvider, dreamRepositoryProvider, dreamWriteCoordinatorProvider, build, DreamJournalPage, _DreamJournalPageState, initState
+
+### Community 623 - "SingleChildRenderObjectWidget"
+Cohesion: 0.29
+Nodes (7): _CapsLockCaretPainter, VimAnchoredChrome, ClampToTargetBounds, _TapThroughBarrier, ProseHighlightUnderlay, _SingleChildViewport, SingleChildRenderObjectWidget
+
+### Community 624 - "CustomClipper"
+Cohesion: 0.40
+Nodes (6): CustomClipper, _ViewportClipper, _WeekTimedViewportClipper, _TrunkAndBranchesClipper, _LeftFractionClipper, Path?
+
+### Community 625 - "_revealEvent"
+Cohesion: 0.40
+Nodes (5): _revealEvent, _revealTask, revealRequestProvider, Route /calendar, Route /todo
+
+### Community 626 - "FinanceUiPrefsStore"
+Cohesion: 0.50
+Nodes (4): FileFinanceUiPrefsStore, FinanceUiPrefsStore, MemoryFinanceUiPrefsStore, _SlowStore
+
+### Community 627 - "dictionary_search_test.dart"
+Cohesion: 0.50
+Nodes (3): package:voyager/core/spellcheck/dictionary_search.dart, _bundled, main
 
 ### Community 957 - "<MultiFactorTotpHostApi>"
 Cohesion: 0.13
 Nodes (13): <MultiFactorTotpHostApi>, -generateSecretSessionIdcompletion, -getAssertionForEnrollmentSecretKeyoneTimePasswordcompletion, -getAssertionForSignInEnrollmentIdoneTimePasswordcompletion, <MultiFactorTotpSecretHostApi>, -generateQrCodeUrlSecretKeyaccountNameissuercompletion, -openInOtpAppSecretKeyqrCodeUrlcompletion, <MultiFactorUserHostApi> (+5 more)
 
-### Community 958 - "CustomClipper"
-Cohesion: 0.40
-Nodes (6): CustomClipper, _ViewportClipper, _WeekTimedViewportClipper, _TrunkAndBranchesClipper, _LeftFractionClipper, Path?
-
 ### Community 959 - "package:voyager/core/dev/dev_flags.dart"
-Cohesion: 0.11
-Nodes (18): _byAge, byCreated, _cardsByDeck, deck, _decks, dropped, effectiveCards, empty (+10 more)
+Cohesion: 0.06
+Nodes (32): _activeUntil, idleGrace, instance, maxWait, noteActivity, ScrollActivityGate, waitUntilIdle, _byAge (+24 more)
 
 ## Knowledge Gaps
-- **18364 isolated node(s):** `1. Goals`, `2. Non-goals (v1)`, `3.1 Snooze vs schedule (worked example)`, `3.2 Coalescing (same rule)`, `4.1 `DeviceRegistration`` (+18359 more)
+- **18383 isolated node(s):** `_CompanyColors`, `_panelController`, `_panelAnimation`, `_searchController`, `_midnightTimer` (+18378 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **49 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **48 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `ActionCodeInfoOperation` connect `Test Suite — package:flutter_riverpod/flu` to `Firebase Auth (ios) — firebase_auth_messages.g`, `Firebase Auth (macos) — firebase_auth_messages.g`, `Firebase Auth (android) — NonNull`, `Firebase Auth (windows) — messages.g.cpp`?**
+- **Why does `ActionCodeInfoOperation` connect `Life Tracker Feature — blossom_stat_popup` to `Firebase Auth (ios) — firebase_auth_messages.g`, `Firebase Auth (macos) — firebase_auth_messages.g`, `Test Suite — package:flutter_riverpod/flu`, `Firebase Auth (android) — NonNull`, `Test Suite — workout_test`?**
   _High betweenness centrality (0.061) - this node is a cross-community bridge._
-- **Why does `InternalActionCodeInfo` connect `Firebase Auth (macos) — firebase_auth_messages.g` to `Test Suite — package:flutter_riverpod/flu`?**
+- **Why does `InternalActionCodeInfo` connect `Firebase Auth (macos) — firebase_auth_messages.g` to `Life Tracker Feature — blossom_stat_popup`?**
   _High betweenness centrality (0.016) - this node is a cross-community bridge._
-- **Why does `ActionCodeInfoOperationBox` connect `Firebase Auth (macos) — firebase_auth_messages.g` to `Test Suite — package:flutter_riverpod/flu`?**
+- **Why does `ActionCodeInfoOperationBox` connect `Firebase Auth (macos) — firebase_auth_messages.g` to `Life Tracker Feature — blossom_stat_popup`?**
   _High betweenness centrality (0.016) - this node is a cross-community bridge._
-- **What connects `1. Goals`, `2. Non-goals (v1)`, `3.1 Snooze vs schedule (worked example)` to the rest of the system?**
-  _18365 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **What connects `_CompanyColors`, `_panelController`, `_panelAnimation` to the rest of the system?**
+  _18384 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Drift Database Schema — app_database` be split into smaller, more focused modules?**
   _Cohesion score 0.00186219739292365 - nodes in this community are weakly interconnected._
 - **Should `Firebase Auth — CHANGELOG` be split into smaller, more focused modules?**

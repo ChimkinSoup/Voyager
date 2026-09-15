@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
+import 'package:voyager/core/widgets/edit_side_panel_host.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
@@ -19,7 +20,8 @@ import 'package:voyager/features/jobs/jobs_actions.dart';
 import 'package:voyager/features/jobs/jobs_company_field.dart';
 import 'package:voyager/features/jobs/jobs_option_list.dart';
 
-const jobsEditPanelWidth = 420.0;
+/// Default editor panel width — see [EditSidePanelMetrics.defaultWidth].
+const jobsEditPanelWidth = EditSidePanelMetrics.defaultWidth;
 
 /// Editor for one application, in the todo page's side-panel idiom.
 ///

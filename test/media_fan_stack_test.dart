@@ -76,20 +76,21 @@ void main() {
     }
   }
 
-  Future<void> pumpFan(WidgetTester tester) async {
+  Future<void> pumpFan(WidgetTester tester, {Color? accentColor}) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           mediaServiceProvider.overrideWith((ref) => service),
           mediaFileStoreProvider.overrideWithValue(fileStore),
         ],
-        child: const MaterialApp(
+        child: MaterialApp(
           home: Scaffold(
             body: Align(
               alignment: Alignment.bottomRight,
               child: MediaFanStack(
                 collection: FirestoreCollections.journalEntries,
                 documentId: entryId,
+                accentColor: accentColor,
               ),
             ),
           ),
@@ -126,6 +127,16 @@ void main() {
 
     expect(find.byType(MediaImage), findsNWidgets(3));
     expect(find.text('+2'), findsOneWidget);
+  });
+
+  testWidgets('the count badge takes dark text on a pale accent', (
+    tester,
+  ) async {
+    await attach(tester, 5);
+    await pumpFan(tester, accentColor: const Color(0xFFF5F0C8));
+
+    final badge = tester.widget<Text>(find.text('+2'));
+    expect(badge.style?.color, const Color(0xFF1B1B22));
   });
 
   testWidgets('the fan opens the lightbox on every image, not just the three', (

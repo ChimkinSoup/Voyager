@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/paper_texture.dart';
 import 'package:voyager/core/widgets/tag_chip.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
@@ -87,6 +88,7 @@ const _cardRadius = BorderRadius.all(Radius.circular(24));
 
 Widget _glassContainer({
   required ThemeData theme,
+  required VoyagerColors vc,
   required FragmentProgram? paperProgram,
   required Widget child,
 
@@ -94,38 +96,52 @@ Widget _glassContainer({
   /// "prefers-reduced-transparency", handled the same way [GlassSurface] does.
   required bool nearSolid,
 }) {
+  final isDark = theme.brightness == Brightness.dark;
   final shadow = BoxShadow(
-    color: Colors.black.withValues(alpha: 0.35),
-    blurRadius: 24,
+    color: vc.shadow.withValues(alpha: isDark ? 0.35 : vc.strongShadowAlpha),
+    blurRadius: 24 * vc.shadowBlurScale,
     spreadRadius: 2,
     offset: const Offset(0, 8),
   );
 
-  // Dark theme: the original translucent glass-over-blur look, unchanged —
-  // it already reads fine against a dark backdrop. Under high contrast the
-  // blur comes off and the fill goes near-solid, so the card separates from
-  // the petals by its own surface rather than by frosting them.
-  if (theme.brightness == Brightness.dark) {
+  // Dark theme: a graphite paper plate, the same doctrine as [GlassButton].
+  // It used to be a translucent tint over a BackdropFilter, but that blurred
+  // the live triangle grid every frame — a smear behind the text and a GPU
+  // cost for a card that sits still. The plate stays just short of opaque so
+  // the grid is a faint presence rather than a moving texture under the
+  // prose; high contrast takes it the rest of the way.
+  if (isDark) {
+    final plate = theme.cardTheme.color ?? theme.colorScheme.surface;
+    final alpha = nearSolid ? 0.97 : 0.94;
     return Container(
       decoration: BoxDecoration(borderRadius: _cardRadius, boxShadow: [shadow]),
       child: ClipRRect(
         borderRadius: _cardRadius,
-        child: BackdropFilter(
-          filter: nearSolid
-              ? ImageFilter.blur(sigmaX: 0, sigmaY: 0)
-              : ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            decoration: BoxDecoration(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: _cardRadius,
+            border: Border.all(
               color: nearSolid
-                  ? theme.colorScheme.surface.withValues(alpha: 0.97)
-                  : Colors.white.withValues(alpha: 0.06),
-              borderRadius: _cardRadius,
-              border: Border.all(
-                color: Colors.white.withValues(alpha: nearSolid ? 0.5 : 0.22),
-              ),
+                  ? theme.colorScheme.onSurface.withValues(alpha: 0.5)
+                  : vc.strongHairline,
             ),
-            padding: const EdgeInsets.all(24),
-            child: child,
+          ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: PaperTexture(
+                  program: paperProgram,
+                  baseColor: plate.withValues(alpha: alpha),
+                  // Specks a step toward bone so grain reads on graphite.
+                  speckColor: Color.lerp(
+                    plate,
+                    theme.colorScheme.onSurface,
+                    0.45,
+                  )!.withValues(alpha: alpha),
+                ),
+              ),
+              Padding(padding: const EdgeInsets.all(24), child: child),
+            ],
           ),
         ),
       ),
@@ -252,6 +268,7 @@ class _CardFront extends ConsumerWidget {
 
     return _glassContainer(
       theme: theme,
+      vc: VoyagerColors.of(context),
       nearSolid: MediaQuery.maybeOf(context)?.highContrast ?? false,
       paperProgram: ref.watch(paperShaderProvider).valueOrNull,
       child: Column(
@@ -319,6 +336,7 @@ class _CardBack extends ConsumerWidget {
     final settings = ref.watch(settingsProvider).valueOrNull;
     return _glassContainer(
       theme: theme,
+      vc: VoyagerColors.of(context),
       nearSolid: MediaQuery.maybeOf(context)?.highContrast ?? false,
       paperProgram: ref.watch(paperShaderProvider).valueOrNull,
       child: VoyagerScrollView(

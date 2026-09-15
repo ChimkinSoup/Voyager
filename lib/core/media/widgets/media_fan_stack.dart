@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/media/widgets/media_image.dart';
 import 'package:voyager/core/media/widgets/media_lightbox.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/domain/models/media_models.dart';
 
 /// A corner-sized fan of an owner's images.
@@ -194,6 +195,7 @@ class _FanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final vc = VoyagerColors.of(context);
     return Container(
       width: size,
       height: size,
@@ -205,8 +207,12 @@ class _FanCard extends StatelessWidget {
         border: Border.all(color: theme.colorScheme.surface, width: 2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.22),
-            blurRadius: 6,
+            color: vc.shadow.withValues(
+              alpha: theme.brightness == Brightness.dark
+                  ? 0.22
+                  : vc.strongShadowAlpha,
+            ),
+            blurRadius: 6 * vc.shadowBlurScale,
             offset: const Offset(0, 2),
           ),
         ],
@@ -237,8 +243,11 @@ class _FanCount extends StatelessWidget {
       ),
       child: Text(
         '+$count',
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          // Picked from the accent's luminance — see VoyagerColors.onAccent.
+          color: accent.computeLuminance() > 0.55
+              ? const Color(0xFF1B1B22)
+              : Colors.white,
           fontSize: 10,
           fontWeight: FontWeight.w600,
           height: 1.2,

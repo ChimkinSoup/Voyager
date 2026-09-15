@@ -167,14 +167,14 @@ void main() {
     await tester.pump(const Duration(milliseconds: 120));
     final midFlip = _labelAlpha(tester, 'Fail');
     expect(midFlip, greaterThan(0.4));
-    expect(midFlip, lessThan(0.87));
+    expect(midFlip, lessThan(1.0));
 
     await tester.pumpAndSettle();
-    expect(_labelAlpha(tester, 'Fail'), closeTo(0.87, 0.001));
+    expect(_labelAlpha(tester, 'Fail'), closeTo(1.0, 0.001));
 
     // All four fade together.
     for (final label in ['Hard', 'Good', 'Easy']) {
-      expect(_labelAlpha(tester, label), closeTo(0.87, 0.001));
+      expect(_labelAlpha(tester, label), closeTo(1.0, 0.001));
     }
   });
 
@@ -184,7 +184,7 @@ void main() {
     await _pumpSession(tester);
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pumpAndSettle();
-    expect(_labelAlpha(tester, 'Fail'), closeTo(0.87, 0.001));
+    expect(_labelAlpha(tester, 'Fail'), closeTo(1.0, 0.001));
 
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pump();
@@ -192,11 +192,11 @@ void main() {
     // The gate shuts on the first frame of the return, but the buttons are
     // still lit — they follow the card down rather than snapping grey.
     expect(_gradingButtonsEnabled(tester), isFalse);
-    expect(_labelAlpha(tester, 'Fail'), closeTo(0.87, 0.001));
+    expect(_labelAlpha(tester, 'Fail'), closeTo(1.0, 0.001));
 
     await tester.pump(const Duration(milliseconds: 120));
     final midFlip = _labelAlpha(tester, 'Fail');
-    expect(midFlip, lessThan(0.87));
+    expect(midFlip, lessThan(1.0));
     expect(midFlip, greaterThan(0.4));
 
     await tester.pumpAndSettle();

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 
 /// Opens [builder] via [showGeneralDialog] with a spring-shaped scale+fade
 /// entrance instead of Material's fixed-curve default, honoring
@@ -9,13 +10,14 @@ Future<T?> showVoyagerDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   bool barrierDismissible = true,
-  Color barrierColor = Colors.black54,
+  /// Defaults to the theme's [VoyagerColors.scrim].
+  Color? barrierColor,
 }) {
   return showGeneralDialog<T>(
     context: context,
     barrierDismissible: barrierDismissible,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-    barrierColor: barrierColor,
+    barrierColor: barrierColor ?? VoyagerColors.of(context).scrim,
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (context, animation, secondaryAnimation) => builder(context),
     transitionBuilder: (context, animation, secondaryAnimation, child) {

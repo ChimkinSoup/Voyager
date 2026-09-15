@@ -16,14 +16,13 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/recurrence_rule.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/core/media/widgets/media_gallery_strip.dart';
+import 'package:voyager/core/widgets/edit_side_panel_host.dart';
 import 'package:voyager/features/todo/todo_edit_panel.dart';
 
 import 'fakes/fake_weather_api_client.dart';
 
-/// Mirrors `_todoEditPanelWidth` in todo_page.dart. The panel is a fixed-width
-/// side panel — the open animation slides a 420-wide child rather than
-/// relaying it out — so this is the only width the row is ever built at.
-const double kTodoEditPanelWidth = 420.0;
+/// Default editor panel width — see [EditSidePanelMetrics.defaultWidth].
+const double kTodoEditPanelWidth = EditSidePanelMetrics.defaultWidth;
 
 /// The narrowest the row survives, with the reset button at its natural size.
 /// Guarded below so that shrinking [kTodoEditPanelWidth] past it fails loudly

@@ -111,7 +111,11 @@ class _ExerciseDetailOverlayState extends State<_ExerciseDetailOverlay>
           final scrim = Positioned.fill(
             child: IgnorePointer(
               child: ColoredBox(
-                color: Colors.black.withValues(alpha: 0.5 * t),
+                color: Color.lerp(
+                  Colors.transparent,
+                  VoyagerColors.of(context).scrim,
+                  t,
+                )!,
               ),
             ),
           );

@@ -7955,6 +7955,17 @@ class $SettingsTableTable extends SettingsTable
         type: DriftSqlType.double,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _editSidePanelWidthMeta =
+      const VerificationMeta('editSidePanelWidth');
+  @override
+  late final GeneratedColumn<double> editSidePanelWidth =
+      GeneratedColumn<double>(
+        'edit_side_panel_width',
+        aliasedName,
+        true,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _geometricTextureScaleMeta =
       const VerificationMeta('geometricTextureScale');
   @override
@@ -8860,6 +8871,7 @@ class $SettingsTableTable extends SettingsTable
     weatherChartCurveTension,
     colorPaletteJson,
     journalEntryListWidth,
+    editSidePanelWidth,
     geometricTextureScale,
     geometricTextureIntensity,
     geometricTextureFocalSpread,
@@ -9542,6 +9554,15 @@ class $SettingsTableTable extends SettingsTable
         journalEntryListWidth.isAcceptableOrUnknown(
           data['journal_entry_list_width']!,
           _journalEntryListWidthMeta,
+        ),
+      );
+    }
+    if (data.containsKey('edit_side_panel_width')) {
+      context.handle(
+        _editSidePanelWidthMeta,
+        editSidePanelWidth.isAcceptableOrUnknown(
+          data['edit_side_panel_width']!,
+          _editSidePanelWidthMeta,
         ),
       );
     }
@@ -10426,6 +10447,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.double,
         data['${effectivePrefix}journal_entry_list_width'],
       ),
+      editSidePanelWidth: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}edit_side_panel_width'],
+      ),
       geometricTextureScale: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}geometric_texture_scale'],
@@ -10809,6 +10834,7 @@ class SettingsTableData extends DataClass
   final double weatherChartCurveTension;
   final String? colorPaletteJson;
   final double? journalEntryListWidth;
+  final double? editSidePanelWidth;
   final double geometricTextureScale;
   final double geometricTextureIntensity;
   final double geometricTextureFocalSpread;
@@ -10987,6 +11013,7 @@ class SettingsTableData extends DataClass
     required this.weatherChartCurveTension,
     this.colorPaletteJson,
     this.journalEntryListWidth,
+    this.editSidePanelWidth,
     required this.geometricTextureScale,
     required this.geometricTextureIntensity,
     required this.geometricTextureFocalSpread,
@@ -11209,6 +11236,9 @@ class SettingsTableData extends DataClass
     }
     if (!nullToAbsent || journalEntryListWidth != null) {
       map['journal_entry_list_width'] = Variable<double>(journalEntryListWidth);
+    }
+    if (!nullToAbsent || editSidePanelWidth != null) {
+      map['edit_side_panel_width'] = Variable<double>(editSidePanelWidth);
     }
     map['geometric_texture_scale'] = Variable<double>(geometricTextureScale);
     map['geometric_texture_intensity'] = Variable<double>(
@@ -11484,6 +11514,9 @@ class SettingsTableData extends DataClass
       journalEntryListWidth: journalEntryListWidth == null && nullToAbsent
           ? const Value.absent()
           : Value(journalEntryListWidth),
+      editSidePanelWidth: editSidePanelWidth == null && nullToAbsent
+          ? const Value.absent()
+          : Value(editSidePanelWidth),
       geometricTextureScale: Value(geometricTextureScale),
       geometricTextureIntensity: Value(geometricTextureIntensity),
       geometricTextureFocalSpread: Value(geometricTextureFocalSpread),
@@ -11731,6 +11764,9 @@ class SettingsTableData extends DataClass
       colorPaletteJson: serializer.fromJson<String?>(json['colorPaletteJson']),
       journalEntryListWidth: serializer.fromJson<double?>(
         json['journalEntryListWidth'],
+      ),
+      editSidePanelWidth: serializer.fromJson<double?>(
+        json['editSidePanelWidth'],
       ),
       geometricTextureScale: serializer.fromJson<double>(
         json['geometricTextureScale'],
@@ -12011,6 +12047,7 @@ class SettingsTableData extends DataClass
       'journalEntryListWidth': serializer.toJson<double?>(
         journalEntryListWidth,
       ),
+      'editSidePanelWidth': serializer.toJson<double?>(editSidePanelWidth),
       'geometricTextureScale': serializer.toJson<double>(geometricTextureScale),
       'geometricTextureIntensity': serializer.toJson<double>(
         geometricTextureIntensity,
@@ -12218,6 +12255,7 @@ class SettingsTableData extends DataClass
     double? weatherChartCurveTension,
     Value<String?> colorPaletteJson = const Value.absent(),
     Value<double?> journalEntryListWidth = const Value.absent(),
+    Value<double?> editSidePanelWidth = const Value.absent(),
     double? geometricTextureScale,
     double? geometricTextureIntensity,
     double? geometricTextureFocalSpread,
@@ -12406,6 +12444,9 @@ class SettingsTableData extends DataClass
     journalEntryListWidth: journalEntryListWidth.present
         ? journalEntryListWidth.value
         : this.journalEntryListWidth,
+    editSidePanelWidth: editSidePanelWidth.present
+        ? editSidePanelWidth.value
+        : this.editSidePanelWidth,
     geometricTextureScale: geometricTextureScale ?? this.geometricTextureScale,
     geometricTextureIntensity:
         geometricTextureIntensity ?? this.geometricTextureIntensity,
@@ -12736,6 +12777,9 @@ class SettingsTableData extends DataClass
       journalEntryListWidth: data.journalEntryListWidth.present
           ? data.journalEntryListWidth.value
           : this.journalEntryListWidth,
+      editSidePanelWidth: data.editSidePanelWidth.present
+          ? data.editSidePanelWidth.value
+          : this.editSidePanelWidth,
       geometricTextureScale: data.geometricTextureScale.present
           ? data.geometricTextureScale.value
           : this.geometricTextureScale,
@@ -13022,6 +13066,7 @@ class SettingsTableData extends DataClass
           ..write('weatherChartCurveTension: $weatherChartCurveTension, ')
           ..write('colorPaletteJson: $colorPaletteJson, ')
           ..write('journalEntryListWidth: $journalEntryListWidth, ')
+          ..write('editSidePanelWidth: $editSidePanelWidth, ')
           ..write('geometricTextureScale: $geometricTextureScale, ')
           ..write('geometricTextureIntensity: $geometricTextureIntensity, ')
           ..write('geometricTextureFocalSpread: $geometricTextureFocalSpread, ')
@@ -13185,6 +13230,7 @@ class SettingsTableData extends DataClass
     weatherChartCurveTension,
     colorPaletteJson,
     journalEntryListWidth,
+    editSidePanelWidth,
     geometricTextureScale,
     geometricTextureIntensity,
     geometricTextureFocalSpread,
@@ -13332,6 +13378,7 @@ class SettingsTableData extends DataClass
           other.weatherChartCurveTension == this.weatherChartCurveTension &&
           other.colorPaletteJson == this.colorPaletteJson &&
           other.journalEntryListWidth == this.journalEntryListWidth &&
+          other.editSidePanelWidth == this.editSidePanelWidth &&
           other.geometricTextureScale == this.geometricTextureScale &&
           other.geometricTextureIntensity == this.geometricTextureIntensity &&
           other.geometricTextureFocalSpread ==
@@ -13489,6 +13536,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<double> weatherChartCurveTension;
   final Value<String?> colorPaletteJson;
   final Value<double?> journalEntryListWidth;
+  final Value<double?> editSidePanelWidth;
   final Value<double> geometricTextureScale;
   final Value<double> geometricTextureIntensity;
   final Value<double> geometricTextureFocalSpread;
@@ -13627,6 +13675,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.weatherChartCurveTension = const Value.absent(),
     this.colorPaletteJson = const Value.absent(),
     this.journalEntryListWidth = const Value.absent(),
+    this.editSidePanelWidth = const Value.absent(),
     this.geometricTextureScale = const Value.absent(),
     this.geometricTextureIntensity = const Value.absent(),
     this.geometricTextureFocalSpread = const Value.absent(),
@@ -13766,6 +13815,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.weatherChartCurveTension = const Value.absent(),
     this.colorPaletteJson = const Value.absent(),
     this.journalEntryListWidth = const Value.absent(),
+    this.editSidePanelWidth = const Value.absent(),
     this.geometricTextureScale = const Value.absent(),
     this.geometricTextureIntensity = const Value.absent(),
     this.geometricTextureFocalSpread = const Value.absent(),
@@ -13905,6 +13955,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<double>? weatherChartCurveTension,
     Expression<String>? colorPaletteJson,
     Expression<double>? journalEntryListWidth,
+    Expression<double>? editSidePanelWidth,
     Expression<double>? geometricTextureScale,
     Expression<double>? geometricTextureIntensity,
     Expression<double>? geometricTextureFocalSpread,
@@ -14086,6 +14137,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (colorPaletteJson != null) 'color_palette_json': colorPaletteJson,
       if (journalEntryListWidth != null)
         'journal_entry_list_width': journalEntryListWidth,
+      if (editSidePanelWidth != null)
+        'edit_side_panel_width': editSidePanelWidth,
       if (geometricTextureScale != null)
         'geometric_texture_scale': geometricTextureScale,
       if (geometricTextureIntensity != null)
@@ -14279,6 +14332,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<double>? weatherChartCurveTension,
     Value<String?>? colorPaletteJson,
     Value<double?>? journalEntryListWidth,
+    Value<double?>? editSidePanelWidth,
     Value<double>? geometricTextureScale,
     Value<double>? geometricTextureIntensity,
     Value<double>? geometricTextureFocalSpread,
@@ -14442,6 +14496,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       colorPaletteJson: colorPaletteJson ?? this.colorPaletteJson,
       journalEntryListWidth:
           journalEntryListWidth ?? this.journalEntryListWidth,
+      editSidePanelWidth: editSidePanelWidth ?? this.editSidePanelWidth,
       geometricTextureScale:
           geometricTextureScale ?? this.geometricTextureScale,
       geometricTextureIntensity:
@@ -14835,6 +14890,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         journalEntryListWidth.value,
       );
     }
+    if (editSidePanelWidth.present) {
+      map['edit_side_panel_width'] = Variable<double>(editSidePanelWidth.value);
+    }
     if (geometricTextureScale.present) {
       map['geometric_texture_scale'] = Variable<double>(
         geometricTextureScale.value,
@@ -15204,6 +15262,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('weatherChartCurveTension: $weatherChartCurveTension, ')
           ..write('colorPaletteJson: $colorPaletteJson, ')
           ..write('journalEntryListWidth: $journalEntryListWidth, ')
+          ..write('editSidePanelWidth: $editSidePanelWidth, ')
           ..write('geometricTextureScale: $geometricTextureScale, ')
           ..write('geometricTextureIntensity: $geometricTextureIntensity, ')
           ..write('geometricTextureFocalSpread: $geometricTextureFocalSpread, ')
@@ -44329,6 +44388,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<double> weatherChartCurveTension,
       Value<String?> colorPaletteJson,
       Value<double?> journalEntryListWidth,
+      Value<double?> editSidePanelWidth,
       Value<double> geometricTextureScale,
       Value<double> geometricTextureIntensity,
       Value<double> geometricTextureFocalSpread,
@@ -44469,6 +44529,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<double> weatherChartCurveTension,
       Value<String?> colorPaletteJson,
       Value<double?> journalEntryListWidth,
+      Value<double?> editSidePanelWidth,
       Value<double> geometricTextureScale,
       Value<double> geometricTextureIntensity,
       Value<double> geometricTextureFocalSpread,
@@ -44899,6 +44960,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<double> get journalEntryListWidth => $composableBuilder(
     column: $table.journalEntryListWidth,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get editSidePanelWidth => $composableBuilder(
+    column: $table.editSidePanelWidth,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -45604,6 +45670,11 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get editSidePanelWidth => $composableBuilder(
+    column: $table.editSidePanelWidth,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get geometricTextureScale => $composableBuilder(
     column: $table.geometricTextureScale,
     builder: (column) => ColumnOrderings(column),
@@ -46301,6 +46372,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<double> get editSidePanelWidth => $composableBuilder(
+    column: $table.editSidePanelWidth,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<double> get geometricTextureScale => $composableBuilder(
     column: $table.geometricTextureScale,
     builder: (column) => column,
@@ -46750,6 +46826,7 @@ class $$SettingsTableTableTableManager
                 Value<double> weatherChartCurveTension = const Value.absent(),
                 Value<String?> colorPaletteJson = const Value.absent(),
                 Value<double?> journalEntryListWidth = const Value.absent(),
+                Value<double?> editSidePanelWidth = const Value.absent(),
                 Value<double> geometricTextureScale = const Value.absent(),
                 Value<double> geometricTextureIntensity = const Value.absent(),
                 Value<double> geometricTextureFocalSpread =
@@ -46905,6 +46982,7 @@ class $$SettingsTableTableTableManager
                 weatherChartCurveTension: weatherChartCurveTension,
                 colorPaletteJson: colorPaletteJson,
                 journalEntryListWidth: journalEntryListWidth,
+                editSidePanelWidth: editSidePanelWidth,
                 geometricTextureScale: geometricTextureScale,
                 geometricTextureIntensity: geometricTextureIntensity,
                 geometricTextureFocalSpread: geometricTextureFocalSpread,
@@ -47053,6 +47131,7 @@ class $$SettingsTableTableTableManager
                 Value<double> weatherChartCurveTension = const Value.absent(),
                 Value<String?> colorPaletteJson = const Value.absent(),
                 Value<double?> journalEntryListWidth = const Value.absent(),
+                Value<double?> editSidePanelWidth = const Value.absent(),
                 Value<double> geometricTextureScale = const Value.absent(),
                 Value<double> geometricTextureIntensity = const Value.absent(),
                 Value<double> geometricTextureFocalSpread =
@@ -47208,6 +47287,7 @@ class $$SettingsTableTableTableManager
                 weatherChartCurveTension: weatherChartCurveTension,
                 colorPaletteJson: colorPaletteJson,
                 journalEntryListWidth: journalEntryListWidth,
+                editSidePanelWidth: editSidePanelWidth,
                 geometricTextureScale: geometricTextureScale,
                 geometricTextureIntensity: geometricTextureIntensity,
                 geometricTextureFocalSpread: geometricTextureFocalSpread,

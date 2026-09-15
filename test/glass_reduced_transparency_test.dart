@@ -8,10 +8,12 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
+import 'package:voyager/core/widgets/paper_texture.dart';
 
 /// Sigma of the blur the single [BackdropFilter] under [of] is applying.
 double _blurSigma(WidgetTester tester, Finder of) {
@@ -29,12 +31,16 @@ Future<void> _pump(
   WidgetTester tester,
   Widget child, {
   required bool highContrast,
+  ThemeData? theme,
 }) async {
   await tester.pumpWidget(
-    MaterialApp(
-      home: MediaQuery(
-        data: MediaQueryData(highContrast: highContrast),
-        child: Scaffold(body: Center(child: child)),
+    ProviderScope(
+      child: MaterialApp(
+        theme: theme,
+        home: MediaQuery(
+          data: MediaQueryData(highContrast: highContrast),
+          child: Scaffold(body: Center(child: child)),
+        ),
       ),
     ),
   );
@@ -129,18 +135,14 @@ void main() {
     );
   });
 
-  testWidgets('GlassButton dark defaults use onSurface label and a thicker plate', (
+  testWidgets('GlassButton dark defaults use onSurface label and graphite paper', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: VoyagerTheme.dark(),
-        home: Scaffold(
-          body: Center(
-            child: GlassButton(onPressed: () {}, label: 'Save'),
-          ),
-        ),
-      ),
+    await _pump(
+      tester,
+      GlassButton(onPressed: () {}, label: 'Save'),
+      highContrast: false,
+      theme: VoyagerTheme.dark(),
     );
 
     final text = tester.widget<Text>(find.text('Save'));
@@ -150,47 +152,50 @@ void main() {
       reason: 'dark glass labels must not stay on black ink',
     );
 
-    final fill = tester.widget<AnimatedContainer>(
-      find
-          .descendant(
-            of: find.byType(GlassButton),
-            matching: find.byType(AnimatedContainer),
-          )
-          .last,
+    expect(
+      find.descendant(
+        of: find.byType(GlassButton),
+        matching: find.byType(PaperTexture),
+      ),
+      findsOneWidget,
     );
-    final decoration = fill.decoration! as BoxDecoration;
-    final gradient = decoration.gradient! as LinearGradient;
-    // Mid stop is the plate body at ~0.22 — light's 0.06 wafer would fail this.
-    expect(gradient.colors[1].a, closeTo(0.22, 0.001));
+
+    final paper = tester.widget<PaperTexture>(
+      find.descendant(
+        of: find.byType(GlassButton),
+        matching: find.byType(PaperTexture),
+      ),
+    );
+    expect(paper.baseColor.a, closeTo(0.82, 0.001));
   });
 
   testWidgets('GlassButton light defaults keep the thin accent wafer', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: VoyagerTheme.light(),
-        home: Scaffold(
-          body: Center(
-            child: GlassButton(onPressed: () {}, label: 'Save'),
-          ),
-        ),
-      ),
+    await _pump(
+      tester,
+      GlassButton(onPressed: () {}, label: 'Save'),
+      highContrast: false,
+      theme: VoyagerTheme.light(),
     );
 
     final text = tester.widget<Text>(find.text('Save'));
-    expect(text.style?.color, Colors.black87);
+    expect(text.style?.color, VoyagerTheme.light().colorScheme.onSurface);
 
-    final fill = tester.widget<AnimatedContainer>(
-      find
-          .descendant(
-            of: find.byType(GlassButton),
-            matching: find.byType(AnimatedContainer),
-          )
-          .last,
+    expect(
+      find.descendant(
+        of: find.byType(GlassButton),
+        matching: find.byType(PaperTexture),
+      ),
+      findsNothing,
     );
-    final decoration = fill.decoration! as BoxDecoration;
-    final gradient = decoration.gradient! as LinearGradient;
-    expect(gradient.colors[1].a, closeTo(0.06, 0.001));
+
+    final fill = tester.widget<ColoredBox>(
+      find.descendant(
+        of: find.byType(GlassButton),
+        matching: find.byType(ColoredBox),
+      ),
+    );
+    expect(fill.color.a, closeTo(0.06, 0.001));
   });
 }

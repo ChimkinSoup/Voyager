@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/domain/models/finance_models.dart';
@@ -285,7 +286,11 @@ class _NetFlowOverlayState extends State<_NetFlowOverlay>
                   child: GestureDetector(
                     onTap: _close,
                     child: ColoredBox(
-                      color: Colors.black.withValues(alpha: 0.5 * raw),
+                      color: Color.lerp(
+                        Colors.transparent,
+                        VoyagerColors.of(context).scrim,
+                        raw,
+                      )!,
                     ),
                   ),
                 );

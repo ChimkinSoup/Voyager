@@ -90,6 +90,10 @@ class _StudyGradingRowState extends State<StudyGradingRow>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final curve = _reduced ? Curves.easeOut : VoyagerSpring.moveCurve;
+    final isDark = theme.brightness == Brightness.dark;
+    // GlassButton's own resting fill / edge opacities for this theme.
+    final glassBase = isDark ? 0.82 : 0.06;
+    final borderBase = isDark ? 0.32 : 0.22;
 
     Widget button(String label, StudyGrade grade, Color color, double t) {
       final result = applyStudyGrade(
@@ -119,16 +123,26 @@ class _StudyGradingRowState extends State<StudyGradingRow>
                 child: GlassButton(
                   onPressed: () => widget.onGrade(grade),
                   label: label,
-                  color: color,
+                  // Dark paints the grade colour at plate opacity, so a
+                  // saturated fill would swallow the bone label; pull it
+                  // most of the way back to the graphite field instead.
+                  color: isDark
+                      ? Color.lerp(
+                          theme.inputDecorationTheme.fillColor ??
+                              theme.colorScheme.surface,
+                          color,
+                          0.28,
+                        )
+                      : color,
                   height: _kGradeButtonHeight,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   // Same three values GlassButton itself moves between its
                   // disabled and enabled looks, interpolated instead.
-                  textColor: Colors.black87.withValues(
-                    alpha: 0.4 + 0.47 * t,
+                  textColor: theme.colorScheme.onSurface.withValues(
+                    alpha: 0.4 + 0.6 * t,
                   ),
-                  glassOpacity: 0.03 + 0.03 * t,
-                  borderOpacity: 0.12 + 0.10 * t,
+                  glassOpacity: glassBase * (0.5 + 0.5 * t),
+                  borderOpacity: borderBase - 0.10 * (1 - t),
                 ),
               ),
             ),

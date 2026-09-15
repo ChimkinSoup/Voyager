@@ -99,7 +99,9 @@ class SettingsPage extends ConsumerWidget {
             ),
           ),
           if (settings.themeMode == AppThemeMode.light)
-            _PetalSettings(settings: settings, onSave: (s) => _save(ref, s)),
+            _PetalSettings(settings: settings, onSave: (s) => _save(ref, s))
+          else
+            const _GeometricSettings(),
           const SizedBox(height: 16),
           Text('Life Tracker', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
@@ -1189,6 +1191,56 @@ class _PetalSettings extends ConsumerWidget {
   Future<void> _removeMinorPetalColor(int index) async {
     final updated = List<int>.from(settings.minorPetalColors)..removeAt(index);
     await onSave(settings.copyWith(minorPetalColors: updated));
+  }
+}
+
+/// The dark theme's counterpart to [_PetalSettings]: the few geometric
+/// background knobs worth owning outside Dev. The rest (scale, focal point,
+/// variation floor, wave shape and timing) stay in the Dev panels.
+///
+/// Goes through the params notifiers rather than [AppSettings] directly, so a
+/// drag repaints the grid live and persists once, debounced.
+class _GeometricSettings extends ConsumerWidget {
+  const _GeometricSettings();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final texture = ref.watch(geometricTextureParamsProvider);
+    final wave = ref.watch(geometricWaveParamsProvider);
+    final textureNotifier = ref.read(geometricTextureParamsProvider.notifier);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _PetalSlider(
+          label: 'Grid intensity',
+          value: texture.intensity,
+          min: 0,
+          max: 1,
+          divisions: 100,
+          valueLabel: '${(texture.intensity * 100).round()}%',
+          onChanged: (v) =>
+              textureNotifier.update(texture.copyWith(intensity: v)),
+        ),
+        _PetalSlider(
+          label: 'Glow spread',
+          value: texture.focalSpread,
+          min: 0.1,
+          max: 2,
+          divisions: 190,
+          valueLabel: texture.focalSpread.toStringAsFixed(2),
+          onChanged: (v) =>
+              textureNotifier.update(texture.copyWith(focalSpread: v)),
+        ),
+        SwitchListTile(
+          title: const Text('Wave'),
+          subtitle: const Text('Triangles lift in a sweep across the grid'),
+          value: wave.enabled,
+          onChanged: (v) => ref
+              .read(geometricWaveParamsProvider.notifier)
+              .update(wave.copyWith(enabled: v)),
+        ),
+      ],
+    );
   }
 }
 
