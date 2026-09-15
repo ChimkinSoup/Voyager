@@ -138,13 +138,10 @@ void main() {
                 top: 60,
                 width: 200,
                 height: 44,
+                // A surface, not a button: GlassButton no longer blurs.
                 child: Opacity(
                   opacity: opacity,
-                  child: GlassButton(
-                    onPressed: () {},
-                    icon: const Icon(Icons.play_circle),
-                    label: 'Study',
-                  ),
+                  child: const GlassSurface(child: SizedBox.expand()),
                 ),
               ),
             ),
@@ -181,9 +178,11 @@ void main() {
     final noLayer = await meanBlue(1.0);
     final withLayer = await meanBlue(0.996);
 
+    // Measured ~3.8 here; the same scene with no BackdropFilter at all reads
+    // ~0.5, so 2 separates the confined backdrop from rounding noise.
     expect(
       (noLayer - withLayer).abs(),
-      greaterThan(5),
+      greaterThan(2),
       reason:
           'If this stops holding, Flutter has changed how BackdropFilter '
           'resolves its backdrop, and the transitions below no longer need to '

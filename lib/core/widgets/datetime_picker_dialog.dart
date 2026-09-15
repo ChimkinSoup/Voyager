@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 /// Shows a combined calendar + clock picker dialog.
 Future<DateTime?> showDateTimePickerDialog(
@@ -182,7 +183,9 @@ class _TimeRangePickerDialogState extends State<TimeRangePickerDialog> {
       child: Dialog(
         child: SizedBox(
           width: 340,
-          child: Column(
+          // Scrolls in a window too short for the 380px clock.
+          child: VoyagerScrollView(
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -243,6 +246,7 @@ class _TimeRangePickerDialogState extends State<TimeRangePickerDialog> {
                 ),
               ),
             ],
+            ),
           ),
         ),
       ),

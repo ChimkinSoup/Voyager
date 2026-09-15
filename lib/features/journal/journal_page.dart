@@ -80,6 +80,12 @@ typedef _JournalRowSignature = ({
   bool isSelected,
 });
 
+/// Below this the editor's metadata row stacks the mood bar above its
+/// controls. The controls (weather, date pill, trash and the dev remote-pull
+/// button) take ~335px and the "Mood" label another ~60, so this leaves the
+/// slider about 120px before it gets a line to itself.
+const double _journalMetadataRowMinWidth = 520;
+
 class JournalPage extends ConsumerStatefulWidget {
   const JournalPage({super.key});
 
@@ -2577,39 +2583,29 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                             // out of the row and slid the body box up with
                             // it. The floor holds the row still whichever
                             // toggles are off.
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(
-                                minHeight: kMinInteractiveDimension,
-                              ),
-                              child: Row(
-                                children: [
-                                  // With the mood bar hidden the slider's
-                                  // Expanded goes with it, so a Spacer takes
-                                  // over its stretch — otherwise the date pill
-                                  // and trash slide left into the empty space
-                                  // instead of staying where they always are.
-                                  if (showMoodBar) ...[
-                                    Text(
-                                      'Mood',
-                                      style: TextStyle(color: accentColor),
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final moodBar = <Widget>[
+                                  Text(
+                                    'Mood',
+                                    style: TextStyle(color: accentColor),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: MoodGradientSlider(
+                                      value: _mood,
+                                      accent: accentColor,
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _mood = value;
+                                          _metadataDirty = true;
+                                        });
+                                        _scheduleMetadataSave();
+                                      },
                                     ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: MoodGradientSlider(
-                                        value: _mood,
-                                        accent: accentColor,
-                                        onChanged: (value) {
-                                          setState(() {
-                                            _mood = value;
-                                            _metadataDirty = true;
-                                          });
-                                          _scheduleMetadataSave();
-                                        },
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                  ] else
-                                    const Spacer(),
+                                  ),
+                                ];
+                                final controls = <Widget>[
                                   if (showWeatherPicker) ...[
                                     PopupMenuButton<VoyagerMenuCatalogEntry>(
                                       tooltip: 'Weather',
@@ -2684,8 +2680,43 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                       ).colorScheme.error,
                                     ),
                                   ),
-                                ],
-                              ),
+                                ];
+                                Widget line(List<Widget> children) =>
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        minHeight: kMinInteractiveDimension,
+                                      ),
+                                      child: Row(children: children),
+                                    );
+                                // Too narrow to share a line (a half-screen
+                                // window beside a wide entry list): the
+                                // controls cannot shrink, so the slider was
+                                // squeezed to nothing and the row still
+                                // overflowed. It takes a line of its own.
+                                if (showMoodBar &&
+                                    constraints.maxWidth <
+                                        _journalMetadataRowMinWidth) {
+                                  return Column(
+                                    children: [
+                                      line(moodBar),
+                                      line([const Spacer(), ...controls]),
+                                    ],
+                                  );
+                                }
+                                // With the mood bar hidden the slider's
+                                // Expanded goes with it, so a Spacer takes
+                                // over its stretch — otherwise the date pill
+                                // and trash slide left into the empty space
+                                // instead of staying where they always are.
+                                return line([
+                                  if (showMoodBar) ...[
+                                    ...moodBar,
+                                    const SizedBox(width: 12),
+                                  ] else
+                                    const Spacer(),
+                                  ...controls,
+                                ]);
+                              },
                             ),
                             const SizedBox(height: 12),
                             Expanded(

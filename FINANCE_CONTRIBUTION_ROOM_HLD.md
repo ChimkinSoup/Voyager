@@ -4,7 +4,16 @@ Generic **contribution-room** tracking for assets with an annual contribution ca
 
 Related: `lib/domain/models/finance_models.dart` (`Asset`, `AssetValuation`, `FinancialTransaction`, `settledTransactions`), `lib/features/finance/finance_asset_modal.dart`, `lib/features/finance/finance_analytics_view.dart` (`_AssetRow`), `lib/features/finance/finance_transaction_modal.dart`, `lib/features/finance/finance_page.dart` (ledger + `ContextMenuRegion`), `lib/data/database/app_database.dart` (`AssetsTable`, `AssetValuationsTable`), sync / soft-delete conventions.
 
-Status: **design** (not implemented).
+Status: **implemented** (2026-09-14). Deviations from the original draft, decided before implementation:
+
+- **Rollover is derived, not stored.** No `lastRolloverYear`, nothing written on Jan 1. The room keeps only its enable-time baseline; every year is recomputed from it plus events (§8). A late-synced December contribution corrects the next year by itself.
+- **Annual limits are per year** (`annualLimits: [{fromYear, cents}]`), so editing the limit changes this year and later without rewriting a year that already rolled.
+- **`baselineAsOf` is an instant**, not a day, so a contribution logged earlier the same day isn't subtracted twice.
+- **Transfers are two legs with kinds `transferOut` / `transferIn`** sharing a `transferGroupId` (§14.1), so direction is readable per asset.
+- **History list** of this year's events (edit / delete with undo) lives in the asset sheet — the only way to correct a transfer, which has no ledger row.
+- **Valuation step is inline** in the Contribute / Withdraw / Transfer sheets: the new value tracks `previous ± amount` until the user types in it.
+- **Linked ledger rows:** Convert and Duplicate are hidden; the type toggle is locked; amount/date/note edits update the event but not the valuation (a note says so).
+- **Deleting an asset keeps its room events** (room math is by `roomId`).
 
 ---
 
@@ -257,23 +266,21 @@ Asset menu → Transfer → pick destination asset (same room) → amount/date �
 
 ## 8. January 1 auto-rollover
 
-Applies to all rooms (generic model uses **calendar year**, matching TFSA). Run lazily on first finance read/write on/after Jan 1 when `lastRolloverYear < currentYear` (and `baselineAsOf.year < currentYear`).
+> **As implemented:** nothing is written. `roomYearSummary` (in `contribution_room_models.dart`) rolls forward from the baseline year on every read, using the same formula per year with `annualLimitFor(Y+1)`. The stored-rollover design below is kept for the record.
+
+Applies to all rooms (generic model uses **calendar year**, matching TFSA). ~~Run lazily on first finance read/write on/after Jan 1 when `lastRolloverYear < currentYear` (and `baselineAsOf.year < currentYear`).~~
 
 For each room, when rolling from year `Y` → `Y+1`:
 
 ```
 endRemaining = remaining(room, Y)           // may be negative (over)
 addBack     = settledWithdrawals(room, Y) // CRA: prior-year withdrawals
-newBaseline = endRemaining + annualLimitCents + addBack
-
-baselineRemainingCents = newBaseline
-baselineAsOf           = DateTime(Y+1, 1, 1)
-lastRolloverYear       = Y+1
+capacity(Y+1) = endRemaining + annualLimitFor(Y+1) + addBack
 ```
 
-- Mid-year enable in `Y+1` after rollover already ran: enable path sets baseline directly; skip duplicate roll.
-- Device offline across New Year: rollover runs on next open; math is deterministic from events + prior baseline.
-- No UI year picker in v1; after roll, bar shows new year’s `X/Y` with `X = 0` until new contributions settle.
+- Re-entering "remaining right now" in the room sheet re-baselines to that figure as of now.
+- Device offline across New Year, or events syncing late: the figures are recomputed from events on every read, so they are always current.
+- No UI year picker in v1; in a new year the bar shows `X = 0` until new contributions settle.
 
 ---
 

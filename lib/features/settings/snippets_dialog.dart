@@ -178,7 +178,10 @@ class _SnippetsDialogState extends ConsumerState<_SnippetsDialog> {
               ),
             ),
             const Divider(height: 24),
-            ConstrainedBox(
+            // Flexible so the list gives up height in a short window rather
+            // than pushing the dialog past its bottom edge.
+            Flexible(
+              child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 340),
               child: settings.snippets.isEmpty && _editingId != _newRowId
                   ? Padding(
@@ -234,6 +237,7 @@ class _SnippetsDialogState extends ConsumerState<_SnippetsDialog> {
                         );
                       },
                     ),
+            ),
             ),
             const SizedBox(height: 8),
             Align(

@@ -346,16 +346,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }
 
   /// Month grid to restore when leaving week view.
-  DateTime _monthTargetForWeekReturn() {
-    if (_mode == CalendarViewMode.week) {
-      return DateTime(_focused.year, _focused.month, 1);
-    }
-    final saved = _lastViewedMonth;
-    if (saved != null) {
-      return DateTime(saved.year, saved.month, 1);
-    }
-    final now = DateTime.now();
-    return DateTime(now.year, now.month, 1);
+  DateTime _monthTargetForWeekReturn(bool weekStartsMonday) {
+    return calendarMonthTargetForWeekReturn(
+      lastViewedMonth: _lastViewedMonth,
+      focusedWeekDate: _focused,
+      weekStartsMonday: weekStartsMonday,
+    );
   }
 
   void _rememberViewedMonth(DateTime month) {
@@ -1082,7 +1078,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         _rememberViewedMonth(_focused);
       } else if (_mode == CalendarViewMode.week) {
         _rememberViewedWeek(_focused, weekStartsMonday);
-        _rememberViewedMonth(DateTime(_focused.year, _focused.month, 1));
+        // Today's month, not week-start month — a current week can begin in
+        // the previous month without meaning we left this one.
+        _rememberViewedMonth(DateTime(now.year, now.month, 1));
       }
     });
     if (_mode == CalendarViewMode.week) {
@@ -1299,8 +1297,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       if (_mode == CalendarViewMode.month) {
         _rememberViewedMonth(_focused);
       } else if (_mode == CalendarViewMode.week) {
+        // Remember the week only — do not overwrite _lastViewedMonth with the
+        // week-start month, or returning to month view jumps to August when
+        // browsing a September week that begins in late August.
         _rememberViewedWeek(_focused, weekStartsMonday);
-        _rememberViewedMonth(DateTime(_focused.year, _focused.month, 1));
       }
     });
   }
@@ -1386,50 +1386,43 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     return idx ~/ 7;
   }
 
+  /// Day inside [visibleMonth]'s grid used to pick the morph week row.
+  ///
+  /// Follows the same week target as [_weekFocusAfterMonthToWeek] so the
+  /// animation and the post-morph focus stay aligned.
   DateTime _weekMorphAnchorDate(DateTime visibleMonth, bool weekStartsMonday) {
-    final saved = _lastViewedWeekStart;
-    if (saved != null) {
-      final weekStart = _weekStart(saved, weekStartsMonday);
-      final dates = monthGridDates(
-        visibleMonth,
-        weekStartsMonday: weekStartsMonday,
-      );
-      for (var i = 0; i < 7; i++) {
-        final day = DateTime(weekStart.year, weekStart.month, weekStart.day + i);
-        if (dates.any((d) => calendarSameDay(d, day))) return day;
-      }
-      // Week view was on a different month — still restore that week.
-      return weekStart;
+    final weekStart = _weekFocusAfterMonthToWeek(visibleMonth, weekStartsMonday);
+    final dates = monthGridDates(
+      visibleMonth,
+      weekStartsMonday: weekStartsMonday,
+    );
+    for (var i = 0; i < 7; i++) {
+      final day = DateTime(weekStart.year, weekStart.month, weekStart.day + i);
+      if (dates.any((d) => calendarSameDay(d, day))) return day;
     }
-    if (_focused.year == visibleMonth.year &&
-        _focused.month == visibleMonth.month) {
-      return _focused;
-    }
-    final now = DateTime.now();
-    if (visibleMonth.year == now.year && visibleMonth.month == now.month) {
-      return DateTime(now.year, now.month, now.day);
-    }
-    return visibleMonth;
+    return weekStart;
   }
 
-  /// Week to show after month→week — prefers the last viewed week in week mode.
+  /// Week to show after month→week.
   DateTime _weekFocusAfterMonthToWeek(
     DateTime visibleMonth,
     bool weekStartsMonday,
   ) {
-    final saved = _lastViewedWeekStart;
-    if (saved != null) {
-      return _weekStart(saved, weekStartsMonday);
-    }
-    final anchor = _weekMorphAnchorDate(visibleMonth, weekStartsMonday);
-    return _weekStart(anchor, weekStartsMonday);
+    return calendarWeekFocusAfterMonthToWeek(
+      visibleMonth: visibleMonth,
+      weekStartsMonday: weekStartsMonday,
+      lastViewedWeekStart: _lastViewedWeekStart,
+    );
   }
 
+  /// Today's week only, and only when it intersects the visible month.
   DateTime? _highlightedWeekStart(bool weekStartsMonday) {
     if (_mode != CalendarViewMode.month) return null;
     final visibleMonth = DateTime(_focused.year, _focused.month, 1);
-    final anchor = _weekMorphAnchorDate(visibleMonth, weekStartsMonday);
-    return _weekStart(anchor, weekStartsMonday);
+    return calendarCurrentWeekHighlightStart(
+      visibleMonth: visibleMonth,
+      weekStartsMonday: weekStartsMonday,
+    );
   }
 
   void _onMonthToWeek(bool weekStartsMonday) {
@@ -1518,7 +1511,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _rememberViewedWeek(_focused, weekStartsMonday);
       setState(() {
         _mode = CalendarViewMode.month;
-        _focused = _monthTargetForWeekReturn();
+        _focused = _monthTargetForWeekReturn(weekStartsMonday);
       });
       return;
     }
@@ -1551,7 +1544,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     final cache = _layoutCache;
     if (cache == null) return false;
 
-    final morphMonth = _monthTargetForWeekReturn();
+    final morphMonth = _monthTargetForWeekReturn(weekStartsMonday);
     _rememberViewedWeek(_focused, weekStartsMonday);
     _captureWeekTimelineScrollOffset();
     final anchor = _focused;
@@ -1946,7 +1939,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         // week arm never fired and every switch landed on January when the
         // focused week and _lastViewedMonth sat in different years.
         _focused = previousMode == CalendarViewMode.week
-            ? DateTime(_focused.year, _focused.month, 1)
+            ? _monthTargetForWeekReturn(weekStartsMonday)
             : _monthTargetForYear(_focused.year);
       }
     });
@@ -2075,7 +2068,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       _mode = CalendarViewMode.month;
       _focused = fromYear
           ? _monthTargetForYear(_focused.year)
-          : _monthTargetForWeekReturn();
+          : _monthTargetForWeekReturn(weekStartsMonday);
       if (fromYear) {
         _rememberViewedMonth(_focused);
       }
@@ -2299,10 +2292,15 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                 events: events,
                 indicators: indicators,
                 todoMarkers: todoMarkers,
+                workoutDays: _workoutDays,
                 showTodoIcons: true,
                 weekStartsMonday: weekStartsMonday,
                 style: MonthDayCellStyle.full,
                 hiddenWeekRow: hiddenWeekRow,
+                highlightedWeekStart: calendarCurrentWeekHighlightStart(
+                  visibleMonth: morphMonth,
+                  weekStartsMonday: weekStartsMonday,
+                ),
                 accentColor: accentColor,
               ),
             ),
@@ -2363,7 +2361,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       final cache = _layoutCache!;
       final morphMonth = _weekMorphForward
           ? DateTime(_focused.year, _focused.month, 1)
-          : _monthTargetForWeekReturn();
+          : _monthTargetForWeekReturn(weekStartsMonday);
       final weekRow = _weekMorphWeekRow;
       final anchor = _weekMorphAnchor!;
       final monthRowRects = cache.monthCellRects.sublist(
@@ -2413,7 +2411,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         key: ValueKey(_weekMorphGeneration),
         controller: _weekMorphController,
         morphMonth: morphMonth,
-        anchor: anchor,
         weekRow: weekRow,
         monthRowRects: monthRowRects,
         weekColumnRects: weekColumnRects,
@@ -2444,6 +2441,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         weekTimelineScrollController: _weekTimelineScrollController,
         weekTimelineScrollOffset: _weekTimelineScrollOffset,
         weekMorphForward: _weekMorphForward,
+        workoutDays: _workoutDays,
         accentColor: accentColor,
       );
 
@@ -2470,8 +2468,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             initialScrollOffset: _weekTimelineScrollOffset,
             showWeekdayHeader: false,
             showDayDateLabels: false,
+            // The morph row's cells carry today's fill into the month row;
+            // painting it here too would double it and leave a copy behind.
+            showTodayHighlight: false,
             entryFadeEnabled: false,
             interactive: false,
+            weekdayAccentColor: accentColor,
             onEventTap: (_) {},
             onTodoTap: (_) {},
             onSlotTap: (_, _) {},
@@ -2585,6 +2587,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         ),
         events: activeEvents,
         todoMarkers: activeTodos,
+        workoutDays: _workoutDays,
+        highlightedWeekStart: calendarCurrentWeekHighlightStart(
+          visibleMonth: morphMonth,
+          weekStartsMonday: weekStartsMonday,
+        ),
         monthMorphEventMetrics: _layoutCache!.monthMorphEventMetrics,
       );
 
@@ -2718,75 +2725,96 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
+                // Two groups rather than one Row: when a narrow window cannot
+                // hold both on one line (a half-screen snap), the right-hand
+                // group drops to a second line instead of overflowing. On one
+                // line spaceBetween pushes them apart, as a Spacer did.
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    _buildViewModeSelector(
-                      weekStartsMonday,
-                      accentColor: calendarAccentColor,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildViewModeSelector(
+                          weekStartsMonday,
+                          accentColor: calendarAccentColor,
+                        ),
+                        _buildGoToTodayButton(weekStartsMonday),
+                        const SizedBox(width: 8),
+                        _buildCalendarSelector(context, calendars),
+                      ],
                     ),
-                    _buildGoToTodayButton(weekStartsMonday),
-                    const SizedBox(width: 8),
-                    _buildCalendarSelector(context, calendars),
                     if (ref
                         .watch(devSettingsProvider)
-                        .showCalendarInstantViewSwitch) ...[
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Instant Switch:',
-                        style: TextStyle(fontSize: 10, color: Colors.grey),
+                        .showCalendarInstantViewSwitch)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Instant Switch:',
+                            style: TextStyle(fontSize: 10, color: Colors.grey),
+                          ),
+                          const SizedBox(width: 4),
+                          GlassButton(
+                            onPressed: () =>
+                                _instantSwitchToWeekView(weekStartsMonday),
+                            label: 'W',
+                            dense: true,
+                          ),
+                          const SizedBox(width: 4),
+                          GlassButton(
+                            onPressed: () =>
+                                _instantSwitchToMonthView(weekStartsMonday),
+                            label: 'M',
+                            dense: true,
+                          ),
+                          const SizedBox(width: 4),
+                          GlassButton(
+                            onPressed: _instantSwitchToYearView,
+                            label: 'Y',
+                            dense: true,
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 4),
-                      GlassButton(
-                        onPressed: () =>
-                            _instantSwitchToWeekView(weekStartsMonday),
-                        label: 'W',
-                        dense: true,
-                      ),
-                      const SizedBox(width: 4),
-                      GlassButton(
-                        onPressed: () =>
-                            _instantSwitchToMonthView(weekStartsMonday),
-                        label: 'M',
-                        dense: true,
-                      ),
-                      const SizedBox(width: 4),
-                      GlassButton(
-                        onPressed: _instantSwitchToYearView,
-                        label: 'Y',
-                        dense: true,
-                      ),
-                    ],
-                    const Spacer(),
-                    if (_isWeekMorphing)
-                      _buildMorphFocusHeader(context, weekStartsMonday)
-                    else if (_mode != CalendarViewMode.month &&
-                        _dayViewDate == null)
-                      _buildFocusHeader(context, weekStartsMonday),
-                    const SizedBox(width: 8),
-                    GlassButton(
-                      onPressed: _syncGoogle,
-                      label: 'Sync Google',
-                      icon: const Icon(PhosphorIconsRegular.arrowClockwise),
-                      dense: true,
-                    ),
-                    const SizedBox(width: 8),
-                    Builder(
-                      builder: (btnCtx) => GlassButton(
-                        onPressed: () {
-                          final box = btnCtx.findRenderObject() as RenderBox?;
-                          Rect? anchor;
-                          if (box != null) {
-                            final origin = box.localToGlobal(Offset.zero);
-                            anchor = origin & box.size;
-                          }
-                          _openEditor(
-                            day: _defaultNewEventDate(),
-                            anchorRect: anchor,
-                          );
-                        },
-                        label: 'Add event',
-                        dense: true,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_isWeekMorphing)
+                          _buildMorphFocusHeader(context, weekStartsMonday)
+                        else if (_mode != CalendarViewMode.month &&
+                            _dayViewDate == null)
+                          _buildFocusHeader(context, weekStartsMonday),
+                        const SizedBox(width: 8),
+                        GlassButton(
+                          onPressed: _syncGoogle,
+                          label: 'Sync Google',
+                          icon: const Icon(PhosphorIconsRegular.arrowClockwise),
+                          dense: true,
+                        ),
+                        const SizedBox(width: 8),
+                        Builder(
+                          builder: (btnCtx) => GlassButton(
+                            onPressed: () {
+                              final box =
+                                  btnCtx.findRenderObject() as RenderBox?;
+                              Rect? anchor;
+                              if (box != null) {
+                                final origin = box.localToGlobal(Offset.zero);
+                                anchor = origin & box.size;
+                              }
+                              _openEditor(
+                                day: _defaultNewEventDate(),
+                                anchorRect: anchor,
+                              );
+                            },
+                            label: 'Add event',
+                            dense: true,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -3345,6 +3373,8 @@ class _MorphAnimationLayer extends StatefulWidget {
     required this.events,
     required this.todoMarkers,
     required this.monthMorphEventMetrics,
+    this.workoutDays = const {},
+    this.highlightedWeekStart,
     this.chainedYearWeekTransition = false,
     this.accentColor,
   });
@@ -3372,6 +3402,13 @@ class _MorphAnimationLayer extends StatefulWidget {
   final List<CalendarTodoMarker> todoMarkers;
   final List<MorphDayEventFrozenMetrics> monthMorphEventMetrics;
   final bool chainedYearWeekTransition;
+
+  /// Days whose workout marker grows in (or out) with the month styling.
+  final Set<DateTime> workoutDays;
+
+  /// Today's week, when the month view highlights it. Year tiles never do, so
+  /// the highlight fades with styleT.
+  final DateTime? highlightedWeekStart;
 
   @override
   State<_MorphAnimationLayer> createState() => _MorphAnimationLayerState();
@@ -3485,6 +3522,17 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
                     widget.dates[i].year == widget.morphMonth.year
                 ? calendarTodoMarkersForDay(widget.todoMarkers, widget.dates[i])
                 : const <CalendarTodoMarker>[],
+            hasWorkout:
+                widget.dates[i].month == widget.morphMonth.month &&
+                widget.dates[i].year == widget.morphMonth.year &&
+                widget.workoutDays.contains(
+                  DateUtils.dateOnly(widget.dates[i].toLocal()),
+                ),
+            weekHighlightAlpha: calendarFocusedWeekHighlightAlpha(
+              date: widget.dates[i],
+              month: widget.morphMonth,
+              weekStart: widget.highlightedWeekStart,
+            ),
           ),
         ),
     ];
@@ -3661,12 +3709,18 @@ class _MorphCell extends StatelessWidget {
     required this.month,
     required this.events,
     required this.todoMarkers,
+    required this.hasWorkout,
+    required this.weekHighlightAlpha,
   });
 
   final DateTime date;
   final DateTime month;
   final List<CalendarEvent?> events;
   final List<CalendarTodoMarker> todoMarkers;
+  final bool hasWorkout;
+
+  /// The month view's current-week fill for this cell, scaled by styleT.
+  final double weekHighlightAlpha;
 
   static const _compactFontSize = 7.0;
   static const _fullFontSize = 15.0;
@@ -3755,10 +3809,15 @@ class _MorphCell extends StatelessWidget {
         : progress.adjacentColor;
     final borderAlpha =
         compactBorderAlpha + (fullBorderAlpha - compactBorderAlpha) * styleT;
+    final highlightAlpha = weekHighlightAlpha * styleT;
 
     return Container(
       margin: EdgeInsets.all(cellMargin),
       decoration: BoxDecoration(
+        color: highlightAlpha > 0
+            ? (progress.accentColor ?? Theme.of(context).colorScheme.primary)
+                  .withValues(alpha: highlightAlpha.clamp(0.0, 1.0))
+            : null,
         border: Border.all(
           color: fullBorderColor.withValues(alpha: borderAlpha.clamp(0.0, 1.0)),
         ),
@@ -3874,6 +3933,22 @@ class _MorphCell extends StatelessWidget {
                       fontSize: dayFontSize,
                       mutedWhenAdjacent: !inMonth,
                       accentColor: progress.accentColor,
+                      // Year tiles have no marker: grow its width and opacity
+                      // with styleT so the number slides aside instead of
+                      // jumping when the month grid takes over.
+                      leading: hasWorkout && styleT > 0
+                          ? Align(
+                              widthFactor: styleT,
+                              heightFactor: 1,
+                              child: Opacity(
+                                opacity: styleT.clamp(0.0, 1.0),
+                                child: CalendarWorkoutIcon(
+                                  fontSize: dayFontSize,
+                                  color: progress.accentColor,
+                                ),
+                              ),
+                            )
+                          : null,
                     ),
                   ),
                 ),
@@ -4086,7 +4161,6 @@ class _MonthWeekMorphLayer extends StatefulWidget {
     super.key,
     required this.controller,
     required this.morphMonth,
-    required this.anchor,
     required this.weekRow,
     required this.monthRowRects,
     required this.weekColumnRects,
@@ -4106,12 +4180,12 @@ class _MonthWeekMorphLayer extends StatefulWidget {
     required this.weekTimelineScrollController,
     required this.weekTimelineScrollOffset,
     required this.weekMorphForward,
+    this.workoutDays = const {},
     this.accentColor,
   });
 
   final AnimationController controller;
   final DateTime morphMonth;
-  final DateTime anchor;
   final int weekRow;
   final List<Rect> monthRowRects;
   final List<Rect> weekColumnRects;
@@ -4131,6 +4205,7 @@ class _MonthWeekMorphLayer extends StatefulWidget {
   final ScrollController weekTimelineScrollController;
   final double weekTimelineScrollOffset;
   final bool weekMorphForward;
+  final Set<DateTime> workoutDays;
 
   /// Selected calendar's color, threaded to the "today" circle and
   /// focused-week highlight during the morph. Falls back to the theme accent.
@@ -4167,6 +4242,12 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
       widget.monthRowRects.first.height,
     );
 
+    // Today's week, as the month view highlights it — not the anchor week, or
+    // week→month from another week lights the wrong row until the handoff.
+    final highlightedWeekStart = calendarCurrentWeekHighlightStart(
+      visibleMonth: widget.morphMonth,
+      weekStartsMonday: widget.weekStartsMonday,
+    );
     _cellChildren = [
       for (var i = 0; i < 7; i++)
         LayoutId(
@@ -4179,9 +4260,9 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
             indicators: widget.indicators,
             todoMarkers: widget.todoMarkers,
             frozenEntryLayoutHeight: _frozenEntryLayoutHeight,
-            highlightedWeekStart: _weekStart(
-              widget.anchor,
-              widget.weekStartsMonday,
+            highlightedWeekStart: highlightedWeekStart,
+            hasWorkout: widget.workoutDays.contains(
+              DateUtils.dateOnly(_weekDates[i].toLocal()),
             ),
           ),
         ),
@@ -4386,6 +4467,9 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
                                 child: CalendarWeekDayDateLabel(
                                   date: date,
                                   accentColor: widget.accentColor,
+                                  hasWorkout: widget.workoutDays.contains(
+                                    DateUtils.dateOnly(date.toLocal()),
+                                  ),
                                 ),
                               ),
                             ),
@@ -4413,6 +4497,7 @@ class _MonthWeekMorphCell extends StatelessWidget {
     required this.todoMarkers,
     required this.frozenEntryLayoutHeight,
     required this.highlightedWeekStart,
+    required this.hasWorkout,
   });
 
   final DateTime date;
@@ -4421,7 +4506,8 @@ class _MonthWeekMorphCell extends StatelessWidget {
   final List<CalendarDayIndicator> indicators;
   final List<CalendarTodoMarker> todoMarkers;
   final double frozenEntryLayoutHeight;
-  final DateTime highlightedWeekStart;
+  final DateTime? highlightedWeekStart;
+  final bool hasWorkout;
 
   @override
   Widget build(BuildContext context) {
@@ -4459,12 +4545,17 @@ class _MonthWeekMorphCell extends StatelessWidget {
         : const <CalendarTodoMarker>[];
 
     final progress = _WeekMorphProgress.of(context);
-    final weekHighlightAlpha = calendarFocusedWeekHighlightAlpha(
-      date: date,
-      month: month,
-      weekStart: highlightedWeekStart,
-      opacity: progress.monthEntryOpacity,
-    );
+    // Month fill → week fill: the rest of the week fades out, but today lerps
+    // into the week view's column fill so it never drops out mid-morph.
+    final weekHighlightAlpha = lerpDouble(
+      calendarFocusedWeekHighlightAlpha(
+        date: date,
+        month: month,
+        weekStart: highlightedWeekStart,
+      ),
+      calendarIsToday(date) ? calendarWeekTodayHighlightOpacity : 0.0,
+      t,
+    )!;
 
     return CalendarDayCell(
       date: date,
@@ -4473,6 +4564,7 @@ class _MonthWeekMorphCell extends StatelessWidget {
       indicators: dayIndicators,
       todoMarkers: dayTodos,
       showTodoIcons: dayTodos.isNotEmpty,
+      hasWorkout: hasWorkout,
       hideEntries: false,
       entryOpacity: progress.monthEntryOpacity,
       dayNumberOpacity: (1.0 - t).clamp(0.0, 1.0),
@@ -4499,15 +4591,5 @@ class _MonthWeekMorphCell extends StatelessWidget {
 // Utilities
 // =============================================================================
 
-DateTime _weekStart(DateTime focused, bool weekStartsMonday) {
-  final weekday = focused.weekday;
-  final firstDay = weekStartsMonday ? DateTime.monday : DateTime.sunday;
-  // Field-based subtraction (not Duration), so this stays correct across
-  // DST transitions — Duration(days:) is a fixed elapsed-time delta and can
-  // land on the wrong calendar day for a local DateTime.
-  return DateTime(
-    focused.year,
-    focused.month,
-    focused.day - (weekday - firstDay) % 7,
-  );
-}
+DateTime _weekStart(DateTime focused, bool weekStartsMonday) =>
+    calendarWeekStart(focused, weekStartsMonday);

@@ -36,6 +36,16 @@ class CharacterOpSession {
 
   String get text => _reconstructText();
 
+  /// The live operations in document order, and the text they spell.
+  ///
+  /// Cached because [recordTextChange] runs on every keystroke, and rebuilding
+  /// the order means sorting every character by a position string that grows
+  /// with the document — 15ms a keystroke at 8k characters, 200ms at 20k.
+  /// [recordTextChange] keeps both up to date itself; everything else that
+  /// changes [_opsById] wholesale clears them.
+  List<CharacterOperation>? _live;
+  String? _liveText;
+
   void resetFromText(String text) {
     _opsById.clear();
     _pendingOpIds.clear();
@@ -46,7 +56,11 @@ class CharacterOpSession {
   void recordTextChange(String before, String after) {
     if (before == after) return;
 
-    final oldIds = _liveOrderedOps().map((op) => op.id).toList();
+    final live = _liveOrderedOps();
+    // When the session already spells `before`, the edit below leaves it
+    // spelling exactly `after`, so the rebuild the final check would do can be
+    // skipped. Length too: the diff indexes ops by UTF-16 offset.
+    final inSync = live.length == before.length && _reconstructText() == before;
     final oldText = before;
 
     // Simple diff: walk both strings.
@@ -69,16 +83,15 @@ class CharacterOpSession {
     final deleteCount = oldEnd - i;
     final insertSegment = after.substring(j, newEnd);
 
-    if (deleteCount > 0) {
-      final live = _liveOrderedOps();
-      final toDelete = live.skip(i).take(deleteCount).toList();
-      for (final op in toDelete) {
+    if (deleteCount > 0 && i < live.length) {
+      final end = i + deleteCount < live.length ? i + deleteCount : live.length;
+      for (final op in live.sublist(i, end)) {
         _tombstone(op.id);
       }
+      live.removeRange(i, end);
     }
 
     if (insertSegment.isNotEmpty) {
-      final live = _liveOrderedOps();
       String? posBefore;
       String? posAfter;
       if (i > 0 && i - 1 < live.length) {
@@ -97,24 +110,41 @@ class CharacterOpSession {
       }
 
       var cursorBefore = posBefore;
+      final inserted = <CharacterOperation>[];
       for (var k = 0; k < insertSegment.length; k++) {
         final char = insertSegment[k];
         final pos = FractionalIndex.between(
           before: cursorBefore,
           after: posAfter,
         );
-        _insertOp(char: char, position: pos);
+        inserted.add(_insertOp(char: char, position: pos));
         cursorBefore = pos;
       }
+
+      // Spliced in at the diff index, which is where a sort would put them as
+      // long as they sort strictly between their new neighbours. When they
+      // don't — equal positions skipped above, or a desynced index — the
+      // cached order is dropped and the next read sorts from scratch.
+      if (i <= live.length) {
+        live.insertAll(i, inserted);
+        final next = i + inserted.length;
+        if ((i > 0 &&
+                live[i - 1].position.compareTo(inserted.first.position) >= 0) ||
+            (next < live.length &&
+                inserted.last.position.compareTo(live[next].position) >= 0)) {
+          _live = null;
+        }
+      } else {
+        _live = null;
+      }
     }
+
+    _liveText = inSync && _live != null ? after : null;
 
     // If diff produced no ops but text changed structurally, re-seed.
     if (_reconstructText() != after) {
       resetFromText(after);
     }
-
-    // Preserve unrelated op ids ordering sanity.
-    assert(oldIds.length >= 0);
   }
 
   List<CharacterOperation> takePendingOps() {
@@ -151,13 +181,12 @@ class CharacterOpSession {
   }
 
   void _seedFromText(String text, {bool markAsPending = false}) {
-    var prevPos = '';
+    _live = null;
+    _liveText = null;
+    final positions = FractionalIndex.spread(text.length);
     for (var i = 0; i < text.length; i++) {
       final char = text[i];
-      final pos = i == 0
-          ? FractionalIndex.first()
-          : FractionalIndex.after(prevPos);
-      prevPos = pos;
+      final pos = positions[i];
       final id = '${clientId}_${_logicalClock}_$pos';
       _opsById[id] = CharacterOperation(
         id: id,
@@ -171,6 +200,8 @@ class CharacterOpSession {
   }
 
   void _loadFromOperations(List<CharacterOperation> operations) {
+    _live = null;
+    _liveText = null;
     var maxClock = -1;
     for (final op in operations) {
       _opsById[op.id] = op;
@@ -181,7 +212,10 @@ class CharacterOpSession {
     _logicalClock = maxClock + 1;
   }
 
-  void _insertOp({required String char, required String position}) {
+  CharacterOperation _insertOp({
+    required String char,
+    required String position,
+  }) {
     final id = '${clientId}_${_logicalClock}_$position';
     final op = CharacterOperation(
       id: id,
@@ -192,6 +226,7 @@ class CharacterOpSession {
     );
     _opsById[id] = op;
     _pendingOpIds.add(id);
+    return op;
   }
 
   void _tombstone(String id) {
@@ -203,12 +238,12 @@ class CharacterOpSession {
   }
 
   List<CharacterOperation> _liveOrderedOps() {
-    return _opsById.values.where((op) => !op.deleted).toList()
-      ..sort((a, b) => a.position.compareTo(b.position));
+    return _live ??= (_opsById.values.where((op) => !op.deleted).toList()
+      ..sort((a, b) => a.position.compareTo(b.position)));
   }
 
   String _reconstructText() {
-    return _liveOrderedOps().map((op) => op.character).join();
+    return _liveText ??= _liveOrderedOps().map((op) => op.character).join();
   }
 }
 

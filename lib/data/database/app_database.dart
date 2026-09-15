@@ -290,6 +290,7 @@ class TransactionsTable extends Table {
   TextColumn get note => text().nullable()();
   TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
   DateTimeColumn get occurredAt => dateTime()();
+  TextColumn get roomEventId => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -352,6 +353,45 @@ class AssetsTable extends Table {
   TextColumn get note => text().nullable()();
   IntColumn get colorValue =>
       integer().withDefault(const Constant(0xFF7C9EFF))();
+  TextColumn get contributionRoomId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class ContributionRoomsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  IntColumn get baselineRemainingCents => integer()();
+  DateTimeColumn get baselineAsOf => dateTime()();
+
+  /// `[{"fromYear": 2026, "cents": 700000}, …]`, ascending.
+  TextColumn get annualLimitsJson => text().withDefault(const Constant('[]'))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class AssetRoomEventsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get assetId => text()();
+  TextColumn get roomId => text()();
+  TextColumn get kind => text()();
+  IntColumn get amountCents => integer()();
+  DateTimeColumn get occurredAt => dateTime()();
+  TextColumn get transactionId => text().nullable()();
+  TextColumn get valuationId => text().nullable()();
+  TextColumn get counterAssetId => text().nullable()();
+  TextColumn get transferGroupId => text().nullable()();
+  TextColumn get note => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -1430,6 +1470,8 @@ class RankingChildrenTable extends Table {
     FinanceCategoriesTable,
     AssetsTable,
     AssetValuationsTable,
+    ContributionRoomsTable,
+    AssetRoomEventsTable,
     SavingsGoalsTable,
     GoalAllocationsTable,
     PinnedNotesTable,
@@ -1466,7 +1508,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 111;
+  int get schemaVersion => 112;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2718,6 +2760,24 @@ class AppDatabase extends _$AppDatabase {
         ]) {
           await _renumberTiedJobSortOrders(table);
         }
+      }
+      if (from < 112) {
+        // Additive only: an existing asset is untracked and an existing
+        // transaction unlinked, which is what null already reads as.
+        await migrator.createTable(contributionRoomsTable);
+        await migrator.createTable(assetRoomEventsTable);
+        await _addColumnIfNotExists(
+          migrator,
+          'assets_table',
+          assetsTable,
+          assetsTable.contributionRoomId,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'transactions_table',
+          transactionsTable,
+          transactionsTable.roomEventId,
+        );
       }
     },
   );

@@ -1,11 +1,10 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 
 /// A modular, reusable glassmorphic button widget featuring an authentic glass aesthetic.
 ///
-/// Incorporates background blur ([BackdropFilter]), dual-gradient specular borders,
+/// Incorporates a translucent tinted fill, dual-gradient specular borders,
 /// top gloss reflections, dynamic hover/press states, and full theme adaptability.
 ///
 /// Fully resizeable (via [width], [height], [padding], [margin], [borderRadius], or [dense])
@@ -27,7 +26,6 @@ class GlassButton extends StatefulWidget {
     this.padding,
     this.margin,
     this.borderRadius,
-    this.blurSigma = 12.0,
     this.glassOpacity = 0.06,
     this.borderOpacity = 0.22,
     this.elevation = 1.5,
@@ -85,9 +83,6 @@ class GlassButton extends StatefulWidget {
 
   /// Custom border radius for shaping the glass container. Defaults to `BorderRadius.circular(12)` (or `10` when [dense]).
   final BorderRadius? borderRadius;
-
-  /// Intensity of the backdrop glass blur.
-  final double blurSigma;
 
   /// Base opacity of the glass surface fill.
   final double glassOpacity;
@@ -216,7 +211,7 @@ class _GlassButtonState extends State<GlassButton>
     // Flutter has no cross-platform "prefers-reduced-transparency" signal;
     // `highContrast` is the closest accessibility proxy it exposes. Read here
     // for the same reason [GlassSurface] reads it — otherwise a button stays
-    // blurred and translucent on top of a surface that has gone near-solid.
+    // translucent on top of a surface that has gone near-solid.
     final nearSolid = MediaQuery.maybeOf(context)?.highContrast ?? false;
 
     // Calculate dynamic glass opacity based on interaction state
@@ -360,74 +355,64 @@ class _GlassButtonState extends State<GlassButton>
               ),
           ],
         ),
+        // No BackdropFilter: a button blurring the animated background redoes
+        // that blur on every background frame, and five in the calendar header
+        // tripled idle GPU load (~8% -> ~22%). Buttons are too small for the
+        // blur to read; the tinted fill and specular border carry the glass.
         child: ClipRRect(
           borderRadius: effectiveRadius,
-          child: BackdropFilter(
-            filter: ImageFilter.blur(
-              sigmaX: nearSolid ? 0 : widget.blurSigma,
-              sigmaY: nearSolid ? 0 : widget.blurSigma,
+          child: CustomPaint(
+            foregroundPainter: _GlassBorderPainter(
+              borderRadius: effectiveRadius,
+              borderWidth: _isHovered || _isFocused ? 1.5 : 1.0,
+              highlightColor: borderHighlight.withValues(alpha: currentBorderOpacity),
+              shadowColor: borderShadow.withValues(alpha: currentBorderOpacity * 0.4),
+              outlineColor: baseColor.withValues(alpha: 0.35),
             ),
-            child: CustomPaint(
-              foregroundPainter: _GlassBorderPainter(
-                borderRadius: effectiveRadius,
-                borderWidth: _isHovered || _isFocused ? 1.5 : 1.0,
-                highlightColor: borderHighlight.withValues(alpha: currentBorderOpacity),
-                shadowColor: borderShadow.withValues(alpha: currentBorderOpacity * 0.4),
-                outlineColor: baseColor.withValues(alpha: 0.35),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              decoration: BoxDecoration(
+                gradient: glassFillGradient,
               ),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                decoration: BoxDecoration(
-                  gradient: glassFillGradient,
-                ),
-                child: Stack(
-                  alignment: widget.alignment,
-                  children: [
-                    // Top gloss reflection line
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: widget.height != null
-                          ? (widget.height! * 0.45).clamp(1.0, 100.0)
-                          : 18.0,
-                      child: IgnorePointer(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.vertical(
-                              top: effectiveRadius.topLeft,
-                            ),
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                vc.highlightWash.withValues(
-                                  alpha: _isHovered ? 0.14 : 0.06,
-                                ),
-                                vc.highlightWash.withValues(alpha: 0.0),
-                              ],
-                            ),
+              child: Stack(
+                alignment: widget.alignment,
+                children: [
+                  // Top gloss reflection line
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: widget.height != null
+                        ? (widget.height! * 0.45).clamp(1.0, 100.0)
+                        : 18.0,
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.vertical(
+                            top: effectiveRadius.topLeft,
+                          ),
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              vc.highlightWash.withValues(
+                                alpha: _isHovered ? 0.14 : 0.06,
+                              ),
+                              vc.highlightWash.withValues(alpha: 0.0),
+                            ],
                           ),
                         ),
                       ),
                     ),
+                  ),
 
-                    // Inner button content
-                    widget.width != null || widget.height != null
-                        ? Container(
-                            width: widget.width,
-                            height: widget.height,
-                            alignment: widget.alignment,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: widget.alignment,
-                              child: Padding(
-                                padding: effectivePadding,
-                                child: content,
-                              ),
-                            ),
-                          )
-                        : FittedBox(
+                  // Inner button content
+                  widget.width != null || widget.height != null
+                      ? Container(
+                          width: widget.width,
+                          height: widget.height,
+                          alignment: widget.alignment,
+                          child: FittedBox(
                             fit: BoxFit.scaleDown,
                             alignment: widget.alignment,
                             child: Padding(
@@ -435,8 +420,16 @@ class _GlassButtonState extends State<GlassButton>
                               child: content,
                             ),
                           ),
-                  ],
-                ),
+                        )
+                      : FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: widget.alignment,
+                          child: Padding(
+                            padding: effectivePadding,
+                            child: content,
+                          ),
+                        ),
+                ],
               ),
             ),
           ),

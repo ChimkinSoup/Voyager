@@ -14,6 +14,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
@@ -1565,6 +1566,7 @@ class DriftFinanceRepository implements FinanceRepository {
             note: Value(transaction.note),
             tagsJson: Value(jsonEncode(transaction.tags)),
             occurredAt: Value(transaction.occurredAt),
+            roomEventId: Value(transaction.roomEventId),
             createdAt: Value(transaction.createdAt),
             updatedAt: Value(transaction.updatedAt),
             version: Value(transaction.version),
@@ -1590,6 +1592,10 @@ class DriftFinanceRepository implements FinanceRepository {
         deletedAt: utcNow(),
       ),
     );
+    // A contribution or withdrawal without its cash side would keep using
+    // room for money the ledger no longer says moved.
+    final roomEventId = transaction.roomEventId;
+    if (roomEventId != null) await softDeleteAssetRoomEvent(roomEventId);
   }
 
   @override
@@ -1790,6 +1796,7 @@ class DriftFinanceRepository implements FinanceRepository {
             name: Value(asset.name),
             note: Value(asset.note),
             colorValue: Value(asset.colorValue),
+            contributionRoomId: Value(asset.contributionRoomId),
             createdAt: Value(asset.createdAt),
             updatedAt: Value(asset.updatedAt),
             version: Value(asset.version),
@@ -1883,6 +1890,218 @@ class DriftFinanceRepository implements FinanceRepository {
         deletedAt: utcNow(),
       ),
     );
+  }
+
+  @override
+  Future<List<ContributionRoom>> listContributionRooms({
+    bool includeDeleted = false,
+  }) async {
+    final rows = await _db.select(_db.contributionRoomsTable).get();
+    final rooms = rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapRoom)
+        .toList();
+    rooms.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return rooms;
+  }
+
+  @override
+  Future<void> upsertContributionRoom(
+    ContributionRoom room, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.contributionRoomsTable)
+        .insertOnConflictUpdate(
+          ContributionRoomsTableCompanion(
+            id: Value(room.id),
+            name: Value(room.name),
+            baselineRemainingCents: Value(room.baselineRemainingCents),
+            baselineAsOf: Value(room.baselineAsOf),
+            annualLimitsJson: Value(
+              jsonEncode([for (final l in room.annualLimits) l.toJson()]),
+            ),
+            createdAt: Value(room.createdAt),
+            updatedAt: Value(room.updatedAt),
+            version: Value(room.version),
+            deletedAt: Value(room.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.contributionRooms, room);
+    }
+  }
+
+  @override
+  Future<void> softDeleteContributionRoom(String id) async {
+    final row = await (_db.select(
+      _db.contributionRoomsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    if (row == null) return;
+    final room = _mapRoom(row);
+    await upsertContributionRoom(
+      room.copyWith(
+        updatedAt: utcNow(),
+        version: room.version + 1,
+        deletedAt: utcNow(),
+      ),
+    );
+    for (final asset in await listAssets()) {
+      if (asset.contributionRoomId != id) continue;
+      await upsertAsset(
+        asset.copyWith(
+          clearContributionRoomId: true,
+          updatedAt: utcNow(),
+          version: asset.version + 1,
+        ),
+      );
+    }
+  }
+
+  @override
+  Future<List<AssetRoomEvent>> listAssetRoomEvents({
+    bool includeDeleted = false,
+  }) async {
+    final rows = await _db.select(_db.assetRoomEventsTable).get();
+    final events = rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapRoomEvent)
+        .toList();
+    events.sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+    return events;
+  }
+
+  @override
+  Future<AssetRoomEvent?> getAssetRoomEvent(String id) async {
+    final row = await (_db.select(
+      _db.assetRoomEventsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapRoomEvent(row);
+  }
+
+  @override
+  Future<void> upsertAssetRoomEvent(
+    AssetRoomEvent event, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.assetRoomEventsTable)
+        .insertOnConflictUpdate(
+          AssetRoomEventsTableCompanion(
+            id: Value(event.id),
+            assetId: Value(event.assetId),
+            roomId: Value(event.roomId),
+            kind: Value(event.kind.name),
+            amountCents: Value(event.amountCents),
+            occurredAt: Value(event.occurredAt),
+            transactionId: Value(event.transactionId),
+            valuationId: Value(event.valuationId),
+            counterAssetId: Value(event.counterAssetId),
+            transferGroupId: Value(event.transferGroupId),
+            note: Value(event.note),
+            createdAt: Value(event.createdAt),
+            updatedAt: Value(event.updatedAt),
+            version: Value(event.version),
+            deletedAt: Value(event.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.assetRoomEvents, event);
+    }
+  }
+
+  /// The event and, for a transfer, its other leg.
+  Future<List<AssetRoomEvent>> _roomEventGroup(AssetRoomEvent event) async {
+    final groupId = event.transferGroupId;
+    if (groupId == null) return [event];
+    return [
+      event,
+      for (final other in await listAssetRoomEvents(includeDeleted: true))
+        if (other.transferGroupId == groupId && other.id != event.id) other,
+    ];
+  }
+
+  @override
+  Future<void> softDeleteAssetRoomEvent(String id) async {
+    final event = await getAssetRoomEvent(id);
+    if (event == null) return;
+    for (final member in await _roomEventGroup(event)) {
+      if (member.deletedAt == null) {
+        await upsertAssetRoomEvent(
+          member.copyWith(
+            updatedAt: utcNow(),
+            version: member.version + 1,
+            deletedAt: utcNow(),
+          ),
+        );
+      }
+      final transactionId = member.transactionId;
+      if (transactionId == null) continue;
+      final transaction = await getTransaction(transactionId);
+      // Written directly rather than through softDeleteTransaction, which
+      // would come straight back here for the event.
+      if (transaction != null && transaction.deletedAt == null) {
+        await upsertTransaction(
+          transaction.copyWith(
+            updatedAt: utcNow(),
+            version: transaction.version + 1,
+            deletedAt: utcNow(),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Future<void> restoreAssetRoomEvent(String id) async {
+    final event = await getAssetRoomEvent(id);
+    if (event == null) return;
+    for (final member in await _roomEventGroup(event)) {
+      if (member.deletedAt != null) {
+        // Rebuilt rather than copyWith'd: copyWith reads
+        // `deletedAt ?? this.deletedAt`, so it cannot clear a tombstone.
+        await upsertAssetRoomEvent(
+          AssetRoomEvent(
+            id: member.id,
+            createdAt: member.createdAt,
+            updatedAt: utcNow(),
+            // Read off disk just now, so one above it outranks the tombstone
+            // and anything a pull landed during the undo window.
+            version: member.version + 1,
+            assetId: member.assetId,
+            roomId: member.roomId,
+            kind: member.kind,
+            amountCents: member.amountCents,
+            occurredAt: member.occurredAt,
+            transactionId: member.transactionId,
+            valuationId: member.valuationId,
+            counterAssetId: member.counterAssetId,
+            transferGroupId: member.transferGroupId,
+            note: member.note,
+          ),
+        );
+      }
+      final transactionId = member.transactionId;
+      if (transactionId == null) continue;
+      final transaction = await getTransaction(transactionId);
+      if (transaction != null && transaction.deletedAt != null) {
+        await upsertTransaction(
+          FinancialTransaction(
+            id: transaction.id,
+            createdAt: transaction.createdAt,
+            updatedAt: utcNow(),
+            version: transaction.version + 1,
+            type: transaction.type,
+            amountCents: transaction.amountCents,
+            occurredAt: transaction.occurredAt,
+            origin: transaction.origin,
+            note: transaction.note,
+            tags: transaction.tags,
+            roomEventId: transaction.roomEventId,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -2044,11 +2263,44 @@ class DriftFinanceRepository implements FinanceRepository {
         deletedAt: row.deletedAt,
       );
 
+  ContributionRoom _mapRoom(ContributionRoomsTableData row) => ContributionRoom(
+    id: row.id,
+    name: row.name,
+    baselineRemainingCents: row.baselineRemainingCents,
+    baselineAsOf: row.baselineAsOf,
+    annualLimits: AnnualLimit.listFromJson(jsonDecode(row.annualLimitsJson)),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  AssetRoomEvent _mapRoomEvent(AssetRoomEventsTableData row) => AssetRoomEvent(
+    id: row.id,
+    assetId: row.assetId,
+    roomId: row.roomId,
+    // Tolerant for the same reason as the transaction type in [_map].
+    kind: RoomEventKind.values.asNameMap()[row.kind] ??
+        RoomEventKind.contribution,
+    amountCents: row.amountCents,
+    occurredAt: row.occurredAt,
+    transactionId: row.transactionId,
+    valuationId: row.valuationId,
+    counterAssetId: row.counterAssetId,
+    transferGroupId: row.transferGroupId,
+    note: row.note,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
   Asset _mapAsset(AssetsTableData row) => Asset(
     id: row.id,
     name: row.name,
     note: row.note,
     colorValue: row.colorValue,
+    contributionRoomId: row.contributionRoomId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -2087,6 +2339,12 @@ class DriftFinanceRepository implements FinanceRepository {
           ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
         .go();
     await (_db.delete(_db.assetsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.assetRoomEventsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
+        .go();
+    await (_db.delete(_db.contributionRoomsTable)
           ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff)))
         .go();
     await (_db.delete(_db.goalAllocationsTable)
@@ -2134,6 +2392,7 @@ class DriftFinanceRepository implements FinanceRepository {
     note: row.note,
     tags: List<String>.from(jsonDecode(row.tagsJson) as List),
     occurredAt: row.occurredAt,
+    roomEventId: row.roomEventId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,

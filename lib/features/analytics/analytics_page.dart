@@ -8,6 +8,7 @@ import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
@@ -1872,8 +1873,18 @@ class _HeatmapRow extends ConsumerWidget {
                                     // Under the square, not on it: inert, and
                                     // so kept out of the pointer's way for the
                                     // tile's hitbox (see [_StatTile]).
-                                    IgnorePointer(
-                                      child: showLabel
+                                    // Held to the square's width: a date is
+                                    // wider than a narrow square, and letting
+                                    // it widen its column pushed the row past
+                                    // its edge. It spills over the unlabelled
+                                    // neighbours instead.
+                                    SizedBox(
+                                      width: squareSize,
+                                      child: OverflowBox(
+                                        maxWidth: double.infinity,
+                                        fit: OverflowBoxFit.deferToChild,
+                                        child: IgnorePointer(
+                                          child: showLabel
                                           ? Text(
                                               _shortDateLabel(
                                                 period,
@@ -1892,6 +1903,8 @@ class _HeatmapRow extends ConsumerWidget {
                                               '',
                                               style: TextStyle(fontSize: 8),
                                             ),
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 ),

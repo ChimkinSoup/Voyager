@@ -11,6 +11,7 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
@@ -470,8 +471,37 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       updatedAt: now,
     ),
   );
+  await financeRepo.upsertContributionRoom(
+    ContributionRoom(
+      id: 'room-1',
+      name: 'TFSA',
+      baselineRemainingCents: 700000,
+      baselineAsOf: now,
+      annualLimits: const [AnnualLimit(fromYear: 2026, cents: 700000)],
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
   await financeRepo.upsertAsset(
-    Asset(id: 'asset-1', name: 'Savings', createdAt: now, updatedAt: now),
+    Asset(
+      id: 'asset-1',
+      name: 'Savings',
+      contributionRoomId: 'room-1',
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await financeRepo.upsertAssetRoomEvent(
+    AssetRoomEvent(
+      id: 'room-event-1',
+      assetId: 'asset-1',
+      roomId: 'room-1',
+      kind: RoomEventKind.contribution,
+      amountCents: 5000,
+      occurredAt: now,
+      createdAt: now,
+      updatedAt: now,
+    ),
   );
   await financeRepo.upsertAssetValuation(
     AssetValuation(
@@ -875,6 +905,14 @@ void main() {
       );
       expectBefore(FirestoreCollections.assets, FirestoreCollections.assetValuations);
       expectBefore(
+        FirestoreCollections.contributionRooms,
+        FirestoreCollections.assets,
+      );
+      expectBefore(
+        FirestoreCollections.assets,
+        FirestoreCollections.assetRoomEvents,
+      );
+      expectBefore(
         FirestoreCollections.savingsGoals,
         FirestoreCollections.goalAllocations,
       );
@@ -915,6 +953,8 @@ void main() {
         'finance_categories_table',
         'assets_table',
         'asset_valuations_table',
+        'contribution_rooms_table',
+        'asset_room_events_table',
         'savings_goals_table',
         'goal_allocations_table',
         'pinned_notes_table',

@@ -105,7 +105,12 @@ class JournalEntryListLayout {
   static const dividerWidth = 12.0;
   static const minListWidth = 180.0;
   static const maxListWidth = 520.0;
-  static const minEditorWidth = 360.0;
+  /// The editor's metadata controls — weather, a date pill that never
+  /// truncates, trash, plus the dev remote-pull button — need ~335px inside
+  /// [editorPadding] even with the mood bar moved to a line of its own. At
+  /// 360 a wide stored list overflowed them in a minimum-size window; 432 is
+  /// what that window leaves beside a [minListWidth] list.
+  static const minEditorWidth = 432.0;
 
   static double defaultListWidth(double totalWidth) {
     return (totalWidth * 0.22).clamp(minListWidth, 320.0);

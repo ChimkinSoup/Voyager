@@ -1,5 +1,6 @@
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/job_models.dart';
@@ -203,6 +204,8 @@ abstract class FinanceRepository {
     FinancialTransaction transaction, {
     bool recordLocalActivity = true,
   });
+
+  /// Also tombstones the room event the row is the cash side of, if any.
   Future<void> softDeleteTransaction(String id);
 
   Future<List<Subscription>> listSubscriptions({bool includeDeleted = false});
@@ -239,6 +242,37 @@ abstract class FinanceRepository {
     bool recordLocalActivity = true,
   });
   Future<void> softDeleteAssetValuation(String id);
+
+  Future<List<ContributionRoom>> listContributionRooms({
+    bool includeDeleted = false,
+  });
+  Future<void> upsertContributionRoom(
+    ContributionRoom room, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Tombstones the room and detaches every asset still in it. The room's
+  /// events are kept.
+  Future<void> softDeleteContributionRoom(String id);
+
+  Future<List<AssetRoomEvent>> listAssetRoomEvents({
+    bool includeDeleted = false,
+  });
+
+  /// See [getTransaction].
+  Future<AssetRoomEvent?> getAssetRoomEvent(String id);
+  Future<void> upsertAssetRoomEvent(
+    AssetRoomEvent event, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Tombstones the event together with its ledger row and, for a transfer,
+  /// its other leg. Valuations are left alone: they are history.
+  Future<void> softDeleteAssetRoomEvent(String id);
+
+  /// Undoes [softDeleteAssetRoomEvent]: the event, its ledger row and its
+  /// other leg come back, each at a version above its tombstone's.
+  Future<void> restoreAssetRoomEvent(String id);
 
   Future<List<SavingsGoal>> listSavingsGoals({bool includeDeleted = false});
   Future<void> upsertSavingsGoal(

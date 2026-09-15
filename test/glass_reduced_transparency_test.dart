@@ -2,7 +2,7 @@
 // same way, or the app ends up with a near-solid dialog carrying blurred
 // buttons on it. Flutter exposes no cross-platform
 // "prefers-reduced-transparency", so `MediaQuery.highContrast` is the proxy —
-// these pin that all three glass surfaces read it, and that
+// these pin that the blurring glass surfaces read it, and that
 // MaterializeTransition's blur ramp exists at all and costs nothing at rest.
 
 import 'dart:ui';
@@ -40,22 +40,23 @@ Future<void> _pump(
 }
 
 void main() {
-  testWidgets('GlassButton drops its blur under high contrast', (tester) async {
+  // A button's blur re-ran on every frame of the animated background: five in
+  // the calendar header tripled idle GPU load. So it never blurs, in either
+  // mode, and is left nothing to disagree with a near-solid surface about.
+  testWidgets('GlassButton never carries a backdrop blur', (tester) async {
     final button = GlassButton(onPressed: () {}, label: 'Save');
 
-    await _pump(tester, button, highContrast: false);
-    expect(
-      _blurSigma(tester, find.byType(GlassButton)),
-      greaterThan(0),
-      reason: 'normally the button frosts what is behind it',
-    );
-
-    await _pump(tester, button, highContrast: true);
-    expect(
-      _blurSigma(tester, find.byType(GlassButton)),
-      0,
-      reason: 'high contrast asks for a solid surface, not a translucent one',
-    );
+    for (final highContrast in [false, true]) {
+      await _pump(tester, button, highContrast: highContrast);
+      expect(
+        find.descendant(
+          of: find.byType(GlassButton),
+          matching: find.byType(BackdropFilter),
+        ),
+        findsNothing,
+        reason: 'highContrast: $highContrast',
+      );
+    }
   });
 
   testWidgets('GlassSurface answers high contrast the same way a button does', (

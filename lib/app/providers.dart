@@ -55,6 +55,7 @@ import 'package:voyager/data/services/quotes_loader.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/job_models.dart';
@@ -1452,6 +1453,8 @@ final _secondaryDataProviders = <ProviderOrFamily>[
   financeCategoriesProvider,
   assetsProvider,
   assetValuationsProvider,
+  contributionRoomsProvider,
+  assetRoomEventsProvider,
   savingsGoalsProvider,
   goalAllocationsProvider,
   pinnedNotesProvider,
@@ -1650,6 +1653,18 @@ final assetValuationsProvider = FutureProvider<List<AssetValuation>>((ref) {
 final savingsGoalsProvider = FutureProvider<List<SavingsGoal>>((ref) {
   ref.keepAlive();
   return ref.watch(financeRepositoryProvider).listSavingsGoals();
+});
+
+/// Contribution rooms, alphabetical by name.
+final contributionRoomsProvider = FutureProvider<List<ContributionRoom>>((ref) {
+  ref.keepAlive();
+  return ref.watch(financeRepositoryProvider).listContributionRooms();
+});
+
+/// Every contribution-room event, newest first.
+final assetRoomEventsProvider = FutureProvider<List<AssetRoomEvent>>((ref) {
+  ref.keepAlive();
+  return ref.watch(financeRepositoryProvider).listAssetRoomEvents();
 });
 
 /// Every goal allocation, newest first.

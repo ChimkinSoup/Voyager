@@ -436,16 +436,20 @@ class _DictionaryDialogState extends ConsumerState<_DictionaryDialog> {
               ),
             ],
             const SizedBox(height: 16),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 320),
-              child: !ready
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(24),
-                        child: CircularProgressIndicator(),
-                      ),
-                    )
-                  : _buildResults(theme, bundled, custom, flaggedPairs),
+            // Flexible so the list gives up height in a short window rather
+            // than pushing the dialog past its bottom edge.
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 320),
+                child: !ready
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(24),
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    : _buildResults(theme, bundled, custom, flaggedPairs),
+              ),
             ),
           ],
         ),

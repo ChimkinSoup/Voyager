@@ -437,6 +437,19 @@ class OutboxSyncWorker {
           (record) => record.id,
           assetValuationToFirestore,
         );
+      case FirestoreCollections.contributionRooms:
+        return fromList(
+          await DriftFinanceRepository(_db).listContributionRooms(
+            includeDeleted: true,
+          ),
+          (record) => record.id,
+          contributionRoomToFirestore,
+        );
+      case FirestoreCollections.assetRoomEvents:
+        return byId(
+          DriftFinanceRepository(_db).getAssetRoomEvent,
+          assetRoomEventToFirestore,
+        );
       case FirestoreCollections.savingsGoals:
         return fromList(
           await DriftFinanceRepository(_db).listSavingsGoals(

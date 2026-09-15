@@ -9,14 +9,19 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/widgets/chart_hover_bubble.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/scope_switcher.dart';
+import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/services/finance_analytics.dart';
 import 'package:voyager/features/finance/finance_asset_modal.dart';
 import 'package:voyager/features/finance/finance_category_modal.dart';
+import 'package:voyager/features/finance/finance_contribution_room_modal.dart';
+import 'package:voyager/features/finance/finance_room_bar.dart';
+import 'package:voyager/features/finance/finance_room_event_modal.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart'
     show kIncomeGreen;
@@ -91,7 +96,10 @@ class FinanceAnalyticsView extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 880;
+        // Side by side, each card gets under half the width. The breakdown
+        // card's month row — "September 2026" beside the Category/Tag/Store
+        // switch — needs ~410px inside the card, which 880 did not leave.
+        final wide = constraints.maxWidth >= 960;
         final padding = EdgeInsets.fromLTRB(wide ? 20 : 16, 4, wide ? 20 : 16, 96);
 
         if (!wide) {
@@ -1465,6 +1473,15 @@ class _NetWorthCard extends ConsumerWidget {
     final assets = ref.watch(assetsProvider).valueOrNull ?? const [];
     final valuations =
         ref.watch(assetValuationsProvider).valueOrNull ?? const [];
+    final rooms = ref.watch(contributionRoomsProvider).valueOrNull ?? const [];
+    final roomEvents =
+        ref.watch(assetRoomEventsProvider).valueOrNull ?? const [];
+    final now = DateTime.now();
+    // One summary per room, shared by every asset in it.
+    final roomSummaries = {
+      for (final room in rooms)
+        room.id: roomYearSummary(room, roomEvents, now: now),
+    };
 
     final series = netWorthSeries(
       transactions,
@@ -1536,6 +1553,10 @@ class _NetWorthCard extends ConsumerWidget {
               _AssetRow(
                 asset: asset,
                 valuation: latestValuation(valuations, asset.id),
+                roomSummary: roomSummaries[asset.contributionRoomId],
+                roomMemberCount: asset.contributionRoomId == null
+                    ? 0
+                    : roomMembers(assets, asset.contributionRoomId!).length,
               ),
           ],
         ],
@@ -1809,49 +1830,152 @@ class _ChartBubbleLayout extends SingleChildLayoutDelegate {
       anchor != oldDelegate.anchor;
 }
 
-class _AssetRow extends ConsumerWidget {
-  const _AssetRow({required this.asset, required this.valuation});
+class _AssetRow extends ConsumerStatefulWidget {
+  const _AssetRow({
+    required this.asset,
+    required this.valuation,
+    required this.roomSummary,
+    required this.roomMemberCount,
+  });
 
   final Asset asset;
   final AssetValuation? valuation;
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final color = paletteColor(asset.colorValue, context);
-    final value = valuation?.valueCents;
+  /// The room's figures when the asset is in one, else null.
+  final RoomYearSummary? roomSummary;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: () => showAssetModal(context, ref, existing: asset),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                asset.name,
-                style: theme.textTheme.labelMedium,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+  /// Live assets in the asset's room, itself included. Transfer needs two.
+  final int roomMemberCount;
+
+  @override
+  ConsumerState<_AssetRow> createState() => _AssetRowState();
+}
+
+class _AssetRowState extends ConsumerState<_AssetRow> {
+  final _menuKey = GlobalKey<ContextMenuRegionState>();
+
+  /// Where the last press landed, so a long-press opens the menu under the
+  /// finger the way a right-click opens it under the pointer.
+  Offset _pressPosition = Offset.zero;
+
+  List<ContextMenuItem> _menuItems() {
+    final asset = widget.asset;
+    if (asset.contributionRoomId == null || widget.roomSummary == null) {
+      return [
+        ContextMenuItem(
+          label: 'Track contribution room…',
+          icon: PhosphorIconsRegular.chartBar,
+          onTap: () => showContributionRoomModal(context, ref, asset: asset),
+        ),
+      ];
+    }
+    return [
+      ContextMenuItem(
+        label: 'Contribute…',
+        icon: PhosphorIconsRegular.arrowDownLeft,
+        onTap: () => showRoomCashEventModal(
+          context,
+          ref,
+          asset: asset,
+          kind: RoomEventKind.contribution,
+        ),
+      ),
+      ContextMenuItem(
+        label: 'Withdraw…',
+        icon: PhosphorIconsRegular.arrowUpRight,
+        onTap: () => showRoomCashEventModal(
+          context,
+          ref,
+          asset: asset,
+          kind: RoomEventKind.withdrawal,
+        ),
+      ),
+      if (widget.roomMemberCount >= 2)
+        ContextMenuItem(
+          label: 'Transfer…',
+          icon: PhosphorIconsRegular.arrowsLeftRight,
+          onTap: () => showRoomTransferModal(context, ref, from: asset),
+        ),
+      ContextMenuItem(
+        label: 'Edit contribution room…',
+        icon: PhosphorIconsRegular.pencilSimple,
+        onTap: () => showContributionRoomModal(context, ref, asset: asset),
+      ),
+      ContextMenuItem(
+        label: 'Detach from room',
+        icon: PhosphorIconsRegular.linkBreak,
+        onTap: () => _detach(),
+      ),
+    ];
+  }
+
+  Future<void> _detach() async {
+    final repo = ref.read(financeRepositoryProvider);
+    // The container outlives this row; `ref` doesn't once the list rebuilds.
+    final container = ProviderScope.containerOf(context, listen: false);
+    await setAssetContributionRoom(repo, widget.asset.id, null);
+    container.invalidate(assetsProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final asset = widget.asset;
+    final color = paletteColor(asset.colorValue, context);
+    final value = widget.valuation?.valueCents;
+    final summary = widget.roomSummary;
+
+    return ContextMenuRegion(
+      key: _menuKey,
+      itemsBuilder: _menuItems,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTapDown: (details) => _pressPosition = details.globalPosition,
+        onTap: () => showAssetModal(context, ref, existing: asset),
+        onLongPress: () => _menuKey.currentState?.openMenuAt(_pressPosition),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      asset.name,
+                      style: theme.textTheme.labelMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    value == null ? 'Not valued' : formatCents(value),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: value != null && value < 0
+                          ? theme.colorScheme.error
+                          : theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            Text(
-              value == null ? 'Not valued' : formatCents(value),
-              style: theme.textTheme.labelMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: value != null && value < 0
-                    ? theme.colorScheme.error
-                    : theme.colorScheme.onSurface,
-              ),
-            ),
-          ],
+              if (summary != null)
+                Padding(
+                  // Under the name, clear of the colour dot.
+                  padding: const EdgeInsets.only(left: 16, top: 4),
+                  child: ContributionRoomBar(summary: summary, color: color),
+                ),
+            ],
+          ),
         ),
       ),
     );

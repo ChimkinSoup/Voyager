@@ -14,8 +14,12 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
+import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/services/finance_analytics.dart';
+import 'package:voyager/features/finance/finance_contribution_room_modal.dart';
+import 'package:voyager/features/finance/finance_room_bar.dart';
+import 'package:voyager/features/finance/finance_room_history.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
@@ -155,17 +159,25 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
     final assetId = existing?.id ?? newId();
 
     try {
+      // Re-read rather than trusting [existing]: the room sheet can attach or
+      // detach this asset while this sheet is open, and writing the stale copy
+      // back would quietly undo that.
+      final onDisk = existing == null
+          ? null
+          : (await repo.listAssets()).where((a) => a.id == assetId).firstOrNull;
+      final base = onDisk ?? existing;
       await repo.upsertAsset(
         Asset(
           id: assetId,
-          createdAt: existing?.createdAt ?? now,
+          createdAt: base?.createdAt ?? now,
           updatedAt: now,
-          version: existing == null ? 0 : existing.version + 1,
+          version: base == null ? 0 : base.version + 1,
           name: _nameController.text.trim(),
           colorValue: _colorValue,
           note: _noteController.text.trim().isEmpty
               ? null
               : _noteController.text.trim(),
+          contributionRoomId: base?.contributionRoomId,
         ),
       );
 
@@ -391,6 +403,10 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
                   ),
                 ),
               ],
+              if (existing != null) ...[
+                const SizedBox(height: 20),
+                _RoomSection(assetId: existing.id, container: widget.container),
+              ],
               const SizedBox(height: 16),
               ColorPickerField(
                 label: 'Color',
@@ -420,5 +436,75 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
       ),
     );
     return CtrlEnterToSubmitScope(onSubmit: _save, child: sheet);
+  }
+}
+
+/// The asset's contribution room: its shared bar and this year's history, or
+/// a way to start tracking one.
+///
+/// Reads the asset live by id: tracking or leaving a room from the sheet
+/// stacked above this one has to show up here without reopening.
+class _RoomSection extends ConsumerWidget {
+  const _RoomSection({required this.assetId, required this.container});
+
+  final String assetId;
+  final ProviderContainer container;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final asset = (ref.watch(assetsProvider).valueOrNull ?? const <Asset>[])
+        .where((a) => a.id == assetId)
+        .firstOrNull;
+    if (asset == null) return const SizedBox.shrink();
+    final rooms = ref.watch(contributionRoomsProvider).valueOrNull ?? const [];
+    final events = ref.watch(assetRoomEventsProvider).valueOrNull ?? const [];
+    final room = rooms
+        .where((r) => r.id == asset.contributionRoomId)
+        .firstOrNull;
+    final labelStyle = theme.textTheme.labelLarge?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+
+    if (room == null) {
+      return Row(
+        children: [
+          Text('Contribution room', style: labelStyle),
+          const Spacer(),
+          TextButton(
+            onPressed: () => showContributionRoomModal(context, ref, asset: asset),
+            child: const Text('Track…'),
+          ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Contribution room · ${room.name}',
+                style: labelStyle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            TextButton(
+              onPressed: () =>
+                  showContributionRoomModal(context, ref, asset: asset),
+              child: const Text('Edit room'),
+            ),
+          ],
+        ),
+        ContributionRoomBar(
+          summary: roomYearSummary(room, events, now: DateTime.now()),
+          color: paletteColor(asset.colorValue, context),
+        ),
+        const SizedBox(height: 8),
+        RoomEventHistory(asset: asset, container: container),
+      ],
+    );
   }
 }

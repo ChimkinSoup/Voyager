@@ -372,12 +372,31 @@ and small state changes, no bounce, no celebration. They respond immediately and
 ### Glass Button (signature)
 
 The one component licensed to be lush, because it reads as an instrument face rather than a
-painted surface. A `BackdropFilter` blur (σ 12) under a three-stop diagonal fill gradient,
-finished with a dual-gradient specular border stroke and a top gloss reflection (18px tall, or
-45% of an explicit height). Press drives a 0.96 scale over 100 ms in `easeOutCubic`, releasing
-over 150. Glass opacity multiplies by state: 1.25× hovered, 1.4× pressed, 0.5× disabled. Focus
-adds an accent glow at 50% alpha with a 1px spread. Every blur and shadow radius multiplies
-through `shadowBlurScale`, so it holds up in both themes.
+painted surface. It does **not** use `BackdropFilter`: a button that blurs the live canvas
+(petal field / triangle grid) redoes that blur every background frame, and a handful in the
+calendar header tripled idle GPU load. Buttons are too small for frosting to read anyway —
+the glass is carried by fill, specular edge, and gloss alone. Larger floating chrome
+(`GlassSurface` on popovers, sheets, menus) keeps backdrop blur; that is a separate budget.
+
+Recipe:
+
+- Three-stop diagonal fill gradient, dual-gradient specular border stroke, and a top gloss
+  reflection (18px tall, or 45% of an explicit height).
+- Press drives a 0.96 scale over 100 ms in `easeOutCubic`, releasing over 150. Glass opacity
+  multiplies by state: 1.25× hovered, 1.4× pressed, 0.5× disabled. Focus adds an accent ring
+  at 50% alpha with a 2px spread (crisp, not a glow — `shadowBlurScale` must not widen it).
+- Shadow radii still multiply through `shadowBlurScale` so elevation holds in both themes.
+- High contrast (`MediaQuery.highContrast`, stand-in for reduced transparency) collapses the
+  fill to near-solid (~97%) with no translucent gradient.
+
+Theme defaults (when callers do not override `glassOpacity` / `textColor` / `borderOpacity`):
+
+- **Light:** fill ~6% accent-tinted plate; label `ink-slate` / dark ink; hairline specular at
+  ~22% — frost is unnecessary over cream paper.
+- **Dark:** fill ~22% at rest on a **graphite-field / surface** plate (not accent alone), so
+  the control separates from the live grid without blur; label and icons default to
+  `onSurface` / bone (never black ink); specular / outline a step stronger at rest (~32%) so
+  the silhouette reads over busy geometry. Hover and press multipliers still apply on top.
 
 ### Inputs / Fields
 

@@ -542,6 +542,23 @@ List<BackupCollection> buildBackupCollections({
       },
     ),
     BackupCollection(
+      name: FirestoreCollections.contributionRooms,
+      read: () async => [
+        for (final room in await financeRepository.listContributionRooms(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: room.id, data: contributionRoomToFirestore(room)),
+      ],
+      restore: (id, data) async {
+        final room = mergeContributionRoomFromRemote(data, id);
+        await financeRepository.upsertContributionRoom(
+          room,
+          recordLocalActivity: false,
+        );
+        return room;
+      },
+    ),
+    BackupCollection(
       name: FirestoreCollections.assets,
       read: () async => [
         for (final asset in await financeRepository.listAssets(
@@ -570,6 +587,23 @@ List<BackupCollection> buildBackupCollections({
           recordLocalActivity: false,
         );
         return valuation;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.assetRoomEvents,
+      read: () async => [
+        for (final event in await financeRepository.listAssetRoomEvents(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: event.id, data: assetRoomEventToFirestore(event)),
+      ],
+      restore: (id, data) async {
+        final event = mergeAssetRoomEventFromRemote(data, id);
+        await financeRepository.upsertAssetRoomEvent(
+          event,
+          recordLocalActivity: false,
+        );
+        return event;
       },
     ),
     BackupCollection(

@@ -195,7 +195,10 @@ class _CustomQuotesDialogState extends ConsumerState<_CustomQuotesDialog> {
               ),
             ],
             const SizedBox(height: 16),
-            ConstrainedBox(
+            // Flexible so the list gives up height in a short window rather
+            // than pushing the dialog past its bottom edge.
+            Flexible(
+              child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 320),
               child: quotesAsync.when(
                 loading: () => const Center(
@@ -284,6 +287,7 @@ class _CustomQuotesDialogState extends ConsumerState<_CustomQuotesDialog> {
                   );
                 },
               ),
+            ),
             ),
           ],
         ),

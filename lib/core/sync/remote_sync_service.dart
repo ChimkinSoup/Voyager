@@ -24,6 +24,7 @@ import 'package:voyager/domain/services/character_operation.dart';
 import 'package:voyager/domain/services/character_sequence_crdt_merger.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/job_models.dart';
@@ -1242,6 +1243,16 @@ class RemoteSyncService {
         );
       case FirestoreCollections.goalAllocations:
         return pullGoalAllocations(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.contributionRooms:
+        return pullContributionRooms(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.assetRoomEvents:
+        return pullAssetRoomEvents(
           documentIds: documentIds,
           documentData: documentData,
         );
@@ -3560,6 +3571,12 @@ class RemoteSyncService {
       case FirestoreCollections.goalAllocations:
         if (record is! GoalAllocation) return null;
         return (id: record.id, payload: goalAllocationToFirestore(record));
+      case FirestoreCollections.contributionRooms:
+        if (record is! ContributionRoom) return null;
+        return (id: record.id, payload: contributionRoomToFirestore(record));
+      case FirestoreCollections.assetRoomEvents:
+        if (record is! AssetRoomEvent) return null;
+        return (id: record.id, payload: assetRoomEventToFirestore(record));
       case FirestoreCollections.pinnedNotes:
         if (record is! PinnedNote) return null;
         return (id: record.id, payload: pinnedNoteToFirestore(record));
@@ -3856,6 +3873,54 @@ class RemoteSyncService {
     );
   }
 
+  Future<bool> pullContributionRooms({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) async {
+    final local = {
+      for (final record in await _financeRepository.listContributionRooms(
+        includeDeleted: true,
+      ))
+        record.id: record,
+    };
+    return _pullCollection(
+      FirestoreCollections.contributionRooms,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        await _financeRepository.upsertContributionRoom(
+          mergeContributionRoomFromRemote(data, id, local: local[id]),
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> pullAssetRoomEvents({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) async {
+    final local = {
+      for (final record in await _financeRepository.listAssetRoomEvents(
+        includeDeleted: true,
+      ))
+        record.id: record,
+    };
+    return _pullCollection(
+      FirestoreCollections.assetRoomEvents,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        await _financeRepository.upsertAssetRoomEvent(
+          mergeAssetRoomEventFromRemote(data, id, local: local[id]),
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
   Future<bool> pullPinnedNotes({
     Set<String>? documentIds,
     Map<String, Map<String, dynamic>>? documentData,
@@ -4020,6 +4085,8 @@ class RemoteSyncService {
     await pullFinanceCategories();
     await pullAssets();
     await pullAssetValuations();
+    await pullContributionRooms();
+    await pullAssetRoomEvents();
     await pullSavingsGoals();
     await pullGoalAllocations();
     await pullPinnedNotes();
@@ -4221,6 +4288,8 @@ class LiveSyncController {
     FirestoreCollections.financeCategories,
     FirestoreCollections.assets,
     FirestoreCollections.assetValuations,
+    FirestoreCollections.contributionRooms,
+    FirestoreCollections.assetRoomEvents,
     FirestoreCollections.savingsGoals,
     FirestoreCollections.goalAllocations,
     FirestoreCollections.pinnedNotes,

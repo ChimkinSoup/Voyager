@@ -9,6 +9,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
+import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
@@ -2110,6 +2111,7 @@ Map<String, dynamic> transactionToFirestore(FinancialTransaction tx) => {
   'origin': tx.origin,
   'note': tx.note,
   'tags': tx.tags,
+  'roomEventId': tx.roomEventId,
   'createdAt': _dateToFirestoreRequired(tx.createdAt),
   'updatedAt': _dateToFirestoreRequired(tx.updatedAt),
   'version': tx.version,
@@ -2147,6 +2149,11 @@ FinancialTransaction mergeTransactionFromRemote(
         : local?.origin,
     note: data['note'] as String?,
     tags: _stringListFromRemote(data['tags'], local?.tags ?? const []),
+    // Keyed on presence: a document written before the field existed says
+    // nothing about the link, but one written after it says so even when null.
+    roomEventId: data.containsKey('roomEventId')
+        ? data['roomEventId'] as String?
+        : local?.roomEventId,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -2304,6 +2311,8 @@ Map<String, dynamic> assetToFirestore(Asset asset) => {
   'name': asset.name,
   'note': asset.note,
   'colorValue': asset.colorValue,
+  // Written even when null, so detaching reaches the other devices.
+  'contributionRoomId': asset.contributionRoomId,
   'createdAt': _dateToFirestoreRequired(asset.createdAt),
   'updatedAt': _dateToFirestoreRequired(asset.updatedAt),
   'version': asset.version,
@@ -2331,6 +2340,9 @@ Asset mergeAssetFromRemote(
         (data['colorValue'] as num?)?.toInt() ??
         local?.colorValue ??
         0xFF7C9EFF,
+    contributionRoomId: data.containsKey('contributionRoomId')
+        ? data['contributionRoomId'] as String?
+        : local?.contributionRoomId,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -2370,6 +2382,116 @@ AssetValuation mergeAssetValuationFromRemote(
     assetId: data['assetId'] as String? ?? local?.assetId ?? '',
     valueCents: (data['valueCents'] as num?)?.toInt() ?? local?.valueCents ?? 0,
     asOf: parseFirestoreDate(data['asOf']) ?? local?.asOf ?? remoteUpdated,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> contributionRoomToFirestore(ContributionRoom room) => {
+  'id': room.id,
+  'name': room.name,
+  'baselineRemainingCents': room.baselineRemainingCents,
+  'baselineAsOf': _dateToFirestoreRequired(room.baselineAsOf),
+  'annualLimits': [for (final l in room.annualLimits) l.toJson()],
+  'createdAt': _dateToFirestoreRequired(room.createdAt),
+  'updatedAt': _dateToFirestoreRequired(room.updatedAt),
+  'version': room.version,
+  'deletedAt': _dateToFirestore(room.deletedAt),
+};
+
+ContributionRoom mergeContributionRoomFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  ContributionRoom? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return ContributionRoom(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
+    baselineRemainingCents:
+        (data['baselineRemainingCents'] as num?)?.toInt() ??
+        local?.baselineRemainingCents ??
+        0,
+    baselineAsOf:
+        parseFirestoreDate(data['baselineAsOf']) ??
+        local?.baselineAsOf ??
+        remoteUpdated,
+    annualLimits: data.containsKey('annualLimits')
+        ? AnnualLimit.listFromJson(data['annualLimits'])
+        : local?.annualLimits ?? const [],
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> assetRoomEventToFirestore(AssetRoomEvent event) => {
+  'id': event.id,
+  'assetId': event.assetId,
+  'roomId': event.roomId,
+  'kind': event.kind.name,
+  'amountCents': event.amountCents,
+  'occurredAt': _dateToFirestoreRequired(event.occurredAt),
+  'transactionId': event.transactionId,
+  'valuationId': event.valuationId,
+  'counterAssetId': event.counterAssetId,
+  'transferGroupId': event.transferGroupId,
+  'note': event.note,
+  'createdAt': _dateToFirestoreRequired(event.createdAt),
+  'updatedAt': _dateToFirestoreRequired(event.updatedAt),
+  'version': event.version,
+  'deletedAt': _dateToFirestore(event.deletedAt),
+};
+
+AssetRoomEvent mergeAssetRoomEventFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  AssetRoomEvent? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return AssetRoomEvent(
+    id: id,
+    assetId: data['assetId'] as String? ?? local?.assetId ?? '',
+    roomId: data['roomId'] as String? ?? local?.roomId ?? '',
+    kind: _enumFromName(
+      RoomEventKind.values,
+      data['kind'],
+      local?.kind ?? RoomEventKind.contribution,
+    ),
+    amountCents:
+        (data['amountCents'] as num?)?.toInt() ?? local?.amountCents ?? 0,
+    occurredAt:
+        parseFirestoreDate(data['occurredAt']) ??
+        local?.occurredAt ??
+        remoteUpdated,
+    transactionId: data['transactionId'] as String?,
+    valuationId: data['valuationId'] as String?,
+    counterAssetId: data['counterAssetId'] as String?,
+    transferGroupId: data['transferGroupId'] as String?,
+    note: data['note'] as String?,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
