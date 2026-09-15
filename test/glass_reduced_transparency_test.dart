@@ -9,6 +9,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 
@@ -126,5 +127,70 @@ void main() {
       findsNothing,
       reason: 'materializing is exactly the effect reduced motion opts out of',
     );
+  });
+
+  testWidgets('GlassButton dark defaults use onSurface label and a thicker plate', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: VoyagerTheme.dark(),
+        home: Scaffold(
+          body: Center(
+            child: GlassButton(onPressed: () {}, label: 'Save'),
+          ),
+        ),
+      ),
+    );
+
+    final text = tester.widget<Text>(find.text('Save'));
+    expect(
+      text.style?.color,
+      VoyagerTheme.dark().colorScheme.onSurface,
+      reason: 'dark glass labels must not stay on black ink',
+    );
+
+    final fill = tester.widget<AnimatedContainer>(
+      find
+          .descendant(
+            of: find.byType(GlassButton),
+            matching: find.byType(AnimatedContainer),
+          )
+          .last,
+    );
+    final decoration = fill.decoration! as BoxDecoration;
+    final gradient = decoration.gradient! as LinearGradient;
+    // Mid stop is the plate body at ~0.22 — light's 0.06 wafer would fail this.
+    expect(gradient.colors[1].a, closeTo(0.22, 0.001));
+  });
+
+  testWidgets('GlassButton light defaults keep the thin accent wafer', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: VoyagerTheme.light(),
+        home: Scaffold(
+          body: Center(
+            child: GlassButton(onPressed: () {}, label: 'Save'),
+          ),
+        ),
+      ),
+    );
+
+    final text = tester.widget<Text>(find.text('Save'));
+    expect(text.style?.color, Colors.black87);
+
+    final fill = tester.widget<AnimatedContainer>(
+      find
+          .descendant(
+            of: find.byType(GlassButton),
+            matching: find.byType(AnimatedContainer),
+          )
+          .last,
+    );
+    final decoration = fill.decoration! as BoxDecoration;
+    final gradient = decoration.gradient! as LinearGradient;
+    expect(gradient.colors[1].a, closeTo(0.06, 0.001));
   });
 }

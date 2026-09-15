@@ -26,8 +26,8 @@ class GlassButton extends StatefulWidget {
     this.padding,
     this.margin,
     this.borderRadius,
-    this.glassOpacity = 0.06,
-    this.borderOpacity = 0.22,
+    this.glassOpacity,
+    this.borderOpacity,
     this.elevation = 1.5,
     this.enabled = true,
     this.dense = false,
@@ -84,11 +84,13 @@ class GlassButton extends StatefulWidget {
   /// Custom border radius for shaping the glass container. Defaults to `BorderRadius.circular(12)` (or `10` when [dense]).
   final BorderRadius? borderRadius;
 
-  /// Base opacity of the glass surface fill.
-  final double glassOpacity;
+  /// Base opacity of the glass surface fill. Null uses the theme default
+  /// (~0.06 light / ~0.22 dark) — see DESIGN.md Glass Button.
+  final double? glassOpacity;
 
-  /// Base opacity of the specular glass edge highlight.
-  final double borderOpacity;
+  /// Base opacity of the specular glass edge highlight. Null uses the theme
+  /// default (~0.22 light / ~0.32 dark).
+  final double? borderOpacity;
 
   /// Shadow elevation for depth and drop shadow.
   final double elevation;
@@ -196,11 +198,17 @@ class _GlassButtonState extends State<GlassButton>
     final effectiveRadius = widget.borderRadius ??
         BorderRadius.circular(widget.dense ? 10.0 : 12.0);
 
-    // Determine base glass tint color
-    final baseColor = widget.color ?? theme.colorScheme.primary;
+    // Light keeps an accent-tinted wafer; dark defaults to the field plate so
+    // the control separates from the live grid without a BackdropFilter.
+    final baseColor = widget.color ??
+        (isDark
+            ? (theme.inputDecorationTheme.fillColor ??
+                theme.colorScheme.surface)
+            : theme.colorScheme.primary);
 
-    // Determine text and icon foreground colors
-    final defaultFg = widget.textColor ?? Colors.black87;
+    // Light ink on cream glass; onSurface / bone on the dark plate.
+    final defaultFg =
+        widget.textColor ?? (isDark ? theme.colorScheme.onSurface : Colors.black87);
 
     final fgColor = isInteractive
         ? defaultFg
@@ -214,6 +222,9 @@ class _GlassButtonState extends State<GlassButton>
     // translucent on top of a surface that has gone near-solid.
     final nearSolid = MediaQuery.maybeOf(context)?.highContrast ?? false;
 
+    final baseGlassOpacity = widget.glassOpacity ?? (isDark ? 0.22 : 0.06);
+    final baseBorderOpacity = widget.borderOpacity ?? (isDark ? 0.32 : 0.22);
+
     // Calculate dynamic glass opacity based on interaction state
     double opacityMultiplier = 1.0;
     if (_isPressed) {
@@ -225,26 +236,19 @@ class _GlassButtonState extends State<GlassButton>
     }
 
     final currentGlassOpacity =
-        (widget.glassOpacity * opacityMultiplier).clamp(0.01, 0.85);
+        (baseGlassOpacity * opacityMultiplier).clamp(0.01, 0.85);
 
-    // Glass fill gradient (ultra-clear top-left highlight down to subtle translucent base)
+    // Flat plate: the old diagonal fade (highlight → half-opacity) read as
+    // "colored on one side" once dark defaults got thicker. Sheen still comes
+    // from the top gloss strip and the specular border, not from the fill.
     final glassFillGradient = LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
-      colors: nearSolid
-          // Near-solid and flat: the gradient's whole job is to read as
-          // translucent material, which is exactly what is being opted out of.
-          ? [
-              baseColor.withValues(alpha: 0.97),
-              baseColor.withValues(alpha: 0.97),
-              baseColor.withValues(alpha: 0.97),
-            ]
-          : [
-              (isDark ? Colors.white : baseColor)
-                  .withValues(alpha: (currentGlassOpacity + (isDark ? 0.03 : 0.01)).clamp(0.0, 1.0)),
-              baseColor.withValues(alpha: currentGlassOpacity),
-              baseColor.withValues(alpha: (currentGlassOpacity * 0.5).clamp(0.01, 0.7)),
-            ],
+      colors: [
+        baseColor.withValues(alpha: nearSolid ? 0.97 : currentGlassOpacity),
+        baseColor.withValues(alpha: nearSolid ? 0.97 : currentGlassOpacity),
+        baseColor.withValues(alpha: nearSolid ? 0.97 : currentGlassOpacity),
+      ],
       stops: const [0.0, 0.5, 1.0],
     );
 
@@ -256,7 +260,7 @@ class _GlassButtonState extends State<GlassButton>
         : baseColor.withValues(alpha: 0.3);
 
     final currentBorderOpacity =
-        (widget.borderOpacity * (_isHovered ? 1.3 : 1.0)).clamp(0.1, 0.9);
+        (baseBorderOpacity * (_isHovered ? 1.3 : 1.0)).clamp(0.1, 0.9);
 
     final effectivePadding = widget.padding ??
         EdgeInsets.symmetric(
