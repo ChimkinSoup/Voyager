@@ -16788,6 +16788,17 @@ class $TransactionsTableTable extends TransactionsTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _roomEventIdMeta = const VerificationMeta(
+    'roomEventId',
+  );
+  @override
+  late final GeneratedColumn<String> roomEventId = GeneratedColumn<String>(
+    'room_event_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -16842,6 +16853,7 @@ class $TransactionsTableTable extends TransactionsTable
     note,
     tagsJson,
     occurredAt,
+    roomEventId,
     createdAt,
     updatedAt,
     version,
@@ -16909,6 +16921,15 @@ class $TransactionsTableTable extends TransactionsTable
     } else if (isInserting) {
       context.missing(_occurredAtMeta);
     }
+    if (data.containsKey('room_event_id')) {
+      context.handle(
+        _roomEventIdMeta,
+        roomEventId.isAcceptableOrUnknown(
+          data['room_event_id']!,
+          _roomEventIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -16974,6 +16995,10 @@ class $TransactionsTableTable extends TransactionsTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}occurred_at'],
       )!,
+      roomEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}room_event_id'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -17008,6 +17033,7 @@ class TransactionsTableData extends DataClass
   final String? note;
   final String tagsJson;
   final DateTime occurredAt;
+  final String? roomEventId;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -17020,6 +17046,7 @@ class TransactionsTableData extends DataClass
     this.note,
     required this.tagsJson,
     required this.occurredAt,
+    this.roomEventId,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -17039,6 +17066,9 @@ class TransactionsTableData extends DataClass
     }
     map['tags_json'] = Variable<String>(tagsJson);
     map['occurred_at'] = Variable<DateTime>(occurredAt);
+    if (!nullToAbsent || roomEventId != null) {
+      map['room_event_id'] = Variable<String>(roomEventId);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -17059,6 +17089,9 @@ class TransactionsTableData extends DataClass
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
       tagsJson: Value(tagsJson),
       occurredAt: Value(occurredAt),
+      roomEventId: roomEventId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(roomEventId),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -17081,6 +17114,7 @@ class TransactionsTableData extends DataClass
       note: serializer.fromJson<String?>(json['note']),
       tagsJson: serializer.fromJson<String>(json['tagsJson']),
       occurredAt: serializer.fromJson<DateTime>(json['occurredAt']),
+      roomEventId: serializer.fromJson<String?>(json['roomEventId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -17098,6 +17132,7 @@ class TransactionsTableData extends DataClass
       'note': serializer.toJson<String?>(note),
       'tagsJson': serializer.toJson<String>(tagsJson),
       'occurredAt': serializer.toJson<DateTime>(occurredAt),
+      'roomEventId': serializer.toJson<String?>(roomEventId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -17113,6 +17148,7 @@ class TransactionsTableData extends DataClass
     Value<String?> note = const Value.absent(),
     String? tagsJson,
     DateTime? occurredAt,
+    Value<String?> roomEventId = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -17125,6 +17161,7 @@ class TransactionsTableData extends DataClass
     note: note.present ? note.value : this.note,
     tagsJson: tagsJson ?? this.tagsJson,
     occurredAt: occurredAt ?? this.occurredAt,
+    roomEventId: roomEventId.present ? roomEventId.value : this.roomEventId,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -17143,6 +17180,9 @@ class TransactionsTableData extends DataClass
       occurredAt: data.occurredAt.present
           ? data.occurredAt.value
           : this.occurredAt,
+      roomEventId: data.roomEventId.present
+          ? data.roomEventId.value
+          : this.roomEventId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -17160,6 +17200,7 @@ class TransactionsTableData extends DataClass
           ..write('note: $note, ')
           ..write('tagsJson: $tagsJson, ')
           ..write('occurredAt: $occurredAt, ')
+          ..write('roomEventId: $roomEventId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -17177,6 +17218,7 @@ class TransactionsTableData extends DataClass
     note,
     tagsJson,
     occurredAt,
+    roomEventId,
     createdAt,
     updatedAt,
     version,
@@ -17193,6 +17235,7 @@ class TransactionsTableData extends DataClass
           other.note == this.note &&
           other.tagsJson == this.tagsJson &&
           other.occurredAt == this.occurredAt &&
+          other.roomEventId == this.roomEventId &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -17208,6 +17251,7 @@ class TransactionsTableCompanion
   final Value<String?> note;
   final Value<String> tagsJson;
   final Value<DateTime> occurredAt;
+  final Value<String?> roomEventId;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -17221,6 +17265,7 @@ class TransactionsTableCompanion
     this.note = const Value.absent(),
     this.tagsJson = const Value.absent(),
     this.occurredAt = const Value.absent(),
+    this.roomEventId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -17235,6 +17280,7 @@ class TransactionsTableCompanion
     this.note = const Value.absent(),
     this.tagsJson = const Value.absent(),
     required DateTime occurredAt,
+    this.roomEventId = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -17254,6 +17300,7 @@ class TransactionsTableCompanion
     Expression<String>? note,
     Expression<String>? tagsJson,
     Expression<DateTime>? occurredAt,
+    Expression<String>? roomEventId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -17268,6 +17315,7 @@ class TransactionsTableCompanion
       if (note != null) 'note': note,
       if (tagsJson != null) 'tags_json': tagsJson,
       if (occurredAt != null) 'occurred_at': occurredAt,
+      if (roomEventId != null) 'room_event_id': roomEventId,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -17284,6 +17332,7 @@ class TransactionsTableCompanion
     Value<String?>? note,
     Value<String>? tagsJson,
     Value<DateTime>? occurredAt,
+    Value<String?>? roomEventId,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -17298,6 +17347,7 @@ class TransactionsTableCompanion
       note: note ?? this.note,
       tagsJson: tagsJson ?? this.tagsJson,
       occurredAt: occurredAt ?? this.occurredAt,
+      roomEventId: roomEventId ?? this.roomEventId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -17330,6 +17380,9 @@ class TransactionsTableCompanion
     if (occurredAt.present) {
       map['occurred_at'] = Variable<DateTime>(occurredAt.value);
     }
+    if (roomEventId.present) {
+      map['room_event_id'] = Variable<String>(roomEventId.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -17358,6 +17411,7 @@ class TransactionsTableCompanion
           ..write('note: $note, ')
           ..write('tagsJson: $tagsJson, ')
           ..write('occurredAt: $occurredAt, ')
+          ..write('roomEventId: $roomEventId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -19109,6 +19163,17 @@ class $AssetsTableTable extends AssetsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0xFF7C9EFF),
   );
+  static const VerificationMeta _contributionRoomIdMeta =
+      const VerificationMeta('contributionRoomId');
+  @override
+  late final GeneratedColumn<String> contributionRoomId =
+      GeneratedColumn<String>(
+        'contribution_room_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -19160,6 +19225,7 @@ class $AssetsTableTable extends AssetsTable
     name,
     note,
     colorValue,
+    contributionRoomId,
     createdAt,
     updatedAt,
     version,
@@ -19200,6 +19266,15 @@ class $AssetsTableTable extends AssetsTable
       context.handle(
         _colorValueMeta,
         colorValue.isAcceptableOrUnknown(data['color_value']!, _colorValueMeta),
+      );
+    }
+    if (data.containsKey('contribution_room_id')) {
+      context.handle(
+        _contributionRoomIdMeta,
+        contributionRoomId.isAcceptableOrUnknown(
+          data['contribution_room_id']!,
+          _contributionRoomIdMeta,
+        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -19255,6 +19330,10 @@ class $AssetsTableTable extends AssetsTable
         DriftSqlType.int,
         data['${effectivePrefix}color_value'],
       )!,
+      contributionRoomId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}contribution_room_id'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -19285,6 +19364,7 @@ class AssetsTableData extends DataClass implements Insertable<AssetsTableData> {
   final String name;
   final String? note;
   final int colorValue;
+  final String? contributionRoomId;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -19294,6 +19374,7 @@ class AssetsTableData extends DataClass implements Insertable<AssetsTableData> {
     required this.name,
     this.note,
     required this.colorValue,
+    this.contributionRoomId,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -19308,6 +19389,9 @@ class AssetsTableData extends DataClass implements Insertable<AssetsTableData> {
       map['note'] = Variable<String>(note);
     }
     map['color_value'] = Variable<int>(colorValue);
+    if (!nullToAbsent || contributionRoomId != null) {
+      map['contribution_room_id'] = Variable<String>(contributionRoomId);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -19323,6 +19407,9 @@ class AssetsTableData extends DataClass implements Insertable<AssetsTableData> {
       name: Value(name),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
       colorValue: Value(colorValue),
+      contributionRoomId: contributionRoomId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(contributionRoomId),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -19342,6 +19429,9 @@ class AssetsTableData extends DataClass implements Insertable<AssetsTableData> {
       name: serializer.fromJson<String>(json['name']),
       note: serializer.fromJson<String?>(json['note']),
       colorValue: serializer.fromJson<int>(json['colorValue']),
+      contributionRoomId: serializer.fromJson<String?>(
+        json['contributionRoomId'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -19356,6 +19446,7 @@ class AssetsTableData extends DataClass implements Insertable<AssetsTableData> {
       'name': serializer.toJson<String>(name),
       'note': serializer.toJson<String?>(note),
       'colorValue': serializer.toJson<int>(colorValue),
+      'contributionRoomId': serializer.toJson<String?>(contributionRoomId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -19368,6 +19459,7 @@ class AssetsTableData extends DataClass implements Insertable<AssetsTableData> {
     String? name,
     Value<String?> note = const Value.absent(),
     int? colorValue,
+    Value<String?> contributionRoomId = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -19377,6 +19469,9 @@ class AssetsTableData extends DataClass implements Insertable<AssetsTableData> {
     name: name ?? this.name,
     note: note.present ? note.value : this.note,
     colorValue: colorValue ?? this.colorValue,
+    contributionRoomId: contributionRoomId.present
+        ? contributionRoomId.value
+        : this.contributionRoomId,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -19390,6 +19485,9 @@ class AssetsTableData extends DataClass implements Insertable<AssetsTableData> {
       colorValue: data.colorValue.present
           ? data.colorValue.value
           : this.colorValue,
+      contributionRoomId: data.contributionRoomId.present
+          ? data.contributionRoomId.value
+          : this.contributionRoomId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -19404,6 +19502,7 @@ class AssetsTableData extends DataClass implements Insertable<AssetsTableData> {
           ..write('name: $name, ')
           ..write('note: $note, ')
           ..write('colorValue: $colorValue, ')
+          ..write('contributionRoomId: $contributionRoomId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -19418,6 +19517,7 @@ class AssetsTableData extends DataClass implements Insertable<AssetsTableData> {
     name,
     note,
     colorValue,
+    contributionRoomId,
     createdAt,
     updatedAt,
     version,
@@ -19431,6 +19531,7 @@ class AssetsTableData extends DataClass implements Insertable<AssetsTableData> {
           other.name == this.name &&
           other.note == this.note &&
           other.colorValue == this.colorValue &&
+          other.contributionRoomId == this.contributionRoomId &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -19442,6 +19543,7 @@ class AssetsTableCompanion extends UpdateCompanion<AssetsTableData> {
   final Value<String> name;
   final Value<String?> note;
   final Value<int> colorValue;
+  final Value<String?> contributionRoomId;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -19452,6 +19554,7 @@ class AssetsTableCompanion extends UpdateCompanion<AssetsTableData> {
     this.name = const Value.absent(),
     this.note = const Value.absent(),
     this.colorValue = const Value.absent(),
+    this.contributionRoomId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -19463,6 +19566,7 @@ class AssetsTableCompanion extends UpdateCompanion<AssetsTableData> {
     required String name,
     this.note = const Value.absent(),
     this.colorValue = const Value.absent(),
+    this.contributionRoomId = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -19477,6 +19581,7 @@ class AssetsTableCompanion extends UpdateCompanion<AssetsTableData> {
     Expression<String>? name,
     Expression<String>? note,
     Expression<int>? colorValue,
+    Expression<String>? contributionRoomId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -19488,6 +19593,8 @@ class AssetsTableCompanion extends UpdateCompanion<AssetsTableData> {
       if (name != null) 'name': name,
       if (note != null) 'note': note,
       if (colorValue != null) 'color_value': colorValue,
+      if (contributionRoomId != null)
+        'contribution_room_id': contributionRoomId,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -19501,6 +19608,7 @@ class AssetsTableCompanion extends UpdateCompanion<AssetsTableData> {
     Value<String>? name,
     Value<String?>? note,
     Value<int>? colorValue,
+    Value<String?>? contributionRoomId,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -19512,6 +19620,7 @@ class AssetsTableCompanion extends UpdateCompanion<AssetsTableData> {
       name: name ?? this.name,
       note: note ?? this.note,
       colorValue: colorValue ?? this.colorValue,
+      contributionRoomId: contributionRoomId ?? this.contributionRoomId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -19534,6 +19643,9 @@ class AssetsTableCompanion extends UpdateCompanion<AssetsTableData> {
     }
     if (colorValue.present) {
       map['color_value'] = Variable<int>(colorValue.value);
+    }
+    if (contributionRoomId.present) {
+      map['contribution_room_id'] = Variable<String>(contributionRoomId.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -19560,6 +19672,7 @@ class AssetsTableCompanion extends UpdateCompanion<AssetsTableData> {
           ..write('name: $name, ')
           ..write('note: $note, ')
           ..write('colorValue: $colorValue, ')
+          ..write('contributionRoomId: $contributionRoomId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -20078,6 +20191,1475 @@ class AssetValuationsTableCompanion
           ..write('assetId: $assetId, ')
           ..write('valueCents: $valueCents, ')
           ..write('asOf: $asOf, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ContributionRoomsTableTable extends ContributionRoomsTable
+    with TableInfo<$ContributionRoomsTableTable, ContributionRoomsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ContributionRoomsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _baselineRemainingCentsMeta =
+      const VerificationMeta('baselineRemainingCents');
+  @override
+  late final GeneratedColumn<int> baselineRemainingCents = GeneratedColumn<int>(
+    'baseline_remaining_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _baselineAsOfMeta = const VerificationMeta(
+    'baselineAsOf',
+  );
+  @override
+  late final GeneratedColumn<DateTime> baselineAsOf = GeneratedColumn<DateTime>(
+    'baseline_as_of',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _annualLimitsJsonMeta = const VerificationMeta(
+    'annualLimitsJson',
+  );
+  @override
+  late final GeneratedColumn<String> annualLimitsJson = GeneratedColumn<String>(
+    'annual_limits_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    baselineRemainingCents,
+    baselineAsOf,
+    annualLimitsJson,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'contribution_rooms_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ContributionRoomsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('baseline_remaining_cents')) {
+      context.handle(
+        _baselineRemainingCentsMeta,
+        baselineRemainingCents.isAcceptableOrUnknown(
+          data['baseline_remaining_cents']!,
+          _baselineRemainingCentsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_baselineRemainingCentsMeta);
+    }
+    if (data.containsKey('baseline_as_of')) {
+      context.handle(
+        _baselineAsOfMeta,
+        baselineAsOf.isAcceptableOrUnknown(
+          data['baseline_as_of']!,
+          _baselineAsOfMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_baselineAsOfMeta);
+    }
+    if (data.containsKey('annual_limits_json')) {
+      context.handle(
+        _annualLimitsJsonMeta,
+        annualLimitsJson.isAcceptableOrUnknown(
+          data['annual_limits_json']!,
+          _annualLimitsJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ContributionRoomsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ContributionRoomsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      baselineRemainingCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}baseline_remaining_cents'],
+      )!,
+      baselineAsOf: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}baseline_as_of'],
+      )!,
+      annualLimitsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}annual_limits_json'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $ContributionRoomsTableTable createAlias(String alias) {
+    return $ContributionRoomsTableTable(attachedDatabase, alias);
+  }
+}
+
+class ContributionRoomsTableData extends DataClass
+    implements Insertable<ContributionRoomsTableData> {
+  final String id;
+  final String name;
+  final int baselineRemainingCents;
+  final DateTime baselineAsOf;
+
+  /// `[{"fromYear": 2026, "cents": 700000}, …]`, ascending.
+  final String annualLimitsJson;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const ContributionRoomsTableData({
+    required this.id,
+    required this.name,
+    required this.baselineRemainingCents,
+    required this.baselineAsOf,
+    required this.annualLimitsJson,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['baseline_remaining_cents'] = Variable<int>(baselineRemainingCents);
+    map['baseline_as_of'] = Variable<DateTime>(baselineAsOf);
+    map['annual_limits_json'] = Variable<String>(annualLimitsJson);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  ContributionRoomsTableCompanion toCompanion(bool nullToAbsent) {
+    return ContributionRoomsTableCompanion(
+      id: Value(id),
+      name: Value(name),
+      baselineRemainingCents: Value(baselineRemainingCents),
+      baselineAsOf: Value(baselineAsOf),
+      annualLimitsJson: Value(annualLimitsJson),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory ContributionRoomsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ContributionRoomsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      baselineRemainingCents: serializer.fromJson<int>(
+        json['baselineRemainingCents'],
+      ),
+      baselineAsOf: serializer.fromJson<DateTime>(json['baselineAsOf']),
+      annualLimitsJson: serializer.fromJson<String>(json['annualLimitsJson']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'baselineRemainingCents': serializer.toJson<int>(baselineRemainingCents),
+      'baselineAsOf': serializer.toJson<DateTime>(baselineAsOf),
+      'annualLimitsJson': serializer.toJson<String>(annualLimitsJson),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  ContributionRoomsTableData copyWith({
+    String? id,
+    String? name,
+    int? baselineRemainingCents,
+    DateTime? baselineAsOf,
+    String? annualLimitsJson,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => ContributionRoomsTableData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    baselineRemainingCents:
+        baselineRemainingCents ?? this.baselineRemainingCents,
+    baselineAsOf: baselineAsOf ?? this.baselineAsOf,
+    annualLimitsJson: annualLimitsJson ?? this.annualLimitsJson,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  ContributionRoomsTableData copyWithCompanion(
+    ContributionRoomsTableCompanion data,
+  ) {
+    return ContributionRoomsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      baselineRemainingCents: data.baselineRemainingCents.present
+          ? data.baselineRemainingCents.value
+          : this.baselineRemainingCents,
+      baselineAsOf: data.baselineAsOf.present
+          ? data.baselineAsOf.value
+          : this.baselineAsOf,
+      annualLimitsJson: data.annualLimitsJson.present
+          ? data.annualLimitsJson.value
+          : this.annualLimitsJson,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ContributionRoomsTableData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('baselineRemainingCents: $baselineRemainingCents, ')
+          ..write('baselineAsOf: $baselineAsOf, ')
+          ..write('annualLimitsJson: $annualLimitsJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    baselineRemainingCents,
+    baselineAsOf,
+    annualLimitsJson,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ContributionRoomsTableData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.baselineRemainingCents == this.baselineRemainingCents &&
+          other.baselineAsOf == this.baselineAsOf &&
+          other.annualLimitsJson == this.annualLimitsJson &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class ContributionRoomsTableCompanion
+    extends UpdateCompanion<ContributionRoomsTableData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<int> baselineRemainingCents;
+  final Value<DateTime> baselineAsOf;
+  final Value<String> annualLimitsJson;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const ContributionRoomsTableCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.baselineRemainingCents = const Value.absent(),
+    this.baselineAsOf = const Value.absent(),
+    this.annualLimitsJson = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ContributionRoomsTableCompanion.insert({
+    required String id,
+    required String name,
+    required int baselineRemainingCents,
+    required DateTime baselineAsOf,
+    this.annualLimitsJson = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       baselineRemainingCents = Value(baselineRemainingCents),
+       baselineAsOf = Value(baselineAsOf),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<ContributionRoomsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<int>? baselineRemainingCents,
+    Expression<DateTime>? baselineAsOf,
+    Expression<String>? annualLimitsJson,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (baselineRemainingCents != null)
+        'baseline_remaining_cents': baselineRemainingCents,
+      if (baselineAsOf != null) 'baseline_as_of': baselineAsOf,
+      if (annualLimitsJson != null) 'annual_limits_json': annualLimitsJson,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ContributionRoomsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<int>? baselineRemainingCents,
+    Value<DateTime>? baselineAsOf,
+    Value<String>? annualLimitsJson,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return ContributionRoomsTableCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      baselineRemainingCents:
+          baselineRemainingCents ?? this.baselineRemainingCents,
+      baselineAsOf: baselineAsOf ?? this.baselineAsOf,
+      annualLimitsJson: annualLimitsJson ?? this.annualLimitsJson,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (baselineRemainingCents.present) {
+      map['baseline_remaining_cents'] = Variable<int>(
+        baselineRemainingCents.value,
+      );
+    }
+    if (baselineAsOf.present) {
+      map['baseline_as_of'] = Variable<DateTime>(baselineAsOf.value);
+    }
+    if (annualLimitsJson.present) {
+      map['annual_limits_json'] = Variable<String>(annualLimitsJson.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ContributionRoomsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('baselineRemainingCents: $baselineRemainingCents, ')
+          ..write('baselineAsOf: $baselineAsOf, ')
+          ..write('annualLimitsJson: $annualLimitsJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AssetRoomEventsTableTable extends AssetRoomEventsTable
+    with TableInfo<$AssetRoomEventsTableTable, AssetRoomEventsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AssetRoomEventsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _assetIdMeta = const VerificationMeta(
+    'assetId',
+  );
+  @override
+  late final GeneratedColumn<String> assetId = GeneratedColumn<String>(
+    'asset_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _roomIdMeta = const VerificationMeta('roomId');
+  @override
+  late final GeneratedColumn<String> roomId = GeneratedColumn<String>(
+    'room_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountCentsMeta = const VerificationMeta(
+    'amountCents',
+  );
+  @override
+  late final GeneratedColumn<int> amountCents = GeneratedColumn<int>(
+    'amount_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _occurredAtMeta = const VerificationMeta(
+    'occurredAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> occurredAt = GeneratedColumn<DateTime>(
+    'occurred_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _transactionIdMeta = const VerificationMeta(
+    'transactionId',
+  );
+  @override
+  late final GeneratedColumn<String> transactionId = GeneratedColumn<String>(
+    'transaction_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _valuationIdMeta = const VerificationMeta(
+    'valuationId',
+  );
+  @override
+  late final GeneratedColumn<String> valuationId = GeneratedColumn<String>(
+    'valuation_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _counterAssetIdMeta = const VerificationMeta(
+    'counterAssetId',
+  );
+  @override
+  late final GeneratedColumn<String> counterAssetId = GeneratedColumn<String>(
+    'counter_asset_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _transferGroupIdMeta = const VerificationMeta(
+    'transferGroupId',
+  );
+  @override
+  late final GeneratedColumn<String> transferGroupId = GeneratedColumn<String>(
+    'transfer_group_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    assetId,
+    roomId,
+    kind,
+    amountCents,
+    occurredAt,
+    transactionId,
+    valuationId,
+    counterAssetId,
+    transferGroupId,
+    note,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'asset_room_events_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AssetRoomEventsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('asset_id')) {
+      context.handle(
+        _assetIdMeta,
+        assetId.isAcceptableOrUnknown(data['asset_id']!, _assetIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_assetIdMeta);
+    }
+    if (data.containsKey('room_id')) {
+      context.handle(
+        _roomIdMeta,
+        roomId.isAcceptableOrUnknown(data['room_id']!, _roomIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_roomIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('amount_cents')) {
+      context.handle(
+        _amountCentsMeta,
+        amountCents.isAcceptableOrUnknown(
+          data['amount_cents']!,
+          _amountCentsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_amountCentsMeta);
+    }
+    if (data.containsKey('occurred_at')) {
+      context.handle(
+        _occurredAtMeta,
+        occurredAt.isAcceptableOrUnknown(data['occurred_at']!, _occurredAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_occurredAtMeta);
+    }
+    if (data.containsKey('transaction_id')) {
+      context.handle(
+        _transactionIdMeta,
+        transactionId.isAcceptableOrUnknown(
+          data['transaction_id']!,
+          _transactionIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('valuation_id')) {
+      context.handle(
+        _valuationIdMeta,
+        valuationId.isAcceptableOrUnknown(
+          data['valuation_id']!,
+          _valuationIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('counter_asset_id')) {
+      context.handle(
+        _counterAssetIdMeta,
+        counterAssetId.isAcceptableOrUnknown(
+          data['counter_asset_id']!,
+          _counterAssetIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('transfer_group_id')) {
+      context.handle(
+        _transferGroupIdMeta,
+        transferGroupId.isAcceptableOrUnknown(
+          data['transfer_group_id']!,
+          _transferGroupIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AssetRoomEventsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AssetRoomEventsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      assetId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}asset_id'],
+      )!,
+      roomId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}room_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      amountCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount_cents'],
+      )!,
+      occurredAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}occurred_at'],
+      )!,
+      transactionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transaction_id'],
+      ),
+      valuationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}valuation_id'],
+      ),
+      counterAssetId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}counter_asset_id'],
+      ),
+      transferGroupId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transfer_group_id'],
+      ),
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $AssetRoomEventsTableTable createAlias(String alias) {
+    return $AssetRoomEventsTableTable(attachedDatabase, alias);
+  }
+}
+
+class AssetRoomEventsTableData extends DataClass
+    implements Insertable<AssetRoomEventsTableData> {
+  final String id;
+  final String assetId;
+  final String roomId;
+  final String kind;
+  final int amountCents;
+  final DateTime occurredAt;
+  final String? transactionId;
+  final String? valuationId;
+  final String? counterAssetId;
+  final String? transferGroupId;
+  final String? note;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const AssetRoomEventsTableData({
+    required this.id,
+    required this.assetId,
+    required this.roomId,
+    required this.kind,
+    required this.amountCents,
+    required this.occurredAt,
+    this.transactionId,
+    this.valuationId,
+    this.counterAssetId,
+    this.transferGroupId,
+    this.note,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['asset_id'] = Variable<String>(assetId);
+    map['room_id'] = Variable<String>(roomId);
+    map['kind'] = Variable<String>(kind);
+    map['amount_cents'] = Variable<int>(amountCents);
+    map['occurred_at'] = Variable<DateTime>(occurredAt);
+    if (!nullToAbsent || transactionId != null) {
+      map['transaction_id'] = Variable<String>(transactionId);
+    }
+    if (!nullToAbsent || valuationId != null) {
+      map['valuation_id'] = Variable<String>(valuationId);
+    }
+    if (!nullToAbsent || counterAssetId != null) {
+      map['counter_asset_id'] = Variable<String>(counterAssetId);
+    }
+    if (!nullToAbsent || transferGroupId != null) {
+      map['transfer_group_id'] = Variable<String>(transferGroupId);
+    }
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  AssetRoomEventsTableCompanion toCompanion(bool nullToAbsent) {
+    return AssetRoomEventsTableCompanion(
+      id: Value(id),
+      assetId: Value(assetId),
+      roomId: Value(roomId),
+      kind: Value(kind),
+      amountCents: Value(amountCents),
+      occurredAt: Value(occurredAt),
+      transactionId: transactionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(transactionId),
+      valuationId: valuationId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(valuationId),
+      counterAssetId: counterAssetId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(counterAssetId),
+      transferGroupId: transferGroupId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(transferGroupId),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory AssetRoomEventsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AssetRoomEventsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      assetId: serializer.fromJson<String>(json['assetId']),
+      roomId: serializer.fromJson<String>(json['roomId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      amountCents: serializer.fromJson<int>(json['amountCents']),
+      occurredAt: serializer.fromJson<DateTime>(json['occurredAt']),
+      transactionId: serializer.fromJson<String?>(json['transactionId']),
+      valuationId: serializer.fromJson<String?>(json['valuationId']),
+      counterAssetId: serializer.fromJson<String?>(json['counterAssetId']),
+      transferGroupId: serializer.fromJson<String?>(json['transferGroupId']),
+      note: serializer.fromJson<String?>(json['note']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'assetId': serializer.toJson<String>(assetId),
+      'roomId': serializer.toJson<String>(roomId),
+      'kind': serializer.toJson<String>(kind),
+      'amountCents': serializer.toJson<int>(amountCents),
+      'occurredAt': serializer.toJson<DateTime>(occurredAt),
+      'transactionId': serializer.toJson<String?>(transactionId),
+      'valuationId': serializer.toJson<String?>(valuationId),
+      'counterAssetId': serializer.toJson<String?>(counterAssetId),
+      'transferGroupId': serializer.toJson<String?>(transferGroupId),
+      'note': serializer.toJson<String?>(note),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  AssetRoomEventsTableData copyWith({
+    String? id,
+    String? assetId,
+    String? roomId,
+    String? kind,
+    int? amountCents,
+    DateTime? occurredAt,
+    Value<String?> transactionId = const Value.absent(),
+    Value<String?> valuationId = const Value.absent(),
+    Value<String?> counterAssetId = const Value.absent(),
+    Value<String?> transferGroupId = const Value.absent(),
+    Value<String?> note = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => AssetRoomEventsTableData(
+    id: id ?? this.id,
+    assetId: assetId ?? this.assetId,
+    roomId: roomId ?? this.roomId,
+    kind: kind ?? this.kind,
+    amountCents: amountCents ?? this.amountCents,
+    occurredAt: occurredAt ?? this.occurredAt,
+    transactionId: transactionId.present
+        ? transactionId.value
+        : this.transactionId,
+    valuationId: valuationId.present ? valuationId.value : this.valuationId,
+    counterAssetId: counterAssetId.present
+        ? counterAssetId.value
+        : this.counterAssetId,
+    transferGroupId: transferGroupId.present
+        ? transferGroupId.value
+        : this.transferGroupId,
+    note: note.present ? note.value : this.note,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  AssetRoomEventsTableData copyWithCompanion(
+    AssetRoomEventsTableCompanion data,
+  ) {
+    return AssetRoomEventsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      assetId: data.assetId.present ? data.assetId.value : this.assetId,
+      roomId: data.roomId.present ? data.roomId.value : this.roomId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      amountCents: data.amountCents.present
+          ? data.amountCents.value
+          : this.amountCents,
+      occurredAt: data.occurredAt.present
+          ? data.occurredAt.value
+          : this.occurredAt,
+      transactionId: data.transactionId.present
+          ? data.transactionId.value
+          : this.transactionId,
+      valuationId: data.valuationId.present
+          ? data.valuationId.value
+          : this.valuationId,
+      counterAssetId: data.counterAssetId.present
+          ? data.counterAssetId.value
+          : this.counterAssetId,
+      transferGroupId: data.transferGroupId.present
+          ? data.transferGroupId.value
+          : this.transferGroupId,
+      note: data.note.present ? data.note.value : this.note,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AssetRoomEventsTableData(')
+          ..write('id: $id, ')
+          ..write('assetId: $assetId, ')
+          ..write('roomId: $roomId, ')
+          ..write('kind: $kind, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('transactionId: $transactionId, ')
+          ..write('valuationId: $valuationId, ')
+          ..write('counterAssetId: $counterAssetId, ')
+          ..write('transferGroupId: $transferGroupId, ')
+          ..write('note: $note, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    assetId,
+    roomId,
+    kind,
+    amountCents,
+    occurredAt,
+    transactionId,
+    valuationId,
+    counterAssetId,
+    transferGroupId,
+    note,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AssetRoomEventsTableData &&
+          other.id == this.id &&
+          other.assetId == this.assetId &&
+          other.roomId == this.roomId &&
+          other.kind == this.kind &&
+          other.amountCents == this.amountCents &&
+          other.occurredAt == this.occurredAt &&
+          other.transactionId == this.transactionId &&
+          other.valuationId == this.valuationId &&
+          other.counterAssetId == this.counterAssetId &&
+          other.transferGroupId == this.transferGroupId &&
+          other.note == this.note &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class AssetRoomEventsTableCompanion
+    extends UpdateCompanion<AssetRoomEventsTableData> {
+  final Value<String> id;
+  final Value<String> assetId;
+  final Value<String> roomId;
+  final Value<String> kind;
+  final Value<int> amountCents;
+  final Value<DateTime> occurredAt;
+  final Value<String?> transactionId;
+  final Value<String?> valuationId;
+  final Value<String?> counterAssetId;
+  final Value<String?> transferGroupId;
+  final Value<String?> note;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const AssetRoomEventsTableCompanion({
+    this.id = const Value.absent(),
+    this.assetId = const Value.absent(),
+    this.roomId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.amountCents = const Value.absent(),
+    this.occurredAt = const Value.absent(),
+    this.transactionId = const Value.absent(),
+    this.valuationId = const Value.absent(),
+    this.counterAssetId = const Value.absent(),
+    this.transferGroupId = const Value.absent(),
+    this.note = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AssetRoomEventsTableCompanion.insert({
+    required String id,
+    required String assetId,
+    required String roomId,
+    required String kind,
+    required int amountCents,
+    required DateTime occurredAt,
+    this.transactionId = const Value.absent(),
+    this.valuationId = const Value.absent(),
+    this.counterAssetId = const Value.absent(),
+    this.transferGroupId = const Value.absent(),
+    this.note = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       assetId = Value(assetId),
+       roomId = Value(roomId),
+       kind = Value(kind),
+       amountCents = Value(amountCents),
+       occurredAt = Value(occurredAt),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<AssetRoomEventsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? assetId,
+    Expression<String>? roomId,
+    Expression<String>? kind,
+    Expression<int>? amountCents,
+    Expression<DateTime>? occurredAt,
+    Expression<String>? transactionId,
+    Expression<String>? valuationId,
+    Expression<String>? counterAssetId,
+    Expression<String>? transferGroupId,
+    Expression<String>? note,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (assetId != null) 'asset_id': assetId,
+      if (roomId != null) 'room_id': roomId,
+      if (kind != null) 'kind': kind,
+      if (amountCents != null) 'amount_cents': amountCents,
+      if (occurredAt != null) 'occurred_at': occurredAt,
+      if (transactionId != null) 'transaction_id': transactionId,
+      if (valuationId != null) 'valuation_id': valuationId,
+      if (counterAssetId != null) 'counter_asset_id': counterAssetId,
+      if (transferGroupId != null) 'transfer_group_id': transferGroupId,
+      if (note != null) 'note': note,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AssetRoomEventsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? assetId,
+    Value<String>? roomId,
+    Value<String>? kind,
+    Value<int>? amountCents,
+    Value<DateTime>? occurredAt,
+    Value<String?>? transactionId,
+    Value<String?>? valuationId,
+    Value<String?>? counterAssetId,
+    Value<String?>? transferGroupId,
+    Value<String?>? note,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return AssetRoomEventsTableCompanion(
+      id: id ?? this.id,
+      assetId: assetId ?? this.assetId,
+      roomId: roomId ?? this.roomId,
+      kind: kind ?? this.kind,
+      amountCents: amountCents ?? this.amountCents,
+      occurredAt: occurredAt ?? this.occurredAt,
+      transactionId: transactionId ?? this.transactionId,
+      valuationId: valuationId ?? this.valuationId,
+      counterAssetId: counterAssetId ?? this.counterAssetId,
+      transferGroupId: transferGroupId ?? this.transferGroupId,
+      note: note ?? this.note,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (assetId.present) {
+      map['asset_id'] = Variable<String>(assetId.value);
+    }
+    if (roomId.present) {
+      map['room_id'] = Variable<String>(roomId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (amountCents.present) {
+      map['amount_cents'] = Variable<int>(amountCents.value);
+    }
+    if (occurredAt.present) {
+      map['occurred_at'] = Variable<DateTime>(occurredAt.value);
+    }
+    if (transactionId.present) {
+      map['transaction_id'] = Variable<String>(transactionId.value);
+    }
+    if (valuationId.present) {
+      map['valuation_id'] = Variable<String>(valuationId.value);
+    }
+    if (counterAssetId.present) {
+      map['counter_asset_id'] = Variable<String>(counterAssetId.value);
+    }
+    if (transferGroupId.present) {
+      map['transfer_group_id'] = Variable<String>(transferGroupId.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AssetRoomEventsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('assetId: $assetId, ')
+          ..write('roomId: $roomId, ')
+          ..write('kind: $kind, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('transactionId: $transactionId, ')
+          ..write('valuationId: $valuationId, ')
+          ..write('counterAssetId: $counterAssetId, ')
+          ..write('transferGroupId: $transferGroupId, ')
+          ..write('note: $note, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -39149,6 +40731,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $AssetsTableTable assetsTable = $AssetsTableTable(this);
   late final $AssetValuationsTableTable assetValuationsTable =
       $AssetValuationsTableTable(this);
+  late final $ContributionRoomsTableTable contributionRoomsTable =
+      $ContributionRoomsTableTable(this);
+  late final $AssetRoomEventsTableTable assetRoomEventsTable =
+      $AssetRoomEventsTableTable(this);
   late final $SavingsGoalsTableTable savingsGoalsTable =
       $SavingsGoalsTableTable(this);
   late final $GoalAllocationsTableTable goalAllocationsTable =
@@ -39265,6 +40851,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     financeCategoriesTable,
     assetsTable,
     assetValuationsTable,
+    contributionRoomsTable,
+    assetRoomEventsTable,
     savingsGoalsTable,
     goalAllocationsTable,
     pinnedNotesTable,
@@ -46480,6 +48068,7 @@ typedef $$TransactionsTableTableCreateCompanionBuilder =
       Value<String?> note,
       Value<String> tagsJson,
       required DateTime occurredAt,
+      Value<String?> roomEventId,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -46495,6 +48084,7 @@ typedef $$TransactionsTableTableUpdateCompanionBuilder =
       Value<String?> note,
       Value<String> tagsJson,
       Value<DateTime> occurredAt,
+      Value<String?> roomEventId,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -46543,6 +48133,11 @@ class $$TransactionsTableTableFilterComposer
 
   ColumnFilters<DateTime> get occurredAt => $composableBuilder(
     column: $table.occurredAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get roomEventId => $composableBuilder(
+    column: $table.roomEventId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -46611,6 +48206,11 @@ class $$TransactionsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get roomEventId => $composableBuilder(
+    column: $table.roomEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -46663,6 +48263,11 @@ class $$TransactionsTableTableAnnotationComposer
 
   GeneratedColumn<DateTime> get occurredAt => $composableBuilder(
     column: $table.occurredAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get roomEventId => $composableBuilder(
+    column: $table.roomEventId,
     builder: (column) => column,
   );
 
@@ -46726,6 +48331,7 @@ class $$TransactionsTableTableTableManager
                 Value<String?> note = const Value.absent(),
                 Value<String> tagsJson = const Value.absent(),
                 Value<DateTime> occurredAt = const Value.absent(),
+                Value<String?> roomEventId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -46739,6 +48345,7 @@ class $$TransactionsTableTableTableManager
                 note: note,
                 tagsJson: tagsJson,
                 occurredAt: occurredAt,
+                roomEventId: roomEventId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -46754,6 +48361,7 @@ class $$TransactionsTableTableTableManager
                 Value<String?> note = const Value.absent(),
                 Value<String> tagsJson = const Value.absent(),
                 required DateTime occurredAt,
+                Value<String?> roomEventId = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -46767,6 +48375,7 @@ class $$TransactionsTableTableTableManager
                 note: note,
                 tagsJson: tagsJson,
                 occurredAt: occurredAt,
+                roomEventId: roomEventId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -47680,6 +49289,7 @@ typedef $$AssetsTableTableCreateCompanionBuilder =
       required String name,
       Value<String?> note,
       Value<int> colorValue,
+      Value<String?> contributionRoomId,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -47692,6 +49302,7 @@ typedef $$AssetsTableTableUpdateCompanionBuilder =
       Value<String> name,
       Value<String?> note,
       Value<int> colorValue,
+      Value<String?> contributionRoomId,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -47725,6 +49336,11 @@ class $$AssetsTableTableFilterComposer
 
   ColumnFilters<int> get colorValue => $composableBuilder(
     column: $table.colorValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get contributionRoomId => $composableBuilder(
+    column: $table.contributionRoomId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -47778,6 +49394,11 @@ class $$AssetsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get contributionRoomId => $composableBuilder(
+    column: $table.contributionRoomId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -47819,6 +49440,11 @@ class $$AssetsTableTableAnnotationComposer
 
   GeneratedColumn<int> get colorValue => $composableBuilder(
     column: $table.colorValue,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get contributionRoomId => $composableBuilder(
+    column: $table.contributionRoomId,
     builder: (column) => column,
   );
 
@@ -47870,6 +49496,7 @@ class $$AssetsTableTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String?> note = const Value.absent(),
                 Value<int> colorValue = const Value.absent(),
+                Value<String?> contributionRoomId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -47880,6 +49507,7 @@ class $$AssetsTableTableTableManager
                 name: name,
                 note: note,
                 colorValue: colorValue,
+                contributionRoomId: contributionRoomId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -47892,6 +49520,7 @@ class $$AssetsTableTableTableManager
                 required String name,
                 Value<String?> note = const Value.absent(),
                 Value<int> colorValue = const Value.absent(),
+                Value<String?> contributionRoomId = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -47902,6 +49531,7 @@ class $$AssetsTableTableTableManager
                 name: name,
                 note: note,
                 colorValue: colorValue,
+                contributionRoomId: contributionRoomId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -48206,6 +49836,725 @@ typedef $$AssetValuationsTableTableProcessedTableManager =
         >,
       ),
       AssetValuationsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$ContributionRoomsTableTableCreateCompanionBuilder =
+    ContributionRoomsTableCompanion Function({
+      required String id,
+      required String name,
+      required int baselineRemainingCents,
+      required DateTime baselineAsOf,
+      Value<String> annualLimitsJson,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$ContributionRoomsTableTableUpdateCompanionBuilder =
+    ContributionRoomsTableCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<int> baselineRemainingCents,
+      Value<DateTime> baselineAsOf,
+      Value<String> annualLimitsJson,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$ContributionRoomsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $ContributionRoomsTableTable> {
+  $$ContributionRoomsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get baselineRemainingCents => $composableBuilder(
+    column: $table.baselineRemainingCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get baselineAsOf => $composableBuilder(
+    column: $table.baselineAsOf,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get annualLimitsJson => $composableBuilder(
+    column: $table.annualLimitsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ContributionRoomsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $ContributionRoomsTableTable> {
+  $$ContributionRoomsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get baselineRemainingCents => $composableBuilder(
+    column: $table.baselineRemainingCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get baselineAsOf => $composableBuilder(
+    column: $table.baselineAsOf,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get annualLimitsJson => $composableBuilder(
+    column: $table.annualLimitsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ContributionRoomsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ContributionRoomsTableTable> {
+  $$ContributionRoomsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get baselineRemainingCents => $composableBuilder(
+    column: $table.baselineRemainingCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get baselineAsOf => $composableBuilder(
+    column: $table.baselineAsOf,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get annualLimitsJson => $composableBuilder(
+    column: $table.annualLimitsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$ContributionRoomsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ContributionRoomsTableTable,
+          ContributionRoomsTableData,
+          $$ContributionRoomsTableTableFilterComposer,
+          $$ContributionRoomsTableTableOrderingComposer,
+          $$ContributionRoomsTableTableAnnotationComposer,
+          $$ContributionRoomsTableTableCreateCompanionBuilder,
+          $$ContributionRoomsTableTableUpdateCompanionBuilder,
+          (
+            ContributionRoomsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $ContributionRoomsTableTable,
+              ContributionRoomsTableData
+            >,
+          ),
+          ContributionRoomsTableData,
+          PrefetchHooks Function()
+        > {
+  $$ContributionRoomsTableTableTableManager(
+    _$AppDatabase db,
+    $ContributionRoomsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ContributionRoomsTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ContributionRoomsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ContributionRoomsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> baselineRemainingCents = const Value.absent(),
+                Value<DateTime> baselineAsOf = const Value.absent(),
+                Value<String> annualLimitsJson = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ContributionRoomsTableCompanion(
+                id: id,
+                name: name,
+                baselineRemainingCents: baselineRemainingCents,
+                baselineAsOf: baselineAsOf,
+                annualLimitsJson: annualLimitsJson,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required int baselineRemainingCents,
+                required DateTime baselineAsOf,
+                Value<String> annualLimitsJson = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ContributionRoomsTableCompanion.insert(
+                id: id,
+                name: name,
+                baselineRemainingCents: baselineRemainingCents,
+                baselineAsOf: baselineAsOf,
+                annualLimitsJson: annualLimitsJson,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ContributionRoomsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ContributionRoomsTableTable,
+      ContributionRoomsTableData,
+      $$ContributionRoomsTableTableFilterComposer,
+      $$ContributionRoomsTableTableOrderingComposer,
+      $$ContributionRoomsTableTableAnnotationComposer,
+      $$ContributionRoomsTableTableCreateCompanionBuilder,
+      $$ContributionRoomsTableTableUpdateCompanionBuilder,
+      (
+        ContributionRoomsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $ContributionRoomsTableTable,
+          ContributionRoomsTableData
+        >,
+      ),
+      ContributionRoomsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$AssetRoomEventsTableTableCreateCompanionBuilder =
+    AssetRoomEventsTableCompanion Function({
+      required String id,
+      required String assetId,
+      required String roomId,
+      required String kind,
+      required int amountCents,
+      required DateTime occurredAt,
+      Value<String?> transactionId,
+      Value<String?> valuationId,
+      Value<String?> counterAssetId,
+      Value<String?> transferGroupId,
+      Value<String?> note,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$AssetRoomEventsTableTableUpdateCompanionBuilder =
+    AssetRoomEventsTableCompanion Function({
+      Value<String> id,
+      Value<String> assetId,
+      Value<String> roomId,
+      Value<String> kind,
+      Value<int> amountCents,
+      Value<DateTime> occurredAt,
+      Value<String?> transactionId,
+      Value<String?> valuationId,
+      Value<String?> counterAssetId,
+      Value<String?> transferGroupId,
+      Value<String?> note,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$AssetRoomEventsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $AssetRoomEventsTableTable> {
+  $$AssetRoomEventsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get assetId => $composableBuilder(
+    column: $table.assetId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get roomId => $composableBuilder(
+    column: $table.roomId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get transactionId => $composableBuilder(
+    column: $table.transactionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get valuationId => $composableBuilder(
+    column: $table.valuationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get counterAssetId => $composableBuilder(
+    column: $table.counterAssetId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get transferGroupId => $composableBuilder(
+    column: $table.transferGroupId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AssetRoomEventsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $AssetRoomEventsTableTable> {
+  $$AssetRoomEventsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get assetId => $composableBuilder(
+    column: $table.assetId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get roomId => $composableBuilder(
+    column: $table.roomId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get transactionId => $composableBuilder(
+    column: $table.transactionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get valuationId => $composableBuilder(
+    column: $table.valuationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get counterAssetId => $composableBuilder(
+    column: $table.counterAssetId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get transferGroupId => $composableBuilder(
+    column: $table.transferGroupId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AssetRoomEventsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AssetRoomEventsTableTable> {
+  $$AssetRoomEventsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get assetId =>
+      $composableBuilder(column: $table.assetId, builder: (column) => column);
+
+  GeneratedColumn<String> get roomId =>
+      $composableBuilder(column: $table.roomId, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get transactionId => $composableBuilder(
+    column: $table.transactionId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get valuationId => $composableBuilder(
+    column: $table.valuationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get counterAssetId => $composableBuilder(
+    column: $table.counterAssetId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get transferGroupId => $composableBuilder(
+    column: $table.transferGroupId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$AssetRoomEventsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AssetRoomEventsTableTable,
+          AssetRoomEventsTableData,
+          $$AssetRoomEventsTableTableFilterComposer,
+          $$AssetRoomEventsTableTableOrderingComposer,
+          $$AssetRoomEventsTableTableAnnotationComposer,
+          $$AssetRoomEventsTableTableCreateCompanionBuilder,
+          $$AssetRoomEventsTableTableUpdateCompanionBuilder,
+          (
+            AssetRoomEventsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $AssetRoomEventsTableTable,
+              AssetRoomEventsTableData
+            >,
+          ),
+          AssetRoomEventsTableData,
+          PrefetchHooks Function()
+        > {
+  $$AssetRoomEventsTableTableTableManager(
+    _$AppDatabase db,
+    $AssetRoomEventsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AssetRoomEventsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AssetRoomEventsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$AssetRoomEventsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> assetId = const Value.absent(),
+                Value<String> roomId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<int> amountCents = const Value.absent(),
+                Value<DateTime> occurredAt = const Value.absent(),
+                Value<String?> transactionId = const Value.absent(),
+                Value<String?> valuationId = const Value.absent(),
+                Value<String?> counterAssetId = const Value.absent(),
+                Value<String?> transferGroupId = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AssetRoomEventsTableCompanion(
+                id: id,
+                assetId: assetId,
+                roomId: roomId,
+                kind: kind,
+                amountCents: amountCents,
+                occurredAt: occurredAt,
+                transactionId: transactionId,
+                valuationId: valuationId,
+                counterAssetId: counterAssetId,
+                transferGroupId: transferGroupId,
+                note: note,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String assetId,
+                required String roomId,
+                required String kind,
+                required int amountCents,
+                required DateTime occurredAt,
+                Value<String?> transactionId = const Value.absent(),
+                Value<String?> valuationId = const Value.absent(),
+                Value<String?> counterAssetId = const Value.absent(),
+                Value<String?> transferGroupId = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AssetRoomEventsTableCompanion.insert(
+                id: id,
+                assetId: assetId,
+                roomId: roomId,
+                kind: kind,
+                amountCents: amountCents,
+                occurredAt: occurredAt,
+                transactionId: transactionId,
+                valuationId: valuationId,
+                counterAssetId: counterAssetId,
+                transferGroupId: transferGroupId,
+                note: note,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AssetRoomEventsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AssetRoomEventsTableTable,
+      AssetRoomEventsTableData,
+      $$AssetRoomEventsTableTableFilterComposer,
+      $$AssetRoomEventsTableTableOrderingComposer,
+      $$AssetRoomEventsTableTableAnnotationComposer,
+      $$AssetRoomEventsTableTableCreateCompanionBuilder,
+      $$AssetRoomEventsTableTableUpdateCompanionBuilder,
+      (
+        AssetRoomEventsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $AssetRoomEventsTableTable,
+          AssetRoomEventsTableData
+        >,
+      ),
+      AssetRoomEventsTableData,
       PrefetchHooks Function()
     >;
 typedef $$SavingsGoalsTableTableCreateCompanionBuilder =
@@ -57847,6 +60196,13 @@ class $AppDatabaseManager {
       $$AssetsTableTableTableManager(_db, _db.assetsTable);
   $$AssetValuationsTableTableTableManager get assetValuationsTable =>
       $$AssetValuationsTableTableTableManager(_db, _db.assetValuationsTable);
+  $$ContributionRoomsTableTableTableManager get contributionRoomsTable =>
+      $$ContributionRoomsTableTableTableManager(
+        _db,
+        _db.contributionRoomsTable,
+      );
+  $$AssetRoomEventsTableTableTableManager get assetRoomEventsTable =>
+      $$AssetRoomEventsTableTableTableManager(_db, _db.assetRoomEventsTable);
   $$SavingsGoalsTableTableTableManager get savingsGoalsTable =>
       $$SavingsGoalsTableTableTableManager(_db, _db.savingsGoalsTable);
   $$GoalAllocationsTableTableTableManager get goalAllocationsTable =>

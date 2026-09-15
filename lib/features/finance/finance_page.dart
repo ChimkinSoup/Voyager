@@ -790,6 +790,9 @@ class _TransactionRow extends ConsumerWidget {
       delete: () async {
         await repo.softDeleteTransaction(snapshot.id);
         container.invalidate(transactionsProvider);
+        if (snapshot.roomEventId != null) {
+          container.invalidate(assetRoomEventsProvider);
+        }
       },
       restore: () async {
         // Rebuilt rather than copyWith'd: copyWith reads
@@ -817,8 +820,15 @@ class _TransactionRow extends ConsumerWidget {
             origin: snapshot.origin,
             note: snapshot.note,
             tags: snapshot.tags,
+            roomEventId: snapshot.roomEventId,
           ),
         );
+        // The delete took the paired room event with it; bring it back too.
+        final roomEventId = snapshot.roomEventId;
+        if (roomEventId != null) {
+          await repo.restoreAssetRoomEvent(roomEventId);
+          container.invalidate(assetRoomEventsProvider);
+        }
         container.invalidate(transactionsProvider);
       },
     );
@@ -889,16 +899,21 @@ class _TransactionRow extends ConsumerWidget {
       // wholesale whenever a transaction changes, and these entries are only
       // ever looked at by the row actually being clicked.
       itemsBuilder: () => [
-        ContextMenuItem(
-          label: isDeposit ? 'Convert to expense' : 'Convert to deposit',
-          icon: PhosphorIconsRegular.arrowsLeftRight,
-          onTap: () => _convert(ref),
-        ),
-        ContextMenuItem(
-          label: 'Duplicate',
-          icon: PhosphorIconsRegular.copy,
-          onTap: () => _duplicate(ref),
-        ),
+        // Not for a contribution or withdrawal: converting would flip what
+        // the room thinks happened, and a duplicate would be cash with no
+        // room event behind it.
+        if (transaction.roomEventId == null) ...[
+          ContextMenuItem(
+            label: isDeposit ? 'Convert to expense' : 'Convert to deposit',
+            icon: PhosphorIconsRegular.arrowsLeftRight,
+            onTap: () => _convert(ref),
+          ),
+          ContextMenuItem(
+            label: 'Duplicate',
+            icon: PhosphorIconsRegular.copy,
+            onTap: () => _duplicate(ref),
+          ),
+        ],
         ContextMenuItem(
           label: 'Delete',
           icon: PhosphorIconsRegular.trash,

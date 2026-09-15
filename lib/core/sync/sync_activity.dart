@@ -3,6 +3,7 @@ import 'dart:async';
 // ignore_for_file: prefer_initializing_formals
 
 import 'package:flutter/foundation.dart';
+import 'package:voyager/core/dev/perf_stall_logger.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
@@ -101,16 +102,19 @@ class SyncActivityController extends ChangeNotifier {
   }
 
   void recordLocalSave(String collection) {
+    PerfStallLogger.instance.breadcrumb('local save: $collection');
     if (!showLocalSaves) return;
     _record(SyncActivityDirection.localSave, collection);
   }
 
   void recordUpload(String collection) {
+    PerfStallLogger.instance.breadcrumb('upload: $collection');
     if (!showUploads) return;
     _record(SyncActivityDirection.upload, collection);
   }
 
   void recordDownloadCheck(String collection) {
+    PerfStallLogger.instance.breadcrumb('download check: $collection');
     if (!showDownloads) return;
     _record(SyncActivityDirection.download, collection);
   }

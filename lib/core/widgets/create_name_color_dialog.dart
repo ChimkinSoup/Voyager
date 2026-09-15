@@ -5,6 +5,7 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 /// Prompts for a name and palette color when creating journals/lists.
 Future<({String name, int color})?> showCreateNameColorDialog(
@@ -81,7 +82,9 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
       title: Text(widget.title),
       content: SizedBox(
         width: 520,
-        child: Column(
+        // Scrolls in a window too short for the palette's three rows.
+        child: VoyagerScrollView(
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -125,6 +128,7 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
               ),
             ),
           ],
+          ),
         ),
       ),
       actions: [

@@ -6,6 +6,7 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/features/rankings/rankings_icons.dart';
 
 /// Name, colour and icon — everything a category needs to exist. Every other
@@ -83,7 +84,9 @@ class _CategoryDialogState extends State<_CategoryDialog> {
         title: Text(widget.title),
         content: SizedBox(
           width: 380,
-          child: Column(
+          // Scrolls in a window too short for the palette and the icons.
+          child: VoyagerScrollView(
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -129,6 +132,7 @@ class _CategoryDialogState extends State<_CategoryDialog> {
                 ],
               ),
             ],
+            ),
           ),
         ),
         actions: [

@@ -299,6 +299,7 @@ class CalendarWeekTimeline extends StatefulWidget {
     this.scrollController,
     this.showWeekdayHeader = true,
     this.showDayDateLabels = true,
+    this.showTodayHighlight = true,
     this.entryFadeEnabled = true,
     this.editingEventId,
     this.weekdayAccentColor,
@@ -320,6 +321,10 @@ class CalendarWeekTimeline extends StatefulWidget {
   final ScrollController? scrollController;
   final bool showWeekdayHeader;
   final bool showDayDateLabels;
+
+  /// When false, today's column is not filled — the week→month morph cell
+  /// paints it instead, so it can travel into the month row.
+  final bool showTodayHighlight;
   final bool entryFadeEnabled;
   final String? editingEventId;
 
@@ -572,9 +577,12 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                                 borderedRects: borderedDayRects,
                                 color: divider,
                                 borderRadius: borderRadius,
-                                todayIndex: todayIndex >= 0 ? todayIndex : null,
+                                todayIndex:
+                                    widget.showTodayHighlight && todayIndex >= 0
+                                    ? todayIndex
+                                    : null,
                                 todayFillColor: accentColor.withValues(
-                                  alpha: 0.28,
+                                  alpha: calendarWeekTodayHighlightOpacity,
                                 ),
                               ),
                             ),

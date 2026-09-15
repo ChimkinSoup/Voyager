@@ -1,4 +1,5 @@
 you
+you'll
 i
 the
 to
@@ -6,14 +7,17 @@ a
 it
 and
 that
+that'll
 of
 is
 in
 what
+what'll
 we
 me
 this
 he
+he'll
 for
 my
 on
@@ -34,11 +38,16 @@ all
 so
 just
 there
+there'll
 here
 they
+they'll
+they'd
+they've
 like
 get
 she
+she'll
 go
 if
 right
@@ -52,6 +61,7 @@ oh
 one
 come
 well
+we'll
 her
 how
 yeah
@@ -64,12 +74,14 @@ see
 did
 good
 who
+who'll
 why
 from
 let
 his
 yes
 when
+when's
 going
 time
 an
@@ -81,9 +93,11 @@ would
 them
 where
 were
+we're
 take
 then
 had
+hadn't
 or
 been
 our
@@ -98,6 +112,7 @@ could
 didn
 by
 need
+needn't
 something
 has
 too
@@ -147,6 +162,7 @@ uh
 again
 maybe
 must
+mustn't
 before
 other
 wait
@@ -220,6 +236,7 @@ wrong
 world
 bad
 might
+mightn't
 three
 today
 listen
@@ -391,6 +408,7 @@ drink
 far
 knows
 its
+it's
 whatever
 eyes
 shut
@@ -1434,6 +1452,7 @@ cousin
 trial
 emergency
 ought
+oughtn't
 eddie
 somehow
 hearing
@@ -1855,6 +1874,7 @@ subject
 legal
 growing
 ill
+i'll
 jason
 mood
 owner
@@ -2520,6 +2540,7 @@ bastards
 puts
 leads
 id
+i'd
 blows
 sons
 estate
@@ -2742,6 +2763,7 @@ slave
 agents
 carol
 lets
+let's
 cruel
 mask
 sally
@@ -3508,6 +3530,7 @@ oxygen
 jeez
 gene
 shed
+she'd
 minor
 ex
 theatre
@@ -3861,7 +3884,7 @@ blonde
 catching
 exposed
 canada
-dont
+don't
 han
 von
 comedy
@@ -5104,7 +5127,7 @@ muscles
 kidney
 finishing
 products
-im
+i'm
 wu
 invasion
 affection
@@ -7315,6 +7338,7 @@ lasts
 doom
 milo
 cant
+can't
 backpack
 aisle
 insulting
@@ -7386,7 +7410,7 @@ puke
 hysterical
 taller
 employment
-thats
+that's
 agrees
 dodge
 unite
@@ -7661,6 +7685,7 @@ alaska
 interference
 freakin
 wont
+won't
 weep
 clive
 mourning
@@ -9833,7 +9858,7 @@ cologne
 accusation
 outsider
 serum
-whats
+what's
 spaces
 oral
 shades
@@ -10353,6 +10378,7 @@ condemn
 resemblance
 suicidal
 wed
+we'd
 packages
 taped
 avatar
@@ -13268,7 +13294,7 @@ snarls
 chiu
 flawless
 considers
-youre
+you're
 harmful
 horseback
 owens
@@ -13891,7 +13917,7 @@ maternal
 harass
 stomp
 cheeseburger
-didnt
+didn't
 chime
 oppression
 resembles
@@ -15876,7 +15902,7 @@ quincy
 shalom
 toil
 weiss
-hes
+he's
 alexandria
 sdi
 epi
@@ -17355,7 +17381,7 @@ palaces
 delaware
 hurley
 faction
-ive
+i've
 rooney
 nominees
 sleepwalking
@@ -17373,7 +17399,7 @@ sobriety
 beka
 gulp
 intensifies
-theres
+there's
 heirloom
 merrily
 unified
@@ -22034,7 +22060,7 @@ nappy
 bowers
 retrospect
 kajal
-shes
+she's
 leased
 talyn
 parliamentary
@@ -22069,7 +22095,7 @@ tempest
 petrie
 deceptive
 voss
-doesnt
+doesn't
 druid
 erected
 kendrick
@@ -23203,7 +23229,7 @@ retrace
 stockholders
 proton
 tt
-isnt
+isn't
 mallard
 reincarnated
 planks
@@ -26592,7 +26618,7 @@ flowering
 enriched
 foal
 legitimacy
-theyre
+they're
 arrhythmia
 lehman
 indulged
@@ -28060,7 +28086,7 @@ starscream
 panorama
 ricki
 regimental
-aint
+ain't
 deploying
 oceanic
 magnate
@@ -28240,7 +28266,7 @@ joplin
 rummage
 banishment
 tories
-havent
+haven't
 abscess
 malaysian
 playlist
@@ -29745,7 +29771,7 @@ vulgarity
 drinkers
 moos
 mortician
-youve
+you've
 dirtiest
 voluptuous
 aprons
@@ -30232,7 +30258,7 @@ patties
 kita
 eugenio
 ponderosa
-hows
+how's
 bedridden
 imperialist
 behest
@@ -33294,7 +33320,7 @@ jiu
 ascot
 nerys
 geezers
-wasnt
+wasn't
 spearhead
 scooters
 slabs
@@ -33324,11 +33350,11 @@ erie
 ufc
 suckered
 adderall
-whos
+who's
 shriveled
 cheetahs
 kk
-couldnt
+couldn't
 generalissimo
 eco
 toiled
@@ -33846,7 +33872,7 @@ affidavits
 ks
 kilmer
 yuh
-arent
+aren't
 emy
 inlet
 trojans
@@ -33902,7 +33928,7 @@ nestled
 pitted
 lusty
 embalmed
-wouldnt
+wouldn't
 fok
 coffeehouse
 starks
@@ -34825,7 +34851,7 @@ begat
 teflon
 lighters
 buttock
-weve
+we've
 espen
 christer
 contaminating
@@ -43446,7 +43472,7 @@ unsophisticated
 kaley
 firs
 bhopal
-wheres
+where's
 triumphal
 christabel
 thurgood
@@ -44040,7 +44066,7 @@ mestre
 opulent
 stache
 hanadarko
-youd
+you'd
 straddle
 stoning
 whrt
@@ -45038,7 +45064,7 @@ nightshirt
 burbuja
 ayanami
 glassware
-whys
+why's
 repressing
 wealthier
 orbiter
@@ -45530,7 +45556,7 @@ fievel
 sharath
 indeterminate
 psychobabble
-shouldnt
+shouldn't
 marvelously
 izmir
 jef
@@ -46114,7 +46140,7 @@ lemel
 deepening
 moonbeams
 nanosecond
-heres
+here's
 karamazov
 fillets
 donati
@@ -51570,7 +51596,7 @@ littler
 ticketed
 zionists
 pranksters
-hed
+he'd
 snorri
 lewiston
 wot
@@ -58416,7 +58442,7 @@ squiggles
 capacitors
 gulshan
 perishes
-werent
+weren't
 godel
 kresteva
 ratcheting
@@ -64257,7 +64283,7 @@ znap
 indigestible
 berggren
 koyama
-hasnt
+hasn't
 sugiura
 iberia
 costed

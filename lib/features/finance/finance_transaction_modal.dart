@@ -16,6 +16,7 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/domain/services/contribution_room_writer.dart';
 import 'package:voyager/domain/services/finance_origins.dart';
 import 'package:voyager/features/finance/finance_origin_field.dart';
 import 'package:voyager/core/layout/touch_target.dart';
@@ -262,6 +263,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       origin: trimToNull(_originController.text),
       note: trimToNull(_noteController.text),
       tags: tags,
+      roomEventId: existing?.roomEventId,
     );
 
     final financeRepo = ref.read(financeRepositoryProvider);
@@ -277,6 +279,10 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     try {
       await financeRepo.upsertTransaction(transaction);
       written = true;
+      if (transaction.roomEventId != null) {
+        await syncRoomEventFromTransaction(financeRepo, transaction);
+        container.invalidate(assetRoomEventsProvider);
+      }
       await _persistTagColors(settingsRepo, tags);
 
       // Through the container, not `ref`: the invalidate has to land even
@@ -325,6 +331,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     final amountColor = isDeposit ? kIncomeGreen : accent;
     final canSave = _parsedCents != null && !_saving;
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
+    final linked = widget.existing?.roomEventId != null;
 
     final sheet = Padding(
       padding: EdgeInsets.only(bottom: viewInsets),
@@ -357,6 +364,16 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                   ),
                 ],
               ),
+              if (linked) ...[
+                Text(
+                  'Linked to a contribution room. Amount, date and note '
+                  'changes update it too; update the asset for its value.',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 4),
+              ],
               const SizedBox(height: 12),
               // Expense / Deposit toggle
               SegmentedButton<TransactionType>(
@@ -378,9 +395,13 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                   ),
                 ],
                 selected: {_type},
-                onSelectionChanged: (set) {
-                  if (set.isNotEmpty) _setType(set.first);
-                },
+                // Locked when linked: the type is what makes it a
+                // contribution or a withdrawal.
+                onSelectionChanged: linked
+                    ? null
+                    : (set) {
+                        if (set.isNotEmpty) _setType(set.first);
+                      },
               ),
               const SizedBox(height: 16),
               // Amount

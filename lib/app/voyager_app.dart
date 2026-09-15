@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/caps_lock/caps_lock_indicator_scope.dart';
+import 'package:voyager/core/dev/perf_stall_logger.dart';
 import 'package:voyager/core/motion/modal_scrim_observer.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
@@ -98,6 +99,8 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       ),
     );
     final router = ref.watch(routerProvider);
+    PerfStallLogger.instance.currentLocation = () =>
+        router.routerDelegate.currentConfiguration.uri.toString();
     final themeMode = ref.watch(themeModeProvider);
     final theme = VoyagerTheme.forMode(themeMode, accent: accent);
     final vimEnabled = ref.watch(

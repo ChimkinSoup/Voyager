@@ -23,6 +23,7 @@ class FinancialTransaction extends SoftDeletable {
     this.origin,
     this.note,
     this.tags = const [],
+    this.roomEventId,
   });
 
   final TransactionType type;
@@ -45,6 +46,10 @@ class FinancialTransaction extends SoftDeletable {
 
   /// Tag names (without a leading `#`). Reuses the shared tag-color table.
   final List<String> tags;
+
+  /// The contribution-room event this row is the cash side of, or null for an
+  /// ordinary entry. Only the asset's Contribute/Withdraw flow sets it.
+  final String? roomEventId;
 
   /// The value with its sign applied: negative for expenses, positive for
   /// deposits.
@@ -75,6 +80,7 @@ class FinancialTransaction extends SoftDeletable {
       origin: clearOrigin ? null : (origin ?? this.origin),
       note: note ?? this.note,
       tags: tags ?? this.tags,
+      roomEventId: roomEventId,
     );
   }
 }
@@ -462,16 +468,22 @@ class Asset extends SoftDeletable {
     required this.name,
     this.colorValue = 0xFF7C9EFF,
     this.note,
+    this.contributionRoomId,
   });
 
   final String name;
   final int colorValue;
   final String? note;
 
+  /// The contribution room this asset draws on, or null when untracked.
+  final String? contributionRoomId;
+
   Asset copyWith({
     String? name,
     int? colorValue,
     String? note,
+    String? contributionRoomId,
+    bool clearContributionRoomId = false,
     DateTime? updatedAt,
     DateTime? deletedAt,
     int? version,
@@ -485,6 +497,9 @@ class Asset extends SoftDeletable {
       name: name ?? this.name,
       colorValue: colorValue ?? this.colorValue,
       note: note ?? this.note,
+      contributionRoomId: clearContributionRoomId
+          ? null
+          : (contributionRoomId ?? this.contributionRoomId),
     );
   }
 }

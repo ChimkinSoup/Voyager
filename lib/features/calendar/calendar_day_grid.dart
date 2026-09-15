@@ -229,6 +229,10 @@ const calendarFocusedWeekAdjacentHighlightOpacity = 0.06;
 /// still reads as one cell rather than dissolving into the week's band.
 const calendarTodayHighlightOpacity = 0.34;
 
+/// Fill behind today's column in week view — the month↔week morph lerps the
+/// month cell's highlight into this so today stays lit through the handoff.
+const calendarWeekTodayHighlightOpacity = 0.28;
+
 bool calendarDateInWeek(DateTime date, DateTime weekStart) {
   final start = DateUtils.dateOnly(weekStart);
   final day = DateUtils.dateOnly(date);
@@ -236,6 +240,119 @@ bool calendarDateInWeek(DateTime date, DateTime weekStart) {
   // into the eighth day in a week containing a spring-forward.
   final end = DateTime(start.year, start.month, start.day + 7);
   return !day.isBefore(start) && day.isBefore(end);
+}
+
+/// Local-midnight start of the week containing [date].
+DateTime calendarWeekStart(DateTime date, bool weekStartsMonday) {
+  final weekday = date.weekday;
+  final firstDay = weekStartsMonday ? DateTime.monday : DateTime.sunday;
+  // Field-based subtraction (not Duration), so this stays correct across
+  // DST transitions — Duration(days:) is a fixed elapsed-time delta and can
+  // land on the wrong calendar day for a local DateTime.
+  return DateTime(
+    date.year,
+    date.month,
+    date.day - (weekday - firstDay) % 7,
+  );
+}
+
+/// True when any day of [weekStart]'s week falls in [month]'s calendar month.
+bool calendarWeekIntersectsMonth(
+  DateTime weekStart,
+  DateTime month, {
+  required bool weekStartsMonday,
+}) {
+  final start = calendarWeekStart(weekStart, weekStartsMonday);
+  final target = DateTime(month.year, month.month, 1);
+  for (var i = 0; i < 7; i++) {
+    final day = DateTime(start.year, start.month, start.day + i);
+    if (day.year == target.year && day.month == target.month) return true;
+  }
+  return false;
+}
+
+/// Month-grid week highlight: today's week only, and only when it intersects
+/// the visible month. Never follows last-viewed week or the focused 1st.
+DateTime? calendarCurrentWeekHighlightStart({
+  required DateTime visibleMonth,
+  required bool weekStartsMonday,
+  DateTime? now,
+}) {
+  final today = now ?? DateTime.now();
+  final weekStart = calendarWeekStart(today, weekStartsMonday);
+  if (!calendarWeekIntersectsMonth(
+    weekStart,
+    visibleMonth,
+    weekStartsMonday: weekStartsMonday,
+  )) {
+    return null;
+  }
+  return weekStart;
+}
+
+/// Week to open when leaving month view for week view.
+///
+/// Prefers today's week when it intersects [visibleMonth], else a last-viewed
+/// week that still intersects that month, else the week of the month's 1st.
+DateTime calendarWeekFocusAfterMonthToWeek({
+  required DateTime visibleMonth,
+  required bool weekStartsMonday,
+  DateTime? lastViewedWeekStart,
+  DateTime? now,
+}) {
+  final month = DateTime(visibleMonth.year, visibleMonth.month, 1);
+  final today = now ?? DateTime.now();
+  final todayWeek = calendarWeekStart(today, weekStartsMonday);
+  if (calendarWeekIntersectsMonth(
+    todayWeek,
+    month,
+    weekStartsMonday: weekStartsMonday,
+  )) {
+    return todayWeek;
+  }
+  if (lastViewedWeekStart != null) {
+    final saved = calendarWeekStart(lastViewedWeekStart, weekStartsMonday);
+    if (calendarWeekIntersectsMonth(
+      saved,
+      month,
+      weekStartsMonday: weekStartsMonday,
+    )) {
+      return saved;
+    }
+  }
+  return calendarWeekStart(month, weekStartsMonday);
+}
+
+/// Month grid to restore when leaving week view.
+///
+/// Prefers [lastViewedMonth] while the focused week still falls in it, then
+/// today's month when the focused week is the current week, else the month of
+/// the week's Thursday (stable across month-boundary weeks that start in the
+/// prior month).
+///
+/// A week browsed out of [lastViewedMonth] has no row in that month's grid, so
+/// returning there would morph a row of unrelated dates.
+DateTime calendarMonthTargetForWeekReturn({
+  DateTime? lastViewedMonth,
+  required DateTime focusedWeekDate,
+  required bool weekStartsMonday,
+  DateTime? now,
+}) {
+  final weekStart = calendarWeekStart(focusedWeekDate, weekStartsMonday);
+  if (lastViewedMonth != null &&
+      calendarWeekIntersectsMonth(
+        weekStart,
+        lastViewedMonth,
+        weekStartsMonday: weekStartsMonday,
+      )) {
+    return DateTime(lastViewedMonth.year, lastViewedMonth.month, 1);
+  }
+  final today = now ?? DateTime.now();
+  if (calendarDateInWeek(today, weekStart)) {
+    return DateTime(today.year, today.month, 1);
+  }
+  final midWeek = DateTime(weekStart.year, weekStart.month, weekStart.day + 3);
+  return DateTime(midWeek.year, midWeek.month, 1);
 }
 
 double calendarFocusedWeekHighlightAlpha({

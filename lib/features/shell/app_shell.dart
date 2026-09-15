@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/constants/app_constants.dart';
+import 'package:voyager/core/dev/perf_stall_logger.dart';
 import 'package:voyager/core/layout/window_size_class.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
@@ -257,6 +258,7 @@ class _ShellBranchChangeFlusherState
       unawaited(PendingFlushRegistry.instance.flushAll());
 
       final currentPath = shellPathForIndex(widget.branchIndex);
+      PerfStallLogger.instance.breadcrumb('switched page to $currentPath');
       final repo = ref.read(settingsRepositoryProvider);
       repo.getSettings().then((s) {
         repo.saveSettings(s.copyWith(lastSeenNavPage: currentPath));

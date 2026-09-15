@@ -21,6 +21,9 @@ const rankingsRowTagCap = 2;
 /// starts at the same x whether or not its row prints a number (§6.3).
 const _rankSlotWidth = 30.0;
 
+/// Below this the row drops its image fan and status chip.
+const _roomyRowWidth = 320.0;
+
 /// One entry in either section of the list.
 ///
 /// The row is the same in both; what changes is which of its trailing pieces
@@ -91,7 +94,13 @@ class _RankingsRowState extends ConsumerState<RankingsRow> {
 
     final row = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
+      // Squeezed beside the open edit panel in a narrow window, the row keeps
+      // the star, title and score and lets the image fan and status chip go:
+      // with them it overflowed.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final roomy = constraints.maxWidth >= _roomyRowWidth;
+          return Row(
         children: [
           if (widget.showRankSlot)
             SizedBox(
@@ -136,7 +145,7 @@ class _RankingsRowState extends ConsumerState<RankingsRow> {
               ],
             ),
           ),
-          if (category.imagesOnParent) ...[
+          if (roomy && category.imagesOnParent) ...[
             const SizedBox(width: 12),
             MediaFanStack(
               collection: FirestoreCollections.rankings,
@@ -163,11 +172,13 @@ class _RankingsRowState extends ConsumerState<RankingsRow> {
             accentColor: accent,
             onChanged: widget.readOnly ? null : widget.onScoreChanged,
           ),
-          if (!parent.isRanked) ...[
+          if (roomy && !parent.isRanked) ...[
             const SizedBox(width: 8),
             _StatusChip(status: parent.status, accent: accent),
           ],
         ],
+          );
+        },
       ),
     );
 

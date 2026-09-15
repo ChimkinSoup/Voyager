@@ -12,6 +12,7 @@ import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/tags/tag_palette.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/dev/perf_stall_logger.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/features/finance/finance_ui_prefs.dart';
 import 'package:voyager/features/hotkeys/hotkey_service.dart';
@@ -21,6 +22,8 @@ import 'package:voyager/firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // First, so a stall anywhere in startup is on the record too.
+  unawaited(PerfStallLogger.instance.restore());
   installWindowsKeyboardWorkaround();
   await configureDesktopWindow();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);

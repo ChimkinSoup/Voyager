@@ -27,6 +27,8 @@ abstract final class FirestoreCollections {
   static const financeCategories = 'finance_categories';
   static const assets = 'assets';
   static const assetValuations = 'asset_valuations';
+  static const contributionRooms = 'contribution_rooms';
+  static const assetRoomEvents = 'asset_room_events';
   static const savingsGoals = 'savings_goals';
   static const goalAllocations = 'goal_allocations';
   static const pinnedNotes = 'pinned_notes';
@@ -98,6 +100,8 @@ abstract final class FirestoreCollections {
     financeCategories,
     assets,
     assetValuations,
+    contributionRooms,
+    assetRoomEvents,
     savingsGoals,
     goalAllocations,
     pinnedNotes,

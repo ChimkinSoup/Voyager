@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
@@ -106,8 +108,11 @@ class LeetCodeDashboard extends ConsumerWidget {
                   Expanded(
                     child: LeetCodeRecentCompletions(problems: problems),
                   ),
+                  // At most half of what is left: at the minimum window
+                  // height the header stacked above leaves under 160px, and
+                  // a fixed 160 overflowed. The matrix scrolls either way.
                   SizedBox(
-                    height: 160,
+                    height: math.min(160, constraints.maxHeight / 2),
                     child: LeetCodeTagMatrix(problems: problems),
                   ),
                 ],
