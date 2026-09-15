@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/widgets/paper_texture.dart';
 
 /// A modular, reusable glassmorphic button widget featuring an authentic glass aesthetic.
 ///
-/// Incorporates a translucent tinted fill, dual-gradient specular borders,
-/// top gloss reflections, dynamic hover/press states, and full theme adaptability.
+/// Incorporates a translucent tinted fill (and in dark mode, graphite paper grain),
+/// dual-gradient specular borders, top gloss reflections, dynamic hover/press states,
+/// and full theme adaptability.
 ///
 /// Fully resizeable (via [width], [height], [padding], [margin], [borderRadius], or [dense])
 /// and recolorable (via [color] tint, [textColor], [iconColor], or [borderColor]).
-class GlassButton extends StatefulWidget {
+class GlassButton extends ConsumerStatefulWidget {
   const GlassButton({
     super.key,
     this.onPressed,
@@ -84,8 +88,8 @@ class GlassButton extends StatefulWidget {
   /// Custom border radius for shaping the glass container. Defaults to `BorderRadius.circular(12)` (or `10` when [dense]).
   final BorderRadius? borderRadius;
 
-  /// Base opacity of the glass surface fill. Null uses the theme default
-  /// (~0.06 light / ~0.22 dark) — see DESIGN.md Glass Button.
+  /// Base opacity of the glass / paper surface fill. Null uses the theme
+  /// default (~0.06 light / ~0.82 dark paper) — see DESIGN.md Glass Button.
   final double? glassOpacity;
 
   /// Base opacity of the specular glass edge highlight. Null uses the theme
@@ -118,10 +122,10 @@ class GlassButton extends StatefulWidget {
   final bool canRequestFocus;
 
   @override
-  State<GlassButton> createState() => _GlassButtonState();
+  ConsumerState<GlassButton> createState() => _GlassButtonState();
 }
 
-class _GlassButtonState extends State<GlassButton>
+class _GlassButtonState extends ConsumerState<GlassButton>
     with SingleTickerProviderStateMixin {
   bool _isHovered = false;
   bool _isPressed = false;
@@ -206,9 +210,8 @@ class _GlassButtonState extends State<GlassButton>
                 theme.colorScheme.surface)
             : theme.colorScheme.primary);
 
-    // Light ink on cream glass; onSurface / bone on the dark plate.
-    final defaultFg =
-        widget.textColor ?? (isDark ? theme.colorScheme.onSurface : Colors.black87);
+    // Ink Slate on cream glass, bone on the dark plate — both are onSurface.
+    final defaultFg = widget.textColor ?? theme.colorScheme.onSurface;
 
     final fgColor = isInteractive
         ? defaultFg
@@ -222,7 +225,7 @@ class _GlassButtonState extends State<GlassButton>
     // translucent on top of a surface that has gone near-solid.
     final nearSolid = MediaQuery.maybeOf(context)?.highContrast ?? false;
 
-    final baseGlassOpacity = widget.glassOpacity ?? (isDark ? 0.22 : 0.06);
+    final baseGlassOpacity = widget.glassOpacity ?? (isDark ? 0.82 : 0.06);
     final baseBorderOpacity = widget.borderOpacity ?? (isDark ? 0.32 : 0.22);
 
     // Calculate dynamic glass opacity based on interaction state
@@ -236,21 +239,13 @@ class _GlassButtonState extends State<GlassButton>
     }
 
     final currentGlassOpacity =
-        (baseGlassOpacity * opacityMultiplier).clamp(0.01, 0.85);
+        (baseGlassOpacity * opacityMultiplier).clamp(0.01, 0.97);
 
-    // Flat plate: the old diagonal fade (highlight → half-opacity) read as
-    // "colored on one side" once dark defaults got thicker. Sheen still comes
-    // from the top gloss strip and the specular border, not from the fill.
-    final glassFillGradient = LinearGradient(
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-      colors: [
-        baseColor.withValues(alpha: nearSolid ? 0.97 : currentGlassOpacity),
-        baseColor.withValues(alpha: nearSolid ? 0.97 : currentGlassOpacity),
-        baseColor.withValues(alpha: nearSolid ? 0.97 : currentGlassOpacity),
-      ],
-      stops: const [0.0, 0.5, 1.0],
-    );
+    // Light: flat accent wafer. Dark: graphite paper uses [currentGlassOpacity]
+    // as the paper alpha (capped higher when near-solid).
+    final fillAlpha = nearSolid ? 0.97 : currentGlassOpacity;
+    final paperProgram =
+        isDark ? ref.watch(paperShaderProvider).valueOrNull : null;
 
     // Specular edge highlights
     final borderHighlight = widget.borderColor ??
@@ -361,8 +356,8 @@ class _GlassButtonState extends State<GlassButton>
         ),
         // No BackdropFilter: a button blurring the animated background redoes
         // that blur on every background frame, and five in the calendar header
-        // tripled idle GPU load (~8% -> ~22%). Buttons are too small for the
-        // blur to read; the tinted fill and specular border carry the glass.
+        // tripled idle GPU load (~8% -> ~22%). Dark mode uses graphite paper
+        // grain instead; light keeps a thin tinted wafer.
         child: ClipRRect(
           borderRadius: effectiveRadius,
           child: CustomPaint(
@@ -373,59 +368,65 @@ class _GlassButtonState extends State<GlassButton>
               shadowColor: borderShadow.withValues(alpha: currentBorderOpacity * 0.4),
               outlineColor: baseColor.withValues(alpha: 0.35),
             ),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              decoration: BoxDecoration(
-                gradient: glassFillGradient,
-              ),
-              child: Stack(
-                alignment: widget.alignment,
-                children: [
-                  // Top gloss reflection line
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    height: widget.height != null
-                        ? (widget.height! * 0.45).clamp(1.0, 100.0)
-                        : 18.0,
-                    child: IgnorePointer(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.vertical(
-                            top: effectiveRadius.topLeft,
-                          ),
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              vc.highlightWash.withValues(
-                                alpha: _isHovered ? 0.14 : 0.06,
-                              ),
-                              vc.highlightWash.withValues(alpha: 0.0),
-                            ],
-                          ),
+            child: Stack(
+              alignment: widget.alignment,
+              children: [
+                if (isDark)
+                  Positioned.fill(
+                    child: PaperTexture(
+                      program: paperProgram,
+                      baseColor: baseColor.withValues(alpha: fillAlpha),
+                      // Specks a step toward bone so grain reads on graphite.
+                      speckColor: Color.lerp(
+                        baseColor,
+                        theme.colorScheme.onSurface,
+                        0.45,
+                      )!
+                          .withValues(alpha: fillAlpha),
+                    ),
+                  )
+                else
+                  Positioned.fill(
+                    child: ColoredBox(
+                      color: baseColor.withValues(alpha: fillAlpha),
+                    ),
+                  ),
+                // Top gloss reflection line
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: widget.height != null
+                      ? (widget.height! * 0.45).clamp(1.0, 100.0)
+                      : 18.0,
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.vertical(
+                          top: effectiveRadius.topLeft,
+                        ),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            vc.highlightWash.withValues(
+                              alpha: _isHovered ? 0.14 : 0.06,
+                            ),
+                            vc.highlightWash.withValues(alpha: 0.0),
+                          ],
                         ),
                       ),
                     ),
                   ),
+                ),
 
-                  // Inner button content
-                  widget.width != null || widget.height != null
-                      ? Container(
-                          width: widget.width,
-                          height: widget.height,
-                          alignment: widget.alignment,
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: widget.alignment,
-                            child: Padding(
-                              padding: effectivePadding,
-                              child: content,
-                            ),
-                          ),
-                        )
-                      : FittedBox(
+                // Inner button content
+                widget.width != null || widget.height != null
+                    ? Container(
+                        width: widget.width,
+                        height: widget.height,
+                        alignment: widget.alignment,
+                        child: FittedBox(
                           fit: BoxFit.scaleDown,
                           alignment: widget.alignment,
                           child: Padding(
@@ -433,8 +434,16 @@ class _GlassButtonState extends State<GlassButton>
                             child: content,
                           ),
                         ),
-                ],
-              ),
+                      )
+                    : FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: widget.alignment,
+                        child: Padding(
+                          padding: effectivePadding,
+                          child: content,
+                        ),
+                      ),
+              ],
             ),
           ),
         ),

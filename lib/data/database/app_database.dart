@@ -646,6 +646,7 @@ class SettingsTable extends Table {
       real().withDefault(const Constant(0.22))();
   TextColumn get colorPaletteJson => text().nullable()();
   RealColumn get journalEntryListWidth => real().nullable()();
+  RealColumn get editSidePanelWidth => real().nullable()();
   RealColumn get geometricTextureScale =>
       real().withDefault(const Constant(10.0))();
   RealColumn get geometricTextureIntensity =>
@@ -1508,7 +1509,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 112;
+  int get schemaVersion => 113;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2777,6 +2778,12 @@ class AppDatabase extends _$AppDatabase {
           'transactions_table',
           transactionsTable,
           transactionsTable.roomEventId,
+        );
+      }
+      if (from < 113) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.editSidePanelWidth,
         );
       }
     },

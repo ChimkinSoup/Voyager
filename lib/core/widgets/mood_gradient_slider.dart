@@ -24,6 +24,7 @@ class MoodGradientSlider extends StatelessWidget {
   Widget build(BuildContext context) {
     final recorded = value;
     final surface = Theme.of(context).colorScheme.surface;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     var sliderTheme = SliderTheme.of(context).copyWith(
       trackHeight: 8,
       activeTrackColor: Colors.transparent,
@@ -32,11 +33,15 @@ class MoodGradientSlider extends StatelessWidget {
       thumbColor: accent,
       valueIndicatorColor: accent,
       trackShape: GradientSliderTrackShape(
-        // White at the low-mood end in both themes, not a theme-derived wash
-        // — on cream that wash resolved to `onSurface`, which read as a
-        // black-to-accent ramp rather than the intended pale one.
+        // A pale low-mood end, not a theme-derived wash — on cream that wash
+        // resolved to `onSurface`, which read as a black-to-accent ramp. Light
+        // starts at white; on graphite pure white is a glaring band, so dark
+        // starts at a pale tint of the accent instead.
         gradient: LinearGradient(
-          colors: [Colors.white, accent],
+          colors: [
+            isDark ? Color.lerp(accent, Colors.white, 0.55)! : Colors.white,
+            accent,
+          ],
         ),
         inactiveColor: surface,
         showActive: recorded != null,

@@ -343,7 +343,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
     ];
 
     final activeNormalTextStyle = theme.textTheme.titleLarge?.copyWith(
-      color: Color.lerp(theme.colorScheme.primary, Colors.grey, 0.7)?.withValues(alpha: 0.4),
+      color: Color.lerp(theme.colorScheme.primary, theme.colorScheme.onSurface, 0.7)?.withValues(alpha: 0.4),
     );
     final activeHighlightTextStyle = theme.textTheme.titleLarge?.copyWith(
       color: theme.colorScheme.primary,
@@ -759,7 +759,7 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
     final theme = Theme.of(context);
     
     final activeNormalTextStyle = theme.textTheme.titleLarge?.copyWith(
-      color: Color.lerp(theme.colorScheme.primary, Colors.grey, 0.7)?.withValues(alpha: 0.4),
+      color: Color.lerp(theme.colorScheme.primary, theme.colorScheme.onSurface, 0.7)?.withValues(alpha: 0.4),
     );
     final activeHighlightTextStyle = theme.textTheme.titleLarge?.copyWith(
       color: theme.colorScheme.primary,

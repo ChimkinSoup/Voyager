@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/text/prose_editing_controller.dart';
 import 'package:voyager/core/text/prose_text_span.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
@@ -99,7 +100,9 @@ class _DreamStickyNoteState extends State<DreamStickyNote>
               theme.colorScheme.surface,
               t,
             ),
-            shadowColor: Colors.black.withValues(alpha: 0.25),
+            shadowColor: VoyagerColors.of(
+              context,
+            ).shadow.withValues(alpha: 0.25),
             borderRadius: BorderRadius.circular(14),
             // Material clips nothing by default, so note text scrolling
             // through the field's viewport painted straight over the card's

@@ -289,6 +289,11 @@ targets and a narrow viewport — and it never drives a composition decision. Wh
 genuinely needs different structure rather than a tighter fit, make that an explicit second
 layout, not a width check bolted onto the first.
 
+**Right-hand editors (Todo, Jobs, Rankings).** The three pages share `EditSidePanelHost`:
+side-by-side push while the list keeps a usefulness floor, overlay when it would not, and a
+user-draggable width (default 420, min 320, max 600 / 45% of the page) persisted as
+`editSidePanelWidth`. Double-click the divider to reset.
+
 ## Elevation & Depth
 
 **This system is flat by doctrine.** Depth is carried by tonal layering — four surface tones
@@ -374,32 +379,31 @@ and small state changes, no bounce, no celebration. They respond immediately and
 The one component licensed to be lush, because it reads as an instrument face rather than a
 painted surface. It does **not** use `BackdropFilter`: a button that blurs the live canvas
 (petal field / triangle grid) redoes that blur every background frame, and a handful in the
-calendar header tripled idle GPU load. Buttons are too small for frosting to read anyway —
-the glass is carried by fill, specular edge, and gloss alone. Larger floating chrome
-(`GlassSurface` on popovers, sheets, menus) keeps backdrop blur; that is a separate budget.
+calendar header tripled idle GPU load. Larger floating chrome (`GlassSurface` on popovers,
+sheets, menus) keeps backdrop blur; that is a separate budget.
 
 Recipe:
 
-- Three-stop diagonal fill gradient, dual-gradient specular border stroke, and a top gloss
-  reflection (18px tall, or 45% of an explicit height).
-+ Flat fill at a single opacity (no diagonal fade), dual-gradient specular border stroke, and a
+- Flat fill at a single opacity (no diagonal fade), dual-gradient specular border stroke, and a
   top gloss reflection (18px tall, or 45% of an explicit height). Sheen comes from gloss + edge,
   not from thinning the plate.
-- Press drives a 0.96 scale over 100 ms in `easeOutCubic`, releasing over 150. Glass opacity
+- **Dark only:** the plate is the same paper-grain shader as the light canvas, retinted to
+  graphite field (or the caller's `color`), at ~82% opacity so a little of the live grid still
+  shows through. Light stays a thin accent-tinted wafer — no grain on buttons there yet.
+- Press drives a 0.96 scale over 100 ms in `easeOutCubic`, releasing over 150. Fill opacity
   multiplies by state: 1.25× hovered, 1.4× pressed, 0.5× disabled. Focus adds an accent ring
   at 50% alpha with a 2px spread (crisp, not a glow — `shadowBlurScale` must not widen it).
 - Shadow radii still multiply through `shadowBlurScale` so elevation holds in both themes.
 - High contrast (`MediaQuery.highContrast`, stand-in for reduced transparency) collapses the
-  fill to near-solid (~97%) with no translucent gradient.
+  fill to near-solid (~97%).
 
 Theme defaults (when callers do not override `glassOpacity` / `textColor` / `borderOpacity`):
 
 - **Light:** fill ~6% accent-tinted plate; label `ink-slate` / dark ink; hairline specular at
   ~22% — frost is unnecessary over cream paper.
-- **Dark:** fill ~22% at rest on a **graphite-field / surface** plate (not accent alone), so
-  the control separates from the live grid without blur; label and icons default to
-  `onSurface` / bone (never black ink); specular / outline a step stronger at rest (~32%) so
-  the silhouette reads over busy geometry. Hover and press multipliers still apply on top.
+- **Dark:** graphite paper plate at ~82% opacity; label and icons default to `onSurface` /
+  bone (never black ink); specular / outline a step stronger at rest (~32%). Hover and press
+  multipliers still apply on top.
 
 ### Inputs / Fields
 

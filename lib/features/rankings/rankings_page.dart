@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
+import 'package:voyager/core/widgets/edit_side_panel_host.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/prompt_name_dialog.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -71,6 +74,17 @@ class _RankingsPageState extends ConsumerState<RankingsPage>
       if (!mounted) return;
       ref.read(rankingSelectedParentProvider.notifier).state = null;
     });
+  }
+
+  Future<void> _persistEditSidePanelWidth(double? width) async {
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settings = await settingsRepo.getSettings();
+    if (settings.editSidePanelWidth == width) return;
+    await settingsRepo.saveSettings(
+      width == null
+          ? settings.copyWith(clearEditSidePanelWidth: true)
+          : settings.copyWith(editSidePanelWidth: width),
+    );
   }
 
   /// Switching categories takes the editor with it: the entry it was open on
@@ -168,6 +182,12 @@ class _RankingsPageState extends ConsumerState<RankingsPage>
                     categories: active,
                     searchController: _searchController,
                     panelAnimation: _panelAnimation,
+                    storedPanelWidth: ref
+                        .watch(settingsProvider)
+                        .valueOrNull
+                        ?.editSidePanelWidth,
+                    onPanelWidthCommitted: (width) =>
+                        unawaited(_persistEditSidePanelWidth(width)),
                     onOpenPanel: _openPanel,
                     onClosePanel: _closePanel,
                   ),
@@ -227,6 +247,8 @@ class _CategoryBody extends ConsumerWidget {
     required this.categories,
     required this.searchController,
     required this.panelAnimation,
+    required this.storedPanelWidth,
+    required this.onPanelWidthCommitted,
     required this.onOpenPanel,
     required this.onClosePanel,
   });
@@ -235,6 +257,8 @@ class _CategoryBody extends ConsumerWidget {
   final List<RankingCategory> categories;
   final TextEditingController searchController;
   final Animation<double> panelAnimation;
+  final double? storedPanelWidth;
+  final ValueChanged<double?> onPanelWidthCommitted;
   final ValueChanged<String> onOpenPanel;
   final VoidCallback onClosePanel;
 
@@ -349,73 +373,46 @@ class _CategoryBody extends ConsumerWidget {
         ),
         if (category.isArchived) const _ArchivedBanner(),
         Expanded(
-          child: Stack(
-            children: [
-              AnimatedBuilder(
-                animation: panelAnimation,
-                builder: (context, child) => Padding(
-                  // The list gives up exactly as much width as the panel has
-                  // taken, so the two never overlap mid-reveal.
-                  padding: EdgeInsets.only(
-                    right: rankingsEditPanelWidth * panelAnimation.value,
+          child: EditSidePanelHost(
+            animation: panelAnimation,
+            listMinWidth: EditSidePanelMetrics.rankingsListMinWidth,
+            storedWidth: storedPanelWidth,
+            onWidthCommitted: onPanelWidthCommitted,
+            list: parents.isEmpty
+                ? _EmptyState(
+                    icon: PhosphorIconsRegular.listPlus,
+                    title: 'Nothing in ${category.name} yet',
+                    message:
+                        'Add something you mean to get to. It waits in '
+                        'the queue until you give it a score.',
+                  )
+                : ranked.isEmpty && !showQueue
+                ? const _EmptyState(
+                    icon: PhosphorIconsRegular.magnifyingGlass,
+                    title: 'Nothing matches',
+                    message:
+                        'Try a different search, or clear the filters.',
+                  )
+                : _Sections(
+                    category: category,
+                    unranked: unranked,
+                    ranked: ranked,
+                    showQueue: showQueue,
+                    queueCollapsed: queueCollapsed,
+                    onToggleQueue: () =>
+                        _toggleQueue(ref, settings, collapsedIds),
+                    childrenByParent: childrenByParent,
+                    selectedId: selectedParentId,
+                    onOpen: onOpenPanel,
                   ),
-                  child: child,
-                ),
-                child: parents.isEmpty
-                    ? _EmptyState(
-                        icon: PhosphorIconsRegular.listPlus,
-                        title: 'Nothing in ${category.name} yet',
-                        message:
-                            'Add something you mean to get to. It waits in '
-                            'the queue until you give it a score.',
-                      )
-                    : ranked.isEmpty && !showQueue
-                    ? const _EmptyState(
-                        icon: PhosphorIconsRegular.magnifyingGlass,
-                        title: 'Nothing matches',
-                        message:
-                            'Try a different search, or clear the filters.',
-                      )
-                    : _Sections(
-                        category: category,
-                        unranked: unranked,
-                        ranked: ranked,
-                        showQueue: showQueue,
-                        queueCollapsed: queueCollapsed,
-                        onToggleQueue: () =>
-                            _toggleQueue(ref, settings, collapsedIds),
-                        childrenByParent: childrenByParent,
-                        selectedId: selectedParentId,
-                        onOpen: onOpenPanel,
-                      ),
-              ),
-              Positioned(
-                top: 0,
-                bottom: 0,
-                right: 0,
-                child: ClipRect(
-                  child: AnimatedBuilder(
-                    animation: panelAnimation,
-                    builder: (context, child) => Align(
-                      alignment: Alignment.centerRight,
-                      widthFactor: panelAnimation.value,
-                      child: child,
-                    ),
-                    child: SizedBox(
-                      width: rankingsEditPanelWidth,
-                      child: _panel(selectedParentId, parents, childrenByParent),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            panel: _panel(selectedParentId, parents, childrenByParent),
           ),
         ),
       ],
     );
   }
 
-  Widget _panel(
+  Widget? _panel(
     String? selectedParentId,
     List<RankingParent> parents,
     Map<String, List<RankingChild>> childrenByParent,
@@ -423,7 +420,7 @@ class _CategoryBody extends ConsumerWidget {
     final selected = parents
         .where((parent) => parent.id == selectedParentId)
         .firstOrNull;
-    if (selected == null) return const SizedBox.shrink();
+    if (selected == null) return null;
     return RankingsEditPanel(
       key: ValueKey(selected.id),
       parent: selected,

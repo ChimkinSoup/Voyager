@@ -10,6 +10,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
+import 'package:voyager/core/widgets/edit_side_panel_host.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
@@ -22,7 +23,8 @@ import 'package:voyager/features/rankings/rankings_field_editor.dart';
 import 'package:voyager/features/rankings/rankings_score_stars.dart';
 import 'package:voyager/features/rankings/rankings_tags_field.dart';
 
-const rankingsEditPanelWidth = 420.0;
+/// Default editor panel width — see [EditSidePanelMetrics.defaultWidth].
+const rankingsEditPanelWidth = EditSidePanelMetrics.defaultWidth;
 
 /// Editor for one entry, in the todo and Jobs side-panel idiom.
 ///

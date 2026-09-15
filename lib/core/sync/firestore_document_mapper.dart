@@ -2848,8 +2848,8 @@ bool _remoteClears(Map<String, dynamic> data, String key) =>
 ///  - the whole weather cache, which the weather service already syncs through
 ///    its own keys in this same document;
 ///  - every `dev*` debugging flag;
-///  - `journalEntryListWidth` and `dreamSplitWidth`, which are sized for the
-///    screen they were dragged on.
+///  - `journalEntryListWidth`, `dreamSplitWidth`, and `editSidePanelWidth`,
+///    which are sized for the screen they were dragged on.
 ///
 /// This map is also the single definition of "did a synced setting change" —
 /// see `DriftSettingsRepository.saveSettings`, which compares two of them to

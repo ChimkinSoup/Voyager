@@ -7,6 +7,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -387,7 +388,11 @@ class _ScratchOverlayState extends State<_ScratchOverlay>
                 behavior: HitTestBehavior.opaque,
                 onTap: _close,
                 child: Container(
-                  color: Colors.black.withValues(alpha: 0.55 * raw),
+                  color: Color.lerp(
+                    Colors.transparent,
+                    VoyagerColors.of(context).scrim,
+                    raw,
+                  ),
                 ),
               ),
             );

@@ -433,7 +433,7 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
     final theme = Theme.of(context);
     final accent = widget.accentColor ?? theme.colorScheme.primary;
     final activeNormalTextStyle = theme.textTheme.titleLarge?.copyWith(
-      color: Color.lerp(accent, Colors.grey, 0.7)?.withValues(alpha: 0.4),
+      color: Color.lerp(accent, theme.colorScheme.onSurface, 0.7)?.withValues(alpha: 0.4),
     );
     final activeHighlightTextStyle = theme.textTheme.titleLarge?.copyWith(
       color: accent,

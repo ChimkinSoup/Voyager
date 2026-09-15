@@ -37,7 +37,6 @@ import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
-import 'package:voyager/domain/models/recurrence_rule.dart';
 import 'package:voyager/domain/services/recurrence_engine.dart';
 import 'package:voyager/domain/todo/todo_recurring_completion.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
@@ -49,10 +48,10 @@ import 'package:voyager/features/todo/todo_list_actions.dart';
 import 'package:voyager/features/todo/todo_list_search.dart';
 import 'package:voyager/features/todo/todo_list_search_bar.dart';
 import 'package:voyager/features/todo/todo_manage_sheet.dart';
+import 'package:voyager/core/widgets/edit_side_panel_host.dart';
 
-const _todoEditPanelWidth = 420.0;
 // The reveal, at the same length the Jobs and Rankings panels open in.
-const _todoEditPanelDuration = Duration(milliseconds: 220);
+const _todoEditPanelDuration = EditSidePanelMetrics.duration;
 // How long a completion toggle's write is held so it doesn't fire during the
 // row's move + confetti. Toggles landing inside the window batch together.
 const _todoCompletionSaveDelay = Duration(milliseconds: 900);
@@ -915,6 +914,17 @@ class _TodoPageState extends ConsumerState<TodoPage>
     );
   }
 
+  Future<void> _persistEditSidePanelWidth(double? width) async {
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settings = await settingsRepo.getSettings();
+    if (settings.editSidePanelWidth == width) return;
+    await settingsRepo.saveSettings(
+      width == null
+          ? settings.copyWith(clearEditSidePanelWidth: true)
+          : settings.copyWith(editSidePanelWidth: width),
+    );
+  }
+
   TodoTask? _panelTaskFor(List<TodoTask> sorted) {
     final panelTask = _editPanelTask;
     if (panelTask == null) return null;
@@ -930,17 +940,6 @@ class _TodoPageState extends ConsumerState<TodoPage>
   Duration get _panelAnimationDuration => DevFlags.slowTodoEditPanelAnimation
       ? _todoEditPanelDuration * 10
       : _todoEditPanelDuration;
-
-  /// How far the task list is inset from the right for a given reveal
-  /// progress, so the list's right edge and the panel's left edge stay on the
-  /// same pixel for the whole animation.
-  ///
-  /// Clamped because [VoyagerSpring.drawerCurve] is underdamped (damping 0.8)
-  /// and overshoots past 1.0 near the end of the open. Unclamped, the list
-  /// would inset further than the panel is wide and open a transparent strip
-  /// between the two right as it settles.
-  static double _panelInset(double t) =>
-      _todoEditPanelWidth * t.clamp(0.0, 1.0);
 
   void _openEditPanel(TodoTask task) {
     setState(() {
@@ -2956,88 +2955,65 @@ class _TodoPageState extends ConsumerState<TodoPage>
               children: [
                 const SyncConflictBanner(),
                 Expanded(
-                  // A Stack, not a Row: the panel stays its own
-                  // always-real-size Positioned (unlike the SizedOverflowBox
-                  // this replaced), so its hit-test bounds always match what
-                  // is actually visible and it stays properly clickable
-                  // throughout the reveal. The list's inset is animated
-                  // independently below rather than falling out of a Row's
-                  // flex, which keeps the two from fighting over the same
-                  // layout pass.
-                  child: Stack(
-                    children: [
-                      // The list gives up exactly as much width as the panel
-                      // has taken, every frame, so the two reflow in lockstep
-                      // and never overlap while the reveal is mid-flight.
-                      //
-                      // The list is passed as AnimatedBuilder's `child` so it
-                      // is built once per page build and NOT rebuilt per
-                      // frame — the builder only re-wraps it in a Positioned
-                      // with a new inset, which costs a relayout of the
-                      // mounted rows and nothing more. Keeping it in `child`
-                      // is load-bearing: this subtree is the page's entire
-                      // sort/filter/group result, and rebuilding it 60-120
-                      // times per reveal is the one thing this layout
-                      // genuinely cannot afford. (Building a Positioned from
-                      // inside a builder is fine — a ParentDataWidget applies
-                      // to the nearest descendant render object and looks up
-                      // to the nearest RenderObjectWidget ancestor, which is
-                      // still the Stack.)
-                      AnimatedBuilder(
-                        animation: _panelAnimation,
-                        builder: (context, child) => Positioned(
-                          left: 0,
-                          top: 0,
-                          bottom: 0,
-                          right: _panelInset(_panelAnimation.value),
-                          child: child!,
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _TodoScopeHeader(
-                                lists: lists,
-                                stats: stats,
-                                activeCount: active.length,
-                                completedCount: completed.length,
-                                selectedListId: listId,
-                                showAllTasks: _showAllTasks,
-                                accent: taskBarColor,
-                                statsFor: _statsForList,
-                                onSelectList: _selectListFromSwitcher,
-                                onSelectAllTasks: _selectAllTasksFromSwitcher,
-                                onManage: () =>
-                                    unawaited(_openListManageSheet()),
-                              ),
-                              const SizedBox(height: 8),
-                              Expanded(
-                                // The search bar floats over the top of the
-                                // list rather than sitting in the page's
-                                // chrome, so opening it costs the list no
-                                // height (TODO_LIST_SEARCH_HLD.md,
-                                // "Placement").
-                                child: Stack(
-                                  children: [
-                                    KeepAliveCustomScrollView(
-                                      storageKey: ShellPageStorageKeys.todoTaskList,
-                                      controller: _taskScrollController,
-                                      // Was 10000.0, then 2000.0 — every mounted
-                                      // row is laid out again on any change to the
-                                      // list's constraints, so this number is a
-                                      // direct multiplier on both the full-page
-                                      // rebuild the deferred completion write
-                                      // triggers ~900ms after each toggle (see
-                                      // _flushPendingCompletionSaves) and, now,
-                                      // every frame of the edit panel's reveal,
-                                      // which animates the list's width. 600 is
-                                      // roughly one extra screen of warm rows each
-                                      // way: still enough that a normal scroll
-                                      // doesn't rebuild rows under the user, but
-                                      // ~3x cheaper per relayout than 2000.
-                                      cacheExtent: 600.0,
-                                      slivers: [
+                  // Shared host: push when the list still has room, overlay
+                  // when it does not, with a capped resizable panel width.
+                  child: EditSidePanelHost(
+                    animation: _panelAnimation,
+                    listMinWidth: EditSidePanelMetrics.todoListMinWidth,
+                    storedWidth: settings?.editSidePanelWidth,
+                    onWidthCommitted: (width) =>
+                        unawaited(_persistEditSidePanelWidth(width)),
+                    // The list is the host's `list` child so it is built once
+                    // per page build and NOT rebuilt per reveal frame — the
+                    // host only re-wraps it with a new inset. Keeping that
+                    // contract is load-bearing: this subtree is the page's
+                    // entire sort/filter/group result.
+                    list: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _TodoScopeHeader(
+                            lists: lists,
+                            stats: stats,
+                            activeCount: active.length,
+                            completedCount: completed.length,
+                            selectedListId: listId,
+                            showAllTasks: _showAllTasks,
+                            accent: taskBarColor,
+                            statsFor: _statsForList,
+                            onSelectList: _selectListFromSwitcher,
+                            onSelectAllTasks: _selectAllTasksFromSwitcher,
+                            onManage: () =>
+                                unawaited(_openListManageSheet()),
+                          ),
+                          const SizedBox(height: 8),
+                          Expanded(
+                            // The search bar floats over the top of the
+                            // list rather than sitting in the page's
+                            // chrome, so opening it costs the list no
+                            // height (TODO_LIST_SEARCH_HLD.md,
+                            // "Placement").
+                            child: Stack(
+                              children: [
+                                KeepAliveCustomScrollView(
+                                  storageKey: ShellPageStorageKeys.todoTaskList,
+                                  controller: _taskScrollController,
+                                  // Was 10000.0, then 2000.0 — every mounted
+                                  // row is laid out again on any change to the
+                                  // list's constraints, so this number is a
+                                  // direct multiplier on both the full-page
+                                  // rebuild the deferred completion write
+                                  // triggers ~900ms after each toggle (see
+                                  // _flushPendingCompletionSaves) and, now,
+                                  // every frame of the edit panel's reveal,
+                                  // which animates the list's width. 600 is
+                                  // roughly one extra screen of warm rows each
+                                  // way: still enough that a normal scroll
+                                  // doesn't rebuild rows under the user, but
+                                  // ~3x cheaper per relayout than 2000.
+                                  cacheExtent: 600.0,
+                                  slivers: [
                                         // Reserved only while a filter is
                                         // actually applied, so the bar merely
                                         // appearing never shifts the list — but
@@ -3081,6 +3057,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                               // pays for the entire dataset instead
                                               // of just the visible rows.
                                               delegate: SliverChildBuilderDelegate(
+
                                                 (context, index) {
                                                   final task =
                                                       activeForDisplay[index];
@@ -3417,45 +3394,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
                             ],
                           ),
                         ),
-                      ),
-                      // A plain Positioned (no left/width) so the child
-                      // determines its own width — same loose-width/
-                      // tight-height contract a non-flex Row child used to
-                      // get, which the Align below relies on for
-                      // widthFactor to size it smaller than 420. Docked to
-                      // the right edge always, at whatever width the reveal
-                      // animation currently reports (0 to _todoEditPanelWidth).
-                      // On open the list beside it (above in this list) has
-                      // already made room, so there's nothing underneath to
-                      // paint over; on close the list has already snapped
-                      // back to full width, so this does paint over it for
-                      // the length of the reverse animation (Stack paints
-                      // later children on top) until the panel finishes
-                      // sliding away.
-                      Positioned(
-                        top: 0,
-                        bottom: 0,
-                        right: 0,
-                        child: ClipRect(
-                          child: AnimatedBuilder(
-                            animation: _panelAnimation,
-                            builder: (context, child) {
-                              return Align(
-                                alignment: Alignment.centerRight,
-                                widthFactor: _panelAnimation.value,
-                                child: child,
-                              );
-                            },
-                            child: SizedBox(
-                              width: _todoEditPanelWidth,
-                              child: panelTask == null
-                                  ? const SizedBox.shrink()
-                                  : _editPanel(panelTask, lists),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    panel: panelTask == null
+                        ? null
+                        : _editPanel(panelTask, lists),
                   ),
                 ),
               ],

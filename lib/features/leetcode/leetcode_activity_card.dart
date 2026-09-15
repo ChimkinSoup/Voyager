@@ -220,7 +220,11 @@ class _LeetCodeActivityOverlayState extends State<_LeetCodeActivityOverlay>
                   child: GestureDetector(
                     onTap: _close,
                     child: ColoredBox(
-                      color: Colors.black.withValues(alpha: 0.5 * raw),
+                      color: Color.lerp(
+                        Colors.transparent,
+                        VoyagerColors.of(context).scrim,
+                        raw,
+                      )!,
                     ),
                   ),
                 );

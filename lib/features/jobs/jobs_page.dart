@@ -11,6 +11,7 @@ import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
+import 'package:voyager/core/widgets/edit_side_panel_host.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
@@ -85,6 +86,17 @@ class _JobsPageState extends ConsumerState<JobsPage>
       if (!mounted) return;
       ref.read(jobSelectedApplicationProvider.notifier).state = null;
     });
+  }
+
+  Future<void> _persistEditSidePanelWidth(double? width) async {
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settings = await settingsRepo.getSettings();
+    if (settings.editSidePanelWidth == width) return;
+    await settingsRepo.saveSettings(
+      width == null
+          ? settings.copyWith(clearEditSidePanelWidth: true)
+          : settings.copyWith(editSidePanelWidth: width),
+    );
   }
 
   @override
@@ -211,137 +223,110 @@ class _JobsPageState extends ConsumerState<JobsPage>
                   },
                 ),
                 Expanded(
-                  child: Stack(
-                    children: [
-                      AnimatedBuilder(
-                        animation: _panelAnimation,
-                        builder: (context, child) => Padding(
-                          // The list gives up exactly as much width as the
-                          // panel has taken, so the two never overlap while
-                          // the reveal is mid-flight.
-                          padding: EdgeInsets.only(
-                            right: jobsEditPanelWidth * _panelAnimation.value,
-                          ),
-                          child: child,
-                        ),
-                        child: Consumer(
-                          builder: (context, ref, _) {
-                            final rows = filterJobApplications(
-                              applications,
-                              includeArchived: includeArchived,
-                              archivedSeasonIds: archivedSeasonIds,
-                              statuses: statusFilter,
-                              query: ref.watch(jobSearchQueryProvider),
-                            )..sort(compareJobApplications);
-                            final duplicates = jobDuplicateIds(rows);
-                            if (rows.isEmpty) {
-                              return _EmptyState(
-                                hasApplications: applications.isNotEmpty,
-                                onClearFilters: _clearFilters,
-                              );
-                            }
-                            return Column(
-                              children: [
-                                JobsTableHeader(columns: columns),
-                                Expanded(
-                                  child: ListView.builder(
-                                    itemCount: rows.length,
-                                    itemBuilder: (context, index) {
-                                      final application = rows[index];
-                                      return JobsTableRow(
-                                        key: ValueKey(application.id),
-                                        application: application,
-                                        columns: columns,
-                                        color: colors.of(application.company),
-                                        statusColor: statusColors.of(
-                                          application.status,
-                                        ),
-                                        isDuplicate: duplicates.contains(
-                                          application.id,
-                                        ),
-                                        isSelected:
-                                            application.id == selectedId,
-                                        isArchived: jobIsArchived(
-                                          application,
-                                          archivedSeasonIds,
-                                        ),
-                                        seasonNames: namesFor(application),
-                                        onTap: () =>
-                                            _openPanel(application.id),
-                                        onStatusTap: (pillContext) =>
-                                            _editStatus(
-                                              pillContext,
-                                              application,
-                                              stages,
-                                            ),
-                                        menuItems: () =>
-                                            jobApplicationMenuItems(
-                                              application: application,
-                                              stages: stages,
-                                              seasons: jobSelectableSeasons(
-                                                seasons,
-                                              ),
-                                              onChangeStatus: (status) =>
-                                                  _setStatus(
-                                                    application,
-                                                    status,
-                                                  ),
-                                              onSetSeasons: (seasonIds) =>
-                                                  _setSeasons(
-                                                    application,
-                                                    seasonIds,
-                                                  ),
-                                              onOpenUrl: () => _openUrl(
-                                                application.applicationUrl!,
-                                              ),
-                                              onDuplicate: () =>
-                                                  _duplicate(application),
-                                              onDelete: () =>
-                                                  _confirmDelete(application),
-                                            ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                      Positioned(
-                        top: 0,
-                        bottom: 0,
-                        right: 0,
-                        child: ClipRect(
-                          child: AnimatedBuilder(
-                            animation: _panelAnimation,
-                            builder: (context, child) => Align(
-                              alignment: Alignment.centerRight,
-                              widthFactor: _panelAnimation.value,
-                              child: child,
-                            ),
-                            child: SizedBox(
-                              width: jobsEditPanelWidth,
-                              child: selected == null
-                                  ? const SizedBox.shrink()
-                                  : JobsEditPanel(
-                                      key: ValueKey(selected.id),
-                                      application: selected,
-                                      stages: stages,
-                                      companies: companies,
-                                      seasons: seasons,
-                                      recentCompanyKeys: ref.watch(
-                                        jobRecentCompanyKeysProvider,
-                                      ),
-                                      accentColor: colors.of(selected.company),
-                                      categoryColorFor: colors.forCompany,
-                                      onClose: _closePanel,
+                  child: EditSidePanelHost(
+                    animation: _panelAnimation,
+                    listMinWidth: EditSidePanelMetrics.jobsListMinWidth,
+                    storedWidth: settings?.editSidePanelWidth,
+                    onWidthCommitted: (width) =>
+                        unawaited(_persistEditSidePanelWidth(width)),
+                    list: Consumer(
+                      builder: (context, ref, _) {
+                        final rows = filterJobApplications(
+                          applications,
+                          includeArchived: includeArchived,
+                          archivedSeasonIds: archivedSeasonIds,
+                          statuses: statusFilter,
+                          query: ref.watch(jobSearchQueryProvider),
+                        )..sort(compareJobApplications);
+                        final duplicates = jobDuplicateIds(rows);
+                        if (rows.isEmpty) {
+                          return _EmptyState(
+                            hasApplications: applications.isNotEmpty,
+                            onClearFilters: _clearFilters,
+                          );
+                        }
+                        return Column(
+                          children: [
+                            JobsTableHeader(columns: columns),
+                            Expanded(
+                              child: ListView.builder(
+                                itemCount: rows.length,
+                                itemBuilder: (context, index) {
+                                  final application = rows[index];
+                                  return JobsTableRow(
+                                    key: ValueKey(application.id),
+                                    application: application,
+                                    columns: columns,
+                                    color: colors.of(application.company),
+                                    statusColor: statusColors.of(
+                                      application.status,
                                     ),
+                                    isDuplicate: duplicates.contains(
+                                      application.id,
+                                    ),
+                                    isSelected:
+                                        application.id == selectedId,
+                                    isArchived: jobIsArchived(
+                                      application,
+                                      archivedSeasonIds,
+                                    ),
+                                    seasonNames: namesFor(application),
+                                    onTap: () =>
+                                        _openPanel(application.id),
+                                    onStatusTap: (pillContext) =>
+                                        _editStatus(
+                                          pillContext,
+                                          application,
+                                          stages,
+                                        ),
+                                    menuItems: () =>
+                                        jobApplicationMenuItems(
+                                          application: application,
+                                          stages: stages,
+                                          seasons: jobSelectableSeasons(
+                                            seasons,
+                                          ),
+                                          onChangeStatus: (status) =>
+                                              _setStatus(
+                                                application,
+                                                status,
+                                              ),
+                                          onSetSeasons: (seasonIds) =>
+                                              _setSeasons(
+                                                application,
+                                                seasonIds,
+                                              ),
+                                          onOpenUrl: () => _openUrl(
+                                            application.applicationUrl!,
+                                          ),
+                                          onDuplicate: () =>
+                                              _duplicate(application),
+                                          onDelete: () =>
+                                              _confirmDelete(application),
+                                        ),
+                                  );
+                                },
+                              ),
                             ),
+                          ],
+                        );
+                      },
+                    ),
+                    panel: selected == null
+                        ? null
+                        : JobsEditPanel(
+                            key: ValueKey(selected.id),
+                            application: selected,
+                            stages: stages,
+                            companies: companies,
+                            seasons: seasons,
+                            recentCompanyKeys: ref.watch(
+                              jobRecentCompanyKeysProvider,
+                            ),
+                            accentColor: colors.of(selected.company),
+                            categoryColorFor: colors.forCompany,
+                            onClose: _closePanel,
                           ),
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ],

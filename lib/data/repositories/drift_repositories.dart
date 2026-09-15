@@ -2905,6 +2905,7 @@ class DriftSettingsRepository implements SettingsRepository {
       weatherChartRainColor: row.weatherChartRainColor,
       weatherChartCurveTension: row.weatherChartCurveTension,
       journalEntryListWidth: row.journalEntryListWidth,
+      editSidePanelWidth: row.editSidePanelWidth,
       navPageOrder: row.navPageOrderJson == null
           ? null
           : List<String>.from(jsonDecode(row.navPageOrderJson!) as List),
@@ -3153,6 +3154,7 @@ class DriftSettingsRepository implements SettingsRepository {
             weatherChartRainColor: Value(settings.weatherChartRainColor),
             weatherChartCurveTension: Value(settings.weatherChartCurveTension),
             journalEntryListWidth: Value(settings.journalEntryListWidth),
+            editSidePanelWidth: Value(settings.editSidePanelWidth),
             navPageOrderJson: Value(
               settings.navPageOrder == null
                   ? null

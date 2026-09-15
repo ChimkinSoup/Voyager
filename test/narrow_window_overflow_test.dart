@@ -32,9 +32,9 @@ const _pageWidths = <double>[624, 760, 900, 980, 1100];
 /// Long enough to wrap, so the row beside a side panel is at its tallest.
 const _probeTitle = 'Overflow probe with a title long enough to wrap its row';
 
-/// A row written into the pages that open a 420px edit panel beside their
-/// list, so the sweep can open it: at the minimum width the list is left
-/// with barely 200px.
+/// A row written into the pages that open a right-hand edit panel beside
+/// their list, so the sweep can open it. At the minimum width the host
+/// overlays rather than crushing the list under a 420px push.
 final _panelSeeds = <String, Future<void> Function(AppDatabase db)>{
   '/todo': (db) async {
     final now = utcNow();

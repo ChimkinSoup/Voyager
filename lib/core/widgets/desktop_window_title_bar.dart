@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
+import 'package:voyager/core/theme/voyager_list_item_surface.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// Custom title bar for frameless desktop windows: drag region + window controls.
@@ -58,9 +60,22 @@ class _DesktopWindowTitleBarState extends State<DesktopWindowTitleBar>
 
     final theme = Theme.of(context);
     final onSurface = theme.colorScheme.onSurface;
+    final isDark = theme.brightness == Brightness.dark;
 
+    // Dark: an opaque band over the moving grid read as a hard cut, so the
+    // bar takes the shell's near-solid chrome alpha and ends in a hairline
+    // instead of a tone edge.
     return Material(
-      color: theme.colorScheme.surface,
+      color: isDark
+          ? theme.colorScheme.surface.withValues(
+              alpha: VoyagerListItemSurface.solidAlpha,
+            )
+          : theme.colorScheme.surface,
+      shape: isDark
+          ? Border(
+              bottom: BorderSide(color: VoyagerColors.of(context).hairline),
+            )
+          : null,
       child: SizedBox(
         height: DesktopWindowTitleBar.height,
         child: Row(

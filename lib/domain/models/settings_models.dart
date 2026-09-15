@@ -119,6 +119,7 @@ class AppSettings {
     this.weatherChartRainColor,
     this.weatherChartCurveTension = 0.22,
     this.journalEntryListWidth,
+    this.editSidePanelWidth,
     this.navPageOrder,
     this.startupPageMode = StartupPageMode.first,
     this.customStartupPage,
@@ -347,6 +348,10 @@ class AppSettings {
   final int? weatherChartRainColor;
   final double weatherChartCurveTension;
   final double? journalEntryListWidth;
+
+  /// Shared width of the Todo / Jobs / Rankings right-hand editor panel.
+  /// Device-local (like [journalEntryListWidth]): sized for this screen.
+  final double? editSidePanelWidth;
   final List<String>? navPageOrder;
   final StartupPageMode startupPageMode;
   final String? customStartupPage;
@@ -567,6 +572,7 @@ class AppSettings {
     int? weatherChartRainColor,
     double? weatherChartCurveTension,
     double? journalEntryListWidth,
+    double? editSidePanelWidth,
     List<String>? navPageOrder,
     StartupPageMode? startupPageMode,
     String? customStartupPage,
@@ -621,6 +627,7 @@ class AppSettings {
     bool clearDefaultJournalId = false,
     bool clearDefaultTodoListId = false,
     bool clearJournalEntryListWidth = false,
+    bool clearEditSidePanelWidth = false,
     bool clearCustomStartupPage = false,
     bool clearLastSeenNavPage = false,
     bool clearDreamSplitWidth = false,
@@ -809,6 +816,9 @@ class AppSettings {
       journalEntryListWidth: clearJournalEntryListWidth
           ? null
           : (journalEntryListWidth ?? this.journalEntryListWidth),
+      editSidePanelWidth: clearEditSidePanelWidth
+          ? null
+          : (editSidePanelWidth ?? this.editSidePanelWidth),
       navPageOrder: clearNavPageOrder ? null : (navPageOrder ?? this.navPageOrder),
       startupPageMode: startupPageMode ?? this.startupPageMode,
       customStartupPage: clearCustomStartupPage

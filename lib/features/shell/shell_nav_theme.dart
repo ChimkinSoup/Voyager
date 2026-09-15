@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/features/shell/shell_page_transition.dart';
 
 /// Shared visual tokens for the two shell navigations.
@@ -16,12 +17,13 @@ const double shellNavItemHeight = 56.0;
 
 /// The resting fill behind a selected destination: the card tone pulled a
 /// third of the way back toward the scaffold, then held just short of opaque
-/// so the paper grain still reads through it.
+/// so the paper grain still reads through it. The alpha is shared with dark
+/// sidebar rows, so the rail and the lists agree on how much grid shows.
 Color shellNavSelectedFill(ThemeData theme) => Color.lerp(
   theme.colorScheme.surface,
   theme.scaffoldBackgroundColor,
   0.35,
-)!.withValues(alpha: 0.92);
+)!.withValues(alpha: VoyagerListItemSurface.solidAlpha);
 
 /// Pointer-hover fill. Never appears on touch, where there is no hover state
 /// to enter — the selected fill is what marks position there.
