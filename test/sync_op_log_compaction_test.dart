@@ -114,6 +114,25 @@ void main() {
     expect(await resolvedBody(), text);
   });
 
+  test('stands down while writes are already queued unsent', () async {
+    await seedOperationLog(
+      saves: RemoteSyncService.operationLogCompactionThreshold + 50,
+    );
+    final before = (await syncRepo.listOperations('doc-1')).length;
+    syncRepo.unsentWriteBacklog = true;
+
+    // Compaction is housekeeping that costs a megabyte-scale baseline write
+    // plus a delete per superseded operation. Generating that against a queue
+    // that is not moving is what filled Firestore's write queue across a run
+    // of hot restarts, since the in-memory guard cannot survive one.
+    expect(await service.compactOperationLog('doc-1'), isFalse);
+    expect(await syncRepo.listOperations('doc-1'), hasLength(before));
+
+    // ...and resumes once the queue is moving again.
+    syncRepo.unsentWriteBacklog = false;
+    expect(await service.compactOperationLog('doc-1'), isTrue);
+  });
+
   test('leaves a short log alone', () async {
     await seedOperationLog(
       saves: RemoteSyncService.operationLogCompactionThreshold - 1,

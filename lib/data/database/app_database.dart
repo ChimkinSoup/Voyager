@@ -509,6 +509,8 @@ class SettingsTable extends Table {
   BoolColumn get weekStartsOnMonday =>
       boolean().withDefault(const Constant(true))();
   BoolColumn get showQuotes => boolean().withDefault(const Constant(true))();
+  BoolColumn get customQuotesOnly =>
+      boolean().withDefault(const Constant(false))();
   BoolColumn get showDefaultTrackersInGrid =>
       boolean().withDefault(const Constant(true))();
   BoolColumn get showDefaultTrackersInCalendar =>
@@ -1509,7 +1511,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 113;
+  int get schemaVersion => 114;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2786,6 +2788,12 @@ class AppDatabase extends _$AppDatabase {
           settingsTable.editSidePanelWidth,
         );
       }
+      if (from < 114) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.customQuotesOnly,
+        );
+      }
     },
   );
 
@@ -3175,6 +3183,9 @@ class AppDatabase extends _$AppDatabase {
     );
     await customStatement(
       'UPDATE settings_table SET snippets_enabled = 1 WHERE snippets_enabled IS NULL',
+    );
+    await customStatement(
+      'UPDATE settings_table SET custom_quotes_only = 0 WHERE custom_quotes_only IS NULL',
     );
     await customStatement(
       "UPDATE settings_table SET snippet_expand_key = 'tab' WHERE snippet_expand_key IS NULL",

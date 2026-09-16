@@ -1,15 +1,44 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:voyager/core/sync/firestore_write_gate.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/weather_forecast_merge.dart';
 
+/// Mutations per `WriteBatch`.
+///
+/// Firestore's own ceiling is 500, and that is what this used to be — but 500
+/// is the limit on what one *batch* may contain, not on what the write stream
+/// will carry. The client keeps several batches in flight at once, so batching
+/// at the maximum let a single burst put thousands of queued writes on one
+/// stream, which is what the backend refuses with `RESOURCE_EXHAUSTED: Write
+/// stream exhausted maximum allowed queued writes`. Small batches cost more
+/// round-trips on a good connection and are the difference between syncing
+/// slowly and not syncing at all on a bad one.
+const int firestoreWriteChunkSize = 40;
+
 class FirestoreSyncRepository implements SyncRepository {
-  FirestoreSyncRepository(this._firestore, this._userId);
+  FirestoreSyncRepository(
+    this._firestore,
+    this._userId, {
+    FirestoreWriteGate? writeGate,
+  }) : writeGate =
+           writeGate ??
+           FirestoreWriteGate(
+             waitForPendingWrites: _firestore.waitForPendingWrites,
+           );
 
   final FirebaseFirestore _firestore;
   final String _userId;
+
+  /// Bounds how many writes are handed to Firestore before it acknowledges
+  /// them — see [FirestoreWriteGate].
+  final FirestoreWriteGate writeGate;
+
+  @override
+  bool get hasUnsentWriteBacklog =>
+      writeGate.hasStartupBacklog || writeGate.isPaused;
 
   DocumentReference<Map<String, dynamic>> _doc(String collection, String id) {
     return _firestore.doc('users/$_userId/$collection/$id');
@@ -25,7 +54,9 @@ class FirestoreSyncRepository implements SyncRepository {
     String id,
     Map<String, dynamic> data,
   ) async {
-    await _doc(collection, id).set(data, SetOptions(merge: true));
+    await writeGate.run(
+      () => _doc(collection, id).set(data, SetOptions(merge: true)),
+    );
   }
 
   @override
@@ -77,7 +108,7 @@ class FirestoreSyncRepository implements SyncRepository {
 
   @override
   Future<void> upsertRemoteSettings(Map<String, dynamic> data) async {
-    await _settingsDoc.set(data, SetOptions(merge: true));
+    await writeGate.run(() => _settingsDoc.set(data, SetOptions(merge: true)));
   }
 
   @override
@@ -216,9 +247,11 @@ class FirestoreSyncRepository implements SyncRepository {
 
   @override
   Future<void> upsertCurrentWeather(WeatherSnapshot weather) async {
-    await _firestore
-        .doc('users/$_userId/weather/current')
-        .set(weather.toJson(), SetOptions(merge: true));
+    await writeGate.run(
+      () => _firestore
+          .doc('users/$_userId/weather/current')
+          .set(weather.toJson(), SetOptions(merge: true)),
+    );
   }
 
   DocumentReference<Map<String, dynamic>> get _forecastDoc =>
@@ -246,17 +279,19 @@ class FirestoreSyncRepository implements SyncRepository {
 
   @override
   Future<void> appendOperation(SyncOperation operation) async {
-    await _doc('sync_operations', operation.id).set(_operationData(operation));
+    await writeGate.run(
+      () => _doc('sync_operations', operation.id).set(_operationData(operation)),
+    );
   }
 
   @override
   Future<void> appendOperationsBatch(List<SyncOperation> operations) async {
-    for (final chunk in _chunked(operations, 500)) {
+    for (final chunk in _chunked(operations, firestoreWriteChunkSize)) {
       final batch = _firestore.batch();
       for (final operation in chunk) {
         batch.set(_doc('sync_operations', operation.id), _operationData(operation));
       }
-      await batch.commit();
+      await writeGate.run(batch.commit);
     }
   }
 
@@ -275,7 +310,7 @@ class FirestoreSyncRepository implements SyncRepository {
     for (final operation in operations) {
       batch.set(_doc('sync_operations', operation.id), _operationData(operation));
     }
-    await batch.commit();
+    await writeGate.run(batch.commit);
   }
 
   @override
@@ -283,7 +318,7 @@ class FirestoreSyncRepository implements SyncRepository {
     String collection,
     Map<String, Map<String, dynamic>> documentsById,
   ) async {
-    for (final chunk in _chunked(documentsById.entries.toList(), 500)) {
+    for (final chunk in _chunked(documentsById.entries.toList(), firestoreWriteChunkSize)) {
       final batch = _firestore.batch();
       for (final entry in chunk) {
         batch.set(
@@ -292,7 +327,7 @@ class FirestoreSyncRepository implements SyncRepository {
           SetOptions(merge: true),
         );
       }
-      await batch.commit();
+      await writeGate.run(batch.commit);
     }
   }
 
@@ -328,7 +363,7 @@ class FirestoreSyncRepository implements SyncRepository {
 
   @override
   Future<void> deleteDocument(String collection, String id) async {
-    await _doc(collection, id).delete();
+    await writeGate.run(() => _doc(collection, id).delete());
   }
 
   /// Forces a server round-trip, so an offline caller is told rather than
@@ -359,7 +394,7 @@ class FirestoreSyncRepository implements SyncRepository {
     }
     if (query.docs.isEmpty) return 0;
 
-    const batchSize = 500;
+    const batchSize = firestoreWriteChunkSize;
     var deleted = 0;
     for (var i = 0; i < query.docs.length; i += batchSize) {
       final batch = _firestore.batch();
@@ -367,7 +402,7 @@ class FirestoreSyncRepository implements SyncRepository {
         batch.delete(doc.reference);
         deleted++;
       }
-      await batch.commit();
+      await writeGate.run(batch.commit);
     }
     return deleted;
   }
@@ -381,19 +416,22 @@ class FirestoreSyncRepository implements SyncRepository {
     var deleted = 0;
     // The operation id is the document name (see [appendOperation]), so these
     // delete without a query.
-    for (final chunk in _chunked(operationIds, 500)) {
+    for (final chunk in _chunked(operationIds, firestoreWriteChunkSize)) {
       final batch = _firestore.batch();
       for (final id in chunk) {
         batch.delete(_doc('sync_operations', id));
         deleted++;
       }
-      await batch.commit();
+      await writeGate.run(batch.commit);
     }
     return deleted;
   }
 }
 
 class NoOpSyncRepository implements SyncRepository {
+  @override
+  bool get hasUnsentWriteBacklog => false;
+
   @override
   Future<void> appendOperation(SyncOperation operation) async {}
 

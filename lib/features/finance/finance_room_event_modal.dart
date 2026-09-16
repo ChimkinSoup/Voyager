@@ -227,37 +227,46 @@ class _ValueField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final invalid =
-        field.controller.text.trim().isNotEmpty && field.parsed == null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        VoyagerTextField(
-          controller: field.controller,
-          accentColor: accent,
-          cursorColor: accent,
-          keyboardType: const TextInputType.numberWithOptions(
-            decimal: true,
-            signed: true,
-          ),
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]')),
-            LengthLimitingTextInputFormatter(13),
+    // Watches its own controller rather than having the sheet rebuild around
+    // it: a `setState` listener on this field re-ran the whole sheet per
+    // keystroke, which also made its heavy GlassSurface re-blur a
+    // window-sized backdrop for every character.
+    return ListenableBuilder(
+      listenable: field.controller,
+      builder: (context, _) {
+        final invalid =
+            field.controller.text.trim().isNotEmpty && field.parsed == null;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            VoyagerTextField(
+              controller: field.controller,
+              accentColor: accent,
+              cursorColor: accent,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+                signed: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]')),
+                LengthLimitingTextInputFormatter(13),
+              ],
+              decoration: InputDecoration(
+                labelText: label,
+                prefixText: r'$ ',
+                errorText: invalid ? 'Enter a number, e.g. 1250.00' : null,
+              ),
+            ),
+            const SizedBox(height: 6),
+            _MutedLine(
+              [
+                'Was ${formatNetCents(previousCents)}',
+                ?caption,
+              ].join(' · '),
+            ),
           ],
-          decoration: InputDecoration(
-            labelText: label,
-            prefixText: r'$ ',
-            errorText: invalid ? 'Enter a number, e.g. 1250.00' : null,
-          ),
-        ),
-        const SizedBox(height: 6),
-        _MutedLine(
-          [
-            'Was ${formatNetCents(previousCents)}',
-            ?caption,
-          ].join(' · '),
-        ),
-      ],
+        );
+      },
     );
   }
 }
@@ -373,7 +382,6 @@ class _RoomCashEventModalState extends ConsumerState<_RoomCashEventModal> {
     final base = existing?.occurredAt ?? DateTime.now();
     _date = DateTime(base.year, base.month, base.day);
     _amountController.addListener(_onChanged);
-    _value.controller.addListener(_onValueTyped);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _onChanged();
     });
@@ -387,8 +395,6 @@ class _RoomCashEventModalState extends ConsumerState<_RoomCashEventModal> {
     _noteFocusNode.dispose();
     super.dispose();
   }
-
-  void _onValueTyped() => setState(() {});
 
   int? get _parsedAmount => parseAmountCents(_amountController.text);
 
@@ -589,15 +595,18 @@ class _RoomCashEventModalState extends ConsumerState<_RoomCashEventModal> {
                 _MutedLine(_saveError!, color: theme.colorScheme.error),
               ],
               const SizedBox(height: 24),
-              GlassButton(
-                onPressed: _canSave ? _save : null,
-                label: existing != null
-                    ? 'Save'
-                    : _isContribution
-                    ? 'Contribute'
-                    : 'Withdraw',
-                color: accent,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+              ListenableBuilder(
+                listenable: _value.controller,
+                builder: (context, _) => GlassButton(
+                  onPressed: _canSave ? _save : null,
+                  label: existing != null
+                      ? 'Save'
+                      : _isContribution
+                      ? 'Contribute'
+                      : 'Withdraw',
+                  color: accent,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
             ],
           ),
@@ -662,8 +671,6 @@ class _RoomTransferModalState extends ConsumerState<_RoomTransferModal> {
     _date = DateTime(base.year, base.month, base.day);
     _toId = _oldIn?.assetId;
     _amountController.addListener(_onChanged);
-    _fromValue.controller.addListener(_onValueTyped);
-    _toValue.controller.addListener(_onValueTyped);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _onChanged();
     });
@@ -678,8 +685,6 @@ class _RoomTransferModalState extends ConsumerState<_RoomTransferModal> {
     _noteFocusNode.dispose();
     super.dispose();
   }
-
-  void _onValueTyped() => setState(() {});
 
   int? get _parsedAmount => parseAmountCents(_amountController.text);
 
@@ -896,11 +901,17 @@ class _RoomTransferModalState extends ConsumerState<_RoomTransferModal> {
                 _MutedLine(_saveError!, color: theme.colorScheme.error),
               ],
               const SizedBox(height: 24),
-              GlassButton(
-                onPressed: _canSave ? _save : null,
-                label: widget.existingLegs.isEmpty ? 'Transfer' : 'Save',
-                color: accent,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+              ListenableBuilder(
+                listenable: Listenable.merge([
+                  _fromValue.controller,
+                  _toValue.controller,
+                ]),
+                builder: (context, _) => GlassButton(
+                  onPressed: _canSave ? _save : null,
+                  label: widget.existingLegs.isEmpty ? 'Transfer' : 'Save',
+                  color: accent,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
             ],
           ),

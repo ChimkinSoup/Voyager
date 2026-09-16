@@ -7178,6 +7178,21 @@ class $SettingsTableTable extends SettingsTable
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _customQuotesOnlyMeta = const VerificationMeta(
+    'customQuotesOnly',
+  );
+  @override
+  late final GeneratedColumn<bool> customQuotesOnly = GeneratedColumn<bool>(
+    'custom_quotes_only',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("custom_quotes_only" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _showDefaultTrackersInGridMeta =
       const VerificationMeta('showDefaultTrackersInGrid');
   @override
@@ -8811,6 +8826,7 @@ class $SettingsTableTable extends SettingsTable
     petalWindStrength,
     weekStartsOnMonday,
     showQuotes,
+    customQuotesOnly,
     showDefaultTrackersInGrid,
     showDefaultTrackersInCalendar,
     journalHotkey,
@@ -9033,6 +9049,15 @@ class $SettingsTableTable extends SettingsTable
       context.handle(
         _showQuotesMeta,
         showQuotes.isAcceptableOrUnknown(data['show_quotes']!, _showQuotesMeta),
+      );
+    }
+    if (data.containsKey('custom_quotes_only')) {
+      context.handle(
+        _customQuotesOnlyMeta,
+        customQuotesOnly.isAcceptableOrUnknown(
+          data['custom_quotes_only']!,
+          _customQuotesOnlyMeta,
+        ),
       );
     }
     if (data.containsKey('show_default_trackers_in_grid')) {
@@ -10207,6 +10232,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.bool,
         data['${effectivePrefix}show_quotes'],
       )!,
+      customQuotesOnly: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}custom_quotes_only'],
+      )!,
       showDefaultTrackersInGrid: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}show_default_trackers_in_grid'],
@@ -10737,6 +10766,7 @@ class SettingsTableData extends DataClass
   final double petalWindStrength;
   final bool weekStartsOnMonday;
   final bool showQuotes;
+  final bool customQuotesOnly;
   final bool showDefaultTrackersInGrid;
   final bool showDefaultTrackersInCalendar;
   final String journalHotkey;
@@ -10953,6 +10983,7 @@ class SettingsTableData extends DataClass
     required this.petalWindStrength,
     required this.weekStartsOnMonday,
     required this.showQuotes,
+    required this.customQuotesOnly,
     required this.showDefaultTrackersInGrid,
     required this.showDefaultTrackersInCalendar,
     required this.journalHotkey,
@@ -11097,6 +11128,7 @@ class SettingsTableData extends DataClass
     map['petal_wind_strength'] = Variable<double>(petalWindStrength);
     map['week_starts_on_monday'] = Variable<bool>(weekStartsOnMonday);
     map['show_quotes'] = Variable<bool>(showQuotes);
+    map['custom_quotes_only'] = Variable<bool>(customQuotesOnly);
     map['show_default_trackers_in_grid'] = Variable<bool>(
       showDefaultTrackersInGrid,
     );
@@ -11408,6 +11440,7 @@ class SettingsTableData extends DataClass
       petalWindStrength: Value(petalWindStrength),
       weekStartsOnMonday: Value(weekStartsOnMonday),
       showQuotes: Value(showQuotes),
+      customQuotesOnly: Value(customQuotesOnly),
       showDefaultTrackersInGrid: Value(showDefaultTrackersInGrid),
       showDefaultTrackersInCalendar: Value(showDefaultTrackersInCalendar),
       journalHotkey: Value(journalHotkey),
@@ -11635,6 +11668,7 @@ class SettingsTableData extends DataClass
       petalWindStrength: serializer.fromJson<double>(json['petalWindStrength']),
       weekStartsOnMonday: serializer.fromJson<bool>(json['weekStartsOnMonday']),
       showQuotes: serializer.fromJson<bool>(json['showQuotes']),
+      customQuotesOnly: serializer.fromJson<bool>(json['customQuotesOnly']),
       showDefaultTrackersInGrid: serializer.fromJson<bool>(
         json['showDefaultTrackersInGrid'],
       ),
@@ -11951,6 +11985,7 @@ class SettingsTableData extends DataClass
       'petalWindStrength': serializer.toJson<double>(petalWindStrength),
       'weekStartsOnMonday': serializer.toJson<bool>(weekStartsOnMonday),
       'showQuotes': serializer.toJson<bool>(showQuotes),
+      'customQuotesOnly': serializer.toJson<bool>(customQuotesOnly),
       'showDefaultTrackersInGrid': serializer.toJson<bool>(
         showDefaultTrackersInGrid,
       ),
@@ -12195,6 +12230,7 @@ class SettingsTableData extends DataClass
     double? petalWindStrength,
     bool? weekStartsOnMonday,
     bool? showQuotes,
+    bool? customQuotesOnly,
     bool? showDefaultTrackersInGrid,
     bool? showDefaultTrackersInCalendar,
     String? journalHotkey,
@@ -12336,6 +12372,7 @@ class SettingsTableData extends DataClass
     petalWindStrength: petalWindStrength ?? this.petalWindStrength,
     weekStartsOnMonday: weekStartsOnMonday ?? this.weekStartsOnMonday,
     showQuotes: showQuotes ?? this.showQuotes,
+    customQuotesOnly: customQuotesOnly ?? this.customQuotesOnly,
     showDefaultTrackersInGrid:
         showDefaultTrackersInGrid ?? this.showDefaultTrackersInGrid,
     showDefaultTrackersInCalendar:
@@ -12600,6 +12637,9 @@ class SettingsTableData extends DataClass
       showQuotes: data.showQuotes.present
           ? data.showQuotes.value
           : this.showQuotes,
+      customQuotesOnly: data.customQuotesOnly.present
+          ? data.customQuotesOnly.value
+          : this.customQuotesOnly,
       showDefaultTrackersInGrid: data.showDefaultTrackersInGrid.present
           ? data.showDefaultTrackersInGrid.value
           : this.showDefaultTrackersInGrid,
@@ -12998,6 +13038,7 @@ class SettingsTableData extends DataClass
           ..write('petalWindStrength: $petalWindStrength, ')
           ..write('weekStartsOnMonday: $weekStartsOnMonday, ')
           ..write('showQuotes: $showQuotes, ')
+          ..write('customQuotesOnly: $customQuotesOnly, ')
           ..write('showDefaultTrackersInGrid: $showDefaultTrackersInGrid, ')
           ..write(
             'showDefaultTrackersInCalendar: $showDefaultTrackersInCalendar, ',
@@ -13170,6 +13211,7 @@ class SettingsTableData extends DataClass
     petalWindStrength,
     weekStartsOnMonday,
     showQuotes,
+    customQuotesOnly,
     showDefaultTrackersInGrid,
     showDefaultTrackersInCalendar,
     journalHotkey,
@@ -13313,6 +13355,7 @@ class SettingsTableData extends DataClass
           other.petalWindStrength == this.petalWindStrength &&
           other.weekStartsOnMonday == this.weekStartsOnMonday &&
           other.showQuotes == this.showQuotes &&
+          other.customQuotesOnly == this.customQuotesOnly &&
           other.showDefaultTrackersInGrid == this.showDefaultTrackersInGrid &&
           other.showDefaultTrackersInCalendar ==
               this.showDefaultTrackersInCalendar &&
@@ -13476,6 +13519,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<double> petalWindStrength;
   final Value<bool> weekStartsOnMonday;
   final Value<bool> showQuotes;
+  final Value<bool> customQuotesOnly;
   final Value<bool> showDefaultTrackersInGrid;
   final Value<bool> showDefaultTrackersInCalendar;
   final Value<String> journalHotkey;
@@ -13615,6 +13659,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.petalWindStrength = const Value.absent(),
     this.weekStartsOnMonday = const Value.absent(),
     this.showQuotes = const Value.absent(),
+    this.customQuotesOnly = const Value.absent(),
     this.showDefaultTrackersInGrid = const Value.absent(),
     this.showDefaultTrackersInCalendar = const Value.absent(),
     this.journalHotkey = const Value.absent(),
@@ -13755,6 +13800,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.petalWindStrength = const Value.absent(),
     this.weekStartsOnMonday = const Value.absent(),
     this.showQuotes = const Value.absent(),
+    this.customQuotesOnly = const Value.absent(),
     this.showDefaultTrackersInGrid = const Value.absent(),
     this.showDefaultTrackersInCalendar = const Value.absent(),
     this.journalHotkey = const Value.absent(),
@@ -13895,6 +13941,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<double>? petalWindStrength,
     Expression<bool>? weekStartsOnMonday,
     Expression<bool>? showQuotes,
+    Expression<bool>? customQuotesOnly,
     Expression<bool>? showDefaultTrackersInGrid,
     Expression<bool>? showDefaultTrackersInCalendar,
     Expression<String>? journalHotkey,
@@ -14038,6 +14085,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (weekStartsOnMonday != null)
         'week_starts_on_monday': weekStartsOnMonday,
       if (showQuotes != null) 'show_quotes': showQuotes,
+      if (customQuotesOnly != null) 'custom_quotes_only': customQuotesOnly,
       if (showDefaultTrackersInGrid != null)
         'show_default_trackers_in_grid': showDefaultTrackersInGrid,
       if (showDefaultTrackersInCalendar != null)
@@ -14272,6 +14320,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<double>? petalWindStrength,
     Value<bool>? weekStartsOnMonday,
     Value<bool>? showQuotes,
+    Value<bool>? customQuotesOnly,
     Value<bool>? showDefaultTrackersInGrid,
     Value<bool>? showDefaultTrackersInCalendar,
     Value<String>? journalHotkey,
@@ -14412,6 +14461,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       petalWindStrength: petalWindStrength ?? this.petalWindStrength,
       weekStartsOnMonday: weekStartsOnMonday ?? this.weekStartsOnMonday,
       showQuotes: showQuotes ?? this.showQuotes,
+      customQuotesOnly: customQuotesOnly ?? this.customQuotesOnly,
       showDefaultTrackersInGrid:
           showDefaultTrackersInGrid ?? this.showDefaultTrackersInGrid,
       showDefaultTrackersInCalendar:
@@ -14645,6 +14695,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (showQuotes.present) {
       map['show_quotes'] = Variable<bool>(showQuotes.value);
+    }
+    if (customQuotesOnly.present) {
+      map['custom_quotes_only'] = Variable<bool>(customQuotesOnly.value);
     }
     if (showDefaultTrackersInGrid.present) {
       map['show_default_trackers_in_grid'] = Variable<bool>(
@@ -15194,6 +15247,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('petalWindStrength: $petalWindStrength, ')
           ..write('weekStartsOnMonday: $weekStartsOnMonday, ')
           ..write('showQuotes: $showQuotes, ')
+          ..write('customQuotesOnly: $customQuotesOnly, ')
           ..write('showDefaultTrackersInGrid: $showDefaultTrackersInGrid, ')
           ..write(
             'showDefaultTrackersInCalendar: $showDefaultTrackersInCalendar, ',
@@ -44328,6 +44382,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<double> petalWindStrength,
       Value<bool> weekStartsOnMonday,
       Value<bool> showQuotes,
+      Value<bool> customQuotesOnly,
       Value<bool> showDefaultTrackersInGrid,
       Value<bool> showDefaultTrackersInCalendar,
       Value<String> journalHotkey,
@@ -44469,6 +44524,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<double> petalWindStrength,
       Value<bool> weekStartsOnMonday,
       Value<bool> showQuotes,
+      Value<bool> customQuotesOnly,
       Value<bool> showDefaultTrackersInGrid,
       Value<bool> showDefaultTrackersInCalendar,
       Value<String> journalHotkey,
@@ -44659,6 +44715,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<bool> get showQuotes => $composableBuilder(
     column: $table.showQuotes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get customQuotesOnly => $composableBuilder(
+    column: $table.customQuotesOnly,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -45364,6 +45425,11 @@ class $$SettingsTableTableOrderingComposer
 
   ColumnOrderings<bool> get showQuotes => $composableBuilder(
     column: $table.showQuotes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get customQuotesOnly => $composableBuilder(
+    column: $table.customQuotesOnly,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -46075,6 +46141,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get customQuotesOnly => $composableBuilder(
+    column: $table.customQuotesOnly,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get showDefaultTrackersInGrid => $composableBuilder(
     column: $table.showDefaultTrackersInGrid,
     builder: (column) => column,
@@ -46761,6 +46832,7 @@ class $$SettingsTableTableTableManager
                 Value<double> petalWindStrength = const Value.absent(),
                 Value<bool> weekStartsOnMonday = const Value.absent(),
                 Value<bool> showQuotes = const Value.absent(),
+                Value<bool> customQuotesOnly = const Value.absent(),
                 Value<bool> showDefaultTrackersInGrid = const Value.absent(),
                 Value<bool> showDefaultTrackersInCalendar =
                     const Value.absent(),
@@ -46921,6 +46993,7 @@ class $$SettingsTableTableTableManager
                 petalWindStrength: petalWindStrength,
                 weekStartsOnMonday: weekStartsOnMonday,
                 showQuotes: showQuotes,
+                customQuotesOnly: customQuotesOnly,
                 showDefaultTrackersInGrid: showDefaultTrackersInGrid,
                 showDefaultTrackersInCalendar: showDefaultTrackersInCalendar,
                 journalHotkey: journalHotkey,
@@ -47066,6 +47139,7 @@ class $$SettingsTableTableTableManager
                 Value<double> petalWindStrength = const Value.absent(),
                 Value<bool> weekStartsOnMonday = const Value.absent(),
                 Value<bool> showQuotes = const Value.absent(),
+                Value<bool> customQuotesOnly = const Value.absent(),
                 Value<bool> showDefaultTrackersInGrid = const Value.absent(),
                 Value<bool> showDefaultTrackersInCalendar =
                     const Value.absent(),
@@ -47226,6 +47300,7 @@ class $$SettingsTableTableTableManager
                 petalWindStrength: petalWindStrength,
                 weekStartsOnMonday: weekStartsOnMonday,
                 showQuotes: showQuotes,
+                customQuotesOnly: customQuotesOnly,
                 showDefaultTrackersInGrid: showDefaultTrackersInGrid,
                 showDefaultTrackersInCalendar: showDefaultTrackersInCalendar,
                 journalHotkey: journalHotkey,

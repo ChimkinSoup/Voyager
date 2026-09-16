@@ -1,7 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -214,6 +217,76 @@ void main() {
 
     expect(restoredJournal.id, legacyJournalId);
     expect(restoredEntry.journalId, legacyJournalId);
+  });
+
+  test('legacy calendar id maps to a firestore-safe document id', () {
+    // Calendars were local-only when their default id was chosen, so it was
+    // spelled with the reserved `__` segments Firestore rejects. Once they
+    // started syncing, every upload of the default calendar came back
+    // `invalid-argument` and was parked on the outbox.
+    final now = utcNow();
+    final calendar = Calendar(
+      id: legacyCalendarId,
+      name: 'Calendar',
+      createdAt: now,
+      updatedAt: now,
+    );
+    final event = CalendarEvent(
+      id: 'event-1',
+      calendarId: legacyCalendarId,
+      title: 'Standup',
+      start: now,
+      end: now,
+      createdAt: now,
+      updatedAt: now,
+    );
+
+    final calendarPayload = calendarToFirestore(calendar);
+    final eventPayload = calendarEventToFirestore(event);
+
+    expect(calendarPayload['id'], legacyCalendarFirestoreId);
+    expect(eventPayload['calendarId'], legacyCalendarFirestoreId);
+    expect(
+      firestoreDocumentIdForLocal(
+        FirestoreCollections.calendars,
+        legacyCalendarId,
+      ),
+      legacyCalendarFirestoreId,
+    );
+
+    final restoredCalendar = mergeCalendarFromRemote(
+      calendarPayload,
+      legacyCalendarId,
+    );
+    final restoredEvent = mergeCalendarEventFromRemote(
+      eventPayload,
+      event.id,
+    );
+
+    expect(restoredCalendar.id, legacyCalendarId);
+    expect(restoredEvent.calendarId, legacyCalendarId);
+  });
+
+  test('an event synced before the alias keeps resolving', () {
+    // `calendarId` is a field value, not a document id, so it was never
+    // rejected — events already on the server carry the raw local id. The
+    // reverse mapper passes anything it does not recognise straight through,
+    // which is what keeps both spellings working.
+    final now = utcNow();
+    final restored = mergeCalendarEventFromRemote(
+      {
+        'id': 'event-2',
+        'calendarId': legacyCalendarId,
+        'title': 'Older event',
+        'start': now.toIso8601String(),
+        'end': now.toIso8601String(),
+        'updatedAt': now.toIso8601String(),
+        'version': 1,
+      },
+      'event-2',
+    );
+
+    expect(restored.calendarId, legacyCalendarId);
   });
 
   // A record the remote has already outranked is adopted whole, including the

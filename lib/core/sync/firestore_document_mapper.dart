@@ -47,6 +47,9 @@ String firestoreDocumentIdForLocal(String collection, String localDocumentId) {
   if (collection == FirestoreCollections.todoLists) {
     return todoListDocumentIdForFirestore(localDocumentId);
   }
+  if (collection == FirestoreCollections.calendars) {
+    return calendarDocumentIdForFirestore(localDocumentId);
+  }
   if (encodedIdCollections.contains(collection)) {
     return encodeDocumentId(localDocumentId);
   }
@@ -741,6 +744,9 @@ String mediaOwnerDocumentIdFromFirestore(
   }
   if (collection == FirestoreCollections.todoLists) {
     return todoListDocumentIdFromFirestore(firestoreDocumentId);
+  }
+  if (collection == FirestoreCollections.calendars) {
+    return calendarDocumentIdFromFirestore(firestoreDocumentId);
   }
   if (encodedIdCollections.contains(collection)) {
     return decodeDocumentId(firestoreDocumentId) ?? firestoreDocumentId;
@@ -1846,7 +1852,7 @@ bool _remoteRecordWins(
 }
 
 Map<String, dynamic> calendarToFirestore(Calendar calendar) => {
-  'id': calendar.id,
+  'id': calendarDocumentIdForFirestore(calendar.id),
   'name': calendar.name,
   'colorValue': calendar.colorValue,
   'overlayCalendarIds': calendar.overlayCalendarIds,
@@ -1892,7 +1898,7 @@ Calendar mergeCalendarFromRemote(
 
 Map<String, dynamic> calendarEventToFirestore(CalendarEvent event) => {
   'id': event.id,
-  'calendarId': event.calendarId,
+  'calendarId': calendarReferenceIdForFirestore(event.calendarId),
   'title': event.title,
   'start': _dateToFirestoreRequired(event.start),
   'end': _dateToFirestoreRequired(event.end),
@@ -1927,8 +1933,10 @@ CalendarEvent mergeCalendarEventFromRemote(
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
   return CalendarEvent(
     id: id,
-    calendarId:
-        data['calendarId'] as String? ?? local?.calendarId ?? legacyCalendarId,
+    calendarId: switch (data['calendarId']) {
+      final String remote => calendarReferenceIdFromFirestore(remote),
+      _ => local?.calendarId ?? legacyCalendarId,
+    },
     title: data['title'] as String? ?? local?.title ?? '',
     start: parseFirestoreDate(data['start']) ?? local?.start ?? remoteUpdated,
     end: parseFirestoreDate(data['end']) ?? local?.end ?? remoteUpdated,
@@ -2866,6 +2874,7 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'petalWindStrength': s.petalWindStrength,
   'weekStartsOnMonday': s.weekStartsOnMonday,
   'showQuotes': s.showQuotes,
+  'customQuotesOnly': s.customQuotesOnly,
   'showDefaultTrackersInGrid': s.showDefaultTrackersInGrid,
   'showDefaultTrackersInCalendar': s.showDefaultTrackersInCalendar,
   'journalHotkey': s.journalHotkey,
@@ -3012,6 +3021,7 @@ AppSettings mergeSettingsFromRemote(
     petalWindStrength: _remoteDouble(data, 'petalWindStrength'),
     weekStartsOnMonday: data['weekStartsOnMonday'] as bool?,
     showQuotes: data['showQuotes'] as bool?,
+    customQuotesOnly: data['customQuotesOnly'] as bool?,
     showDefaultTrackersInGrid: data['showDefaultTrackersInGrid'] as bool?,
     showDefaultTrackersInCalendar:
         data['showDefaultTrackersInCalendar'] as bool?,

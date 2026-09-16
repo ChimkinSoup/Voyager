@@ -39,9 +39,12 @@ const journalHarnessSecondName = 'Second';
 /// [weatherApiClient] replaces the default fake outright, so a test can hold
 /// the new-entry weather refresh open. [seedEntries] replaces the single
 /// seeded entry, for tests that need particular bodies or more than one row in
-/// the journal on screen.
+/// the journal on screen. [theme] puts the real app theme over the page, for
+/// the tests that measure text — the default MaterialApp theme reaches for the
+/// test font, whose glyphs are all one em wide.
 Future<AppDatabase> pumpJournalPage(
   WidgetTester tester, {
+  ThemeData? theme,
   bool showAllJournals = false,
   Journal Function(Journal journal)? configureJournal,
   bool seedSecondJournal = false,
@@ -132,7 +135,10 @@ Future<AppDatabase> pumpJournalPage(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: Scaffold(body: JournalPage())),
+      child: MaterialApp(
+        theme: theme,
+        home: const Scaffold(body: JournalPage()),
+      ),
     ),
   );
   // Not pumpAndSettle: the page keeps animations alive, so settling never

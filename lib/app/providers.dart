@@ -28,6 +28,7 @@ import 'package:voyager/core/media/media_transfer_worker.dart';
 import 'package:voyager/core/media/remote_media_sync_publisher.dart';
 import 'package:voyager/core/sync/connectivity_status.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/core/sync/firestore_write_gate.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
@@ -385,10 +386,34 @@ final syncActivityProvider = ChangeNotifierProvider<SyncActivityController>((
   return controller;
 });
 
+/// The single gate every Firestore write in the app passes through.
+///
+/// Deliberately independent of auth, unlike [syncRepositoryProvider]. The gate
+/// bounds writes handed to the Firestore *client*, which is a process-wide
+/// singleton with one write stream and one local queue — so a repository
+/// rebuilt on sign-out and sign-in must not arrive with a fresh allowance on
+/// top of a queue that never drained. That is the same mistake
+/// [FirestoreWriteGate.hasStartupBacklog] exists to stop across restarts.
+///
+/// [OutboxSyncWorker] reads this too: it writes straight to Firestore rather
+/// than through the repository, so a gate private to the repository would
+/// leave the app's overflow path as the one unbounded writer.
+final firestoreWriteGateProvider = Provider<FirestoreWriteGate>((ref) {
+  final gate = FirestoreWriteGate(
+    waitForPendingWrites: FirebaseFirestore.instance.waitForPendingWrites,
+  );
+  ref.onDispose(gate.dispose);
+  return gate;
+});
+
 final syncRepositoryProvider = Provider<SyncRepository>((ref) {
   final uid = ref.watch(authRepositoryProvider).currentUserId;
   if (uid == null) return NoOpSyncRepository();
-  return FirestoreSyncRepository(FirebaseFirestore.instance, uid);
+  return FirestoreSyncRepository(
+    FirebaseFirestore.instance,
+    uid,
+    writeGate: ref.watch(firestoreWriteGateProvider),
+  );
 });
 
 /// Watches whether the sync backend is reachable, for the shell's offline
@@ -590,10 +615,20 @@ final customQuotesProvider = FutureProvider<List<CustomQuote>>((ref) {
   return ref.watch(settingsRepositoryProvider).getCustomQuotes();
 });
 
-/// Everything a new journal entry can draw from: the bundled quotes plus the
-/// user's own. The browse-and-pick dialog lists exactly this.
+/// Everything a new journal entry can draw from: the user's own quotes, plus
+/// the bundled ones unless [AppSettings.customQuotesOnly] is on. The
+/// browse-and-pick dialog lists exactly this.
 final quotePoolProvider = FutureProvider<List<Quote>>((ref) async {
-  final bundled = await ref.watch(bundledQuotesProvider.future);
+  // `selectAsync`, not a plain watch: it waits for settings to actually load
+  // rather than reading the loading state as false and rebuilding a moment
+  // later, and it leaves the pool alone when some *other* setting changes —
+  // a rebuild there would reset [QuoteBank]'s drawn-already set.
+  final customOnly = await ref.watch(
+    settingsProvider.selectAsync((s) => s.customQuotesOnly),
+  );
+  final bundled = customOnly
+      ? const <Quote>[]
+      : await ref.watch(bundledQuotesProvider.future);
   final custom = await ref.watch(customQuotesProvider.future);
   return [for (final q in custom) q.toQuote(), ...bundled];
 });

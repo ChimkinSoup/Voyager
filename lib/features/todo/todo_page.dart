@@ -1084,7 +1084,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
       final batch = applyNewUndatedTask(task, active);
       for (final updated in batch.tasks) {
         await repo.upsertTask(updated);
-        remoteSync.pushTodoTaskNow(updated);
+        remoteSync.pushTodoTaskInBackground(updated);
       }
       final placed = batch.tasks.firstWhere((t) => t.id == task.id);
       if (!mounted) return;
@@ -1851,7 +1851,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
 
     for (final t in batch.tasks) {
       await repo.upsertTask(t);
-      remoteSync.pushTodoTaskNow(t);
+      remoteSync.pushTodoTaskInBackground(t);
     }
     if (!mounted) return;
     ref.invalidate(todoTasksProvider(sourceListId));

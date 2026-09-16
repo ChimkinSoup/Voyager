@@ -86,6 +86,13 @@ typedef _JournalRowSignature = ({
 /// slider about 120px before it gets a line to itself.
 const double _journalMetadataRowMinWidth = 520;
 
+/// The date/time pill's floor width, so the metadata row doesn't shift when the
+/// selection moves between entries whose labels are spelled at different
+/// lengths ("Sep 1, 2026 at 4:20 AM" against "May 10, 2026 at 10:00 AM"). 200
+/// clears the widest label the formatter can produce — measured at 183.3px in
+/// `labelLarge` — plus the pill's own 8px of horizontal padding a side.
+const double _journalDatePillMinWidth = 200;
+
 class JournalPage extends ConsumerStatefulWidget {
   const JournalPage({super.key});
 
@@ -400,8 +407,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     return JournalPageDebugSnapshot(
       selectedEntryId: entryId,
       titleText: _titleController.text,
+      // Deliberately the raw controller text rather than
+      // [_PlainJournalEditorState.bodyTextFor]: this snapshot exists to report
+      // what the editor is actually holding, so a buffer belonging to the
+      // previous entry must show up here rather than be quietly corrected.
       bodyText:
-          _editorKey.currentState?.currentBodyText ??
+          _editorKey.currentState?.rawBodyTextForDebug ??
           (entryId == null
               ? ''
               : (_entryBodyDrafts[entryId] ?? _selectedEntry?.body ?? '')),
@@ -822,6 +833,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     }
     final now = _nextEntryTimestamp();
 
+    // Drawn here, synchronously, whenever the bank is already loaded — which
+    // it is from the startup warm-up onwards. Leaving it to
+    // [_finalizeNewEntry] meant the entry painted one frame with no quote,
+    // the editor stretched over the space it would take, and then jumped as
+    // the quote landed. The async pass below still covers the cold case.
+    final quote = ref.read(quotesLoadedProvider).hasValue
+        ? ref.read(quoteBankProvider).nextQuote()
+        : null;
+
     final entry = JournalEntry(
       id: newId(),
       journalId: journalId,
@@ -836,6 +856,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       // Same reasoning as the weather default above: stamped once at creation,
       // so an entry opens at the neutral midpoint instead of unrecorded.
       mood: kDefaultMood,
+      quoteId: quote?.id,
+      customQuote: quote?.text,
       timestamp: now,
       createdAt: now,
       updatedAt: now,
@@ -876,28 +898,64 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     JournalEntry entry,
     AppSettings settings,
   ) async {
-    final weatherService = ref.read(weatherServiceProvider);
+    // Two passes, not one. The quote only waits on the bundled asset load,
+    // while the weather refresh below reaches Firestore and the weather API —
+    // seconds to tens of seconds on a cold start or a bad network. Writing
+    // both together left the new entry blank at the bottom for that whole
+    // window, so the quote only turned up once the entry had been reopened.
 
     // Assigned even when quotes are hidden — globally or for this journal —
     // so turning them back on shows a quote on entries written while they were
-    // off, rather than a run of blanks.
-    await ref.read(quotesLoadedProvider.future);
-    final assignedQuote = ref.read(quoteBankProvider).nextQuote();
+    // off, rather than a run of blanks. Only when [_createEntryOptimistic]
+    // could not draw one itself: with the bank already loaded it stamps the
+    // quote at creation, so the entry never paints without it.
+    Quote? assignedQuote;
+    if (entry.customQuote == null) {
+      await ref.read(quotesLoadedProvider.future);
+      assignedQuote = ref.read(quoteBankProvider).nextQuote();
+    }
+    // Runs even with nothing to change. The seeding write in
+    // [_createEntryOptimistic] goes straight at the repository, which neither
+    // schedules the entry's Firestore upload nor refreshes the entry caches —
+    // both of which this pass used to carry as a side effect of writing the
+    // quote. Without it a new entry that is never typed into stays on this
+    // device, and its id never reaches [journalAllEntryIdsProvider], so
+    // [_reconcilePendingEntries] never evicts it from [_pendingEntries] and
+    // [_suppressAutoSelect] stays on for good.
+    await _saveNewEntryDelta(entry.id, (base) {
+      final quote = assignedQuote;
+      if (quote == null) return base;
+      return base.copyWith(
+        quoteId: quote.id,
+        customQuote: quote.text,
+        bumpVersion: false,
+      );
+    });
 
+    final weatherService = ref.read(weatherServiceProvider);
     final weather =
         await weatherService.refreshIfNeeded() ??
         weatherService.readCachedSnapshot(settings);
+    // [_createEntryOptimistic] already stamped the cached icon, so there is
+    // nothing left to write when the refresh comes back empty.
+    if (weather == null) return;
+    await _saveNewEntryDelta(
+      entry.id,
+      (base) => base.copyWith(weatherIcon: weather.icon, bumpVersion: false),
+    );
+  }
 
+  /// One [_finalizeNewEntry] pass: a field delta against the row on disk, with
+  /// the pending snapshot and the selection brought along with it.
+  Future<void> _saveNewEntryDelta(
+    String entryId,
+    JournalEntry Function(JournalEntry base) applyDelta,
+  ) async {
     final coordinator = _writeCoordinatorOrNull();
     if (coordinator == null) return;
     await coordinator.saveEntry(
-      entryId: entry.id,
-      applyDelta: (base) => base.copyWith(
-        quoteId: assignedQuote.id,
-        customQuote: assignedQuote.text,
-        weatherIcon: weather?.icon ?? base.weatherIcon,
-        bumpVersion: false,
-      ),
+      entryId: entryId,
+      applyDelta: applyDelta,
       onSuccess: (finalized) {
         if (_pendingEntries.containsKey(finalized.id)) {
           _pendingEntries[finalized.id] = finalized;
@@ -1033,8 +1091,16 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final mood = _mood;
     final weatherIcon = _weatherIcon;
 
+    // Asked for [entryId]'s text specifically. The editor reseeds its
+    // controller in [_PlainJournalEditorState._switchEntryWidget], which awaits
+    // *this* flush first — so during a switch the page already names the
+    // incoming entry while the controller still holds the outgoing one. Reading
+    // the controller unconditionally wrote the outgoing body, under the
+    // incoming id and title, with the version bumped: title and image intact,
+    // body gone, no tombstone for undo to work from. The drafts and the row are
+    // both entry-keyed, so falling through to them is always safe.
     var body =
-        _editorKey.currentState?.currentBodyText ??
+        _editorKey.currentState?.bodyTextFor(entryId) ??
         _entryBodyDrafts[entryId] ??
         entry.body;
 
@@ -1067,7 +1133,16 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       bumpVersion: true,
     );
 
-    await remoteSync.flushDocument(
+    // Local only, deliberately: the entry's Firestore upload is started here
+    // but never waited on. Every entry switch runs this flush and queues behind
+    // [_flushInProgress], and a brand-new entry always has an upload pending
+    // (see [_finalizeNewEntry]) — so any wait on that round-trip is a wait the
+    // user spends unable to switch entries. With offline persistence it is
+    // unbounded, which made the list permanently unclickable; bounding it only
+    // shortened the freeze to the deadline. The local write above is the part
+    // that makes switching safe, and app teardown pushes anything still unsent
+    // through `flushAllPending` (see `VoyagerApp._flushAllPendingEdits`).
+    await remoteSync.flushDocumentLocal(
       FirestoreCollections.journalEntries,
       entryId,
     );
@@ -1091,7 +1166,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     if (entryId == null || entry == null) return;
 
     final body =
-        _editorKey.currentState?.currentBodyText ??
+        _editorKey.currentState?.bodyTextFor(entryId) ??
         _entryBodyDrafts[entryId] ??
         entry.body;
 
@@ -2642,14 +2717,24 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                           DateTime.now();
                                       final label =
                                           '${DateFormat.yMMMd().format(date)} at ${formatTime12Hour(date)}';
-                                      return SelectorPill(
-                                        dense: false,
-                                        ellipsize: false,
-                                        isActive: _isDatePickerOpen,
-                                        label: label,
-                                        accentColor: accentColor,
-                                        onTap: () =>
-                                            _changeEntryDateAndTime(ctx),
+                                      // A floor rather than a fixed width: it
+                                      // holds the row still across every label
+                                      // the formatter can produce, and a label
+                                      // pushed past it by text scaling still
+                                      // gets the room instead of overflowing.
+                                      return ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          minWidth: _journalDatePillMinWidth,
+                                        ),
+                                        child: SelectorPill(
+                                          dense: false,
+                                          ellipsize: false,
+                                          isActive: _isDatePickerOpen,
+                                          label: label,
+                                          accentColor: accentColor,
+                                          onTap: () =>
+                                              _changeEntryDateAndTime(ctx),
+                                        ),
                                       );
                                     },
                                   ),
@@ -3036,6 +3121,20 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   /// registrations still belong to the outgoing entry.
   String? _attachedEntryId;
 
+  /// The entry [_controller]'s text actually belongs to.
+  ///
+  /// Not the same thing as `widget.entry`, which during a switch already names
+  /// the incoming entry while the controller still holds the outgoing one —
+  /// [_switchEntryWidget] awaits the page's in-flight flush before it reseeds
+  /// the text. Anything pairing the controller's text with an entry id must
+  /// read it from here, or it files one entry's body under another's. That is
+  /// how a finished entry lost its body on 2026-09-16; see
+  /// JOURNAL_DATA_LOSS_POSTMORTEM.md.
+  ///
+  /// Distinct from [_attachedEntryId], which tracks the *sync* registration and
+  /// is deliberately left alone when there is no sync service to register with.
+  String? _bodyEntryId;
+
   bool get hasFocus => widget.focusNode.hasFocus;
 
   /// Replaces the editor's text.
@@ -3080,6 +3179,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     // owns focusNode.onKeyEvent so it can claim the arrow keys, and chains
     // through to this handler for everything it doesn't use.
     _lastText = _controller.text;
+    _bodyEntryId = widget.entry?.id;
     _tags = widget.entry?.tags ?? extractTags(_controller.text);
     final entry = widget.entry;
     if (entry != null) {
@@ -3201,6 +3301,10 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     _tagTimer?.cancel();
     _controller.text = widget.entry?.body ?? '';
     _lastText = _controller.text;
+    // Unconditional, unlike [_attachedEntryId] below: the controller holds this
+    // entry's text whether or not there is a sync service to register it with,
+    // and a stale id here is what mislabels a save.
+    _bodyEntryId = widget.entry?.id;
     _dirty = false;
     _tags = widget.entry?.tags ?? extractTags(_controller.text);
     _setEditingFlag(widget.entry, widget.focusNode.hasFocus);
@@ -3238,7 +3342,32 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     _setEditingFlag(widget.entry, widget.focusNode.hasFocus);
   }
 
-  String get currentBodyText => _controller.text;
+  /// The live body text, but only when it is [entryId]'s.
+  ///
+  /// Returns null during the switch window described on [_bodyEntryId], which
+  /// lets callers fall through to the page's own entry-keyed draft instead of
+  /// saving the outgoing entry's text against the incoming entry.
+  String? bodyTextFor(String entryId) {
+    if (_bodyEntryId == entryId) return _controller.text;
+    // Rare by construction, and silent before this: the caller simply wrote
+    // whatever the controller held. Logging the rejection is what turns a
+    // recurrence into a line in journal_debug.log instead of a body that
+    // quietly goes missing — the 2026-09-16 loss left no trace at all.
+    widget.onDebugLog?.call(
+      'BODY_BUFFER_ENTRY_MISMATCH',
+      details:
+          'asked for $entryId, controller holds ${_bodyEntryId ?? "(none)"}; '
+          'falling back to the entry-keyed draft.',
+    );
+    return null;
+  }
+
+  /// The controller's text with no regard for whose it is.
+  ///
+  /// Only for the debug snapshot, which exists to report what is actually in
+  /// the editor — qualifying it would hide the very mismatch it is there to
+  /// catch. Everything that *writes* goes through [bodyTextFor].
+  String get rawBodyTextForDebug => _controller.text;
 
   void _setEditingFlag(JournalEntry? entry, bool isEditing) {
     if (entry == null) return;
@@ -3278,7 +3407,11 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
 
     final before = _lastText;
     _lastText = _controller.text;
-    final entryId = widget.entry?.id;
+    // [_bodyEntryId], not `widget.entry?.id`: a keystroke landing inside the
+    // switch window would otherwise file the outgoing entry's text under the
+    // incoming entry's draft — poisoning the very fallback [bodyTextFor] leans
+    // on — and record that text against the wrong CRDT document.
+    final entryId = _bodyEntryId;
     if (entryId != null) {
       widget.onDraftChanged(entryId, _controller.text);
       _remoteSync?.recordJournalTextChange(
@@ -3454,7 +3587,7 @@ extension on _JournalPageState {
       final remoteText = remoteData?['body'] as String? ?? '';
 
       final currentLocalText =
-          _editorKey.currentState?.currentBodyText ?? entry.body;
+          _editorKey.currentState?.bodyTextFor(entry.id) ?? entry.body;
 
       _remoteCompareOpen = false;
       await showVoyagerDialog<void>(

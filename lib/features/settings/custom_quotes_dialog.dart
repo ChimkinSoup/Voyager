@@ -138,6 +138,8 @@ class _CustomQuotesDialogState extends ConsumerState<_CustomQuotesDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final quotesAsync = ref.watch(customQuotesProvider);
+    final settings = ref.watch(settingsProvider).valueOrNull;
+    final customOnly = settings?.customQuotesOnly ?? false;
 
     return AlertDialog(
       title: const Text('Custom quotes'),
@@ -153,6 +155,27 @@ class _CustomQuotesDialogState extends ConsumerState<_CustomQuotesDialog> {
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Only my quotes'),
+              subtitle: Text(
+                customOnly && quotesAsync.valueOrNull?.isEmpty == true
+                    ? 'Add a quote below — with none of your own, entries '
+                          'have no quote to draw.'
+                    : 'Leave out the quotes that ship with the app.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              value: customOnly,
+              onChanged: settings == null
+                  ? null
+                  : (value) => ref
+                        .read(settingsProvider.notifier)
+                        .saveSettings(
+                          settings.copyWith(customQuotesOnly: value),
+                        ),
             ),
             const SizedBox(height: 12),
             IntrinsicHeight(

@@ -10,11 +10,15 @@ import 'dart:async';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
+import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/repositories/weather_api_client.dart';
 
@@ -117,6 +121,50 @@ void main() {
 
     weather.refreshGate.complete();
     await settle(tester);
+    await disposeJournalPage(tester);
+  });
+
+  testWidgets('a new entry is pushed even when it is never typed into', (
+    tester,
+  ) async {
+    // Creating an entry writes the row straight at the repository, which is a
+    // local write and nothing else: no Firestore upload, and none of the
+    // entry-cache invalidation that publishes the row to the rest of the app.
+    // Both used to ride along on the quote write that followed. The quote is
+    // stamped at creation now (see journal_new_entry_quote_test.dart), so that
+    // pass can have nothing to change — and it has to run regardless.
+    final remote = InMemorySyncRepository();
+    final db = await pumpJournalPage(
+      tester,
+      extraOverrides: (_) => [
+        syncRepositoryProvider.overrideWithValue(remote),
+        bundledQuotesProvider.overrideWith(
+          (ref) async => const [Quote(id: 'q1', text: 'Harness quote')],
+        ),
+      ],
+    );
+
+    // Twice: the first entry is created before anything has pulled the quote
+    // bank in, so only the second takes the stamped-at-creation path the app
+    // itself always takes — the bank is loaded by the startup warm-up.
+    await tester.tap(find.text('New entry'));
+    await settle(tester, frames: 20);
+    await tester.tap(find.text('New entry'));
+    await settle(tester, frames: 20);
+
+    final created = (await entriesIn(db)).where((e) => e.title.isEmpty);
+    expect(created, hasLength(2));
+    for (final entry in created) {
+      expect(
+        await remote.getDocument(
+          FirestoreCollections.journalEntries,
+          entry.id,
+        ),
+        isNotNull,
+        reason: 'entry ${entry.id} never reached the remote',
+      );
+    }
+
     await disposeJournalPage(tester);
   });
 

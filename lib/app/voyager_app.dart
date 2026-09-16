@@ -32,6 +32,11 @@ class VoyagerApp extends ConsumerStatefulWidget {
   ConsumerState<VoyagerApp> createState() => _VoyagerAppState();
 }
 
+// How long either half of a termination flush may wait on the network before
+// the app stops caring. Matches the journal editor's own remote-flush deadline;
+// the local writes it fronts complete in milliseconds.
+const Duration _flushDeadline = Duration(seconds: 2);
+
 class _VoyagerAppState extends ConsumerState<VoyagerApp>
     with WidgetsBindingObserver, WindowListener {
   RemoteSyncService? _remoteSync;
@@ -66,7 +71,15 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
 
   @override
   void onWindowClose() async {
-    await _flushAllPendingEdits();
+    // Never let the flush decide whether the window closes. Each stage of it
+    // ends in a Firestore write that, with an unreachable server, either hangs
+    // until the device is back online or throws once SyncRetryPolicy gives up —
+    // and both used to reach straight past `destroy()`, leaving a window that
+    // would not close. The flush is bounded per stage below; anything still
+    // unsent has already been written locally and goes out on the next launch.
+    try {
+      await _flushAllPendingEdits();
+    } catch (_) {}
     await windowManager.destroy();
   }
 
@@ -83,10 +96,14 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   }
 
   Future<void> _flushAllPendingEdits() async {
-    await PendingFlushRegistry.instance.flushAll();
+    await PendingFlushRegistry.instance.flushAll(
+      perCallbackDeadline: _flushDeadline,
+    );
     final remoteSync = _remoteSync;
     if (remoteSync != null) {
-      await remoteSync.flushAllPending();
+      await remoteSync
+          .flushAllPending()
+          .timeout(_flushDeadline, onTimeout: () {});
     }
   }
 

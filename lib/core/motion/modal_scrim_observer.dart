@@ -70,3 +70,33 @@ class ModalScrimObserver extends NavigatorObserver {
     }
   }
 }
+
+/// Freezes [child]'s tickers while a scrimmed modal is open.
+///
+/// For ambient, infinitely-repeating decoration — a pulsing badge, a "this is
+/// live" dot. A running [Ticker] calls scheduleFrame() on every vsync, so one
+/// of these pins the whole pipeline at the display's native refresh for as
+/// long as it is mounted. That costs little on its own, but a glass sheet's
+/// [BackdropFilter] re-blurs a window-sized backdrop on every frame it is
+/// handed — so an ambient pulse left running turns an idle open sheet into a
+/// continuous full-window blur. Same reasoning as the animated background in
+/// [modalScrimOpen]; the background was paused and these were not.
+///
+/// Only for decoration the user loses nothing by not seeing behind a scrim.
+/// Anything carrying information — a progress indicator, a countdown — should
+/// keep running.
+class PauseUnderModalScrim extends StatelessWidget {
+  const PauseUnderModalScrim({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: modalScrimOpen,
+      builder: (context, covered, child) =>
+          TickerMode(enabled: !covered, child: child!),
+      child: child,
+    );
+  }
+}

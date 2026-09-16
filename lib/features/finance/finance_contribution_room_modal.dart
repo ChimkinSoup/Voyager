@@ -93,9 +93,6 @@ class _ContributionRoomModalState
   @override
   void initState() {
     super.initState();
-    _nameController.addListener(_rebuild);
-    _limitController.addListener(_rebuild);
-    _remainingController.addListener(_rebuild);
   }
 
   @override
@@ -107,8 +104,6 @@ class _ContributionRoomModalState
     _remainingFocusNode.dispose();
     super.dispose();
   }
-
-  void _rebuild() => setState(() {});
 
   int? get _limit {
     final cents = parseSignedAmountCents(_limitController.text);
@@ -132,7 +127,8 @@ class _ContributionRoomModalState
     _seededRoom = room;
     _seededLimit = room.annualLimitFor(now.year);
     _seededRemaining = roomYearSummary(room, events, now: now).remainingCents;
-    // Deferred a frame: the controllers' listeners call setState.
+    // Deferred a frame: this runs from build, and the Save button listens to
+    // these controllers — setting .text here would mark it dirty mid-build.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _nameController.text = room.name;
@@ -404,11 +400,23 @@ class _ContributionRoomModalState
                 ),
               ],
               const SizedBox(height: 24),
-              GlassButton(
-                onPressed: _canSave ? _save : null,
-                label: _editing ? 'Save' : 'Track',
-                color: accent,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+              // Save is the only thing the three fields drive, so only it
+              // rebuilds as they are typed. A `setState` listener on each
+              // controller rebuilt the whole sheet per keystroke, which also
+              // made its heavy GlassSurface re-blur a window-sized backdrop
+              // for every character.
+              ListenableBuilder(
+                listenable: Listenable.merge([
+                  _nameController,
+                  _limitController,
+                  _remainingController,
+                ]),
+                builder: (context, _) => GlassButton(
+                  onPressed: _canSave ? _save : null,
+                  label: _editing ? 'Save' : 'Track',
+                  color: accent,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
               if (_editing) ...[
                 const SizedBox(height: 8),

@@ -61,7 +61,7 @@ Items below are ordered by severity. **Must** = required for dark to feel as del
 
 | # | Decision | Where | Note |
 |---|----------|-------|------|
-| 17 | **Life Tracker cream island** | `life_tracker_page.dart` (`_paperColor` / `_inkColor`) | Explicitly kept as ink-on-paper in both themes. Not a token bug. If dark parity is required, **frame** the canvas (theme chrome around the watercolor) — do not recolor the tree to graphite. |
+| 17 | ~~**Life Tracker cream island**~~ — **resolved 2026-09-15** | `life_tracker_page.dart`, `life_tree_canvas.dart` | The premise was wrong: the canvas never painted its own paper. It is transparent and composites onto the app background, so light got cream + petals for free and dark got the washes stacking straight over the live triangle grid (near-black ink on near-black, canopy as one lit slab). Dark now paints its own toned stock (`_nightPaperColor`) with bone ink, a wash ramp tuned for a ground that lightens rather than darkens under layers, and brighter per-week specks — an authored night scene, framed as before. Light is byte-for-byte unchanged. |
 | 18 | **Media lightbox always black chrome** | `media_lightbox.dart` | Intentional cinema overlay; same in light. |
 | 19 | **Tag storage = dark ramp, remap on light** | `journal_tags.dart`, `palette_color.dart` | Sync design; dark is canonical. Ensure all paint sites call `resolveTagColor` (finance analytics store charts still pass raw tags in places — primarily a light bug). |
 | 20 | **No `AppThemeMode.system`** | `enums.dart` | By design (two authored worlds). Only add if product wants follow-device. |
@@ -88,7 +88,7 @@ Worst “messy” screens in dark today:
 1. **Any sidebar with many `VoyagerListItemSurface` rows** (journal, todo, rankings) — grid bleed.
 2. **LeetCode flashcard / session** — blur smear + hard shadow.
 3. **Study grading row** — black labels on dark glass.
-4. **Life Tracker** — full-bleed cream poster on geometric night (intentional island; still jarring without framing).
+4. ~~**Life Tracker**~~ — fixed; see P3 #17.
 5. **Analytics charts** — mixed grey vs outline gridlines.
 
 ---
@@ -115,7 +115,7 @@ Light recently gained targeted coverage; dark is still the default harness for m
 4. **Scrim token wiring** — `showVoyagerDialog` + hero overlays.  
 5. **Settings `_GeometricSettings`** — parity with petals.  
 6. **P2 token cleanup** — mood slider, shadows, grey lerps, glass label.  
-7. **Life Tracker framing** (only if product wants less “island”).  
+7. ~~**Life Tracker framing**~~ — done.  
 8. **Tests** for the above.
 
 ---

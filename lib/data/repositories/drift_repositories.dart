@@ -2812,6 +2812,7 @@ class DriftSettingsRepository implements SettingsRepository {
       petalWindStrength: row.petalWindStrength,
       weekStartsOnMonday: row.weekStartsOnMonday,
       showQuotes: row.showQuotes,
+      customQuotesOnly: row.customQuotesOnly,
       showDefaultTrackersInGrid: row.showDefaultTrackersInGrid,
       showDefaultTrackersInCalendar: row.showDefaultTrackersInCalendar,
       journalHotkey: row.journalHotkey,
@@ -3032,6 +3033,7 @@ class DriftSettingsRepository implements SettingsRepository {
             petalWindStrength: Value(settings.petalWindStrength),
             weekStartsOnMonday: Value(settings.weekStartsOnMonday),
             showQuotes: Value(settings.showQuotes),
+            customQuotesOnly: Value(settings.customQuotesOnly),
             showDefaultTrackersInGrid:
                 Value(settings.showDefaultTrackersInGrid),
             showDefaultTrackersInCalendar:

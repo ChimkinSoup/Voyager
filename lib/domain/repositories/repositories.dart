@@ -891,6 +891,20 @@ abstract class SyncRepository {
   );
   Future<Map<String, dynamic>?> getRemoteSettings();
   Future<void> upsertRemoteSettings(Map<String, dynamic> data);
+
+  /// Whether writes are already piling up unacknowledged.
+  ///
+  /// True means the backend has not kept up — either this session has more
+  /// writes outstanding than it is willing to hold, or a queue inherited from
+  /// an earlier run of the app has still not been confirmed sent. Housekeeping
+  /// that generates writes of its own (operation-log compaction, most of all)
+  /// asks first and stands down, because adding to a queue that isn't moving
+  /// is how the queue stops moving permanently. See `FirestoreWriteGate`.
+  ///
+  /// Backends that cannot queue — the in-memory and no-op ones — are never
+  /// backlogged, which is why this defaults to false rather than being
+  /// abstract.
+  bool get hasUnsentWriteBacklog => false;
   Future<GoogleCalendarSyncLock?> getCalendarLock();
   Future<bool> claimCalendarLock(GoogleCalendarSyncLock lock);
   Future<void> releaseCalendarLock(String deviceId);

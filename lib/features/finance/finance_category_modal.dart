@@ -62,7 +62,6 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
     _nameController = TextEditingController(text: widget.existing?.name ?? '');
     _selectedTags = {...?widget.existing?.tags};
     _colorValue = widget.existing?.colorValue ?? 0xFF7C9EFF;
-    _nameController.addListener(() => setState(() {}));
   }
 
   @override
@@ -274,11 +273,18 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
                 ),
               ],
               const SizedBox(height: 24),
-              GlassButton(
-                onPressed: _canSave ? _save : null,
-                label: widget.existing == null ? 'Add' : 'Save',
-                color: accent,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+              // The button is the only thing the typed name drives. Watching
+              // it here rather than rebuilding the whole sheet per keystroke
+              // also spares the sheet's GlassSurface a window-sized re-blur
+              // for every character.
+              ListenableBuilder(
+                listenable: _nameController,
+                builder: (context, _) => GlassButton(
+                  onPressed: _canSave ? _save : null,
+                  label: widget.existing == null ? 'Add' : 'Save',
+                  color: accent,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
             ],
           ),

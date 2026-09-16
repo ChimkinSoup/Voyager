@@ -93,8 +93,6 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
     _initialDueDate = _dueDate;
     _initialPeriod = _period;
     _colorValue = existing?.colorValue ?? 0xFF7C9EFF;
-    _amountController.addListener(_onFieldChanged);
-    _nameController.addListener(_onFieldChanged);
   }
 
   @override
@@ -106,8 +104,6 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
     _noteFocusNode.dispose();
     super.dispose();
   }
-
-  void _onFieldChanged() => setState(() {});
 
   int? get _parsedCents => parseAmountCents(_amountController.text);
 
@@ -241,7 +237,6 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = paletteColor(_colorValue, context);
-    final cents = _parsedCents;
     // What the radar will actually show for this anchor, so the editor and
     // the radar can't disagree.
     final nextDue = nextDueAfterPaid(
@@ -309,27 +304,35 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: VoyagerTextField(
-                      controller: _amountController,
-                      focusNode: _amountFocusNode,
-                      accentColor: accent,
-                      cursorColor: accent,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
+                    // Only the pieces that read the typed text rebuild as it
+                    // is typed. A `setState` listener on the controllers
+                    // rebuilt the whole sheet per keystroke, which also made
+                    // its heavy GlassSurface re-blur a window-sized backdrop
+                    // for every character.
+                    child: ListenableBuilder(
+                      listenable: _amountController,
+                      builder: (context, _) => VoyagerTextField(
+                        controller: _amountController,
+                        focusNode: _amountFocusNode,
+                        accentColor: accent,
+                        cursorColor: accent,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                          // Bounded so a long paste can't reach the range
+                          // where double.parse returns Infinity.
+                          LengthLimitingTextInputFormatter(12),
+                        ],
+                        decoration: InputDecoration(
+                          labelText: 'Amount',
+                          prefixText: r'$ ',
+                          errorText: _amountError,
+                        ),
+                        // Past the Billing dropdown: the chain is text only.
+                        onSubmitted: (_) => _noteFocusNode.requestFocus(),
                       ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                        // Bounded so a long paste can't reach the range where
-                        // double.parse returns Infinity.
-                        LengthLimitingTextInputFormatter(12),
-                      ],
-                      decoration: InputDecoration(
-                        labelText: 'Amount',
-                        prefixText: r'$ ',
-                        errorText: _amountError,
-                      ),
-                      // Past the Billing dropdown: the chain is text only.
-                      onSubmitted: (_) => _noteFocusNode.requestFocus(),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -355,15 +358,22 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
                   ),
                 ],
               ),
-              if (cents != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  '${formatCents(annualCentsFor(cents, _period))} per year',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+              ListenableBuilder(
+                listenable: _amountController,
+                builder: (context, _) {
+                  final cents = _parsedCents;
+                  if (cents == null) return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      '${formatCents(annualCentsFor(cents, _period))} per year',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  );
+                },
+              ),
               const SizedBox(height: 16),
               VoyagerTextField(
                 controller: _noteController,
@@ -427,11 +437,17 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
                 ),
               ],
               const SizedBox(height: 24),
-              GlassButton(
-                onPressed: _canSave ? _save : null,
-                label: widget.existing == null ? 'Add' : 'Save',
-                color: accent,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+              ListenableBuilder(
+                listenable: Listenable.merge([
+                  _nameController,
+                  _amountController,
+                ]),
+                builder: (context, _) => GlassButton(
+                  onPressed: _canSave ? _save : null,
+                  label: widget.existing == null ? 'Add' : 'Save',
+                  color: accent,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
             ],
           ),

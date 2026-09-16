@@ -7,6 +7,7 @@ import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/sync/char_ops_encoder.dart';
 import 'package:voyager/core/sync/crdt_document_resolver.dart';
+import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/utils/journal_tags.dart';import 'package:voyager/core/sync/firestore_collections.dart';
@@ -765,6 +766,42 @@ class RemoteSyncService {
 
   Future<void> flushDocument(String collection, String documentId) {
     return flushPending(documentKey(collection, documentId));
+  }
+
+  /// Waits for [documentId]'s queued local writes to reach SQLite, and for
+  /// nothing else.
+  ///
+  /// The half of [flushPending] that never touches the network. Callers that
+  /// only need the document to be safely on disk before they act on it — an
+  /// editor changing its selection, a delete about to read the row back — want
+  /// this and not the upload, which with offline persistence never completes
+  /// while Firestore is unreachable.
+  ///
+  /// A pending upload is left scheduled. It re-reads the row from SQLite when
+  /// it runs, so it always carries whatever this settled, not the text it was
+  /// queued for. Cancel it with [cancelDocument] if it must not run at all.
+  Future<void> settleLocalWrites(String collection, String documentId) async {
+    await _localSaveChains[documentKey(collection, documentId)]?.catchError(
+      (_) {},
+    );
+  }
+
+  /// [settleLocalWrites], then starts the pending upload without waiting for
+  /// the server to acknowledge it.
+  ///
+  /// The commitment-point flush for a text editor: everything typed is on disk
+  /// when this returns, and the round-trip is handed to the background through
+  /// the same [_runRemoteSave] the debounce timer uses, so a failure is still
+  /// recorded on the outbox. [flushDocument] awaits that round-trip instead,
+  /// which on an unreachable server blocks the caller indefinitely.
+  Future<void> flushDocumentLocal(String collection, String documentId) async {
+    await settleLocalWrites(collection, documentId);
+    final key = documentKey(collection, documentId);
+    final remoteSave = _pendingRemoteSaves.remove(key);
+    _activeDebouncers.remove(key)?.cancel();
+    if (remoteSave != null) {
+      unawaited(_runRemoteSave(collection, documentId, remoteSave));
+    }
   }
 
   Future<void> flushAllPending() async {
@@ -2154,6 +2191,9 @@ class RemoteSyncService {
     if (collection == FirestoreCollections.todoLists) {
       return todoListDocumentIdFromFirestore(firestoreId);
     }
+    if (collection == FirestoreCollections.calendars) {
+      return calendarDocumentIdFromFirestore(firestoreId);
+    }
     if (encodedIdCollections.contains(collection)) {
       return decodeDocumentId(firestoreId) ?? firestoreId;
     }
@@ -2791,9 +2831,37 @@ class RemoteSyncService {
     );
   }
 
+  /// Uploads [task] and hands the failure back to the caller.
+  ///
+  /// Deliberately *not* wrapped in [_runRemoteSave], unlike its siblings: this
+  /// is the form the callers that can handle a failure use, and two of them
+  /// need it to throw. [TodoWriteCoordinator.saveTask] runs it inside a
+  /// [_runRemoteSave] of its own, which would otherwise record success for a
+  /// write that failed and clear the outbox row standing for it; the To-Do
+  /// page's cascade attaches its own `catchError` to re-queue the rows it was
+  /// pushing. Call sites that cannot await it want
+  /// [pushTodoTaskInBackground] instead.
   Future<void> pushTodoTaskNow(TodoTask task) {
     cancelDocument(FirestoreCollections.todoTasks, task.id);
     return _uploadTodoTaskNow(task);
+  }
+
+  /// [pushTodoTaskNow] for the call sites that fire and forget.
+  ///
+  /// Dropping the future from [pushTodoTaskNow] loses the failure twice over:
+  /// it escapes to the zone as an unhandled error, and — worse — the task is
+  /// never queued for a retry, so an edit made while sync is paused is simply
+  /// never uploaded and nothing anywhere records that. Routing through
+  /// [_runRemoteSave] puts it on the outbox like every other push.
+  void pushTodoTaskInBackground(TodoTask task) {
+    cancelDocument(FirestoreCollections.todoTasks, task.id);
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.todoTasks,
+        task.id,
+        () => _uploadTodoTaskNow(task),
+      ),
+    );
   }
 
   /// Batched counterpart to [pushTodoTaskNow] for a set of tasks that only
@@ -3212,6 +3280,18 @@ class RemoteSyncService {
       final ops =
           knownOperations ?? await _syncRepository.listOperations(documentId);
       if (ops.length < operationLogCompactionThreshold) return false;
+
+      // Compaction is pure housekeeping, and it is expensive twice over: a
+      // baseline group close to a megabyte, then a delete for every operation
+      // it supersedes. Neither is worth generating while writes are already
+      // queued unsent — and [_compactingDocuments] cannot stop it happening,
+      // because that guard lives in memory and a restart empties it. An
+      // afternoon of hot restarts against a stalled connection therefore ran
+      // this once per launch, each time piling another baseline onto a queue
+      // that had not moved since the last one. Standing down instead costs a
+      // log that stays long for another session, which is what the threshold
+      // is for. See [SyncRepository.hasUnsentWriteBacklog].
+      if (_syncRepository.hasUnsentWriteBacklog) return false;
 
       // Rewriting the log drops tombstones, so a device that is mid-edit could
       // re-send a character this one believes deleted. Requiring every foreign

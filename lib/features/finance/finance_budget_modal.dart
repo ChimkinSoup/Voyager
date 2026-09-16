@@ -67,8 +67,6 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
           ? ''
           : (widget.existing!.limitCents / 100).toStringAsFixed(2),
     );
-    _tagController.addListener(_onChanged);
-    _limitController.addListener(_onChanged);
   }
 
   @override
@@ -78,8 +76,6 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
     _limitFocusNode.dispose();
     super.dispose();
   }
-
-  void _onChanged() => setState(() {});
 
   String get _tag => _tagController.text.replaceAll('#', '').trim();
 
@@ -183,24 +179,26 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
   }
 
   /// Tags worth suggesting: everything already used on a live transaction,
-  /// most-used first, narrowed to what's been typed so far so the chip row
-  /// completes like the `#` popup does elsewhere.
+  /// most-used first. Narrowed to what's been typed so far where the chip row
+  /// is drawn, so it completes like the `#` popup does elsewhere.
   ///
   /// Live transactions only — see `_CategoryModalState._knownTags` for why a
   /// stored tag color is not evidence the tag still exists. A brand-new tag
   /// is still reachable by typing it.
-  List<String> _suggestedTags() {
+  ///
+  /// Ranked here and narrowed where it is drawn: `ref.watch` belongs to this
+  /// widget's own build, not to the chip row's builder below, which reruns on
+  /// its own as the tag is typed.
+  List<String> _usedTags() {
     final transactions = ref.watch(transactionsProvider).valueOrNull ?? const [];
-    final used = rankTagsByUsage(transactions.map((t) => t.tags));
-    return filterTagSuggestions(used, _tag, limit: 12);
+    return rankTagsByUsage(transactions.map((t) => t.tags));
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
-    final limit = _parsedLimit;
-    final suggestions = _suggestedTags();
+    final usedTags = widget.existing == null ? _usedTags() : const <String>[];
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
     final sheet = Padding(
@@ -264,57 +262,86 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
                 ),
                 onSubmitted: (_) => _limitFocusNode.requestFocus(),
               ),
-              if (widget.existing == null && suggestions.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final tag in suggestions)
-                      ActionChip(
-                        label: Text('#$tag',
-                            style: const TextStyle(fontSize: 12)),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () {
-                          _tagController.text = tag;
-                          _tagController.selection = TextSelection.collapsed(
-                            offset: tag.length,
-                          );
-                        },
+              // Each piece below watches only the field it reads. A
+              // `setState` listener on the controllers rebuilt the whole sheet
+              // per keystroke, which also made its heavy GlassSurface re-blur
+              // a window-sized backdrop for every character.
+              if (widget.existing == null)
+                ListenableBuilder(
+                  listenable: _tagController,
+                  builder: (context, _) {
+                    final suggestions =
+                        filterTagSuggestions(usedTags, _tag, limit: 12);
+                    if (suggestions.isEmpty) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final tag in suggestions)
+                            ActionChip(
+                              label: Text('#$tag',
+                                  style: const TextStyle(fontSize: 12)),
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () {
+                                _tagController.text = tag;
+                                _tagController.selection =
+                                    TextSelection.collapsed(
+                                  offset: tag.length,
+                                );
+                              },
+                            ),
+                        ],
                       ),
-                  ],
+                    );
+                  },
                 ),
-              ],
               const SizedBox(height: 16),
-              VoyagerTextField(
-                controller: _limitController,
-                focusNode: _limitFocusNode,
-                accentColor: accent,
-                cursorColor: accent,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                  // Bounded so a long paste can't reach the range where
-                  // double.parse returns Infinity.
-                  LengthLimitingTextInputFormatter(12),
-                ],
-                decoration: InputDecoration(
-                  labelText: 'Monthly limit',
-                  prefixText: r'$ ',
-                  errorText: _limitError,
-                ),
-                onSubmitted: (_) => _save(),
-              ),
-              if (limit != null && _tag.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Keep #$_tag under ${formatCents(limit)} this month.',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+              ListenableBuilder(
+                listenable: _limitController,
+                builder: (context, _) => VoyagerTextField(
+                  controller: _limitController,
+                  focusNode: _limitFocusNode,
+                  accentColor: accent,
+                  cursorColor: accent,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    // Bounded so a long paste can't reach the range where
+                    // double.parse returns Infinity.
+                    LengthLimitingTextInputFormatter(12),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: 'Monthly limit',
+                    prefixText: r'$ ',
+                    errorText: _limitError,
                   ),
+                  onSubmitted: (_) => _save(),
                 ),
-              ],
+              ),
+              ListenableBuilder(
+                listenable: Listenable.merge([
+                  _tagController,
+                  _limitController,
+                ]),
+                builder: (context, _) {
+                  final limit = _parsedLimit;
+                  if (limit == null || _tag.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'Keep #$_tag under ${formatCents(limit)} this month.',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  );
+                },
+              ),
               if (_saveError != null) ...[
                 const SizedBox(height: 16),
                 Text(
@@ -325,10 +352,16 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
                 ),
               ],
               const SizedBox(height: 24),
-              GlassButton(
-                onPressed: _canSave ? _save : null,
-                label: widget.existing == null ? 'Add' : 'Save',
-                padding: const EdgeInsets.symmetric(vertical: 14),
+              ListenableBuilder(
+                listenable: Listenable.merge([
+                  _tagController,
+                  _limitController,
+                ]),
+                builder: (context, _) => GlassButton(
+                  onPressed: _canSave ? _save : null,
+                  label: widget.existing == null ? 'Add' : 'Save',
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
             ],
           ),

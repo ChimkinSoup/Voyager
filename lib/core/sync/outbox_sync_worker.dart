@@ -4,8 +4,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drift/drift.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
+import 'package:voyager/core/sync/firestore_write_gate.dart';
 import 'package:voyager/core/sync/sync_error_classification.dart';
 import 'package:voyager/data/database/app_database.dart';
+import 'package:voyager/data/remote/firestore_sync_repository.dart'
+    show firestoreWriteChunkSize;
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
@@ -28,12 +31,28 @@ class OutboxSyncWorker {
     this._authRepo, {
     this.yieldDelay = const Duration(seconds: 2),
     this.pushDocument,
-  });
+    FirestoreWriteGate? writeGate,
+  }) : _writeGate =
+           writeGate ??
+           FirestoreWriteGate(
+             waitForPendingWrites: _firestore.waitForPendingWrites,
+           ) {
+    _gateWasClosed = _writeGate.isPaused;
+    _writeGate.addListener(_onWriteGateChanged);
+  }
 
   final AppDatabase _db;
   final FirebaseFirestore _firestore;
   final AuthRepository _authRepo;
   final Duration yieldDelay;
+
+  /// Bounds the writes this worker hands Firestore — see [FirestoreWriteGate].
+  ///
+  /// Production passes `firestoreWriteGateProvider`, which is the same gate
+  /// the sync repository uses: one write stream deserves one count, and two
+  /// independent allowances add up to neither of them. The fallback exists so
+  /// a worker built standalone (tests) is bounded rather than unbounded.
+  final FirestoreWriteGate _writeGate;
 
   /// How a document in one of [FirestoreCollections.crdtBacked] is re-sent.
   ///
@@ -54,6 +73,35 @@ class OutboxSyncWorker {
   final OutboxDocumentPusher? pushDocument;
 
   bool _isDraining = false;
+
+  /// Last seen [FirestoreWriteGate.isPaused], so the reopening *edge* can be
+  /// told apart from the stream of notifications the gate emits for every
+  /// write it admits and releases.
+  late bool _gateWasClosed;
+
+  /// Drains as soon as the gate reopens.
+  ///
+  /// [startDraining] breaks out of its loop when the gate is shut, because
+  /// pushing refused rows back at a stopped queue only bounces them into the
+  /// queue they came from. Nothing then resumed it: the drain is otherwise
+  /// only started at launch, on sign-in, on app resume and on the
+  /// offline→online edge, and a gate that reopens mid-session is none of
+  /// those. Rows sat queued until the user happened to alt-tab away and back.
+  ///
+  /// This matters most for the case the gate's stall latch exists for, where
+  /// reopening is triggered by a `waitForPendingWrites` probe resolving — an
+  /// event with no user-visible cause at all.
+  void _onWriteGateChanged() {
+    final closed = _writeGate.isPaused;
+    final reopened = _gateWasClosed && !closed;
+    _gateWasClosed = closed;
+    if (!reopened) return;
+    // Nothing to drain for a user who isn't there, and `startDraining` would
+    // only break on the same check.
+    if (_authRepo.currentUserId == null) return;
+    // Idempotent — a drain already running simply keeps going.
+    unawaited(startDraining());
+  }
 
   /// How long a queued upload keeps being retried before it is parked. Bounds
   /// the damage from an error this code fails to recognise as permanent.
@@ -76,6 +124,7 @@ class OutboxSyncWorker {
     AuthRepository authRepo, {
     Duration yieldDelay = const Duration(seconds: 2),
     OutboxDocumentPusher? pushDocument,
+    FirestoreWriteGate? writeGate,
   }) {
     _instance = OutboxSyncWorker(
       db,
@@ -83,6 +132,7 @@ class OutboxSyncWorker {
       authRepo,
       yieldDelay: yieldDelay,
       pushDocument: pushDocument,
+      writeGate: writeGate,
     );
   }
 
@@ -97,6 +147,12 @@ class OutboxSyncWorker {
           // User not logged in, stop draining.
           break;
         }
+
+        // Firestore is already holding more unacknowledged writes than it
+        // should, and this queue is where refused writes land — pushing them
+        // back at it now just bounces them straight into the queue they came
+        // from. Stop; the next drain picks them up once the gate reopens.
+        if (_writeGate.isPaused) break;
 
         // 1. Query exactly 500 retryable items from Outbox. Rows carrying a
         // failureReason were abandoned deliberately and are kept only as a
@@ -177,34 +233,51 @@ class OutboxSyncWorker {
           }
         }
 
-        // 3. Commit to Cloud
-        if (uploads.isNotEmpty) {
+        // 3. Commit to Cloud, in chunks rather than as one batch of the whole
+        // round — see [firestoreWriteChunkSize]. A round is up to 500 rows,
+        // which is the batch API's ceiling and well past what the write stream
+        // will carry; handing it that much at once is what wedged sync in the
+        // first place. Chunking also narrows the blast radius below, since a
+        // batch is all-or-nothing.
+        var committed = false;
+        var chunkFailed = false;
+        for (var i = 0; i < uploads.length; i += firestoreWriteChunkSize) {
+          final end = i + firestoreWriteChunkSize;
+          final chunk = uploads.sublist(
+            i,
+            end < uploads.length ? end : uploads.length,
+          );
           final batch = _firestore.batch();
-          for (final upload in uploads) {
+          for (final upload in chunk) {
             batch.set(upload.reference, upload.data, SetOptions(merge: true));
           }
           try {
-            await batch.commit();
+            await _writeGate.run(batch.commit);
           } catch (error) {
             // The batch is all-or-nothing, so a single rejected document
             // fails every document beside it and the error doesn't say which
             // one. Re-send them individually to find out: the healthy ones
             // still get through, and the offender can be parked instead of
             // being retried forever at the head of the queue.
-            await _clearPending(orphans);
-            final progressed = await _drainIndividually(uploads);
-            // Nothing cleared and nothing parked means every row failed for a
-            // reason that may pass later. Stop rather than spin on them —
-            // unless the pushed documents above already shrank the queue.
-            if (!progressed && !pushed) break;
-            await Future.delayed(yieldDelay);
+            chunkFailed = true;
+            if (await _drainIndividually(chunk)) committed = true;
             continue;
           }
 
           // 4. Remove successful items from local Outbox
-          await _clearPending(uploads.map((u) => u.pending).toList());
+          await _clearPending(chunk.map((u) => u.pending).toList());
+          committed = true;
         }
         await _clearPending(orphans);
+
+        if (chunkFailed) {
+          // Nothing cleared and nothing parked means every row failed for a
+          // reason that may pass later. Stop rather than spin on them —
+          // unless something this round already shrank the queue.
+          if (!committed && !pushed) break;
+          await Future.delayed(yieldDelay);
+          continue;
+        }
 
         // Every row in this round failed for a reason that may pass later, so
         // the next query would return the same 500 rows and spin. Without this
@@ -519,7 +592,9 @@ class OutboxSyncWorker {
     var progressed = false;
     for (final upload in uploads) {
       try {
-        await upload.reference.set(upload.data, SetOptions(merge: true));
+        await _writeGate.run(
+          () => upload.reference.set(upload.data, SetOptions(merge: true)),
+        );
         await _clearPending([upload.pending]);
         progressed = true;
       } catch (error) {

@@ -571,7 +571,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
           savedTask = toSave;
         }
         await repo.upsertTask(toSave);
-        remoteSync.pushTodoTaskNow(toSave);
+        remoteSync.pushTodoTaskInBackground(toSave);
       }
       ref.invalidate(todoTasksProvider);
       ref.invalidate(todoTasksProvider(sourceListId));
@@ -610,7 +610,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
           savedTask = toSave;
         }
         await repo.upsertTask(toSave);
-        remoteSync.pushTodoTaskNow(toSave);
+        remoteSync.pushTodoTaskInBackground(toSave);
       }
       widget.onSortBatchApplied?.call(batch);
       logTodoSortDebug(
@@ -645,7 +645,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
             widget.task.id,
           ),
         );
-        remoteSync.pushTodoTaskNow(baseUpdate);
+        remoteSync.pushTodoTaskInBackground(baseUpdate);
       }
     }
     if (notifyChanged) widget.onChanged();
@@ -832,7 +832,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       if (!mounted) return;
       setState(() => _subtasks = [subtask, ..._subtasks]);
       ref.read(todoRepositoryProvider).upsertTask(subtask).then((_) {
-        ref.read(remoteSyncServiceProvider).pushTodoTaskNow(subtask);
+        ref.read(remoteSyncServiceProvider).pushTodoTaskInBackground(subtask);
         widget.onChanged();
       });
     });
@@ -845,7 +845,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       if (index != -1) _subtasks[index] = updated;
     });
     ref.read(todoRepositoryProvider).upsertTask(updated).then((_) {
-      ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
+      ref.read(remoteSyncServiceProvider).pushTodoTaskInBackground(updated);
       widget.onChanged();
     });
   }
@@ -859,7 +859,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       if (index != -1) _subtasks[index] = updated;
     });
     ref.read(todoRepositoryProvider).upsertTask(updated).then((_) {
-      ref.read(remoteSyncServiceProvider).pushTodoTaskNow(updated);
+      ref.read(remoteSyncServiceProvider).pushTodoTaskInBackground(updated);
       widget.onChanged();
     });
   }
@@ -875,7 +875,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       _subtasks.removeWhere((s) => s.id == subtask.id);
     });
     await ref.read(todoRepositoryProvider).upsertTask(deleted);
-    ref.read(remoteSyncServiceProvider).pushTodoTaskNow(deleted);
+    ref.read(remoteSyncServiceProvider).pushTodoTaskInBackground(deleted);
     widget.onChanged();
 
     // No confirm dialog on a subtask — it is a one-line row, and asking twice
@@ -929,7 +929,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       recurrenceAnchor: subtask.recurrenceAnchor,
     );
     await repo.upsertTask(restored);
-    container.read(remoteSyncServiceProvider).pushTodoTaskNow(restored);
+    container.read(remoteSyncServiceProvider).pushTodoTaskInBackground(restored);
     // Unconditional, and through the container: the panel is closed by the
     // user in the ordinary course of things, and closing it is the likeliest
     // thing to happen during an eight-second undo window. These providers are
@@ -972,7 +972,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
         final remoteSync = ref.read(remoteSyncServiceProvider);
         for (final task in updates) {
           await repo.upsertTask(task);
-          remoteSync.pushTodoTaskNow(task);
+          remoteSync.pushTodoTaskInBackground(task);
         }
         widget.onChanged();
       }),
@@ -996,7 +996,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     final batch = applyNewUndatedTask(task, active);
     for (final updated in batch.tasks) {
       await repo.upsertTask(updated);
-      remoteSync.pushTodoTaskNow(updated);
+      remoteSync.pushTodoTaskInBackground(updated);
     }
     await _deleteSubtask(subtask);
     widget.onChanged();

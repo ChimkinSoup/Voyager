@@ -129,6 +129,9 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
       db,
       FirebaseFirestore.instance,
       authRepo,
+      // The same gate the sync repository writes through: the bound is on the
+      // one Firestore write stream, not on either caller.
+      writeGate: ref.read(firestoreWriteGateProvider),
       // Read lazily: the drain only reaches for this once it has a queued row
       // in a collection that keeps a character-operation log.
       pushDocument: (collection, documentId, {forceCrdtOverwrite = false}) =>

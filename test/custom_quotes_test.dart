@@ -1,4 +1,6 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
@@ -125,6 +127,82 @@ void main() {
       expect(
         mergeCustomQuoteFromRemote(remote, 'q1').deletedAt,
         deletedAt,
+      );
+    });
+  });
+
+  group('customQuotesOnly', () {
+    late AppDatabase db;
+    late DriftSettingsRepository repo;
+    late ProviderContainer container;
+
+    setUp(() {
+      db = AppDatabase.inMemory();
+      repo = DriftSettingsRepository(db);
+      container = ProviderContainer(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(repo),
+          // The bundled list normally comes off the asset bundle; two stand-ins
+          // are enough to tell whether it was included.
+          bundledQuotesProvider.overrideWith(
+            (ref) async => const [
+              Quote(id: 'b1', text: 'Bundled one'),
+              Quote(id: 'b2', text: 'Bundled two'),
+            ],
+          ),
+        ],
+      );
+    });
+
+    tearDown(() async {
+      container.dispose();
+      await db.close();
+    });
+
+    Future<void> setFlag(bool value) async {
+      final settings = await repo.getSettings();
+      await repo.saveSettings(settings.copyWith(customQuotesOnly: value));
+    }
+
+    test('defaults off and persists across a reload', () async {
+      expect((await repo.getSettings()).customQuotesOnly, isFalse);
+      await setFlag(true);
+      expect((await repo.getSettings()).customQuotesOnly, isTrue);
+    });
+
+    test('off, the pool holds the bundled quotes too', () async {
+      final now = utcNow();
+      await repo.upsertCustomQuote(
+        CustomQuote(id: 'q1', text: 'Mine', createdAt: now, updatedAt: now),
+      );
+      final pool = await container.read(quotePoolProvider.future);
+      expect(pool.map((q) => q.text), ['Mine', 'Bundled one', 'Bundled two']);
+    });
+
+    test('on, the bundled quotes drop out of the pool', () async {
+      final now = utcNow();
+      await repo.upsertCustomQuote(
+        CustomQuote(id: 'q1', text: 'Mine', createdAt: now, updatedAt: now),
+      );
+      await setFlag(true);
+      final pool = await container.read(quotePoolProvider.future);
+      expect(pool.map((q) => q.text), ['Mine']);
+    });
+
+    test('flipping the flag rebuilds the pool', () async {
+      final now = utcNow();
+      await repo.upsertCustomQuote(
+        CustomQuote(id: 'q1', text: 'Mine', createdAt: now, updatedAt: now),
+      );
+      expect((await container.read(quotePoolProvider.future)).length, 3);
+      await container
+          .read(settingsProvider.notifier)
+          .saveSettings(
+            (await repo.getSettings()).copyWith(customQuotesOnly: true),
+          );
+      expect(
+        (await container.read(quotePoolProvider.future)).map((q) => q.text),
+        ['Mine'],
       );
     });
   });

@@ -44,6 +44,19 @@ Future<JournalEntryDeletion?> softDeleteJournalEntry(
   final snapshot = await repository.getEntry(entryId);
   if (snapshot == null) return null;
 
+  // Settle first, then cancel: the entry's editor flushes locally and leaves
+  // the upload running in the background, and an in-flight local save that is
+  // still going would re-arm that upload after a bare cancel. Once the queue is
+  // empty, dropping the pending upload is what keeps the *live* row from being
+  // published after the tombstone below and resurrecting the entry on the next
+  // device to pull. Nothing is lost by dropping it — the tombstone push reads
+  // the row back off disk, so it carries the same edit.
+  await remoteSync.settleLocalWrites(
+    FirestoreCollections.journalEntries,
+    entryId,
+  );
+  remoteSync.cancelDocument(FirestoreCollections.journalEntries, entryId);
+
   await repository.softDeleteEntry(entryId);
   // The pushed tombstone is read back rather than built here. `softDeleteEntry`
   // bumps the version itself, and whenever the caller's copy lagged disk the

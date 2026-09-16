@@ -78,8 +78,6 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
     _noteController = TextEditingController(text: existing?.note ?? '');
     _targetDate = existing?.targetDate;
     _colorValue = existing?.colorValue ?? 0xFF7C9EFF;
-    _nameController.addListener(() => setState(() {}));
-    _targetController.addListener(() => setState(() {}));
   }
 
   @override
@@ -269,25 +267,31 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
                 onSubmitted: (_) => _targetFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
-              VoyagerTextField(
-                controller: _targetController,
-                focusNode: _targetFocusNode,
-                accentColor: accent,
-                cursorColor: accent,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                  // Bounded so a long paste can't reach the range where
-                  // double.parse returns Infinity.
-                  LengthLimitingTextInputFormatter(12),
-                ],
-                decoration: InputDecoration(
-                  labelText: 'Target amount',
-                  prefixText: r'$ ',
-                  errorText: _targetError,
+              // Scoped to the field and the button below: rebuilding the
+              // whole sheet per keystroke also made its heavy GlassSurface
+              // re-blur a window-sized backdrop for every character.
+              ListenableBuilder(
+                listenable: _targetController,
+                builder: (context, _) => VoyagerTextField(
+                  controller: _targetController,
+                  focusNode: _targetFocusNode,
+                  accentColor: accent,
+                  cursorColor: accent,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    // Bounded so a long paste can't reach the range where
+                    // double.parse returns Infinity.
+                    LengthLimitingTextInputFormatter(12),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: 'Target amount',
+                    prefixText: r'$ ',
+                    errorText: _targetError,
+                  ),
+                  onSubmitted: (_) => _noteFocusNode.requestFocus(),
                 ),
-                onSubmitted: (_) => _noteFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
               VoyagerTextField(
@@ -347,11 +351,17 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
                 ),
               ],
               const SizedBox(height: 24),
-              GlassButton(
-                onPressed: _canSave ? _save : null,
-                label: widget.existing == null ? 'Add' : 'Save',
-                color: accent,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+              ListenableBuilder(
+                listenable: Listenable.merge([
+                  _nameController,
+                  _targetController,
+                ]),
+                builder: (context, _) => GlassButton(
+                  onPressed: _canSave ? _save : null,
+                  label: widget.existing == null ? 'Add' : 'Save',
+                  color: accent,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
             ],
           ),

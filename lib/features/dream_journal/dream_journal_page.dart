@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -272,7 +273,8 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   Future<void> _saveDraft({required bool bumpVersion}) async {
     final entry = _selectedEntry;
     if (entry == null) return;
-    final body = _bodyEditorKey.currentState?.currentBodyText ?? entry.body;
+    final body =
+        _bodyEditorKey.currentState?.bodyTextFor(entry.id) ?? entry.body;
     await _persistEntryEdits(
       entry: entry,
       title: _titleController.text,
@@ -417,7 +419,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     if (remoteSync == null) return;
 
     final currentBody =
-        _bodyEditorKey.currentState?.currentBodyText ?? target.body;
+        _bodyEditorKey.currentState?.bodyTextFor(entryId) ?? target.body;
     final pendingApplied = await remoteSync.applyPendingDreamEntryTextMerge(
       entryId: entryId,
       currentLocalText: currentBody,
@@ -432,30 +434,24 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
       entry: target,
       title: _titleController.text,
       body:
-          _bodyEditorKey.currentState?.currentBodyText ??
+          _bodyEditorKey.currentState?.bodyTextFor(entryId) ??
           pendingApplied?.body ??
           target.body,
       bumpVersion: true,
     );
 
-    // The local write above has already landed and the outbox retries the
-    // upload, so a network failure here must not abort the caller — most of
-    // them are selection changes and teardowns whose setState would never run.
-    try {
-      await remoteSync.flushDocument(
-        FirestoreCollections.dreamEntries,
-        entryId,
-      );
-    } catch (error, stackTrace) {
-      FlutterError.reportError(
-        FlutterErrorDetails(
-          exception: error,
-          stack: stackTrace,
-          library: 'DreamJournalPage',
-          context: ErrorDescription('while uploading dream entry edits'),
-        ),
-      );
-    }
+    // Local only, and not just so a network *failure* can't abort the caller:
+    // `flushDocument` waits for Firestore to acknowledge the upload, and with
+    // offline persistence that wait never ends while the server is
+    // unreachable. Every caller here is a selection change, a date-picker
+    // press or a teardown, and all of them run through [_queueWrite] — so one
+    // hung upload used to park the whole queue and leave the page unable to
+    // switch dreams at all. The local write above has landed; the upload is
+    // started in the background and retried by the outbox.
+    await remoteSync.flushDocumentLocal(
+      FirestoreCollections.dreamEntries,
+      entryId,
+    );
 
     // Unconditional, not hung off the write above — see [_persistEntryEdits].
     if (refreshList && mounted) ref.invalidate(allDreamEntriesProvider);
@@ -1456,7 +1452,33 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
   RemoteSyncService? _remoteSync;
   PendingTextMergeListener? _pendingTextMergeListener;
 
-  String get currentBodyText => _controller.text;
+  /// The dream [_controller]'s text actually belongs to.
+  ///
+  /// `widget.entry` names the dream the *page* has selected, which moves ahead
+  /// of the controller: the page reseeds this editor by rebuilding it, so
+  /// between a selection change and the next frame's [didUpdateWidget] the two
+  /// disagree. A save that takes its target from the page and its body from
+  /// here writes one dream's text over another — the journal page lost an
+  /// entry's body that way on 2026-09-16.
+  late String _bodyEntryId;
+
+  /// The live body text, but only when it is [entryId]'s.
+  ///
+  /// Returns null during the window described on [_bodyEntryId], which lets
+  /// callers fall through to the dream they actually meant to save.
+  String? bodyTextFor(String entryId) {
+    if (_bodyEntryId == entryId) return _controller.text;
+    // Rare by construction, and silent before this: the caller simply wrote
+    // whatever the controller held. Saying so is what turns a recurrence into
+    // a log line instead of a body that quietly goes missing.
+    if (kDebugMode) {
+      debugPrint(
+        '[dream] BODY_BUFFER_ENTRY_MISMATCH: asked for $entryId, controller '
+        'holds $_bodyEntryId; falling back to the stored body.',
+      );
+    }
+    return null;
+  }
 
   /// Replaces the body with text the user did not type.
   ///
@@ -1491,7 +1513,9 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
     );
     if (recordAsEdit) {
       _remoteSync?.recordDreamTextChange(
-        entryId: widget.entry.id,
+        // [_bodyEntryId], not `widget.entry.id`: this diffs the controller's
+        // own text, so it belongs to whichever dream that text is.
+        entryId: _bodyEntryId,
         before: before,
         after: body,
       );
@@ -1504,6 +1528,7 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
     super.initState();
     _controller = TextEditingController(text: widget.entry.body);
     _lastText = _controller.text;
+    _bodyEntryId = widget.entry.id;
     widget.focusNode.addListener(_handleFocusChanged);
     // _handleKey is installed by TagHighlightedTextField (see its onKeyEvent
     // param) rather than assigned here: the tag completion popup owns
@@ -1601,6 +1626,7 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
 
     _controller.text = widget.entry.body;
     _lastText = _controller.text;
+    _bodyEntryId = widget.entry.id;
 
     if (remoteSync != null) {
       _pendingTextMergeListener = _handlePendingTextMerge;
@@ -1676,7 +1702,10 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
     final before = _lastText;
     _lastText = _controller.text;
     _remoteSync?.recordDreamTextChange(
-      entryId: widget.entry.id,
+      // See [_bodyEntryId]: a keystroke landing inside the switch window would
+      // otherwise record the outgoing dream's characters against the incoming
+      // dream's operation log.
+      entryId: _bodyEntryId,
       before: before,
       after: _controller.text,
     );

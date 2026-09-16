@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/motion/modal_scrim_observer.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/notification_urgency_dot.dart';
 import 'package:voyager/domain/models/notification_models.dart';
@@ -87,9 +88,11 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
                   Positioned(
                     top: -1,
                     right: -1,
-                    child: _FlashingGlowDot(
-                      important: urgency == NotificationUrgency.important,
-                      accent: widget.accent,
+                    child: PauseUnderModalScrim(
+                      child: _FlashingGlowDot(
+                        important: urgency == NotificationUrgency.important,
+                        accent: widget.accent,
+                      ),
                     ),
                   ),
               ],

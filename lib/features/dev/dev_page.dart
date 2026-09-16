@@ -14,6 +14,7 @@ import 'package:voyager/features/dev/dev_calendar_debug_tile.dart';
 import 'package:voyager/features/dev/dev_out_of_sync_purge_tile.dart';
 import 'package:voyager/features/dev/dev_perf_stall_log_tile.dart';
 import 'package:voyager/features/dev/dev_remote_purge_tile.dart';
+import 'package:voyager/features/dev/dev_sync_backlog_tile.dart';
 import 'package:voyager/features/dev/dev_sync_compare_tile.dart';
 import 'package:voyager/features/dev/dev_todo_sort_debug_tile.dart';
 import 'package:voyager/features/dev/dev_journal_debug_tile.dart';
@@ -276,6 +277,8 @@ class DevPage extends ConsumerWidget {
             );
           },
         ),
+        const Divider(height: 32),
+        const DevSyncBacklogSection(),
         const Divider(height: 32),
         ListTile(
           title: const Text('Force reload local data'),

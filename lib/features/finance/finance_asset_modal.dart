@@ -82,8 +82,6 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
     final now = DateTime.now();
     _asOf = DateTime(now.year, now.month, now.day);
     _colorValue = existing?.colorValue ?? 0xFF7C9EFF;
-    _nameController.addListener(() => setState(() {}));
-    _valueController.addListener(() => setState(() {}));
   }
 
   @override
@@ -335,28 +333,36 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
                 onSubmitted: (_) => _valueFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
-              VoyagerTextField(
-                controller: _valueController,
-                focusNode: _valueFocusNode,
-                accentColor: accent,
-                cursorColor: accent,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                  signed: true,
+              // Only the parts that read the typed text rebuild as it is
+              // typed. A `setState` listener on the controllers rebuilt the
+              // whole sheet instead — ~570 widgets per character, each of
+              // which also made the sheet's heavy GlassSurface re-blur a
+              // window-sized backdrop.
+              ListenableBuilder(
+                listenable: _valueController,
+                builder: (context, _) => VoyagerTextField(
+                  controller: _valueController,
+                  focusNode: _valueFocusNode,
+                  accentColor: accent,
+                  cursorColor: accent,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                    signed: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]')),
+                    // Bounded so a long paste can't reach the range where
+                    // double.parse returns Infinity.
+                    LengthLimitingTextInputFormatter(13),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: 'Current value',
+                    prefixText: r'$ ',
+                    hintText: 'Use a minus sign for a debt',
+                    errorText: _valueError,
+                  ),
+                  onSubmitted: (_) => _noteFocusNode.requestFocus(),
                 ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]')),
-                  // Bounded so a long paste can't reach the range where
-                  // double.parse returns Infinity.
-                  LengthLimitingTextInputFormatter(13),
-                ],
-                decoration: InputDecoration(
-                  labelText: 'Current value',
-                  prefixText: r'$ ',
-                  hintText: 'Use a minus sign for a debt',
-                  errorText: _valueError,
-                ),
-                onSubmitted: (_) => _noteFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
               VoyagerTextField(
@@ -393,16 +399,22 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
               // Only true when there is a figure to record — an existing
               // asset can now be saved with the value field left empty, which
               // touches no valuation at all.
-              if (existing != null && _parsedCents != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  'Saving records a new valuation on this date, keeping past '
-                  'values in the net-worth history.',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+              if (existing != null)
+                ListenableBuilder(
+                  listenable: _valueController,
+                  builder: (context, _) => _parsedCents == null
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            'Saving records a new valuation on this date, '
+                            'keeping past values in the net-worth history.',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
                 ),
-              ],
               if (existing != null) ...[
                 const SizedBox(height: 20),
                 _RoomSection(assetId: existing.id, container: widget.container),
@@ -424,11 +436,17 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
                 ),
               ],
               const SizedBox(height: 24),
-              GlassButton(
-                onPressed: _canSave ? _save : null,
-                label: existing == null ? 'Add' : 'Save',
-                color: accent,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+              ListenableBuilder(
+                listenable: Listenable.merge([
+                  _nameController,
+                  _valueController,
+                ]),
+                builder: (context, _) => GlassButton(
+                  onPressed: _canSave ? _save : null,
+                  label: existing == null ? 'Add' : 'Save',
+                  color: accent,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
             ],
           ),

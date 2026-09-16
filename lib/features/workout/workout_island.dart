@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/motion/modal_scrim_observer.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
@@ -125,7 +126,7 @@ class _WorkoutIslandState extends ConsumerState<WorkoutIsland>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _LiveDot(accent: accent),
+                      PauseUnderModalScrim(child: _LiveDot(accent: accent)),
                       const SizedBox(width: VoyagerSpacing.md),
                       Flexible(
                         child: Text(

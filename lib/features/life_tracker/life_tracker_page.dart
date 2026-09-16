@@ -20,9 +20,11 @@ import 'package:voyager/features/life_tracker/stat_leader_label.dart';
 /// bucket list, and one leaf already resting on the ground for every week
 /// already lived. See LIFE_TRACKER.md for the spec.
 ///
-/// The page paints its own paper and keeps it in both themes. The whole look
-/// is ink and wash on off-white stock, and re-toning it for dark mode gives up
-/// the thing it is.
+/// The look is ink and wash on paper. In light the canvas is transparent and
+/// composites straight onto the app's own paper background; in dark it paints
+/// its own toned stock instead, because the background there is the animated
+/// triangle grid and a transparent canvas leaves the washes stacking over it
+/// — see [_nightPaperColor] and the framing at the end of [build].
 class LifeTrackerPage extends ConsumerStatefulWidget {
   const LifeTrackerPage({super.key});
 
@@ -30,10 +32,16 @@ class LifeTrackerPage extends ConsumerStatefulWidget {
   ConsumerState<LifeTrackerPage> createState() => _LifeTrackerPageState();
 }
 
-/// The paper and the ink it is painted with, fixed across themes.
+/// The paper and the ink it is painted with. Light is the cream stock the
+/// painting was authored on; dark is the same painting worked on toned stock,
+/// with the ink pulled up to bone so the brushwork still reads.
 const _paperColor = Color(0xFFF3F1EA);
 const _inkColor = Color(0xFF241F1B);
 const _grassColor = Color(0xFF8C9A79);
+
+const _nightPaperColor = Color(0xFF17151C);
+const _nightInkColor = Color(0xFFE8E2D8);
+const _nightGrassColor = Color(0xFF6F8268);
 
 class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
   final _stackKey = GlobalKey();
@@ -123,6 +131,12 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final isDark = brightness == Brightness.dark;
+    final ink = isDark ? _nightInkColor : _inkColor;
+    final paper = isDark ? _nightPaperColor : _paperColor;
+    final grass = isDark ? _nightGrassColor : _grassColor;
+
     final geometry = ref.watch(lifeTreeGeometryProvider);
     final settings = ref.watch(settingsProvider).valueOrNull;
     final statsAsync = ref.watch(lifeTrackerStatsProvider);
@@ -165,9 +179,10 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
               child: LifeTreeCanvas(
                 geometry: geometry,
                 leafColors: leafColors,
-                inkColor: _inkColor,
-                paperColor: _paperColor,
-                grassColor: _grassColor,
+                inkColor: ink,
+                paperColor: paper,
+                grassColor: grass,
+                brightness: brightness,
                 groundedLeafIndices: grounded,
                 controller: _canvasController,
                 accentColor: accent,
@@ -180,7 +195,7 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
                 child: CustomPaint(
                   painter: LeaderLinePainter(
                     blossoms: geometry.blossoms,
-                    inkColor: _inkColor,
+                    inkColor: ink,
                     accentColor: accent,
                     highlighted: _hoveredLabel,
                   ),
@@ -231,9 +246,9 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
                         name: resolved.shortLabel,
                         value: resolved.value,
                         onLeft: blossom.onLeft,
-                        inkColor: _inkColor,
+                        inkColor: ink,
                         accentColor: accent,
-                        haloColor: _paperColor,
+                        haloColor: paper,
                         onTap: () => _openBlossomPopup(blossom, size, accent),
                         onHoverChanged: (hovered) => setState(
                           () => _hoveredLabel = hovered ? i : -1,
@@ -262,12 +277,10 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
       },
     );
 
-    // The paper stays paper in dark too (see the class doc), but full-bleed
-    // it read as a cream poster slapped over the night grid. Dark frames it
-    // instead: inset, rounded, hairline-edged and shadowed like a card, so
-    // the theme's chrome holds the island. The wrapper is the same widgets in
-    // both themes, so switching theme does not remount the canvas.
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Dark frames the canvas: inset, rounded, hairline-edged and shadowed like
+    // a card, so the theme's chrome holds the toned stock rather than letting
+    // it run full-bleed into the grid. The wrapper is the same widgets in both
+    // themes, so switching theme does not remount the canvas.
     final vc = VoyagerColors.of(context);
     const frameRadius = BorderRadius.all(Radius.circular(18));
 

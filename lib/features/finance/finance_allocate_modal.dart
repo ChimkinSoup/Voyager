@@ -68,7 +68,6 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
     super.initState();
     final now = DateTime.now();
     _date = DateTime(now.year, now.month, now.day);
-    _amountController.addListener(() => setState(() {}));
   }
 
   @override
@@ -239,29 +238,35 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
                 },
               ),
               const SizedBox(height: 16),
-              VoyagerTextField(
-                controller: _amountController,
-                autofocus: true,
-                accentColor: accent,
-                cursorColor: accent,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                  // Bounded so a long paste can't reach the range where
-                  // double.parse returns Infinity.
-                  LengthLimitingTextInputFormatter(12),
-                ],
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  color: accent,
-                  fontWeight: FontWeight.w600,
+              // Scoped to the amount field and the button below: rebuilding
+              // the whole sheet per keystroke also made its heavy GlassSurface
+              // re-blur a window-sized backdrop for every character.
+              ListenableBuilder(
+                listenable: _amountController,
+                builder: (context, _) => VoyagerTextField(
+                  controller: _amountController,
+                  autofocus: true,
+                  accentColor: accent,
+                  cursorColor: accent,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    // Bounded so a long paste can't reach the range where
+                    // double.parse returns Infinity.
+                    LengthLimitingTextInputFormatter(12),
+                  ],
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    color: accent,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Amount',
+                    prefixText: r'$ ',
+                    errorText: _amountError,
+                  ),
+                  onSubmitted: (_) => _noteFocusNode.requestFocus(),
                 ),
-                decoration: InputDecoration(
-                  labelText: 'Amount',
-                  prefixText: r'$ ',
-                  errorText: _amountError,
-                ),
-                onSubmitted: (_) => _noteFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
               VoyagerTextField(
@@ -305,11 +310,14 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
                 ),
               ],
               const SizedBox(height: 24),
-              GlassButton(
-                onPressed: _canSave ? _save : null,
-                label: _withdrawing ? 'Withdraw' : 'Add funds',
-                color: accent,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+              ListenableBuilder(
+                listenable: _amountController,
+                builder: (context, _) => GlassButton(
+                  onPressed: _canSave ? _save : null,
+                  label: _withdrawing ? 'Withdraw' : 'Add funds',
+                  color: accent,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
             ],
           ),

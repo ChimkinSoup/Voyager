@@ -1458,10 +1458,20 @@ void main() {
       );
       await OutboxSyncWorker.instance.startDraining();
 
-      expect(mockFirestore.batchCreatedCount, 3);
-      expect(mockFirestore.batches[0].sets.length, 500);
-      expect(mockFirestore.batches[1].sets.length, 500);
-      expect(mockFirestore.batches[2].sets.length, 200);
+      // Used to assert 500/500/200 — one batch per query round, each filled to
+      // the batch API's ceiling. That ceiling is the limit on what a single
+      // *batch* may hold, not on what the write stream will carry, and filling
+      // them to the brim is what let a backlog wedge sync outright. Rounds are
+      // now cut into chunks; what matters is the width of each one and that
+      // every row still goes exactly once.
+      expect(mockFirestore.batches, isNotEmpty);
+      for (final batch in mockFirestore.batches) {
+        expect(batch.sets.length, lessThanOrEqualTo(firestoreWriteChunkSize));
+      }
+      expect(
+        mockFirestore.batches.fold<int>(0, (sum, b) => sum + b.sets.length),
+        1200,
+      );
 
       final remains = await db.select(db.pendingUploadsTable).get();
       expect(remains, isEmpty);

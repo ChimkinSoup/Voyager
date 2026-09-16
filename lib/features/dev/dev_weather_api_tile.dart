@@ -25,10 +25,7 @@ class _DevWeatherApiTileState extends ConsumerState<DevWeatherApiTile> {
     _apiKeyController = TextEditingController(
       text: widget.settings.devOpenWeatherApiKey ?? '',
     );
-    _apiKeyController.addListener(_onTextChanged);
   }
-
-  void _onTextChanged() => setState(() {});
 
   @override
   void didUpdateWidget(covariant DevWeatherApiTile oldWidget) {
@@ -41,7 +38,6 @@ class _DevWeatherApiTileState extends ConsumerState<DevWeatherApiTile> {
 
   @override
   void dispose() {
-    _apiKeyController.removeListener(_onTextChanged);
     _apiKeyController.dispose();
     super.dispose();
   }
@@ -58,7 +54,6 @@ class _DevWeatherApiTileState extends ConsumerState<DevWeatherApiTile> {
     if (!kDebugMode) return const SizedBox.shrink();
 
     final settings = widget.settings;
-    final hasKey = _apiKeyController.text.trim().isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -87,10 +82,17 @@ class _DevWeatherApiTileState extends ConsumerState<DevWeatherApiTile> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Align(
               alignment: Alignment.centerRight,
-              child: GlassButton(
-                onPressed: hasKey ? () => _saveApiKey(settings) : null,
-                label: 'Save API key',
-                dense: true,
+              // Watches the field itself rather than having the tile rebuild
+              // around it on every character.
+              child: ListenableBuilder(
+                listenable: _apiKeyController,
+                builder: (context, _) => GlassButton(
+                  onPressed: _apiKeyController.text.trim().isEmpty
+                      ? null
+                      : () => _saveApiKey(settings),
+                  label: 'Save API key',
+                  dense: true,
+                ),
               ),
             ),
           ),

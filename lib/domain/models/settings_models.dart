@@ -27,6 +27,7 @@ class AppSettings {
     this.petalWindStrength = 46.0,
     this.weekStartsOnMonday = true,
     this.showQuotes = true,
+    this.customQuotesOnly = false,
     this.showDefaultTrackersInGrid = true,
     this.showDefaultTrackersInCalendar = true,
     this.journalHotkey = defaultJournalHotkey,
@@ -187,6 +188,11 @@ class AppSettings {
 
   final bool weekStartsOnMonday;
   final bool showQuotes;
+
+  /// Whether the quote pool is the user's own quotes alone, with the
+  /// bundled ones left out. Independent of [showQuotes], which hides the
+  /// quote line entirely.
+  final bool customQuotesOnly;
 
   /// Whether built-in default trackers (currently the "Journal Entries"
   /// tracker) appear in the analytics page's grid view.
@@ -479,6 +485,7 @@ class AppSettings {
     double? petalWindStrength,
     bool? weekStartsOnMonday,
     bool? showQuotes,
+    bool? customQuotesOnly,
     bool? showDefaultTrackersInGrid,
     bool? showDefaultTrackersInCalendar,
     String? journalHotkey,
@@ -650,6 +657,7 @@ class AppSettings {
       petalWindStrength: petalWindStrength ?? this.petalWindStrength,
       weekStartsOnMonday: weekStartsOnMonday ?? this.weekStartsOnMonday,
       showQuotes: showQuotes ?? this.showQuotes,
+      customQuotesOnly: customQuotesOnly ?? this.customQuotesOnly,
       showDefaultTrackersInGrid:
           showDefaultTrackersInGrid ?? this.showDefaultTrackersInGrid,
       showDefaultTrackersInCalendar:

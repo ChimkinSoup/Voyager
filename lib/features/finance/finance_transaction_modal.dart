@@ -148,7 +148,6 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     final base = existing?.occurredAt ?? draft?.occurredAt ?? DateTime.now();
     _date = DateTime(base.year, base.month, base.day);
     _newId = newId();
-    _amountController.addListener(_onAmountChanged);
   }
 
   @override
@@ -162,8 +161,6 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     _tagsFocusNode.dispose();
     super.dispose();
   }
-
-  void _onAmountChanged() => setState(() {});
 
   /// Store and Source are separate vocabularies, so an origin typed for one
   /// type means nothing for the other: the switch clears it rather than
@@ -329,7 +326,6 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     final accent = theme.colorScheme.primary;
     final isDeposit = _type == TransactionType.deposit;
     final amountColor = isDeposit ? kIncomeGreen : accent;
-    final canSave = _parsedCents != null && !_saving;
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
     final linked = widget.existing?.roomEventId != null;
 
@@ -404,33 +400,40 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                       },
               ),
               const SizedBox(height: 16),
-              // Amount
-              VoyagerTextField(
-                controller: _amountController,
-                autofocus: widget.existing == null,
-                accentColor: amountColor,
-                cursorColor: amountColor,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
+              // Amount. Only this field and the save button read the typed
+              // figure, so only they rebuild as it is typed: a `setState`
+              // listener on the controller rebuilt the whole sheet per
+              // keystroke, which also made its heavy GlassSurface re-blur a
+              // window-sized backdrop for every character.
+              ListenableBuilder(
+                listenable: _amountController,
+                builder: (context, _) => VoyagerTextField(
+                  controller: _amountController,
+                  autofocus: widget.existing == null,
+                  accentColor: amountColor,
+                  cursorColor: amountColor,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    // Bounded so a long paste can't reach the range where
+                    // double.parse returns Infinity.
+                    LengthLimitingTextInputFormatter(12),
+                  ],
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    color: amountColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Amount',
+                    prefixText: r'$ ',
+                    errorText: _amountError,
+                  ),
+                  // Enter walks Amount → Store/Source → Note → Tags, and Enter
+                  // in Tags saves.
+                  onSubmitted: (_) => _originFocusNode.requestFocus(),
                 ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                  // Bounded so a long paste can't reach the range where
-                  // double.parse returns Infinity.
-                  LengthLimitingTextInputFormatter(12),
-                ],
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  color: amountColor,
-                  fontWeight: FontWeight.w600,
-                ),
-                decoration: InputDecoration(
-                  labelText: 'Amount',
-                  prefixText: r'$ ',
-                  errorText: _amountError,
-                ),
-                // Enter walks Amount → Store/Source → Note → Tags, and Enter
-                // in Tags saves.
-                onSubmitted: (_) => _originFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
               // Store / Source
@@ -508,11 +511,14 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                 ),
               ],
               const SizedBox(height: 24),
-              GlassButton(
-                onPressed: canSave ? _save : null,
-                label: widget.existing == null ? 'Add' : 'Save',
-                color: amountColor,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+              ListenableBuilder(
+                listenable: _amountController,
+                builder: (context, _) => GlassButton(
+                  onPressed: _parsedCents != null && !_saving ? _save : null,
+                  label: widget.existing == null ? 'Add' : 'Save',
+                  color: amountColor,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
             ],
           ),

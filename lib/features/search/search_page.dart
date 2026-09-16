@@ -203,14 +203,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     if (!confirmed || !mounted) return;
     final JournalEntryDeletion? deletion;
     try {
-      // An in-flight save for this entry would otherwise land after the
-      // tombstone and republish it as live, which is why journal_page._delete
-      // flushes first too.
-      await ref
-          .read(remoteSyncServiceProvider)
-          .flushDocument(FirestoreCollections.journalEntries, entry.id);
       // Shared with the Journal page, which deletes the same rows — see
-      // [softDeleteJournalEntry].
+      // [softDeleteJournalEntry]. It settles and cancels this entry's pending
+      // save itself, so an in-flight one can no longer land after the tombstone
+      // and republish the entry as live; waiting on the upload here did the
+      // same job, but hung whenever the server was unreachable.
       deletion = await softDeleteJournalEntry(container, entry.id);
     } catch (error, stackTrace) {
       // Never hide a row that still exists: the confirm dialog has already

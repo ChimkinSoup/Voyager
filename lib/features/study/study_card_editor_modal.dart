@@ -87,8 +87,6 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
   void initState() {
     super.initState();
     _media = ref.read(mediaServiceProvider);
-    _front.addListener(() => setState(() {}));
-    _back.addListener(() => setState(() {}));
   }
 
   @override
@@ -235,7 +233,12 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
     final images =
         ref.watch(studyCardImagesProvider).valueOrNull?[_cardId] ??
         (front: const <MediaAsset>[], back: const <MediaAsset>[]);
-    final canSave =
+    // Read live rather than captured at build time: the Save button below is
+    // the only thing the typed text drives, and it watches the controllers
+    // itself. A `setState` listener on each rebuilt the whole sheet per
+    // keystroke, which also made its heavy GlassSurface re-blur a
+    // window-sized backdrop for every character.
+    bool canSave() =>
         !_saving &&
         _sideFilled(_front.text, images.front) &&
         _sideFilled(_back.text, images.back);
@@ -307,10 +310,13 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
                 label: 'Back',
               ),
               const SizedBox(height: 18),
-              GlassButton(
-                onPressed: canSave ? _save : null,
-                label: 'Save',
-                padding: const EdgeInsets.symmetric(vertical: 14),
+              ListenableBuilder(
+                listenable: Listenable.merge([_front, _back]),
+                builder: (context, _) => GlassButton(
+                  onPressed: canSave() ? _save : null,
+                  label: 'Save',
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
             ],
           ),
@@ -318,9 +324,12 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
       ),
     );
     // Gated like the button: _save itself doesn't check that both faces are
-    // filled.
+    // filled. Checked on press rather than handed a build-time verdict, which
+    // no longer refreshes on every keystroke.
     return CtrlEnterToSubmitScope(
-      onSubmit: canSave ? _save : null,
+      onSubmit: () {
+        if (canSave()) _save();
+      },
       child: sheet,
     );
   }

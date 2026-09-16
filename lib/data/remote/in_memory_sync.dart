@@ -5,6 +5,14 @@ import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
 class InMemorySyncRepository implements SyncRepository {
+  /// Nothing is ever queued here: every write lands the moment it is made, so
+  /// this is false unless a test is standing in for a stalled backend.
+  @override
+  bool get hasUnsentWriteBacklog => unsentWriteBacklog;
+
+  /// Test seam for [hasUnsentWriteBacklog].
+  bool unsentWriteBacklog = false;
+
   final _documents = <String, Map<String, dynamic>>{};
   final _watchers = <String, StreamController<Map<String, dynamic>>>{};
   final _collectionWatchers =

@@ -114,14 +114,31 @@ class LifeTreeCanvasController extends ChangeNotifier {
 /// colour. The canopy is built by layering translucent pools of these in
 /// multiply, and a single flat pink stacks into a flat mass — the depth in the
 /// reference painting comes entirely from mixing tints and deep accents.
-List<Color> buildTonePalette(List<Color> base) {
+///
+/// [night] is not the same ramp dimmed — it is the tone the *accumulated* mass
+/// should land on. Twenty-odd pools overlap in the middle of the crown, and
+/// over cream each added one steps down toward the pigment while over the
+/// night stock each one steps up away from it, so a pigment picked to be
+/// thinned by paper saturates into a lit grey slab instead. Trying to hold
+/// that back with alpha means guessing the overlap count; picking a pigment
+/// that is already the deep plum the dense middle wants means the stack
+/// converges there however deep it gets, and the thin rim still fades off
+/// into the stock on its own.
+List<Color> buildTonePalette(List<Color> base, {bool night = false}) {
   final palette = <Color>[];
   for (var i = 0; i < 4; i++) {
     final color = base[i % base.length];
-    palette
-      ..add(Color.lerp(color, const Color(0xFFFDEEF1), 0.30)!)
-      ..add(color)
-      ..add(Color.lerp(color, const Color(0xFFC85466), 0.35)!);
+    if (night) {
+      palette
+        ..add(Color.lerp(color, const Color(0xFF4A1236), 0.60)!)
+        ..add(Color.lerp(color, const Color(0xFF3A0E2E), 0.75)!)
+        ..add(Color.lerp(color, const Color(0xFF2A0822), 0.88)!);
+    } else {
+      palette
+        ..add(Color.lerp(color, const Color(0xFFFDEEF1), 0.30)!)
+        ..add(color)
+        ..add(Color.lerp(color, const Color(0xFFC85466), 0.35)!);
+    }
   }
   return palette;
 }
@@ -150,6 +167,7 @@ class LifeTreeCanvas extends StatefulWidget {
     required this.groundedLeafIndices,
     required this.controller,
     required this.accentColor,
+    this.brightness = Brightness.light,
     this.hovered = false,
     this.showDebugColors = false,
   });
@@ -163,9 +181,11 @@ class LifeTreeCanvas extends StatefulWidget {
   /// Pigment the woody parts and the paper grain are painted in.
   final Color inkColor;
 
-  /// The paper itself. Every wash is multiplied over this, so it has to be
-  /// painted rather than left to the scaffold behind — a transparent canvas
-  /// would give multiply nothing to darken.
+  /// The paper itself. In light this is only bled through the dry brush and
+  /// behind the labels — the stock the washes sit on is the app's own paper
+  /// background, showing through a transparent canvas. In dark the background
+  /// behind is the animated triangle grid instead, so the canvas paints this
+  /// as its own opaque stock (see [brightness]).
   final Color paperColor;
 
   final Color grassColor;
@@ -177,6 +197,15 @@ class LifeTreeCanvas extends StatefulWidget {
 
   /// Tint for the whole-tree hover glow — see [hovered].
   final Color accentColor;
+
+  /// Which of the two authored worlds this is painting. Dark is not the light
+  /// painting dimmed: the canvas lays down its own toned stock and its fibre,
+  /// the wash thins right back so the canopy reads as a mass in shadow rather
+  /// than a lit slab, its dried edges catch the light instead of pooling
+  /// darker, and the per-week specks brighten to the blossom actually catching
+  /// it. Everything the [inkColor] / [paperColor] / [grassColor] the page
+  /// hands down doesn't already cover.
+  final Brightness brightness;
 
   /// Whether the pointer is currently over the tree (outside the individual
   /// stat labels). Eased into a soft glow along the trunk, branches, roots
@@ -197,14 +226,37 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
     with SingleTickerProviderStateMixin {
   static const _spriteExtent = 96.0;
 
+  bool get _night => widget.brightness == Brightness.dark;
+
   /// Alpha baked into every petal sprite (0-255). Kept light so stipple adds
   /// subtle grain over the wash rather than darkening it into a muddy blob.
+  /// On the night stock the wash under it is thinned right back instead, so
+  /// the specks carry the canopy and have to actually register against it.
   static const _leafAlpha = 35;
+  static const _nightLeafAlpha = 98;
+
+  int get _stippleAlpha => _night ? _nightLeafAlpha : _leafAlpha;
+
+  /// How big a canopy speck is drawn at night, against the size the light
+  /// painting uses. A speck at full size is sized to be a grain of pigment
+  /// *within* a wash that is already carrying the canopy; at night the wash
+  /// is far thinner and the specks are opaque enough to see, so at full size
+  /// three thousand of them overlap into a pale veil that greys out the whole
+  /// crown — the exact opposite of the blossom-catching-light they are meant
+  /// to be. Shrunk, they stop touching each other and read as points.
+  static const _nightLeafScale = 0.75;
+
+  double get _stippleScale => _night ? _nightLeafScale : 1.0;
 
   /// Alpha baked into a leaf that is resting on the ground — 70% opacity per
   /// user request, well above the on-tree stipple so grounded leaves read
-  /// clearly against the grass instead of staying a faint grain.
+  /// clearly against the grass instead of staying a faint grain. Pulled back
+  /// at night, where 70% of a lit petal against the dark ground is the
+  /// brightest thing on the canvas and the pile reads as a bar of neon.
   static const _landedLeafAlpha = 179;
+  static const _nightLandedLeafAlpha = 88;
+
+  int get _landedAlpha => _night ? _nightLandedLeafAlpha : _landedLeafAlpha;
 
   static const _grainExtent = 128;
 
@@ -227,12 +279,14 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
 
   ui.Image? _atlas;
   List<Color>? _atlasColors;
+  int? _atlasAlpha;
   late List<Rect> _leafCellRects;
 
   // A second atlas of the same sprites baked at _landedLeafAlpha, used only
   // for leaves that have settled on the ground.
   ui.Image? _landedAtlas;
   List<Color>? _landedAtlasColors;
+  int? _landedAtlasAlpha;
 
   ui.Image? _grain;
   Color? _grainInk;
@@ -251,6 +305,13 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
       Float32List(widget.geometry.leaves.length * 4);
   late final Float32List _rectBuffer =
       Float32List(widget.geometry.leaves.length * 4);
+
+  // cos/sin/roll per wash cell, refilled in place once a frame. Resolving
+  // these into objects instead allocated one per cell plus one Offset per
+  // leaf carried through it — some three thousand short-lived objects every
+  // frame, for values that are three doubles.
+  late final Float32List _cellSwayBuffer =
+      Float32List(widget.geometry.cells.length * 3);
 
   // Resting places, resolved once. These are derived from the leaf index
   // alone, but deriving them seeds a Random per leaf — and every grounded leaf
@@ -284,6 +345,7 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
   Color? _scenePaper;
   Color? _sceneGrass;
   double? _sceneShed;
+  Brightness? _sceneBrightness;
   bool? _sceneShowDebugColors;
 
   /// Guards against a re-bake that was kicked off before a resize (or before
@@ -396,19 +458,29 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
   }
 
   void _ensureAtlas(List<Color> colors) {
-    if (_atlas != null && listEquals(_atlasColors, colors)) return;
+    final alpha = _stippleAlpha;
+    if (_atlas != null && _atlasAlpha == alpha && listEquals(_atlasColors, colors)) {
+      return;
+    }
     _atlas?.dispose();
-    final built = _buildAtlas(colors, _leafAlpha);
+    final built = _buildAtlas(colors, alpha);
     _atlas = built.image;
     _atlasColors = colors;
+    _atlasAlpha = alpha;
     _leafCellRects = built.cellRects;
   }
 
   void _ensureLandedAtlas(List<Color> colors) {
-    if (_landedAtlas != null && listEquals(_landedAtlasColors, colors)) return;
+    final alpha = _landedAlpha;
+    if (_landedAtlas != null &&
+        _landedAtlasAlpha == alpha &&
+        listEquals(_landedAtlasColors, colors)) {
+      return;
+    }
     _landedAtlas?.dispose();
-    _landedAtlas = _buildAtlas(colors, _landedLeafAlpha).image;
+    _landedAtlas = _buildAtlas(colors, alpha).image;
     _landedAtlasColors = colors;
+    _landedAtlasAlpha = alpha;
   }
 
   ({ui.Image image, List<Rect> cellRects}) _buildAtlas(
@@ -462,7 +534,12 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
   /// falling-petal background.
   void _paintBloom(Canvas canvas, LeafDesign design, Rect rect, Color color) {
     final path = design.pathBuilder(rect);
-    final borderColor = Color.lerp(color, const Color(0xFF000000), 0.30)!;
+    // The rim is a fixed share of the sprite, so once a speck is drawn eight
+    // pixels wide it is mostly rim. A 30% step toward black is what keeps the
+    // stipple from glaring on cream; on the night stock the same step is most
+    // of why a lit blossom renders as a grey fleck.
+    final borderColor =
+        Color.lerp(color, const Color(0xFF000000), _night ? 0.14 : 0.30)!;
     canvas.drawPath(path, Paint()..color = color.withValues(alpha: 0.50));
     canvas.drawPath(
       path,
@@ -476,7 +553,9 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
 
   /// A small tile of scattered specks, repeated across the canvas. Paper fibre
   /// is the single strongest cue that a painting was made with water and
-  /// pigment rather than vectors, so it goes over everything.
+  /// pigment rather than vectors, so it goes under everything on the stock
+  /// this canvas lays down itself. Light doesn't call this at all — the stock
+  /// there is the app's own paper background, which brings its own grain.
   void _ensureGrain(Color ink) {
     if (_grain != null && _grainInk == ink) return;
     // The shader holds its own native handle and references the image below,
@@ -490,8 +569,12 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
     final canvas = Canvas(recorder);
     final rand = math.Random(917);
     final paint = Paint();
-    for (var i = 0; i < 2400; i++) {
-      paint.color = ink.withValues(alpha: 0.018 + rand.nextDouble() * 0.038);
+    // Sparse and very faint. This is the tooth of the stock catching light,
+    // and it tiles across the whole canvas — at any density where an
+    // individual speck is findable it stops reading as paper and starts
+    // reading as sensor noise over the picture.
+    for (var i = 0; i < 900; i++) {
+      paint.color = ink.withValues(alpha: 0.006 + rand.nextDouble() * 0.014);
       canvas.drawCircle(
         Offset(
           rand.nextDouble() * _grainExtent,
@@ -520,7 +603,21 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
     final canvas = Canvas(recorder, Offset.zero & pixelSize);
     canvas.scale(scale);
 
-    canvas.drawColor(const Color(0x00000000), BlendMode.src);
+    // Light leaves the stock transparent and composites onto the app's paper
+    // background. Dark can't: the background there is the animated triangle
+    // grid, and every wash above would stack over live geometry.
+    canvas.drawColor(
+      _night ? widget.paperColor : const Color(0x00000000),
+      BlendMode.src,
+    );
+    if (_night) {
+      canvas.drawRect(
+        Offset.zero & size,
+        // Non-null on every path that reaches here: build() bakes it before
+        // it asks for a scene, and the off-frame re-bakes reuse it.
+        Paint()..shader = _grainShader!,
+      );
+    }
 
     _paintWood(canvas, size);
     _paintGrass(canvas, size);
@@ -565,6 +662,7 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
         _sceneInk == widget.inkColor &&
         _scenePaper == widget.paperColor &&
         _sceneGrass == widget.grassColor &&
+        _sceneBrightness == widget.brightness &&
         _sceneShowDebugColors == widget.showDebugColors;
 
     if (propsValid && _sceneSize != size) {
@@ -620,6 +718,7 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
     _sceneGrass = widget.grassColor;
     _sceneShed = shed;
     _pendingShed = null;
+    _sceneBrightness = widget.brightness;
     _sceneShowDebugColors = widget.showDebugColors;
   }
 
@@ -681,6 +780,7 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
     _sceneGrass = widget.grassColor;
     _sceneShed = shed;
     _pendingShed = null;
+    _sceneBrightness = widget.brightness;
     _sceneShowDebugColors = widget.showDebugColors;
     setState(() {});
   }
@@ -750,6 +850,25 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
     final fade = 1.0 - 0.40 * shed;
     if (fade <= 0) return;
 
+    final night = _night;
+    // The pools stack, so the wash strength is what decides whether the canopy
+    // reads as foliage or as one flat slab. On cream a strong wash is the mass;
+    // on the night stock the same wash stacks into a lit blob floating on
+    // black, and the light has to come off the specks instead — so it is
+    // thinned to roughly a third and the stipple above is brightened to carry
+    // it (see [_nightLeafAlpha]).
+    // Night's strength is close to light's on purpose — the tone it converges
+    // to is set by the ramp (see [buildTonePalette]), not held back here.
+    final washBoost = night ? 1.30 : 1.45;
+    final washCap = night ? 0.12 : 0.28;
+    // Watercolour dries darker at the rim either way. Held well back at night:
+    // a rim that reads at all outlines every pool in the stack, and ~328
+    // outlined pools is a facetted crumple, not a canopy. The outer silhouette
+    // is carried by the wash itself.
+    const rimToneOffset = 2;
+    final rimBoost = night ? 0.22 : 0.5;
+    final rimCap = night ? 0.07 : 0.18;
+
     final rimWidth = size.shortestSide * 0.0012;
     for (final cell in widget.geometry.cells) {
       if (cell.shedOrder < shed) continue;
@@ -758,15 +877,18 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
       canvas.drawPath(
         path,
         Paint()
-          ..color = color.withValues(alpha: (cell.alpha * fade * 1.45).clamp(0.0, 0.28)),
+          ..color = color.withValues(
+            alpha: (cell.alpha * fade * washBoost).clamp(0.0, washCap),
+          ),
       );
-      // Soft edge darkening
       canvas.drawPath(
         path,
         Paint()
-          ..color = palette[((cell.colorIndex ~/ 3) * 3 + 2)
+          ..color = palette[((cell.colorIndex ~/ 3) * 3 + rimToneOffset)
                   .clamp(0, palette.length - 1)]
-              .withValues(alpha: (cell.alpha * fade * 0.5).clamp(0.0, 0.18))
+              .withValues(
+                alpha: (cell.alpha * fade * rimBoost).clamp(0.0, rimCap),
+              )
           ..style = PaintingStyle.stroke
           ..strokeWidth = rimWidth,
       );
@@ -886,19 +1008,29 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
 
     final ink = widget.inkColor;
     final wood = _woodPathFor(size);
+    final night = _night;
 
     final blur = size.shortestSide * 0.004;
+
+    // The same 40% of the ink that reads as a grey brush stroke on cream reads
+    // as bleached bone once the ink is the pale one — the stock under it is
+    // near-black, so nothing takes the stroke back down. Night lays the wood in
+    // at roughly half that, which lands it as a lit branch against the canopy
+    // rather than a cut-out.
+    final bleedAlpha = night ? 0.10 : 0.12;
+    final bodyAlpha = night ? 0.30 : 0.40;
+    final settleAlpha = night ? 0.20 : 0.38;
 
     // Ink bleed into damp paper around stroke edges
     canvas.drawPath(
       wood,
       Paint()
-        ..color = ink.withValues(alpha: 0.12)
+        ..color = ink.withValues(alpha: bleedAlpha)
         ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, blur * 1.5),
     );
 
     // Exact 40% opacity for branches per user request
-    canvas.drawPath(wood, Paint()..color = ink.withValues(alpha: 0.40));
+    canvas.drawPath(wood, Paint()..color = ink.withValues(alpha: bodyAlpha));
 
     canvas.save();
     canvas.clipPath(wood);
@@ -945,7 +1077,7 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
     canvas.drawPath(
       wood.shift(Offset(size.shortestSide * 0.0025, size.shortestSide * 0.0010)),
       Paint()
-        ..color = ink.withValues(alpha: 0.38)
+        ..color = ink.withValues(alpha: settleAlpha)
         ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, blur * 0.8),
     );
 
@@ -1146,20 +1278,23 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         if (size.isEmpty) return const SizedBox.shrink();
 
-        final palette = buildTonePalette(widget.leafColors);
-        _ensureAtlas(palette);
-        _ensureLandedAtlas(palette);
-        _ensureGrain(widget.inkColor);
+        // The wash sinks into shadow at night; the specks are the blossom
+        // actually catching the moonlight, so they keep the lit ramp. Same
+        // list in light, where the wash is the lit thing.
+        final palette = buildTonePalette(widget.leafColors, night: _night);
+        final stipplePalette =
+            _night ? buildTonePalette(widget.leafColors) : palette;
+        _ensureAtlas(stipplePalette);
+        _ensureLandedAtlas(stipplePalette);
+        // Baked into the background rather than laid over it per frame, so it
+        // has to exist before the scene does.
+        if (_night) _ensureGrain(widget.inkColor);
         _ensureScene(size, palette, MediaQuery.devicePixelRatioOf(context));
 
         final atlas = _atlas;
         final landedAtlas = _landedAtlas;
         final background = _background;
-        final grainShader = _grainShader;
-        if (atlas == null ||
-            landedAtlas == null ||
-            background == null ||
-            grainShader == null) {
+        if (atlas == null || landedAtlas == null || background == null) {
           return const SizedBox.shrink();
         }
 
@@ -1171,18 +1306,19 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
             painter: _LifeTreePainter(
               geometry: widget.geometry,
               background: background,
-              grainShader: grainShader,
               atlas: atlas,
               landedAtlas: landedAtlas,
               leafCellRects: _leafCellRects,
               rstBuffer: _rstBuffer,
               rectBuffer: _rectBuffer,
+              cellSwayBuffer: _cellSwayBuffer,
               landedRstBuffer: _landedRstBuffer,
               landedRectBuffer: _landedRectBuffer,
               restPositions: _restPositions,
               restRotations: _restRotations,
               fallenDiameters: _fallenDiameters,
               colorCount: palette.length,
+              stippleScale: _stippleScale,
               // The clock, the glow and the live gust queue, as a repaint
               // listenable — a frame repaints the canvas without rebuilding
               // anything above it.
@@ -1503,40 +1639,23 @@ List<Offset> _convexHull(List<Offset> points) {
 
 /// A wash cell's live sway, resolved once per frame and applied to every
 /// stipple speck sitting on it.
-class _CellTransform {
-  _CellTransform(this.cos, this.sin, this.pivot, this.roll);
-
-  final double cos;
-  final double sin;
-  final Offset pivot;
-  final double roll;
-
-  Offset apply(Offset p) {
-    final dx = p.dx - pivot.dx;
-    final dy = p.dy - pivot.dy;
-    return Offset(
-      dx * cos - dy * sin + pivot.dx,
-      dx * sin + dy * cos + pivot.dy,
-    );
-  }
-}
-
 class _LifeTreePainter extends CustomPainter {
   _LifeTreePainter({
     required this.geometry,
     required this.background,
-    required this.grainShader,
     required this.atlas,
     required this.landedAtlas,
     required this.leafCellRects,
     required this.rstBuffer,
     required this.rectBuffer,
+    required this.cellSwayBuffer,
     required this.landedRstBuffer,
     required this.landedRectBuffer,
     required this.restPositions,
     required this.restRotations,
     required this.fallenDiameters,
     required this.colorCount,
+    required this.stippleScale,
     required this.animation,
     required this.groundedLeafIndices,
     required this.glowPathFor,
@@ -1552,7 +1671,6 @@ class _LifeTreePainter extends CustomPainter {
   /// Paper, canopy wash, wood, grass and the figure, pre-rasterized at canvas
   /// size for the current shed level.
   final ui.Image background;
-  final ui.ImageShader grainShader;
   final ui.Image atlas;
 
   /// Same sprites as [atlas], baked brighter — used for leaves resting on the
@@ -1561,6 +1679,10 @@ class _LifeTreePainter extends CustomPainter {
   final List<Rect> leafCellRects;
   final Float32List rstBuffer;
   final Float32List rectBuffer;
+
+  /// cos, sin and roll for each wash cell, in that order — see
+  /// [_resolveCellSway].
+  final Float32List cellSwayBuffer;
   final Float32List landedRstBuffer;
   final Float32List landedRectBuffer;
   final List<Offset> restPositions;
@@ -1570,6 +1692,11 @@ class _LifeTreePainter extends CustomPainter {
   /// in the canopy, keyed by leaf index — see [fallenLeafDiameterFor].
   final Float32List fallenDiameters;
   final int colorCount;
+
+  /// Multiplier on the size a canopy speck is drawn at — see
+  /// [_LifeTreeCanvasState._nightLeafScale]. Canopy only; a leaf already on
+  /// the ground is drawn at its own fixed pixel size.
+  final double stippleScale;
 
   /// The per-frame values, shared with the state and listened to for repaints.
   final _TreeAnimation animation;
@@ -1604,7 +1731,7 @@ class _LifeTreePainter extends CustomPainter {
       geometry.trunkTop.dx * size.width,
       geometry.trunkTop.dy * size.height,
     );
-    final transforms = _resolveCellTransforms(size);
+    _resolveCellSway();
 
     canvas.drawImageRect(
       background,
@@ -1618,7 +1745,7 @@ class _LifeTreePainter extends CustomPainter {
     // a degree on pigment this faint the motion was never visible, and holding
     // it still is what lets the whole background be one texture. The stipple
     // over it still sways and breathes.
-    _paintStipple(canvas, size, transforms, pivot, breathe);
+    _paintStipple(canvas, size, pivot, breathe);
 
     if (hoverGlow > 0.001) _paintTreeGlow(canvas, size);
   }
@@ -1656,24 +1783,24 @@ class _LifeTreePainter extends CustomPainter {
 
   /// The canopy breathes as one: every cell shares a slow global scale about
   /// the trunk's fork, with only a fractional-degree roll of its own. A gust
-  /// adds a brief localized shiver.
-  List<_CellTransform> _resolveCellTransforms(Size size) {
-    final pivot = Offset(
-      geometry.trunkTop.dx * size.width,
-      geometry.trunkTop.dy * size.height,
-    );
-    return [
-      for (final cell in geometry.cells)
-        () {
-          var shiver = 0.0;
-          for (final gust in gusts) {
-            shiver += gust.extraAt(cell.center);
-          }
-          final roll = math.sin(time * 0.34 + cell.swayPhase) * 0.006 +
-              math.sin(time * 7.5 + cell.swayPhase) * 0.02 * shiver;
-          return _CellTransform(math.cos(roll), math.sin(roll), pivot, roll);
-        }(),
-    ];
+  /// adds a brief localized shiver. Written into [cellSwayBuffer] in place —
+  /// the pivot and the breathe are the same for every cell, so all a cell
+  /// actually carries is its own rotation.
+  void _resolveCellSway() {
+    final cells = geometry.cells;
+    for (var i = 0; i < cells.length; i++) {
+      final cell = cells[i];
+      var shiver = 0.0;
+      for (final gust in gusts) {
+        shiver += gust.extraAt(cell.center);
+      }
+      final roll = math.sin(time * 0.34 + cell.swayPhase) * 0.006 +
+          math.sin(time * 7.5 + cell.swayPhase) * 0.02 * shiver;
+      final at = i * 3;
+      cellSwayBuffer[at] = math.cos(roll);
+      cellSwayBuffer[at + 1] = math.sin(roll);
+      cellSwayBuffer[at + 2] = roll;
+    }
   }
 
   /// Every one of the 4160 weeks, as one speck of blossom over the wash.
@@ -1682,7 +1809,6 @@ class _LifeTreePainter extends CustomPainter {
   void _paintStipple(
     Canvas canvas,
     Size size,
-    List<_CellTransform> transforms,
     Offset pivot,
     double breathe,
   ) {
@@ -1710,13 +1836,14 @@ class _LifeTreePainter extends CustomPainter {
         angle = restRotations[i];
       } else {
         // Still on the tree: sways with its pool, breathes with the crown.
-        final transform = transforms[leaf.cellIndex];
-        final swayed = transform.apply(
-          Offset(leaf.position.dx * size.width, leaf.position.dy * size.height),
-        );
-        x = pivot.dx + (swayed.dx - pivot.dx) * breathe;
-        y = pivot.dy + (swayed.dy - pivot.dy) * breathe;
-        angle = leaf.baseAngle + transform.roll;
+        final at = leaf.cellIndex * 3;
+        final cos = cellSwayBuffer[at];
+        final sin = cellSwayBuffer[at + 1];
+        final dx = leaf.position.dx * size.width - pivot.dx;
+        final dy = leaf.position.dy * size.height - pivot.dy;
+        x = pivot.dx + (dx * cos - dy * sin) * breathe;
+        y = pivot.dy + (dx * sin + dy * cos) * breathe;
+        angle = leaf.baseAngle + cellSwayBuffer[at + 2];
       }
 
       // Grounded leaves are drawn at a fixed pixel size matching the
@@ -1724,7 +1851,7 @@ class _LifeTreePainter extends CustomPainter {
       // while still part of the canopy texture.
       final scale = settled
           ? fallenDiameters[i] / _spriteExtent
-          : leaf.size * size.shortestSide * 2 / _spriteExtent;
+          : leaf.size * size.shortestSide * 2 * stippleScale / _spriteExtent;
       final scos = math.cos(angle) * scale;
       final ssin = math.sin(angle) * scale;
 
@@ -1792,6 +1919,7 @@ class _LifeTreePainter extends CustomPainter {
         !identical(oldDelegate.landedAtlas, landedAtlas) ||
         !identical(oldDelegate.geometry, geometry) ||
         oldDelegate.colorCount != colorCount ||
+        oldDelegate.stippleScale != stippleScale ||
         oldDelegate.glowColor != glowColor;
   }
 }
