@@ -704,6 +704,29 @@ void main() {
     });
   });
 
+  group('alphanumeric runs', () {
+    _desktopWidgets('a letter run touching a digit is left alone', (
+      tester,
+    ) async {
+      // The squiggle drops `3wtih` whole because the run holds a digit, so
+      // the correction has to stay off it too — otherwise autocorrect
+      // rewrites a model number the checker says nothing about.
+      await pumpField(tester, text: '3');
+      await type(tester, 'wtih ');
+      expect(controller.text, '3wtih ');
+    });
+
+    _desktopWidgets('a digit typed after the word does not stop it', (
+      tester,
+    ) async {
+      // Sanity check the guard is about the run and not about digits being
+      // anywhere in the field.
+      await pumpField(tester, text: '3 ');
+      await type(tester, 'wtih ');
+      expect(controller.text, '3 with ');
+    });
+  });
+
   // `FLAGGED_WORDS.md` §5: a flagged word is unknown, and a flag that stores a
   // replacement is a rule the user wrote rather than a guess the cascade made.
   group('flagged words', () {

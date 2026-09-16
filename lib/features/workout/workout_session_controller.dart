@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -15,6 +16,7 @@ class ActiveWorkoutState {
     this.logs = const [],
     this.exercisesById = const {},
     this.cursor = 0,
+    this.segmentIndex = 0,
     this.restEndsAt,
     this.restTotalSeconds = 0,
     this.expanded = false,
@@ -28,6 +30,9 @@ class ActiveWorkoutState {
 
   /// Index into [logs] of the set the wheels are currently dialling.
   final int cursor;
+
+  /// 0 = top/main segment of [currentSet]; 1+ = drop segment index + 1.
+  final int segmentIndex;
 
   /// Wall-clock end of the running rest countdown, or null when not resting.
   /// Stored as an instant rather than a remaining duration so the countdown
@@ -73,12 +78,22 @@ class ActiveWorkoutState {
   bool get isResting =>
       restEndsAt != null && restEndsAt!.isAfter(DateTime.now());
 
+  SetSegment? get currentSegment {
+    final set = currentSet;
+    if (set == null) return null;
+    final segments = set.allSegments;
+    if (segments.isEmpty) return null;
+    final index = segmentIndex.clamp(0, segments.length - 1);
+    return segments[index];
+  }
+
   ActiveWorkoutState copyWith({
     WorkoutSession? session,
     bool clearSession = false,
     List<WorkoutSetLog>? logs,
     Map<String, Exercise>? exercisesById,
     int? cursor,
+    int? segmentIndex,
     DateTime? restEndsAt,
     bool clearRest = false,
     int? restTotalSeconds,
@@ -89,8 +104,11 @@ class ActiveWorkoutState {
       logs: logs ?? this.logs,
       exercisesById: exercisesById ?? this.exercisesById,
       cursor: cursor ?? this.cursor,
+      segmentIndex: segmentIndex ?? this.segmentIndex,
       restEndsAt: clearRest ? null : (restEndsAt ?? this.restEndsAt),
-      restTotalSeconds: clearRest ? 0 : (restTotalSeconds ?? this.restTotalSeconds),
+      restTotalSeconds: clearRest
+          ? 0
+          : (restTotalSeconds ?? this.restTotalSeconds),
       expanded: expanded ?? this.expanded,
     );
   }
@@ -186,22 +204,49 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
     for (var order = 0; order < dayEntries.length; order++) {
       final entry = dayEntries[order];
       final exercise = exercisesById[entry.exerciseId]!;
-      for (var setIndex = 0; setIndex < exercise.targetSets; setIndex++) {
-        logs.add(
-          WorkoutSetLog(
-            id: newId(),
-            sessionId: session.id,
-            exerciseId: entry.exerciseId,
-            exerciseOrder: order,
-            setIndex: setIndex,
-            weightKg: exercise.targetWeightKg,
-            reps: exercise.targetReps,
-            plannedWeightKg: exercise.targetWeightKg,
-            plannedReps: exercise.targetReps,
-            createdAt: now,
-            updatedAt: now,
-          ),
-        );
+      if (entry.isCustomPrescription) {
+        for (var setIndex = 0;
+            setIndex < entry.setPrescriptions.length;
+            setIndex++) {
+          final prescription = entry.setPrescriptions[setIndex];
+          final top = prescription.top;
+          final drops = prescription.drops;
+          logs.add(
+            WorkoutSetLog(
+              id: newId(),
+              sessionId: session.id,
+              exerciseId: entry.exerciseId,
+              exerciseOrder: order,
+              setIndex: setIndex,
+              weightKg: top.weightKg,
+              reps: top.reps,
+              plannedWeightKg: top.weightKg,
+              plannedReps: top.reps,
+              dropSegments: drops,
+              plannedDropSegments: drops,
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+        }
+      } else {
+        for (var setIndex = 0; setIndex < exercise.targetSets; setIndex++) {
+          logs.add(
+            WorkoutSetLog(
+              id: newId(),
+              sessionId: session.id,
+              exerciseId: entry.exerciseId,
+              exerciseOrder: order,
+              setIndex: setIndex,
+              weightKg: exercise.targetWeightKg,
+              reps: exercise.targetReps,
+              plannedWeightKg: exercise.targetWeightKg,
+              plannedReps: exercise.targetReps,
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+        }
       }
     }
 
@@ -228,20 +273,76 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
   /// expanded view and by tapping a set row.
   void focusSet(String logId) {
     final index = state.logs.indexWhere((l) => l.id == logId);
-    if (index == -1 || index == state.cursor) return;
-    state = state.copyWith(cursor: index);
+    if (index == -1) return;
+    if (index == state.cursor && state.segmentIndex == 0) return;
+    state = state.copyWith(cursor: index, segmentIndex: 0);
   }
 
-  /// Applies a wheel change to the current set. Only touches this session's
-  /// log — the plan entry it came from is deliberately left alone, which is
-  /// what makes a heavy or light day a one-off dip rather than a new baseline.
+  /// Focuses a segment within the current set (0 = top, 1+ = drops).
+  void focusSegment(int segmentIndex) {
+    final set = state.currentSet;
+    if (set == null) return;
+    final max = set.allSegments.length - 1;
+    final next = segmentIndex.clamp(0, max < 0 ? 0 : max);
+    if (next == state.segmentIndex) return;
+    state = state.copyWith(segmentIndex: next);
+  }
+
+  /// Applies a wheel change to the focused segment of the current set.
   Future<void> updateCurrentSet({double? weightKg, int? reps}) async {
     final set = state.currentSet;
     if (set == null) return;
     if (weightKg == null && reps == null) return;
 
-    final updated = set.copyWith(weightKg: weightKg, reps: reps);
+    final segment = state.segmentIndex;
+    late final WorkoutSetLog updated;
+    if (segment <= 0) {
+      updated = set.copyWith(weightKg: weightKg, reps: reps);
+    } else {
+      final drops = [...set.dropSegments];
+      final dropIndex = segment - 1;
+      if (dropIndex >= drops.length) return;
+      final current = drops[dropIndex];
+      drops[dropIndex] = SetSegment(
+        weightKg: weightKg ?? current.weightKg,
+        reps: reps ?? current.reps,
+      );
+      updated = set.copyWith(dropSegments: drops);
+    }
     _replaceLog(updated);
+    await _repo.upsertSetLog(updated);
+    _ref.read(remoteSyncServiceProvider).pushWorkoutSetLog(updated);
+  }
+
+  /// Appends a drop to the current set, seeded from the last segment − X.
+  Future<void> addDropToCurrentSet(WeightUnit unit) async {
+    final set = state.currentSet;
+    if (set == null || set.dropSegments.length >= kMaxDropsPerSet) return;
+    final prev = set.allSegments.last;
+    final updated = set.copyWith(
+      dropSegments: [...set.dropSegments, nextDropSegment(prev, unit)],
+    );
+    _replaceLog(updated);
+    state = state.copyWith(segmentIndex: updated.allSegments.length - 1);
+    await _repo.upsertSetLog(updated);
+    _ref.read(remoteSyncServiceProvider).pushWorkoutSetLog(updated);
+  }
+
+  /// Removes a drop segment (1-based into [WorkoutSetLog.dropSegments]).
+  Future<void> removeDropFromCurrentSet(int dropIndex) async {
+    final set = state.currentSet;
+    if (set == null) return;
+    if (dropIndex < 0 || dropIndex >= set.dropSegments.length) return;
+    final drops = [
+      for (var i = 0; i < set.dropSegments.length; i++)
+        if (i != dropIndex) set.dropSegments[i],
+    ];
+    final updated = set.copyWith(dropSegments: drops);
+    final nextSegment = state.segmentIndex > dropIndex + 1
+        ? state.segmentIndex - 1
+        : state.segmentIndex.clamp(0, updated.allSegments.length - 1);
+    _replaceLog(updated);
+    state = state.copyWith(segmentIndex: nextSegment);
     await _repo.upsertSetLog(updated);
     _ref.read(remoteSyncServiceProvider).pushWorkoutSetLog(updated);
   }
@@ -259,7 +360,7 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
     _invalidate();
 
     final next = _firstIncompleteIndex(state.logs);
-    state = state.copyWith(cursor: next);
+    state = state.copyWith(cursor: next, segmentIndex: 0);
 
     final settings = _ref.read(settingsProvider).valueOrNull;
     if (settings != null &&

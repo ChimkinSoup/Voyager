@@ -32,6 +32,9 @@ Future<void> main() async {
   } catch (_) {
     // Ignore if another instance owns global hotkeys.
   }
+  // The bootstrap initializes the outbox a frame after launch; an upload that
+  // fails before then is held for it rather than forgotten.
+  OutboxSyncWorker.holdRecordsUntilInitialized();
   runApp(const ProviderScope(child: VoyagerBootstrap()));
 }
 
@@ -234,6 +237,14 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
           await remoteSync.pullAll();
           if (!mounted) return;
           liveSync.start();
+          // The controller is rebuilt with the sync service — signing out and
+          // back in swaps both — and a rebuilt one starts stopped. Start each
+          // replacement too, or live sync stays off for the rest of the
+          // session after the first sign-in change.
+          ref.listenManual(
+            liveSyncProvider,
+            (_, controller) => controller.start(),
+          );
           // Uploads parked by a permanent refusal get one more shot per
           // launch — otherwise a Storage rule that has since been fixed
           // leaves every image attached before the fix stranded for good.

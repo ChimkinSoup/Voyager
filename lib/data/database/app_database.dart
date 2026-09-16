@@ -14,7 +14,8 @@ import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart' show jobCalendarDay;
 import 'package:voyager/domain/models/journal_models.dart' show kDefaultMood;
 import 'package:voyager/domain/models/leetcode_models.dart';
-import 'package:voyager/domain/models/settings_models.dart' show defaultPetalColor;
+import 'package:voyager/domain/models/settings_models.dart'
+    show JobExperienceSnippet, Snippet, defaultPetalColor;
 import 'package:voyager/domain/services/color_palette_codec.dart';
 
 part 'app_database.g.dart';
@@ -570,9 +571,9 @@ class SettingsTable extends Table {
   TextColumn get snippetExpandKey =>
       text().withDefault(const Constant('tab'))();
 
-  /// The snippet list as a JSON array of [Snippet.toJson] maps. One column
-  /// rather than a table of its own: the list is small, always read whole, and
-  /// syncs as a single settings field.
+  /// Legacy: the snippet list as a JSON array, from before snippets became
+  /// records in [SnippetsTable]. The v115 migration moves it there and clears
+  /// it; nothing reads or writes it since.
   TextColumn get snippetsJson => text().nullable()();
   TextColumn get deviceId => text().nullable()();
   TextColumn get lastViewedJournalId => text().nullable()();
@@ -736,10 +737,8 @@ class SettingsTable extends Table {
   TextColumn get jobProfileGitHubUrl => text().nullable()();
   TextColumn get jobProfilePortfolioUrl => text().nullable()();
 
-  /// The Jobs header's experience snippets, as a JSON array of
-  /// [JobExperienceSnippet.toJson] maps in display order. One column for the
-  /// same reason as [snippetsJson]: small, always read whole, synced as one
-  /// settings field.
+  /// Legacy, like [snippetsJson]: moved into [JobExperienceSnippetsTable] by
+  /// the v115 migration.
   TextColumn get jobExperienceSnippetsJson => text().nullable()();
   RealColumn get dreamSplitWidth => real().nullable()();
   BoolColumn get showDreamStatistics =>
@@ -871,6 +870,41 @@ class FlaggedWordsTable extends Table {
 class CustomQuotesTable extends Table {
   TextColumn get id => text()();
   TextColumn get quote => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// The user's text-expansion snippets, one synced record each — see
+/// `SyncedListItem` for why they left the settings row.
+class SnippetsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get trigger => text()();
+  TextColumn get replacement => text()();
+  BoolColumn get autoExpand => boolean().withDefault(const Constant(false))();
+  BoolColumn get wordBoundary =>
+      boolean().withDefault(const Constant(false))();
+  RealColumn get position => real()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// The Jobs header's experience snippets, one synced record each, ordered by
+/// [position] — the first three are the header's chips.
+class JobExperienceSnippetsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get description => text()();
+  RealColumn get position => real()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -1068,15 +1102,23 @@ UPDATE exercises_table SET
   ), target_weight_kg)
 ''';
 
-/// A placement only — which movement sits on which day, in what order. The
-/// sets/reps/weight it used to carry moved to [ExercisesTable] so they are
-/// global to the movement; see the v68 migration.
+/// A placement — which movement sits on which day, in what order. Uniform
+/// targets still live on [ExercisesTable] ([WorkoutPrescriptionMode.inherit]);
+/// custom per-day recipes (varying sets / drops) live on this row.
 class WorkoutPlanEntriesTable extends Table {
   TextColumn get id => text()();
   TextColumn get planId => text()();
   IntColumn get dayIndex => integer()();
   TextColumn get exerciseId => text()();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  /// `inherit` | `custom` — see [WorkoutPrescriptionMode].
+  TextColumn get prescriptionMode =>
+      text().withDefault(const Constant('inherit'))();
+
+  /// JSON list of set prescriptions when [prescriptionMode] is custom.
+  TextColumn get setPrescriptionsJson =>
+      text().withDefault(const Constant('[]'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -1115,6 +1157,12 @@ class WorkoutSetLogsTable extends Table {
   IntColumn get reps => integer().withDefault(const Constant(0))();
   RealColumn get plannedWeightKg => real().withDefault(const Constant(0))();
   IntColumn get plannedReps => integer().withDefault(const Constant(0))();
+
+  /// JSON list of drop segments after the top weight/reps columns.
+  TextColumn get dropSegmentsJson =>
+      text().withDefault(const Constant('[]'))();
+  TextColumn get plannedDropSegmentsJson =>
+      text().withDefault(const Constant('[]'))();
   BoolColumn get completed => boolean().withDefault(const Constant(false))();
   DateTimeColumn get completedAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
@@ -1482,6 +1530,8 @@ class RankingChildrenTable extends Table {
     CustomWordsTable,
     FlaggedWordsTable,
     CustomQuotesTable,
+    SnippetsTable,
+    JobExperienceSnippetsTable,
     BucketListItemsTable,
     LeetCodeProblemsTable,
     StudyFoldersTable,
@@ -1511,7 +1561,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 114;
+  int get schemaVersion => 116;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2794,8 +2844,90 @@ class AppDatabase extends _$AppDatabase {
           settingsTable.customQuotesOnly,
         );
       }
+      if (from < 115) {
+        await migrator.createTable(snippetsTable);
+        await migrator.createTable(jobExperienceSnippetsTable);
+        await _moveSnippetListsIntoTables();
+      }
+      if (from < 116) {
+        await migrator.addColumn(
+          workoutPlanEntriesTable,
+          workoutPlanEntriesTable.prescriptionMode,
+        );
+        await migrator.addColumn(
+          workoutPlanEntriesTable,
+          workoutPlanEntriesTable.setPrescriptionsJson,
+        );
+        await migrator.addColumn(
+          workoutSetLogsTable,
+          workoutSetLogsTable.dropSegmentsJson,
+        );
+        await migrator.addColumn(
+          workoutSetLogsTable,
+          workoutSetLogsTable.plannedDropSegmentsJson,
+        );
+      }
     },
   );
+
+  /// v115: copies the two JSON snippet lists out of the settings row into
+  /// their own tables, in list order, then clears the columns.
+  ///
+  /// Version 0 and the settings row's clock, so a copy of the same snippet
+  /// another device already uploaded — possibly edited since — outranks this
+  /// one on the first pull, and only the newer of two unedited copies wins.
+  Future<void> _moveSnippetListsIntoTables() async {
+    final row = await customSelect(
+      'SELECT snippets_json, job_experience_snippets_json, updated_at '
+      'FROM settings_table WHERE id = 1',
+    ).getSingleOrNull();
+    if (row == null) return;
+    final stamp =
+        row.read<DateTime?>('updated_at')?.toUtc() ?? DateTime.now().toUtc();
+
+    final snippetsJson = row.read<String?>('snippets_json');
+    if (snippetsJson != null) {
+      final snippets = Snippet.listFromJson(jsonDecode(snippetsJson));
+      for (var i = 0; i < snippets.length; i++) {
+        final snippet = snippets[i];
+        await into(snippetsTable).insertOnConflictUpdate(
+          SnippetsTableCompanion.insert(
+            id: snippet.id,
+            trigger: snippet.trigger,
+            replacement: snippet.replacement,
+            autoExpand: Value(snippet.autoExpand),
+            wordBoundary: Value(snippet.wordBoundary),
+            position: i.toDouble(),
+            createdAt: stamp,
+            updatedAt: stamp,
+          ),
+        );
+      }
+    }
+
+    final jobsJson = row.read<String?>('job_experience_snippets_json');
+    if (jobsJson != null) {
+      final snippets = JobExperienceSnippet.listFromJson(jsonDecode(jobsJson));
+      for (var i = 0; i < snippets.length; i++) {
+        final snippet = snippets[i];
+        await into(jobExperienceSnippetsTable).insertOnConflictUpdate(
+          JobExperienceSnippetsTableCompanion.insert(
+            id: snippet.id,
+            name: snippet.name,
+            description: snippet.description,
+            position: i.toDouble(),
+            createdAt: stamp,
+            updatedAt: stamp,
+          ),
+        );
+      }
+    }
+
+    await customStatement(
+      'UPDATE settings_table SET snippets_json = NULL, '
+      'job_experience_snippets_json = NULL WHERE id = 1',
+    );
+  }
 
   /// Rewrites every application's `date_applied` from the instant of a local
   /// midnight to UTC midnight of the same calendar day — see `jobCalendarDay`.

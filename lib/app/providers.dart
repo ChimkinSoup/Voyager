@@ -31,6 +31,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_write_gate.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
+import 'package:voyager/domain/services/character_op_session.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
 import 'package:voyager/core/sync/synced_write_notifier.dart';
@@ -451,10 +452,20 @@ final syncEngineProvider = Provider<SyncEngine>((ref) {
 });
 
 final weatherApiClientProvider = Provider<WeatherApiClient>((ref) {
-  final settings = ref.watch(settingsProvider).valueOrNull;
-  if (kDebugMode && (settings?.devUseDirectOpenWeather ?? false)) {
+  // Only the two fields this reads. Watching the whole settings row rebuilt
+  // the client on every settings save, and with it [weatherServiceProvider]
+  // and [remoteSyncServiceProvider], which is built from it — see there.
+  final direct = ref.watch(
+    settingsProvider.select(
+      (s) => (
+        use: s.valueOrNull?.devUseDirectOpenWeather ?? false,
+        key: s.valueOrNull?.devOpenWeatherApiKey,
+      ),
+    ),
+  );
+  if (kDebugMode && direct.use) {
     final key =
-        settings?.devOpenWeatherApiKey?.trim() ??
+        direct.key?.trim() ??
         (_openWeatherApiKey.isNotEmpty ? _openWeatherApiKey : null);
     if (key != null && key.isNotEmpty) {
       return DevOpenWeatherClient(apiKey: key);
@@ -485,8 +496,23 @@ final weatherServiceProvider = Provider<WeatherService>((ref) {
   );
 });
 
+/// Character operations recorded since each document's last upload.
+///
+/// Held here rather than inside [RemoteSyncService] so they outlive it: the
+/// service is rebuilt whenever a dependency changes, and its disposal cleared
+/// the registry — every operation typed since the last upload, gone, with the
+/// text still on screen and in SQLite and never again re-emitted.
+final charOpRegistryProvider = Provider<CharacterOpRegistry>(
+  (ref) => CharacterOpRegistry(),
+);
+
 final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
-  final settings = ref.watch(settingsProvider).valueOrNull;
+  // Read, not watched: [forceConflictUi] is kept current by the listener
+  // below. Watching rebuilt — and disposed — this service on every settings
+  // save, including the ones page navigation makes, and the startup
+  // `ref.invalidate(settingsProvider)` landed right after live sync started,
+  // disposing the controller it had just started.
+  final settings = ref.read(settingsProvider).valueOrNull;
   final service = RemoteSyncService(
     syncRepository: ref.watch(syncRepositoryProvider),
     journalRepository: ref.watch(journalRepositoryProvider),
@@ -508,6 +534,7 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
     syncEngine: ref.watch(syncEngineProvider),
     syncConflictRepository: ref.watch(syncConflictRepositoryProvider),
     syncActivity: ref.read(syncActivityProvider),
+    charOpRegistry: ref.watch(charOpRegistryProvider),
     deviceId: ref.watch(deviceIdProvider),
     forceConflictUi: settings?.devForceConflictUi ?? false,
   );
@@ -719,9 +746,58 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
   /// first — two deltas against one base, each cancelling the other.
   /// Publishing first makes each delta apply to the outcome of the one before
   /// it.
+  ///
+  /// The two snippet lists are published as they currently are, not as
+  /// [settings] carries them: the repository doesn't write them (see
+  /// [saveSnippets]), so a caller holding an older copy must not make a
+  /// snippet that arrived since disappear from the screen.
   Future<void> saveSettings(AppSettings settings) async {
-    state = AsyncData(settings);
+    final current = state.valueOrNull;
+    state = AsyncData(
+      current == null
+          ? settings
+          : settings.copyWith(
+              snippets: current.snippets,
+              jobExperienceSnippets: current.jobExperienceSnippets,
+            ),
+    );
     await ref.read(settingsRepositoryProvider).saveSettings(settings);
+  }
+
+  /// Persists the user's edit to [AppSettings.snippets] — [before] is the list
+  /// the editor started from, [after] the one it produced — as a change to
+  /// just the snippets it touched, then publishes the stored list.
+  Future<void> saveSnippets(List<Snippet> before, List<Snippet> after) async {
+    final current = state.valueOrNull;
+    if (current != null) state = AsyncData(current.copyWith(snippets: after));
+    final repository = ref.read(settingsRepositoryProvider);
+    await repository.applySnippetEdit(before, after);
+    final stored = [
+      for (final record in await repository.getSnippetRecords()) record.item,
+    ];
+    final latest = state.valueOrNull;
+    if (latest != null) state = AsyncData(latest.copyWith(snippets: stored));
+  }
+
+  /// [saveSnippets] for [AppSettings.jobExperienceSnippets].
+  Future<void> saveJobExperienceSnippets(
+    List<JobExperienceSnippet> before,
+    List<JobExperienceSnippet> after,
+  ) async {
+    final current = state.valueOrNull;
+    if (current != null) {
+      state = AsyncData(current.copyWith(jobExperienceSnippets: after));
+    }
+    final repository = ref.read(settingsRepositoryProvider);
+    await repository.applyJobExperienceSnippetEdit(before, after);
+    final stored = [
+      for (final record in await repository.getJobExperienceSnippetRecords())
+        record.item,
+    ];
+    final latest = state.valueOrNull;
+    if (latest != null) {
+      state = AsyncData(latest.copyWith(jobExperienceSnippets: stored));
+    }
   }
 }
 

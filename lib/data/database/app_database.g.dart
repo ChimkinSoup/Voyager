@@ -10809,9 +10809,9 @@ class SettingsTableData extends DataClass
   /// [SnippetExpandKey] name — 'tab' or 'space'.
   final String snippetExpandKey;
 
-  /// The snippet list as a JSON array of [Snippet.toJson] maps. One column
-  /// rather than a table of its own: the list is small, always read whole, and
-  /// syncs as a single settings field.
+  /// Legacy: the snippet list as a JSON array, from before snippets became
+  /// records in [SnippetsTable]. The v115 migration moves it there and clears
+  /// it; nothing reads or writes it since.
   final String? snippetsJson;
   final String? deviceId;
   final String? lastViewedJournalId;
@@ -10920,10 +10920,8 @@ class SettingsTableData extends DataClass
   final String? jobProfileGitHubUrl;
   final String? jobProfilePortfolioUrl;
 
-  /// The Jobs header's experience snippets, as a JSON array of
-  /// [JobExperienceSnippet.toJson] maps in display order. One column for the
-  /// same reason as [snippetsJson]: small, always read whole, synced as one
-  /// settings field.
+  /// Legacy, like [snippetsJson]: moved into [JobExperienceSnippetsTable] by
+  /// the v115 migration.
   final String? jobExperienceSnippetsJson;
   final double? dreamSplitWidth;
   final bool showDreamStatistics;
@@ -24949,6 +24947,1153 @@ class CustomQuotesTableCompanion
   }
 }
 
+class $SnippetsTableTable extends SnippetsTable
+    with TableInfo<$SnippetsTableTable, SnippetsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SnippetsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _triggerMeta = const VerificationMeta(
+    'trigger',
+  );
+  @override
+  late final GeneratedColumn<String> trigger = GeneratedColumn<String>(
+    'trigger',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _replacementMeta = const VerificationMeta(
+    'replacement',
+  );
+  @override
+  late final GeneratedColumn<String> replacement = GeneratedColumn<String>(
+    'replacement',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _autoExpandMeta = const VerificationMeta(
+    'autoExpand',
+  );
+  @override
+  late final GeneratedColumn<bool> autoExpand = GeneratedColumn<bool>(
+    'auto_expand',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("auto_expand" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _wordBoundaryMeta = const VerificationMeta(
+    'wordBoundary',
+  );
+  @override
+  late final GeneratedColumn<bool> wordBoundary = GeneratedColumn<bool>(
+    'word_boundary',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("word_boundary" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<double> position = GeneratedColumn<double>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    trigger,
+    replacement,
+    autoExpand,
+    wordBoundary,
+    position,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'snippets_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SnippetsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('trigger')) {
+      context.handle(
+        _triggerMeta,
+        trigger.isAcceptableOrUnknown(data['trigger']!, _triggerMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_triggerMeta);
+    }
+    if (data.containsKey('replacement')) {
+      context.handle(
+        _replacementMeta,
+        replacement.isAcceptableOrUnknown(
+          data['replacement']!,
+          _replacementMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_replacementMeta);
+    }
+    if (data.containsKey('auto_expand')) {
+      context.handle(
+        _autoExpandMeta,
+        autoExpand.isAcceptableOrUnknown(data['auto_expand']!, _autoExpandMeta),
+      );
+    }
+    if (data.containsKey('word_boundary')) {
+      context.handle(
+        _wordBoundaryMeta,
+        wordBoundary.isAcceptableOrUnknown(
+          data['word_boundary']!,
+          _wordBoundaryMeta,
+        ),
+      );
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_positionMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SnippetsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SnippetsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      trigger: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}trigger'],
+      )!,
+      replacement: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}replacement'],
+      )!,
+      autoExpand: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}auto_expand'],
+      )!,
+      wordBoundary: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}word_boundary'],
+      )!,
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}position'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $SnippetsTableTable createAlias(String alias) {
+    return $SnippetsTableTable(attachedDatabase, alias);
+  }
+}
+
+class SnippetsTableData extends DataClass
+    implements Insertable<SnippetsTableData> {
+  final String id;
+  final String trigger;
+  final String replacement;
+  final bool autoExpand;
+  final bool wordBoundary;
+  final double position;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const SnippetsTableData({
+    required this.id,
+    required this.trigger,
+    required this.replacement,
+    required this.autoExpand,
+    required this.wordBoundary,
+    required this.position,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['trigger'] = Variable<String>(trigger);
+    map['replacement'] = Variable<String>(replacement);
+    map['auto_expand'] = Variable<bool>(autoExpand);
+    map['word_boundary'] = Variable<bool>(wordBoundary);
+    map['position'] = Variable<double>(position);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  SnippetsTableCompanion toCompanion(bool nullToAbsent) {
+    return SnippetsTableCompanion(
+      id: Value(id),
+      trigger: Value(trigger),
+      replacement: Value(replacement),
+      autoExpand: Value(autoExpand),
+      wordBoundary: Value(wordBoundary),
+      position: Value(position),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory SnippetsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SnippetsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      trigger: serializer.fromJson<String>(json['trigger']),
+      replacement: serializer.fromJson<String>(json['replacement']),
+      autoExpand: serializer.fromJson<bool>(json['autoExpand']),
+      wordBoundary: serializer.fromJson<bool>(json['wordBoundary']),
+      position: serializer.fromJson<double>(json['position']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'trigger': serializer.toJson<String>(trigger),
+      'replacement': serializer.toJson<String>(replacement),
+      'autoExpand': serializer.toJson<bool>(autoExpand),
+      'wordBoundary': serializer.toJson<bool>(wordBoundary),
+      'position': serializer.toJson<double>(position),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  SnippetsTableData copyWith({
+    String? id,
+    String? trigger,
+    String? replacement,
+    bool? autoExpand,
+    bool? wordBoundary,
+    double? position,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => SnippetsTableData(
+    id: id ?? this.id,
+    trigger: trigger ?? this.trigger,
+    replacement: replacement ?? this.replacement,
+    autoExpand: autoExpand ?? this.autoExpand,
+    wordBoundary: wordBoundary ?? this.wordBoundary,
+    position: position ?? this.position,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  SnippetsTableData copyWithCompanion(SnippetsTableCompanion data) {
+    return SnippetsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      trigger: data.trigger.present ? data.trigger.value : this.trigger,
+      replacement: data.replacement.present
+          ? data.replacement.value
+          : this.replacement,
+      autoExpand: data.autoExpand.present
+          ? data.autoExpand.value
+          : this.autoExpand,
+      wordBoundary: data.wordBoundary.present
+          ? data.wordBoundary.value
+          : this.wordBoundary,
+      position: data.position.present ? data.position.value : this.position,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SnippetsTableData(')
+          ..write('id: $id, ')
+          ..write('trigger: $trigger, ')
+          ..write('replacement: $replacement, ')
+          ..write('autoExpand: $autoExpand, ')
+          ..write('wordBoundary: $wordBoundary, ')
+          ..write('position: $position, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    trigger,
+    replacement,
+    autoExpand,
+    wordBoundary,
+    position,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SnippetsTableData &&
+          other.id == this.id &&
+          other.trigger == this.trigger &&
+          other.replacement == this.replacement &&
+          other.autoExpand == this.autoExpand &&
+          other.wordBoundary == this.wordBoundary &&
+          other.position == this.position &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class SnippetsTableCompanion extends UpdateCompanion<SnippetsTableData> {
+  final Value<String> id;
+  final Value<String> trigger;
+  final Value<String> replacement;
+  final Value<bool> autoExpand;
+  final Value<bool> wordBoundary;
+  final Value<double> position;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const SnippetsTableCompanion({
+    this.id = const Value.absent(),
+    this.trigger = const Value.absent(),
+    this.replacement = const Value.absent(),
+    this.autoExpand = const Value.absent(),
+    this.wordBoundary = const Value.absent(),
+    this.position = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SnippetsTableCompanion.insert({
+    required String id,
+    required String trigger,
+    required String replacement,
+    this.autoExpand = const Value.absent(),
+    this.wordBoundary = const Value.absent(),
+    required double position,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       trigger = Value(trigger),
+       replacement = Value(replacement),
+       position = Value(position),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<SnippetsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? trigger,
+    Expression<String>? replacement,
+    Expression<bool>? autoExpand,
+    Expression<bool>? wordBoundary,
+    Expression<double>? position,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (trigger != null) 'trigger': trigger,
+      if (replacement != null) 'replacement': replacement,
+      if (autoExpand != null) 'auto_expand': autoExpand,
+      if (wordBoundary != null) 'word_boundary': wordBoundary,
+      if (position != null) 'position': position,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SnippetsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? trigger,
+    Value<String>? replacement,
+    Value<bool>? autoExpand,
+    Value<bool>? wordBoundary,
+    Value<double>? position,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return SnippetsTableCompanion(
+      id: id ?? this.id,
+      trigger: trigger ?? this.trigger,
+      replacement: replacement ?? this.replacement,
+      autoExpand: autoExpand ?? this.autoExpand,
+      wordBoundary: wordBoundary ?? this.wordBoundary,
+      position: position ?? this.position,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (trigger.present) {
+      map['trigger'] = Variable<String>(trigger.value);
+    }
+    if (replacement.present) {
+      map['replacement'] = Variable<String>(replacement.value);
+    }
+    if (autoExpand.present) {
+      map['auto_expand'] = Variable<bool>(autoExpand.value);
+    }
+    if (wordBoundary.present) {
+      map['word_boundary'] = Variable<bool>(wordBoundary.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<double>(position.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SnippetsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('trigger: $trigger, ')
+          ..write('replacement: $replacement, ')
+          ..write('autoExpand: $autoExpand, ')
+          ..write('wordBoundary: $wordBoundary, ')
+          ..write('position: $position, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $JobExperienceSnippetsTableTable extends JobExperienceSnippetsTable
+    with
+        TableInfo<
+          $JobExperienceSnippetsTableTable,
+          JobExperienceSnippetsTableData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $JobExperienceSnippetsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<double> position = GeneratedColumn<double>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    description,
+    position,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'job_experience_snippets_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<JobExperienceSnippetsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_descriptionMeta);
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_positionMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  JobExperienceSnippetsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return JobExperienceSnippetsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      )!,
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}position'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $JobExperienceSnippetsTableTable createAlias(String alias) {
+    return $JobExperienceSnippetsTableTable(attachedDatabase, alias);
+  }
+}
+
+class JobExperienceSnippetsTableData extends DataClass
+    implements Insertable<JobExperienceSnippetsTableData> {
+  final String id;
+  final String name;
+  final String description;
+  final double position;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const JobExperienceSnippetsTableData({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.position,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['description'] = Variable<String>(description);
+    map['position'] = Variable<double>(position);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  JobExperienceSnippetsTableCompanion toCompanion(bool nullToAbsent) {
+    return JobExperienceSnippetsTableCompanion(
+      id: Value(id),
+      name: Value(name),
+      description: Value(description),
+      position: Value(position),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory JobExperienceSnippetsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return JobExperienceSnippetsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      description: serializer.fromJson<String>(json['description']),
+      position: serializer.fromJson<double>(json['position']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'description': serializer.toJson<String>(description),
+      'position': serializer.toJson<double>(position),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  JobExperienceSnippetsTableData copyWith({
+    String? id,
+    String? name,
+    String? description,
+    double? position,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => JobExperienceSnippetsTableData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    description: description ?? this.description,
+    position: position ?? this.position,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  JobExperienceSnippetsTableData copyWithCompanion(
+    JobExperienceSnippetsTableCompanion data,
+  ) {
+    return JobExperienceSnippetsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      position: data.position.present ? data.position.value : this.position,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JobExperienceSnippetsTableData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('description: $description, ')
+          ..write('position: $position, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    description,
+    position,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is JobExperienceSnippetsTableData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.description == this.description &&
+          other.position == this.position &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class JobExperienceSnippetsTableCompanion
+    extends UpdateCompanion<JobExperienceSnippetsTableData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> description;
+  final Value<double> position;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const JobExperienceSnippetsTableCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.description = const Value.absent(),
+    this.position = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  JobExperienceSnippetsTableCompanion.insert({
+    required String id,
+    required String name,
+    required String description,
+    required double position,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       description = Value(description),
+       position = Value(position),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<JobExperienceSnippetsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? description,
+    Expression<double>? position,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (description != null) 'description': description,
+      if (position != null) 'position': position,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  JobExperienceSnippetsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String>? description,
+    Value<double>? position,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return JobExperienceSnippetsTableCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      position: position ?? this.position,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<double>(position.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('JobExperienceSnippetsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('description: $description, ')
+          ..write('position: $position, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $BucketListItemsTableTable extends BucketListItemsTable
     with TableInfo<$BucketListItemsTableTable, BucketListItemsTableData> {
   @override
@@ -31062,6 +32207,30 @@ class $WorkoutPlanEntriesTableTable extends WorkoutPlanEntriesTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _prescriptionModeMeta = const VerificationMeta(
+    'prescriptionMode',
+  );
+  @override
+  late final GeneratedColumn<String> prescriptionMode = GeneratedColumn<String>(
+    'prescription_mode',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('inherit'),
+  );
+  static const VerificationMeta _setPrescriptionsJsonMeta =
+      const VerificationMeta('setPrescriptionsJson');
+  @override
+  late final GeneratedColumn<String> setPrescriptionsJson =
+      GeneratedColumn<String>(
+        'set_prescriptions_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('[]'),
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -31114,6 +32283,8 @@ class $WorkoutPlanEntriesTableTable extends WorkoutPlanEntriesTable
     dayIndex,
     exerciseId,
     sortOrder,
+    prescriptionMode,
+    setPrescriptionsJson,
     createdAt,
     updatedAt,
     version,
@@ -31164,6 +32335,24 @@ class $WorkoutPlanEntriesTableTable extends WorkoutPlanEntriesTable
       context.handle(
         _sortOrderMeta,
         sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('prescription_mode')) {
+      context.handle(
+        _prescriptionModeMeta,
+        prescriptionMode.isAcceptableOrUnknown(
+          data['prescription_mode']!,
+          _prescriptionModeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('set_prescriptions_json')) {
+      context.handle(
+        _setPrescriptionsJsonMeta,
+        setPrescriptionsJson.isAcceptableOrUnknown(
+          data['set_prescriptions_json']!,
+          _setPrescriptionsJsonMeta,
+        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -31226,6 +32415,14 @@ class $WorkoutPlanEntriesTableTable extends WorkoutPlanEntriesTable
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
+      prescriptionMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}prescription_mode'],
+      )!,
+      setPrescriptionsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}set_prescriptions_json'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -31258,6 +32455,12 @@ class WorkoutPlanEntriesTableData extends DataClass
   final int dayIndex;
   final String exerciseId;
   final int sortOrder;
+
+  /// `inherit` | `custom` — see [WorkoutPrescriptionMode].
+  final String prescriptionMode;
+
+  /// JSON list of set prescriptions when [prescriptionMode] is custom.
+  final String setPrescriptionsJson;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -31268,6 +32471,8 @@ class WorkoutPlanEntriesTableData extends DataClass
     required this.dayIndex,
     required this.exerciseId,
     required this.sortOrder,
+    required this.prescriptionMode,
+    required this.setPrescriptionsJson,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -31281,6 +32486,8 @@ class WorkoutPlanEntriesTableData extends DataClass
     map['day_index'] = Variable<int>(dayIndex);
     map['exercise_id'] = Variable<String>(exerciseId);
     map['sort_order'] = Variable<int>(sortOrder);
+    map['prescription_mode'] = Variable<String>(prescriptionMode);
+    map['set_prescriptions_json'] = Variable<String>(setPrescriptionsJson);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -31297,6 +32504,8 @@ class WorkoutPlanEntriesTableData extends DataClass
       dayIndex: Value(dayIndex),
       exerciseId: Value(exerciseId),
       sortOrder: Value(sortOrder),
+      prescriptionMode: Value(prescriptionMode),
+      setPrescriptionsJson: Value(setPrescriptionsJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -31317,6 +32526,10 @@ class WorkoutPlanEntriesTableData extends DataClass
       dayIndex: serializer.fromJson<int>(json['dayIndex']),
       exerciseId: serializer.fromJson<String>(json['exerciseId']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      prescriptionMode: serializer.fromJson<String>(json['prescriptionMode']),
+      setPrescriptionsJson: serializer.fromJson<String>(
+        json['setPrescriptionsJson'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -31332,6 +32545,8 @@ class WorkoutPlanEntriesTableData extends DataClass
       'dayIndex': serializer.toJson<int>(dayIndex),
       'exerciseId': serializer.toJson<String>(exerciseId),
       'sortOrder': serializer.toJson<int>(sortOrder),
+      'prescriptionMode': serializer.toJson<String>(prescriptionMode),
+      'setPrescriptionsJson': serializer.toJson<String>(setPrescriptionsJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -31345,6 +32560,8 @@ class WorkoutPlanEntriesTableData extends DataClass
     int? dayIndex,
     String? exerciseId,
     int? sortOrder,
+    String? prescriptionMode,
+    String? setPrescriptionsJson,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -31355,6 +32572,8 @@ class WorkoutPlanEntriesTableData extends DataClass
     dayIndex: dayIndex ?? this.dayIndex,
     exerciseId: exerciseId ?? this.exerciseId,
     sortOrder: sortOrder ?? this.sortOrder,
+    prescriptionMode: prescriptionMode ?? this.prescriptionMode,
+    setPrescriptionsJson: setPrescriptionsJson ?? this.setPrescriptionsJson,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -31371,6 +32590,12 @@ class WorkoutPlanEntriesTableData extends DataClass
           ? data.exerciseId.value
           : this.exerciseId,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      prescriptionMode: data.prescriptionMode.present
+          ? data.prescriptionMode.value
+          : this.prescriptionMode,
+      setPrescriptionsJson: data.setPrescriptionsJson.present
+          ? data.setPrescriptionsJson.value
+          : this.setPrescriptionsJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -31386,6 +32611,8 @@ class WorkoutPlanEntriesTableData extends DataClass
           ..write('dayIndex: $dayIndex, ')
           ..write('exerciseId: $exerciseId, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('prescriptionMode: $prescriptionMode, ')
+          ..write('setPrescriptionsJson: $setPrescriptionsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -31401,6 +32628,8 @@ class WorkoutPlanEntriesTableData extends DataClass
     dayIndex,
     exerciseId,
     sortOrder,
+    prescriptionMode,
+    setPrescriptionsJson,
     createdAt,
     updatedAt,
     version,
@@ -31415,6 +32644,8 @@ class WorkoutPlanEntriesTableData extends DataClass
           other.dayIndex == this.dayIndex &&
           other.exerciseId == this.exerciseId &&
           other.sortOrder == this.sortOrder &&
+          other.prescriptionMode == this.prescriptionMode &&
+          other.setPrescriptionsJson == this.setPrescriptionsJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -31428,6 +32659,8 @@ class WorkoutPlanEntriesTableCompanion
   final Value<int> dayIndex;
   final Value<String> exerciseId;
   final Value<int> sortOrder;
+  final Value<String> prescriptionMode;
+  final Value<String> setPrescriptionsJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -31439,6 +32672,8 @@ class WorkoutPlanEntriesTableCompanion
     this.dayIndex = const Value.absent(),
     this.exerciseId = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.prescriptionMode = const Value.absent(),
+    this.setPrescriptionsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -31451,6 +32686,8 @@ class WorkoutPlanEntriesTableCompanion
     required int dayIndex,
     required String exerciseId,
     this.sortOrder = const Value.absent(),
+    this.prescriptionMode = const Value.absent(),
+    this.setPrescriptionsJson = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -31468,6 +32705,8 @@ class WorkoutPlanEntriesTableCompanion
     Expression<int>? dayIndex,
     Expression<String>? exerciseId,
     Expression<int>? sortOrder,
+    Expression<String>? prescriptionMode,
+    Expression<String>? setPrescriptionsJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -31480,6 +32719,9 @@ class WorkoutPlanEntriesTableCompanion
       if (dayIndex != null) 'day_index': dayIndex,
       if (exerciseId != null) 'exercise_id': exerciseId,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (prescriptionMode != null) 'prescription_mode': prescriptionMode,
+      if (setPrescriptionsJson != null)
+        'set_prescriptions_json': setPrescriptionsJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -31494,6 +32736,8 @@ class WorkoutPlanEntriesTableCompanion
     Value<int>? dayIndex,
     Value<String>? exerciseId,
     Value<int>? sortOrder,
+    Value<String>? prescriptionMode,
+    Value<String>? setPrescriptionsJson,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -31506,6 +32750,8 @@ class WorkoutPlanEntriesTableCompanion
       dayIndex: dayIndex ?? this.dayIndex,
       exerciseId: exerciseId ?? this.exerciseId,
       sortOrder: sortOrder ?? this.sortOrder,
+      prescriptionMode: prescriptionMode ?? this.prescriptionMode,
+      setPrescriptionsJson: setPrescriptionsJson ?? this.setPrescriptionsJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -31531,6 +32777,14 @@ class WorkoutPlanEntriesTableCompanion
     }
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (prescriptionMode.present) {
+      map['prescription_mode'] = Variable<String>(prescriptionMode.value);
+    }
+    if (setPrescriptionsJson.present) {
+      map['set_prescriptions_json'] = Variable<String>(
+        setPrescriptionsJson.value,
+      );
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -31558,6 +32812,8 @@ class WorkoutPlanEntriesTableCompanion
           ..write('dayIndex: $dayIndex, ')
           ..write('exerciseId: $exerciseId, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('prescriptionMode: $prescriptionMode, ')
+          ..write('setPrescriptionsJson: $setPrescriptionsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -32291,6 +33547,30 @@ class $WorkoutSetLogsTableTable extends WorkoutSetLogsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _dropSegmentsJsonMeta = const VerificationMeta(
+    'dropSegmentsJson',
+  );
+  @override
+  late final GeneratedColumn<String> dropSegmentsJson = GeneratedColumn<String>(
+    'drop_segments_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _plannedDropSegmentsJsonMeta =
+      const VerificationMeta('plannedDropSegmentsJson');
+  @override
+  late final GeneratedColumn<String> plannedDropSegmentsJson =
+      GeneratedColumn<String>(
+        'planned_drop_segments_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('[]'),
+      );
   static const VerificationMeta _completedMeta = const VerificationMeta(
     'completed',
   );
@@ -32373,6 +33653,8 @@ class $WorkoutSetLogsTableTable extends WorkoutSetLogsTable
     reps,
     plannedWeightKg,
     plannedReps,
+    dropSegmentsJson,
+    plannedDropSegmentsJson,
     completed,
     completedAt,
     createdAt,
@@ -32455,6 +33737,24 @@ class $WorkoutSetLogsTableTable extends WorkoutSetLogsTable
         plannedReps.isAcceptableOrUnknown(
           data['planned_reps']!,
           _plannedRepsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('drop_segments_json')) {
+      context.handle(
+        _dropSegmentsJsonMeta,
+        dropSegmentsJson.isAcceptableOrUnknown(
+          data['drop_segments_json']!,
+          _dropSegmentsJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('planned_drop_segments_json')) {
+      context.handle(
+        _plannedDropSegmentsJsonMeta,
+        plannedDropSegmentsJson.isAcceptableOrUnknown(
+          data['planned_drop_segments_json']!,
+          _plannedDropSegmentsJsonMeta,
         ),
       );
     }
@@ -32549,6 +33849,14 @@ class $WorkoutSetLogsTableTable extends WorkoutSetLogsTable
         DriftSqlType.int,
         data['${effectivePrefix}planned_reps'],
       )!,
+      dropSegmentsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}drop_segments_json'],
+      )!,
+      plannedDropSegmentsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}planned_drop_segments_json'],
+      )!,
       completed: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}completed'],
@@ -32593,6 +33901,10 @@ class WorkoutSetLogsTableData extends DataClass
   final int reps;
   final double plannedWeightKg;
   final int plannedReps;
+
+  /// JSON list of drop segments after the top weight/reps columns.
+  final String dropSegmentsJson;
+  final String plannedDropSegmentsJson;
   final bool completed;
   final DateTime? completedAt;
   final DateTime createdAt;
@@ -32609,6 +33921,8 @@ class WorkoutSetLogsTableData extends DataClass
     required this.reps,
     required this.plannedWeightKg,
     required this.plannedReps,
+    required this.dropSegmentsJson,
+    required this.plannedDropSegmentsJson,
     required this.completed,
     this.completedAt,
     required this.createdAt,
@@ -32628,6 +33942,10 @@ class WorkoutSetLogsTableData extends DataClass
     map['reps'] = Variable<int>(reps);
     map['planned_weight_kg'] = Variable<double>(plannedWeightKg);
     map['planned_reps'] = Variable<int>(plannedReps);
+    map['drop_segments_json'] = Variable<String>(dropSegmentsJson);
+    map['planned_drop_segments_json'] = Variable<String>(
+      plannedDropSegmentsJson,
+    );
     map['completed'] = Variable<bool>(completed);
     if (!nullToAbsent || completedAt != null) {
       map['completed_at'] = Variable<DateTime>(completedAt);
@@ -32652,6 +33970,8 @@ class WorkoutSetLogsTableData extends DataClass
       reps: Value(reps),
       plannedWeightKg: Value(plannedWeightKg),
       plannedReps: Value(plannedReps),
+      dropSegmentsJson: Value(dropSegmentsJson),
+      plannedDropSegmentsJson: Value(plannedDropSegmentsJson),
       completed: Value(completed),
       completedAt: completedAt == null && nullToAbsent
           ? const Value.absent()
@@ -32680,6 +34000,10 @@ class WorkoutSetLogsTableData extends DataClass
       reps: serializer.fromJson<int>(json['reps']),
       plannedWeightKg: serializer.fromJson<double>(json['plannedWeightKg']),
       plannedReps: serializer.fromJson<int>(json['plannedReps']),
+      dropSegmentsJson: serializer.fromJson<String>(json['dropSegmentsJson']),
+      plannedDropSegmentsJson: serializer.fromJson<String>(
+        json['plannedDropSegmentsJson'],
+      ),
       completed: serializer.fromJson<bool>(json['completed']),
       completedAt: serializer.fromJson<DateTime?>(json['completedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -32701,6 +34025,10 @@ class WorkoutSetLogsTableData extends DataClass
       'reps': serializer.toJson<int>(reps),
       'plannedWeightKg': serializer.toJson<double>(plannedWeightKg),
       'plannedReps': serializer.toJson<int>(plannedReps),
+      'dropSegmentsJson': serializer.toJson<String>(dropSegmentsJson),
+      'plannedDropSegmentsJson': serializer.toJson<String>(
+        plannedDropSegmentsJson,
+      ),
       'completed': serializer.toJson<bool>(completed),
       'completedAt': serializer.toJson<DateTime?>(completedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -32720,6 +34048,8 @@ class WorkoutSetLogsTableData extends DataClass
     int? reps,
     double? plannedWeightKg,
     int? plannedReps,
+    String? dropSegmentsJson,
+    String? plannedDropSegmentsJson,
     bool? completed,
     Value<DateTime?> completedAt = const Value.absent(),
     DateTime? createdAt,
@@ -32736,6 +34066,9 @@ class WorkoutSetLogsTableData extends DataClass
     reps: reps ?? this.reps,
     plannedWeightKg: plannedWeightKg ?? this.plannedWeightKg,
     plannedReps: plannedReps ?? this.plannedReps,
+    dropSegmentsJson: dropSegmentsJson ?? this.dropSegmentsJson,
+    plannedDropSegmentsJson:
+        plannedDropSegmentsJson ?? this.plannedDropSegmentsJson,
     completed: completed ?? this.completed,
     completedAt: completedAt.present ? completedAt.value : this.completedAt,
     createdAt: createdAt ?? this.createdAt,
@@ -32762,6 +34095,12 @@ class WorkoutSetLogsTableData extends DataClass
       plannedReps: data.plannedReps.present
           ? data.plannedReps.value
           : this.plannedReps,
+      dropSegmentsJson: data.dropSegmentsJson.present
+          ? data.dropSegmentsJson.value
+          : this.dropSegmentsJson,
+      plannedDropSegmentsJson: data.plannedDropSegmentsJson.present
+          ? data.plannedDropSegmentsJson.value
+          : this.plannedDropSegmentsJson,
       completed: data.completed.present ? data.completed.value : this.completed,
       completedAt: data.completedAt.present
           ? data.completedAt.value
@@ -32785,6 +34124,8 @@ class WorkoutSetLogsTableData extends DataClass
           ..write('reps: $reps, ')
           ..write('plannedWeightKg: $plannedWeightKg, ')
           ..write('plannedReps: $plannedReps, ')
+          ..write('dropSegmentsJson: $dropSegmentsJson, ')
+          ..write('plannedDropSegmentsJson: $plannedDropSegmentsJson, ')
           ..write('completed: $completed, ')
           ..write('completedAt: $completedAt, ')
           ..write('createdAt: $createdAt, ')
@@ -32806,6 +34147,8 @@ class WorkoutSetLogsTableData extends DataClass
     reps,
     plannedWeightKg,
     plannedReps,
+    dropSegmentsJson,
+    plannedDropSegmentsJson,
     completed,
     completedAt,
     createdAt,
@@ -32826,6 +34169,8 @@ class WorkoutSetLogsTableData extends DataClass
           other.reps == this.reps &&
           other.plannedWeightKg == this.plannedWeightKg &&
           other.plannedReps == this.plannedReps &&
+          other.dropSegmentsJson == this.dropSegmentsJson &&
+          other.plannedDropSegmentsJson == this.plannedDropSegmentsJson &&
           other.completed == this.completed &&
           other.completedAt == this.completedAt &&
           other.createdAt == this.createdAt &&
@@ -32845,6 +34190,8 @@ class WorkoutSetLogsTableCompanion
   final Value<int> reps;
   final Value<double> plannedWeightKg;
   final Value<int> plannedReps;
+  final Value<String> dropSegmentsJson;
+  final Value<String> plannedDropSegmentsJson;
   final Value<bool> completed;
   final Value<DateTime?> completedAt;
   final Value<DateTime> createdAt;
@@ -32862,6 +34209,8 @@ class WorkoutSetLogsTableCompanion
     this.reps = const Value.absent(),
     this.plannedWeightKg = const Value.absent(),
     this.plannedReps = const Value.absent(),
+    this.dropSegmentsJson = const Value.absent(),
+    this.plannedDropSegmentsJson = const Value.absent(),
     this.completed = const Value.absent(),
     this.completedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -32880,6 +34229,8 @@ class WorkoutSetLogsTableCompanion
     this.reps = const Value.absent(),
     this.plannedWeightKg = const Value.absent(),
     this.plannedReps = const Value.absent(),
+    this.dropSegmentsJson = const Value.absent(),
+    this.plannedDropSegmentsJson = const Value.absent(),
     this.completed = const Value.absent(),
     this.completedAt = const Value.absent(),
     required DateTime createdAt,
@@ -32902,6 +34253,8 @@ class WorkoutSetLogsTableCompanion
     Expression<int>? reps,
     Expression<double>? plannedWeightKg,
     Expression<int>? plannedReps,
+    Expression<String>? dropSegmentsJson,
+    Expression<String>? plannedDropSegmentsJson,
     Expression<bool>? completed,
     Expression<DateTime>? completedAt,
     Expression<DateTime>? createdAt,
@@ -32920,6 +34273,9 @@ class WorkoutSetLogsTableCompanion
       if (reps != null) 'reps': reps,
       if (plannedWeightKg != null) 'planned_weight_kg': plannedWeightKg,
       if (plannedReps != null) 'planned_reps': plannedReps,
+      if (dropSegmentsJson != null) 'drop_segments_json': dropSegmentsJson,
+      if (plannedDropSegmentsJson != null)
+        'planned_drop_segments_json': plannedDropSegmentsJson,
       if (completed != null) 'completed': completed,
       if (completedAt != null) 'completed_at': completedAt,
       if (createdAt != null) 'created_at': createdAt,
@@ -32940,6 +34296,8 @@ class WorkoutSetLogsTableCompanion
     Value<int>? reps,
     Value<double>? plannedWeightKg,
     Value<int>? plannedReps,
+    Value<String>? dropSegmentsJson,
+    Value<String>? plannedDropSegmentsJson,
     Value<bool>? completed,
     Value<DateTime?>? completedAt,
     Value<DateTime>? createdAt,
@@ -32958,6 +34316,9 @@ class WorkoutSetLogsTableCompanion
       reps: reps ?? this.reps,
       plannedWeightKg: plannedWeightKg ?? this.plannedWeightKg,
       plannedReps: plannedReps ?? this.plannedReps,
+      dropSegmentsJson: dropSegmentsJson ?? this.dropSegmentsJson,
+      plannedDropSegmentsJson:
+          plannedDropSegmentsJson ?? this.plannedDropSegmentsJson,
       completed: completed ?? this.completed,
       completedAt: completedAt ?? this.completedAt,
       createdAt: createdAt ?? this.createdAt,
@@ -32998,6 +34359,14 @@ class WorkoutSetLogsTableCompanion
     if (plannedReps.present) {
       map['planned_reps'] = Variable<int>(plannedReps.value);
     }
+    if (dropSegmentsJson.present) {
+      map['drop_segments_json'] = Variable<String>(dropSegmentsJson.value);
+    }
+    if (plannedDropSegmentsJson.present) {
+      map['planned_drop_segments_json'] = Variable<String>(
+        plannedDropSegmentsJson.value,
+      );
+    }
     if (completed.present) {
       map['completed'] = Variable<bool>(completed.value);
     }
@@ -33034,6 +34403,8 @@ class WorkoutSetLogsTableCompanion
           ..write('reps: $reps, ')
           ..write('plannedWeightKg: $plannedWeightKg, ')
           ..write('plannedReps: $plannedReps, ')
+          ..write('dropSegmentsJson: $dropSegmentsJson, ')
+          ..write('plannedDropSegmentsJson: $plannedDropSegmentsJson, ')
           ..write('completed: $completed, ')
           ..write('completedAt: $completedAt, ')
           ..write('createdAt: $createdAt, ')
@@ -40864,6 +42235,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $FlaggedWordsTableTable(this);
   late final $CustomQuotesTableTable customQuotesTable =
       $CustomQuotesTableTable(this);
+  late final $SnippetsTableTable snippetsTable = $SnippetsTableTable(this);
+  late final $JobExperienceSnippetsTableTable jobExperienceSnippetsTable =
+      $JobExperienceSnippetsTableTable(this);
   late final $BucketListItemsTableTable bucketListItemsTable =
       $BucketListItemsTableTable(this);
   late final $LeetCodeProblemsTableTable leetCodeProblemsTable =
@@ -40973,6 +42347,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     customWordsTable,
     flaggedWordsTable,
     customQuotesTable,
+    snippetsTable,
+    jobExperienceSnippetsTable,
     bucketListItemsTable,
     leetCodeProblemsTable,
     studyFoldersTable,
@@ -52448,6 +53824,589 @@ typedef $$CustomQuotesTableTableProcessedTableManager =
       CustomQuotesTableData,
       PrefetchHooks Function()
     >;
+typedef $$SnippetsTableTableCreateCompanionBuilder =
+    SnippetsTableCompanion Function({
+      required String id,
+      required String trigger,
+      required String replacement,
+      Value<bool> autoExpand,
+      Value<bool> wordBoundary,
+      required double position,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$SnippetsTableTableUpdateCompanionBuilder =
+    SnippetsTableCompanion Function({
+      Value<String> id,
+      Value<String> trigger,
+      Value<String> replacement,
+      Value<bool> autoExpand,
+      Value<bool> wordBoundary,
+      Value<double> position,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$SnippetsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $SnippetsTableTable> {
+  $$SnippetsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get trigger => $composableBuilder(
+    column: $table.trigger,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get replacement => $composableBuilder(
+    column: $table.replacement,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get autoExpand => $composableBuilder(
+    column: $table.autoExpand,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get wordBoundary => $composableBuilder(
+    column: $table.wordBoundary,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SnippetsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $SnippetsTableTable> {
+  $$SnippetsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get trigger => $composableBuilder(
+    column: $table.trigger,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get replacement => $composableBuilder(
+    column: $table.replacement,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get autoExpand => $composableBuilder(
+    column: $table.autoExpand,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get wordBoundary => $composableBuilder(
+    column: $table.wordBoundary,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SnippetsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SnippetsTableTable> {
+  $$SnippetsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get trigger =>
+      $composableBuilder(column: $table.trigger, builder: (column) => column);
+
+  GeneratedColumn<String> get replacement => $composableBuilder(
+    column: $table.replacement,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get autoExpand => $composableBuilder(
+    column: $table.autoExpand,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get wordBoundary => $composableBuilder(
+    column: $table.wordBoundary,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$SnippetsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SnippetsTableTable,
+          SnippetsTableData,
+          $$SnippetsTableTableFilterComposer,
+          $$SnippetsTableTableOrderingComposer,
+          $$SnippetsTableTableAnnotationComposer,
+          $$SnippetsTableTableCreateCompanionBuilder,
+          $$SnippetsTableTableUpdateCompanionBuilder,
+          (
+            SnippetsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $SnippetsTableTable,
+              SnippetsTableData
+            >,
+          ),
+          SnippetsTableData,
+          PrefetchHooks Function()
+        > {
+  $$SnippetsTableTableTableManager(_$AppDatabase db, $SnippetsTableTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SnippetsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SnippetsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SnippetsTableTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> trigger = const Value.absent(),
+                Value<String> replacement = const Value.absent(),
+                Value<bool> autoExpand = const Value.absent(),
+                Value<bool> wordBoundary = const Value.absent(),
+                Value<double> position = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SnippetsTableCompanion(
+                id: id,
+                trigger: trigger,
+                replacement: replacement,
+                autoExpand: autoExpand,
+                wordBoundary: wordBoundary,
+                position: position,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String trigger,
+                required String replacement,
+                Value<bool> autoExpand = const Value.absent(),
+                Value<bool> wordBoundary = const Value.absent(),
+                required double position,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SnippetsTableCompanion.insert(
+                id: id,
+                trigger: trigger,
+                replacement: replacement,
+                autoExpand: autoExpand,
+                wordBoundary: wordBoundary,
+                position: position,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SnippetsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SnippetsTableTable,
+      SnippetsTableData,
+      $$SnippetsTableTableFilterComposer,
+      $$SnippetsTableTableOrderingComposer,
+      $$SnippetsTableTableAnnotationComposer,
+      $$SnippetsTableTableCreateCompanionBuilder,
+      $$SnippetsTableTableUpdateCompanionBuilder,
+      (
+        SnippetsTableData,
+        BaseReferences<_$AppDatabase, $SnippetsTableTable, SnippetsTableData>,
+      ),
+      SnippetsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$JobExperienceSnippetsTableTableCreateCompanionBuilder =
+    JobExperienceSnippetsTableCompanion Function({
+      required String id,
+      required String name,
+      required String description,
+      required double position,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$JobExperienceSnippetsTableTableUpdateCompanionBuilder =
+    JobExperienceSnippetsTableCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String> description,
+      Value<double> position,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$JobExperienceSnippetsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $JobExperienceSnippetsTableTable> {
+  $$JobExperienceSnippetsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$JobExperienceSnippetsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $JobExperienceSnippetsTableTable> {
+  $$JobExperienceSnippetsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$JobExperienceSnippetsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $JobExperienceSnippetsTableTable> {
+  $$JobExperienceSnippetsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$JobExperienceSnippetsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $JobExperienceSnippetsTableTable,
+          JobExperienceSnippetsTableData,
+          $$JobExperienceSnippetsTableTableFilterComposer,
+          $$JobExperienceSnippetsTableTableOrderingComposer,
+          $$JobExperienceSnippetsTableTableAnnotationComposer,
+          $$JobExperienceSnippetsTableTableCreateCompanionBuilder,
+          $$JobExperienceSnippetsTableTableUpdateCompanionBuilder,
+          (
+            JobExperienceSnippetsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $JobExperienceSnippetsTableTable,
+              JobExperienceSnippetsTableData
+            >,
+          ),
+          JobExperienceSnippetsTableData,
+          PrefetchHooks Function()
+        > {
+  $$JobExperienceSnippetsTableTableTableManager(
+    _$AppDatabase db,
+    $JobExperienceSnippetsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$JobExperienceSnippetsTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$JobExperienceSnippetsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$JobExperienceSnippetsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> description = const Value.absent(),
+                Value<double> position = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JobExperienceSnippetsTableCompanion(
+                id: id,
+                name: name,
+                description: description,
+                position: position,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required String description,
+                required double position,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => JobExperienceSnippetsTableCompanion.insert(
+                id: id,
+                name: name,
+                description: description,
+                position: position,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$JobExperienceSnippetsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $JobExperienceSnippetsTableTable,
+      JobExperienceSnippetsTableData,
+      $$JobExperienceSnippetsTableTableFilterComposer,
+      $$JobExperienceSnippetsTableTableOrderingComposer,
+      $$JobExperienceSnippetsTableTableAnnotationComposer,
+      $$JobExperienceSnippetsTableTableCreateCompanionBuilder,
+      $$JobExperienceSnippetsTableTableUpdateCompanionBuilder,
+      (
+        JobExperienceSnippetsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $JobExperienceSnippetsTableTable,
+          JobExperienceSnippetsTableData
+        >,
+      ),
+      JobExperienceSnippetsTableData,
+      PrefetchHooks Function()
+    >;
 typedef $$BucketListItemsTableTableCreateCompanionBuilder =
     BucketListItemsTableCompanion Function({
       required String id,
@@ -55471,6 +57430,8 @@ typedef $$WorkoutPlanEntriesTableTableCreateCompanionBuilder =
       required int dayIndex,
       required String exerciseId,
       Value<int> sortOrder,
+      Value<String> prescriptionMode,
+      Value<String> setPrescriptionsJson,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -55484,6 +57445,8 @@ typedef $$WorkoutPlanEntriesTableTableUpdateCompanionBuilder =
       Value<int> dayIndex,
       Value<String> exerciseId,
       Value<int> sortOrder,
+      Value<String> prescriptionMode,
+      Value<String> setPrescriptionsJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -55522,6 +57485,16 @@ class $$WorkoutPlanEntriesTableTableFilterComposer
 
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get prescriptionMode => $composableBuilder(
+    column: $table.prescriptionMode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get setPrescriptionsJson => $composableBuilder(
+    column: $table.setPrescriptionsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -55580,6 +57553,16 @@ class $$WorkoutPlanEntriesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get prescriptionMode => $composableBuilder(
+    column: $table.prescriptionMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get setPrescriptionsJson => $composableBuilder(
+    column: $table.setPrescriptionsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -55626,6 +57609,16 @@ class $$WorkoutPlanEntriesTableTableAnnotationComposer
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<String> get prescriptionMode => $composableBuilder(
+    column: $table.prescriptionMode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get setPrescriptionsJson => $composableBuilder(
+    column: $table.setPrescriptionsJson,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -55691,6 +57684,8 @@ class $$WorkoutPlanEntriesTableTableTableManager
                 Value<int> dayIndex = const Value.absent(),
                 Value<String> exerciseId = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<String> prescriptionMode = const Value.absent(),
+                Value<String> setPrescriptionsJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -55702,6 +57697,8 @@ class $$WorkoutPlanEntriesTableTableTableManager
                 dayIndex: dayIndex,
                 exerciseId: exerciseId,
                 sortOrder: sortOrder,
+                prescriptionMode: prescriptionMode,
+                setPrescriptionsJson: setPrescriptionsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -55715,6 +57712,8 @@ class $$WorkoutPlanEntriesTableTableTableManager
                 required int dayIndex,
                 required String exerciseId,
                 Value<int> sortOrder = const Value.absent(),
+                Value<String> prescriptionMode = const Value.absent(),
+                Value<String> setPrescriptionsJson = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -55726,6 +57725,8 @@ class $$WorkoutPlanEntriesTableTableTableManager
                 dayIndex: dayIndex,
                 exerciseId: exerciseId,
                 sortOrder: sortOrder,
+                prescriptionMode: prescriptionMode,
+                setPrescriptionsJson: setPrescriptionsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -56083,6 +58084,8 @@ typedef $$WorkoutSetLogsTableTableCreateCompanionBuilder =
       Value<int> reps,
       Value<double> plannedWeightKg,
       Value<int> plannedReps,
+      Value<String> dropSegmentsJson,
+      Value<String> plannedDropSegmentsJson,
       Value<bool> completed,
       Value<DateTime?> completedAt,
       required DateTime createdAt,
@@ -56102,6 +58105,8 @@ typedef $$WorkoutSetLogsTableTableUpdateCompanionBuilder =
       Value<int> reps,
       Value<double> plannedWeightKg,
       Value<int> plannedReps,
+      Value<String> dropSegmentsJson,
+      Value<String> plannedDropSegmentsJson,
       Value<bool> completed,
       Value<DateTime?> completedAt,
       Value<DateTime> createdAt,
@@ -56162,6 +58167,16 @@ class $$WorkoutSetLogsTableTableFilterComposer
 
   ColumnFilters<int> get plannedReps => $composableBuilder(
     column: $table.plannedReps,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get dropSegmentsJson => $composableBuilder(
+    column: $table.dropSegmentsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get plannedDropSegmentsJson => $composableBuilder(
+    column: $table.plannedDropSegmentsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -56250,6 +58265,16 @@ class $$WorkoutSetLogsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get dropSegmentsJson => $composableBuilder(
+    column: $table.dropSegmentsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get plannedDropSegmentsJson => $composableBuilder(
+    column: $table.plannedDropSegmentsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get completed => $composableBuilder(
     column: $table.completed,
     builder: (column) => ColumnOrderings(column),
@@ -56322,6 +58347,16 @@ class $$WorkoutSetLogsTableTableAnnotationComposer
 
   GeneratedColumn<int> get plannedReps => $composableBuilder(
     column: $table.plannedReps,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get dropSegmentsJson => $composableBuilder(
+    column: $table.dropSegmentsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get plannedDropSegmentsJson => $composableBuilder(
+    column: $table.plannedDropSegmentsJson,
     builder: (column) => column,
   );
 
@@ -56398,6 +58433,8 @@ class $$WorkoutSetLogsTableTableTableManager
                 Value<int> reps = const Value.absent(),
                 Value<double> plannedWeightKg = const Value.absent(),
                 Value<int> plannedReps = const Value.absent(),
+                Value<String> dropSegmentsJson = const Value.absent(),
+                Value<String> plannedDropSegmentsJson = const Value.absent(),
                 Value<bool> completed = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -56415,6 +58452,8 @@ class $$WorkoutSetLogsTableTableTableManager
                 reps: reps,
                 plannedWeightKg: plannedWeightKg,
                 plannedReps: plannedReps,
+                dropSegmentsJson: dropSegmentsJson,
+                plannedDropSegmentsJson: plannedDropSegmentsJson,
                 completed: completed,
                 completedAt: completedAt,
                 createdAt: createdAt,
@@ -56434,6 +58473,8 @@ class $$WorkoutSetLogsTableTableTableManager
                 Value<int> reps = const Value.absent(),
                 Value<double> plannedWeightKg = const Value.absent(),
                 Value<int> plannedReps = const Value.absent(),
+                Value<String> dropSegmentsJson = const Value.absent(),
+                Value<String> plannedDropSegmentsJson = const Value.absent(),
                 Value<bool> completed = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 required DateTime createdAt,
@@ -56451,6 +58492,8 @@ class $$WorkoutSetLogsTableTableTableManager
                 reps: reps,
                 plannedWeightKg: plannedWeightKg,
                 plannedReps: plannedReps,
+                dropSegmentsJson: dropSegmentsJson,
+                plannedDropSegmentsJson: plannedDropSegmentsJson,
                 completed: completed,
                 completedAt: completedAt,
                 createdAt: createdAt,
@@ -60376,6 +62419,14 @@ class $AppDatabaseManager {
       $$FlaggedWordsTableTableTableManager(_db, _db.flaggedWordsTable);
   $$CustomQuotesTableTableTableManager get customQuotesTable =>
       $$CustomQuotesTableTableTableManager(_db, _db.customQuotesTable);
+  $$SnippetsTableTableTableManager get snippetsTable =>
+      $$SnippetsTableTableTableManager(_db, _db.snippetsTable);
+  $$JobExperienceSnippetsTableTableTableManager
+  get jobExperienceSnippetsTable =>
+      $$JobExperienceSnippetsTableTableTableManager(
+        _db,
+        _db.jobExperienceSnippetsTable,
+      );
   $$BucketListItemsTableTableTableManager get bucketListItemsTable =>
       $$BucketListItemsTableTableTableManager(_db, _db.bucketListItemsTable);
   $$LeetCodeProblemsTableTableTableManager get leetCodeProblemsTable =>

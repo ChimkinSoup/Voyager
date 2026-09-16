@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 
@@ -8,6 +9,16 @@ import 'package:voyager/core/text/list_text_editing.dart';
 TextEditingController _typeAtEnd(String previousText, String typed) {
   final controller = TextEditingController(text: previousText + typed)
     ..selection = TextSelection.collapsed(offset: previousText.length + typed.length);
+  applyListEditing(controller: controller, previousText: previousText);
+  return controller;
+}
+
+/// Simulates pasting [pasted] at the end of [previousText] — the clipboard
+/// insert has already landed in the controller with the caret after it, which
+/// is the state `onChanged` sees.
+TextEditingController _pasteAtEnd(String previousText, String pasted) {
+  final controller = TextEditingController(text: previousText + pasted)
+    ..selection = TextSelection.collapsed(offset: previousText.length + pasted.length);
   applyListEditing(controller: controller, previousText: previousText);
   return controller;
 }
@@ -189,6 +200,124 @@ void main() {
       );
       expect(c.text, '1. existing\n2. pasted a\n3. pasted b');
     });
+  });
+
+  group('paste-continuation', () {
+    test('bulletizes every pasted line after the first', () {
+      final c = _pasteAtEnd('- ', 'one\ntwo\nthree');
+      expect(c.text, '- one\n- two\n- three');
+      expect(c.selection, TextSelection.collapsed(offset: c.text.length));
+    });
+
+    test('continues a numbered list, numbering the pasted lines', () {
+      final c = _pasteAtEnd('1. ', 'one\ntwo\nthree');
+      expect(c.text, '1. one\n2. two\n3. three');
+    });
+
+    test('renumbers a numbered paste made mid-list', () {
+      final c = _pasteAtEnd('1. a\n2. ', 'b\nc');
+      expect(c.text, '1. a\n2. b\n3. c');
+    });
+
+    test('keeps the list indent', () {
+      final c = _pasteAtEnd('  - ', 'one\ntwo');
+      expect(c.text, '  - one\n  - two');
+    });
+
+    test('continues from a line that already has content', () {
+      final c = _pasteAtEnd('- foo', 'bar\nbaz');
+      expect(c.text, '- foobar\n- baz');
+    });
+
+    test('leaves a plain line alone', () {
+      final c = _pasteAtEnd('just text', 'a\nb');
+      expect(c.text, 'just texta\nb');
+    });
+
+    test('leaves a single-line paste alone', () {
+      final c = _pasteAtEnd('- ', 'one');
+      expect(c.text, '- one');
+    });
+
+    test('does not double up markers the paste already has', () {
+      final c = _pasteAtEnd('- ', '- one\n- two');
+      expect(c.text, '- one\n- two');
+    });
+
+    test('keeps a pasted nested list nested', () {
+      final c = _pasteAtEnd('- ', 'one\n  - two\nthree');
+      expect(c.text, '- one\n  - two\n- three');
+    });
+
+    test('rewrites pasted unicode bullets as the list marker', () {
+      final c = _pasteAtEnd('- ', '\u2022 one\n\u2022 two');
+      expect(c.text, '- one\n- two');
+    });
+
+    test('rewrites pasted unicode bullets into a numbered list', () {
+      final c = _pasteAtEnd('1. ', '\u2022 one\n\u2022 two');
+      expect(c.text, '1. one\n2. two');
+    });
+
+    test('leaves blank lines blank rather than making empty bullets', () {
+      final c = _pasteAtEnd('- ', 'one\n\ntwo');
+      expect(c.text, '- one\n\n- two');
+    });
+
+    test('does not continue when the paste lands before the marker', () {
+      final controller = TextEditingController(text: 'x\ny- a')
+        ..selection = const TextSelection.collapsed(offset: 3);
+      applyListEditing(controller: controller, previousText: '- a');
+      expect(controller.text, 'x\ny- a');
+    });
+
+    test('replacing a selection with a multi-line paste continues the list', () {
+      final controller = TextEditingController(text: '- one\ntwo')
+        ..selection = const TextSelection.collapsed(offset: 9);
+      applyListEditing(controller: controller, previousText: '- x');
+      expect(controller.text, '- one\n- two');
+    });
+  });
+
+  // The unit tests above drive [applyListEditing] directly; this one proves a
+  // real clipboard paste reaches it, through the same `onChanged` wiring the
+  // journal, dream journal, todo and calendar notes fields use.
+  testWidgets('a clipboard paste continues the list end to end', (tester) async {
+    const pasted = 'one\ntwo\nthree';
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async => call.method == 'Clipboard.getData'
+          ? <String, dynamic>{'text': pasted}
+          : null,
+    );
+
+    final controller = TextEditingController(text: '- ')
+      ..selection = const TextSelection.collapsed(offset: 2);
+    var lastText = controller.text;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TextField(
+            controller: controller,
+            maxLines: null,
+            autofocus: true,
+            onChanged: (_) {
+              applyListEditing(controller: controller, previousText: lastText);
+              lastText = controller.text;
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester
+        .state<EditableTextState>(find.byType(EditableText))
+        .pasteText(SelectionChangedCause.keyboard);
+    await tester.pump();
+
+    expect(controller.text, '- one\n- two\n- three');
   });
 
   group('isOnListLine', () {

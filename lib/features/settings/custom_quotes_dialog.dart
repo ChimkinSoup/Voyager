@@ -125,12 +125,14 @@ class _CustomQuotesDialogState extends ConsumerState<_CustomQuotesDialog> {
   }
 
   Future<void> _remove(CustomQuote quote) async {
-    await ref.read(settingsRepositoryProvider).softDeleteCustomQuote(quote.id);
-    ref
-        .read(remoteSyncServiceProvider)
-        .pushCustomQuote(
-          quote.copyWith(deletedAt: utcNow(), updatedAt: utcNow()),
-        );
+    final repo = ref.read(settingsRepositoryProvider);
+    await repo.softDeleteCustomQuote(quote.id);
+    // The tombstone as written, version bump included, rather than one built
+    // from the list's copy.
+    final tombstone = await repo.getCustomQuote(quote.id);
+    if (tombstone != null) {
+      ref.read(remoteSyncServiceProvider).pushCustomQuote(tombstone);
+    }
     ref.invalidate(customQuotesProvider);
   }
 

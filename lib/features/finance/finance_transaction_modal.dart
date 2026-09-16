@@ -249,20 +249,6 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       existing?.occurredAt.second ?? wall.second,
     );
 
-    final transaction = FinancialTransaction(
-      id: existing?.id ?? _newId,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      version: existing == null ? 0 : existing.version + 1,
-      type: _type,
-      amountCents: cents,
-      occurredAt: occurredAt,
-      origin: trimToNull(_originController.text),
-      note: trimToNull(_noteController.text),
-      tags: tags,
-      roomEventId: existing?.roomEventId,
-    );
-
     final financeRepo = ref.read(financeRepositoryProvider);
     // Both reads happen before the first await: `ref` throws once this sheet
     // is disposed, and it can be dismissed while the write is in flight.
@@ -274,6 +260,25 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     // money the ledger has already taken.
     var written = false;
     try {
+      // Re-read rather than trusting [existing] — see the goal sheet. Also
+      // covers a retry of a new entry, whose first attempt is already on disk.
+      final id = existing?.id ?? _newId;
+      final base = await financeRepo.getTransaction(id) ?? existing;
+      final transaction = FinancialTransaction(
+        id: id,
+        createdAt: base?.createdAt ?? now,
+        updatedAt: now,
+        version: base == null ? 0 : base.version + 1,
+        deletedAt: base?.deletedAt,
+        type: _type,
+        amountCents: cents,
+        occurredAt: occurredAt,
+        origin: trimToNull(_originController.text),
+        note: trimToNull(_noteController.text),
+        tags: tags,
+        // A room event attached or detached while the sheet was open.
+        roomEventId: base?.roomEventId,
+      );
       await financeRepo.upsertTransaction(transaction);
       written = true;
       if (transaction.roomEventId != null) {

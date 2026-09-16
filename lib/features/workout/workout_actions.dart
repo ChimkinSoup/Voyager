@@ -72,6 +72,30 @@ class WorkoutActions {
     invalidateWorkoutProvidersFrom(_ref);
   }
 
+  /// Saves a per-day custom set recipe (varying sets and/or drops) on [entry].
+  Future<void> savePlacementPrescription(
+    WorkoutPlanEntry entry, {
+    required List<SetPrescription> prescriptions,
+  }) {
+    return savePlanEntry(
+      entry.copyWith(
+        prescriptionMode: WorkoutPrescriptionMode.custom,
+        setPrescriptions: prescriptions,
+      ),
+    );
+  }
+
+  /// Clears a placement's custom recipe so it inherits the exercise globals
+  /// again.
+  Future<void> clearPlacementPrescription(WorkoutPlanEntry entry) {
+    return savePlanEntry(
+      entry.copyWith(
+        prescriptionMode: WorkoutPrescriptionMode.inherit,
+        setPrescriptions: const [],
+      ),
+    );
+  }
+
   /// Places [exerciseId] on [dayIndex] of [planId], appended after whatever is
   /// already there.
   Future<void> addExerciseToDay({
@@ -234,6 +258,8 @@ Future<void> restoreExercise(
       dayIndex: entry.dayIndex,
       exerciseId: entry.exerciseId,
       sortOrder: entry.sortOrder,
+      prescriptionMode: entry.prescriptionMode,
+      setPrescriptions: entry.setPrescriptions,
     );
     await repo.upsertPlanEntry(row);
     sync.pushWorkoutPlanEntry(row);

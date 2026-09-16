@@ -23,7 +23,7 @@ Related: `lib/core/spellcheck/`, `lib/core/widgets/spell_check_popup.dart`, `Cus
 - A **blocklist** for words that are already in the bundled dictionary. Bundled words stay allowed. "Remove" does not mean “flag `colour` even though it is English.” **Superseded:** `FLAGGED_WORDS.md` shipped, and flagging is now how a bundled word is overridden — `known = (bundled ∪ custom) − flagged`. Removing a custom word still means only what it says here; the flag is a separate collection and a separate verb.
 - Editing or deleting bundled words.
 - Per-field / per-journal dictionaries.
-- Stemming, plurals, or “add all forms of this word.” Each token is its own entry, matching how the tokenizer works today.
+- Stemming, plurals, or “add all forms of this word.” Each token is its own entry, matching how the tokenizer works today. **One exception, 2026-09-16:** a trailing `'s` is stripped at *lookup* time, so `dog's` is known because `dog` is. The bundled list holds contractions and no possessives at all, so every possessive in an entry squiggled — and the autocorrect cascade found `dogs` one deletion away and rewrote the apostrophe out of it. Nothing about an *entry* changes: `dog's` is still not a row anyone adds (`isKnownWord`, `word_token.dart`).
 - Bulk paste / import of a word list (backup already round-trips custom words).
 - Replacing the misspelling popup’s **Add to dictionary** action.
 

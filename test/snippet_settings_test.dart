@@ -39,11 +39,11 @@ void main() {
 
     test('round-trips the list and both flags', () async {
       final saved = (await repo.getSettings()).copyWith(
-        snippets: _snippets,
         snippetsEnabled: false,
         snippetExpandKey: SnippetExpandKey.space,
       );
       await repo.saveSettings(saved);
+      await repo.applySnippetEdit(const [], _snippets);
       final read = await repo.getSettings();
       expect(read.snippets, _snippets);
       expect(read.snippetsEnabled, isFalse);
@@ -51,74 +51,56 @@ void main() {
     });
 
     test('an emptied list persists as empty rather than reverting', () async {
-      var settings = (await repo.getSettings()).copyWith(snippets: _snippets);
-      await repo.saveSettings(settings);
-      settings = (await repo.getSettings()).copyWith(snippets: const []);
-      await repo.saveSettings(settings);
+      await repo.applySnippetEdit(const [], _snippets);
+      await repo.applySnippetEdit(_snippets, const []);
       expect((await repo.getSettings()).snippets, isEmpty);
     });
   });
 
   group('sync and import/export', () {
-    // Both the Firestore document and the backup zip are written by
-    // settingsToFirestore and read back by mergeSettingsFromRemote, so this
-    // covers the round trip for each.
-    AppSettings roundTrip(AppSettings settings, {AppSettings? into}) {
-      return mergeSettingsFromRemote(
-        settingsToFirestore(settings),
-        into ?? const AppSettings(updatedAt: null),
-      );
-    }
-
-    test('carries the list, the switch and the expand key', () {
+    // The switch and the expand key travel in the settings document; the list
+    // itself travels as records (snippet_records_sync_test.dart).
+    test('the settings document carries the switch and the expand key', () {
       final settings = AppSettings(
-        snippets: _snippets,
         snippetsEnabled: false,
         snippetExpandKey: SnippetExpandKey.space,
         updatedAt: DateTime.utc(2026, 8, 16),
       );
-      final merged = roundTrip(settings);
-      expect(merged.snippets, _snippets);
+      final merged = mergeSettingsFromRemote(
+        settingsToFirestore(settings),
+        const AppSettings(updatedAt: null),
+      );
       expect(merged.snippetsEnabled, isFalse);
       expect(merged.snippetExpandKey, SnippetExpandKey.space);
     });
 
-    test('an empty remote list clears the local one', () {
-      final local = AppSettings(snippets: _snippets);
-      final merged = roundTrip(
-        AppSettings(updatedAt: DateTime.utc(2026, 8, 16)),
-        into: local,
-      );
-      expect(merged.snippets, isEmpty);
-    });
-
-    test('a document predating snippets leaves the local list alone', () {
+    test('a remote settings document never touches the local list', () {
       final local = AppSettings(snippets: _snippets);
       final data = settingsToFirestore(
         AppSettings(updatedAt: DateTime.utc(2026, 8, 16)),
-      )..remove('snippets');
-      final merged = mergeSettingsFromRemote(data, local);
-      expect(merged.snippets, _snippets);
+      )..['snippets'] = <Object>[];
+      expect(mergeSettingsFromRemote(data, local).snippets, _snippets);
     });
 
-    test('the payload is what decides a synced setting changed', () {
+    test('a snippet edit does not move the settings clock', () {
       // DriftSettingsRepository.saveSettings compares two of these to move the
-      // last-write-wins clock, so a snippet edit has to show up here.
-      const base = AppSettings();
-      final withSnippets = AppSettings(snippets: _snippets);
+      // last-write-wins clock; snippets have their own versions instead.
       expect(
-        settingsSyncPayload(base).toString(),
-        isNot(settingsSyncPayload(withSnippets).toString()),
+        settingsSyncPayload(const AppSettings()).toString(),
+        settingsSyncPayload(AppSettings(snippets: _snippets)).toString(),
       );
     });
 
-    test('an unusable remote row is dropped, not the whole list', () {
-      final data = settingsToFirestore(
-        AppSettings(snippets: _snippets, updatedAt: DateTime.utc(2026, 8, 16)),
-      );
-      (data['snippets'] as List).insert(0, {'trigger': 'no id'});
-      final merged = mergeSettingsFromRemote(data, const AppSettings());
-      expect(merged.snippets, _snippets);
+    test('an unusable legacy entry is dropped, not the whole list', () async {
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+      final legacy = await DriftSettingsRepository(db).unknownLegacySnippets({
+        'snippets': [
+          {'trigger': 'no id'},
+          for (final snippet in _snippets) snippet.toJson(),
+        ],
+      });
+      expect(legacy.snippets.map((r) => r.item), _snippets);
     });
   });
 }

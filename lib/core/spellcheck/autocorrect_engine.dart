@@ -2,6 +2,8 @@ import 'dart:ui' show TextRange;
 
 import 'package:flutter/services.dart' show TextSelection;
 
+import 'package:voyager/core/spellcheck/word_token.dart';
+
 /// The pure half of autocorrect: which typos have an unambiguous fix, where a
 /// word token sits, and which keystrokes finish a word.
 ///
@@ -92,8 +94,10 @@ String? autocorrectFor(String token, Set<String> known) {
   final lower = token.toLowerCase();
   if (lower.length < kMinAutocorrectLength) return null;
   // A word the dictionary already knows is not a typo, whatever else it is
-  // one edit away from (AUTOCORRECT.md §4.5).
-  if (known.contains(lower)) return null;
+  // one edit away from (AUTOCORRECT.md §4.5) — including a possessive, which
+  // the bundled list has no entries for and which `dogs` sits one deletion
+  // away from.
+  if (isKnownWord(lower, known)) return null;
   return _onlyKnown(_transpositions(lower), known) ??
       _onlyKnown(_deletions(lower), known) ??
       _onlyKnown(_insertions(lower), known);
@@ -232,6 +236,31 @@ TextRange? autocorrectTokenAt(String text, int offset) {
 /// check is the accented Latin that actually turns up in prose.
 bool isAsciiWordFragment(String text, int start, int end) =>
     _isLetterLikeNonAscii(text, start - 1) || _isLetterLikeNonAscii(text, end);
+
+/// Whether [start]–[end] is part of a longer alphanumeric run — the `enc` of
+/// `x264enc`, the `D` of `3D`.
+///
+/// `tokenizeWords` drops a run holding a digit whole (`runHasDigit`), so there
+/// is no squiggle under any of it: a model number or an identifier is not
+/// prose. Correcting a piece of one would rewrite the very text spell-check
+/// deliberately has no opinion about, and `autocorrectTokenAt` stops at a
+/// digit rather than seeing the run.
+bool isInAlphanumericRun(String text, int start, int end) {
+  for (var i = start - 1; i >= 0 && _isRunChar(text.codeUnitAt(i)); i--) {
+    if (_isDigit(text.codeUnitAt(i))) return true;
+  }
+  for (var i = end; i < text.length && _isRunChar(text.codeUnitAt(i)); i++) {
+    if (_isDigit(text.codeUnitAt(i))) return true;
+  }
+  return false;
+}
+
+/// A character `wordRunPattern` can carry: a letter, a digit, or the
+/// apostrophe that holds `XM6's` together as one run.
+bool _isRunChar(int unit) =>
+    _isLetter(unit) || _isDigit(unit) || unit == 0x27;
+
+bool _isDigit(int unit) => unit >= 0x30 && unit <= 0x39;
 
 final RegExp _unicodeLetter = RegExp(r'[\p{L}\p{M}]', unicode: true);
 

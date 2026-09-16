@@ -2,8 +2,9 @@ import 'package:flutter/widgets.dart';
 import 'package:voyager/core/spellcheck/word_token.dart';
 import 'package:voyager/core/text/prose_markup.dart';
 
-/// Word tokens in [text], excluding any token that falls inside an exclusion
-/// zone — a `#tag`, an `` `inline code` `` span, or `$…$` LaTeX
+/// Word tokens in [text], excluding any token that holds a digit (`3D`, `XM6's`
+/// — see [runHasDigit]) or falls inside an exclusion zone — a `#tag`, an
+/// `` `inline code` `` span, or `$…$` LaTeX
 /// (EMPHASIS_FORMATTING.md §6.1). None of the three holds prose the dictionary
 /// has any business judging: tag vocabulary is user-defined, code is code, and
 /// `$\alpha$` is not a misspelling of anything.
@@ -26,8 +27,9 @@ List<TextRange> tokenizeWords(String text, {int start = 0, int? end}) {
   final scanEnd = end ?? text.length;
   final tokens = <TextRange>[];
   var zone = 0;
-  for (final m in wordTokenPattern.allMatches(text, start)) {
+  for (final m in wordRunPattern.allMatches(text, start)) {
     if (m.start >= scanEnd) break;
+    if (runHasDigit(m[0]!)) continue;
     // Zones come back in document order and so do tokens, so one forward
     // cursor serves both. Testing every token against every zone was
     // quadratic: a heavily tagged entry of a couple of thousand words ran tens

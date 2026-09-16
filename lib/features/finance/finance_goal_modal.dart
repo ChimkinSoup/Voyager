@@ -145,12 +145,23 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
     final repo = ref.read(financeRepositoryProvider);
     final container = widget.container;
     try {
+      // Re-read rather than trusting [existing], as the asset sheet does: a
+      // pull can land while this sheet is open, and a version built from the
+      // snapshot could fall behind the row on disk and lose to the older copy.
+      final onDisk = existing == null
+          ? null
+          : (await repo.listSavingsGoals(
+              includeDeleted: true,
+            )).where((g) => g.id == existing.id).firstOrNull;
+      final base = onDisk ?? existing;
       await repo.upsertSavingsGoal(
         SavingsGoal(
           id: existing?.id ?? newId(),
-          createdAt: existing?.createdAt ?? now,
+          createdAt: base?.createdAt ?? now,
           updatedAt: now,
-          version: existing == null ? 0 : existing.version + 1,
+          version: base == null ? 0 : base.version + 1,
+          // Deleted while the sheet was open stays deleted.
+          deletedAt: base?.deletedAt,
           name: _nameController.text.trim(),
           targetCents: target,
           colorValue: _colorValue,

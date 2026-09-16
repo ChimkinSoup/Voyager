@@ -180,6 +180,65 @@ class CharacterOpSession {
     _pendingOpIds.insertAll(0, restored);
   }
 
+  /// Whether this session holds operations no upload has taken yet.
+  bool get hasPendingOps => _pendingOpIds.isNotEmpty;
+
+  /// Folds operations read back from the shared log into this session.
+  ///
+  /// A session is loaded once, when its document opens, and nothing used to
+  /// tell it about operations another device wrote after that. Text from those
+  /// operations still reached the editor — a pull re-seeding an idle editor, a
+  /// buffered merge injected into a focused one — and was then diffed against a
+  /// session that had never seen it, so it went back up as this device's own
+  /// characters at the very fractional positions the other device had already
+  /// used: every character twice on the next merge.
+  ///
+  /// Same winner rule as [CharacterSequenceCrdtMerger]: a tombstone beats a
+  /// live copy, then the higher logical clock, then the higher client id.
+  /// Pending operations stay pending.
+  void absorbRemote(List<CharacterOperation> operations) {
+    var changed = false;
+    for (final op in operations) {
+      final existing = _opsById[op.id];
+      if (existing != null && !_remoteWins(op, existing)) continue;
+      _opsById[op.id] = op;
+      changed = true;
+      if (op.clientId == clientId && op.logicalClock >= _logicalClock) {
+        _logicalClock = op.logicalClock + 1;
+      }
+    }
+    if (!changed) return;
+    _live = null;
+    _liveText = null;
+  }
+
+  bool _remoteWins(CharacterOperation incoming, CharacterOperation existing) {
+    if (incoming.deleted != existing.deleted) return incoming.deleted;
+    if (incoming.logicalClock != existing.logicalClock) {
+      return incoming.logicalClock > existing.logicalClock;
+    }
+    return incoming.clientId.compareTo(existing.clientId) > 0;
+  }
+
+  /// The live operations [recordTextChange] would tombstone going from [text]
+  /// to [after], without recording anything.
+  List<CharacterOperation> opsReplacedBy(String after) {
+    final live = _liveOrderedOps();
+    final before = _reconstructText();
+    var i = 0;
+    while (i < before.length && i < after.length && before[i] == after[i]) {
+      i++;
+    }
+    var oldEnd = before.length;
+    var newEnd = after.length;
+    while (oldEnd > i && newEnd > i && before[oldEnd - 1] == after[newEnd - 1]) {
+      oldEnd--;
+      newEnd--;
+    }
+    if (oldEnd <= i || i >= live.length) return const [];
+    return live.sublist(i, oldEnd < live.length ? oldEnd : live.length);
+  }
+
   void _seedFromText(String text, {bool markAsPending = false}) {
     _live = null;
     _liveText = null;
@@ -320,6 +379,16 @@ class CharacterOpRegistry {
     List<CharacterOperation> operations,
   ) {
     _sessions[key(collection, documentId)]?.restorePendingOps(operations);
+  }
+
+  /// See [CharacterOpSession.absorbRemote]. A document with no session has
+  /// nothing to fold into; its next session loads the log whole.
+  void absorbRemote(
+    String collection,
+    String documentId,
+    List<CharacterOperation> operations,
+  ) {
+    _sessions[key(collection, documentId)]?.absorbRemote(operations);
   }
 
   void resetSession({

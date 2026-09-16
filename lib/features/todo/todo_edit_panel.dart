@@ -302,6 +302,10 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
         ),
       ),
     );
+    // The next keystroke is diffed from [_lastNotesText]. Left at the
+    // pre-merge text, that diff carried the remote change back up as this
+    // device's own edit.
+    _lastNotesText = merged;
   }
 
   Future<void> _applyPendingNotesMerge() async {
@@ -313,6 +317,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     );
     if (merged != null && mounted) {
       _notesController.text = merged.notes ?? '';
+      _lastNotesText = _notesController.text;
     }
   }
 
@@ -828,40 +833,63 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       createdAt: now,
       updatedAt: now,
     );
-    Future.delayed(const Duration(milliseconds: 50), () {
-      if (!mounted) return;
-      setState(() => _subtasks = [subtask, ..._subtasks]);
-      ref.read(todoRepositoryProvider).upsertTask(subtask).then((_) {
-        ref.read(remoteSyncServiceProvider).pushTodoTaskInBackground(subtask);
-        widget.onChanged();
-      });
-    });
+    // Written now, not behind a delay and a `mounted` check: the field is
+    // already cleared, so closing the panel inside that window dropped the
+    // subtask the user had just typed. Only the list update needs the panel.
+    setState(() => _subtasks = [subtask, ..._subtasks]);
+    final repo = ref.read(todoRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    await repo.upsertTask(subtask);
+    remoteSync.pushTodoTaskInBackground(subtask);
+    if (mounted) widget.onChanged();
+  }
+
+  /// Applies [change] to [subtask] as it is on disk now, not as this panel
+  /// loaded it: the list is read once on open, so a row built from it undid
+  /// whatever another device or the page changed since, and a tombstone built
+  /// from a stale version lost to the newer copy and came back.
+  ///
+  /// Returns the written row, or null when the subtask no longer exists.
+  Future<TodoTask?> _writeSubtask(
+    TodoTask subtask,
+    TodoTask Function(TodoTask current) change,
+  ) async {
+    final repo = ref.read(todoRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    final current = await repo.getTask(subtask.id);
+    if (current == null) return null;
+    final updated = change(current);
+    await repo.upsertTask(updated);
+    remoteSync.pushTodoTaskInBackground(updated);
+    return updated;
   }
 
   Future<void> _toggleSubtask(TodoTask subtask, bool completed) async {
-    final updated = subtask.copyWith(completed: completed);
     setState(() {
       final index = _subtasks.indexWhere((s) => s.id == subtask.id);
-      if (index != -1) _subtasks[index] = updated;
+      if (index != -1) {
+        _subtasks[index] = subtask.copyWith(completed: completed);
+      }
     });
-    ref.read(todoRepositoryProvider).upsertTask(updated).then((_) {
-      ref.read(remoteSyncServiceProvider).pushTodoTaskInBackground(updated);
-      widget.onChanged();
-    });
+    final written = await _writeSubtask(
+      subtask,
+      (current) => current.copyWith(completed: completed),
+    );
+    if (written != null && mounted) widget.onChanged();
   }
 
   Future<void> _renameSubtask(TodoTask subtask, String title) async {
     final trimmed = title.trim();
     if (trimmed.isEmpty || trimmed == subtask.title) return;
-    final updated = subtask.copyWith(title: title);
     setState(() {
       final index = _subtasks.indexWhere((s) => s.id == subtask.id);
-      if (index != -1) _subtasks[index] = updated;
+      if (index != -1) _subtasks[index] = subtask.copyWith(title: title);
     });
-    ref.read(todoRepositoryProvider).upsertTask(updated).then((_) {
-      ref.read(remoteSyncServiceProvider).pushTodoTaskInBackground(updated);
-      widget.onChanged();
-    });
+    final written = await _writeSubtask(
+      subtask,
+      (current) => current.copyWith(title: title),
+    );
+    if (written != null && mounted) widget.onChanged();
   }
 
   Future<void> _deleteSubtask(TodoTask subtask) async {
@@ -870,20 +898,22 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     final container = ProviderScope.containerOf(context, listen: false);
     final overlay = Overlay.of(context, rootOverlay: true);
 
-    final deleted = subtask.copyWith(deletedAt: utcNow());
     setState(() {
       _subtasks.removeWhere((s) => s.id == subtask.id);
     });
-    await ref.read(todoRepositoryProvider).upsertTask(deleted);
-    ref.read(remoteSyncServiceProvider).pushTodoTaskInBackground(deleted);
-    widget.onChanged();
+    final deleted = await _writeSubtask(
+      subtask,
+      (current) => current.copyWith(deletedAt: utcNow()),
+    );
+    if (deleted == null) return;
+    if (mounted) widget.onChanged();
 
     // No confirm dialog on a subtask — it is a one-line row, and asking twice
     // costs more than the delete does. The undo is what makes that safe.
     showSoftDeleteUndoToast(
       overlay: overlay,
       message: deletedMessage(subtask.title, fallback: 'subtask'),
-      restore: () => _undoSubtaskDelete(container, subtask),
+      restore: () => _undoSubtaskDelete(container, deleted),
     );
   }
 
@@ -957,7 +987,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     final updates = <TodoTask>[];
     for (int i = 0; i < subtasks.length; i++) {
       if (subtasks[i].sortOrder != i) {
-        updates.add(subtasks[i].copyWith(sortOrder: i));
+        updates.add(subtasks[i]);
         subtasks[i] = subtasks[i].copyWith(sortOrder: i);
       }
     }
@@ -968,13 +998,14 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     // potentially blocking database operations.
     unawaited(
       Future.delayed(Duration.zero, () async {
-        final repo = ref.read(todoRepositoryProvider);
-        final remoteSync = ref.read(remoteSyncServiceProvider);
         for (final task in updates) {
-          await repo.upsertTask(task);
-          remoteSync.pushTodoTaskInBackground(task);
+          final order = subtasks.indexWhere((s) => s.id == task.id);
+          await _writeSubtask(
+            task,
+            (current) => current.copyWith(sortOrder: order),
+          );
         }
-        widget.onChanged();
+        if (mounted) widget.onChanged();
       }),
     );
   }

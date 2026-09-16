@@ -13,6 +13,17 @@ const double _kGradeButtonHeight = 56;
 /// it lands back on its front.
 const Duration _kGradeRevealDuration = Duration(milliseconds: 350);
 
+/// Catppuccin Frappe accents, one per grade. Both themes paint the same four
+/// so the bar reads as one identity whichever way the app is running.
+const Color _kFrappeRed = Color(0xFFE78284);
+const Color _kFrappePeach = Color(0xFFEF9F76);
+const Color _kFrappeBlue = Color(0xFF8CAAEE);
+const Color _kFrappeGreen = Color(0xFFA6D189);
+
+/// Catppuccin Frappe crust. The accents are light pastels, so a saturated
+/// plate wants dark ink on it -- bone would sit near 1.5:1 on Frappe green.
+const Color _kFrappeCrust = Color(0xFF232634);
+
 /// The Fail/Hard/Good/Easy bar under a review card, with each button's
 /// resulting interval previewed above it. Takes the raw SRS state rather than
 /// a card so both the Study session (a [StudyCard]) and the LeetCode Review
@@ -91,8 +102,11 @@ class _StudyGradingRowState extends State<StudyGradingRow>
     final theme = Theme.of(context);
     final curve = _reduced ? Curves.easeOut : VoyagerSpring.moveCurve;
     final isDark = theme.brightness == Brightness.dark;
-    // GlassButton's own resting fill / edge opacities for this theme.
-    final glassBase = GlassButton.defaultGlassOpacity(isDark);
+    // The grades carry their accent at plate strength rather than
+    // GlassButton's near-transparent light wafer -- that 6% tint is what left
+    // the bar looking washed out. The edge keeps the theme's own specular
+    // opacity.
+    final glassBase = isDark ? 0.95 : 0.85;
     final borderBase = GlassButton.defaultBorderOpacity(isDark);
 
     Widget button(String label, StudyGrade grade, Color color, double t) {
@@ -123,23 +137,17 @@ class _StudyGradingRowState extends State<StudyGradingRow>
                 child: GlassButton(
                   onPressed: () => widget.onGrade(grade),
                   label: label,
-                  // Dark paints the grade colour at plate opacity, so a
-                  // saturated fill would swallow the bone label; pull it
-                  // most of the way back to the graphite field instead.
-                  color: isDark
-                      ? Color.lerp(
-                          theme.inputDecorationTheme.fillColor ??
-                              theme.colorScheme.surface,
-                          color,
-                          0.28,
-                        )
-                      : color,
+                  color: color,
                   height: _kGradeButtonHeight,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   // Same three values GlassButton itself moves between its
-                  // disabled and enabled looks, interpolated instead.
-                  textColor: theme.colorScheme.onSurface.withValues(
-                    alpha: 0.4 + 0.6 * t,
+                  // disabled and enabled looks, interpolated instead. The
+                  // label starts on the dimmed onSurface both themes share
+                  // and lands on crust as the plate reaches full strength.
+                  textColor: Color.lerp(
+                    theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                    _kFrappeCrust,
+                    t,
                   ),
                   glassOpacity: glassBase * (0.5 + 0.5 * t),
                   borderOpacity: borderBase - 0.10 * (1 - t),
@@ -157,13 +165,13 @@ class _StudyGradingRowState extends State<StudyGradingRow>
         final t = curve.transform(_reveal.value);
         return Row(
           children: [
-            button('Fail', StudyGrade.fail, theme.colorScheme.error, t),
+            button('Fail', StudyGrade.fail, _kFrappeRed, t),
             const SizedBox(width: 10),
-            button('Hard', StudyGrade.hard, const Color(0xFFE0A63A), t),
+            button('Hard', StudyGrade.hard, _kFrappePeach, t),
             const SizedBox(width: 10),
-            button('Good', StudyGrade.good, const Color(0xFF5C8BE0), t),
+            button('Good', StudyGrade.good, _kFrappeBlue, t),
             const SizedBox(width: 10),
-            button('Easy', StudyGrade.easy, const Color(0xFF4CAF7D), t),
+            button('Easy', StudyGrade.easy, _kFrappeGreen, t),
           ],
         );
       },

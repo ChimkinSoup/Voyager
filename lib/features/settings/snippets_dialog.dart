@@ -41,9 +41,7 @@ class _SnippetsDialogState extends ConsumerState<_SnippetsDialog> {
   Future<void> _write(AppSettings settings, List<Snippet> snippets) {
     return ref
         .read(settingsProvider.notifier)
-        .saveSettings(
-          settings.copyWith(snippets: snippets, updatedAt: utcNow()),
-        );
+        .saveSnippets(settings.snippets, snippets);
   }
 
   Future<void> _saveRow(

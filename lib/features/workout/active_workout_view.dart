@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
@@ -61,8 +62,9 @@ class ActiveWorkoutView extends ConsumerWidget {
                       _CurrentExerciseTitle(exercise: exercise, state: state),
                       const SizedBox(height: VoyagerSpacing.md),
                       WorkoutWheelPair(
-                        weightKg: set.weightKg,
-                        reps: set.reps,
+                        key: ValueKey('${set.id}-${state.segmentIndex}'),
+                        weightKg: state.currentSegment?.weightKg ?? set.weightKg,
+                        reps: state.currentSegment?.reps ?? set.reps,
                         unit: unit,
                         deviatesFromPlan: set.deviatesFromPlan,
                         onInteraction: controller.cancelRest,
@@ -79,12 +81,21 @@ class ActiveWorkoutView extends ConsumerWidget {
                           child: Text(
                             'Planned '
                             '${unit.formatKilogramsWithUnit(set.plannedWeightKg)}'
-                            ' × ${set.plannedReps} — just for today',
+                            ' × ${set.plannedReps}'
+                            '${set.plannedDropSegments.isEmpty ? '' : ' + drops'}'
+                            ' — just for today',
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: theme.colorScheme.primary,
                             ),
                           ),
                         ),
+                      const SizedBox(height: VoyagerSpacing.md),
+                      _DropSegmentsPanel(
+                        set: set,
+                        unit: unit,
+                        segmentIndex: state.segmentIndex,
+                        controller: controller,
+                      ),
                       const SizedBox(height: VoyagerSpacing.lg),
                       _SetCountField(
                         key: ValueKey(set.exerciseId),
@@ -383,7 +394,8 @@ class _SetRow extends StatelessWidget {
                   Text(
                     set.completed
                         ? '${unit.formatKilograms(set.weightKg)} × ${set.reps}'
-                        : 'Set ${index + 1}',
+                            '${set.hasDrops ? ' ↓' : ''}'
+                        : 'Set ${index + 1}${set.hasDrops ? ' ↓' : ''}',
                     style: theme.textTheme.labelMedium?.copyWith(
                       color: set.deviatesFromPlan && set.completed
                           ? accent
@@ -394,6 +406,92 @@ class _SetRow extends StatelessWidget {
               ),
             ),
           ),
+      ],
+    );
+  }
+}
+
+/// Top + drops for the focused set. One complete control still covers the
+/// whole chain; wheels edit whichever segment is selected here.
+class _DropSegmentsPanel extends StatelessWidget {
+  const _DropSegmentsPanel({
+    required this.set,
+    required this.unit,
+    required this.segmentIndex,
+    required this.controller,
+  });
+
+  final WorkoutSetLog set;
+  final WeightUnit unit;
+  final int segmentIndex;
+  final WorkoutSessionController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+    final segments = set.allSegments;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < segments.length; i++)
+          InkWell(
+            onTap: () => controller.focusSegment(i),
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: VoyagerSpacing.xs),
+              padding: const EdgeInsets.symmetric(
+                horizontal: VoyagerSpacing.sm,
+                vertical: VoyagerSpacing.xs,
+              ),
+              decoration: BoxDecoration(
+                color: segmentIndex == i
+                    ? accent.withValues(alpha: 0.12)
+                    : null,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: segmentIndex == i ? accent : Colors.transparent,
+                ),
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 56,
+                    child: Text(
+                      i == 0 ? 'Top' : 'Drop $i',
+                      style: theme.textTheme.labelMedium,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      '${unit.formatKilogramsWithUnit(segments[i].weightKg)}'
+                      ' × ${segments[i].reps}',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  if (i > 0)
+                    IconButton(
+                      onPressed: () =>
+                          controller.removeDropFromCurrentSet(i - 1),
+                      icon: const Icon(PhosphorIconsRegular.x, size: 14),
+                      tooltip: 'Remove drop',
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: set.dropSegments.length >= kMaxDropsPerSet
+                ? null
+                : () => controller.addDropToCurrentSet(unit),
+            icon: const Icon(PhosphorIconsRegular.caretDown, size: 14),
+            label: const Text('Add drop'),
+          ),
+        ),
       ],
     );
   }

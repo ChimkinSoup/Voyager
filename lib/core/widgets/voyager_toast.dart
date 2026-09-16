@@ -3,6 +3,7 @@
 // ignore_for_file: prefer_initializing_formals
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:voyager/core/motion/motion.dart';
@@ -205,6 +206,34 @@ VoyagerToast showVoyagerToastIn(
 /// longer than reading the card takes and still terminates on its own.
 const _kMaxHoverHold = Duration(seconds: 60);
 
+/// The label color for a toast's action buttons.
+///
+/// The buttons are tinted in the accent, so the accent cannot also be the
+/// words: a pale accent on the light wafer — and any accent at all on the
+/// near-solid dark plate — paints the label the same color as what is behind
+/// it. Pick whichever end of the scheme stands further off the fill that is
+/// actually painted, the way the accent's own on-color is picked.
+Color _toastActionLabelColor(ThemeData theme) {
+  final scheme = theme.colorScheme;
+  final fill = Color.alphaBlend(
+    scheme.primary.withValues(
+      alpha: GlassButton.defaultGlassOpacity(
+        theme.brightness == Brightness.dark,
+      ),
+    ),
+    scheme.surfaceContainerHighest,
+  );
+  return _contrast(scheme.onSurface, fill) >= _contrast(scheme.onPrimary, fill)
+      ? scheme.onSurface
+      : scheme.onPrimary;
+}
+
+double _contrast(Color a, Color b) {
+  final x = a.computeLuminance();
+  final y = b.computeLuminance();
+  return (math.max(x, y) + 0.05) / (math.min(x, y) + 0.05);
+}
+
 class _VoyagerToast extends StatefulWidget {
   const _VoyagerToast({
     required this.message,
@@ -394,7 +423,7 @@ class _VoyagerToastState extends State<_VoyagerToast>
                 label: action.label,
                 dense: true,
                 color: theme.colorScheme.primary,
-                textColor: theme.colorScheme.primary,
+                textColor: _toastActionLabelColor(theme),
               ),
             ],
           ],

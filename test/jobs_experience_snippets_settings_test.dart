@@ -1,8 +1,8 @@
 // The experience snippets behind the Jobs header's copy chips
 // (JOBS_EXPERIENCE_SNIPPETS_HLD.md §5, §11): they survive a local save in
-// order and byte-for-byte, they travel through the settings document that
-// sync and import/export share, and "deleted them all" is not mistaken for
-// "this document predates the feature".
+// order and byte-for-byte, and travel as records of their own — no longer
+// inside the settings document, whose single clock let a stale device's list
+// overwrite newer edits (DATA_INTEGRITY_AUDIT_REPORT.md P1-1).
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
@@ -37,89 +37,71 @@ void main() {
     addTearDown(db.close);
     final repo = DriftSettingsRepository(db);
 
-    await repo.saveSettings(
-      (await repo.getSettings()).copyWith(
-        jobExperienceSnippets: const [_initech, _acme, _globex],
-      ),
-    );
+    await repo.applyJobExperienceSnippetEdit(const [], const [
+      _initech,
+      _acme,
+      _globex,
+    ]);
     var stored = await repo.getSettings();
     expect(stored.jobExperienceSnippets, const [_initech, _acme, _globex]);
 
-    await repo.saveSettings(stored.copyWith(jobExperienceSnippets: const []));
+    await repo.applyJobExperienceSnippetEdit(const [
+      _initech,
+      _acme,
+      _globex,
+    ], const [_acme, _globex, _initech]);
+    stored = await repo.getSettings();
+    expect(stored.jobExperienceSnippets, const [_acme, _globex, _initech]);
+
+    await repo.applyJobExperienceSnippetEdit(
+      stored.jobExperienceSnippets,
+      const [],
+    );
     stored = await repo.getSettings();
     expect(stored.jobExperienceSnippets, isEmpty);
   });
 
   group('sync and import/export', () {
-    // Both the Firestore document and the backup zip go out through
-    // settingsToFirestore and come back through mergeSettingsFromRemote.
-    AppSettings roundTrip(AppSettings settings, {AppSettings? into}) {
-      return mergeSettingsFromRemote(
-        settingsToFirestore(settings),
-        into ?? const AppSettings(updatedAt: null),
+    test('a record round-trips text and position byte-for-byte', () {
+      final record = SyncedListItem(
+        item: _acme,
+        position: 2.5,
+        createdAt: DateTime.utc(2026, 9, 10),
+        updatedAt: DateTime.utc(2026, 9, 11),
+        version: 2,
       );
-    }
-
-    test('carries the whole ordered list', () {
-      final merged = roundTrip(
-        AppSettings(
-          jobExperienceSnippets: const [_globex, _initech, _acme],
-          updatedAt: DateTime.utc(2026, 9, 10),
-        ),
-      );
-      expect(merged.jobExperienceSnippets, const [_globex, _initech, _acme]);
+      final merged = mergeJobExperienceSnippetFromRemote(
+        jobExperienceSnippetToFirestore(record),
+        'a',
+      )!;
+      expect(merged.item, _acme);
+      expect(merged.position, 2.5);
     });
 
-    test('an emptied list on another device empties it here', () {
-      final merged = roundTrip(
-        AppSettings(updatedAt: DateTime.utc(2026, 9, 10)),
-        into: const AppSettings(jobExperienceSnippets: [_acme]),
-      );
-      expect(merged.jobExperienceSnippets, isEmpty);
-    });
-
-    test('a document predating the feature leaves the local list alone', () {
-      const local = AppSettings(jobExperienceSnippets: [_acme]);
-      final data = settingsToFirestore(
-        AppSettings(updatedAt: DateTime.utc(2026, 9, 10)),
-      )..remove('jobExperienceSnippets');
-      expect(
-        mergeSettingsFromRemote(data, local).jobExperienceSnippets,
-        const [_acme],
-      );
-    });
-
-    test('a malformed entry is dropped without losing the rest', () {
-      final data = settingsToFirestore(
-        AppSettings(updatedAt: DateTime.utc(2026, 9, 10)),
-      );
-      data['jobExperienceSnippets'] = [
-        _acme.toJson(),
-        {'id': 'x', 'name': '   '},
-        'junk',
-        {'id': 'y', 'name': 'No body'},
-      ];
-      final merged = mergeSettingsFromRemote(data, const AppSettings());
-      expect(merged.jobExperienceSnippets, const [
+    test('a malformed legacy entry is dropped without losing the rest',
+        () async {
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+      final legacy = await DriftSettingsRepository(db).unknownLegacySnippets({
+        'jobExperienceSnippets': [
+          _acme.toJson(),
+          {'id': 'x', 'name': '   '},
+          'junk',
+          {'id': 'y', 'name': 'No body'},
+        ],
+      });
+      expect(legacy.jobExperienceSnippets.map((r) => r.item), const [
         _acme,
         JobExperienceSnippet(id: 'y', name: 'No body', description: ''),
       ]);
     });
 
-    test('an edit or a reorder is visible to the last-write-wins clock', () {
-      // DriftSettingsRepository.saveSettings compares two of these to decide
-      // a synced setting moved; without that the edit never leaves the device.
-      String payload(List<JobExperienceSnippet> list) => settingsSyncPayload(
-        AppSettings(jobExperienceSnippets: list),
-      ).toString();
-      expect(payload(const [_acme, _globex]), isNot(payload(const [])));
+    test('the settings document no longer carries the list', () {
       expect(
-        payload(const [_acme, _globex]),
-        isNot(payload(const [_globex, _acme])),
-      );
-      expect(
-        payload(const [_acme]),
-        isNot(payload([_acme.copyWith(description: 'changed')])),
+        settingsSyncPayload(
+          const AppSettings(jobExperienceSnippets: [_acme]),
+        ).containsKey('jobExperienceSnippets'),
+        isFalse,
       );
     });
   });

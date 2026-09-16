@@ -89,23 +89,16 @@ class _QuickAddSnippetPanelState extends ConsumerState<_QuickAddSnippetPanel> {
       setState(() => _error = error);
       return;
     }
-    await ref
-        .read(settingsProvider.notifier)
-        .saveSettings(
-          settings.copyWith(
-            snippets: [
-              ...settings.snippets,
-              Snippet(
-                id: newId(),
-                trigger: trigger,
-                replacement: draft.replacement,
-                autoExpand: draft.autoExpand,
-                wordBoundary: draft.wordBoundary,
-              ),
-            ],
-            updatedAt: utcNow(),
-          ),
-        );
+    await ref.read(settingsProvider.notifier).saveSnippets(settings.snippets, [
+      ...settings.snippets,
+      Snippet(
+        id: newId(),
+        trigger: trigger,
+        replacement: draft.replacement,
+        autoExpand: draft.autoExpand,
+        wordBoundary: draft.wordBoundary,
+      ),
+    ]);
     if (!mounted) return;
     Navigator.of(context).pop(_QuickAddOutcome.saved);
   }

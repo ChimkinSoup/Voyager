@@ -658,7 +658,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     // keep its char-ops; the rest of the batch is sort-order shuffling only.
     final edited = writes.where((t) => t.id == next.id).firstOrNull;
     if (edited != null) {
-      await remoteSync.pushTodoTaskNow(edited);
+      // Background: a throw here skipped the cascade push and the repeating
+      // task's roll-forward below, both of which are already owed.
+      remoteSync.pushTodoTaskInBackground(edited);
     }
     await remoteSync.pushTodoTasksBatch(
       writes.where((t) => t.id != next.id).toList(),

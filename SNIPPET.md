@@ -290,6 +290,15 @@ Reject multi-character inserts (paste), deletions, and replacements.
 
 ### 6.4 Persistence & sync
 
+> **Superseded (2026-09-16, schema v115).** Snippets no longer travel inside the
+> settings document. Each snippet is its own synced record (`snippets_table`,
+> Firestore `snippets`, `SyncedListItem<Snippet>`) with its own version and a
+> fractional `position`, and edits go through `SettingsNotifier.saveSnippets`,
+> which applies only what the edit changed. The whole-list design below let any
+> device that changed any setting re-upload a stale list over snippets added
+> elsewhere — see `DATA_INTEGRITY_AUDIT_REPORT.md` P1-1. The switch and the
+> expand key are still settings fields. The original plan is kept for history.
+
 - Store the snippet list and global flags on `AppSettings`.
 - Extend `settingsToFirestore` / `settingsSyncPayload` / `mergeSettingsFromRemote` / import-export the same way other settings fields are handled.
 - Merge policy: follow existing settings merge (typically last-write / field-level); snippet list treated as one atomic settings field unless a smarter merge is already patterned elsewhere.

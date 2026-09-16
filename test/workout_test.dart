@@ -125,6 +125,100 @@ void main() {
         300,
       );
     });
+
+    test('volume sums top set and every drop segment', () {
+      final now = utcNow();
+      final log = WorkoutSetLog(
+        id: 'x',
+        sessionId: 's',
+        exerciseId: 'e',
+        exerciseOrder: 0,
+        setIndex: 0,
+        weightKg: 100,
+        reps: 8,
+        plannedWeightKg: 100,
+        plannedReps: 8,
+        dropSegments: const [
+          SetSegment(weightKg: 80, reps: 8),
+          SetSegment(weightKg: 60, reps: 10),
+        ],
+        completed: true,
+        createdAt: now,
+        updatedAt: now,
+      );
+      // 100*8 + 80*8 + 60*10
+      expect(log.volumeKg, 800 + 640 + 600);
+    });
+
+    test('a drop-only change counts as a deviation', () {
+      final now = utcNow();
+      final log = WorkoutSetLog(
+        id: 'x',
+        sessionId: 's',
+        exerciseId: 'e',
+        exerciseOrder: 0,
+        setIndex: 0,
+        weightKg: 100,
+        reps: 8,
+        plannedWeightKg: 100,
+        plannedReps: 8,
+        plannedDropSegments: const [SetSegment(weightKg: 80, reps: 8)],
+        dropSegments: const [SetSegment(weightKg: 70, reps: 8)],
+        createdAt: now,
+        updatedAt: now,
+      );
+      expect(log.deviatesFromPlan, isTrue);
+    });
+  });
+
+  group('drop helpers', () {
+    test('next drop copies reps and subtracts the unit default', () {
+      const prev = SetSegment(weightKg: 100, reps: 8);
+      final nextKg = nextDropSegment(prev, WeightUnit.kg);
+      expect(nextKg.reps, 8);
+      expect(nextKg.weightKg, 95);
+
+      final nextLb = nextDropSegment(prev, WeightUnit.lb);
+      expect(nextLb.weightKg, closeTo(100 - poundsToKilograms(10), 0.001));
+    });
+
+    test('seed prescriptions mirror exercise targets as single-segment sets', () {
+      final now = utcNow();
+      final exercise = Exercise(
+        id: 'e',
+        name: 'Bench',
+        targetSets: 3,
+        targetReps: 8,
+        targetWeightKg: 100,
+        createdAt: now,
+        updatedAt: now,
+      );
+      final seeded = seedPrescriptionsFromExercise(exercise);
+      expect(seeded, hasLength(3));
+      expect(seeded.every((p) => p.segments.length == 1), isTrue);
+      expect(seeded.first.top.weightKg, 100);
+      expect(seeded.first.top.reps, 8);
+    });
+
+    test('prescription JSON round-trips', () {
+      final prescriptions = [
+        const SetPrescription(
+          segments: [
+            SetSegment(weightKg: 100, reps: 8),
+            SetSegment(weightKg: 80, reps: 8),
+          ],
+        ),
+        const SetPrescription(
+          segments: [SetSegment(weightKg: 90, reps: 10)],
+        ),
+      ];
+      final decoded = decodeSetPrescriptions(
+        encodeSetPrescriptions(prescriptions),
+      );
+      expect(decoded, hasLength(2));
+      expect(decoded.first.hasDrops, isTrue);
+      expect(decoded.last.top.reps, 10);
+    });
   });
 
   group('buildExerciseHistory', () {
@@ -148,6 +242,31 @@ void main() {
       expect(history.first.setWeightsKg, [100, 100]);
       expect(history.first.volumeKg, 1600);
       expect(history.last.setWeightsKg, [105]);
+    });
+
+    test('sparkline uses top-set weight; volume includes drops', () {
+      final now = utcNow();
+      final log = WorkoutSetLog(
+        id: 'x',
+        sessionId: 'a',
+        exerciseId: 'e',
+        exerciseOrder: 0,
+        setIndex: 0,
+        weightKg: 100,
+        reps: 8,
+        plannedWeightKg: 100,
+        plannedReps: 8,
+        dropSegments: const [SetSegment(weightKg: 60, reps: 8)],
+        completed: true,
+        createdAt: now,
+        updatedAt: now,
+      );
+      final history = buildExerciseHistory(
+        [log],
+        {'a': DateTime(2026, 8, 1)},
+      );
+      expect(history.single.setWeightsKg, [100]);
+      expect(history.single.volumeKg, 100 * 8 + 60 * 8);
     });
 
     test('unfinished sets never count toward volume', () {
@@ -469,6 +588,86 @@ void main() {
         stored.map((l) => '${l.exerciseId}${l.setIndex}'),
         ['a0', 'a1', 'b0'],
       );
+    });
+
+    test('custom prescriptions and drop segments persist', () async {
+      final now = utcNow();
+      await repo.upsertPlan(
+        WorkoutPlan(
+          id: 'plan',
+          name: 'Plan',
+          mode: WorkoutPlanMode.weekly,
+          cycleAnchor: DateTime(2026, 1, 1),
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      await repo.upsertExercise(
+        Exercise(
+          id: 'bench',
+          name: 'Bench',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      final entry = WorkoutPlanEntry(
+        id: 'entry',
+        planId: 'plan',
+        dayIndex: 1,
+        exerciseId: 'bench',
+        prescriptionMode: WorkoutPrescriptionMode.custom,
+        setPrescriptions: const [
+          SetPrescription(
+            segments: [
+              SetSegment(weightKg: 100, reps: 8),
+              SetSegment(weightKg: 80, reps: 8),
+            ],
+          ),
+          SetPrescription(
+            segments: [SetSegment(weightKg: 90, reps: 10)],
+          ),
+        ],
+        createdAt: now,
+        updatedAt: now,
+      );
+      await repo.upsertPlanEntry(entry);
+
+      final storedEntry = (await repo.getPlanEntry('entry'))!;
+      expect(storedEntry.isCustomPrescription, isTrue);
+      expect(storedEntry.setPrescriptions, hasLength(2));
+      expect(storedEntry.setPrescriptions.first.hasDrops, isTrue);
+
+      await repo.upsertSession(
+        WorkoutSession(
+          id: 'session',
+          planId: 'plan',
+          dayIndex: 1,
+          date: workoutDayKey(now),
+          startedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      final log = WorkoutSetLog(
+        id: 'log',
+        sessionId: 'session',
+        exerciseId: 'bench',
+        exerciseOrder: 0,
+        setIndex: 0,
+        weightKg: 100,
+        reps: 8,
+        plannedWeightKg: 100,
+        plannedReps: 8,
+        dropSegments: const [SetSegment(weightKg: 80, reps: 8)],
+        plannedDropSegments: const [SetSegment(weightKg: 80, reps: 8)],
+        createdAt: now,
+        updatedAt: now,
+      );
+      await repo.upsertSetLog(log);
+      final storedLog = (await repo.getSetLog('log'))!;
+      expect(storedLog.hasDrops, isTrue);
+      expect(storedLog.dropSegments.single.weightKg, 80);
+      expect(storedLog.volumeKg, 100 * 8 + 80 * 8);
     });
   });
 }

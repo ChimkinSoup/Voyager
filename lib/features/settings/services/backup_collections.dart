@@ -392,6 +392,48 @@ List<BackupCollection> buildBackupCollections({
       },
     ),
     BackupCollection(
+      name: FirestoreCollections.snippets,
+      read: () async => [
+        for (final record in await settingsRepository.getSnippetRecords(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: record.item.id, data: snippetToFirestore(record)),
+      ],
+      restore: (id, data) async {
+        final record =
+            mergeSnippetFromRemote(data, id) ??
+            (throw FormatException('Unreadable snippet $id'));
+        await settingsRepository.upsertSnippetRecord(
+          record,
+          recordLocalActivity: false,
+        );
+        return record;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.jobExperienceSnippets,
+      read: () async => [
+        for (final record
+            in await settingsRepository.getJobExperienceSnippetRecords(
+              includeDeleted: true,
+            ))
+          BackupRecord(
+            id: record.item.id,
+            data: jobExperienceSnippetToFirestore(record),
+          ),
+      ],
+      restore: (id, data) async {
+        final record =
+            mergeJobExperienceSnippetFromRemote(data, id) ??
+            (throw FormatException('Unreadable experience snippet $id'));
+        await settingsRepository.upsertJobExperienceSnippetRecord(
+          record,
+          recordLocalActivity: false,
+        );
+        return record;
+      },
+    ),
+    BackupCollection(
       name: FirestoreCollections.calendars,
       read: () async => [
         for (final calendar in await calendarRepository.listCalendars(

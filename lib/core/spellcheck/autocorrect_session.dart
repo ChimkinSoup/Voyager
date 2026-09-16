@@ -533,6 +533,10 @@ class AutocorrectSession {
     // `caféwtih`. The squiggle already splits it that way, but underlining a
     // fragment and rewriting one are not the same thing (§4.3).
     if (isAsciiWordFragment(text, token.start, token.end)) return;
+    // Likewise a piece of an alphanumeric — `enc` in `x264enc`. The squiggle
+    // drops the whole run, so a correction here would rewrite what spell-check
+    // says nothing about.
+    if (isInAlphanumericRun(text, token.start, token.end)) return;
 
     final word = text.substring(token.start, token.end);
     if (isAllCapsToken(word)) return;

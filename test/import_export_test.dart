@@ -345,6 +345,15 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       planId: 'plan-1',
       dayIndex: 2,
       exerciseId: 'exercise-1',
+      prescriptionMode: WorkoutPrescriptionMode.custom,
+      setPrescriptions: const [
+        SetPrescription(
+          segments: [
+            SetSegment(weightKg: 60, reps: 5),
+            SetSegment(weightKg: 50, reps: 5),
+          ],
+        ),
+      ],
       createdAt: now,
       updatedAt: now,
     ),
@@ -372,6 +381,8 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       reps: 5,
       plannedWeightKg: 60,
       plannedReps: 5,
+      dropSegments: const [SetSegment(weightKg: 50, reps: 5)],
+      plannedDropSegments: const [SetSegment(weightKg: 50, reps: 5)],
       completed: true,
       completedAt: now,
       createdAt: now,
@@ -382,6 +393,30 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
     CustomQuote(
       id: 'quote-1',
       text: 'Keep going.',
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await settingsRepo.upsertSnippetRecord(
+    SyncedListItem(
+      item: const Snippet(
+        id: 'snippet-1',
+        trigger: 'brb',
+        replacement: 'be right back',
+      ),
+      position: 0,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await settingsRepo.upsertJobExperienceSnippetRecord(
+    SyncedListItem(
+      item: const JobExperienceSnippet(
+        id: 'experience-1',
+        name: 'Initech',
+        description: 'Built the TPS report pipeline.',
+      ),
+      position: 0,
       createdAt: now,
       updatedAt: now,
     ),
@@ -943,6 +978,8 @@ void main() {
         'workout_sessions_table',
         'workout_set_logs_table',
         'custom_quotes_table',
+        'snippets_table',
+        'job_experience_snippets_table',
         'calendars_table',
         'calendar_events_table',
         'trackers_table',

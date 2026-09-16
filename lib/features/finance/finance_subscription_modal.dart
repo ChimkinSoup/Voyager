@@ -170,26 +170,37 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
 
     final now = utcNow();
     final existing = widget.existing;
-    final subscription = Subscription(
-      id: existing?.id ?? newId(),
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      version: existing == null ? 0 : existing.version + 1,
-      name: _nameController.text.trim(),
-      amountCents: cents,
-      period: _period,
-      anchorDueDate: _dueDate,
-      paidThroughDate: _retainedPaidThrough,
-      colorValue: _colorValue,
-      note: _noteController.text.trim().isEmpty
-          ? null
-          : _noteController.text.trim(),
-    );
 
     // Read before the first await: `ref` throws once this sheet is disposed.
     final repo = ref.read(financeRepositoryProvider);
     final container = widget.container;
     try {
+      // Re-read rather than trusting [existing] — see the goal sheet. A bill
+      // logged as paid while this sheet was open moved `paidThroughDate` on
+      // disk, and an unedited series keeps that rather than the opening value.
+      final onDisk = existing == null
+          ? null
+          : await repo.getSubscription(existing.id);
+      final base = onDisk ?? existing;
+      final seriesUnchanged = existing != null &&
+          _dueDate == _initialDueDate &&
+          _period == _initialPeriod;
+      final subscription = Subscription(
+        id: existing?.id ?? newId(),
+        createdAt: base?.createdAt ?? now,
+        updatedAt: now,
+        version: base == null ? 0 : base.version + 1,
+        deletedAt: base?.deletedAt,
+        name: _nameController.text.trim(),
+        amountCents: cents,
+        period: _period,
+        anchorDueDate: _dueDate,
+        paidThroughDate: seriesUnchanged ? base?.paidThroughDate : null,
+        colorValue: _colorValue,
+        note: _noteController.text.trim().isEmpty
+            ? null
+            : _noteController.text.trim(),
+      );
       await repo.upsertSubscription(subscription);
       // Through the container, not `ref`: the invalidate has to land even
       // when the sheet was dismissed mid-write.

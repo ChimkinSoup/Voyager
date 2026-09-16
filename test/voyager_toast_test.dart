@@ -1,16 +1,21 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
+import 'package:voyager/domain/models/enums.dart';
 
 /// Pumps a bare app and hands back a context inside its overlay.
-Future<BuildContext> pumpHost(WidgetTester tester) async {
+Future<BuildContext> pumpHost(WidgetTester tester, {ThemeData? theme}) async {
   late BuildContext ctx;
   await tester.pumpWidget(
     MaterialApp(
+      theme: theme,
       home: Builder(
         builder: (context) {
           ctx = context;
@@ -168,4 +173,54 @@ void main() {
     // holds, instead of retaining it for the life of the app.
     expect(done, isTrue);
   });
+
+  // The action buttons are painted in the accent, and the accent is whatever
+  // the user picked. A pale one used to be the label color as well as the
+  // fill, which left the words invisible on the button they sat in.
+  for (final mode in AppThemeMode.values) {
+    testWidgets('a toast action stays legible on a pale accent in $mode', (
+      tester,
+    ) async {
+      const pale = Color(0xFFF3E6A8);
+      final theme = VoyagerTheme.forMode(mode, accent: pale);
+      final ctx = await pumpHost(tester, theme: theme);
+
+      showVoyagerToast(
+        ctx,
+        message: 'Your last session left scratch code behind.',
+        icon: PhosphorIconsRegular.clockCounterClockwise,
+        actions: [
+          VoyagerToastAction(label: 'Restore', onPressed: () {}),
+          VoyagerToastAction(label: 'Discard', onPressed: () {}),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      // What the label is actually painted on: the accent wafer (light) or
+      // the near-solid accent plate (dark), over the toast card.
+      final scheme = theme.colorScheme;
+      final fill = Color.alphaBlend(
+        scheme.primary.withValues(
+          alpha: GlassButton.defaultGlassOpacity(mode == AppThemeMode.dark),
+        ),
+        scheme.surfaceContainerHighest,
+      );
+
+      for (final label in ['Restore', 'Discard']) {
+        final color = tester.widget<Text>(find.text(label)).style?.color;
+        expect(color, isNotNull, reason: '$label carries an explicit color');
+        expect(
+          contrast(color!, fill),
+          greaterThanOrEqualTo(4.5),
+          reason: '$label reads against the button it sits in',
+        );
+      }
+    });
+  }
+}
+
+double contrast(Color a, Color b) {
+  final x = a.computeLuminance();
+  final y = b.computeLuminance();
+  return (math.max(x, y) + 0.05) / (math.min(x, y) + 0.05);
 }

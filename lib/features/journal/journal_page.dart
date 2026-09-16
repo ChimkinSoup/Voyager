@@ -1119,8 +1119,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         entry: pendingApplied,
         details: 'Merged buffered remote body before flush.',
       );
-      if (_editorKey.currentState != null && mounted) {
-        _editorKey.currentState!.setBodyText(body);
+      // Only into an editor still holding this entry: during a switch the
+      // controller may already carry the next one, and writing this body into
+      // it put one entry's text under another's id.
+      final editor = _editorKey.currentState;
+      if (editor != null && mounted && editor.bodyTextFor(entryId) != null) {
+        editor.setBodyText(body);
       }
     }
 
@@ -3155,15 +3159,18 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   void setBodyText(String body, {bool recordAsEdit = false}) {
     final before = _controller.text;
     _controller.text = body;
-    if (recordAsEdit && before != body) {
-      final entryId = widget.entry?.id;
-      if (entryId != null) {
-        _remoteSync?.recordJournalTextChange(
-          entryId: entryId,
-          before: before,
-          after: body,
-        );
-      }
+    // [_bodyEntryId], not `widget.entry?.id`: the text replaced here is the
+    // controller's, whichever entry that is. And re-anchored from the
+    // session's own text rather than diffed from [before] — a pull has already
+    // folded the operations behind [body] into the session, so recording
+    // [before] → [body] re-inserted another device's characters as this one's.
+    final entryId = _bodyEntryId;
+    if (recordAsEdit && before != body && entryId != null) {
+      _remoteSync?.reanchorEditorText(
+        collection: FirestoreCollections.journalEntries,
+        documentId: entryId,
+        text: body,
+      );
     }
     _lastText = body;
     _tags = extractTags(body);
@@ -3185,10 +3192,15 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     if (entry != null) {
       final remoteSync = ref.read(remoteSyncServiceProvider);
       _remoteSync = remoteSync;
-      remoteSync.prepareEditingSession(
-        collection: FirestoreCollections.journalEntries,
-        documentId: entry.id,
-        initialText: _controller.text,
+      // Surfaced rather than dropped — see the dream page's editor.
+      unawaited(
+        remoteSync
+            .prepareEditingSession(
+              collection: FirestoreCollections.journalEntries,
+              documentId: entry.id,
+              initialText: _controller.text,
+            )
+            .catchError(_reportPrepareFailure),
       );
       remoteSync.setDocumentEditing(
         collection: FirestoreCollections.journalEntries,
@@ -3316,14 +3328,30 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
         documentId: entry.id,
         listener: _pendingTextMergeListener!,
       );
-      remoteSync.prepareEditingSession(
-        collection: FirestoreCollections.journalEntries,
-        documentId: entry.id,
-        initialText: _controller.text,
+      // Surfaced rather than dropped — see the dream page's editor.
+      unawaited(
+        remoteSync
+            .prepareEditingSession(
+              collection: FirestoreCollections.journalEntries,
+              documentId: entry.id,
+              initialText: _controller.text,
+            )
+            .catchError(_reportPrepareFailure),
       );
       _attachedEntryId = entry.id;
     }
     if (mounted) setState(() {});
+  }
+
+  void _reportPrepareFailure(Object error, StackTrace stack) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stack,
+        library: 'JournalPage',
+        context: ErrorDescription('while preparing the editing session'),
+      ),
+    );
   }
 
   @override

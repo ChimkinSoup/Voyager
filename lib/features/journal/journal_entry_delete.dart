@@ -38,12 +38,6 @@ Future<JournalEntryDeletion?> softDeleteJournalEntry(
   final remoteSync = container.read(remoteSyncServiceProvider);
   final media = container.read(mediaServiceProvider);
 
-  // Read off disk rather than taken from the caller's copy: the lists both
-  // pages render from lag an in-flight save, and restoring from a stale
-  // snapshot would quietly roll the last edit back with the undo.
-  final snapshot = await repository.getEntry(entryId);
-  if (snapshot == null) return null;
-
   // Settle first, then cancel: the entry's editor flushes locally and leaves
   // the upload running in the background, and an in-flight local save that is
   // still going would re-arm that upload after a bare cancel. Once the queue is
@@ -56,6 +50,13 @@ Future<JournalEntryDeletion?> softDeleteJournalEntry(
     entryId,
   );
   remoteSync.cancelDocument(FirestoreCollections.journalEntries, entryId);
+
+  // Read off disk rather than taken from the caller's copy: the lists both
+  // pages render from lag an in-flight save, and restoring from a stale
+  // snapshot would quietly roll the last edit back with the undo. After the
+  // settle, so a save still in flight is part of what the undo restores.
+  final snapshot = await repository.getEntry(entryId);
+  if (snapshot == null) return null;
 
   await repository.softDeleteEntry(entryId);
   // The pushed tombstone is read back rather than built here. `softDeleteEntry`

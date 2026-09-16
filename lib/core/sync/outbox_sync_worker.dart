@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/firestore_write_gate.dart';
@@ -134,6 +135,28 @@ class OutboxSyncWorker {
       pushDocument: pushDocument,
       writeGate: writeGate,
     );
+    final early = List.of(_beforeInitialize);
+    _beforeInitialize.clear();
+    unawaited(Future.forEach(early, (record) => record()));
+  }
+
+  /// Records made before [initialize] ran, which happens a frame after
+  /// launch. Dropping them lost a failed upload from the first frame with
+  /// nothing left to say it was owed; they are replayed in order instead.
+  ///
+  /// Only held once [holdRecordsUntilInitialized] says an [initialize] is
+  /// coming — the app does, at launch. Anywhere that never initializes (most
+  /// tests) they would pile up and be replayed into whichever worker is built
+  /// next.
+  static final _beforeInitialize = <Future<void> Function()>[];
+  static bool _holdEarlyRecords = false;
+
+  static void holdRecordsUntilInitialized() => _holdEarlyRecords = true;
+
+  static bool _heldForInitialize(Future<void> Function() record) {
+    if (isInitialized) return false;
+    if (_holdEarlyRecords) _beforeInitialize.add(record);
+    return true;
   }
 
   Future<void> startDraining() async {
@@ -164,6 +187,9 @@ class OutboxSyncWorker {
             .get();
 
         if (pendingList.isEmpty) break; // Queue is empty, we are done!
+        // Only re-queues after this read count as newer than what the round
+        // is about to send — see [_clearPending].
+        _requeuedDuringRound.clear();
 
         // 2. Resolve each row to the write it stands for. Rows whose entity is
         // gone locally have nothing to upload and are just cleared.
@@ -192,6 +218,9 @@ class OutboxSyncWorker {
           if (pusher != null &&
               FirestoreCollections.crdtBacked.contains(collection)) {
             for (final pending in entry.value) {
+              // Same stand-down as the top of the round: every push below is
+              // a write through the gate.
+              if (_writeGate.isPaused) break;
               try {
                 await pusher(
                   collection,
@@ -209,9 +238,19 @@ class OutboxSyncWorker {
             continue;
           }
 
-          final payloads = await _payloadsFor(collection, {
-            for (final pending in entry.value) pending.documentId,
-          });
+          final Map<String, Map<String, dynamic>> payloads;
+          try {
+            payloads = await _payloadsFor(collection, {
+              for (final pending in entry.value) pending.documentId,
+            });
+          } catch (error, stackTrace) {
+            // One collection whose rows can't be read back must not stop every
+            // other collection's uploads. Its rows stay queued for next time.
+            debugPrint(
+              '[sync] outbox could not resolve $collection: $error\n$stackTrace',
+            );
+            continue;
+          }
           for (final pending in entry.value) {
             final data = payloads[pending.documentId];
             if (data == null) {
@@ -252,7 +291,7 @@ class OutboxSyncWorker {
             batch.set(upload.reference, upload.data, SetOptions(merge: true));
           }
           try {
-            await _writeGate.run(batch.commit);
+            await _writeGate.run(batch.commit, weight: chunk.length);
           } catch (error) {
             // The batch is all-or-nothing, so a single rejected document
             // fails every document beside it and the error doesn't say which
@@ -539,6 +578,13 @@ class OutboxSyncWorker {
           (record) => record.id,
           goalAllocationToFirestore,
         );
+      case FirestoreCollections.mediaAssets:
+        return byId(DriftMediaRepository(_db).getAsset, mediaAssetToFirestore);
+      case FirestoreCollections.mediaReferences:
+        return byId(
+          DriftMediaRepository(_db).getReference,
+          mediaReferenceToFirestore,
+        );
       case FirestoreCollections.pinnedNotes:
         return byId(
           DriftNotificationRepository(_db).getPinnedNote,
@@ -568,6 +614,16 @@ class OutboxSyncWorker {
         return byId(
           DriftSettingsRepository(_db).getFlaggedWordRecord,
           flaggedWordToFirestore,
+        );
+      case FirestoreCollections.snippets:
+        return byId(
+          DriftSettingsRepository(_db).getSnippetRecord,
+          snippetToFirestore,
+        );
+      case FirestoreCollections.jobExperienceSnippets:
+        return byId(
+          DriftSettingsRepository(_db).getJobExperienceSnippetRecord,
+          jobExperienceSnippetToFirestore,
         );
       case FirestoreCollections.settings:
         // One document, not a collection, and it always exists — `getSettings`
@@ -621,6 +677,14 @@ class OutboxSyncWorker {
       return true;
     }
 
+    // A refusal from the write gate, or a write it gave up waiting on, says
+    // the connection is stopped — nothing about the document. Ageing those out
+    // parked every row of a queue that stayed wedged for a week, and parked
+    // rows are never drained again.
+    if (error is SyncBackpressureException || error is TimeoutException) {
+      return false;
+    }
+
     // Classification defaults to "transient" for anything it doesn't
     // recognise, so without an age cap a misclassified permanent failure would
     // retry on every launch forever. [enqueue] deliberately leaves `addedAt`
@@ -641,10 +705,16 @@ class OutboxSyncWorker {
     return false;
   }
 
+  ///
+  /// A row queued again while the round was sending it stays: that re-queue is
+  /// a newer failure — an edit refused after this round read the row — and the
+  /// round's upload carried the older content.
   Future<void> _clearPending(List<PendingUploadData> rows) async {
     final keys = await _loadRowKeys();
     for (final row in rows) {
-      keys.remove(_rowKey(row.collectionName, row.documentId));
+      final key = _rowKey(row.collectionName, row.documentId);
+      if (_requeuedDuringRound.contains(key)) continue;
+      keys.remove(key);
       await (_db.delete(_db.pendingUploadsTable)..where(
             (t) =>
                 t.documentId.equals(row.documentId) &
@@ -675,14 +745,24 @@ class OutboxSyncWorker {
 
   /// Keys of every row in the table, so the common case — a document that has
   /// never failed — costs no query on the success path.
-  Set<String>? _rowKeys;
+  ///
+  /// Loaded once and shared: two first callers each loading the table used to
+  /// race, and the later assignment dropped the key the other had added.
+  Future<Set<String>>? _rowKeys;
 
-  Future<Set<String>> _loadRowKeys() async {
-    return _rowKeys ??= {
-      for (final row in await _db.select(_db.pendingUploadsTable).get())
-        _rowKey(row.collectionName, row.documentId),
-    };
+  Future<Set<String>> _loadRowKeys() {
+    return _rowKeys ??= _db
+        .select(_db.pendingUploadsTable)
+        .get()
+        .then(
+          (rows) => {
+            for (final row in rows) _rowKey(row.collectionName, row.documentId),
+          },
+        );
   }
+
+  /// Keys queued since the drain round in progress read its rows.
+  final _requeuedDuringRound = <String>{};
 
   /// Queues [documentId] for a later retry after an upload failed for a reason
   /// that may not recur.
@@ -696,6 +776,7 @@ class OutboxSyncWorker {
     required String documentId,
     bool crdtOverwrite = false,
   }) async {
+    _requeuedDuringRound.add(_rowKey(collection, documentId));
     (await _loadRowKeys()).add(_rowKey(collection, documentId));
     await _db
         .into(_db.pendingUploadsTable)
@@ -799,7 +880,15 @@ class OutboxSyncWorker {
     required String documentId,
     required Object error,
   }) async {
-    if (!isInitialized) return;
+    if (_heldForInitialize(
+      () => recordFailure(
+        collection: collection,
+        documentId: documentId,
+        error: error,
+      ),
+    )) {
+      return;
+    }
     final permanent =
         classifySyncFailure(error) == SyncFailureKind.permanent;
     if (permanent || !drainableCollections.contains(collection)) {
@@ -827,12 +916,32 @@ class OutboxSyncWorker {
     required String collection,
     required String documentId,
   }) async {
-    if (!isInitialized) return;
+    if (_heldForInitialize(
+      () => recordCrdtOverwrite(collection: collection, documentId: documentId),
+    )) {
+      return;
+    }
     await instance.enqueue(
       collection: collection,
       documentId: documentId,
       crdtOverwrite: true,
     );
+  }
+
+  /// Queues [documentId] because this device holds a change the server does
+  /// not have, found by something other than a failed upload — a pull that
+  /// kept local text newer than the operation log. The replay re-derives the
+  /// missing operations from the row.
+  static Future<void> recordOwedUpload({
+    required String collection,
+    required String documentId,
+  }) async {
+    if (_heldForInitialize(
+      () => recordOwedUpload(collection: collection, documentId: documentId),
+    )) {
+      return;
+    }
+    await instance.enqueue(collection: collection, documentId: documentId);
   }
 
   /// Clears a document's queued or parked row after it uploaded successfully,
@@ -841,7 +950,13 @@ class OutboxSyncWorker {
     required String collection,
     required String documentId,
   }) async {
-    if (!isInitialized) return;
+    // Held in order with the records above, so an early failure that a later
+    // upload fixed doesn't come back as a row.
+    if (_heldForInitialize(
+      () => recordSuccess(collection: collection, documentId: documentId),
+    )) {
+      return;
+    }
     await instance.clearFor(collection: collection, documentId: documentId);
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/spellcheck/spell_check_suggestions.dart';
 import 'package:voyager/core/spellcheck/spell_check_tokenizer.dart';
+import 'package:voyager/core/spellcheck/word_token.dart';
 
 /// A [SpellCheckService] backed by a bundled dictionary plus user-added
 /// custom words, checked purely in Dart. Flutter's built-in
@@ -141,7 +142,7 @@ class VoyagerSpellCheckService implements SpellCheckService {
     for (final range in tokenizeWords(text)) {
       final word = text.substring(range.start, range.end);
       final lower = word.toLowerCase();
-      if (known.contains(lower)) continue;
+      if (isKnownWord(lower, known)) continue;
       spans.add(_spanFor(range, lower, includeSuggestions: includeSuggestions));
     }
     return spans;
@@ -226,7 +227,7 @@ class VoyagerSpellCheckService implements SpellCheckService {
       }
       final word = newText.substring(absRange.start, absRange.end);
       final lower = word.toLowerCase();
-      if (known.contains(lower)) continue;
+      if (isKnownWord(lower, known)) continue;
       spans.add(
         _spanFor(absRange, lower, includeSuggestions: includeSuggestions),
       );

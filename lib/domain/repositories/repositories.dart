@@ -614,6 +614,54 @@ abstract class SettingsRepository {
     bool recordLocalActivity = true,
   });
   Future<void> softDeleteCustomQuote(String id);
+
+  /// The text-expansion snippets as synced records, in list order. Tombstoned
+  /// rows are included only when [includeDeleted] is set.
+  ///
+  /// [getSettings] carries the live ones as [AppSettings.snippets];
+  /// [saveSettings] ignores that list, and edits go through [applySnippetEdit].
+  Future<List<SyncedListItem<Snippet>>> getSnippetRecords({
+    bool includeDeleted = false,
+  });
+  Future<SyncedListItem<Snippet>?> getSnippetRecord(String id);
+  Future<void> upsertSnippetRecord(
+    SyncedListItem<Snippet> record, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Applies the user's edit — the list the editor started from, and the list
+  /// it produced — as the rows it adds, changes, moves and removes, leaving
+  /// everything else stored untouched. See `planOrderedListEdit`.
+  Future<void> applySnippetEdit(List<Snippet> before, List<Snippet> after);
+
+  /// [getSnippetRecords] for [AppSettings.jobExperienceSnippets].
+  Future<List<SyncedListItem<JobExperienceSnippet>>>
+  getJobExperienceSnippetRecords({bool includeDeleted = false});
+  Future<SyncedListItem<JobExperienceSnippet>?> getJobExperienceSnippetRecord(
+    String id,
+  );
+  Future<void> upsertJobExperienceSnippetRecord(
+    SyncedListItem<JobExperienceSnippet> record, {
+    bool recordLocalActivity = true,
+  });
+
+  /// [applySnippetEdit] for [AppSettings.jobExperienceSnippets].
+  Future<void> applyJobExperienceSnippetEdit(
+    List<JobExperienceSnippet> before,
+    List<JobExperienceSnippet> after,
+  );
+
+  /// Snippets in a settings document written before they became records — by
+  /// an older build, or in an older backup — whose ids this device has no row
+  /// for, tombstones included. Built as records appended after the stored
+  /// ones, but not written.
+  Future<
+    ({
+      List<SyncedListItem<Snippet>> snippets,
+      List<SyncedListItem<JobExperienceSnippet>> jobExperienceSnippets,
+    })
+  >
+  unknownLegacySnippets(Map<String, dynamic> settingsDocument);
 }
 
 /// Job applications and everything the Jobs page configures around them:

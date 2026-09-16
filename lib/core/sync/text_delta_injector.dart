@@ -113,6 +113,11 @@ class TextDeltaInjector {
       return localText.substring(0, localText.length - oldRemoteText.length) +
           newRemoteText;
     }
-    return '$localText\n$newRemoteText';
+    // Nothing lines up, so there is nowhere to put the remote change. Leave
+    // what the user is looking at alone rather than appending the remote
+    // document beneath it — that doubled the whole text in the editor, and the
+    // next autosave published the double. The remote change is still in the
+    // operation log and arrives with the next pull once editing stops.
+    return localText;
   }
 }

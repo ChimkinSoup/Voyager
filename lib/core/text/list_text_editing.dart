@@ -1,8 +1,9 @@
 /// Shared plain-text list editing behavior for multi-line "notes"-style text
 /// fields: recognizing `-`/`*` bullet and `1.` numbered list lines, continuing
-/// them on Enter, cleanly exiting an empty list item, renumbering numbered
-/// lists after any edit (typing, deleting, reordering, pasting), and
-/// indenting/outdenting the current line(s) with Tab / Shift+Tab.
+/// them on Enter and across a pasted block of lines, cleanly exiting an empty
+/// list item, renumbering numbered lists after any edit (typing, deleting,
+/// reordering, pasting), and indenting/outdenting the current line(s) with
+/// Tab / Shift+Tab.
 ///
 /// Callers wire this into an existing [TextEditingController] + [FocusNode]
 /// pair; it never owns either. Call [applyListEditing] as the first statement
@@ -148,6 +149,16 @@ bool applyListEditing({
   if (continued != null) {
     text = continued.text;
     selection = continued.selection;
+  } else {
+    final pasted = _applyPasteContinuation(
+      text: text,
+      selection: selection,
+      previousText: previousText,
+    );
+    if (pasted != null) {
+      text = pasted.text;
+      selection = pasted.selection;
+    }
   }
 
   final renumbered = _renumberDocument(text);
@@ -215,6 +226,120 @@ _TextEdit? _applyEnterContinuation({
   final nextOffset = replacementStart + insert.length;
 
   return _TextEdit(nextText, TextSelection.collapsed(offset: nextOffset));
+}
+
+/// Bullet glyphs a list pasted as plain text arrives with — a browser, Word
+/// and Google Docs all render `<li>` as one of these. None is a Voyager
+/// marker, so a pasted line carrying one is rewritten to use the marker of
+/// the list it lands in rather than keeping the glyph as literal content.
+final RegExp _pastedBulletPattern = RegExp(
+  r'^(\s*)[•‣▪◦·–—][ 	]+(.*)$',
+);
+
+final RegExp _leadingWhitespacePattern = RegExp(r'^[ 	]*');
+
+/// The content of [line] with whatever list marker it already carries removed,
+/// or null if it carries none.
+String? _stripPastedMarker(String line) {
+  final pastedBullet = _pastedBulletPattern.firstMatch(line);
+  if (pastedBullet != null) return pastedBullet.group(2)!;
+  return _matchLine(line)?.content;
+}
+
+/// Continues the list the caret sits in across a multi-line insert — a paste —
+/// by giving every inserted line after the first the marker of the line the
+/// paste landed in.
+///
+/// [_applyEnterContinuation] cannot cover this: it only ever looks at a
+/// one-character change, and a paste arrives whole, which is why until now
+/// only the first pasted line joined the list and the rest landed as prose.
+///
+/// A line that already reads as a list item keeps its own marker and indent,
+/// so pasting a nested list does not flatten it, and a blank line stays blank
+/// rather than becoming an empty bullet.
+_TextEdit? _applyPasteContinuation({
+  required String text,
+  required TextSelection selection,
+  required String previousText,
+}) {
+  if (!selection.isCollapsed) return null;
+
+  final shorter = text.length < previousText.length
+      ? text.length
+      : previousText.length;
+  var prefix = 0;
+  while (prefix < shorter &&
+      text.codeUnitAt(prefix) == previousText.codeUnitAt(prefix)) {
+    prefix++;
+  }
+  var suffix = 0;
+  while (suffix < shorter - prefix &&
+      text.codeUnitAt(text.length - 1 - suffix) ==
+          previousText.codeUnitAt(previousText.length - 1 - suffix)) {
+    suffix++;
+  }
+  final insertEnd = text.length - suffix;
+  // Only an insert the user just made at the caret: a programmatic rewrite
+  // (a sync merge, a controller refresh) leaves the caret somewhere else.
+  if (selection.baseOffset != insertEnd) return null;
+  final inserted = text.substring(prefix, insertEnd);
+  // A lone newline is a typed Enter, already handled above.
+  if (inserted.length < 2 || !inserted.contains('\n')) return null;
+
+  final lineStart = _lineStartFor(text, prefix);
+  // Everything before the insert is identical in both texts, so [lineStart]
+  // addresses the same line in each; the pre-paste line is the one holding
+  // the marker to continue.
+  final pastedInto = previousText.substring(
+    lineStart,
+    _lineEndFor(previousText, lineStart),
+  );
+  final match = _matchLine(pastedInto);
+  if (match == null) return null;
+
+  final markerLength = match.isNumbered
+      ? match.marker.length + 1 // digits + '.'
+      : match.marker.length;
+  final contentStart =
+      lineStart + match.indent.length + markerLength + match.spacing.length;
+  // Pasting into the marker itself, or ahead of it, is not a continuation.
+  if (prefix < contentStart) return null;
+
+  final lines = inserted.split('\n');
+  // The paste starting exactly at the marker's end means the item was still
+  // empty, so a marker the first pasted line carries would otherwise sit
+  // after this line's own marker as literal text.
+  if (prefix == contentStart) {
+    lines[0] = _stripPastedMarker(lines[0]) ?? lines[0];
+  }
+  var nextNumber = match.isNumbered ? (int.tryParse(match.marker) ?? 0) : 0;
+  for (var i = 1; i < lines.length; i++) {
+    final line = lines[i];
+    if (line.trim().isEmpty) continue;
+    // Already a list line of Voyager's own: its marker and indent are the
+    // pasted list's own structure, and rewriting them would flatten it. The
+    // renumbering pass below still puts any numbering in order.
+    if (_matchLine(line) != null) continue;
+    final pastedBullet = _pastedBulletPattern.firstMatch(line);
+    final String lineIndent;
+    final String content;
+    if (pastedBullet != null) {
+      lineIndent = pastedBullet.group(1)!;
+      content = pastedBullet.group(2)!;
+    } else {
+      lineIndent = _leadingWhitespacePattern.firstMatch(line)!.group(0)!;
+      content = line.substring(lineIndent.length);
+    }
+    final marker = match.isNumbered ? '${++nextNumber}.' : match.marker;
+    lines[i] = '${match.indent}$lineIndent$marker${match.spacing}$content';
+  }
+
+  final rewritten = lines.join('\n');
+  if (rewritten == inserted) return null;
+  return _TextEdit(
+    text.replaceRange(prefix, insertEnd, rewritten),
+    TextSelection.collapsed(offset: prefix + rewritten.length),
+  );
 }
 
 class _NumberEdit {

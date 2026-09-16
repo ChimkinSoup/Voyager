@@ -159,6 +159,30 @@ class DataImportService {
         );
         restoredSettings = merged;
       }
+
+      // A backup made before snippets were records carries them inside its
+      // settings document instead of in collections of their own.
+      if (backupSettings != null) {
+        final legacy = await _settingsRepository.unknownLegacySnippets(
+          backupSettings,
+        );
+        for (final record in legacy.snippets) {
+          await _settingsRepository.upsertSnippetRecord(
+            record,
+            recordLocalActivity: false,
+          );
+          (restored[FirestoreCollections.snippets] ??= []).add(record);
+        }
+        for (final record in legacy.jobExperienceSnippets) {
+          await _settingsRepository.upsertJobExperienceSnippetRecord(
+            record,
+            recordLocalActivity: false,
+          );
+          (restored[FirestoreCollections.jobExperienceSnippets] ??= []).add(
+            record,
+          );
+        }
+      }
     });
 
     // Blobs are written after the transaction and before the uploads: the

@@ -43,3 +43,11 @@ const int kMaxReps = 60;
 /// can be edited — the planner's sheet and the detail view's inline fields —
 /// so the same typed number can't be accepted by one and clamped by the other.
 const int kMaxSets = 20;
+
+/// Upper bound on drop segments after the top/main segment of one set.
+const int kMaxDropsPerSet = 10;
+
+/// Default weight stripped when adding a drop, in display units. Converted to
+/// kg at the call site so storage stays unit-agnostic.
+const double kDefaultDropDecrementLb = 10;
+const double kDefaultDropDecrementKg = 5;

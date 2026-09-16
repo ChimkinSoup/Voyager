@@ -121,6 +121,11 @@ class FirestoreWriteGate extends ChangeNotifier {
   /// the hole this class exists to prevent, only more slowly.
   bool _stalled = false;
 
+  /// Rejected probes in a row; see [_watchQueueDrain].
+  int _probeRejections = 0;
+  static const _maxProbeRejections = 5;
+  static const _probeRetryDelay = Duration(seconds: 2);
+
   /// Writes issued this session and not yet acknowledged.
   int get inFlight => _inFlight;
 
@@ -174,9 +179,15 @@ class FirestoreWriteGate extends ChangeNotifier {
   /// id — ids that `CharacterOpRegistry.restorePendingOps` hands back
   /// unchanged, so the retry re-sends the same ones rather than minting new
   /// ones at the same positions.
-  Future<T> run<T>(Future<T> Function() write) async {
+  ///
+  /// [weight] is how many document writes [write] carries — a batch commit of
+  /// forty is forty queued writes to Firestore, not one. A batch heavier than
+  /// the whole allowance is admitted when nothing else is in flight, so a
+  /// chunk larger than the startup limit still goes out on its own.
+  Future<T> run<T>(Future<T> Function() write, {int weight = 1}) async {
     final limit = _currentLimit;
-    if (_inFlight >= limit) {
+    final admitted = _inFlight == 0 ? limit > 0 : _inFlight + weight <= limit;
+    if (!admitted) {
       _refusedWrites++;
       notifyListeners();
       throw SyncBackpressureException(
@@ -185,7 +196,7 @@ class FirestoreWriteGate extends ChangeNotifier {
         stalled: _stalled,
       );
     }
-    _inFlight++;
+    _inFlight += weight;
     if (_inFlight > _peakInFlight) _peakInFlight = _inFlight;
     notifyListeners();
     try {
@@ -200,7 +211,7 @@ class FirestoreWriteGate extends ChangeNotifier {
       }
       rethrow;
     } finally {
-      _inFlight--;
+      _inFlight -= weight;
       notifyListeners();
     }
   }
@@ -241,11 +252,20 @@ class FirestoreWriteGate extends ChangeNotifier {
     unawaited(
       pending.then(
         (_) => _onQueueDrained(),
-        // A signed-out user rejects outstanding calls. Nothing is queued for
-        // a user who isn't there, so that is a cleared queue too.
+        // Firestore rejects outstanding calls when the signed-in user
+        // changes — a sign-out, or auth restoring after this gate was built.
+        // That says nothing about the queue, so ask again rather than lifting
+        // the latches over a backlog that may still be there. Bounded: a
+        // platform that only ever rejects is one that cannot tell us, and
+        // refusing every write forever is worse than trusting the counter.
         onError: (Object error) {
           if (kDebugMode) {
             debugPrint('[sync] waitForPendingWrites failed: $error');
+          }
+          if (_probeRejections < _maxProbeRejections) {
+            _probeRejections++;
+            Timer(_probeRetryDelay, _watchQueueDrain);
+            return;
           }
           _onQueueDrained();
         },
@@ -257,6 +277,7 @@ class FirestoreWriteGate extends ChangeNotifier {
   /// stalled has moved. Both latches come off together because both stand for
   /// that one fact, and this is the direct measurement of it.
   void _onQueueDrained() {
+    _probeRejections = 0;
     if (_startupBacklogCleared && !_stalled) return;
     _startupBacklogCleared = true;
     _stalled = false;

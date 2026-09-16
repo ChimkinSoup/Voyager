@@ -404,6 +404,84 @@ CustomQuote mergeCustomQuoteFromRemote(
   );
 }
 
+Map<String, dynamic> snippetToFirestore(SyncedListItem<Snippet> record) => {
+  ...record.item.toJson(),
+  'position': record.position,
+  'createdAt': _dateToFirestoreRequired(record.createdAt),
+  'updatedAt': _dateToFirestoreRequired(record.updatedAt),
+  'version': record.version,
+  'deletedAt': _dateToFirestore(record.deletedAt),
+};
+
+/// Null when the remote document isn't a usable snippet and there is no local
+/// copy to keep — one malformed document must not stop the pull.
+SyncedListItem<Snippet>? mergeSnippetFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  SyncedListItem<Snippet>? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local;
+  }
+  final snippet = Snippet.fromJson({...data, 'id': id});
+  if (snippet == null) return local;
+  return _mergedListItem(data, snippet, local);
+}
+
+Map<String, dynamic> jobExperienceSnippetToFirestore(
+  SyncedListItem<JobExperienceSnippet> record,
+) => {
+  ...record.item.toJson(),
+  'position': record.position,
+  'createdAt': _dateToFirestoreRequired(record.createdAt),
+  'updatedAt': _dateToFirestoreRequired(record.updatedAt),
+  'version': record.version,
+  'deletedAt': _dateToFirestore(record.deletedAt),
+};
+
+SyncedListItem<JobExperienceSnippet>? mergeJobExperienceSnippetFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  SyncedListItem<JobExperienceSnippet>? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local;
+  }
+  final snippet = JobExperienceSnippet.fromJson({...data, 'id': id});
+  if (snippet == null) return local;
+  return _mergedListItem(data, snippet, local);
+}
+
+SyncedListItem<T> _mergedListItem<T>(
+  Map<String, dynamic> data,
+  T item,
+  SyncedListItem<T>? local,
+) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return SyncedListItem(
+    item: item,
+    position:
+        (data['position'] as num?)?.toDouble() ?? local?.position ?? 0,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    // A re-added snippet clears its tombstone, so the remote value is taken
+    // verbatim, as for custom words.
+    deletedAt: parseFirestoreDate(data['deletedAt']),
+  );
+}
+
 Map<String, dynamic> studyFolderToFirestore(StudyFolder folder) => {
   'id': folder.id,
   'name': folder.name,
@@ -910,6 +988,8 @@ Map<String, dynamic> workoutPlanEntryToFirestore(WorkoutPlanEntry entry) => {
   'dayIndex': entry.dayIndex,
   'exerciseId': entry.exerciseId,
   'sortOrder': entry.sortOrder,
+  'prescriptionMode': entry.prescriptionMode.name,
+  'setPrescriptions': [for (final p in entry.setPrescriptions) p.toJson()],
   'createdAt': _dateToFirestoreRequired(entry.createdAt),
   'updatedAt': _dateToFirestoreRequired(entry.updatedAt),
   'version': entry.version,
@@ -933,12 +1013,31 @@ WorkoutPlanEntry mergeWorkoutPlanEntryFromRemote(
     return local;
   }
 
+  final modeName = data['prescriptionMode'] as String? ?? 'inherit';
+  final mode = WorkoutPrescriptionMode.values.asNameMap()[modeName] ??
+      WorkoutPrescriptionMode.inherit;
+  final prescriptions = <SetPrescription>[];
+  final rawPrescriptions = data['setPrescriptions'];
+  if (rawPrescriptions is List) {
+    for (final item in rawPrescriptions) {
+      if (item is Map<String, dynamic>) {
+        prescriptions.add(SetPrescription.fromJson(item));
+      } else if (item is Map) {
+        prescriptions.add(
+          SetPrescription.fromJson(Map<String, dynamic>.from(item)),
+        );
+      }
+    }
+  }
+
   return WorkoutPlanEntry(
     id: id,
     planId: data['planId'] as String? ?? local?.planId ?? '',
     dayIndex: (data['dayIndex'] as num?)?.toInt() ?? local?.dayIndex ?? 0,
     exerciseId: data['exerciseId'] as String? ?? local?.exerciseId ?? '',
     sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
+    prescriptionMode: mode,
+    setPrescriptions: prescriptions,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -1016,6 +1115,8 @@ Map<String, dynamic> workoutSetLogToFirestore(WorkoutSetLog log) => {
   'reps': log.reps,
   'plannedWeightKg': log.plannedWeightKg,
   'plannedReps': log.plannedReps,
+  'dropSegments': [for (final s in log.dropSegments) s.toJson()],
+  'plannedDropSegments': [for (final s in log.plannedDropSegments) s.toJson()],
   'completed': log.completed,
   'completedAt': _dateToFirestore(log.completedAt),
   'createdAt': _dateToFirestoreRequired(log.createdAt),
@@ -1041,6 +1142,17 @@ WorkoutSetLog mergeWorkoutSetLogFromRemote(
     return local;
   }
 
+  List<SetSegment> parseSegments(Object? raw, List<SetSegment>? fallback) {
+    if (raw is! List) return fallback ?? const [];
+    return [
+      for (final item in raw)
+        if (item is Map<String, dynamic>)
+          SetSegment.fromJson(item)
+        else if (item is Map)
+          SetSegment.fromJson(Map<String, dynamic>.from(item)),
+    ];
+  }
+
   return WorkoutSetLog(
     id: id,
     sessionId: data['sessionId'] as String? ?? local?.sessionId ?? '',
@@ -1056,6 +1168,11 @@ WorkoutSetLog mergeWorkoutSetLogFromRemote(
         0,
     plannedReps:
         (data['plannedReps'] as num?)?.toInt() ?? local?.plannedReps ?? 0,
+    dropSegments: parseSegments(data['dropSegments'], local?.dropSegments),
+    plannedDropSegments: parseSegments(
+      data['plannedDropSegments'],
+      local?.plannedDropSegments,
+    ),
     completed: data['completed'] as bool? ?? local?.completed ?? false,
     completedAt: parseFirestoreDate(data['completedAt']),
     createdAt:
@@ -2857,7 +2974,12 @@ bool _remoteClears(Map<String, dynamic> data, String key) =>
 ///    its own keys in this same document;
 ///  - every `dev*` debugging flag;
 ///  - `journalEntryListWidth`, `dreamSplitWidth`, and `editSidePanelWidth`,
-///    which are sized for the screen they were dragged on.
+///    which are sized for the screen they were dragged on;
+///  - where the user is: `lastSeenNavPage`, the `lastViewed*Id`s, the
+///    `*ShowAll*` scopes and `todoCompletedSectionExpanded`. These change on
+///    every page or list switch, and while they synced, merely navigating on a
+///    device that hadn't pulled moved the clock and re-uploaded its stale copy
+///    of every other setting over newer edits made elsewhere.
 ///
 /// This map is also the single definition of "did a synced setting change" —
 /// see `DriftSettingsRepository.saveSettings`, which compares two of them to
@@ -2899,15 +3021,8 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'mediaRemoteDownloadsEnabled': s.mediaRemoteDownloadsEnabled,
   'mediaBackgroundPrefetchEnabled': s.mediaBackgroundPrefetchEnabled,
   'snippetExpandKey': s.snippetExpandKey.name,
-  'snippets': [for (final snippet in s.snippets) snippet.toJson()],
-  'lastViewedJournalId': s.lastViewedJournalId,
-  'lastViewedTodoListId': s.lastViewedTodoListId,
-  'lastViewedCalendarId': s.lastViewedCalendarId,
   'defaultJournalId': s.defaultJournalId,
   'defaultTodoListId': s.defaultTodoListId,
-  'journalShowAllEntries': s.journalShowAllEntries,
-  'todoShowAllTasks': s.todoShowAllTasks,
-  'calendarShowAllCalendars': s.calendarShowAllCalendars,
   'geometricTextureScale': s.geometricTextureScale,
   'geometricTextureIntensity': s.geometricTextureIntensity,
   'geometricTextureFocalSpread': s.geometricTextureFocalSpread,
@@ -2948,13 +3063,8 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'jobProfileLinkedInUrl': s.jobProfileLinkedInUrl,
   'jobProfileGitHubUrl': s.jobProfileGitHubUrl,
   'jobProfilePortfolioUrl': s.jobProfilePortfolioUrl,
-  'jobExperienceSnippets': [
-    for (final snippet in s.jobExperienceSnippets) snippet.toJson(),
-  ],
   'startupPageMode': s.startupPageMode.name,
   'customStartupPage': s.customStartupPage,
-  'lastSeenNavPage': s.lastSeenNavPage,
-  'todoCompletedSectionExpanded': s.todoCompletedSectionExpanded,
   'showAnnualizedSubscriptionCost': s.showAnnualizedSubscriptionCost,
   'showDreamStatistics': s.showDreamStatistics,
   'dreamNotesPinned': s.dreamNotesPinned,
@@ -3054,25 +3164,10 @@ AppSettings mergeSettingsFromRemote(
       data['snippetExpandKey'],
       local.snippetExpandKey,
     ),
-    // Absent means "this document predates snippets", which must leave the
-    // local list alone; present-but-empty is a real "the user deleted them
-    // all" and has to come through as an empty list, not as unspecified.
-    snippets: data.containsKey('snippets')
-        ? Snippet.listFromJson(data['snippets'])
-        : null,
-    lastViewedJournalId: data['lastViewedJournalId'] as String?,
-    clearLastViewedJournalId: _remoteClears(data, 'lastViewedJournalId'),
-    lastViewedTodoListId: data['lastViewedTodoListId'] as String?,
-    clearLastViewedTodoListId: _remoteClears(data, 'lastViewedTodoListId'),
-    lastViewedCalendarId: data['lastViewedCalendarId'] as String?,
-    clearLastViewedCalendarId: _remoteClears(data, 'lastViewedCalendarId'),
     defaultJournalId: data['defaultJournalId'] as String?,
     clearDefaultJournalId: _remoteClears(data, 'defaultJournalId'),
     defaultTodoListId: data['defaultTodoListId'] as String?,
     clearDefaultTodoListId: _remoteClears(data, 'defaultTodoListId'),
-    journalShowAllEntries: data['journalShowAllEntries'] as bool?,
-    todoShowAllTasks: data['todoShowAllTasks'] as bool?,
-    calendarShowAllCalendars: data['calendarShowAllCalendars'] as bool?,
     geometricTextureScale: _remoteDouble(data, 'geometricTextureScale'),
     geometricTextureIntensity: _remoteDouble(data, 'geometricTextureIntensity'),
     geometricTextureFocalSpread: _remoteDouble(
@@ -3171,9 +3266,6 @@ AppSettings mergeSettingsFromRemote(
     ),
     customStartupPage: data['customStartupPage'] as String?,
     clearCustomStartupPage: _remoteClears(data, 'customStartupPage'),
-    lastSeenNavPage: data['lastSeenNavPage'] as String?,
-    clearLastSeenNavPage: _remoteClears(data, 'lastSeenNavPage'),
-    todoCompletedSectionExpanded: data['todoCompletedSectionExpanded'] as bool?,
     showAnnualizedSubscriptionCost:
         data['showAnnualizedSubscriptionCost'] as bool?,
     showDreamStatistics: data['showDreamStatistics'] as bool?,
@@ -3184,11 +3276,6 @@ AppSettings mergeSettingsFromRemote(
     clearJobProfileGitHubUrl: _remoteClears(data, 'jobProfileGitHubUrl'),
     jobProfilePortfolioUrl: data['jobProfilePortfolioUrl'] as String?,
     clearJobProfilePortfolioUrl: _remoteClears(data, 'jobProfilePortfolioUrl'),
-    // Same absent-vs-empty rule as `snippets` above: a document predating the
-    // feature leaves the local list alone, an empty array deletes them all.
-    jobExperienceSnippets: data.containsKey('jobExperienceSnippets')
-        ? JobExperienceSnippet.listFromJson(data['jobExperienceSnippets'])
-        : null,
     leetcodeUsername: data['leetcodeUsername'] as String?,
     clearLeetcodeUsername: _remoteClears(data, 'leetcodeUsername'),
     showNeetCode150: data['showNeetCode150'] as bool?,

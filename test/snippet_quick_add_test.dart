@@ -258,13 +258,9 @@ void main() {
     testWidgets('a duplicate trigger is refused without closing', (
       tester,
     ) async {
-      await repo.saveSettings(
-        (await repo.getSettings()).copyWith(
-          snippets: const [
-            Snippet(id: 'a', trigger: 'hello', replacement: 'hi'),
-          ],
-        ),
-      );
+      await repo.applySnippetEdit(const [], const [
+        Snippet(id: 'a', trigger: 'hello', replacement: 'hi'),
+      ]);
       await pumpField(tester);
       await openQuickAdd(tester);
       await tester.tap(find.byTooltip('Save snippet'));

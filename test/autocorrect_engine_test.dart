@@ -56,6 +56,14 @@ void main() {
       },
     );
 
+    test('a possessive of a known word is left alone', () {
+      // Nothing in the bundled list is a possessive, so `dog's` is unknown by
+      // the letter of the set — and `dogs` is exactly one deletion away, which
+      // is how the apostrophe used to get corrected out of it.
+      expect(autocorrectFor("dog's", {'dogs'}), 'dogs');
+      expect(autocorrectFor("dog's", {'dog', 'dogs'}), isNull);
+    });
+
     test('a token shorter than the minimum is left alone', () {
       expect(kMinAutocorrectLength, 3);
       // `eh` is one transposition from `he` and would otherwise be corrected.
@@ -254,6 +262,25 @@ void main() {
     test(r'a word inside $...$ is excluded', () {
       expect(excluded(r'the sum $x wtih y$ holds', 11), isTrue);
       expect(excluded(r'the sum $x wtih y$ holds', 20), isFalse);
+    });
+  });
+
+  group('alphanumeric runs', () {
+    test('a token beside a digit is part of a longer run', () {
+      // `autocorrectTokenAt` stops at the digit, so the token looks whole;
+      // the squiggle drops the whole run, and a correction must too.
+      expect(isInAlphanumericRun('x264enc ', 5, 8), isTrue);
+      expect(isInAlphanumericRun('3D ', 1, 2), isTrue);
+      // Across the apostrophe that holds one run together.
+      expect(isInAlphanumericRun("xm6'sss ", 4, 7), isTrue);
+    });
+
+    test('an ordinary word is not in a run', () {
+      expect(isInAlphanumericRun('the dog ran', 4, 7), isFalse);
+      expect(isInAlphanumericRun('dog', 0, 3), isFalse);
+      // A digit the other side of a space or a hyphen is its own run.
+      expect(isInAlphanumericRun('3 dog', 2, 5), isFalse);
+      expect(isInAlphanumericRun('3-dog', 2, 5), isFalse);
     });
   });
 

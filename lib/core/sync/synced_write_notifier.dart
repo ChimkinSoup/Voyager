@@ -24,23 +24,25 @@
 class SyncedWriteNotifier {
   void Function(String collection, List<Object> records)? _onWrite;
 
-  /// Writes that happened before the sync layer registered itself.
-  final _buffered = <({String collection, List<Object> records})>[];
-
-  /// Ceiling on [_buffered]. Only reached if a listener is never registered at
-  /// all — in tests, and in any build where syncing is off — where the entries
-  /// are never going anywhere and holding more of them helps nobody.
-  static const _maxBuffered = 500;
+  /// Writes that happened before the sync layer registered itself — or while
+  /// it is being rebuilt — grouped by collection in arrival order.
+  ///
+  /// Never trimmed. It used to drop the oldest entries past 500, and each
+  /// dropped entry was a row written locally whose upload nothing would ever
+  /// retry: a large import landing during a rebuild lost uploads silently.
+  /// Grouping by collection keeps it to one entry per collection however many
+  /// writes arrive.
+  final _buffered = <String, List<Object>>{};
 
   /// Registered by the sync layer once it is built. Replays anything that was
   /// written in the meantime.
   set onWrite(void Function(String collection, List<Object> records)? handler) {
     _onWrite = handler;
     if (handler == null || _buffered.isEmpty) return;
-    final replay = List.of(_buffered);
+    final replay = Map.of(_buffered);
     _buffered.clear();
-    for (final entry in replay) {
-      handler(entry.collection, entry.records);
+    for (final entry in replay.entries) {
+      handler(entry.key, entry.value);
     }
   }
 
@@ -48,8 +50,7 @@ class SyncedWriteNotifier {
     if (records.isEmpty) return;
     final handler = _onWrite;
     if (handler == null) {
-      if (_buffered.length >= _maxBuffered) _buffered.removeAt(0);
-      _buffered.add((collection: collection, records: records));
+      (_buffered[collection] ??= []).addAll(records);
       return;
     }
     handler(collection, records);

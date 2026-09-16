@@ -8,6 +8,7 @@ import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/features/workout/exercise_detail_view.dart';
 import 'package:voyager/features/workout/workout_actions.dart';
+import 'package:voyager/features/workout/workout_placement_prescription_editor.dart';
 import 'package:voyager/features/workout/workout_target_editor.dart';
 import 'package:voyager/features/workout/workout_exercise_panel.dart';
 import 'package:voyager/features/workout/workout_units.dart';
@@ -269,8 +270,7 @@ class _PlanEntryCard extends ConsumerWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            '${resolved.targetSets} × ${resolved.targetReps}'
-            '${resolved.targetWeightKg > 0 ? ' · ${unit.formatKilogramsWithUnit(resolved.targetWeightKg)}' : ''}',
+            _placementSummary(entry, resolved, unit),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.labelSmall?.copyWith(
@@ -287,6 +287,11 @@ class _PlanEntryCard extends ConsumerWidget {
           label: 'Edit target everywhere',
           icon: PhosphorIconsRegular.slidersHorizontal,
           onTap: () => _edit(context, ref, resolved),
+        ),
+        ContextMenuItem(
+          label: 'Custom sets for this day',
+          icon: PhosphorIconsRegular.listNumbers,
+          onTap: () => _editCustom(context, ref, resolved),
         ),
         ContextMenuItem(
           label: 'Remove from day',
@@ -333,6 +338,43 @@ class _PlanEntryCard extends ConsumerWidget {
       weightKg: result.weightKg,
     );
   }
+
+  Future<void> _editCustom(
+    BuildContext context,
+    WidgetRef ref,
+    Exercise resolved,
+  ) async {
+    final result = await showPlacementPrescriptionEditor(
+      context,
+      exercise: resolved,
+      entry: entry,
+      unit: unit,
+    );
+    if (result == null) return;
+    final actions = WorkoutActions(ref);
+    if (result.clearToInherit) {
+      await actions.clearPlacementPrescription(entry);
+    } else {
+      await actions.savePlacementPrescription(
+        entry,
+        prescriptions: result.prescriptions,
+      );
+    }
+  }
+}
+
+String _placementSummary(
+  WorkoutPlanEntry entry,
+  Exercise exercise,
+  WeightUnit unit,
+) {
+  if (entry.isCustomPrescription) {
+    final n = entry.setPrescriptions.length;
+    final hasDrops = entry.setPrescriptions.any((p) => p.hasDrops);
+    return hasDrops ? '$n sets (drops)' : '$n sets';
+  }
+  return '${exercise.targetSets} × ${exercise.targetReps}'
+      '${exercise.targetWeightKg > 0 ? ' · ${unit.formatKilogramsWithUnit(exercise.targetWeightKg)}' : ''}';
 }
 
 class _EntryDragFeedback extends StatelessWidget {

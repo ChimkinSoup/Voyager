@@ -104,12 +104,20 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
     final container = widget.container;
 
     try {
+      // Re-read rather than trusting [existing] — see the goal sheet.
+      final onDisk = existing == null
+          ? null
+          : (await repo.listCategories(
+              includeDeleted: true,
+            )).where((c) => c.id == existing.id).firstOrNull;
+      final base = onDisk ?? existing;
       await repo.upsertCategory(
         FinanceCategory(
           id: existing?.id ?? newId(),
-          createdAt: existing?.createdAt ?? now,
+          createdAt: base?.createdAt ?? now,
           updatedAt: now,
-          version: existing == null ? 0 : existing.version + 1,
+          version: base == null ? 0 : base.version + 1,
+          deletedAt: base?.deletedAt,
           name: _nameController.text.trim(),
           colorValue: _colorValue,
           tags: _selectedTags.toList()..sort(),

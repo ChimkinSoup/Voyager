@@ -40,18 +40,22 @@ void main() {
     expect(reopened.calendarShowAllCalendars, isTrue);
   });
 
-  // Not just stored: synced. A view restored on one machine and not the other
-  // is what dropping either key out of the payload would look like.
-  test('the pair survives a round trip through Firestore', () {
+  // Stored, but not synced: where this device is looking is not a preference.
+  // While it synced, switching calendars moved the settings clock and a stale
+  // device re-uploaded every other setting over newer edits made elsewhere.
+  test('the pair stays on this device', () {
     final remote = AppSettings(
       lastViewedCalendarId: 'work',
       calendarShowAllCalendars: true,
       updatedAt: DateTime.utc(2026, 8, 29, 12),
     );
-    final local = AppSettings(updatedAt: DateTime.utc(2026, 8, 29, 11));
+    final local = AppSettings(
+      lastViewedCalendarId: 'home',
+      updatedAt: DateTime.utc(2026, 8, 29, 11),
+    );
 
     final merged = mergeSettingsFromRemote(settingsToFirestore(remote), local);
-    expect(merged.lastViewedCalendarId, 'work');
-    expect(merged.calendarShowAllCalendars, isTrue);
+    expect(merged.lastViewedCalendarId, 'home');
+    expect(merged.calendarShowAllCalendars, isFalse);
   });
 }

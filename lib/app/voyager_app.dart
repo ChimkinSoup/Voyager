@@ -99,7 +99,12 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     await PendingFlushRegistry.instance.flushAll(
       perCallbackDeadline: _flushDeadline,
     );
-    final remoteSync = _remoteSync;
+    // Re-read while mounted: the cached instance is whichever service the
+    // last build saw, and a rebuilt provider leaves it disposed — with its
+    // pending uploads handed on to a successor this flush would never reach.
+    final remoteSync = mounted
+        ? ref.read(remoteSyncServiceProvider)
+        : _remoteSync;
     if (remoteSync != null) {
       await remoteSync
           .flushAllPending()

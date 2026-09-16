@@ -36,8 +36,9 @@ String jobExperienceSnippetsSummary(AppSettings settings) {
 class _ExperienceSnippetsDialog extends ConsumerWidget {
   const _ExperienceSnippetsDialog();
 
-  /// Writes over the *current* list rather than the one this build saw, so an
-  /// edit made while another dialog was open never resurrects a stale order.
+  /// Applies [change] to the *current* list rather than the one this build
+  /// saw, and stores only what it changed, so an edit made while another
+  /// dialog was open — or on another device — is never undone.
   Future<void> _write(
     WidgetRef ref,
     List<JobExperienceSnippet> Function(List<JobExperienceSnippet> current)
@@ -45,13 +46,10 @@ class _ExperienceSnippetsDialog extends ConsumerWidget {
   ) async {
     final settings = ref.read(settingsProvider).valueOrNull;
     if (settings == null) return;
+    final before = settings.jobExperienceSnippets;
     await ref
         .read(settingsProvider.notifier)
-        .saveSettings(
-          settings.copyWith(
-            jobExperienceSnippets: change(settings.jobExperienceSnippets),
-          ),
-        );
+        .saveJobExperienceSnippets(before, change(before));
   }
 
   Future<void> _add(BuildContext context, WidgetRef ref) async {

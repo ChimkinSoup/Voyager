@@ -33,6 +33,13 @@ enum WorkoutPlanMode { weekly, cycle }
 /// `kPoundsPerKilogram` in workout_models.dart.
 enum WeightUnit { kg, lb }
 
+/// How a plan placement gets its set recipe.
+///
+/// [inherit] uses the movement's global targets (legacy / simple editor).
+/// [custom] stores a per-day list of set prescriptions (varying sets and/or
+/// drop segments) on the [WorkoutPlanEntry] itself.
+enum WorkoutPrescriptionMode { inherit, custom }
+
 enum StartupPageMode { first, custom, lastSeen }
 
 /// Which key expands a non-auto text snippet once its trigger sits before the

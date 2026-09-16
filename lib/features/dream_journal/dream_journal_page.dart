@@ -1512,12 +1512,14 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
       ),
     );
     if (recordAsEdit) {
-      _remoteSync?.recordDreamTextChange(
-        // [_bodyEntryId], not `widget.entry.id`: this diffs the controller's
-        // own text, so it belongs to whichever dream that text is.
-        entryId: _bodyEntryId,
-        before: before,
-        after: body,
+      // [_bodyEntryId], not `widget.entry.id`: this replaces the controller's
+      // own text, so it belongs to whichever dream that text is. Re-anchored
+      // from the session's text rather than diffed from [before] — see
+      // [RemoteSyncService.reanchorEditorText].
+      _remoteSync?.reanchorEditorText(
+        collection: FirestoreCollections.dreamEntries,
+        documentId: _bodyEntryId,
+        text: body,
       );
     }
     _lastText = body;

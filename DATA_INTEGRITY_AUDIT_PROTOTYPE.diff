@@ -1,0 +1,1228 @@
+diff --git a/lib/app/providers.dart b/lib/app/providers.dart
+index ea18e9c..08c8603 100644
+--- a/lib/app/providers.dart
++++ b/lib/app/providers.dart
+@@ -31,6 +31,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
+ import 'package:voyager/core/sync/firestore_write_gate.dart';
+ import 'package:voyager/core/sync/journal_write_coordinator.dart';
+ import 'package:voyager/core/sync/remote_sync_service.dart';
++import 'package:voyager/domain/services/character_op_session.dart';
+ import 'package:voyager/core/sync/sync_activity.dart';
+ import 'package:voyager/core/sync/sync_engine.dart';
+ import 'package:voyager/core/sync/synced_write_notifier.dart';
+@@ -451,10 +452,20 @@ final syncEngineProvider = Provider<SyncEngine>((ref) {
+ });
+ 
+ final weatherApiClientProvider = Provider<WeatherApiClient>((ref) {
+-  final settings = ref.watch(settingsProvider).valueOrNull;
+-  if (kDebugMode && (settings?.devUseDirectOpenWeather ?? false)) {
++  // Only the two fields this reads. Watching the whole settings row rebuilt
++  // the client on every settings save, and with it [weatherServiceProvider]
++  // and [remoteSyncServiceProvider], which is built from it — see there.
++  final direct = ref.watch(
++    settingsProvider.select(
++      (s) => (
++        use: s.valueOrNull?.devUseDirectOpenWeather ?? false,
++        key: s.valueOrNull?.devOpenWeatherApiKey,
++      ),
++    ),
++  );
++  if (kDebugMode && direct.use) {
+     final key =
+-        settings?.devOpenWeatherApiKey?.trim() ??
++        direct.key?.trim() ??
+         (_openWeatherApiKey.isNotEmpty ? _openWeatherApiKey : null);
+     if (key != null && key.isNotEmpty) {
+       return DevOpenWeatherClient(apiKey: key);
+@@ -485,8 +496,23 @@ final weatherServiceProvider = Provider<WeatherService>((ref) {
+   );
+ });
+ 
++/// Character operations recorded since each document's last upload.
++///
++/// Held here rather than inside [RemoteSyncService] so they outlive it: the
++/// service is rebuilt whenever a dependency changes, and its disposal cleared
++/// the registry — every operation typed since the last upload, gone, with the
++/// text still on screen and in SQLite and never again re-emitted.
++final charOpRegistryProvider = Provider<CharacterOpRegistry>(
++  (ref) => CharacterOpRegistry(),
++);
++
+ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
+-  final settings = ref.watch(settingsProvider).valueOrNull;
++  // Read, not watched: [forceConflictUi] is kept current by the listener
++  // below. Watching rebuilt — and disposed — this service on every settings
++  // save, including the ones page navigation makes, and the startup
++  // `ref.invalidate(settingsProvider)` landed right after live sync started,
++  // disposing the controller it had just started.
++  final settings = ref.read(settingsProvider).valueOrNull;
+   final service = RemoteSyncService(
+     syncRepository: ref.watch(syncRepositoryProvider),
+     journalRepository: ref.watch(journalRepositoryProvider),
+@@ -508,6 +534,7 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
+     syncEngine: ref.watch(syncEngineProvider),
+     syncConflictRepository: ref.watch(syncConflictRepositoryProvider),
+     syncActivity: ref.read(syncActivityProvider),
++    charOpRegistry: ref.watch(charOpRegistryProvider),
+     deviceId: ref.watch(deviceIdProvider),
+     forceConflictUi: settings?.devForceConflictUi ?? false,
+   );
+diff --git a/lib/app/voyager_app.dart b/lib/app/voyager_app.dart
+index 5b5accb..5c4a95e 100644
+--- a/lib/app/voyager_app.dart
++++ b/lib/app/voyager_app.dart
+@@ -99,7 +99,12 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
+     await PendingFlushRegistry.instance.flushAll(
+       perCallbackDeadline: _flushDeadline,
+     );
+-    final remoteSync = _remoteSync;
++    // Re-read while mounted: the cached instance is whichever service the
++    // last build saw, and a rebuilt provider leaves it disposed — with its
++    // pending uploads handed on to a successor this flush would never reach.
++    final remoteSync = mounted
++        ? ref.read(remoteSyncServiceProvider)
++        : _remoteSync;
+     if (remoteSync != null) {
+       await remoteSync
+           .flushAllPending()
+diff --git a/lib/core/sync/outbox_sync_worker.dart b/lib/core/sync/outbox_sync_worker.dart
+index 39bb1bd..85053c5 100644
+--- a/lib/core/sync/outbox_sync_worker.dart
++++ b/lib/core/sync/outbox_sync_worker.dart
+@@ -192,6 +192,9 @@ class OutboxSyncWorker {
+           if (pusher != null &&
+               FirestoreCollections.crdtBacked.contains(collection)) {
+             for (final pending in entry.value) {
++              // Same stand-down as the top of the round: every push below is
++              // a write through the gate.
++              if (_writeGate.isPaused) break;
+               try {
+                 await pusher(
+                   collection,
+@@ -539,6 +542,13 @@ class OutboxSyncWorker {
+           (record) => record.id,
+           goalAllocationToFirestore,
+         );
++      case FirestoreCollections.mediaAssets:
++        return byId(DriftMediaRepository(_db).getAsset, mediaAssetToFirestore);
++      case FirestoreCollections.mediaReferences:
++        return byId(
++          DriftMediaRepository(_db).getReference,
++          mediaReferenceToFirestore,
++        );
+       case FirestoreCollections.pinnedNotes:
+         return byId(
+           DriftNotificationRepository(_db).getPinnedNote,
+@@ -621,6 +631,14 @@ class OutboxSyncWorker {
+       return true;
+     }
+ 
++    // A refusal from the write gate, or a write it gave up waiting on, says
++    // the connection is stopped — nothing about the document. Ageing those out
++    // parked every row of a queue that stayed wedged for a week, and parked
++    // rows are never drained again.
++    if (error is SyncBackpressureException || error is TimeoutException) {
++      return false;
++    }
++
+     // Classification defaults to "transient" for anything it doesn't
+     // recognise, so without an age cap a misclassified permanent failure would
+     // retry on every launch forever. [enqueue] deliberately leaves `addedAt`
+@@ -835,6 +853,18 @@ class OutboxSyncWorker {
+     );
+   }
+ 
++  /// Queues [documentId] because this device holds a change the server does
++  /// not have, found by something other than a failed upload — a pull that
++  /// kept local text newer than the operation log. The replay re-derives the
++  /// missing operations from the row.
++  static Future<void> recordOwedUpload({
++    required String collection,
++    required String documentId,
++  }) async {
++    if (!isInitialized) return;
++    await instance.enqueue(collection: collection, documentId: documentId);
++  }
++
+   /// Clears a document's queued or parked row after it uploaded successfully,
+   /// so a past failure doesn't linger as a false report.
+   static Future<void> recordSuccess({
+diff --git a/lib/core/sync/remote_sync_service.dart b/lib/core/sync/remote_sync_service.dart
+index 32ab034..5f9050c 100644
+--- a/lib/core/sync/remote_sync_service.dart
++++ b/lib/core/sync/remote_sync_service.dart
+@@ -94,6 +94,7 @@ class RemoteSyncService {
+        _syncActivity = syncActivity,
+        _crdtResolver = crdtResolver ?? CrdtDocumentResolver(),
+        _charOpRegistry = charOpRegistry ?? CharacterOpRegistry(),
++       _ownsCharOpRegistry = charOpRegistry == null,
+        _conflictDetector = conflictDetector ?? SyncConflictDetector(),
+        _charMerger = CharacterSequenceCrdtMerger(),
+        _uploadDebounceDelay = uploadDebounceDelay;
+@@ -120,6 +121,10 @@ class RemoteSyncService {
+   final SyncActivityController? _syncActivity;
+   final CrdtDocumentResolver _crdtResolver;
+   final CharacterOpRegistry _charOpRegistry;
++
++  /// False when the registry was handed in, in which case it outlives this
++  /// service — see `charOpRegistryProvider`.
++  final bool _ownsCharOpRegistry;
+   final SyncConflictDetector _conflictDetector;
+   final CharacterSequenceCrdtMerger _charMerger;
+   final Duration _uploadDebounceDelay;
+@@ -129,6 +134,14 @@ class RemoteSyncService {
+   final Map<String, Timer> _activeDebouncers = {};
+   final Map<String, Future<void>> _localSaveChains = {};
+   final Map<String, Future<void> Function()> _pendingRemoteSaves = {};
++
++  /// The collection and id behind each [_pendingRemoteSaves] key, which the
++  /// key's `collection_id` spelling cannot be split back into.
++  final Map<String, ({String collection, String documentId})>
++  _pendingRemoteSaveTargets = {};
++
++  /// Each document's uploads, one at a time — see [_runRemoteSave].
++  final Map<String, Future<void>> _remoteSaveChains = {};
+   final Map<String, int> _localSaveGenerations = {};
+   final Set<String> _activelyEditedDocuments = {};
+   final PendingTextMergeBuffer _pendingTextMergeBuffer = PendingTextMergeBuffer();
+@@ -225,10 +238,9 @@ class RemoteSyncService {
+     required String before,
+     required String after,
+   }) {
+-    _charOpRegistry.recordTextChange(
+-      collection: FirestoreCollections.journalEntries,
+-      documentId: entryId,
+-      clientId: deviceId,
++    _recordTextChange(
++      FirestoreCollections.journalEntries,
++      entryId,
+       before: before,
+       after: after,
+     );
+@@ -239,10 +251,9 @@ class RemoteSyncService {
+     required String before,
+     required String after,
+   }) {
+-    _charOpRegistry.recordTextChange(
+-      collection: FirestoreCollections.dreamEntries,
+-      documentId: entryId,
+-      clientId: deviceId,
++    _recordTextChange(
++      FirestoreCollections.dreamEntries,
++      entryId,
+       before: before,
+       after: after,
+     );
+@@ -253,15 +264,132 @@ class RemoteSyncService {
+     required String before,
+     required String after,
+   }) {
+-    _charOpRegistry.recordTextChange(
+-      collection: FirestoreCollections.todoTasks,
+-      documentId: taskId,
+-      clientId: deviceId,
++    _recordTextChange(
++      FirestoreCollections.todoTasks,
++      taskId,
+       before: before,
+       after: after,
+     );
+   }
+ 
++  /// Records an editor's edit from [before] to [after] against the session.
++  ///
++  /// The session is supposed to spell [before] already, and when it does this
++  /// is a plain diff. When it doesn't — the session has absorbed another
++  /// device's characters the editor is not showing yet, or the editor was
++  /// re-seeded by a route the session never saw — diffing [before] against it
++  /// used to fall through to `resetFromText`, which re-seeds every character
++  /// under fresh ids at fresh positions while the old ones stay live in the
++  /// shared log: the whole document twice on the next merge. The user's edit is
++  /// re-applied onto the session's own text instead, so only what they typed
++  /// becomes operations.
++  void _recordTextChange(
++    String collection,
++    String documentId, {
++    required String before,
++    required String after,
++  }) {
++    final session = _charOpRegistry.session(collection, documentId);
++    final current = session?.text;
++    // The editor catching up to text the session already holds — a pull it
++    // has absorbed, re-seeded into the field — is not an edit.
++    if (current != null && current != before && current == after) return;
++    _charOpRegistry.recordTextChange(
++      collection: collection,
++      documentId: documentId,
++      clientId: deviceId,
++      before: current ?? before,
++      after: current == null || current == before
++          ? after
++          : _rebaseEdit(onto: current, before: before, after: after),
++    );
++  }
++
++  /// Replaces what an open editor shows with [text] from SQLite.
++  ///
++  /// Diffed from the session's own text rather than from what the editor held:
++  /// after a pull the session has already absorbed the operations that produced
++  /// [text], so there is usually nothing to record at all. Recording the
++  /// editor's old text against [text] is what re-inserted another device's
++  /// characters as this device's own.
++  void reanchorEditorText({
++    required String collection,
++    required String documentId,
++    required String text,
++  }) {
++    final session = _charOpRegistry.session(collection, documentId);
++    if (session == null || session.text == text) return;
++    _charOpRegistry.recordTextChange(
++      collection: collection,
++      documentId: documentId,
++      clientId: deviceId,
++      before: session.text,
++      after: text,
++    );
++  }
++
++  /// [after] is [before] with one contiguous edit; returns [onto] with that
++  /// same edit applied where it can be placed unambiguously.
++  ///
++  /// Text the edit did not touch is never removed: a deletion inside a span
++  /// where [before] and [onto] disagree is applied only if the deleted text can
++  /// be found there, and an insertion there lands at the start of the span.
++  static String _rebaseEdit({
++    required String onto,
++    required String before,
++    required String after,
++  }) {
++    var start = 0;
++    while (start < before.length &&
++        start < after.length &&
++        before.codeUnitAt(start) == after.codeUnitAt(start)) {
++      start++;
++    }
++    var beforeEnd = before.length;
++    var afterEnd = after.length;
++    while (beforeEnd > start &&
++        afterEnd > start &&
++        before.codeUnitAt(beforeEnd - 1) == after.codeUnitAt(afterEnd - 1)) {
++      beforeEnd--;
++      afterEnd--;
++    }
++    final deleted = before.substring(start, beforeEnd);
++    final inserted = after.substring(start, afterEnd);
++
++    var shared = 0;
++    while (shared < before.length &&
++        shared < onto.length &&
++        before.codeUnitAt(shared) == onto.codeUnitAt(shared)) {
++      shared++;
++    }
++    var sharedTail = 0;
++    while (sharedTail < before.length - shared &&
++        sharedTail < onto.length - shared &&
++        before.codeUnitAt(before.length - 1 - sharedTail) ==
++            onto.codeUnitAt(onto.length - 1 - sharedTail)) {
++      sharedTail++;
++    }
++
++    final int at;
++    var removeLength = deleted.length;
++    if (beforeEnd <= shared) {
++      at = start;
++    } else if (start >= before.length - sharedTail) {
++      at = onto.length - (before.length - start);
++    } else {
++      final found = deleted.isEmpty
++          ? -1
++          : onto.indexOf(deleted, shared);
++      if (found >= 0 && found + deleted.length <= onto.length - sharedTail) {
++        at = found;
++      } else {
++        at = shared;
++        removeLength = 0;
++      }
++    }
++    return onto.replaceRange(at, at + removeLength, inserted);
++  }
++
+   Future<List<SyncConflict>> listConflicts() async {
+     final repo = _syncConflictRepository;
+     if (repo == null) return const [];
+@@ -598,7 +726,21 @@ class RemoteSyncService {
+       after: published.body,
+     );
+     // No second bump: `published` is what SQLite holds.
+-    await _uploadJournalEntryNow(published);
++    try {
++      await _uploadJournalEntryNow(published);
++    } catch (_) {
++      // The log is already wiped and nothing has replaced it, so this device
++      // is the only holder of the rewrite. The seed operations stay pending in
++      // the session, but a session does not survive a restart; the outbox row
++      // does, and replaying it re-publishes from the row.
++      if (queueOnFailure) {
++        await OutboxSyncWorker.recordCrdtOverwrite(
++          collection: collection,
++          documentId: published.id,
++        );
++      }
++      rethrow;
++    }
+ 
+     _charOpRegistry.removeSession(collection, published.id);
+     await OutboxSyncWorker.recordSuccess(
+@@ -755,12 +897,20 @@ class RemoteSyncService {
+     );
+   }
+ 
++  /// Settles [key]'s local writes, then runs its pending upload and waits for
++  /// it.
++  ///
++  /// Through [_runRemoteSave], like every other upload: this is reached from
++  /// teardown and from fire-and-forget panel closes, and running the save bare
++  /// let a failure escape to the zone with nothing queued to retry it — the
++  /// pending save had already been taken off [_pendingRemoteSaves].
+   Future<void> flushPending(String key) async {
+     await _localSaveChains[key]?.catchError((_) {});
+     final remoteSave = _pendingRemoteSaves.remove(key);
++    final target = _pendingRemoteSaveTargets.remove(key);
+     _activeDebouncers.remove(key)?.cancel();
+-    if (remoteSave != null) {
+-      await remoteSave();
++    if (remoteSave != null && target != null) {
++      await _runRemoteSave(target.collection, target.documentId, remoteSave);
+     }
+   }
+ 
+@@ -798,6 +948,7 @@ class RemoteSyncService {
+     await settleLocalWrites(collection, documentId);
+     final key = documentKey(collection, documentId);
+     final remoteSave = _pendingRemoteSaves.remove(key);
++    _pendingRemoteSaveTargets.remove(key);
+     _activeDebouncers.remove(key)?.cancel();
+     if (remoteSave != null) {
+       unawaited(_runRemoteSave(collection, documentId, remoteSave));
+@@ -816,6 +967,7 @@ class RemoteSyncService {
+   void cancelPending(String key) {
+     _activeDebouncers.remove(key)?.cancel();
+     _pendingRemoteSaves.remove(key);
++    _pendingRemoteSaveTargets.remove(key);
+   }
+ 
+   void cancelDocument(String collection, String documentId) {
+@@ -881,8 +1033,29 @@ class RemoteSyncService {
+       // later re-included both, interleaving every character twice. Diffing
+       // in place reuses the existing ids for the unchanged span and tombs
+       // only the parts that actually differ.
++      //
++      // Only when the difference is this device's own, though. The log is just
++      // as often *ahead* of SQLite — another device edited and this one has not
++      // pulled yet — and diffing then tombstoned the other device's text as if
++      // this device had deleted it, everywhere, on the next upload. Characters
++      // another client wrote are never deleted from here: the document is
++      // pulled instead, which brings SQLite and the editor up to the log.
+       final loaded = _charOpRegistry.session(collection, documentId);
+-      if (loaded != null && loaded.text != initialText) {
++      if (loaded != null &&
++          loaded.text != initialText &&
++          loaded
++              .opsReplacedBy(initialText)
++              .any((op) => op.clientId != deviceId)) {
++        unawaited(
++          pullForCollection(
++            collection,
++            documentIds: {firestoreDocumentIdForLocal(collection, documentId)},
++          ).catchError((Object error, StackTrace stackTrace) {
++            debugPrint('[sync] catch-up pull for $documentId failed: $error');
++            return false;
++          }),
++        );
++      } else if (loaded != null && loaded.text != initialText) {
+         _charOpRegistry.recordTextChange(
+           collection: collection,
+           documentId: documentId,
+@@ -1838,6 +2011,11 @@ class RemoteSyncService {
+       apply: (id, data, {required fromCrdt}) async {
+         final local = await _journalRepository.getEntry(id);
+         final remoteCharOps = await _listRemoteCharOps(id);
++        _charOpRegistry.absorbRemote(
++          FirestoreCollections.journalEntries,
++          id,
++          remoteCharOps,
++        );
+         final force = _forceNextDownloadConflict;
+         if (force) _forceNextDownloadConflict = false;
+ 
+@@ -1907,6 +2085,42 @@ class RemoteSyncService {
+             id,
+             merged.body,
+           );
++          final owed = local == null || !fromCrdt
++              ? null
++              : await _textOwedByThisDevice(
++                  FirestoreCollections.journalEntries,
++                  id,
++                  localText: local.body,
++                  logText: merged.body,
++                  localIsNewer: _localIsNewer(
++                    data,
++                    version: local.version,
++                    updatedAt: local.updatedAt,
++                  ),
++                );
++          if (owed != null) {
++            merged = JournalEntry(
++              id: merged.id,
++              journalId: merged.journalId,
++              title: merged.title,
++              body: owed,
++              richBodyJson: owed == local!.body
++                  ? local.richBodyJson
++                  : merged.richBodyJson,
++              entryDate: merged.entryDate,
++              timestamp: merged.timestamp,
++              tags: extractTags(owed),
++              mood: merged.mood,
++              quoteId: merged.quoteId,
++              customQuote: merged.customQuote,
++              weatherIcon: merged.weatherIcon,
++              guidedPrompt: merged.guidedPrompt,
++              createdAt: merged.createdAt,
++              updatedAt: merged.updatedAt,
++              version: merged.version,
++              deletedAt: merged.deletedAt,
++            );
++          }
+         }
+         await _journalRepository.upsertEntry(
+           merged,
+@@ -1927,6 +2141,11 @@ class RemoteSyncService {
+       apply: (id, data, {required fromCrdt}) async {
+         final local = await _dreamRepository.getEntry(id);
+         final remoteCharOps = await _listRemoteCharOps(id);
++        _charOpRegistry.absorbRemote(
++          FirestoreCollections.dreamEntries,
++          id,
++          remoteCharOps,
++        );
+         final force = _forceNextDownloadConflict;
+         if (force) _forceNextDownloadConflict = false;
+ 
+@@ -1994,6 +2213,33 @@ class RemoteSyncService {
+             id,
+             merged.body,
+           );
++          final owed = local == null || !fromCrdt
++              ? null
++              : await _textOwedByThisDevice(
++                  FirestoreCollections.dreamEntries,
++                  id,
++                  localText: local.body,
++                  logText: merged.body,
++                  localIsNewer: _localIsNewer(
++                    data,
++                    version: local.version,
++                    updatedAt: local.updatedAt,
++                  ),
++                );
++          if (owed != null) {
++            merged = DreamEntry(
++              id: merged.id,
++              title: merged.title,
++              body: owed,
++              notes: merged.notes,
++              entryDate: merged.entryDate,
++              tags: extractTags(owed),
++              createdAt: merged.createdAt,
++              updatedAt: merged.updatedAt,
++              version: merged.version,
++              deletedAt: merged.deletedAt,
++            );
++          }
+         }
+         await _dreamRepository.upsertEntry(
+           merged,
+@@ -2045,6 +2291,11 @@ class RemoteSyncService {
+               ? localTasks[id]
+               : await _todoRepository.getTask(id);
+           final remoteCharOps = await _listRemoteCharOps(id);
++          _charOpRegistry.absorbRemote(
++            FirestoreCollections.todoTasks,
++            id,
++            remoteCharOps,
++          );
+           final force = _forceNextDownloadConflict;
+           if (force) _forceNextDownloadConflict = false;
+ 
+@@ -2097,6 +2348,39 @@ class RemoteSyncService {
+               id,
+               merged.notes ?? '',
+             );
++            final owed = local == null || !fromCrdt
++                ? null
++                : await _textOwedByThisDevice(
++                    FirestoreCollections.todoTasks,
++                    id,
++                    localText: local.notes ?? '',
++                    logText: merged.notes ?? '',
++                    localIsNewer: _localIsNewer(
++                      data,
++                      version: local.version,
++                      updatedAt: local.updatedAt,
++                    ),
++                  );
++            if (owed != null) {
++              merged = TodoTask(
++                id: merged.id,
++                listId: merged.listId,
++                title: merged.title,
++                notes: owed.isEmpty ? null : owed,
++                dueDate: merged.dueDate,
++                completed: merged.completed,
++                starred: merged.starred,
++                sortOrder: merged.sortOrder,
++                dueDateSetAt: merged.dueDateSetAt,
++                parentTaskId: merged.parentTaskId,
++                recurrence: merged.recurrence,
++                recurrenceAnchor: merged.recurrenceAnchor,
++                createdAt: merged.createdAt,
++                updatedAt: merged.updatedAt,
++                version: merged.version,
++                deletedAt: merged.deletedAt,
++              );
++            }
+           }
+           await _todoRepository.upsertTask(
+             merged,
+@@ -2180,6 +2464,75 @@ class RemoteSyncService {
+     return docs.isNotEmpty;
+   }
+ 
++  /// Whether the local row outranks the resolved remote snapshot [data] on
++  /// version, then `updatedAt` — the inverse of `remoteVersionWins`.
++  bool _localIsNewer(
++    Map<String, dynamic> data, {
++    required int version,
++    required DateTime updatedAt,
++  }) {
++    return !remoteVersionWins(
++      remoteVersion: parseVersion(data),
++      localVersion: version,
++      remoteUpdated: parseFirestoreDate(data['updatedAt']),
++      localUpdated: updatedAt,
++    );
++  }
++
++  /// Text a pull must keep instead of the log's [logText], or null when the
++  /// log's text is the right one to write.
++  ///
++  /// A pull resolving a collaborative document takes its text from the
++  /// operation log, bypassing the version comparison every other field goes
++  /// through — correct for a log that has everything, and destructive for one
++  /// that is missing what this device typed. That is the normal state of an
++  /// offline edit: its operations were refused or never sent, live only in
++  /// memory, and are gone after a restart. The pull then wrote the log's older
++  /// text over the row, and the outbox replay re-read that reverted row and
++  /// published it.
++  ///
++  /// Two things say this device has text the log lacks: operations still
++  /// pending in its session (the session has absorbed the log by now, so its
++  /// text is the merge of both), or a local row that outranks the resolved
++  /// snapshot and disagrees with it — which, with no session, can only be
++  /// operations lost from memory. The latter is queued so the replay
++  /// re-derives them from the row.
++  ///
++  /// A quarantined conflict on the document also keeps the row as it is: the
++  /// conflict's "keep mine" resolves from the row, so writing the log's text
++  /// over it first would make that choice publish the other side.
++  Future<String?> _textOwedByThisDevice(
++    String collection,
++    String documentId, {
++    required String localText,
++    required String logText,
++    required bool localIsNewer,
++  }) async {
++    if (localText != logText &&
++        await _syncConflictRepository?.getConflict(
++              '${collection}_$documentId',
++            ) !=
++            null) {
++      return localText;
++    }
++    final session = _charOpRegistry.session(collection, documentId);
++    if (session != null && session.hasPendingOps && session.text != logText) {
++      return session.text;
++    }
++    if (localIsNewer && localText != logText) {
++      if (session == null) {
++        unawaited(
++          OutboxSyncWorker.recordOwedUpload(
++            collection: collection,
++            documentId: documentId,
++          ),
++        );
++      }
++      return localText;
++    }
++    return null;
++  }
++
+   String _firestoreDocumentId(String collection, String localId) {
+     return firestoreDocumentIdForLocal(collection, localId);
+   }
+@@ -2373,11 +2726,7 @@ class RemoteSyncService {
+     for (final entry in payloads.entries) {
+       _markSelfEcho(FirestoreCollections.studyCards, entry.key, entry.value);
+     }
+-    await _syncEngine.syncDocumentsImmediately(
+-      collection: FirestoreCollections.studyCards,
+-      payloadsByDocumentId: payloads,
+-      logOperation: false,
+-    );
++    await _runRemoteBatchSave(FirestoreCollections.studyCards, payloads);
+   }
+ 
+   void pushExercise(Exercise exercise) {
+@@ -2449,11 +2798,7 @@ class RemoteSyncService {
+     for (final entry in payloads.entries) {
+       _markSelfEcho(FirestoreCollections.workoutSetLogs, entry.key, entry.value);
+     }
+-    await _syncEngine.syncDocumentsImmediately(
+-      collection: FirestoreCollections.workoutSetLogs,
+-      payloadsByDocumentId: payloads,
+-      logOperation: false,
+-    );
++    await _runRemoteBatchSave(FirestoreCollections.workoutSetLogs, payloads);
+   }
+ 
+   void pushJobApplication(JobApplication application) {
+@@ -2492,11 +2837,7 @@ class RemoteSyncService {
+         entry.value,
+       );
+     }
+-    await _syncEngine.syncDocumentsImmediately(
+-      collection: FirestoreCollections.jobApplications,
+-      payloadsByDocumentId: payloads,
+-      logOperation: false,
+-    );
++    await _runRemoteBatchSave(FirestoreCollections.jobApplications, payloads);
+   }
+ 
+   void pushJobStatusEvent(JobStatusEvent event) {
+@@ -2531,11 +2872,7 @@ class RemoteSyncService {
+         entry.value,
+       );
+     }
+-    await _syncEngine.syncDocumentsImmediately(
+-      collection: FirestoreCollections.jobStatusEvents,
+-      payloadsByDocumentId: payloads,
+-      logOperation: false,
+-    );
++    await _runRemoteBatchSave(FirestoreCollections.jobStatusEvents, payloads);
+   }
+ 
+   void pushJobStage(JobStage stage) {
+@@ -2566,11 +2903,7 @@ class RemoteSyncService {
+     for (final entry in payloads.entries) {
+       _markSelfEcho(FirestoreCollections.jobStages, entry.key, entry.value);
+     }
+-    await _syncEngine.syncDocumentsImmediately(
+-      collection: FirestoreCollections.jobStages,
+-      payloadsByDocumentId: payloads,
+-      logOperation: false,
+-    );
++    await _runRemoteBatchSave(FirestoreCollections.jobStages, payloads);
+   }
+ 
+   void pushRankingCategory(RankingCategory category) {
+@@ -2714,11 +3047,7 @@ class RemoteSyncService {
+     for (final entry in payloads.entries) {
+       _markSelfEcho(FirestoreCollections.jobCompanies, entry.key, entry.value);
+     }
+-    await _syncEngine.syncDocumentsImmediately(
+-      collection: FirestoreCollections.jobCompanies,
+-      payloadsByDocumentId: payloads,
+-      logOperation: false,
+-    );
++    await _runRemoteBatchSave(FirestoreCollections.jobCompanies, payloads);
+   }
+ 
+   void pushJobCategory(JobCategory category) {
+@@ -2764,11 +3093,7 @@ class RemoteSyncService {
+     for (final entry in payloads.entries) {
+       _markSelfEcho(FirestoreCollections.jobSeasons, entry.key, entry.value);
+     }
+-    await _syncEngine.syncDocumentsImmediately(
+-      collection: FirestoreCollections.jobSeasons,
+-      payloadsByDocumentId: payloads,
+-      logOperation: false,
+-    );
++    await _runRemoteBatchSave(FirestoreCollections.jobSeasons, payloads);
+   }
+ 
+   void pushStudyReviewLog(StudyReviewLog log) {
+@@ -2886,9 +3211,10 @@ class RemoteSyncService {
+     // Keeps its operation-log entry, unlike the other batch pushes: todo tasks
+     // carry collaborative notes, and a mirror newer than the log would simply
+     // be resolved away on the next pull.
+-    await _syncEngine.syncDocumentsImmediately(
+-      collection: FirestoreCollections.todoTasks,
+-      payloadsByDocumentId: payloads,
++    await _runRemoteBatchSave(
++      FirestoreCollections.todoTasks,
++      payloads,
++      logOperation: true,
+     );
+   }
+ 
+@@ -2904,7 +3230,11 @@ class RemoteSyncService {
+     final journal = await _journalRepository.getJournal(id);
+     if (journal == null) return;
+     cancelDocument(FirestoreCollections.journals, journal.id);
+-    await _uploadJournalNow(journal);
++    await _runRemoteSave(
++      FirestoreCollections.journals,
++      journal.id,
++      () => _uploadJournalNow(journal),
++    );
+   }
+ 
+   Future<TodoTask?> _findTodoTask(String taskId) {
+@@ -2938,16 +3268,120 @@ class RemoteSyncService {
+           await forceOverwriteJournalEntryText(entry, queueOnFailure: false);
+           return;
+         }
++        if (!await _recoverLostOperations(
++          collection,
++          documentId,
++          text: entry.body,
++          title: entry.title,
++          payload: journalEntryToFirestore(entry),
++        )) {
++          return;
++        }
+         await _uploadJournalEntryNow(entry);
+       case FirestoreCollections.dreamEntries:
+         final entry = await _dreamRepository.getEntry(documentId);
+-        if (entry != null) await _uploadDreamEntryNow(entry);
++        if (entry == null) return;
++        if (!await _recoverLostOperations(
++          collection,
++          documentId,
++          text: entry.body,
++          title: entry.title,
++          payload: dreamEntryToFirestore(entry),
++        )) {
++          return;
++        }
++        await _uploadDreamEntryNow(entry);
+       case FirestoreCollections.todoTasks:
+         final task = await _findTodoTask(documentId);
+-        if (task != null) await _uploadTodoTaskNow(task);
++        if (task == null) return;
++        if (!await _recoverLostOperations(
++          collection,
++          documentId,
++          text: task.notes ?? '',
++          title: task.title,
++          payload: todoTaskToFirestore(task),
++        )) {
++          return;
++        }
++        await _uploadTodoTaskNow(task);
+     }
+   }
+ 
++  /// Re-derives the operations a queued document's text needs when the
++  /// session that recorded them is gone — a restart, most often.
++  ///
++  /// A replay used to upload the row with whatever the session held, which
++  /// after a restart is nothing: a snapshot newer than the log, and a log
++  /// whose text wins the next pull on every device because a pull takes text
++  /// from the log. Diffing the log's text to the row's puts the missing
++  /// characters back in it.
++  ///
++  /// Returns false, having quarantined a conflict, when that diff would delete
++  /// characters another device wrote. The row and the log have both moved
++  /// since this device last uploaded, and deleting text the user never saw is
++  /// not a choice to make silently; the conflict keeps both sides.
++  Future<bool> _recoverLostOperations(
++    String collection,
++    String documentId, {
++    required String text,
++    required String title,
++    required Map<String, dynamic> payload,
++  }) async {
++    if (_charOpRegistry.session(collection, documentId) != null) return true;
++    final ops = await _listRemoteCharOps(
++      firestoreDocumentIdForLocal(collection, documentId),
++    );
++    if (_charOpRegistry.session(collection, documentId) != null) return true;
++    if (ops.isEmpty) {
++      _charOpRegistry.ensureSession(
++        collection: collection,
++        documentId: documentId,
++        clientId: deviceId,
++        initialText: text,
++        markSeedsAsPending: true,
++      );
++      return true;
++    }
++    _charOpRegistry.loadSession(
++      collection: collection,
++      documentId: documentId,
++      clientId: deviceId,
++      operations: ops,
++    );
++    final session = _charOpRegistry.session(collection, documentId)!;
++    if (session.text == text) return true;
++    if (session.opsReplacedBy(text).any((op) => op.clientId != deviceId)) {
++      final logText = session.text;
++      _charOpRegistry.removeSession(collection, documentId);
++      final textField =
++          collection == FirestoreCollections.todoTasks ? 'notes' : 'body';
++      await _quarantineConflict(
++        collection: collection,
++        documentId: documentId,
++        reason: SyncConflictReason.hardMetadataCollision,
++        local: SyncConflictDetector.payloadJson(payload),
++        remote: SyncConflictDetector.payloadJson({
++          ...payload,
++          textField: logText,
++          '_remoteCharOps': [for (final op in ops) op.toJson()],
++        }),
++        localTitle: title,
++        remoteTitle: title,
++        localText: text,
++        remoteText: logText,
++      );
++      return false;
++    }
++    _charOpRegistry.recordTextChange(
++      collection: collection,
++      documentId: documentId,
++      clientId: deviceId,
++      before: session.text,
++      after: text,
++    );
++    return true;
++  }
++
+   void _scheduleRemoteUpload(
+     String collection,
+     String documentId,
+@@ -2956,8 +3390,13 @@ class RemoteSyncService {
+     final key = documentKey(collection, documentId);
+     _activeDebouncers.remove(key)?.cancel();
+     _pendingRemoteSaves[key] = remoteSave;
++    _pendingRemoteSaveTargets[key] = (
++      collection: collection,
++      documentId: documentId,
++    );
+     _activeDebouncers[key] = Timer(_uploadDebounceDelay, () {
+       final save = _pendingRemoteSaves.remove(key);
++      _pendingRemoteSaveTargets.remove(key);
+       _activeDebouncers.remove(key);
+       if (save != null) {
+         unawaited(_runRemoteSave(collection, documentId, save));
+@@ -2974,10 +3413,40 @@ class RemoteSyncService {
+   /// tried. Transient failures go back on the outbox for a later attempt;
+   /// permanent ones are parked so they stop consuming retries but remain
+   /// visible.
++  ///
++  /// Uploads of one document run one at a time, in the order they were
++  /// started. Run concurrently, two things went wrong under exactly the load
++  /// the write gate exists for: a retry of an older snapshot could land after
++  /// a newer one had, regressing the server copy to a lower version this
++  /// device would never repair; and an older upload acknowledged late cleared
++  /// the outbox row a newer, refused upload of the same document had just
++  /// queued, so the newer edit was owed to nobody.
+   Future<void> _runRemoteSave(
+     String collection,
+     String documentId,
+     Future<void> Function() remoteSave,
++  ) {
++    final key = documentKey(collection, documentId);
++    final previous = _remoteSaveChains[key] ?? Future<void>.value();
++    late final Future<void> next;
++    next = previous.then(
++      (_) => _runRemoteSaveNow(collection, documentId, remoteSave),
++    );
++    _remoteSaveChains[key] = next;
++    unawaited(
++      next.whenComplete(() {
++        if (identical(_remoteSaveChains[key], next)) {
++          _remoteSaveChains.remove(key);
++        }
++      }),
++    );
++    return next;
++  }
++
++  Future<void> _runRemoteSaveNow(
++    String collection,
++    String documentId,
++    Future<void> Function() remoteSave,
+   ) async {
+     try {
+       await remoteSave();
+@@ -3002,13 +3471,14 @@ class RemoteSyncService {
+   /// never be uploaded, and no later pull would repair the difference.
+   Future<void> _runRemoteBatchSave(
+     String collection,
+-    Map<String, Map<String, dynamic>> payloads,
+-  ) async {
++    Map<String, Map<String, dynamic>> payloads, {
++    bool logOperation = false,
++  }) async {
+     try {
+       await _syncEngine.syncDocumentsImmediately(
+         collection: collection,
+         payloadsByDocumentId: payloads,
+-        logOperation: false,
++        logOperation: logOperation,
+       );
+       for (final documentId in payloads.keys) {
+         await OutboxSyncWorker.recordSuccess(
+@@ -3248,12 +3718,23 @@ class RemoteSyncService {
+       timer.cancel();
+     }
+     _activeDebouncers.clear();
++    // Started, not dropped. A save pending here has already reached SQLite and
++    // is owed to the server; clearing it left nothing — no upload, no outbox
++    // row — to say so.
++    for (final entry in _pendingRemoteSaves.entries) {
++      final target = _pendingRemoteSaveTargets[entry.key];
++      if (target == null) continue;
++      unawaited(
++        _runRemoteSave(target.collection, target.documentId, entry.value),
++      );
++    }
+     _pendingRemoteSaves.clear();
++    _pendingRemoteSaveTargets.clear();
+     _localSaveChains.clear();
+     _localSaveGenerations.clear();
+     _activelyEditedDocuments.clear();
+     _selfEchoes.clear();
+-    _charOpRegistry.clear();
++    if (_ownsCharOpRegistry) _charOpRegistry.clear();
+   }
+ 
+   Future<List<CharacterOperation>> _listRemoteCharOps(String documentId) async {
+diff --git a/lib/core/sync/text_delta_injector.dart b/lib/core/sync/text_delta_injector.dart
+index 742865e..fd27743 100644
+--- a/lib/core/sync/text_delta_injector.dart
++++ b/lib/core/sync/text_delta_injector.dart
+@@ -113,6 +113,11 @@ class TextDeltaInjector {
+       return localText.substring(0, localText.length - oldRemoteText.length) +
+           newRemoteText;
+     }
+-    return '$localText\n$newRemoteText';
++    // Nothing lines up, so there is nowhere to put the remote change. Leave
++    // what the user is looking at alone rather than appending the remote
++    // document beneath it — that doubled the whole text in the editor, and the
++    // next autosave published the double. The remote change is still in the
++    // operation log and arrives with the next pull once editing stops.
++    return localText;
+   }
+ }
+diff --git a/lib/domain/services/character_op_session.dart b/lib/domain/services/character_op_session.dart
+index 95aebd5..a012cd2 100644
+--- a/lib/domain/services/character_op_session.dart
++++ b/lib/domain/services/character_op_session.dart
+@@ -180,6 +180,65 @@ class CharacterOpSession {
+     _pendingOpIds.insertAll(0, restored);
+   }
+ 
++  /// Whether this session holds operations no upload has taken yet.
++  bool get hasPendingOps => _pendingOpIds.isNotEmpty;
++
++  /// Folds operations read back from the shared log into this session.
++  ///
++  /// A session is loaded once, when its document opens, and nothing used to
++  /// tell it about operations another device wrote after that. Text from those
++  /// operations still reached the editor — a pull re-seeding an idle editor, a
++  /// buffered merge injected into a focused one — and was then diffed against a
++  /// session that had never seen it, so it went back up as this device's own
++  /// characters at the very fractional positions the other device had already
++  /// used: every character twice on the next merge.
++  ///
++  /// Same winner rule as [CharacterSequenceCrdtMerger]: a tombstone beats a
++  /// live copy, then the higher logical clock, then the higher client id.
++  /// Pending operations stay pending.
++  void absorbRemote(List<CharacterOperation> operations) {
++    var changed = false;
++    for (final op in operations) {
++      final existing = _opsById[op.id];
++      if (existing != null && !_remoteWins(op, existing)) continue;
++      _opsById[op.id] = op;
++      changed = true;
++      if (op.clientId == clientId && op.logicalClock >= _logicalClock) {
++        _logicalClock = op.logicalClock + 1;
++      }
++    }
++    if (!changed) return;
++    _live = null;
++    _liveText = null;
++  }
++
++  bool _remoteWins(CharacterOperation incoming, CharacterOperation existing) {
++    if (incoming.deleted != existing.deleted) return incoming.deleted;
++    if (incoming.logicalClock != existing.logicalClock) {
++      return incoming.logicalClock > existing.logicalClock;
++    }
++    return incoming.clientId.compareTo(existing.clientId) > 0;
++  }
++
++  /// The live operations [recordTextChange] would tombstone going from [text]
++  /// to [after], without recording anything.
++  List<CharacterOperation> opsReplacedBy(String after) {
++    final live = _liveOrderedOps();
++    final before = _reconstructText();
++    var i = 0;
++    while (i < before.length && i < after.length && before[i] == after[i]) {
++      i++;
++    }
++    var oldEnd = before.length;
++    var newEnd = after.length;
++    while (oldEnd > i && newEnd > i && before[oldEnd - 1] == after[newEnd - 1]) {
++      oldEnd--;
++      newEnd--;
++    }
++    if (oldEnd <= i || i >= live.length) return const [];
++    return live.sublist(i, oldEnd < live.length ? oldEnd : live.length);
++  }
++
+   void _seedFromText(String text, {bool markAsPending = false}) {
+     _live = null;
+     _liveText = null;
+@@ -322,6 +381,16 @@ class CharacterOpRegistry {
+     _sessions[key(collection, documentId)]?.restorePendingOps(operations);
+   }
+ 
++  /// See [CharacterOpSession.absorbRemote]. A document with no session has
++  /// nothing to fold into; its next session loads the log whole.
++  void absorbRemote(
++    String collection,
++    String documentId,
++    List<CharacterOperation> operations,
++  ) {
++    _sessions[key(collection, documentId)]?.absorbRemote(operations);
++  }
++
+   void resetSession({
+     required String collection,
+     required String documentId,
+diff --git a/lib/domain/todo/todo_recurring_completion.dart b/lib/domain/todo/todo_recurring_completion.dart
+index 5bc9834..473e202 100644
+--- a/lib/domain/todo/todo_recurring_completion.dart
++++ b/lib/domain/todo/todo_recurring_completion.dart
+@@ -55,7 +55,10 @@ Future<TodoCompletionOutcome?> completeTodoTask({
+   Future<TodoCompletionOutcome> plainlyCompleted() async {
+     final completed = latest.copyWith(completed: true);
+     await repo.upsertTask(completed);
+-    await sync.pushTodoTaskNow(completed);
++    // Background, not awaited: the row is on disk, and a push that throws
++    // here aborted the caller after the write — leaving the To-Do page's
++    // optimistic check stuck and the calendar's roll-forward never run.
++    sync.pushTodoTaskInBackground(completed);
+     return TodoCompletionOutcome(
+       rolledForward: false,
+       listId: completed.listId,
+diff --git a/lib/features/calendar/calendar_page.dart b/lib/features/calendar/calendar_page.dart
+index ccc208e..d898be3 100644
+--- a/lib/features/calendar/calendar_page.dart
++++ b/lib/features/calendar/calendar_page.dart
+@@ -658,7 +658,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
+     // keep its char-ops; the rest of the batch is sort-order shuffling only.
+     final edited = writes.where((t) => t.id == next.id).firstOrNull;
+     if (edited != null) {
+-      await remoteSync.pushTodoTaskNow(edited);
++      // Background: a throw here skipped the cascade push and the repeating
++      // task's roll-forward below, both of which are already owed.
++      remoteSync.pushTodoTaskInBackground(edited);
+     }
+     await remoteSync.pushTodoTasksBatch(
+       writes.where((t) => t.id != next.id).toList(),
+diff --git a/lib/features/dream_journal/dream_journal_page.dart b/lib/features/dream_journal/dream_journal_page.dart
+index ed30028..5294f26 100644
+--- a/lib/features/dream_journal/dream_journal_page.dart
++++ b/lib/features/dream_journal/dream_journal_page.dart
+@@ -1512,12 +1512,14 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
+       ),
+     );
+     if (recordAsEdit) {
+-      _remoteSync?.recordDreamTextChange(
+-        // [_bodyEntryId], not `widget.entry.id`: this diffs the controller's
+-        // own text, so it belongs to whichever dream that text is.
+-        entryId: _bodyEntryId,
+-        before: before,
+-        after: body,
++      // [_bodyEntryId], not `widget.entry.id`: this replaces the controller's
++      // own text, so it belongs to whichever dream that text is. Re-anchored
++      // from the session's text rather than diffed from [before] — see
++      // [RemoteSyncService.reanchorEditorText].
++      _remoteSync?.reanchorEditorText(
++        collection: FirestoreCollections.dreamEntries,
++        documentId: _bodyEntryId,
++        text: body,
+       );
+     }
+     _lastText = body;
+diff --git a/lib/features/journal/journal_page.dart b/lib/features/journal/journal_page.dart
+index e200ca3..b71a140 100644
+--- a/lib/features/journal/journal_page.dart
++++ b/lib/features/journal/journal_page.dart
+@@ -3155,15 +3155,18 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
+   void setBodyText(String body, {bool recordAsEdit = false}) {
+     final before = _controller.text;
+     _controller.text = body;
+-    if (recordAsEdit && before != body) {
+-      final entryId = widget.entry?.id;
+-      if (entryId != null) {
+-        _remoteSync?.recordJournalTextChange(
+-          entryId: entryId,
+-          before: before,
+-          after: body,
+-        );
+-      }
++    // [_bodyEntryId], not `widget.entry?.id`: the text replaced here is the
++    // controller's, whichever entry that is. And re-anchored from the
++    // session's own text rather than diffed from [before] — a pull has already
++    // folded the operations behind [body] into the session, so recording
++    // [before] → [body] re-inserted another device's characters as this one's.
++    final entryId = _bodyEntryId;
++    if (recordAsEdit && before != body && entryId != null) {
++      _remoteSync?.reanchorEditorText(
++        collection: FirestoreCollections.journalEntries,
++        documentId: entryId,
++        text: body,
++      );
+     }
+     _lastText = body;
+     _tags = extractTags(body);
+diff --git a/lib/features/todo/todo_edit_panel.dart b/lib/features/todo/todo_edit_panel.dart
+index a573f97..eefa34b 100644
+--- a/lib/features/todo/todo_edit_panel.dart
++++ b/lib/features/todo/todo_edit_panel.dart
+@@ -302,6 +302,10 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
+         ),
+       ),
+     );
++    // The next keystroke is diffed from [_lastNotesText]. Left at the
++    // pre-merge text, that diff carried the remote change back up as this
++    // device's own edit.
++    _lastNotesText = merged;
+   }
+ 
+   Future<void> _applyPendingNotesMerge() async {
+@@ -313,6 +317,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
+     );
+     if (merged != null && mounted) {
+       _notesController.text = merged.notes ?? '';
++      _lastNotesText = _notesController.text;
+     }
+   }
+ 

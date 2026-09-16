@@ -68,6 +68,32 @@ class _SettingsColorPaletteSectionState
     await _updatePalette(palette);
   }
 
+  /// Moves [dragged] into [target]'s slot.
+  ///
+  /// Dropping onto a chip to the right lands after it, to the left lands
+  /// before it — `removeAt` has already shifted the later indices down by one
+  /// when the move is rightward, so the single `insert` covers both.
+  Future<void> _moveColor(int dragged, int target) async {
+    final palette = List<int>.from(widget.settings.colorPalette);
+    final from = palette.indexOf(normalizeColorValue(dragged));
+    final to = palette.indexOf(normalizeColorValue(target));
+    if (from < 0 || to < 0 || from == to) return;
+    palette.insert(to, palette.removeAt(from));
+    await _updatePalette(palette);
+  }
+
+  Widget _colorChip(int color, {required bool deletable, BorderSide? side}) {
+    return InputChip(
+      avatar: CircleAvatar(backgroundColor: Color(color)),
+      label: Text(formatColorHex(color)),
+      side: side,
+      onDeleted: deletable ? () => _removeColor(color) : null,
+      deleteIcon: deletable
+          ? const Icon(PhosphorIconsRegular.x, size: 18)
+          : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -80,7 +106,8 @@ class _SettingsColorPaletteSectionState
         const SizedBox(height: 4),
         Text(
           'Preset colors used across the app. Add custom colors with hex here; '
-          'everywhere else you pick from this list only.',
+          'everywhere else you pick from this list only. Drag a swatch to '
+          'reorder the palette.',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
@@ -91,15 +118,36 @@ class _SettingsColorPaletteSectionState
           runSpacing: 8,
           children: [
             for (final color in palette)
-              InputChip(
-                avatar: CircleAvatar(backgroundColor: Color(color)),
-                label: Text(formatColorHex(color)),
-                onDeleted: palette.length > 1
-                    ? () => _removeColor(color)
-                    : null,
-                deleteIcon: palette.length > 1
-                    ? const Icon(PhosphorIconsRegular.x, size: 18)
-                    : null,
+              DragTarget<int>(
+                onWillAcceptWithDetails: (details) =>
+                    normalizeColorValue(details.data) !=
+                    normalizeColorValue(color),
+                onAcceptWithDetails: (details) =>
+                    _moveColor(details.data, color),
+                builder: (context, candidates, _) => Draggable<int>(
+                  data: color,
+                  feedback: Material(
+                    type: MaterialType.transparency,
+                    child: _colorChip(color, deletable: false),
+                  ),
+                  childWhenDragging: Opacity(
+                    opacity: 0.3,
+                    child: _colorChip(color, deletable: false),
+                  ),
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.grab,
+                    child: _colorChip(
+                      color,
+                      deletable: palette.length > 1,
+                      side: candidates.isEmpty
+                          ? null
+                          : BorderSide(
+                              color: theme.colorScheme.primary,
+                              width: 2,
+                            ),
+                    ),
+                  ),
+                ),
               ),
           ],
         ),

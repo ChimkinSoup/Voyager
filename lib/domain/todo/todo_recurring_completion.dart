@@ -55,7 +55,10 @@ Future<TodoCompletionOutcome?> completeTodoTask({
   Future<TodoCompletionOutcome> plainlyCompleted() async {
     final completed = latest.copyWith(completed: true);
     await repo.upsertTask(completed);
-    await sync.pushTodoTaskNow(completed);
+    // Background, not awaited: the row is on disk, and a push that throws
+    // here aborted the caller after the write — leaving the To-Do page's
+    // optimistic check stuck and the calendar's roll-forward never run.
+    sync.pushTodoTaskInBackground(completed);
     return TodoCompletionOutcome(
       rolledForward: false,
       listId: completed.listId,

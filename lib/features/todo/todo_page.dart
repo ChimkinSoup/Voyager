@@ -348,10 +348,6 @@ class _TodoPageState extends ConsumerState<TodoPage>
   // twice inside the window only writes the state it ended on.
   final _pendingCompletionSaves = <String, TodoTask>{};
   Timer? _completionSaveTimer;
-  // Rows whose Firestore push failed and is waiting to be re-pushed. Kept apart
-  // from _pendingCompletionSaves on purpose — see [_requeueRemotePush].
-  final _pendingRemotePushes = <String, TodoTask>{};
-  Timer? _remotePushRetryTimer;
   // Captured up front so pending writes can still be flushed from dispose(),
   // where `ref` is already off limits.
   late final ProviderContainer _container;
@@ -987,7 +983,6 @@ class _TodoPageState extends ConsumerState<TodoPage>
     // already run, leaving a live Timer on a disposed State that later
     // invalidates providers.
     _completionSaveTimer?.cancel();
-    _remotePushRetryTimer?.cancel();
     _scrollIdleTimer?.cancel();
     _coalescedRefreshTimer?.cancel();
     _taskScrollController.removeListener(_onTaskScrollActivity);
@@ -1407,27 +1402,17 @@ class _TodoPageState extends ConsumerState<TodoPage>
         // Deliberately not awaited: holding the isolate for N sequential
         // Firestore round-trips (2N writes, since each push does an op-log
         // append then a document upsert) is long enough to drop frames on
-        // its own. But a fire-and-forget call swallows failures silently —
-        // catch it instead: log it and put the task back in the queue so the
-        // next flush retries it.
-        unawaited(
-          remoteSync
-              .pushTodoTaskNow(task)
-              .catchError((Object error) => _requeueRemotePush([task], error)),
-        );
+        // its own. A failure lands on the outbox, which retries with the row
+        // as it is on disk then — not this snapshot, which an in-memory retry
+        // used to re-send over newer edits.
+        remoteSync.pushTodoTaskInBackground(task);
       } else {
         cascadeRows.add(task);
       }
     }
 
     if (cascadeRows.isNotEmpty) {
-      unawaited(
-        remoteSync
-            .pushTodoTasksBatch(cascadeRows)
-            .catchError(
-              (Object error) => _requeueRemotePush(cascadeRows, error),
-            ),
-      );
+      unawaited(remoteSync.pushTodoTasksBatch(cascadeRows));
     }
 
     return touchedLists;
@@ -1443,39 +1428,6 @@ class _TodoPageState extends ConsumerState<TodoPage>
   /// invalidation), and every one of them would re-detect the same condition
   /// and re-issue the whole write set plus another Firestore round-trip.
   final _normalizingLists = <String>{};
-
-  /// Retries a *remote* push, and nothing else.
-  ///
-  /// These rows were already written locally before the push was attempted, so
-  /// there is nothing local to redo. Putting them back into
-  /// [_pendingCompletionSaves] — which is what this used to do — fed them to
-  /// [_writeCompletionBatch], a local *placement* pipeline: every requeued row
-  /// carrying `completed: false` was re-read as a fresh uncompletion, snapped
-  /// to the top of its section and everything below it renumbered. One
-  /// transient network failure reordered the list.
-  void _requeueRemotePush(List<TodoTask> tasks, Object error) {
-    for (final task in tasks) {
-      logTodoSortDebug(
-        _container.read(todoSortDebugLoggerProvider),
-        'REMOTE_PUSH_FAILED',
-        task: task,
-        details: 'error=$error',
-      );
-      _pendingRemotePushes[task.id] = task;
-    }
-    _remotePushRetryTimer?.cancel();
-    _remotePushRetryTimer = Timer(_todoCompletionSaveDelay, () {
-      final rows = _pendingRemotePushes.values.toList();
-      _pendingRemotePushes.clear();
-      if (rows.isEmpty) return;
-      unawaited(
-        _container
-            .read(remoteSyncServiceProvider)
-            .pushTodoTasksBatch(rows)
-            .catchError((Object e) => _requeueRemotePush(rows, e)),
-      );
-    });
-  }
 
   void _maybeNormalizeListSort(List<TodoTask> tasks, String listId) {
     if (_showAllTasks || _normalizingLists.contains(listId)) return;

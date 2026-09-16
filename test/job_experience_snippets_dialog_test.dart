@@ -29,9 +29,7 @@ void main() {
   });
 
   Future<void> seed(List<JobExperienceSnippet> snippets) async {
-    await repo.saveSettings(
-      (await repo.getSettings()).copyWith(jobExperienceSnippets: snippets),
-    );
+    await repo.applyJobExperienceSnippetEdit(const [], snippets);
   }
 
   Future<List<JobExperienceSnippet>> stored() async =>

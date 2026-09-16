@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:voyager/core/sync/firestore_write_gate.dart';
@@ -291,7 +293,7 @@ class FirestoreSyncRepository implements SyncRepository {
       for (final operation in chunk) {
         batch.set(_doc('sync_operations', operation.id), _operationData(operation));
       }
-      await writeGate.run(batch.commit);
+      await writeGate.run(batch.commit, weight: chunk.length);
     }
   }
 
@@ -302,16 +304,33 @@ class FirestoreSyncRepository implements SyncRepository {
       await appendOperation(operations.single);
       return;
     }
-    // One batch, so the group lands whole or not at all. Splitting at 500 the
-    // way [appendOperationsBatch] does would break that guarantee, but a group
-    // never approaches 500 chunks: each one holds close to a megabyte of
-    // character operations.
-    final batch = _firestore.batch();
+    // As few commits as fit Firestore's 10 MiB request limit — each chunk holds
+    // close to a megabyte of character operations, so a large reseed or
+    // compaction in one batch was rejected outright, every time it was
+    // retried. Splitting is safe because readers ignore a group until every
+    // one of its `chunkCount` chunks is present: a commit that fails partway
+    // leaves a partial group nobody resolves, never partial text.
+    var batch = _firestore.batch();
+    var bytes = 0;
+    var count = 0;
     for (final operation in operations) {
+      final size = utf8.encode(operation.payload).length + _operationOverheadBytes;
+      if (count > 0 && bytes + size > _maxCommitBytes) {
+        await writeGate.run(batch.commit, weight: count);
+        batch = _firestore.batch();
+        bytes = 0;
+        count = 0;
+      }
       batch.set(_doc('sync_operations', operation.id), _operationData(operation));
+      bytes += size;
+      count++;
     }
-    await writeGate.run(batch.commit);
+    await writeGate.run(batch.commit, weight: count);
   }
+
+  /// Under the 10 MiB request limit with room for the per-write envelope.
+  static const _maxCommitBytes = 8 * 1024 * 1024;
+  static const _operationOverheadBytes = 1024;
 
   @override
   Future<void> upsertDocumentsBatch(
@@ -327,7 +346,7 @@ class FirestoreSyncRepository implements SyncRepository {
           SetOptions(merge: true),
         );
       }
-      await writeGate.run(batch.commit);
+      await writeGate.run(batch.commit, weight: chunk.length);
     }
   }
 
@@ -398,11 +417,13 @@ class FirestoreSyncRepository implements SyncRepository {
     var deleted = 0;
     for (var i = 0; i < query.docs.length; i += batchSize) {
       final batch = _firestore.batch();
+      var count = 0;
       for (final doc in query.docs.skip(i).take(batchSize)) {
         batch.delete(doc.reference);
         deleted++;
+        count++;
       }
-      await writeGate.run(batch.commit);
+      await writeGate.run(batch.commit, weight: count);
     }
     return deleted;
   }
@@ -422,7 +443,7 @@ class FirestoreSyncRepository implements SyncRepository {
         batch.delete(_doc('sync_operations', id));
         deleted++;
       }
-      await writeGate.run(batch.commit);
+      await writeGate.run(batch.commit, weight: chunk.length);
     }
     return deleted;
   }

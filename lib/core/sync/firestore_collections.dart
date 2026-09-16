@@ -17,6 +17,12 @@ abstract final class FirestoreCollections {
   static const workoutSessions = 'workout_sessions';
   static const workoutSetLogs = 'workout_set_logs';
   static const customQuotes = 'custom_quotes';
+
+  /// Text-expansion snippets and the Jobs header's experience snippets. Lists
+  /// inside the settings document until they became records of their own —
+  /// see `SyncedListItem`.
+  static const snippets = 'snippets';
+  static const jobExperienceSnippets = 'job_experience_snippets';
   static const calendars = 'calendars';
   static const calendarEvents = 'calendar_events';
   static const trackers = 'trackers';
@@ -90,6 +96,8 @@ abstract final class FirestoreCollections {
     workoutSessions,
     workoutSetLogs,
     customQuotes,
+    snippets,
+    jobExperienceSnippets,
     calendars,
     calendarEvents,
     trackers,

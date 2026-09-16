@@ -976,6 +976,36 @@ class FlaggedWord {
   final DateTime? deletedAt;
 }
 
+/// One [Snippet] or [JobExperienceSnippet] as the sync layer stores it: its own
+/// record with its own version, rather than an element of a list inside the
+/// settings document.
+///
+/// Those lists used to sync as settings fields, under the settings document's
+/// single last-write-wins clock, so any device that changed any setting
+/// re-uploaded its whole — possibly stale — list over snippets added elsewhere.
+/// As records, two devices editing different snippets both keep their edit.
+///
+/// [position] orders the list. Fractional, so moving one item rewrites only
+/// that item: renumbering every row on a reorder would make each of them
+/// outrank a concurrent content edit to the same row on another device.
+class SyncedListItem<T> {
+  const SyncedListItem({
+    required this.item,
+    required this.position,
+    required this.createdAt,
+    required this.updatedAt,
+    this.version = 0,
+    this.deletedAt,
+  });
+
+  final T item;
+  final double position;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+}
+
 class CustomQuote {
   const CustomQuote({
     required this.id,

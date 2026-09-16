@@ -62,6 +62,14 @@ Future<BuildContext> _contextUnder(WidgetTester tester, ThemeData theme) async {
   return captured;
 }
 
+/// WCAG relative-contrast ratio between two opaque colours.
+double _contrastRatio(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  final (hi, lo) = la > lb ? (la, lb) : (lb, la);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
 void main() {
   group('sidebar rows and shell nav', () {
     testWidgets('dark rows are near-solid so the grid cannot show through', (
@@ -101,7 +109,7 @@ void main() {
     });
   });
 
-  testWidgets('grade buttons label in onSurface, never black ink, in dark', (
+  testWidgets('grade buttons label in Frappe crust on their plates, in dark', (
     tester,
   ) async {
     final theme = VoyagerTheme.dark();
@@ -122,7 +130,13 @@ void main() {
       ),
     );
 
+    // The plates are saturated Catppuccin Frappe accents, which are light
+    // pastels -- bone ink would sit near 1.5:1 on Frappe green. The label is
+    // Frappe crust, and every plate has to stay light enough to carry it.
     for (final label in ['Fail', 'Hard', 'Good', 'Easy']) {
+      final button = tester.widget<GlassButton>(
+        find.widgetWithText(GlassButton, label),
+      );
       final text = tester.widget<Text>(
         find.descendant(
           of: find.widgetWithText(GlassButton, label),
@@ -131,7 +145,12 @@ void main() {
       );
       expect(
         text.style?.color?.toARGB32(),
-        theme.colorScheme.onSurface.toARGB32(),
+        const Color(0xFF232634).toARGB32(),
+        reason: label,
+      );
+      expect(
+        _contrastRatio(button.color!, text.style!.color!),
+        greaterThan(4.5),
         reason: label,
       );
     }

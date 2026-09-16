@@ -42,6 +42,36 @@ void main() {
     });
   });
 
+  group('possessives', () {
+    test("`X's` is known when `X` is", () {
+      final service = _serviceWith({'dog', 'the'});
+      expect(service.checkTextSync("the dog's bowl"), hasLength(1));
+      expect(
+        _flaggedWords("the dog's bowl", service.checkTextSync("the dog's bowl")),
+        ['bowl'],
+      );
+    });
+
+    test('a possessive of an unknown word is still flagged', () {
+      final service = _serviceWith({'the'});
+      expect(_flaggedWords("the dgo's", service.checkTextSync("the dgo's")), [
+        "dgo's",
+      ]);
+    });
+
+    test('flagging the base word puts the squiggle back on the possessive', () {
+      final service = _serviceWith({'dog'});
+      service.updateFlaggedWords({'dog': null});
+      expect(_flaggedWords("dog's", service.checkTextSync("dog's")), ["dog's"]);
+    });
+
+    test('one letter is a long enough base', () {
+      // `mind your p's and q's`.
+      final service = _serviceWith({'p', 'q', 'and', 'mind', 'your'});
+      expect(service.checkTextSync("mind your p's and q's"), isEmpty);
+    });
+  });
+
   group('hydrateSuggestions', () {
     test('fills in corrections for a flagged span', () {
       final service = _serviceWith({'world', 'word'});
@@ -281,9 +311,13 @@ void main() {
         return text.substring(0, pos) + text.substring(pos + len);
       } else {
         // Insert a single character at a random position (simulates
-        // mid-word typing).
+        // mid-word typing). Digits and apostrophes are in the alphabet
+        // because they are what decides where a run begins and ends: a
+        // window widened without them re-tokenizes half of `xm6's` and
+        // disagrees with the full pass.
         final pos = rng.nextInt(text.length + 1);
-        final ch = String.fromCharCode(97 + rng.nextInt(26));
+        const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789'";
+        final ch = alphabet[rng.nextInt(alphabet.length)];
         return text.substring(0, pos) + ch + text.substring(pos);
       }
     }

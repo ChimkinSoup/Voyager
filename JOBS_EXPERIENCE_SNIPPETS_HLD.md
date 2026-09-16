@@ -263,6 +263,13 @@ No special empty-description toast.
 
 ## 11. Sync, import / export, migrations
 
+> **Superseded (2026-09-16, schema v115).** Experience snippets are records of
+> their own (`job_experience_snippets_table`, Firestore
+> `job_experience_snippets`), ordered by a fractional `position`, rather than a
+> list in the settings document — see `SNIPPET.md` §6.4 and
+> `DATA_INTEGRITY_AUDIT_REPORT.md` P1-1. Backups carry them as their own
+> collection; an older backup's list is adopted on import.
+
 - New settings field ships with schema migration if the Drift `AppSettings` table needs a column (JSON text or dedicated blob — match project convention).
 - Firestore settings mapper: read/write the list; remote clear / merge semantics follow other settings list fields.
 - Import/export: include snippets in the settings payload so a backup restores order and bodies.

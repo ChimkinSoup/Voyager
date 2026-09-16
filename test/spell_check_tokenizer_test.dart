@@ -29,6 +29,26 @@ void main() {
     expect(words, ['words', 'and', 'stuff']);
   });
 
+  group('digits', () {
+    test('a letter beside a digit is not a word of its own', () {
+      // `3D` used to tokenize to `D`, which is in no dictionary.
+      expect(words('rendered in 3D today'), ['rendered', 'in', 'today']);
+    });
+
+    test("an apostrophe after a digit does not split the run either", () {
+      // `XM6's` used to tokenize to `XM` and `s` — two squiggles.
+      expect(words("the XM6's grip"), ['the', 'grip']);
+    });
+
+    test('a digit suffix takes the whole word out of spell-check', () {
+      expect(words('1990s covid19 x264enc sha256 prose'), ['prose']);
+    });
+
+    test('a digit does not reach past a non-word character', () {
+      expect(words('3 D and 3-D'), ['D', 'and', 'D']);
+    });
+  });
+
   test('excludes tokens inside an inline code span', () {
     const text = 'call `fooo bario` twice';
     expect(words(text), ['call', 'twice']);

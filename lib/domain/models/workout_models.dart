@@ -1,8 +1,11 @@
+import 'dart:convert';
+
+import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
 
 export 'package:voyager/domain/models/enums.dart'
-    show WorkoutPlanMode, WeightUnit;
+    show WorkoutPlanMode, WeightUnit, WorkoutPrescriptionMode;
 
 /// Weight is stored in kilograms everywhere — table columns, Firestore
 /// payloads, sparkline points — and converted only at the display edge. The
@@ -247,11 +250,143 @@ class WorkoutPlan extends SoftDeletable {
   }
 }
 
+/// One weight × reps slice. Index 0 of a prescription/log is the top/main
+/// work; later slices are drops performed without rest.
+class SetSegment {
+  const SetSegment({required this.weightKg, required this.reps});
+
+  final double weightKg;
+  final int reps;
+
+  SetSegment copyWith({double? weightKg, int? reps}) => SetSegment(
+    weightKg: weightKg ?? this.weightKg,
+    reps: reps ?? this.reps,
+  );
+
+  Map<String, dynamic> toJson() => {'weightKg': weightKg, 'reps': reps};
+
+  factory SetSegment.fromJson(Map<String, dynamic> json) => SetSegment(
+    weightKg: (json['weightKg'] as num?)?.toDouble() ?? 0,
+    reps: (json['reps'] as num?)?.toInt() ?? 0,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SetSegment &&
+          (weightKg - other.weightKg).abs() < 0.001 &&
+          reps == other.reps;
+
+  @override
+  int get hashCode => Object.hash(weightKg, reps);
+}
+
+/// One planned set: a top segment plus optional drops.
+class SetPrescription {
+  const SetPrescription({required this.segments});
+
+  final List<SetSegment> segments;
+
+  SetSegment get top => segments.first;
+  List<SetSegment> get drops =>
+      segments.length <= 1 ? const [] : segments.sublist(1);
+  bool get hasDrops => segments.length > 1;
+
+  SetPrescription copyWith({List<SetSegment>? segments}) =>
+      SetPrescription(segments: segments ?? this.segments);
+
+  Map<String, dynamic> toJson() => {
+    'segments': [for (final s in segments) s.toJson()],
+  };
+
+  factory SetPrescription.fromJson(Map<String, dynamic> json) {
+    final raw = json['segments'];
+    final segments = <SetSegment>[];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map<String, dynamic>) {
+          segments.add(SetSegment.fromJson(item));
+        } else if (item is Map) {
+          segments.add(
+            SetSegment.fromJson(Map<String, dynamic>.from(item)),
+          );
+        }
+      }
+    }
+    if (segments.isEmpty) {
+      segments.add(const SetSegment(weightKg: 0, reps: 0));
+    }
+    return SetPrescription(segments: segments);
+  }
+}
+
+/// Default kg stripped when appending a drop, matching the active display unit.
+double defaultDropDecrementKg(WeightUnit unit) => unit == WeightUnit.lb
+    ? poundsToKilograms(kDefaultDropDecrementLb)
+    : kDefaultDropDecrementKg;
+
+/// Next drop after [previous]: same reps, weight reduced by the unit default.
+SetSegment nextDropSegment(SetSegment previous, WeightUnit unit) {
+  final next =
+      (previous.weightKg - defaultDropDecrementKg(unit)).clamp(0.0, double.infinity);
+  return SetSegment(weightKg: next.toDouble(), reps: previous.reps);
+}
+
+/// Seeds a custom placement recipe from an exercise's global uniform targets.
+List<SetPrescription> seedPrescriptionsFromExercise(Exercise exercise) {
+  final top = SetSegment(
+    weightKg: exercise.targetWeightKg,
+    reps: exercise.targetReps,
+  );
+  final count = exercise.targetSets < 1 ? 1 : exercise.targetSets;
+  return [for (var i = 0; i < count; i++) SetPrescription(segments: [top])];
+}
+
+String encodeSetPrescriptions(List<SetPrescription> prescriptions) =>
+    jsonEncode([for (final p in prescriptions) p.toJson()]);
+
+List<SetPrescription> decodeSetPrescriptions(String? raw) {
+  if (raw == null || raw.isEmpty || raw == '[]') return const [];
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return const [];
+    return [
+      for (final item in decoded)
+        if (item is Map<String, dynamic>)
+          SetPrescription.fromJson(item)
+        else if (item is Map)
+          SetPrescription.fromJson(Map<String, dynamic>.from(item)),
+    ];
+  } catch (_) {
+    return const [];
+  }
+}
+
+String encodeSetSegments(List<SetSegment> segments) =>
+    jsonEncode([for (final s in segments) s.toJson()]);
+
+List<SetSegment> decodeSetSegments(String? raw) {
+  if (raw == null || raw.isEmpty || raw == '[]') return const [];
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return const [];
+    return [
+      for (final item in decoded)
+        if (item is Map<String, dynamic>)
+          SetSegment.fromJson(item)
+        else if (item is Map)
+          SetSegment.fromJson(Map<String, dynamic>.from(item)),
+    ];
+  } catch (_) {
+    return const [];
+  }
+}
+
 /// One exercise placed on one day of a plan.
 ///
-/// Purely a placement: which movement, which day, in what order. The
-/// sets/reps/weight live on the [Exercise] itself so they stay global — this
-/// row deliberately has no numbers of its own to fall out of step with them.
+/// Placement owns day/order. Numbers come either from the [Exercise] globals
+/// ([WorkoutPrescriptionMode.inherit]) or from [setPrescriptions] when the
+/// placement is in custom mode — so Monday Bench can differ from Thursday.
 class WorkoutPlanEntry extends SoftDeletable {
   const WorkoutPlanEntry({
     required super.id,
@@ -263,18 +398,28 @@ class WorkoutPlanEntry extends SoftDeletable {
     required this.dayIndex,
     required this.exerciseId,
     this.sortOrder = 0,
+    this.prescriptionMode = WorkoutPrescriptionMode.inherit,
+    this.setPrescriptions = const [],
   });
 
   final String planId;
   final int dayIndex;
   final String exerciseId;
   final int sortOrder;
+  final WorkoutPrescriptionMode prescriptionMode;
+  final List<SetPrescription> setPrescriptions;
+
+  bool get isCustomPrescription =>
+      prescriptionMode == WorkoutPrescriptionMode.custom &&
+      setPrescriptions.isNotEmpty;
 
   WorkoutPlanEntry copyWith({
     String? planId,
     int? dayIndex,
     String? exerciseId,
     int? sortOrder,
+    WorkoutPrescriptionMode? prescriptionMode,
+    List<SetPrescription>? setPrescriptions,
     DateTime? deletedAt,
     int? version,
     bool bumpVersion = true,
@@ -289,6 +434,8 @@ class WorkoutPlanEntry extends SoftDeletable {
       dayIndex: dayIndex ?? this.dayIndex,
       exerciseId: exerciseId ?? this.exerciseId,
       sortOrder: sortOrder ?? this.sortOrder,
+      prescriptionMode: prescriptionMode ?? this.prescriptionMode,
+      setPrescriptions: setPrescriptions ?? this.setPrescriptions,
     );
   }
 
@@ -298,6 +445,8 @@ class WorkoutPlanEntry extends SoftDeletable {
     'dayIndex': dayIndex,
     'exerciseId': exerciseId,
     'sortOrder': sortOrder,
+    'prescriptionMode': prescriptionMode.name,
+    'setPrescriptions': [for (final p in setPrescriptions) p.toJson()],
     'createdAt': createdAt.toUtc().toIso8601String(),
     'updatedAt': updatedAt.toUtc().toIso8601String(),
     'version': version,
@@ -305,12 +454,30 @@ class WorkoutPlanEntry extends SoftDeletable {
   };
 
   factory WorkoutPlanEntry.fromJson(Map<String, dynamic> json) {
+    final modeName = json['prescriptionMode'] as String? ?? 'inherit';
+    final mode = WorkoutPrescriptionMode.values.asNameMap()[modeName] ??
+        WorkoutPrescriptionMode.inherit;
+    final rawPrescriptions = json['setPrescriptions'];
+    final prescriptions = <SetPrescription>[];
+    if (rawPrescriptions is List) {
+      for (final item in rawPrescriptions) {
+        if (item is Map<String, dynamic>) {
+          prescriptions.add(SetPrescription.fromJson(item));
+        } else if (item is Map) {
+          prescriptions.add(
+            SetPrescription.fromJson(Map<String, dynamic>.from(item)),
+          );
+        }
+      }
+    }
     return WorkoutPlanEntry(
       id: json['id'] as String,
       planId: json['planId'] as String,
       dayIndex: json['dayIndex'] as int? ?? 0,
       exerciseId: json['exerciseId'] as String,
       sortOrder: json['sortOrder'] as int? ?? 0,
+      prescriptionMode: mode,
+      setPrescriptions: prescriptions,
       createdAt: DateTime.parse(json['createdAt'] as String).toUtc(),
       updatedAt: DateTime.parse(json['updatedAt'] as String).toUtc(),
       version: json['version'] as int? ?? 0,
@@ -417,6 +584,10 @@ class WorkoutSession extends SoftDeletable {
 /// rather than read back through [WorkoutPlanEntry]: the plan can be edited
 /// months later, and a past session's "did I hit my numbers?" has to stay
 /// answerable against the numbers that were actually planned that day.
+///
+/// [weightKg]/[reps] are always the **top/main** segment. Optional
+/// [dropSegments] are immediate follow-on loads that still count as this one
+/// set for progress, with volume summed across every segment.
 class WorkoutSetLog extends SoftDeletable {
   const WorkoutSetLog({
     required super.id,
@@ -432,6 +603,8 @@ class WorkoutSetLog extends SoftDeletable {
     required this.reps,
     required this.plannedWeightKg,
     required this.plannedReps,
+    this.dropSegments = const [],
+    this.plannedDropSegments = const [],
     this.completed = false,
     this.completedAt,
   });
@@ -447,19 +620,41 @@ class WorkoutSetLog extends SoftDeletable {
   final int reps;
   final double plannedWeightKg;
   final int plannedReps;
+  final List<SetSegment> dropSegments;
+  final List<SetSegment> plannedDropSegments;
   final bool completed;
   final DateTime? completedAt;
 
+  bool get hasDrops => dropSegments.isNotEmpty;
+
+  /// Top plus drops — the full chain performed (or planned to perform).
+  List<SetSegment> get allSegments => [
+    SetSegment(weightKg: weightKg, reps: reps),
+    ...dropSegments,
+  ];
+
   /// Whether the user moved off the planned numbers for this set — the
   /// condition the active view paints in the accent colour.
-  bool get deviatesFromPlan =>
-      (weightKg - plannedWeightKg).abs() > 0.001 || reps != plannedReps;
+  bool get deviatesFromPlan {
+    if ((weightKg - plannedWeightKg).abs() > 0.001 || reps != plannedReps) {
+      return true;
+    }
+    if (dropSegments.length != plannedDropSegments.length) return true;
+    for (var i = 0; i < dropSegments.length; i++) {
+      if (dropSegments[i] != plannedDropSegments[i]) return true;
+    }
+    return false;
+  }
 
-  double get volumeKg => weightKg * reps;
+  double get volumeKg =>
+      weightKg * reps +
+      dropSegments.fold<double>(0, (sum, s) => sum + s.weightKg * s.reps);
 
   WorkoutSetLog copyWith({
     double? weightKg,
     int? reps,
+    List<SetSegment>? dropSegments,
+    List<SetSegment>? plannedDropSegments,
     bool? completed,
     DateTime? completedAt,
     bool clearCompletedAt = false,
@@ -481,6 +676,8 @@ class WorkoutSetLog extends SoftDeletable {
       reps: reps ?? this.reps,
       plannedWeightKg: plannedWeightKg,
       plannedReps: plannedReps,
+      dropSegments: dropSegments ?? this.dropSegments,
+      plannedDropSegments: plannedDropSegments ?? this.plannedDropSegments,
       completed: completed ?? this.completed,
       completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
     );
@@ -496,6 +693,8 @@ class WorkoutSetLog extends SoftDeletable {
     'reps': reps,
     'plannedWeightKg': plannedWeightKg,
     'plannedReps': plannedReps,
+    'dropSegments': [for (final s in dropSegments) s.toJson()],
+    'plannedDropSegments': [for (final s in plannedDropSegments) s.toJson()],
     'completed': completed,
     'completedAt': completedAt?.toUtc().toIso8601String(),
     'createdAt': createdAt.toUtc().toIso8601String(),
@@ -505,6 +704,17 @@ class WorkoutSetLog extends SoftDeletable {
   };
 
   factory WorkoutSetLog.fromJson(Map<String, dynamic> json) {
+    List<SetSegment> parseSegments(Object? raw) {
+      if (raw is! List) return const [];
+      return [
+        for (final item in raw)
+          if (item is Map<String, dynamic>)
+            SetSegment.fromJson(item)
+          else if (item is Map)
+            SetSegment.fromJson(Map<String, dynamic>.from(item)),
+      ];
+    }
+
     return WorkoutSetLog(
       id: json['id'] as String,
       sessionId: json['sessionId'] as String,
@@ -515,6 +725,8 @@ class WorkoutSetLog extends SoftDeletable {
       reps: json['reps'] as int? ?? 0,
       plannedWeightKg: (json['plannedWeightKg'] as num?)?.toDouble() ?? 0,
       plannedReps: json['plannedReps'] as int? ?? 0,
+      dropSegments: parseSegments(json['dropSegments']),
+      plannedDropSegments: parseSegments(json['plannedDropSegments']),
       completed: json['completed'] as bool? ?? false,
       completedAt: json['completedAt'] != null
           ? DateTime.parse(json['completedAt'] as String).toUtc()
