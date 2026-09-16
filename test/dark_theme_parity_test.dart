@@ -9,6 +9,7 @@ import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/paper_texture.dart';
+import 'package:voyager/core/widgets/surface_grain.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
@@ -196,7 +197,8 @@ void main() {
     await tester.pump();
 
     expect(find.byType(BackdropFilter), findsNothing);
-    expect(find.byType(PaperTexture), findsWidgets);
+    expect(find.byType(SurfaceGrain), findsWidgets);
+    expect(find.byType(PaperTexture), findsNothing);
   });
 
   // Semantics off: SettingsPage mounted outside the shell hands the semantics

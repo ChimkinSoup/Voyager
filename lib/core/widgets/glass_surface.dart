@@ -90,38 +90,7 @@ class GlassSurface extends StatelessWidget {
                 width: accentBorder != null ? 2.0 : 1.0,
               ),
             ),
-            child: Stack(
-              children: [
-                // Top gloss: a light material catches more light than a heavy
-                // one.
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: isHeavy ? 12 : 20,
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.vertical(
-                          top: borderRadius.topLeft,
-                        ),
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            vc.highlightWash.withValues(
-                              alpha: isHeavy ? 0.05 : 0.08,
-                            ),
-                            vc.highlightWash.withValues(alpha: 0.0),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                child,
-              ],
-            ),
+            child: child,
           ),
         ),
       ),

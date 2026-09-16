@@ -1,7 +1,6 @@
 import 'package:flutter/physics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/motion/motion.dart';
-import 'package:voyager/core/widgets/resizable_pane_divider.dart';
 
 /// Guards `lib/core/motion` — the spring/rubber-band primitives that the
 /// window frame, dialogs, popovers, context menus, flip cards and pane
@@ -171,46 +170,6 @@ void main() {
     test('a non-positive dimension yields no displacement', () {
       expect(rubberBand(100, 0), 0);
       expect(rubberBand(100, -50), 0);
-    });
-  });
-
-  group('resizePaneRubberBand', () {
-    const totalWidth = 1200.0;
-    const minWidth = 180.0;
-    const maxWidth = 520.0;
-
-    double band(double width) => resizePaneRubberBand(
-      width: width,
-      totalWidth: totalWidth,
-      minWidth: minWidth,
-      maxWidth: maxWidth,
-    );
-
-    test('passes widths inside the range through untouched', () {
-      expect(band(minWidth), minWidth);
-      expect(band(350), 350);
-      expect(band(maxWidth), maxWidth);
-    });
-
-    test('past the minimum it resists instead of stopping hard', () {
-      final resisted = band(minWidth - 100);
-      expect(resisted, lessThan(minWidth), reason: 'it must still give');
-      expect(
-        resisted,
-        greaterThan(minWidth - 100),
-        reason: 'but not follow the drag one-to-one',
-      );
-    });
-
-    test('past the maximum it resists instead of stopping hard', () {
-      final resisted = band(maxWidth + 100);
-      expect(resisted, greaterThan(maxWidth));
-      expect(resisted, lessThan(maxWidth + 100));
-    });
-
-    test('never escapes the pane by more than the window width', () {
-      expect(band(maxWidth + 1e6), lessThan(maxWidth + totalWidth));
-      expect(band(minWidth - 1e6), greaterThan(minWidth - totalWidth));
     });
   });
 

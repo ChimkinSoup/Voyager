@@ -265,8 +265,8 @@
     "semantic_hash": ""
   },
   "lib/core/sync/firestore_document_mapper.dart": {
-    "mtime": 1789411877.466068,
-    "ast_hash": "ac4ed39be8f712319f4a3f2499761280",
+    "mtime": 1789495902.2528515,
+    "ast_hash": "1b8c73e91316ff9f746f9f2b3e285439",
     "semantic_hash": ""
   },
   "lib/core/sync/firestore_pull_service.dart": {
@@ -330,9 +330,9 @@
     "semantic_hash": "2654fb2899ca5e557892db4d0aae9d4e"
   },
   "lib/core/theme/voyager_list_item_surface.dart": {
-    "mtime": 1786836611.857726,
-    "ast_hash": "dc40c567cb14ff7dcd54ac8c3fb08d16",
-    "semantic_hash": "dc40c567cb14ff7dcd54ac8c3fb08d16"
+    "mtime": 1789493833.073661,
+    "ast_hash": "7276447764d897221e5f50b3a07272ec",
+    "semantic_hash": ""
   },
   "lib/core/theme/voyager_menu_theme.dart": {
     "mtime": 1785205629.0016606,
@@ -415,9 +415,9 @@
     "semantic_hash": "3532318c25624cd7d5a73643ecfd7b6c"
   },
   "lib/core/widgets/desktop_window_title_bar.dart": {
-    "mtime": 1782074967.4069424,
-    "ast_hash": "72195cb4351acf16d41a445d28558bb6",
-    "semantic_hash": "72195cb4351acf16d41a445d28558bb6"
+    "mtime": 1789494034.3381467,
+    "ast_hash": "5014e90245f1d56607adeb0d2877521c",
+    "semantic_hash": ""
   },
   "lib/core/widgets/enter_to_submit_scope.dart": {
     "mtime": 1789173443.4607458,
@@ -455,9 +455,9 @@
     "semantic_hash": "43a05cf5679b7262eebf1076990caefc"
   },
   "lib/core/widgets/mood_gradient_slider.dart": {
-    "mtime": 1787427148.143077,
-    "ast_hash": "c51508b1014dd2f6bcea715a803a4667",
-    "semantic_hash": "c51508b1014dd2f6bcea715a803a4667"
+    "mtime": 1789493962.7909667,
+    "ast_hash": "28ac209ec618f43f53c4139634a37aa5",
+    "semantic_hash": ""
   },
   "lib/core/widgets/notched_field_border.dart": {
     "mtime": 1786836611.871518,
@@ -490,9 +490,9 @@
     "semantic_hash": ""
   },
   "lib/core/widgets/time_selector_popovers.dart": {
-    "mtime": 1786836611.8768458,
-    "ast_hash": "a446bfd6ce9158dede3156e5afb0892e",
-    "semantic_hash": "a446bfd6ce9158dede3156e5afb0892e"
+    "mtime": 1789493954.61467,
+    "ast_hash": "823f0c9bba6c05f7750ec554a3a32b47",
+    "semantic_hash": ""
   },
   "lib/core/widgets/voyager_dropdown_button.dart": {
     "mtime": 1785385578.5923462,
@@ -525,13 +525,13 @@
     "semantic_hash": "268a7a3a47fa90c40e8ac8c6e3402cf9"
   },
   "lib/data/database/app_database.dart": {
-    "mtime": 1789411749.5011594,
-    "ast_hash": "621d3ed05f81d50857328a802abf34d4",
+    "mtime": 1789495903.082,
+    "ast_hash": "348765075f66ae6090c143cfcc100883",
     "semantic_hash": ""
   },
   "lib/data/database/app_database.g.dart": {
-    "mtime": 1789411910.6724918,
-    "ast_hash": "89e113f54085f6606948f937afd9ee29",
+    "mtime": 1789496087.8915064,
+    "ast_hash": "08b17ba7f8ef0e30131fd472f2b412a4",
     "semantic_hash": ""
   },
   "lib/data/remote/cloud_function_weather_client.dart": {
@@ -570,8 +570,8 @@
     "semantic_hash": "22eb727b81b4ebfd6af33a5e68491d35"
   },
   "lib/data/repositories/drift_repositories.dart": {
-    "mtime": 1789411838.323595,
-    "ast_hash": "a3405cf3210331a711d159d687cc557f",
+    "mtime": 1789495903.806064,
+    "ast_hash": "2fea856d181f5b0a5e52eb7da3ee3279",
     "semantic_hash": ""
   },
   "lib/data/services/quotes_loader.dart": {
@@ -600,8 +600,8 @@
     "semantic_hash": "99fbc479ff56b530b339467a5cbf13c6"
   },
   "lib/domain/models/settings_models.dart": {
-    "mtime": 1789075887.9637022,
-    "ast_hash": "40a16add3c99fd44b8c690a3f48a37c5",
+    "mtime": 1789495899.6262436,
+    "ast_hash": "aee55449743d0f4d626bbd13931318e8",
     "semantic_hash": ""
   },
   "lib/domain/models/soft_deletable.dart": {
@@ -715,8 +715,8 @@
     "semantic_hash": "b9fea4da159a0ca225202f54d989b784"
   },
   "lib/features/analytics/analytics_page.dart": {
-    "mtime": 1789435434.628557,
-    "ast_hash": "1bdc5123ca7d0b24d24f51fed8349e42",
+    "mtime": 1789493726.4269786,
+    "ast_hash": "0e3eec8bab081f2994f8b27bed08896d",
     "semantic_hash": ""
   },
   "lib/features/analytics/heatmap_calendar.dart": {
@@ -890,8 +890,8 @@
     "semantic_hash": "a8c74d55bc5719249b19a7f2d1d616f1"
   },
   "lib/features/settings/settings_page.dart": {
-    "mtime": 1789076393.2515628,
-    "ast_hash": "bd12d6270263cd199e77dbaa1036a132",
+    "mtime": 1789494014.6609805,
+    "ast_hash": "9154f715c9e0f90313391da4e21a34fc",
     "semantic_hash": ""
   },
   "lib/features/settings/weather_location_tile.dart": {
@@ -975,8 +975,8 @@
     "semantic_hash": ""
   },
   "lib/features/todo/todo_page.dart": {
-    "mtime": 1789190024.004411,
-    "ast_hash": "babbab162eaca91005823b64018620df",
+    "mtime": 1789502812.7795942,
+    "ast_hash": "36036eeb81f7d84a46e60725891069f2",
     "semantic_hash": ""
   },
   "lib/firebase_options.dart": {
@@ -1370,9 +1370,9 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "lib/core/widgets/datetime_selector_popover.dart": {
-    "mtime": 1786836611.8673875,
-    "ast_hash": "c07c612bddb1bdbea219e98e7024d6dd",
-    "semantic_hash": "c07c612bddb1bdbea219e98e7024d6dd"
+    "mtime": 1789493956.08677,
+    "ast_hash": "530a27848c6fc41f1b44afa40946ae1e",
+    "semantic_hash": ""
   },
   "lib/features/calendar/calendar_todo_panel.dart": {
     "mtime": 1789161964.3705277,
@@ -1630,8 +1630,8 @@
     "semantic_hash": "22d03a76b5bf331e0f72f7961c8c0b09"
   },
   "lib/core/widgets/glass_button.dart": {
-    "mtime": 1789491628.950314,
-    "ast_hash": "59c3bf6af739fb7ed32964fe6fe2cf5e",
+    "mtime": 1789505517.49519,
+    "ast_hash": "717504352504642bdaa3b0234a94372d",
     "semantic_hash": ""
   },
   "test/glass_button_test.dart": {
@@ -1985,8 +1985,8 @@
     "semantic_hash": ""
   },
   "lib/features/dream_journal/dream_sticky_note.dart": {
-    "mtime": 1788979937.5550346,
-    "ast_hash": "8a9a3f4512314ac8d8da9023aeee6ce3",
+    "mtime": 1789493947.8415504,
+    "ast_hash": "5bc437b27da64480f2ec6654eeaeafb5",
     "semantic_hash": ""
   },
   "DREAM_JOURNAL.md": {
@@ -2120,9 +2120,9 @@
     "semantic_hash": ""
   },
   "lib/features/life_tracker/life_tracker_page.dart": {
-    "mtime": 1787711748.9188087,
-    "ast_hash": "b39156d54e428fb9863db1a075c87a52",
-    "semantic_hash": "b39156d54e428fb9863db1a075c87a52"
+    "mtime": 1789494090.7961662,
+    "ast_hash": "9f069d41b040c954bb8363da283df95d",
+    "semantic_hash": ""
   },
   "lib/features/life_tracker/life_tracker_providers.dart": {
     "mtime": 1787603199.7649367,
@@ -2265,14 +2265,14 @@
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_detail_view.dart": {
-    "mtime": 1789157735.3039517,
-    "ast_hash": "c86b165b07e867c71f0db478d55f4249",
+    "mtime": 1789494372.2233534,
+    "ast_hash": "4cde84d972bc8c54ece870a8fb3f2ae1",
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_flashcard.dart": {
-    "mtime": 1787762053.4082315,
-    "ast_hash": "20c01825b21ef38dbb5c230517cae15e",
-    "semantic_hash": "20c01825b21ef38dbb5c230517cae15e"
+    "mtime": 1789504242.6624944,
+    "ast_hash": "302fe69f737a25835054c78c036f7ff3",
+    "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_page.dart": {
     "mtime": 1786836611.9214616,
@@ -2330,9 +2330,9 @@
     "semantic_hash": "5d5d1674085f0832cc4e49d5bff9803b"
   },
   "lib/features/shell/shell_nav_theme.dart": {
-    "mtime": 1786836611.93599,
-    "ast_hash": "0abbefd6ce9dc6c5d7e71fa8db1268f1",
-    "semantic_hash": "0abbefd6ce9dc6c5d7e71fa8db1268f1"
+    "mtime": 1789493838.0835812,
+    "ast_hash": "5506cb9a0be132662fd719402ba4c005",
+    "semantic_hash": ""
   },
   "lib/features/study/study_breadcrumb.dart": {
     "mtime": 1786836611.938063,
@@ -2395,8 +2395,8 @@
     "semantic_hash": ""
   },
   "DESIGN.md": {
-    "mtime": 1789491560.345047,
-    "ast_hash": "7b5abbb6d262d66aef2f0128a4c2ec49",
+    "mtime": 1789505057.3345933,
+    "ast_hash": "5a76c90021ff7d7c5fe725629f1bd030",
     "semantic_hash": ""
   },
   "LEETCODE_TRACKER.md": {
@@ -2440,14 +2440,14 @@
     "semantic_hash": "2e3c65f352eb39f486b4c32acea4250c"
   },
   "lib/core/widgets/glass_surface.dart": {
-    "mtime": 1789313985.9950645,
-    "ast_hash": "ab2ce606d9ee56dbcad32542785c82e2",
+    "mtime": 1789507352.8492455,
+    "ast_hash": "cb5ff72fcd8ab46f48a9273b4f9781f9",
     "semantic_hash": ""
   },
   "lib/core/widgets/voyager_dialog.dart": {
-    "mtime": 1786836611.8774648,
-    "ast_hash": "5c9defcdcd4c31358161f863d64701ea",
-    "semantic_hash": "5c9defcdcd4c31358161f863d64701ea"
+    "mtime": 1789493909.9750228,
+    "ast_hash": "861a90a87ad5916544df5278da4c2b64",
+    "semantic_hash": ""
   },
   "lib/features/study/study_actions.dart": {
     "mtime": 1789157721.8029187,
@@ -2500,9 +2500,9 @@
     "semantic_hash": "d7f96439edc21d193b21639cc7b6288b"
   },
   "lib/features/workout/exercise_detail_view.dart": {
-    "mtime": 1786836611.9519062,
-    "ast_hash": "daf74e52e512bec4a64cf8a7133d597c",
-    "semantic_hash": "daf74e52e512bec4a64cf8a7133d597c"
+    "mtime": 1789494373.463911,
+    "ast_hash": "1a32496c8114936b7fe35a70802f7f63",
+    "semantic_hash": ""
   },
   "lib/features/workout/workout_actions.dart": {
     "mtime": 1788385370.7624078,
@@ -2570,8 +2570,8 @@
     "semantic_hash": "9d807d7f81c12632b82eef36c6e65612"
   },
   "test/glass_reduced_transparency_test.dart": {
-    "mtime": 1789491660.6417623,
-    "ast_hash": "cfabbf1a1abb9aca25184e806380674c",
+    "mtime": 1789504262.5554304,
+    "ast_hash": "8e94ba2766b8a226b6f76fa111ca6468",
     "semantic_hash": ""
   },
   "test/journal_all_journals_destination_test.dart": {
@@ -2830,9 +2830,9 @@
     "semantic_hash": ""
   },
   "lib/features/study/study_grading_row.dart": {
-    "mtime": 1786836611.9407053,
-    "ast_hash": "c9400e1b66fb896418683567d6fe88fc",
-    "semantic_hash": "c9400e1b66fb896418683567d6fe88fc"
+    "mtime": 1789493717.0565069,
+    "ast_hash": "5ca702be6f2b315642e221d49fb6dea2",
+    "semantic_hash": ""
   },
   "test/leetcode_mini_flashcard_test.dart": {
     "mtime": 1787761711.9562085,
@@ -2860,9 +2860,9 @@
     "semantic_hash": "b0c877c3bc9035b685eccaf2a6727d93"
   },
   "test/study_grade_during_flip_test.dart": {
-    "mtime": 1786836611.9910405,
-    "ast_hash": "040b10f2d9e542d79b1105d7f8ff61a3",
-    "semantic_hash": "040b10f2d9e542d79b1105d7f8ff61a3"
+    "mtime": 1789494806.4442418,
+    "ast_hash": "7f72216ceffff2ed8b545c3593cc8259",
+    "semantic_hash": ""
   },
   "lib/core/motion/voyager_crossfade.dart": {
     "mtime": 1786836611.8471615,
@@ -3365,9 +3365,9 @@
     "semantic_hash": "f5f3b5a3dc2bc4523084ce4bffe1f6b6"
   },
   "lib/features/leetcode/leetcode_activity_card.dart": {
-    "mtime": 1788560607.8400252,
-    "ast_hash": "9266abe930a8be4ed6bdd50ae331c2ba",
-    "semantic_hash": "9266abe930a8be4ed6bdd50ae331c2ba"
+    "mtime": 1789494370.558862,
+    "ast_hash": "5dcafedb489057ef91b76b01ff7482a8",
+    "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_activity_chart.dart": {
     "mtime": 1786905047.8536227,
@@ -3620,8 +3620,8 @@
     "semantic_hash": ""
   },
   "lib/features/jobs/jobs_edit_panel.dart": {
-    "mtime": 1789337762.8676364,
-    "ast_hash": "2d9b0608199a5fc70bc65f542f73f1c6",
+    "mtime": 1789495992.1228864,
+    "ast_hash": "eeb36a5ef8fc3aae7bcfea6bff2f1ab4",
     "semantic_hash": ""
   },
   "lib/features/jobs/jobs_header.dart": {
@@ -3635,8 +3635,8 @@
     "semantic_hash": ""
   },
   "lib/features/jobs/jobs_page.dart": {
-    "mtime": 1789405589.4259057,
-    "ast_hash": "b070808dba208af705e117274249f1f7",
+    "mtime": 1789496276.8077111,
+    "ast_hash": "3cf63ddff133fed05b7f221b11c84864",
     "semantic_hash": ""
   },
   "lib/features/jobs/jobs_providers.dart": {
@@ -3710,9 +3710,9 @@
     "semantic_hash": "980200e90b6ecc6983a8e887cbf099af"
   },
   "test/todo_repeat_row_layout_test.dart": {
-    "mtime": 1788385370.7804909,
-    "ast_hash": "8fe6b16db79a13c996eb9badd4ebcdf5",
-    "semantic_hash": "8fe6b16db79a13c996eb9badd4ebcdf5"
+    "mtime": 1789496392.0618455,
+    "ast_hash": "6ead3dd9ef5b7ced9589a20ac38daf88",
+    "semantic_hash": ""
   },
   "AUDIT.md": {
     "mtime": 1789448909.4704187,
@@ -3900,9 +3900,9 @@
     "semantic_hash": "131c540fccffc1e6d1d54bf53da209d6"
   },
   "lib/core/media/widgets/media_fan_stack.dart": {
-    "mtime": 1788026177.8392518,
-    "ast_hash": "474041ae9eef7da897b7e0a36b7c7dc3",
-    "semantic_hash": "474041ae9eef7da897b7e0a36b7c7dc3"
+    "mtime": 1789493736.4636655,
+    "ast_hash": "157c5890d2773d3fb16af2053886385d",
+    "semantic_hash": ""
   },
   "lib/core/media/widgets/media_gallery_strip.dart": {
     "mtime": 1788291139.7893643,
@@ -4010,8 +4010,8 @@
     "semantic_hash": ""
   },
   "lib/features/rankings/rankings_edit_panel.dart": {
-    "mtime": 1789327679.1547492,
-    "ast_hash": "51a7160a1b9e491170d3a36676b3fd01",
+    "mtime": 1789495992.1228864,
+    "ast_hash": "12efd826f5e6741ea32fe5a565f79729",
     "semantic_hash": ""
   },
   "lib/features/rankings/rankings_field_editor.dart": {
@@ -4040,8 +4040,8 @@
     "semantic_hash": "eba1c9c7d9e0b175bec4fef54cc46f55"
   },
   "lib/features/rankings/rankings_page.dart": {
-    "mtime": 1789327658.6096814,
-    "ast_hash": "09a56c6835f8a02702273a1c07243260",
+    "mtime": 1789496366.7450423,
+    "ast_hash": "e51ac5858ce554e27eb10f47818e0d0b",
     "semantic_hash": ""
   },
   "lib/features/rankings/rankings_providers.dart": {
@@ -4115,9 +4115,9 @@
     "semantic_hash": "a01e29d289f478abb4b66668b0d7eec5"
   },
   "test/media_fan_stack_test.dart": {
-    "mtime": 1787932091.022357,
-    "ast_hash": "24c5a9e4b2f3e65e632f6b99c375eeb3",
-    "semantic_hash": "24c5a9e4b2f3e65e632f6b99c375eeb3"
+    "mtime": 1789494468.8740323,
+    "ast_hash": "72152bb39ecd85ebf0c9c8c23ffb1380",
+    "semantic_hash": ""
   },
   "test/media_lightbox_test.dart": {
     "mtime": 1789139475.054231,
@@ -4315,9 +4315,9 @@
     "semantic_hash": "5476bbbc4d71b22c17b6d60a370931ab"
   },
   "lib/features/leetcode/leetcode_scratch_pad.dart": {
-    "mtime": 1788381256.2276738,
-    "ast_hash": "77ee60685e536ae7819e57308ff0051d",
-    "semantic_hash": "77ee60685e536ae7819e57308ff0051d"
+    "mtime": 1789493928.194213,
+    "ast_hash": "e27fe3b87fc070a62cfd63e5f9f7728b",
+    "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_scratch_session.dart": {
     "mtime": 1788381086.2744875,
@@ -4325,9 +4325,9 @@
     "semantic_hash": "09b1e1f0ab2094ea5dc5e4223b0c8d77"
   },
   "lib/features/leetcode/leetcode_scratch_starter.dart": {
-    "mtime": 1788220923.6656072,
-    "ast_hash": "10606e88805093b973d0cea921425dce",
-    "semantic_hash": "10606e88805093b973d0cea921425dce"
+    "mtime": 1789506916.529923,
+    "ast_hash": "d377ec769a945abefb97d1995f469c0b",
+    "semantic_hash": ""
   },
   "test/bucket_list_delete_undo_test.dart": {
     "mtime": 1788218899.8387403,
@@ -4365,9 +4365,9 @@
     "semantic_hash": "cfe133487d4f89843259e9e397c84fd9"
   },
   "test/leetcode_scratch_starter_test.dart": {
-    "mtime": 1788220155.9953904,
-    "ast_hash": "055d6e726fad1ed6cbb937a3f2416866",
-    "semantic_hash": "055d6e726fad1ed6cbb937a3f2416866"
+    "mtime": 1789506929.7332022,
+    "ast_hash": "9741fb4d0865fbdf126fa4861951a180",
+    "semantic_hash": ""
   },
   "test/soft_delete_toast_test.dart": {
     "mtime": 1789157811.4135275,
@@ -5005,8 +5005,8 @@
     "semantic_hash": ""
   },
   "lib/features/finance/finance_net_flow_hero.dart": {
-    "mtime": 1789264582.463774,
-    "ast_hash": "d95e4a4efb0fc69eb2d99f9eeb3ecefe",
+    "mtime": 1789494368.988139,
+    "ast_hash": "b4e6848cf839dafa9eb8bd090630f46d",
     "semantic_hash": ""
   },
   "test/finance_net_flow_test.dart": {
@@ -5155,8 +5155,8 @@
     "semantic_hash": ""
   },
   "test/narrow_window_overflow_test.dart": {
-    "mtime": 1789436820.2297504,
-    "ast_hash": "726d35ce9f0ad34bac1ffc41c469c04b",
+    "mtime": 1789496392.0371947,
+    "ast_hash": "277b8b95305ce36a0607119f223d357e",
     "semantic_hash": ""
   },
   "test/perf_stall_logger_test.dart": {
@@ -5172,6 +5172,31 @@
   "MULTILINE_FIELD_SCROLL_INSETS.md": {
     "mtime": 1789440370.51746,
     "ast_hash": "e4898ba942fa2548978ffe06e26e7590",
+    "semantic_hash": ""
+  },
+  "lib/core/widgets/edit_side_panel_host.dart": {
+    "mtime": 1789502626.4799187,
+    "ast_hash": "edf4bcc540acf0ae1414b91be4a00b70",
+    "semantic_hash": ""
+  },
+  "test/dark_theme_parity_test.dart": {
+    "mtime": 1789504265.348413,
+    "ast_hash": "cee07c9d8ed6e94a02c5ccd06547aef0",
+    "semantic_hash": ""
+  },
+  "test/edit_side_panel_host_test.dart": {
+    "mtime": 1789502627.6250074,
+    "ast_hash": "267b3fa1fff5c7995a6db46b1a26a47c",
+    "semantic_hash": ""
+  },
+  "DARK_THEME_AUDIT.md": {
+    "mtime": 1789493417.00861,
+    "ast_hash": "01d61c5533a770f61b5752d1570079cd",
+    "semantic_hash": ""
+  },
+  "lib/core/widgets/surface_grain.dart": {
+    "mtime": 1789504204.807601,
+    "ast_hash": "7998a4c5091edc63c7a953e64276f764",
     "semantic_hash": ""
   }
 }

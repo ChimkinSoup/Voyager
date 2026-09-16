@@ -92,8 +92,8 @@ class _StudyGradingRowState extends State<StudyGradingRow>
     final curve = _reduced ? Curves.easeOut : VoyagerSpring.moveCurve;
     final isDark = theme.brightness == Brightness.dark;
     // GlassButton's own resting fill / edge opacities for this theme.
-    final glassBase = isDark ? 0.82 : 0.06;
-    final borderBase = isDark ? 0.32 : 0.22;
+    final glassBase = GlassButton.defaultGlassOpacity(isDark);
+    final borderBase = GlassButton.defaultBorderOpacity(isDark);
 
     Widget button(String label, StudyGrade grade, Color color, double t) {
       final result = applyStudyGrade(

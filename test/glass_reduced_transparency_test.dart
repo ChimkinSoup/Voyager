@@ -14,6 +14,7 @@ import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/paper_texture.dart';
+import 'package:voyager/core/widgets/surface_grain.dart';
 
 /// Sigma of the blur the single [BackdropFilter] under [of] is applying.
 double _blurSigma(WidgetTester tester, Finder of) {
@@ -135,7 +136,7 @@ void main() {
     );
   });
 
-  testWidgets('GlassButton dark defaults use onSurface label and graphite paper', (
+  testWidgets('GlassButton dark defaults use onSurface label and SurfaceGrain', (
     tester,
   ) async {
     await _pump(
@@ -155,18 +156,25 @@ void main() {
     expect(
       find.descendant(
         of: find.byType(GlassButton),
-        matching: find.byType(PaperTexture),
+        matching: find.byType(SurfaceGrain),
       ),
       findsOneWidget,
     );
-
-    final paper = tester.widget<PaperTexture>(
+    expect(
       find.descendant(
         of: find.byType(GlassButton),
         matching: find.byType(PaperTexture),
       ),
+      findsNothing,
     );
-    expect(paper.baseColor.a, closeTo(0.82, 0.001));
+
+    final grain = tester.widget<SurfaceGrain>(
+      find.descendant(
+        of: find.byType(GlassButton),
+        matching: find.byType(SurfaceGrain),
+      ),
+    );
+    expect(grain.color.a, closeTo(0.95, 0.001));
   });
 
   testWidgets('GlassButton light defaults keep the thin accent wafer', (

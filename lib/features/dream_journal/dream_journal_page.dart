@@ -63,18 +63,11 @@ class DreamSplitLayout {
         maxListWidth,
       );
 
+  /// A hard cap, applied during the drag as well as after it: the divider
+  /// stops at the bound rather than stretching past and snapping back, so the
+  /// editor is never squeezed narrower than it can be read at.
   static double clampListWidth(double width, double totalWidth) {
     return width.clamp(minListWidth, _maxAllowed(totalWidth));
-  }
-
-  /// Soft-bounded version of [clampListWidth] for use while a drag is live.
-  static double dragClampListWidth(double width, double totalWidth) {
-    return resizePaneRubberBand(
-      width: width,
-      totalWidth: totalWidth,
-      minWidth: minListWidth,
-      maxWidth: _maxAllowed(totalWidth),
-    );
   }
 
   static const editorPadding = EdgeInsets.fromLTRB(28, 40, 28, 24);
@@ -1081,10 +1074,10 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
                               _dragStartWidth ??
                               DreamSplitLayout.defaultListWidth(totalWidth);
                           setState(() {
-                            // Soft-bounded while the drag is live — tracks the
-                            // pointer 1:1 but resists past the real bounds
-                            // instead of stopping dead.
-                            _splitWidth = DreamSplitLayout.dragClampListWidth(
+                            // Tracks the pointer 1:1 and stops dead at the
+                            // bounds, so neither pane is ever dragged past
+                            // the width it stays readable at.
+                            _splitWidth = DreamSplitLayout.clampListWidth(
                               start + totalDelta,
                               totalWidth,
                             );

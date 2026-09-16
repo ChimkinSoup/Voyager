@@ -1,19 +1,19 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
-import 'package:voyager/core/widgets/paper_texture.dart';
+import 'package:voyager/core/widgets/surface_grain.dart';
 
 /// A modular, reusable glassmorphic button widget featuring an authentic glass aesthetic.
 ///
-/// Incorporates a translucent tinted fill (and in dark mode, graphite paper grain),
-/// dual-gradient specular borders, top gloss reflections, dynamic hover/press states,
-/// and full theme adaptability.
+/// Incorporates a translucent tinted fill (and in dark mode, matte graphite
+/// [SurfaceGrain]), dual-gradient specular borders, top gloss reflections,
+/// dynamic hover/press states, and full theme adaptability.
 ///
 /// Fully resizeable (via [width], [height], [padding], [margin], [borderRadius], or [dense])
 /// and recolorable (via [color] tint, [textColor], [iconColor], or [borderColor]).
-class GlassButton extends ConsumerStatefulWidget {
+class GlassButton extends StatefulWidget {
   const GlassButton({
     super.key,
     this.onPressed,
@@ -89,7 +89,7 @@ class GlassButton extends ConsumerStatefulWidget {
   final BorderRadius? borderRadius;
 
   /// Base opacity of the glass / paper surface fill. Null uses the theme
-  /// default (~0.06 light / ~0.82 dark paper) — see DESIGN.md Glass Button.
+  /// default (~0.06 light / ~0.95 dark matte plate) — see DESIGN.md Glass Button.
   final double? glassOpacity;
 
   /// Base opacity of the specular glass edge highlight. Null uses the theme
@@ -121,11 +121,19 @@ class GlassButton extends ConsumerStatefulWidget {
   /// so buttons don't steal focus and flash focus highlights during page transitions.
   final bool canRequestFocus;
 
+  /// What a null [glassOpacity] / [borderOpacity] resolves to. Public so a
+  /// caller that interpolates its own states — the study grading row fades
+  /// its four buttons in with the card — starts from these numbers rather
+  /// than copying them and drifting when they move.
+  static double defaultGlassOpacity(bool isDark) => isDark ? 0.95 : 0.06;
+
+  static double defaultBorderOpacity(bool isDark) => isDark ? 0.32 : 0.22;
+
   @override
-  ConsumerState<GlassButton> createState() => _GlassButtonState();
+  State<GlassButton> createState() => _GlassButtonState();
 }
 
-class _GlassButtonState extends ConsumerState<GlassButton>
+class _GlassButtonState extends State<GlassButton>
     with SingleTickerProviderStateMixin {
   bool _isHovered = false;
   bool _isPressed = false;
@@ -225,8 +233,10 @@ class _GlassButtonState extends ConsumerState<GlassButton>
     // translucent on top of a surface that has gone near-solid.
     final nearSolid = MediaQuery.maybeOf(context)?.highContrast ?? false;
 
-    final baseGlassOpacity = widget.glassOpacity ?? (isDark ? 0.82 : 0.06);
-    final baseBorderOpacity = widget.borderOpacity ?? (isDark ? 0.32 : 0.22);
+    final baseGlassOpacity =
+        widget.glassOpacity ?? GlassButton.defaultGlassOpacity(isDark);
+    final baseBorderOpacity =
+        widget.borderOpacity ?? GlassButton.defaultBorderOpacity(isDark);
 
     // Calculate dynamic glass opacity based on interaction state
     double opacityMultiplier = 1.0;
@@ -241,11 +251,9 @@ class _GlassButtonState extends ConsumerState<GlassButton>
     final currentGlassOpacity =
         (baseGlassOpacity * opacityMultiplier).clamp(0.01, 0.97);
 
-    // Light: flat accent wafer. Dark: graphite paper uses [currentGlassOpacity]
-    // as the paper alpha (capped higher when near-solid).
+    // Light: flat accent wafer. Dark: matte [SurfaceGrain] uses
+    // [currentGlassOpacity] as the plate alpha (near-solid → ~97%).
     final fillAlpha = nearSolid ? 0.97 : currentGlassOpacity;
-    final paperProgram =
-        isDark ? ref.watch(paperShaderProvider).valueOrNull : null;
 
     // Specular edge highlights
     final borderHighlight = widget.borderColor ??
@@ -356,8 +364,8 @@ class _GlassButtonState extends ConsumerState<GlassButton>
         ),
         // No BackdropFilter: a button blurring the animated background redoes
         // that blur on every background frame, and five in the calendar header
-        // tripled idle GPU load (~8% -> ~22%). Dark mode uses graphite paper
-        // grain instead; light keeps a thin tinted wafer.
+        // tripled idle GPU load (~8% -> ~22%). Dark mode uses matte
+        // [SurfaceGrain] instead; light keeps a thin tinted wafer.
         child: ClipRRect(
           borderRadius: effectiveRadius,
           child: CustomPaint(
@@ -373,16 +381,13 @@ class _GlassButtonState extends ConsumerState<GlassButton>
               children: [
                 if (isDark)
                   Positioned.fill(
-                    child: PaperTexture(
-                      program: paperProgram,
-                      baseColor: baseColor.withValues(alpha: fillAlpha),
-                      // Specks a step toward bone so grain reads on graphite.
-                      speckColor: Color.lerp(
-                        baseColor,
-                        theme.colorScheme.onSurface,
-                        0.45,
-                      )!
-                          .withValues(alpha: fillAlpha),
+                    child: SurfaceGrain(
+                      color: baseColor.withValues(alpha: fillAlpha),
+                      borderRadius: effectiveRadius,
+                      grainOpacity: surfaceGrainOpacityForContrast(
+                        nearSolid: nearSolid,
+                      ),
+                      seed: identityHashCode(this),
                     ),
                   )
                 else
@@ -520,20 +525,48 @@ class _GlassBorderPainter extends CustomPainter {
       ..color = outlineColor;
     canvas.drawPath(path, outlinePaint);
 
+    // Specular rim: light from the upper-left. Highlight covers ~80% of the
+    // top edge and ~20% of the bottom — a lit shelf on top, almost none on
+    // the floor.
+    //
+    // Built in pixel space, not from an Alignment: an Alignment gradient
+    // treats the rect as a unit square, which collapsed wide pills to ~50/50,
+    // and a fixed-length axis overshoots so wide pills clamped entirely into
+    // the shadow color (Study/Cram went dark while the compact Track FAB
+    // still showed white).
+    //
+    // The split runs from (0.8w, 0) to (0.2w, h); the gradient axis is its
+    // perpendicular, pointing down-right so the highlight lands up-left. The
+    // rect's corners bound that axis at 0 and `extent`, and the split line
+    // passes through the centre — which is always the midpoint of a
+    // rectangle's projection — so the band sits at 0.5 of the run whatever
+    // the button's proportions.
+    const topHighlightFraction = 0.80;
+    const bottomHighlightFraction = 0.20;
+    const fade = 0.08;
+    final w = size.width;
+    final h = size.height;
+    final along = Offset(
+      (bottomHighlightFraction - topHighlightFraction) * w,
+      h,
+    );
+    final axis = Offset(along.dy, -along.dx) / along.distance;
+    final extent = (w * axis.dx).abs() + (h * axis.dy).abs();
+
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = borderWidth
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
+      ..shader = ui.Gradient.linear(
+        Offset.zero,
+        axis * extent,
+        [
           highlightColor,
           highlightColor.withValues(alpha: highlightColor.a * 0.5),
           shadowColor.withValues(alpha: shadowColor.a * 0.3),
           shadowColor,
         ],
-        stops: const [0.0, 0.35, 0.7, 1.0],
-      ).createShader(rect);
+        const [0.0, 0.5 - fade, 0.5 + fade, 1.0],
+      );
 
     canvas.drawPath(path, paint);
   }
