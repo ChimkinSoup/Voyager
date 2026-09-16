@@ -16,6 +16,7 @@ import 'package:voyager/core/widgets/notched_field_border.dart';
 import 'package:voyager/core/widgets/autocorrect_flash_layer.dart';
 import 'package:voyager/core/widgets/prose_highlight_layer.dart';
 import 'package:voyager/core/widgets/selection_highlight_layer.dart';
+import 'package:voyager/core/widgets/scroll_offset_follower.dart';
 import 'package:voyager/core/widgets/tag_suggestion_overlay.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
@@ -386,6 +387,7 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
         cursorWidth: vim.overlayCaretWidth,
         undoController: vim.undoController,
         scrollPadding: kVoyagerFieldScrollPadding,
+        scrollPhysics: const VoyagerFieldScrollPhysics(),
         onChanged: widget.onChanged,
         decoration: decoration,
       ),
@@ -423,21 +425,15 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
               textHeightBehavior: textHeightBehavior,
               child: ClipRect(
                 child: ListenableBuilder(
-                  // The controller as well as the scroll position: the pills
+                  // The controller, not just the scroll position: the pills
                   // are measured from the same paragraph the field renders,
                   // and revealing a `**` moves every glyph after it on the
                   // line. The *text* stays debounced — that is what
                   // [_highlightedText] is — but the reveal must not be.
-                  listenable: Listenable.merge([
-                    _scrollController,
-                    _controller,
-                  ]),
+                  listenable: _controller,
                   builder: (context, _) {
-                    final scrollOffset = _scrollController.hasClients
-                        ? _scrollController.offset
-                        : 0.0;
-                    return Transform.translate(
-                      offset: Offset(0, -scrollOffset),
+                    return ScrollOffsetFollower(
+                      controller: _scrollController,
                       child: Padding(
                         padding: overlayPadding,
                         child: _TagHighlightLayer(

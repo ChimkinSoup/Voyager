@@ -37,6 +37,7 @@ Future<void> showAssetModal(
   final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
+    enableDrag: false,
     builder: (ctx) => ProviderScope(
       parent: container,
       child: _AssetModal(container: container, existing: existing),
@@ -66,7 +67,9 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
   late int _colorValue;
   bool _datePopoverOpen = false;
   bool _saving = false;
-  bool _seededValue = false;
+  /// The figure last written into the value field from the asset's latest
+  /// valuation, or null before the first one.
+  String? _seededText;
 
   /// Set when a write throws, so the sheet says what went wrong instead of
   /// silently sitting there with Save disabled forever.
@@ -102,7 +105,9 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
   /// is empty — an empty value is allowed when editing (see [_canSave]).
   String? get _valueError {
     if (_valueController.text.trim().isEmpty) return null;
-    return _parsedCents == null ? 'Enter a number, e.g. 1250.00' : null;
+    if (_parsedCents != null) return null;
+    return amountOverMaxError(_valueController.text) ??
+        'Enter a number, e.g. 1250.00';
   }
 
   /// A valuation is only required for a brand-new asset. An existing one can
@@ -255,21 +260,28 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
     final existing = widget.existing;
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
-    // Seed the value field with the asset's current worth the first time the
-    // valuations load, so editing starts from the latest figure.
+    // Seed the value field with the asset's current worth, so editing starts
+    // from the latest figure — and keep it current while the field still
+    // shows the seed: a contribution edited from this sheet can revalue the
+    // asset, and saving a stale seed would write the old figure back over it.
     final valuations = ref.watch(assetValuationsProvider).valueOrNull;
-    if (!_seededValue && existing != null && valuations != null) {
-      _seededValue = true;
-      final latest = latestValuation(valuations, existing.id);
-      if (latest != null) {
-        // Deferred a frame: setting .text here synchronously would fire the
-        // controller's listener (which calls setState) while this build is
-        // still in progress.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          _valueController.text = (latest.valueCents / 100).toStringAsFixed(2);
-        });
-      }
+    final latest = existing == null || valuations == null
+        ? null
+        : latestValuation(valuations, existing.id);
+    final latestText = latest == null
+        ? null
+        : (latest.valueCents / 100).toStringAsFixed(2);
+    if (latestText != null &&
+        latestText != _seededText &&
+        (_seededText == null || _valueController.text == _seededText)) {
+      _seededText = latestText;
+      // Deferred a frame: setting .text here synchronously would fire the
+      // controller's listener (which calls setState) while this build is
+      // still in progress.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _valueController.text = latestText;
+      });
     }
 
     final sheet = Padding(
@@ -281,18 +293,6 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.onSurfaceVariant
-                        .withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
               Row(
                 children: [
                   Text(
@@ -396,25 +396,6 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
                   ),
                 ],
               ),
-              // Only true when there is a figure to record — an existing
-              // asset can now be saved with the value field left empty, which
-              // touches no valuation at all.
-              if (existing != null)
-                ListenableBuilder(
-                  listenable: _valueController,
-                  builder: (context, _) => _parsedCents == null
-                      ? const SizedBox.shrink()
-                      : Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            'Saving records a new valuation on this date, '
-                            'keeping past values in the net-worth history.',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                ),
               if (existing != null) ...[
                 const SizedBox(height: 20),
                 _RoomSection(assetId: existing.id, container: widget.container),
@@ -489,9 +470,10 @@ class _RoomSection extends ConsumerWidget {
         children: [
           Text('Contribution room', style: labelStyle),
           const Spacer(),
-          TextButton(
+          GlassButton(
             onPressed: () => showContributionRoomModal(context, ref, asset: asset),
-            child: const Text('Track…'),
+            label: 'Track…',
+            dense: true,
           ),
         ],
       );
@@ -509,13 +491,16 @@ class _RoomSection extends ConsumerWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            TextButton(
+            const SizedBox(width: 12),
+            GlassButton(
               onPressed: () =>
                   showContributionRoomModal(context, ref, asset: asset),
-              child: const Text('Edit room'),
+              label: 'Edit room',
+              dense: true,
             ),
           ],
         ),
+        const SizedBox(height: 12),
         ContributionRoomBar(
           summary: roomYearSummary(room, events, now: DateTime.now()),
           color: paletteColor(asset.colorValue, context),

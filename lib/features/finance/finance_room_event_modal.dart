@@ -35,7 +35,7 @@ Future<void> showRoomCashEventModal(
   final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
-    kind: VoyagerSheetKind.editor,
+    enableDrag: false,
     builder: (ctx) => ProviderScope(
       parent: container,
       child: _RoomCashEventModal(
@@ -59,7 +59,7 @@ Future<void> showRoomTransferModal(
   final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
-    kind: VoyagerSheetKind.editor,
+    enableDrag: false,
     builder: (ctx) => ProviderScope(
       parent: container,
       child: _RoomTransferModal(
@@ -254,7 +254,10 @@ class _ValueField extends StatelessWidget {
               decoration: InputDecoration(
                 labelText: label,
                 prefixText: r'$ ',
-                errorText: invalid ? 'Enter a number, e.g. 1250.00' : null,
+                errorText: invalid
+                    ? amountOverMaxError(field.controller.text) ??
+                          'Enter a number, e.g. 1250.00'
+                    : null,
               ),
             ),
             const SizedBox(height: 6),
@@ -542,8 +545,6 @@ class _RoomCashEventModalState extends ConsumerState<_RoomCashEventModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (voyagerSheetDrags(VoyagerSheetKind.editor))
-                const VoyagerSheetHandle(),
               _SheetHeader(title: title),
               if (roomLine != null) _MutedLine(roomLine),
               if (!_isContribution)
@@ -557,7 +558,8 @@ class _RoomCashEventModalState extends ConsumerState<_RoomCashEventModal> {
                 error:
                     _amountController.text.trim().isNotEmpty &&
                         _parsedAmount == null
-                    ? r'Enter an amount over $0.00'
+                    ? amountOverMaxError(_amountController.text) ??
+                          r'Enter an amount over $0.00'
                     : null,
                 onSubmitted: (_) => _noteFocusNode.requestFocus(),
               ),
@@ -812,8 +814,6 @@ class _RoomTransferModalState extends ConsumerState<_RoomTransferModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (voyagerSheetDrags(VoyagerSheetKind.editor))
-                const VoyagerSheetHandle(),
               _SheetHeader(
                 title: widget.existingLegs.isEmpty
                     ? 'Transfer from ${widget.from.name}'
@@ -861,7 +861,8 @@ class _RoomTransferModalState extends ConsumerState<_RoomTransferModal> {
                 error:
                     _amountController.text.trim().isNotEmpty &&
                         _parsedAmount == null
-                    ? r'Enter an amount over $0.00'
+                    ? amountOverMaxError(_amountController.text) ??
+                          r'Enter an amount over $0.00'
                     : null,
                 onSubmitted: (_) => _noteFocusNode.requestFocus(),
               ),

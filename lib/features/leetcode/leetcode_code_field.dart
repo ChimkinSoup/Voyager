@@ -687,6 +687,7 @@ class _LeetCodeCodeEditorState extends State<_LeetCodeCodeEditor> {
               autocorrect: false,
               enableSuggestions: false,
               scrollPadding: kVoyagerFieldScrollPadding,
+              scrollPhysics: const VoyagerFieldScrollPhysics(),
               decoration: _codeDecoration,
             ),
             // Vim alone, unlike the prose fields, which mount this for a

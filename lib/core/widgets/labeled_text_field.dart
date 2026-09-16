@@ -311,6 +311,7 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
         cursorWidth: vim.overlayCaretWidth,
         undoController: vim.undoController,
         scrollPadding: kVoyagerFieldScrollPadding,
+        scrollPhysics: const VoyagerFieldScrollPhysics(),
         decoration: InputDecoration(
           isDense: widget.dense || widget.allowShortHeight,
           hintText: effectiveHint,

@@ -39,7 +39,7 @@ class ContributionRoomBar extends StatelessWidget {
         : 'Remaining ${formatCents(summary.remainingCents)}';
 
     final bar = SizedBox(
-      height: 14,
+      height: 22,
       child: Stack(
         alignment: Alignment.centerLeft,
         children: [
@@ -47,7 +47,7 @@ class ContributionRoomBar extends StatelessWidget {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.07),
-                borderRadius: BorderRadius.circular(7),
+                borderRadius: BorderRadius.circular(11),
               ),
             ),
           ),
@@ -58,19 +58,19 @@ class ContributionRoomBar extends StatelessWidget {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: fill.withValues(alpha: 0.32),
-                  borderRadius: BorderRadius.circular(7),
+                  borderRadius: BorderRadius.circular(11),
                 ),
               ),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Text(
               '${_barCents(used)}/${_barCents(capacity)}',
               maxLines: 1,
               overflow: TextOverflow.clip,
               style: theme.textTheme.labelSmall?.copyWith(
-                fontSize: 9.5,
+                fontSize: 11,
                 height: 1,
                 fontWeight: FontWeight.w600,
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.8),

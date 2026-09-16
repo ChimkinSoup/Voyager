@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:voyager/core/text/prose_highlight_paint.dart';
 import 'package:voyager/core/text/prose_text_span.dart';
+import 'package:voyager/core/widgets/scroll_offset_follower.dart';
 
 /// Paints the fill behind `==highlighted==` text in an editable field, with
 /// the rounded corners [TextStyle.backgroundColor] cannot give it.
@@ -108,17 +109,9 @@ class _ProseHighlightLayerState extends State<ProseHighlightLayer> {
       return ClipRect(child: CustomPaint(painter: painter));
     }
     return ClipRect(
-      child: ListenableBuilder(
-        listenable: scrollController,
-        builder: (context, _) {
-          final offset = scrollController.hasClients
-              ? scrollController.offset
-              : 0.0;
-          return Transform.translate(
-            offset: Offset(0, -offset),
-            child: CustomPaint(painter: painter),
-          );
-        },
+      child: ScrollOffsetFollower(
+        controller: scrollController,
+        child: CustomPaint(painter: painter),
       ),
     );
   }

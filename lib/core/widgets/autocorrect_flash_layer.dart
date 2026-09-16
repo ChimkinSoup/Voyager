@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:voyager/core/spellcheck/autocorrect_engine.dart';
 import 'package:voyager/core/spellcheck/autocorrect_session.dart';
 import 'package:voyager/core/text/prose_text_span.dart';
+import 'package:voyager/core/widgets/scroll_offset_follower.dart';
 
 /// The brief tint behind a word autocorrect has just replaced
 /// (AUTOCORRECT.md §9).
@@ -201,14 +202,8 @@ class _AutocorrectFlashLayerState extends State<AutocorrectFlashLayer>
 
     final scrollController = widget.scrollController;
     if (scrollController != null) {
-      painted = ListenableBuilder(
-        listenable: scrollController,
-        builder: (context, child) {
-          final offset = scrollController.hasClients
-              ? scrollController.offset
-              : 0.0;
-          return Transform.translate(offset: Offset(0, -offset), child: child);
-        },
+      painted = ScrollOffsetFollower(
+        controller: scrollController,
         child: painted,
       );
     }

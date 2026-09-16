@@ -847,6 +847,7 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
                 maxLines: null,
                 minLines: 1,
                 scrollPadding: kVoyagerFieldScrollPadding,
+                scrollPhysics: const VoyagerFieldScrollPhysics(),
                 contextMenuBuilder: voyagerTextContextMenuBuilder(
                   context,
                   snippetsAllowed: vim.snippetsAllowed,

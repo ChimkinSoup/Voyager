@@ -187,6 +187,78 @@ void main() {
     expect(find.text(r'$1,500/$7,000'), findsNWidgets(2));
   });
 
+  testWidgets(
+      'revaluing from an edited contribution refreshes the open asset sheet',
+      (tester) async {
+    final (repo, _) = await _harness(
+      tester,
+      home: const FinanceAnalyticsView(),
+      seed: _seedRoom,
+    );
+
+    await tester.tap(find.text('TFSA A'));
+    await tester.pumpAndSettle();
+    expect(find.text('1000.00'), findsOneWidget);
+
+    await tester.tap(find.text('Contribution'));
+    await tester.pumpAndSettle();
+    final sheet = find.byType(BottomSheet).last;
+    // Amount, new value, note.
+    final fields = find.descendant(
+      of: sheet,
+      matching: find.byType(EditableText),
+    );
+    await tester.enterText(fields.at(1), '4321');
+    await tester.pump();
+    await tester.tap(find.descendant(of: sheet, matching: find.text('Save')));
+    await tester.pumpAndSettle();
+
+    // The asset sheet underneath follows the new figure...
+    expect(find.text('4321.00'), findsOneWidget);
+    expect(find.text('1000.00'), findsNothing);
+
+    // ...so saving it doesn't write the old one back.
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(
+      (await repo.listAssetValuations(assetId: 'a')).first.valueCents,
+      432100,
+    );
+  });
+
+  testWidgets('the asset sheet leaves a typed value alone when revalued',
+      (tester) async {
+    await _harness(
+      tester,
+      home: const FinanceAnalyticsView(),
+      seed: _seedRoom,
+    );
+
+    await tester.tap(find.text('TFSA A'));
+    await tester.pumpAndSettle();
+    final assetFields = find.descendant(
+      of: find.byType(BottomSheet),
+      matching: find.byType(EditableText),
+    );
+    // Name, current value, note.
+    await tester.enterText(assetFields.at(1), '999');
+    await tester.pump();
+
+    await tester.tap(find.text('Contribution'));
+    await tester.pumpAndSettle();
+    final sheet = find.byType(BottomSheet).last;
+    final fields = find.descendant(
+      of: sheet,
+      matching: find.byType(EditableText),
+    );
+    await tester.enterText(fields.at(1), '4321');
+    await tester.pump();
+    await tester.tap(find.descendant(of: sheet, matching: find.text('Save')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('999'), findsOneWidget);
+  });
+
   testWidgets('a linked ledger row offers no Convert or Duplicate',
       (tester) async {
     await _harness(

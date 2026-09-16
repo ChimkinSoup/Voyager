@@ -1473,6 +1473,7 @@ class _LeetCodeUsernameDialogState extends State<_LeetCodeUsernameDialog> {
               cursorWidth: vim.overlayCaretWidth,
               undoController: vim.undoController,
               scrollPadding: kVoyagerFieldScrollPadding,
+              scrollPhysics: const VoyagerFieldScrollPhysics(),
               onSubmitted: (_) => _submit(),
               decoration: const InputDecoration(
                 hintText: hintText,

@@ -214,6 +214,7 @@ class _RoomEventRow extends ConsumerWidget {
                 color: color,
               ),
             ),
+            const SizedBox(width: 8),
             IconButton(
               onPressed: () => deleteRoomEventWithUndo(
                 overlay: Overlay.of(context, rootOverlay: true),

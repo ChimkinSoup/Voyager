@@ -28,6 +28,7 @@ Future<void> showBudgetModal(
   final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
+    enableDrag: false,
     builder: (ctx) => ProviderScope(
       parent: container,
       child: _BudgetModal(container: container, existing: existing),
@@ -87,7 +88,9 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
   /// unconditionally — a budget that can never be exceeded.
   String? get _limitError {
     if (_limitController.text.trim().isEmpty) return null;
-    return _parsedLimit == null ? r'Enter a limit over $0.00' : null;
+    if (_parsedLimit != null) return null;
+    return amountOverMaxError(_limitController.text) ??
+        r'Enter a limit over $0.00';
   }
 
   bool get _canSave => _tag.isNotEmpty && _parsedLimit != null && !_saving;
@@ -210,18 +213,6 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.onSurfaceVariant
-                        .withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
               Row(
                 children: [
                   Text(

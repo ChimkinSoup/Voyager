@@ -30,6 +30,7 @@ Future<void> showAllocateModal(
   final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
+    enableDrag: false,
     builder: (ctx) => ProviderScope(
       parent: container,
       child: _AllocateModal(container: container, goal: goal),
@@ -84,7 +85,9 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
   /// field is empty: an untouched field isn't an error yet.
   String? get _amountError {
     if (_amountController.text.trim().isEmpty) return null;
-    return _parsedCents == null ? r'Enter an amount over $0.00' : null;
+    if (_parsedCents != null) return null;
+    return amountOverMaxError(_amountController.text) ??
+        r'Enter an amount over $0.00';
   }
 
   bool get _canSave => _parsedCents != null && !_saving;
@@ -174,18 +177,6 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.onSurfaceVariant
-                        .withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
               Row(
                 children: [
                   Expanded(

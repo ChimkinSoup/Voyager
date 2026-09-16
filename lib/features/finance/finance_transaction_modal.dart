@@ -72,7 +72,7 @@ Future<void> showFinanceTransactionModal(
   final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
-    kind: VoyagerSheetKind.editor,
+    enableDrag: false,
     builder: (ctx) => ProviderScope(
       parent: container,
       child: _TransactionModal(
@@ -179,7 +179,9 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
   /// field is empty: an untouched field isn't an error yet.
   String? get _amountError {
     if (_amountController.text.trim().isEmpty) return null;
-    return _parsedCents == null ? r'Enter an amount over $0.00' : null;
+    if (_parsedCents != null) return null;
+    return amountOverMaxError(_amountController.text) ??
+        r'Enter an amount over $0.00';
   }
 
   /// Parses the tags field into clean tag names (no leading `#`). Accepts both
@@ -343,9 +345,6 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Handle
-              if (voyagerSheetDrags(VoyagerSheetKind.editor))
-                const VoyagerSheetHandle(),
               // Header row
               Row(
                 children: [

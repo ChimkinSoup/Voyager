@@ -35,7 +35,7 @@ Future<void> showSubscriptionModal(
   final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
-    kind: VoyagerSheetKind.editor,
+    enableDrag: false,
     builder: (ctx) => ProviderScope(
       parent: container,
       child: _SubscriptionModal(container: container, existing: existing),
@@ -111,7 +111,9 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
   /// field is empty: an untouched field isn't an error yet.
   String? get _amountError {
     if (_amountController.text.trim().isEmpty) return null;
-    return _parsedCents == null ? r'Enter an amount over $0.00' : null;
+    if (_parsedCents != null) return null;
+    return amountOverMaxError(_amountController.text) ??
+        r'Enter an amount over $0.00';
   }
 
   /// The recorded payment this bill keeps through the save, or null if the
@@ -267,8 +269,6 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (voyagerSheetDrags(VoyagerSheetKind.editor))
-                const VoyagerSheetHandle(),
               Row(
                 children: [
                   Text(

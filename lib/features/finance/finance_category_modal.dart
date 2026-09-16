@@ -26,6 +26,7 @@ Future<void> showCategoryModal(
   final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
+    enableDrag: false,
     builder: (ctx) => ProviderScope(
       parent: container,
       child: _CategoryModal(container: container, existing: existing),
@@ -177,18 +178,6 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.onSurfaceVariant
-                        .withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
               Row(
                 children: [
                   Text(

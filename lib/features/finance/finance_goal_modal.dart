@@ -31,6 +31,7 @@ Future<void> showGoalModal(
   final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
+    enableDrag: false,
     builder: (ctx) => ProviderScope(
       parent: container,
       child: _GoalModal(container: container, existing: existing),
@@ -96,7 +97,9 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
   /// field is empty: an untouched field isn't an error yet.
   String? get _targetError {
     if (_targetController.text.trim().isEmpty) return null;
-    return _parsedTarget == null ? r'Enter a target over $0.00' : null;
+    if (_parsedTarget != null) return null;
+    return amountOverMaxError(_targetController.text) ??
+        r'Enter a target over $0.00';
   }
 
   bool get _canSave =>
@@ -226,18 +229,6 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.onSurfaceVariant
-                        .withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
               Row(
                 children: [
                   Text(

@@ -1069,6 +1069,7 @@ class _BreakdownCard extends ConsumerWidget {
   Future<void> _showCategoryManager(BuildContext context, WidgetRef ref) async {
     await showVoyagerSheet<void>(
       context: context,
+      enableDrag: false,
       builder: (ctx) => ProviderScope(
         parent: ProviderScope.containerOf(context),
         child: const _CategoryManager(),
@@ -1376,18 +1377,6 @@ class _CategoryManager extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                color:
-                    theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
           Row(
             children: [
               Text('Categories', style: theme.textTheme.titleMedium),

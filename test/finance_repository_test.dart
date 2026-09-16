@@ -760,6 +760,20 @@ void main() {
     });
   });
 
+  group('amountOverMaxError', () {
+    test('names the cap for a number past it, either sign', () {
+      expect(amountOverMaxError('3234234234234'), r'Max $99,999,999.99');
+      expect(amountOverMaxError('-100000000'), r'Max $99,999,999.99');
+    });
+
+    test('is null within the cap and for text that is not a number', () {
+      expect(amountOverMaxError('99999999.99'), isNull);
+      expect(amountOverMaxError('-12.50'), isNull);
+      expect(amountOverMaxError('1.2.3'), isNull);
+      expect(amountOverMaxError('1-2'), isNull);
+    });
+  });
+
   test('settings persist the annualized-cost toggle', () async {
     final settingsRepo = DriftSettingsRepository(db);
     final base = await settingsRepo.getSettings();

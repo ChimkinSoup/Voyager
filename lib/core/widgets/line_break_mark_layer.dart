@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:voyager/core/text/prose_text_span.dart';
+import 'package:voyager/core/widgets/scroll_offset_follower.dart';
 
 /// Gap between the end of a line's text and its mark, in em.
 const double _kMarkGap = 0.3;
@@ -107,17 +108,9 @@ class _LineBreakMarkLayerState extends State<LineBreakMarkLayer> {
     }
     return ClipRect(
       clipper: clipper,
-      child: ListenableBuilder(
-        listenable: scrollController,
-        builder: (context, _) {
-          final offset = scrollController.hasClients
-              ? scrollController.offset
-              : 0.0;
-          return Transform.translate(
-            offset: Offset(0, -offset),
-            child: CustomPaint(painter: painter),
-          );
-        },
+      child: ScrollOffsetFollower(
+        controller: scrollController,
+        child: CustomPaint(painter: painter),
       ),
     );
   }

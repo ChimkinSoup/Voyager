@@ -4,6 +4,7 @@ import 'package:voyager/core/text/prose_text_span.dart';
 import 'package:voyager/core/text/styled_runs.dart';
 import 'package:voyager/core/spellcheck/voyager_spell_check_service.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
+import 'package:voyager/core/widgets/scroll_offset_follower.dart';
 
 /// Paints the misspelled-word wavy underline for a field. This is the app's
 /// *only* spellcheck rendering: Voyager's fields are built with
@@ -294,7 +295,7 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
       // defaults to TextOverflow.clip, which clips painting to that shorter
       // `size` in the paragraph's own local coordinates — a band anchored to
       // the *document's* top, not the current scroll position. Since that
-      // clip is applied before the ancestor Transform.translate below
+      // clip is applied before the ancestor ScrollOffsetFollower below
       // repositions it on screen, scrolling only ever moves the clipped band
       // around; content past the first viewport-height's worth of lines never
       // paints at all. TextOverflow.visible disables that self-clip so the
@@ -314,15 +315,12 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
     }
 
     return ClipRect(
-      child: ListenableBuilder(
-        listenable: scrollController,
-        builder: (context, _) {
-          final offset = scrollController.hasClients ? scrollController.offset : 0.0;
-          return Transform.translate(
-            offset: Offset(0, clearance - offset),
-            child: richText,
-          );
-        },
+      child: ScrollOffsetFollower(
+        controller: scrollController,
+        child: Transform.translate(
+          offset: Offset(0, clearance),
+          child: richText,
+        ),
       ),
     );
   }

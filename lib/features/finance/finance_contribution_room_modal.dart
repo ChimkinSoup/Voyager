@@ -26,6 +26,7 @@ Future<void> showContributionRoomModal(
   final container = ProviderScope.containerOf(context, listen: false);
   await showVoyagerSheet<void>(
     context: context,
+    enableDrag: false,
     builder: (ctx) => ProviderScope(
       parent: container,
       child: _ContributionRoomModal(container: container, asset: asset),
@@ -255,8 +256,6 @@ class _ContributionRoomModalState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (voyagerSheetDrags(VoyagerSheetKind.sheet))
-                const VoyagerSheetHandle(),
               Row(
                 children: [
                   Expanded(

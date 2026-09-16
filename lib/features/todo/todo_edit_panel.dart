@@ -1728,6 +1728,7 @@ class _SubtaskRowState extends State<_SubtaskRow>
                               undoController: vim.undoController,
                               textInputAction: TextInputAction.done,
                               scrollPadding: kVoyagerFieldScrollPadding,
+                              scrollPhysics: const VoyagerFieldScrollPhysics(),
                               decoration: const InputDecoration(
                                 isDense: true,
                                 contentPadding: contentPadding,

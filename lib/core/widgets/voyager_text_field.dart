@@ -252,7 +252,10 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       textStyle = withSquiggleRoom(textStyle);
     }
 
-    final innerDecoration = decoration.copyWith(
+    // Helper and error text go under the border rather than to the TextField:
+    // [NotchedFieldBorder] outlines everything its child lays out, so a
+    // subtext line inside the decorator would land inside the outline.
+    final innerDecoration = _withoutSubtext(decoration).copyWith(
       hintText: decoration.hintText,
       // Matched to the field's own text metrics \u2014 see [fieldHintStyle] for the
       // shrink-on-first-keystroke this avoids. A caller's explicit hintStyle
@@ -338,6 +341,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
             ? TextAlignVertical.top
             : TextAlignVertical.center,
         scrollPadding: kVoyagerFieldScrollPadding,
+        scrollPhysics: const VoyagerFieldScrollPhysics(),
       ),
     );
 
@@ -525,8 +529,19 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       child: field,
     );
 
+    final subtext = _buildSubtext(theme, decoration, contentPadding);
+    // Only wrapped when there is a line to show: a Column hands its children
+    // unbounded height, which an `expands` field can't lay out in.
+    final withSubtext = subtext == null
+        ? bordered
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [bordered, subtext],
+          );
+
     final tagScope = widget.tagScope;
-    if (tagScope == null) return bordered;
+    if (tagScope == null) return withSubtext;
 
     return TagSuggestionPortal(
       scope: tagScope,
@@ -538,7 +553,102 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       escapeAlsoBubbles: vim.escapeLeavesInsert,
       onChanged: widget.onChanged,
       onKeyEvent: widget.onKeyEvent,
-      child: bordered,
+      child: withSubtext,
+    );
+  }
+
+  /// The decoration's error, or else its helper, as a line under the border —
+  /// the same precedence and default styles [InputDecorator] uses.
+  Widget? _buildSubtext(
+    ThemeData theme,
+    InputDecoration decoration,
+    EdgeInsetsGeometry contentPadding,
+  ) {
+    final isError = decoration.error != null || decoration.errorText != null;
+    final Widget? content;
+    if (isError) {
+      content =
+          decoration.error ??
+          Text(
+            decoration.errorText!,
+            maxLines: decoration.errorMaxLines,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.error)
+                .merge(decoration.errorStyle),
+          );
+    } else if (decoration.helper != null || decoration.helperText != null) {
+      content =
+          decoration.helper ??
+          Text(
+            decoration.helperText!,
+            maxLines: decoration.helperMaxLines,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant)
+                .merge(decoration.helperStyle),
+          );
+    } else {
+      return null;
+    }
+    final padding = contentPadding.resolve(Directionality.of(context));
+    return Padding(
+      padding: EdgeInsets.only(left: padding.left, right: padding.right, top: 6),
+      child: content,
     );
   }
 }
+
+/// [decoration] with its helper and error cleared. `copyWith` can only set
+/// fields, not null them, so this rebuilds it field by field.
+InputDecoration _withoutSubtext(InputDecoration d) => InputDecoration(
+  icon: d.icon,
+  iconColor: d.iconColor,
+  label: d.label,
+  labelText: d.labelText,
+  labelStyle: d.labelStyle,
+  floatingLabelStyle: d.floatingLabelStyle,
+  hintText: d.hintText,
+  hint: d.hint,
+  hintStyle: d.hintStyle,
+  hintTextDirection: d.hintTextDirection,
+  hintMaxLines: d.hintMaxLines,
+  hintFadeDuration: d.hintFadeDuration,
+  maintainHintSize: d.maintainHintSize,
+  maintainLabelSize: d.maintainLabelSize,
+  floatingLabelBehavior: d.floatingLabelBehavior,
+  floatingLabelAlignment: d.floatingLabelAlignment,
+  isCollapsed: d.isCollapsed,
+  isDense: d.isDense,
+  contentPadding: d.contentPadding,
+  prefixIcon: d.prefixIcon,
+  prefix: d.prefix,
+  prefixText: d.prefixText,
+  prefixStyle: d.prefixStyle,
+  prefixIconColor: d.prefixIconColor,
+  prefixIconConstraints: d.prefixIconConstraints,
+  suffixIcon: d.suffixIcon,
+  suffix: d.suffix,
+  suffixText: d.suffixText,
+  suffixStyle: d.suffixStyle,
+  suffixIconColor: d.suffixIconColor,
+  suffixIconConstraints: d.suffixIconConstraints,
+  counter: d.counter,
+  counterText: d.counterText,
+  counterStyle: d.counterStyle,
+  filled: d.filled,
+  fillColor: d.fillColor,
+  focusColor: d.focusColor,
+  hoverColor: d.hoverColor,
+  errorBorder: d.errorBorder,
+  focusedBorder: d.focusedBorder,
+  focusedErrorBorder: d.focusedErrorBorder,
+  disabledBorder: d.disabledBorder,
+  enabledBorder: d.enabledBorder,
+  border: d.border,
+  enabled: d.enabled,
+  semanticCounterText: d.semanticCounterText,
+  alignLabelWithHint: d.alignLabelWithHint,
+  constraints: d.constraints,
+  visualDensity: d.visualDensity,
+);

@@ -9,6 +9,7 @@ import 'package:voyager/core/spellcheck/autocorrect_session.dart';
 import 'package:voyager/core/widgets/autocorrect_flash_layer.dart';
 import 'package:voyager/core/widgets/prose_highlight_layer.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
+import 'package:voyager/core/widgets/scroll_offset_follower.dart';
 
 /// WCAG relative-luminance cutoff: below this the accent reads as dark and the
 /// glyph on the block switches to a constant light foreground.
@@ -288,17 +289,9 @@ class _VimTextOverlayState extends State<VimTextOverlay> {
       return ClipRect(child: CustomPaint(painter: painter));
     }
     return ClipRect(
-      child: ListenableBuilder(
-        listenable: scrollController,
-        builder: (context, _) {
-          final offset = scrollController.hasClients
-              ? scrollController.offset
-              : 0.0;
-          return Transform.translate(
-            offset: Offset(0, -offset),
-            child: CustomPaint(painter: painter),
-          );
-        },
+      child: ScrollOffsetFollower(
+        controller: scrollController,
+        child: CustomPaint(painter: painter),
       ),
     );
   }

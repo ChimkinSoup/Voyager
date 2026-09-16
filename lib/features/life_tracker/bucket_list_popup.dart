@@ -363,6 +363,7 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
                         cursorWidth: vim.overlayCaretWidth,
                         undoController: vim.undoController,
                         scrollPadding: kVoyagerFieldScrollPadding,
+                        scrollPhysics: const VoyagerFieldScrollPhysics(),
                         decoration: const InputDecoration(
                           hintText: hintText,
                           isDense: true,
@@ -617,6 +618,7 @@ class _TitleEditor extends StatelessWidget {
               cursorWidth: vim.overlayCaretWidth,
               undoController: vim.undoController,
               scrollPadding: kVoyagerFieldScrollPadding,
+              scrollPhysics: const VoyagerFieldScrollPhysics(),
               decoration: const InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
@@ -745,6 +747,7 @@ class _BucketNoteDialogState extends State<_BucketNoteDialog> {
                 keyboardType: TextInputType.multiline,
                 autofocus: true,
                 scrollPadding: kVoyagerFieldScrollPadding,
+                scrollPhysics: const VoyagerFieldScrollPhysics(),
                 cursorColor: vim.overlayCaretColor(theme.colorScheme.primary),
                 cursorWidth: vim.overlayCaretWidth,
                 undoController: vim.undoController,

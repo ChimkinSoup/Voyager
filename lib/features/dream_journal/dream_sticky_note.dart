@@ -314,6 +314,7 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
                         maxLines: null,
                         expands: true,
                         scrollPadding: kVoyagerFieldScrollPadding,
+                        scrollPhysics: const VoyagerFieldScrollPhysics(),
                         contextMenuBuilder: voyagerTextContextMenuBuilder(
                           context,
                           snippetsAllowed: vim.snippetsAllowed,

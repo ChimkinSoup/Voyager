@@ -19,6 +19,7 @@ import 'package:voyager/features/hotkeys/hotkey_service.dart';
 import 'package:voyager/features/hotkeys/quick_popups.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/firebase_options.dart';
+import 'package:voyager/routing/app_router.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -352,15 +353,18 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     }
   }
 
-  void _openQuickJournal() {
-    showVoyagerDialog<void>(
-      context: context,
-      builder: (_) => const QuickJournalPopup(),
-    );
-  }
+  void _openQuickJournal() => _openQuickPopup(const QuickJournalPopup());
 
-  void _openQuickTodo() {
-    showVoyagerDialog<void>(context: context, builder: (_) => const QuickTodoPopup());
+  void _openQuickTodo() => _openQuickPopup(const QuickTodoPopup());
+
+  /// This widget sits above [MaterialApp], so its own context has no
+  /// Navigator or MaterialLocalizations — open from the router's root
+  /// navigator instead.
+  void _openQuickPopup(Widget popup) {
+    final navigatorContext =
+        ref.read(routerProvider).routerDelegate.navigatorKey.currentContext;
+    if (navigatorContext == null) return;
+    showVoyagerDialog<void>(context: navigatorContext, builder: (_) => popup);
   }
 
   @override

@@ -699,6 +699,18 @@ int? parseSignedAmountCents(String text) {
   return raw.startsWith('-') ? -cents : cents;
 }
 
+/// The error for an amount field whose [text] is a number, just a bigger one
+/// than [kMaxAmountCents] allows. Null for anything else, so the field can
+/// fall back to its own message for text that isn't a number at all.
+String? amountOverMaxError(String text) {
+  final value = double.tryParse(text.trim());
+  if (value == null) return null;
+  if (value.isFinite && (value.abs() * 100).round() <= kMaxAmountCents) {
+    return null;
+  }
+  return 'Max ${formatCents(kMaxAmountCents)}';
+}
+
 /// Hoisted rather than built per call: constructing a [NumberFormat] parses a
 /// locale number pattern, and [formatCents] renders every figure in the
 /// feature, so a full ledger repaint would otherwise pay for a few hundred
