@@ -52,6 +52,24 @@ class Solution:
         pass''');
     });
 
+    test('drops nested helper classes but keeps methods on Solution', () {
+      const code = '''
+class Solution:
+    class Node:
+        def __init__(self, val, index, next=None):
+            self.val = val
+            self.index = index
+            self.next = next
+
+    def dailyTemperatures(self, temperatures):
+        return []''';
+
+      expect(deriveLeetCodeStarterFromCode(code, 'python'), '''
+class Solution:
+    def dailyTemperatures(self, temperatures):
+        pass''');
+    });
+
     test('follows a signature that runs over several lines', () {
       const code = '''
 class Solution:
@@ -174,6 +192,145 @@ class Solution {
     public int solve(int n) {
     }
 }''');
+    });
+
+    test('drops nested helper classes but keeps methods on Solution', () {
+      // Daily Temperatures-style: a custom Node nested inside Solution is an
+      // implementation detail, not the LeetCode entry shape.
+      const code = '''
+class Solution {
+    class Node {
+        private int val;
+        private int index;
+        private Node next;
+
+        public Node(int val, int index, Node next) {
+            this.val = val;
+            this.index = index;
+            this.next = next;
+        }
+    }
+
+    public int[] dailyTemperatures(int[] temperatures) {
+        return new int[0];
+    }
+}''';
+
+      expect(deriveLeetCodeStarterFromCode(code, 'java'), '''
+class Solution {
+    public int[] dailyTemperatures(int[] temperatures) {
+    }
+}''');
+    });
+
+    test('keeps helper methods when a nested class is also present', () {
+      const code = '''
+class Solution {
+    class Node {
+        int val;
+        Node(int val) { this.val = val; }
+    }
+
+    private int helper(int n) {
+        return n * 2;
+    }
+
+    public int solve(int n) {
+        return helper(n);
+    }
+}''';
+
+      expect(deriveLeetCodeStarterFromCode(code, 'java'), '''
+class Solution {
+    private int helper(int n) {
+    }
+    public int solve(int n) {
+    }
+}''');
+    });
+
+    test('Min Stack keeps methods when nested Node braces are unbalanced', () {
+      // Real saved solution shape: nested Node is missing the constructor's
+      // closing brace. A brace-only skip would swallow push/pop/top/getMin.
+      const code = '''
+class MinStack {
+    class Node {
+        int val;
+        int min;
+        Node next;
+
+        private Node(int val, int min, Node next) {
+            this.val = val;
+            this.min = min;
+            this.next = next;
+
+    }
+
+    private Node head;
+
+    public MinStack() {
+    }
+
+    public void push(int val) {
+        head = new Node(val, val, null);
+    }
+
+    public void pop() {
+        head = head.next;
+    }
+
+    public int top() {
+        return head.val;
+    }
+
+    public int getMin() {
+        return head.min;
+    }
+}''';
+
+      expect(deriveLeetCodeStarterFromCode(code, 'java'), '''
+class MinStack {
+    public MinStack() {
+    }
+    public void push(int val) {
+    }
+    public void pop() {
+    }
+    public int top() {
+    }
+    public int getMin() {
+    }
+}''');
+    });
+
+    test('a one-line member does not swallow the container closer', () {
+      // The ListNode boilerplate LeetCode hands out: the constructor opens and
+      // closes on its own line. Treating that as an open body ate the struct's
+      // `};`, which left the outer-container count stuck and made the real
+      // Solution class read as a nested helper and vanish.
+      const code = '''
+struct ListNode {
+    int val;
+    ListNode *next;
+    ListNode() : val(0), next(nullptr) {}
+};
+
+class Solution {
+public:
+    ListNode* addTwoNumbers(ListNode* a, ListNode* b) {
+        return nullptr;
+    }
+};''';
+
+      expect(deriveLeetCodeStarterFromCode(code, 'cpp'), '''
+struct ListNode {
+    ListNode() : val(0), next(nullptr) {}
+};
+class Solution {
+public:
+    ListNode* addTwoNumbers(ListNode* a, ListNode* b) {
+    }
+};''');
     });
 
     test('is null when there is no callable declaration', () {

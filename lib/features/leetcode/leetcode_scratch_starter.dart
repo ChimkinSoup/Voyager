@@ -72,9 +72,28 @@ int _indentOf(String line) {
 final _pythonClass = RegExp(r'^\s*class\s+\w');
 final _pythonDef = RegExp(r'^\s*(async\s+)?def\s+\w');
 
+/// Skip a nested `class` and every line indented past it. Returns the index of
+/// the first line at or shallower than [classIndent] (or past the end).
+int _skipPythonNestedClass(List<String> lines, int start, int classIndent) {
+  var i = start + 1;
+  while (i < lines.length) {
+    final body = lines[i];
+    if (body.trim().isEmpty) {
+      i++;
+      continue;
+    }
+    if (_indentOf(body) <= classIndent) break;
+    i++;
+  }
+  return i;
+}
+
 /// Python's blocks are its indentation, so a body is every line indented past
 /// the `def` that opened it — including the blank lines inside it, which is why
 /// a blank is only treated as the end of a body once a *shallower* line follows.
+///
+/// Nested classes (any `class` indented under another) are implementation
+/// helpers, not part of the LeetCode shape, so they are dropped entirely.
 String? _derivePython(List<String> lines) {
   final out = <String>[];
   var keptDef = false;
@@ -83,6 +102,12 @@ String? _derivePython(List<String> lines) {
   while (i < lines.length) {
     final line = lines[i];
     if (_pythonClass.hasMatch(line)) {
+      final indent = _indentOf(line);
+      // Indented `class` means nested under an outer class — skip it.
+      if (indent > 0) {
+        i = _skipPythonNestedClass(lines, i, indent);
+        continue;
+      }
       out.add(line.trimRight());
       i++;
       continue;
@@ -167,13 +192,62 @@ bool _opensContainer(String line) {
   return !line.substring(0, brace).contains('(');
 }
 
+/// Whether [trimmed] is only closing braces (and an optional trailing `;`),
+/// e.g. `}`, `};`, `}}`. Used so an indent-based early exit does not treat the
+/// nested type's own closer as a sibling member of the outer class.
+bool _isOnlyClosers(String trimmed) {
+  if (trimmed.isEmpty) return false;
+  var end = trimmed.length;
+  if (trimmed[end - 1] == ';') end--;
+  if (end == 0) return false;
+  for (var i = 0; i < end; i++) {
+    if (trimmed[i] != '}') return false;
+  }
+  return true;
+}
+
+/// Advance past the nested container that [start] opens. Returns the index of
+/// the first line after that block (or [lines.length] if it never closes).
+///
+/// Prefers brace depth, but also stops at a sibling declaration at or shallower
+/// than the nested type's indent while still inside the block. That recovers
+/// when the saved solution has unbalanced braces inside the nested type (a
+/// missing `}` would otherwise swallow the outer class's methods).
+int _skipNestedContainer(List<String> lines, int start) {
+  final openIndent = _indentOf(lines[start]);
+  var depth = 0;
+  var i = start;
+  while (i < lines.length) {
+    final line = lines[i];
+    final trimmed = line.trim();
+    if (i > start &&
+        depth > 0 &&
+        trimmed.isNotEmpty &&
+        _indentOf(line) <= openIndent &&
+        !_isOnlyClosers(trimmed)) {
+      break;
+    }
+    depth += _braceDelta(line);
+    i++;
+    if (depth <= 0) break;
+  }
+  return i;
+}
+
 /// Brace languages: a body is the block a callable declaration opens. Classified
 /// per line rather than by nesting depth, so a method is stubbed wherever it
 /// sits and the container lines around it come through exactly as written.
+///
+/// Nested classes/structs (a container opened while already inside one) are
+/// implementation helpers — not the LeetCode entry shape — so the whole nested
+/// block is dropped. Helper *methods* on the outer class are still kept.
 String? _deriveBraces(List<String> lines) {
   final out = <String>[];
   var keptFunction = false;
   var i = 0;
+  // How many kept class/struct/namespace containers currently enclose us.
+  // Nested containers are skipped, not counted.
+  var containerDepth = 0;
 
   while (i < lines.length) {
     final line = lines[i];
@@ -182,13 +256,29 @@ String? _deriveBraces(List<String> lines) {
       continue;
     }
 
-    // Container headers, stray closers, and access specifiers are structure
-    // rather than a body, so they come through as written. Everything else
-    // with no argument list is a loose statement, and is dropped.
-    if (_opensContainer(line) ||
-        _braceDelta(line) < 0 ||
-        _isAccessSpecifier(line)) {
+    if (_opensContainer(line)) {
+      // Nested helper type inside an outer class — drop the whole block.
+      if (containerDepth > 0) {
+        i = _skipNestedContainer(lines, i);
+        continue;
+      }
       out.add(line.trimRight());
+      containerDepth += _braceDelta(line);
+      if (containerDepth < 0) containerDepth = 0;
+      i++;
+      continue;
+    }
+
+    // Stray closers and access specifiers are structure rather than a body,
+    // so they come through as written. Everything else with no argument list
+    // is a loose statement, and is dropped.
+    final delta = _braceDelta(line);
+    if (delta < 0 || _isAccessSpecifier(line)) {
+      out.add(line.trimRight());
+      if (delta < 0) {
+        containerDepth += delta;
+        if (containerDepth < 0) containerDepth = 0;
+      }
       i++;
       continue;
     }
@@ -201,21 +291,32 @@ String? _deriveBraces(List<String> lines) {
     // at the `{` that opens the body or the `;` that says there isn't one.
     final indent = ' ' * _indentOf(line);
     var opened = false;
+    // How deep the signature's own line leaves us. Usually 1 — the `{` that
+    // opens the body — but a one-line member (`ListNode() : val(0) {}`) opens
+    // and closes on the same line and leaves 0.
+    var bodyDepth = 0;
     while (i < lines.length) {
       final sig = lines[i];
       out.add(sig.trimRight());
       i++;
       if (sig.contains('{')) {
         opened = true;
+        bodyDepth = _braceDelta(sig);
         break;
       }
       if (sig.trimRight().endsWith(';')) break;
     }
     keptFunction = true;
     if (!opened) continue;
+    // Already closed on its own line: there is no body to skip, and adding a
+    // closer would eat the *enclosing* container's `}` instead — which would
+    // leave [containerDepth] stuck and make the real Solution class read as a
+    // nested helper.
+    if (bodyDepth <= 0) continue;
 
     // Skip the body, then close the block ourselves at the signature's indent.
-    var bodyDepth = 1;
+    // Method bodies do not affect [containerDepth] — their braces never reach
+    // the outer loop.
     while (i < lines.length && bodyDepth > 0) {
       bodyDepth += _braceDelta(lines[i]);
       i++;

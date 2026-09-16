@@ -3057,7 +3057,6 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                               // pays for the entire dataset instead
                                               // of just the visible rows.
                                               delegate: SliverChildBuilderDelegate(
-
                                                 (context, index) {
                                                   final task =
                                                       activeForDisplay[index];

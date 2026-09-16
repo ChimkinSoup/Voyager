@@ -575,10 +575,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   void _onEntryListDragUpdate(double totalDelta, double totalWidth) {
     final startWidth = _entryListDragStartWidth;
     if (startWidth == null) return;
-    // Soft-bounded while the drag is live — tracks the pointer 1:1 but
-    // resists past the real bounds instead of stopping dead.
+    // Tracks the pointer 1:1 and stops dead at the bounds, so neither pane is
+    // ever dragged past the width it stays readable at.
     setState(
-      () => _entryListWidth = JournalEntryListLayout.dragClampListWidth(
+      () => _entryListWidth = JournalEntryListLayout.clampListWidth(
         startWidth + totalDelta,
         totalWidth,
       ),

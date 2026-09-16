@@ -20,28 +20,20 @@ class EditSidePanelMetrics {
   static const rankingsListMinWidth = 300.0;
   static const jobsListMinWidth = 380.0;
 
+  /// The widest the panel may ever be on a page this size — a hard cap, not a
+  /// resistance point: the drag stops here rather than stretching past and
+  /// snapping back.
+  ///
+  /// The fraction is what keeps the list the majority of the page. The
+  /// [minWidth] floor is what keeps the cap valid at all: below ~711px the
+  /// fraction falls under the panel's own minimum, and a cap under the floor
+  /// would make [clampWidth]'s range empty.
   static double maxAllowed(double pageWidth) {
-    final fractionCap = pageWidth * maxFraction;
-    // On a wide page the fraction is the real cap. On a narrow one it falls
-    // below [minWidth]; allowing up to the page itself lets overlay mode keep
-    // a usable panel instead of shrinking to 320 and flipping back to push.
-    if (fractionCap >= minWidth) {
-      return math.min(maxWidth, fractionCap);
-    }
-    return math.min(maxWidth, pageWidth);
+    return math.max(minWidth, math.min(maxWidth, pageWidth * maxFraction));
   }
 
   static double clampWidth(double width, double pageWidth) {
     return width.clamp(minWidth, maxAllowed(pageWidth));
-  }
-
-  static double dragClampWidth(double width, double pageWidth) {
-    return resizePaneRubberBand(
-      width: width,
-      totalWidth: pageWidth,
-      minWidth: minWidth,
-      maxWidth: maxAllowed(pageWidth),
-    );
   }
 
   static double resolveWidth(double? stored, double pageWidth) {
@@ -122,7 +114,7 @@ class _EditSidePanelHostState extends State<EditSidePanelHost> {
     if (start == null) return;
     // Divider is on the panel's left edge: drag left (negative delta) widens.
     setState(() {
-      _liveWidth = EditSidePanelMetrics.dragClampWidth(
+      _liveWidth = EditSidePanelMetrics.clampWidth(
         start - totalDelta,
         pageWidth,
       );
@@ -206,6 +198,19 @@ class _EditSidePanelHostState extends State<EditSidePanelHost> {
                     width: panelWidth,
                     child: Stack(
                       children: [
+                        // Push mode leaves nothing behind the panel, so the
+                        // editors carry no fill of their own and read as a
+                        // column of the same page. Overlay puts the full-width
+                        // list underneath, where that transparency would show
+                        // rows straight through the editor — so the host lays
+                        // down the scaffold tone the list sits on, which is
+                        // exactly what push mode shows behind the panel.
+                        if (!push)
+                          Positioned.fill(
+                            child: ColoredBox(
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                            ),
+                          ),
                         Positioned.fill(
                           child: widget.panel ?? const SizedBox.shrink(),
                         ),
@@ -214,6 +219,10 @@ class _EditSidePanelHostState extends State<EditSidePanelHost> {
                           top: 0,
                           bottom: 0,
                           child: ResizablePaneDivider(
+                            // The panel already draws a hairline down its left
+                            // edge; a second line for the grab handle read as
+                            // a double rule.
+                            showLine: false,
                             onDragStart: () => _onDragStart(pageWidth),
                             onDragUpdate: (delta) =>
                                 _onDragUpdate(delta, pageWidth),

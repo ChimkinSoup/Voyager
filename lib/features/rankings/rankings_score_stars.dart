@@ -197,10 +197,11 @@ class _RankingQuickRateState extends State<RankingQuickRate>
 /// The overall score, given a row to itself: the number on the left, the strip
 /// filling the rest of the row (`RANKINGS_UI` §9.3).
 ///
-/// The strip's stars are always sized as if the scale ran to ten, so a
-/// five-point entry and a ten-point one draw the same star and the shorter
-/// scale simply leaves whitespace after it. A star that grew with the scale it
-/// belongs to would make the same picture mean two different things.
+/// The strip's stars are one fixed size, so a five-point entry and a ten-point
+/// one draw the same star and the shorter scale simply leaves whitespace after
+/// it. A star that grew with the scale it belongs to — or with the width of
+/// the panel it happens to be in — would make the same picture mean two
+/// different things.
 ///
 /// The number is the control: clicking it opens the popover, and long-press
 /// clears it. A scored row and an unscored one are the same size, so scoring
@@ -231,8 +232,13 @@ class RankingOverallRow extends StatefulWidget {
   /// Wide enough for the longest score a scale can print ('10', '8.5').
   static const _numberWidth = 40.0;
 
-  /// The scale every strip is drawn to, whatever scale it actually runs on.
-  static const _referenceScoreMax = 10;
+  /// One fixed star, not one sized from the space available: the editor panel
+  /// is user-resizable, and a strip that grew with it made the same score draw
+  /// at a different size on every drag. Ten stars at 20 (plus their 1px gaps)
+  /// come to 220, which still fits the ~237 the row has left inside the
+  /// narrowest the panel can be dragged to; a wider panel simply leaves
+  /// whitespace after the strip, which is already what a five-point scale does.
+  static const _starSize = 20.0;
 
   @override
   State<RankingOverallRow> createState() => _RankingOverallRowState();
@@ -272,22 +278,14 @@ class _RankingOverallRowState extends State<RankingOverallRow>
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) => Align(
-              alignment: Alignment.centerLeft,
-              child: RankingStars(
-                value: shown,
-                scoreMax: widget.scoreMax,
-                // Every star carries a gap on each side, so a strip is
-                // scoreMax * (size + 2) wide — inverted here against the
-                // reference scale rather than this row's own.
-                size:
-                    (constraints.maxWidth / RankingOverallRow._referenceScoreMax -
-                            2)
-                        .clamp(12.0, 64.0),
-                accentColor: widget.accentColor,
-                semanticLabel: widget.semanticLabel,
-              ),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: RankingStars(
+              value: shown,
+              scoreMax: widget.scoreMax,
+              size: RankingOverallRow._starSize,
+              accentColor: widget.accentColor,
+              semanticLabel: widget.semanticLabel,
             ),
           ),
         ),

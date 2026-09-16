@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:voyager/core/motion/motion.dart';
 
 class ResizablePaneDivider extends StatefulWidget {
   const ResizablePaneDivider({
@@ -9,6 +8,7 @@ class ResizablePaneDivider extends StatefulWidget {
     this.onDragEnd,
     this.onDoubleTapReset,
     this.width = 12,
+    this.showLine = true,
   });
 
   final VoidCallback? onDragStart;
@@ -16,6 +16,11 @@ class ResizablePaneDivider extends StatefulWidget {
   final VoidCallback? onDragEnd;
   final VoidCallback? onDoubleTapReset;
   final double width;
+
+  /// Whether to draw the grab line. False where the pane beside it already
+  /// draws its own edge, so the two do not read as a double rule — the resize
+  /// cursor is then the only affordance.
+  final bool showLine;
 
   @override
   State<ResizablePaneDivider> createState() => _ResizablePaneDividerState();
@@ -64,39 +69,23 @@ class _ResizablePaneDividerState extends State<ResizablePaneDivider> {
         onDoubleTap: widget.onDoubleTapReset,
         child: SizedBox(
           width: widget.width,
-          child: Center(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              width: _dragging || _hovering ? 3 : 1,
-              margin: const EdgeInsets.symmetric(vertical: 8),
-              decoration: BoxDecoration(
-                color: lineColor,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
+          child: widget.showLine
+              ? Center(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    width: _dragging || _hovering ? 3 : 1,
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: lineColor,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                )
+              : null,
         ),
       ),
     );
   }
-}
-
-/// Shared by every split-pane layout (journal, dream journal): resists past
-/// [minWidth]/[maxWidth] instead of stopping hard, for use while a divider
-/// drag is live. Callers still hard-[clamp] the value once the drag ends.
-double resizePaneRubberBand({
-  required double width,
-  required double totalWidth,
-  required double minWidth,
-  required double maxWidth,
-}) {
-  if (width < minWidth) {
-    return minWidth + rubberBand(width - minWidth, totalWidth);
-  }
-  if (width > maxWidth) {
-    return maxWidth + rubberBand(width - maxWidth, totalWidth);
-  }
-  return width;
 }
 
 class JournalEntryListLayout {
@@ -122,18 +111,11 @@ class JournalEntryListLayout {
         maxListWidth,
       );
 
+  /// A hard cap, applied during the drag as well as after it: the divider
+  /// stops at the bound rather than stretching past and snapping back, so the
+  /// editor is never squeezed narrower than it can be read at.
   static double clampListWidth(double width, double totalWidth) {
     return width.clamp(minListWidth, _maxAllowed(totalWidth));
-  }
-
-  /// Soft-bounded version of [clampListWidth] for use while a drag is live.
-  static double dragClampListWidth(double width, double totalWidth) {
-    return resizePaneRubberBand(
-      width: width,
-      totalWidth: totalWidth,
-      minWidth: minListWidth,
-      maxWidth: _maxAllowed(totalWidth),
-    );
   }
 
   static const editorPadding = EdgeInsets.fromLTRB(24, 40, 24, 24);

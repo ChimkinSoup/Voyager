@@ -292,7 +292,16 @@ layout, not a width check bolted onto the first.
 **Right-hand editors (Todo, Jobs, Rankings).** The three pages share `EditSidePanelHost`:
 side-by-side push while the list keeps a usefulness floor, overlay when it would not, and a
 user-draggable width (default 420, min 320, max 600 / 45% of the page) persisted as
-`editSidePanelWidth`. Double-click the divider to reset.
+`editSidePanelWidth`. Double-click the divider to reset. In overlay the host lays the
+scaffold tone under the panel — the editors carry no fill of their own, which is right when
+push has already moved the list out from behind them and wrong when it has not.
+
+**Draggable dividers hard-stop.** Journal, dream journal and the three editors all clamp
+*during* the drag, not just on release: the divider tracks the pointer to the bound and then
+stops. There is no rubber band, because resisting past the bound still renders the pane at
+a width it is not readable at. The divider draws its own grab line only where the pane
+beside it has no edge of its own — the three editors already draw a left hairline, so their
+divider is hit area and cursor alone.
 
 ## Elevation & Depth
 
@@ -384,14 +393,18 @@ sheets, menus) keeps backdrop blur; that is a separate budget.
 
 Recipe:
 
-- Flat fill at a single opacity (no diagonal fade), dual-gradient specular border stroke, and a
-  top gloss reflection (18px tall, or 45% of an explicit height). Sheen comes from gloss + edge,
-  not from thinning the plate.
-- **Dark only:** the plate is the same paper-grain shader as the light canvas, retinted to
-  graphite field (or the caller's `color`), at ~82% opacity so a little of the live grid still
-  shows through. Light stays a thin accent-tinted wafer — no grain on buttons there yet.
+- Flat fill at a single opacity (no diagonal fade), dual-gradient specular border stroke
+  (highlight runs ~80% along the top edge and ~20% along the bottom — light from upper-left,
+  not a symmetric TL→BR wash), and a top gloss reflection (18px tall, or 45% of an explicit
+  height). Sheen comes from gloss + edge, not from thinning the plate.
+- **Dark only:** a matte graphite `SurfaceGrain` plate (deterministic
+  bidirectional luminance flecks — no paper shader, no blur) at ~95% opacity
+  so the live grid is only a faint presence. Light stays a thin accent-tinted
+  wafer — no grain on buttons there yet.
 - Press drives a 0.96 scale over 100 ms in `easeOutCubic`, releasing over 150. Fill opacity
-  multiplies by state: 1.25× hovered, 1.4× pressed, 0.5× disabled. Focus adds an accent ring
+  multiplies by state: 1.25× hovered, 1.4× pressed, 0.5× disabled — all clamped at 97%, so
+  on the dark plate (95% at rest) only *disabled* moves the fill and hover/press are carried
+  by the gloss and the specular edge instead. Focus adds an accent ring
   at 50% alpha with a 2px spread (crisp, not a glow — `shadowBlurScale` must not widen it).
 - Shadow radii still multiply through `shadowBlurScale` so elevation holds in both themes.
 - High contrast (`MediaQuery.highContrast`, stand-in for reduced transparency) collapses the
@@ -401,9 +414,9 @@ Theme defaults (when callers do not override `glassOpacity` / `textColor` / `bor
 
 - **Light:** fill ~6% accent-tinted plate; label `ink-slate` / dark ink; hairline specular at
   ~22% — frost is unnecessary over cream paper.
-- **Dark:** graphite paper plate at ~82% opacity; label and icons default to `onSurface` /
-  bone (never black ink); specular / outline a step stronger at rest (~32%). Hover and press
-  multipliers still apply on top.
+- **Dark:** graphite `SurfaceGrain` plate at ~95% opacity; label and icons default to
+  `onSurface` / bone (never black ink); specular / outline a step stronger at rest (~32%).
+  Hover and press multipliers still apply on top. High contrast keeps a very faint grain.
 
 ### Inputs / Fields
 

@@ -6,6 +6,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/paper_texture.dart';
+import 'package:voyager/core/widgets/surface_grain.dart';
 import 'package:voyager/core/widgets/tag_chip.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/features/leetcode/leetcode_code_field.dart';
@@ -104,15 +105,15 @@ Widget _glassContainer({
     offset: const Offset(0, 8),
   );
 
-  // Dark theme: a graphite paper plate, the same doctrine as [GlassButton].
-  // It used to be a translucent tint over a BackdropFilter, but that blurred
-  // the live triangle grid every frame — a smear behind the text and a GPU
-  // cost for a card that sits still. The plate stays just short of opaque so
-  // the grid is a faint presence rather than a moving texture under the
-  // prose; high contrast takes it the rest of the way.
+  // Dark theme: a matte graphite [SurfaceGrain] plate, same doctrine as
+  // [GlassButton]. It used to be a translucent tint over a BackdropFilter
+  // (and later the light-canvas paper shader retinted to graphite), but that
+  // either blurred the live triangle grid every frame or read as loud digital
+  // noise on small cards. The plate stays nearly opaque so the grid is only a
+  // faint presence; high contrast takes it the rest of the way.
   if (isDark) {
     final plate = theme.cardTheme.color ?? theme.colorScheme.surface;
-    final alpha = nearSolid ? 0.97 : 0.94;
+    final alpha = nearSolid ? 0.97 : 0.95;
     return Container(
       decoration: BoxDecoration(borderRadius: _cardRadius, boxShadow: [shadow]),
       child: ClipRRect(
@@ -129,15 +130,13 @@ Widget _glassContainer({
           child: Stack(
             children: [
               Positioned.fill(
-                child: PaperTexture(
-                  program: paperProgram,
-                  baseColor: plate.withValues(alpha: alpha),
-                  // Specks a step toward bone so grain reads on graphite.
-                  speckColor: Color.lerp(
-                    plate,
-                    theme.colorScheme.onSurface,
-                    0.45,
-                  )!.withValues(alpha: alpha),
+                child: SurfaceGrain(
+                  color: plate.withValues(alpha: alpha),
+                  borderRadius: _cardRadius,
+                  grainOpacity: surfaceGrainOpacityForContrast(
+                    nearSolid: nearSolid,
+                  ),
+                  seed: 41,
                 ),
               ),
               Padding(padding: const EdgeInsets.all(24), child: child),

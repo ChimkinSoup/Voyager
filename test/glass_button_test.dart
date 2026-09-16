@@ -178,16 +178,17 @@ void main() {
     expect((topSpace - bottomSpace).abs(), lessThan(1.0));
   });
 
-  testWidgets('GlassButton standardizes text and icon color to black text',
+  testWidgets('GlassButton standardizes text and icon color to onSurface',
       (WidgetTester tester) async {
+    final ThemeData theme = ThemeData.dark();
     await tester.pumpWidget(
       MaterialApp(
-        theme: ThemeData.dark(),
+        theme: theme,
         home: Scaffold(
           body: Center(
             child: GlassButton(
               onPressed: () {},
-              label: 'Standardized Black Text',
+              label: 'Standardized Label',
               icon: const Icon(Icons.star),
               color: Colors.blue,
             ),
@@ -196,13 +197,15 @@ void main() {
       ),
     );
 
-    final Text textWidget = tester.widget(find.text('Standardized Black Text'));
-    expect(textWidget.style?.color, equals(Colors.black87));
+    // A tinted button is still labelled in the theme's ink, never in black —
+    // on a dark plate black ink is unreadable.
+    final Text textWidget = tester.widget(find.text('Standardized Label'));
+    expect(textWidget.style?.color, equals(theme.colorScheme.onSurface));
 
     final IconTheme iconThemeWidget = tester.widget(find.ancestor(
       of: find.byIcon(Icons.star),
       matching: find.byType(IconTheme),
     ).first);
-    expect(iconThemeWidget.data.color, equals(Colors.black87));
+    expect(iconThemeWidget.data.color, equals(theme.colorScheme.onSurface));
   });
 }
