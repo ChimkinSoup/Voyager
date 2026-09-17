@@ -7247,6 +7247,18 @@ class $SettingsTableTable extends SettingsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(defaultTodoHotkey),
   );
+  static const VerificationMeta _financeHotkeyMeta = const VerificationMeta(
+    'financeHotkey',
+  );
+  @override
+  late final GeneratedColumn<String> financeHotkey = GeneratedColumn<String>(
+    'finance_hotkey',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(defaultFinanceHotkey),
+  );
   static const VerificationMeta _calendarNavigateLeftKeyMeta =
       const VerificationMeta('calendarNavigateLeftKey');
   @override
@@ -8842,6 +8854,7 @@ class $SettingsTableTable extends SettingsTable
     showDefaultTrackersInCalendar,
     journalHotkey,
     todoHotkey,
+    financeHotkey,
     calendarNavigateLeftKey,
     calendarNavigateRightKey,
     timelineModeYearZero,
@@ -9103,6 +9116,15 @@ class $SettingsTableTable extends SettingsTable
       context.handle(
         _todoHotkeyMeta,
         todoHotkey.isAcceptableOrUnknown(data['todo_hotkey']!, _todoHotkeyMeta),
+      );
+    }
+    if (data.containsKey('finance_hotkey')) {
+      context.handle(
+        _financeHotkeyMeta,
+        financeHotkey.isAcceptableOrUnknown(
+          data['finance_hotkey']!,
+          _financeHotkeyMeta,
+        ),
       );
     }
     if (data.containsKey('calendar_navigate_left_key')) {
@@ -10273,6 +10295,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}todo_hotkey'],
       )!,
+      financeHotkey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}finance_hotkey'],
+      )!,
       calendarNavigateLeftKey: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}calendar_navigate_left_key'],
@@ -10796,6 +10822,7 @@ class SettingsTableData extends DataClass
   final bool showDefaultTrackersInCalendar;
   final String journalHotkey;
   final String todoHotkey;
+  final String financeHotkey;
   final String calendarNavigateLeftKey;
   final String calendarNavigateRightKey;
   final bool timelineModeYearZero;
@@ -11015,6 +11042,7 @@ class SettingsTableData extends DataClass
     required this.showDefaultTrackersInCalendar,
     required this.journalHotkey,
     required this.todoHotkey,
+    required this.financeHotkey,
     required this.calendarNavigateLeftKey,
     required this.calendarNavigateRightKey,
     required this.timelineModeYearZero,
@@ -11165,6 +11193,7 @@ class SettingsTableData extends DataClass
     );
     map['journal_hotkey'] = Variable<String>(journalHotkey);
     map['todo_hotkey'] = Variable<String>(todoHotkey);
+    map['finance_hotkey'] = Variable<String>(financeHotkey);
     map['calendar_navigate_left_key'] = Variable<String>(
       calendarNavigateLeftKey,
     );
@@ -11476,6 +11505,7 @@ class SettingsTableData extends DataClass
       showDefaultTrackersInCalendar: Value(showDefaultTrackersInCalendar),
       journalHotkey: Value(journalHotkey),
       todoHotkey: Value(todoHotkey),
+      financeHotkey: Value(financeHotkey),
       calendarNavigateLeftKey: Value(calendarNavigateLeftKey),
       calendarNavigateRightKey: Value(calendarNavigateRightKey),
       timelineModeYearZero: Value(timelineModeYearZero),
@@ -11711,6 +11741,7 @@ class SettingsTableData extends DataClass
       ),
       journalHotkey: serializer.fromJson<String>(json['journalHotkey']),
       todoHotkey: serializer.fromJson<String>(json['todoHotkey']),
+      financeHotkey: serializer.fromJson<String>(json['financeHotkey']),
       calendarNavigateLeftKey: serializer.fromJson<String>(
         json['calendarNavigateLeftKey'],
       ),
@@ -12031,6 +12062,7 @@ class SettingsTableData extends DataClass
       ),
       'journalHotkey': serializer.toJson<String>(journalHotkey),
       'todoHotkey': serializer.toJson<String>(todoHotkey),
+      'financeHotkey': serializer.toJson<String>(financeHotkey),
       'calendarNavigateLeftKey': serializer.toJson<String>(
         calendarNavigateLeftKey,
       ),
@@ -12273,6 +12305,7 @@ class SettingsTableData extends DataClass
     bool? showDefaultTrackersInCalendar,
     String? journalHotkey,
     String? todoHotkey,
+    String? financeHotkey,
     String? calendarNavigateLeftKey,
     String? calendarNavigateRightKey,
     bool? timelineModeYearZero,
@@ -12418,6 +12451,7 @@ class SettingsTableData extends DataClass
         showDefaultTrackersInCalendar ?? this.showDefaultTrackersInCalendar,
     journalHotkey: journalHotkey ?? this.journalHotkey,
     todoHotkey: todoHotkey ?? this.todoHotkey,
+    financeHotkey: financeHotkey ?? this.financeHotkey,
     calendarNavigateLeftKey:
         calendarNavigateLeftKey ?? this.calendarNavigateLeftKey,
     calendarNavigateRightKey:
@@ -12694,6 +12728,9 @@ class SettingsTableData extends DataClass
       todoHotkey: data.todoHotkey.present
           ? data.todoHotkey.value
           : this.todoHotkey,
+      financeHotkey: data.financeHotkey.present
+          ? data.financeHotkey.value
+          : this.financeHotkey,
       calendarNavigateLeftKey: data.calendarNavigateLeftKey.present
           ? data.calendarNavigateLeftKey.value
           : this.calendarNavigateLeftKey,
@@ -13090,6 +13127,7 @@ class SettingsTableData extends DataClass
           )
           ..write('journalHotkey: $journalHotkey, ')
           ..write('todoHotkey: $todoHotkey, ')
+          ..write('financeHotkey: $financeHotkey, ')
           ..write('calendarNavigateLeftKey: $calendarNavigateLeftKey, ')
           ..write('calendarNavigateRightKey: $calendarNavigateRightKey, ')
           ..write('timelineModeYearZero: $timelineModeYearZero, ')
@@ -13262,6 +13300,7 @@ class SettingsTableData extends DataClass
     showDefaultTrackersInCalendar,
     journalHotkey,
     todoHotkey,
+    financeHotkey,
     calendarNavigateLeftKey,
     calendarNavigateRightKey,
     timelineModeYearZero,
@@ -13408,6 +13447,7 @@ class SettingsTableData extends DataClass
               this.showDefaultTrackersInCalendar &&
           other.journalHotkey == this.journalHotkey &&
           other.todoHotkey == this.todoHotkey &&
+          other.financeHotkey == this.financeHotkey &&
           other.calendarNavigateLeftKey == this.calendarNavigateLeftKey &&
           other.calendarNavigateRightKey == this.calendarNavigateRightKey &&
           other.timelineModeYearZero == this.timelineModeYearZero &&
@@ -13572,6 +13612,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> showDefaultTrackersInCalendar;
   final Value<String> journalHotkey;
   final Value<String> todoHotkey;
+  final Value<String> financeHotkey;
   final Value<String> calendarNavigateLeftKey;
   final Value<String> calendarNavigateRightKey;
   final Value<bool> timelineModeYearZero;
@@ -13713,6 +13754,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.showDefaultTrackersInCalendar = const Value.absent(),
     this.journalHotkey = const Value.absent(),
     this.todoHotkey = const Value.absent(),
+    this.financeHotkey = const Value.absent(),
     this.calendarNavigateLeftKey = const Value.absent(),
     this.calendarNavigateRightKey = const Value.absent(),
     this.timelineModeYearZero = const Value.absent(),
@@ -13855,6 +13897,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.showDefaultTrackersInCalendar = const Value.absent(),
     this.journalHotkey = const Value.absent(),
     this.todoHotkey = const Value.absent(),
+    this.financeHotkey = const Value.absent(),
     this.calendarNavigateLeftKey = const Value.absent(),
     this.calendarNavigateRightKey = const Value.absent(),
     this.timelineModeYearZero = const Value.absent(),
@@ -13997,6 +14040,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? showDefaultTrackersInCalendar,
     Expression<String>? journalHotkey,
     Expression<String>? todoHotkey,
+    Expression<String>? financeHotkey,
     Expression<String>? calendarNavigateLeftKey,
     Expression<String>? calendarNavigateRightKey,
     Expression<bool>? timelineModeYearZero,
@@ -14144,6 +14188,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'show_default_trackers_in_calendar': showDefaultTrackersInCalendar,
       if (journalHotkey != null) 'journal_hotkey': journalHotkey,
       if (todoHotkey != null) 'todo_hotkey': todoHotkey,
+      if (financeHotkey != null) 'finance_hotkey': financeHotkey,
       if (calendarNavigateLeftKey != null)
         'calendar_navigate_left_key': calendarNavigateLeftKey,
       if (calendarNavigateRightKey != null)
@@ -14379,6 +14424,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? showDefaultTrackersInCalendar,
     Value<String>? journalHotkey,
     Value<String>? todoHotkey,
+    Value<String>? financeHotkey,
     Value<String>? calendarNavigateLeftKey,
     Value<String>? calendarNavigateRightKey,
     Value<bool>? timelineModeYearZero,
@@ -14523,6 +14569,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           showDefaultTrackersInCalendar ?? this.showDefaultTrackersInCalendar,
       journalHotkey: journalHotkey ?? this.journalHotkey,
       todoHotkey: todoHotkey ?? this.todoHotkey,
+      financeHotkey: financeHotkey ?? this.financeHotkey,
       calendarNavigateLeftKey:
           calendarNavigateLeftKey ?? this.calendarNavigateLeftKey,
       calendarNavigateRightKey:
@@ -14770,6 +14817,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     }
     if (todoHotkey.present) {
       map['todo_hotkey'] = Variable<String>(todoHotkey.value);
+    }
+    if (financeHotkey.present) {
+      map['finance_hotkey'] = Variable<String>(financeHotkey.value);
     }
     if (calendarNavigateLeftKey.present) {
       map['calendar_navigate_left_key'] = Variable<String>(
@@ -15315,6 +15365,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           )
           ..write('journalHotkey: $journalHotkey, ')
           ..write('todoHotkey: $todoHotkey, ')
+          ..write('financeHotkey: $financeHotkey, ')
           ..write('calendarNavigateLeftKey: $calendarNavigateLeftKey, ')
           ..write('calendarNavigateRightKey: $calendarNavigateRightKey, ')
           ..write('timelineModeYearZero: $timelineModeYearZero, ')
@@ -45830,6 +45881,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> showDefaultTrackersInCalendar,
       Value<String> journalHotkey,
       Value<String> todoHotkey,
+      Value<String> financeHotkey,
       Value<String> calendarNavigateLeftKey,
       Value<String> calendarNavigateRightKey,
       Value<bool> timelineModeYearZero,
@@ -45973,6 +46025,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> showDefaultTrackersInCalendar,
       Value<String> journalHotkey,
       Value<String> todoHotkey,
+      Value<String> financeHotkey,
       Value<String> calendarNavigateLeftKey,
       Value<String> calendarNavigateRightKey,
       Value<bool> timelineModeYearZero,
@@ -46185,6 +46238,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<String> get todoHotkey => $composableBuilder(
     column: $table.todoHotkey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get financeHotkey => $composableBuilder(
+    column: $table.financeHotkey,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -46900,6 +46958,11 @@ class $$SettingsTableTableOrderingComposer
 
   ColumnOrderings<String> get todoHotkey => $composableBuilder(
     column: $table.todoHotkey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get financeHotkey => $composableBuilder(
+    column: $table.financeHotkey,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -47621,6 +47684,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get financeHotkey => $composableBuilder(
+    column: $table.financeHotkey,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get calendarNavigateLeftKey => $composableBuilder(
     column: $table.calendarNavigateLeftKey,
     builder: (column) => column,
@@ -48298,6 +48366,7 @@ class $$SettingsTableTableTableManager
                     const Value.absent(),
                 Value<String> journalHotkey = const Value.absent(),
                 Value<String> todoHotkey = const Value.absent(),
+                Value<String> financeHotkey = const Value.absent(),
                 Value<String> calendarNavigateLeftKey = const Value.absent(),
                 Value<String> calendarNavigateRightKey = const Value.absent(),
                 Value<bool> timelineModeYearZero = const Value.absent(),
@@ -48459,6 +48528,7 @@ class $$SettingsTableTableTableManager
                 showDefaultTrackersInCalendar: showDefaultTrackersInCalendar,
                 journalHotkey: journalHotkey,
                 todoHotkey: todoHotkey,
+                financeHotkey: financeHotkey,
                 calendarNavigateLeftKey: calendarNavigateLeftKey,
                 calendarNavigateRightKey: calendarNavigateRightKey,
                 timelineModeYearZero: timelineModeYearZero,
@@ -48607,6 +48677,7 @@ class $$SettingsTableTableTableManager
                     const Value.absent(),
                 Value<String> journalHotkey = const Value.absent(),
                 Value<String> todoHotkey = const Value.absent(),
+                Value<String> financeHotkey = const Value.absent(),
                 Value<String> calendarNavigateLeftKey = const Value.absent(),
                 Value<String> calendarNavigateRightKey = const Value.absent(),
                 Value<bool> timelineModeYearZero = const Value.absent(),
@@ -48768,6 +48839,7 @@ class $$SettingsTableTableTableManager
                 showDefaultTrackersInCalendar: showDefaultTrackersInCalendar,
                 journalHotkey: journalHotkey,
                 todoHotkey: todoHotkey,
+                financeHotkey: financeHotkey,
                 calendarNavigateLeftKey: calendarNavigateLeftKey,
                 calendarNavigateRightKey: calendarNavigateRightKey,
                 timelineModeYearZero: timelineModeYearZero,

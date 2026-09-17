@@ -520,6 +520,8 @@ class SettingsTable extends Table {
       text().withDefault(const Constant(defaultJournalHotkey))();
   TextColumn get todoHotkey =>
       text().withDefault(const Constant(defaultTodoHotkey))();
+  TextColumn get financeHotkey =>
+      text().withDefault(const Constant(defaultFinanceHotkey))();
   TextColumn get calendarNavigateLeftKey =>
       text().withDefault(const Constant(defaultCalendarNavigateLeftKey))();
   TextColumn get calendarNavigateRightKey =>
@@ -1598,7 +1600,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 117;
+  int get schemaVersion => 118;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2936,6 +2938,12 @@ class AppDatabase extends _$AppDatabase {
           // columns that no longer exist in Dart.
           await migrator.alterTable(TableMigration(workoutPlanEntriesTable));
         }
+      }
+      if (from < 118) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.financeHotkey,
+        );
       }
     },
   );

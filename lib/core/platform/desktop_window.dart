@@ -5,6 +5,15 @@ import 'package:window_manager/window_manager.dart';
 
 var _desktopWindowConfigured = false;
 
+/// The main window's minimum size. Lifted while a hotkey floater borrows the
+/// window, which is far smaller than this.
+const kMainWindowMinimumSize = Size(720, 520);
+
+/// False while the app's pages cannot be seen even though the window may be:
+/// hidden to the tray, or lent to a hotkey floater. Window-level signals miss
+/// both — a hidden window reports no lifecycle change on Windows.
+final mainContentOnScreen = ValueNotifier<bool>(true);
+
 /// True when frameless chrome is active (Windows + [configureDesktopWindow] succeeded).
 bool get desktopWindowChromeActive => isWindows && _desktopWindowConfigured;
 
@@ -16,7 +25,7 @@ Future<void> configureDesktopWindow() async {
 
     const windowOptions = WindowOptions(
       size: Size(1280, 800),
-      minimumSize: Size(720, 520),
+      minimumSize: kMainWindowMinimumSize,
       center: true,
       title: 'Voyager',
       titleBarStyle: TitleBarStyle.hidden,

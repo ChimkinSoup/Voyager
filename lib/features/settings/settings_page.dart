@@ -661,6 +661,10 @@ class SettingsPage extends ConsumerWidget {
                 'Default is $defaultTodoHotkey so Chrome Ctrl+Shift+T still works.',
               ),
             ),
+            ListTile(
+              title: const Text('Finance hotkey'),
+              subtitle: Text(settings.financeHotkey),
+            ),
           ],
           if (isAndroid)
             const ListTile(

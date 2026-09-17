@@ -59,6 +59,8 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
+import 'package:voyager/features/hotkeys/quick_capture.dart';
+import 'package:voyager/features/hotkeys/quick_journal_entry.dart';
 import 'package:voyager/features/journal/journal_entry_actions.dart';
 import 'package:voyager/features/journal/journal_entry_delete.dart';
 import 'package:voyager/features/journal/journal_manage_sheet.dart';
@@ -1086,6 +1088,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     // the flush finished and the selection had already moved on, writing
     // against whatever entry was selected by then.
     _bodySaveTimer?.cancel();
+    if (quickJournalNotepadEntryId.value == entryId) return;
 
     final title = _titleController.text;
     final mood = _mood;
@@ -1168,6 +1171,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final entryId = _selectedEntryId;
     final entry = _selectedEntry;
     if (entryId == null || entry == null) return;
+    // See [quickJournalNotepadEntryId]: the editor's copy is stale.
+    if (quickJournalNotepadEntryId.value == entryId) return;
 
     final body =
         _editorKey.currentState?.bodyTextFor(entryId) ??
@@ -1204,6 +1209,25 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   Future<void> _openEntry(String id) async {
     _revealCompactEditor();
     await _loadEntryById(id);
+  }
+
+  /// The journal hotkey's in-app path: today's Quick Journal Entry — the same
+  /// one the notepad floater binds to — opened for editing, in its journal.
+  Future<void> _openQuickJournalEntry() async {
+    final entry = await resolveQuickJournalEntry(
+      ProviderScope.containerOf(context, listen: false),
+    );
+    if (!mounted) return;
+    if (!_viewAllJournals && _journalFilter != entry.journalId) {
+      await _flushActiveEntryEdits(refreshList: true);
+      if (!mounted) return;
+      setState(() => _journalFilter = entry.journalId);
+    }
+    await _openEntry(entry.id);
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _bodyFocusNode.requestFocus();
+    });
   }
 
   void _revealCompactEditor() {
@@ -2145,6 +2169,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _journalRepository = ref.read(journalRepositoryProvider);
     _journalWriteCoordinator = ref.read(journalWriteCoordinatorProvider);
     _journalDebugLogger = ref.read(journalDebugLoggerProvider);
+    ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
+      if (request?.kind == QuickCaptureKind.journal) {
+        unawaited(_openQuickJournalEntry());
+      }
+    });
     final journalsAsync = ref.watch(journalsProvider);
     final settings = ref.watch(settingsProvider).valueOrNull;
     final entryListScope = _entryListScope(journalsAsync.valueOrNull);

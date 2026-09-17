@@ -32,6 +32,7 @@ class AppSettings {
     this.showDefaultTrackersInCalendar = true,
     this.journalHotkey = defaultJournalHotkey,
     this.todoHotkey = defaultTodoHotkey,
+    this.financeHotkey = defaultFinanceHotkey,
     this.calendarNavigateLeftKey = defaultCalendarNavigateLeftKey,
     this.calendarNavigateRightKey = defaultCalendarNavigateRightKey,
     this.srsFailKey = defaultStudyFailKey,
@@ -204,6 +205,7 @@ class AppSettings {
   final bool showDefaultTrackersInCalendar;
   final String journalHotkey;
   final String todoHotkey;
+  final String financeHotkey;
   final String calendarNavigateLeftKey;
   final String calendarNavigateRightKey;
 
@@ -495,6 +497,7 @@ class AppSettings {
     bool? showDefaultTrackersInCalendar,
     String? journalHotkey,
     String? todoHotkey,
+    String? financeHotkey,
     String? calendarNavigateLeftKey,
     String? calendarNavigateRightKey,
     String? srsFailKey,
@@ -671,6 +674,7 @@ class AppSettings {
           showDefaultTrackersInCalendar ?? this.showDefaultTrackersInCalendar,
       journalHotkey: journalHotkey ?? this.journalHotkey,
       todoHotkey: todoHotkey ?? this.todoHotkey,
+      financeHotkey: financeHotkey ?? this.financeHotkey,
       calendarNavigateLeftKey:
           calendarNavigateLeftKey ?? this.calendarNavigateLeftKey,
       calendarNavigateRightKey:

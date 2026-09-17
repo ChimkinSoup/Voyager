@@ -48,6 +48,9 @@ dependencies:
   super_clipboard: ^0.9.1
   super_drag_and_drop: ^0.9.1
   crypto: ^3.0.7
+  tray_manager: ^0.5.3
+  win32: ^5.15.0
+  ffi: ^2.2.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -81,6 +84,7 @@ flutter:
   assets:
     - assets/quotes.json
     - assets/dictionary_en.txt
+    - assets/app_icon.ico
   fonts:
     - family: IosevkaAile
       fonts:

@@ -58,12 +58,16 @@ class FinanceTransactionDraft {
 /// the bookkeeping that only makes sense once the money is actually recorded —
 /// advancing a bill's due date, say. It does not run when the sheet is
 /// dismissed, and a throw from it is the caller's to handle.
+///
+/// [onDraft] receives the unsaved fields when the sheet closes without a save
+/// (null when they are all empty), and null after a save.
 Future<void> showFinanceTransactionModal(
   BuildContext context,
   WidgetRef ref, {
   FinancialTransaction? existing,
   FinanceTransactionDraft? draft,
   Future<void> Function()? onSaved,
+  ValueChanged<FinanceTransactionDraft?>? onDraft,
 }) async {
   // Captured out here, not inside the sheet: the sheet builds its own
   // ProviderScope, and that container is disposed the moment the sheet is
@@ -80,8 +84,28 @@ Future<void> showFinanceTransactionModal(
         existing: existing,
         draft: draft,
         onSaved: onSaved,
+        onDraft: onDraft,
       ),
     ),
+  );
+}
+
+/// The modal's form without its sheet, for the finance hotkey floater, which
+/// is not a route: [onClose] stands in for the sheet's pop, after a save and
+/// from the close button alike.
+Widget financeTransactionForm({
+  required ProviderContainer container,
+  required VoidCallback onClose,
+  FinanceTransactionDraft? draft,
+  Future<void> Function()? onSaved,
+  ValueChanged<FinanceTransactionDraft?>? onDraft,
+}) {
+  return _TransactionModal(
+    container: container,
+    draft: draft,
+    onSaved: onSaved,
+    onClose: onClose,
+    onDraft: onDraft,
   );
 }
 
@@ -91,6 +115,8 @@ class _TransactionModal extends ConsumerStatefulWidget {
     this.existing,
     this.draft,
     this.onSaved,
+    this.onClose,
+    this.onDraft,
   });
 
   /// The app-level container, which outlives this sheet. See
@@ -100,6 +126,8 @@ class _TransactionModal extends ConsumerStatefulWidget {
   final FinancialTransaction? existing;
   final FinanceTransactionDraft? draft;
   final Future<void> Function()? onSaved;
+  final VoidCallback? onClose;
+  final ValueChanged<FinanceTransactionDraft?>? onDraft;
 
   @override
   ConsumerState<_TransactionModal> createState() => _TransactionModalState();
@@ -150,8 +178,51 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     _newId = newId();
   }
 
+  /// Set once a save has written the transaction, so closing doesn't hand
+  /// back a draft of money already recorded.
+  var _saved = false;
+
+  void _close() {
+    final onClose = widget.onClose;
+    if (onClose != null) {
+      onClose();
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
+  FinanceTransactionDraft? _unsavedDraft() {
+    if (_saved) return null;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final amountCents = _parsedCents;
+    final origin = trimToNull(_originController.text);
+    final note = trimToNull(_noteController.text);
+    final tags = _parsedTags;
+    // The date only counts when it was moved: an untouched "today" kept as a
+    // draft would reopen tomorrow pinned to yesterday.
+    final occurredAt = _date == today ? null : _date;
+    if (_type == TransactionType.expense &&
+        amountCents == null &&
+        origin == null &&
+        note == null &&
+        tags.isEmpty &&
+        occurredAt == null) {
+      return null;
+    }
+    return FinanceTransactionDraft(
+      type: _type,
+      amountCents: amountCents,
+      origin: origin,
+      note: note,
+      occurredAt: occurredAt,
+      tags: tags,
+    );
+  }
+
   @override
   void dispose() {
+    widget.onDraft?.call(_unsavedDraft());
     _amountController.dispose();
     _originController.dispose();
     _originFocusNode.dispose();
@@ -283,6 +354,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       );
       await financeRepo.upsertTransaction(transaction);
       written = true;
+      _saved = true;
       if (transaction.roomEventId != null) {
         await syncRoomEventFromTransaction(financeRepo, transaction);
         container.invalidate(assetRoomEventsProvider);
@@ -298,7 +370,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       // is recording a consequence of *this* save, and a failure there has to
       // land in this sheet's error line rather than on a dismissed one.
       await widget.onSaved?.call();
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) _close();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -356,7 +428,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                   ),
                   const Spacer(),
                   IconButton(
-                    onPressed: Navigator.of(context).pop,
+                    onPressed: _close,
                     icon: const Icon(PhosphorIconsRegular.x, size: 18),
                     tooltip: 'Close',
                     padding: EdgeInsets.zero,

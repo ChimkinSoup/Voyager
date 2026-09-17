@@ -155,9 +155,9 @@
     "semantic_hash": "12857b3dcd10ee59c163aac32dd8b352"
   },
   "lib/core/constants/hotkey_defaults.dart": {
-    "mtime": 1786836611.8403854,
-    "ast_hash": "873e37631881c651aab4f0e7b7b1aba0",
-    "semantic_hash": "873e37631881c651aab4f0e7b7b1aba0"
+    "mtime": 1789621538.120485,
+    "ast_hash": "89a505284bbcfb7ae4b53160a0156c31",
+    "semantic_hash": ""
   },
   "lib/core/constants/journal_constants.dart": {
     "mtime": 1782080766.075755,
@@ -265,8 +265,8 @@
     "semantic_hash": ""
   },
   "lib/core/sync/firestore_document_mapper.dart": {
-    "mtime": 1789584962.3213203,
-    "ast_hash": "308c8cdb2a97d5907a7f707d4ed1e9e3",
+    "mtime": 1789621539.4644325,
+    "ast_hash": "daee88247550c8747656e7c56d065e47",
     "semantic_hash": ""
   },
   "lib/core/sync/firestore_pull_service.dart": {
@@ -525,13 +525,13 @@
     "semantic_hash": "268a7a3a47fa90c40e8ac8c6e3402cf9"
   },
   "lib/data/database/app_database.dart": {
-    "mtime": 1789584896.6523814,
-    "ast_hash": "d58674f963c0b8187a477352ab28224f",
+    "mtime": 1789619613.1907055,
+    "ast_hash": "922d0431b844303edea1a16b6e1de904",
     "semantic_hash": ""
   },
   "lib/data/database/app_database.g.dart": {
-    "mtime": 1789585027.3700602,
-    "ast_hash": "2efa7d15b9105cdad9d54b8d2496a317",
+    "mtime": 1789613910.5616982,
+    "ast_hash": "5fa1bc6668d916ce15fe64754c2523d4",
     "semantic_hash": ""
   },
   "lib/data/remote/cloud_function_weather_client.dart": {
@@ -570,8 +570,8 @@
     "semantic_hash": ""
   },
   "lib/data/repositories/drift_repositories.dart": {
-    "mtime": 1789591958.4835863,
-    "ast_hash": "945132a92cf31d28044b9e754ea91f7e",
+    "mtime": 1789613780.1258876,
+    "ast_hash": "b14d8535511653385f1545545f133180",
     "semantic_hash": ""
   },
   "lib/data/services/quotes_loader.dart": {
@@ -600,8 +600,8 @@
     "semantic_hash": "99fbc479ff56b530b339467a5cbf13c6"
   },
   "lib/domain/models/settings_models.dart": {
-    "mtime": 1789579341.8253312,
-    "ast_hash": "06e9b604cf6a9cd1e98b00e941c36e98",
+    "mtime": 1789613756.4143429,
+    "ast_hash": "b54102246803666edc7c3cd7accef2ad",
     "semantic_hash": ""
   },
   "lib/domain/models/soft_deletable.dart": {
@@ -1070,8 +1070,8 @@
     "semantic_hash": ""
   },
   "test/import_export_test.dart": {
-    "mtime": 1789585401.6031096,
-    "ast_hash": "7aeb8fc6d3c32ea1d334cd620f74268c",
+    "mtime": 1789619545.7545905,
+    "ast_hash": "966e585cc60301c63ddde4b552f2e351",
     "semantic_hash": ""
   },
   "test/journal_weather_snapshot_test.dart": {
@@ -2490,8 +2490,8 @@
     "semantic_hash": ""
   },
   "lib/domain/models/workout_models.dart": {
-    "mtime": 1789585476.9964314,
-    "ast_hash": "6e2af6abb5f7d7c36b38ab646b637d88",
+    "mtime": 1789613685.681466,
+    "ast_hash": "565b38e1c7ab6c88a3c2ff3c583d7cc1",
     "semantic_hash": ""
   },
   "lib/features/workout/active_workout_view.dart": {
@@ -2500,23 +2500,23 @@
     "semantic_hash": ""
   },
   "lib/features/workout/exercise_detail_view.dart": {
-    "mtime": 1789517620.5804002,
-    "ast_hash": "1a32496c8114936b7fe35a70802f7f63",
+    "mtime": 1789620160.3760347,
+    "ast_hash": "50a80005e41d9208727caa4ccf9125ac",
     "semantic_hash": ""
   },
   "lib/features/workout/workout_actions.dart": {
-    "mtime": 1789585123.2823224,
-    "ast_hash": "c9fd23b58ff0b05df07c767c7b2e87fc",
+    "mtime": 1789619003.6278696,
+    "ast_hash": "831dee86258eb471ce5ba1e0f9475e23",
     "semantic_hash": ""
   },
   "lib/features/workout/workout_day_column.dart": {
-    "mtime": 1789585162.7049105,
-    "ast_hash": "37734177afaaa0595ced0262ecb84c37",
+    "mtime": 1789620160.3750348,
+    "ast_hash": "16e1ae029ec56d678e3388664846d44e",
     "semantic_hash": ""
   },
   "lib/features/workout/workout_exercise_panel.dart": {
-    "mtime": 1789190024.005411,
-    "ast_hash": "926d06849f937d32b7710d21f29b2a3f",
+    "mtime": 1789619412.162011,
+    "ast_hash": "eea73c0a0e13570765de8d3387d299dd",
     "semantic_hash": ""
   },
   "lib/features/workout/workout_island.dart": {
@@ -2535,13 +2535,13 @@
     "semantic_hash": "2367047e534b1cad8faac9219162cac9"
   },
   "lib/features/workout/workout_page.dart": {
-    "mtime": 1786836611.95504,
-    "ast_hash": "20056d978eab95705f7e50a3d8026008",
-    "semantic_hash": "20056d978eab95705f7e50a3d8026008"
+    "mtime": 1789620101.069409,
+    "ast_hash": "bb32900b3f49a4f23f7d3deea6acfe6c",
+    "semantic_hash": ""
   },
   "lib/features/workout/workout_session_controller.dart": {
-    "mtime": 1789585236.4389122,
-    "ast_hash": "a4d5448208ce8f912a6375acc7d4346b",
+    "mtime": 1789618969.5318966,
+    "ast_hash": "50df542ba4386812c12232db20bb962a",
     "semantic_hash": ""
   },
   "lib/features/workout/workout_target_editor.dart": {
@@ -2630,8 +2630,8 @@
     "semantic_hash": "33af145388ec1c14fcd14be90b93d4a8"
   },
   "test/workout_test.dart": {
-    "mtime": 1789585393.4172325,
-    "ast_hash": "fd834cab044d2eb72062fd817063aac6",
+    "mtime": 1789619654.3322577,
+    "ast_hash": "5b22a916b22b6463f8da9194c16a49b6",
     "semantic_hash": ""
   },
   "WORKOUT_TRACKER.md": {
@@ -5150,8 +5150,8 @@
     "semantic_hash": ""
   },
   "test/narrow_window_modal_overflow_test.dart": {
-    "mtime": 1789436248.9833727,
-    "ast_hash": "6d9a99ee7ce7f9b61181a152b5b18eb7",
+    "mtime": 1789619723.281131,
+    "ast_hash": "07da9107a432398b6d3c82780948d088",
     "semantic_hash": ""
   },
   "test/narrow_window_overflow_test.dart": {
@@ -5284,11 +5284,6 @@
     "ast_hash": "4236250804d557dd2c49f4ec0ed3b028",
     "semantic_hash": ""
   },
-  "lib/features/workout/workout_placement_prescription_editor.dart": {
-    "mtime": 1789585135.3506079,
-    "ast_hash": "e57b7123f0e887f4f8ddb561f590e7cc",
-    "semantic_hash": ""
-  },
   "test/settings_color_palette_reorder_test.dart": {
     "mtime": 1789583413.4637418,
     "ast_hash": "d7202e541c1161c1bcb01f80c4d98aca",
@@ -5300,8 +5295,8 @@
     "semantic_hash": ""
   },
   "test/workout_drop_sets_sync_test.dart": {
-    "mtime": 1789585430.177056,
-    "ast_hash": "1fe8d5173953ec76f603758e4190dc7e",
+    "mtime": 1789619508.4817674,
+    "ast_hash": "c7f342b94ec1c04540431b25e487ab42",
     "semantic_hash": ""
   },
   "test/sync_integrity_followups_test.dart": {
@@ -5327,6 +5322,21 @@
   "test/multiline_field_scroll_insets_test.dart": {
     "mtime": 1789605272.645032,
     "ast_hash": "9e98f0c449e43f45dc4af5ff8af6d854",
+    "semantic_hash": ""
+  },
+  "lib/features/workout/workout_prescription_editor.dart": {
+    "mtime": 1789620160.3750348,
+    "ast_hash": "6edf219729af8b2cb2ce7cd2a5e543ec",
+    "semantic_hash": ""
+  },
+  "test/workout_set_reorder_test.dart": {
+    "mtime": 1789619925.6640072,
+    "ast_hash": "8a0ea5bb117bc002bbb21850c2dc5434",
+    "semantic_hash": ""
+  },
+  "GLOBAL_HOTKEY_FLOATERS_HLD.md": {
+    "mtime": 1789608535.5150528,
+    "ast_hash": "f0d97b9a053e16a2b7dc244b0b15514c",
     "semantic_hash": ""
   }
 }

@@ -13,13 +13,11 @@ import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/tags/tag_palette.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/perf_stall_logger.dart';
-import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/features/finance/finance_ui_prefs.dart';
+import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/hotkey_service.dart';
-import 'package:voyager/features/hotkeys/quick_popups.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/firebase_options.dart';
-import 'package:voyager/routing/app_router.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -157,11 +155,12 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     if (!mounted) return;
     DevFlags.disableCache = settings.devDisableCache;
     try {
+      final floaters = ref.read(floaterControllerProvider);
       await _hotkeys.register(
         journalHotkey: settings.journalHotkey,
         todoHotkey: settings.todoHotkey,
-        onJournal: _openQuickJournal,
-        onTodo: _openQuickTodo,
+        financeHotkey: settings.financeHotkey,
+        onHotkey: floaters.onHotkey,
       );
     } catch (error, stackTrace) {
       FlutterError.reportError(
@@ -351,20 +350,6 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     } else {
       _stopWeatherRefreshTimer();
     }
-  }
-
-  void _openQuickJournal() => _openQuickPopup(const QuickJournalPopup());
-
-  void _openQuickTodo() => _openQuickPopup(const QuickTodoPopup());
-
-  /// This widget sits above [MaterialApp], so its own context has no
-  /// Navigator or MaterialLocalizations — open from the router's root
-  /// navigator instead.
-  void _openQuickPopup(Widget popup) {
-    final navigatorContext =
-        ref.read(routerProvider).routerDelegate.navigatorKey.currentContext;
-    if (navigatorContext == null) return;
-    showVoyagerDialog<void>(context: navigatorContext, builder: (_) => popup);
   }
 
   @override

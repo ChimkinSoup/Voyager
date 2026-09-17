@@ -43,6 +43,7 @@ import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/sync/sync_conflict_banner.dart';
+import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:voyager/features/todo/todo_edit_panel.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
 import 'package:voyager/features/todo/todo_list_search.dart';
@@ -1045,6 +1046,25 @@ class _TodoPageState extends ConsumerState<TodoPage>
         legacyTodoListId;
   }
 
+  /// The todo hotkey's in-app path: focus the composer, carrying over the
+  /// quick-add bar's unsaved title. Only into an empty composer — text already
+  /// typed here is not the hotkey's to replace — and the title then belongs to
+  /// the composer, so the bar stops offering it.
+  void _takeQuickCaptureDraft() {
+    final notifier = ref.read(todoCaptureDraftProvider.notifier);
+    final title = notifier.state.title;
+    if (title.isNotEmpty && _taskController.text.isEmpty) {
+      _taskController.value = TextEditingValue(
+        text: title,
+        selection: TextSelection.collapsed(offset: title.length),
+      );
+      notifier.state = notifier.state.copyWith(title: '');
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _taskFocusNode.requestFocus();
+    });
+  }
+
   /// Guards against a second entry while the first is still awaiting. The
   /// composer wires this to both onSubmitted and the Add button, neither
   /// debounced, and the field was previously only cleared *after* three awaits
@@ -1067,6 +1087,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
       final remoteSync = ref.read(remoteSyncServiceProvider);
       final now = utcNow();
       final listId = _listIdForNewTask(lists);
+      // Adding is a touch too: the todo hotkey's bar defaults to this list.
+      _markListViewed(listId);
       final task = TodoTask(
         id: newId(),
         listId: listId,
@@ -2627,6 +2649,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
+      if (request?.kind == QuickCaptureKind.todo) _takeQuickCaptureDraft();
+    });
     final settingsAsync = ref.watch(settingsProvider);
     final settings = settingsAsync.valueOrNull;
     _applySavedViewPreferences(settings);

@@ -25,6 +25,7 @@ import 'package:voyager/features/finance/finance_goals_view.dart';
 import 'package:voyager/features/finance/finance_net_flow_hero.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart';
 import 'package:voyager/features/finance/finance_ui_prefs.dart';
+import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
 /// Screen width at/above which the dashboard splits into ledger (left 60%) and
@@ -36,6 +37,18 @@ class FinancePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The finance hotkey's in-app path: the new-transaction sheet, holding
+    // the same session draft as the floater.
+    ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
+      if (request?.kind != QuickCaptureKind.finance) return;
+      final container = ProviderScope.containerOf(context, listen: false);
+      showFinanceTransactionModal(
+        context,
+        ref,
+        draft: ref.read(financeCaptureDraftProvider),
+        onDraft: (draft) => storeFinanceCaptureDraft(container, draft),
+      );
+    });
     final transactionsAsync = ref.watch(transactionsProvider);
     final tagColorsAsync = ref.watch(tagColorsProvider);
     final tagColors = tagColorsAsync.valueOrNull ?? const <String, int>{};

@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/platform/app_tray.dart';
 import 'package:voyager/core/caps_lock/caps_lock_indicator_scope.dart';
 import 'package:voyager/core/dev/perf_stall_logger.dart';
 import 'package:voyager/core/motion/modal_scrim_observer.dart';
@@ -21,6 +23,8 @@ import 'package:voyager/core/widgets/geometric_texture.dart';
 import 'package:voyager/core/widgets/paper_texture.dart';
 import 'package:voyager/core/widgets/petal_field.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
+import 'package:voyager/features/hotkeys/floaters/floater_host.dart';
 import 'package:voyager/features/settings/snippets_dialog.dart';
 import 'package:voyager/routing/app_router.dart';
 import 'package:window_manager/window_manager.dart';
@@ -42,6 +46,8 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   RemoteSyncService? _remoteSync;
   final _selectionOnResume = PreserveSelectionOnAppResume();
 
+  AppTray? _tray;
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +56,12 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     WindowsKeyboardReconciler.instance.install();
     if (desktopWindowChromeActive) {
       windowManager.addListener(this);
+      final tray = AppTray(
+        onOpen: () => ref.read(floaterControllerProvider).showMainWindow(),
+        onQuit: _quit,
+      );
+      _tray = tray;
+      unawaited(tray.install());
     }
   }
 
@@ -58,6 +70,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     if (desktopWindowChromeActive) {
       windowManager.removeListener(this);
     }
+    unawaited(_tray?.dispose());
     WindowsKeyboardReconciler.instance.uninstall();
     _selectionOnResume.dispose();
     WidgetsBinding.instance.removeObserver(this);
@@ -69,9 +82,19 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     unawaited(windowManager.focus());
   }
 
+  /// Closing the window hides it to the tray: the process stays up so the
+  /// global hotkeys keep working. [_quit] is the way out.
   @override
   void onWindowClose() async {
-    // Never let the flush decide whether the window closes. Each stage of it
+    mainContentOnScreen.value = false;
+    await windowManager.hide();
+    try {
+      await _flushAllPendingEdits();
+    } catch (_) {}
+  }
+
+  Future<void> _quit() async {
+    // Never let the flush decide whether the app quits. Each stage of it
     // ends in a Firestore write that, with an unreachable server, either hangs
     // until the device is back online or throws once SyncRetryPolicy gives up —
     // and both used to reach straight past `destroy()`, leaving a window that
@@ -79,6 +102,10 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     // unsent has already been written locally and goes out on the next launch.
     try {
       await _flushAllPendingEdits();
+    } catch (_) {}
+    try {
+      await hotKeyManager.unregisterAll();
+      await _tray?.dispose();
     } catch (_) {}
     await windowManager.destroy();
   }
@@ -156,18 +183,20 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
                   // [SnippetSettingsLauncher].
                   child: SnippetSettingsLauncher(
                     open: showSnippetsDialog,
-                    child: Stack(
-                      children: [
-                        const _AppBackground(),
-                        RepaintBoundary(
-                          child: DefaultTextStyle(
-                            style: AppFonts.style(
-                              color: theme.colorScheme.onSurface,
+                    child: DefaultTextStyle(
+                      style: AppFonts.style(
+                        color: theme.colorScheme.onSurface,
+                      ),
+                      child: FloaterHost(
+                        child: Stack(
+                          children: [
+                            const _AppBackground(),
+                            RepaintBoundary(
+                              child: child ?? const SizedBox.shrink(),
                             ),
-                            child: child ?? const SizedBox.shrink(),
-                          ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),

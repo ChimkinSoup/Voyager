@@ -36,7 +36,8 @@ mixin WindowVisibility<T extends StatefulWidget> on State<T>
   var _minimized = false;
 
   /// Whether the window is on screen. Gate the animation's timer on this.
-  bool get windowVisible => _lifecycleVisible && !_minimized;
+  bool get windowVisible =>
+      _lifecycleVisible && !_minimized && mainContentOnScreen.value;
 
   /// Called when [windowVisible] flips. Start or stop the timer here.
   @protected
@@ -51,6 +52,7 @@ mixin WindowVisibility<T extends StatefulWidget> on State<T>
   void initState() {
     super.initState();
     _lifecycle = AppLifecycleListener(onStateChange: _handleLifecycleState);
+    mainContentOnScreen.addListener(_handleContentOnScreen);
     if (desktopWindowChromeActive) {
       windowManager.addListener(this);
     }
@@ -59,6 +61,10 @@ mixin WindowVisibility<T extends StatefulWidget> on State<T>
   void _handleLifecycleState(AppLifecycleState state) {
     _update(() => _lifecycleVisible = _isVisible(state));
   }
+
+  // Hidden to the tray or lent to a floater: [windowVisible] reads the value
+  // itself, so there is nothing to record — only the edge to report.
+  void _handleContentOnScreen() => onWindowVisibilityChanged();
 
   @override
   void onWindowMinimize() => _update(() => _minimized = true);
@@ -90,6 +96,7 @@ mixin WindowVisibility<T extends StatefulWidget> on State<T>
   void dispose() {
     _lifecycle?.dispose();
     _lifecycle = null;
+    mainContentOnScreen.removeListener(_handleContentOnScreen);
     if (desktopWindowChromeActive) {
       windowManager.removeListener(this);
     }
