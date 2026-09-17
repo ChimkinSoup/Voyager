@@ -324,6 +324,15 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       name: 'Squat',
       formCues: 'chest up',
       targetWeightKg: 60,
+      prescriptionMode: WorkoutPrescriptionMode.custom,
+      setPrescriptions: const [
+        SetPrescription(
+          segments: [
+            SetSegment(weightKg: 60, reps: 5),
+            SetSegment(weightKg: 50, reps: 5),
+          ],
+        ),
+      ],
       createdAt: now,
       updatedAt: now,
     ),
@@ -345,15 +354,6 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       planId: 'plan-1',
       dayIndex: 2,
       exerciseId: 'exercise-1',
-      prescriptionMode: WorkoutPrescriptionMode.custom,
-      setPrescriptions: const [
-        SetPrescription(
-          segments: [
-            SetSegment(weightKg: 60, reps: 5),
-            SetSegment(weightKg: 50, reps: 5),
-          ],
-        ),
-      ],
       createdAt: now,
       updatedAt: now,
     ),

@@ -295,8 +295,8 @@
     "semantic_hash": "d643cdfd556db3bb0c54b5e81b388b54"
   },
   "lib/core/sync/remote_sync_service.dart": {
-    "mtime": 1789591966.3453586,
-    "ast_hash": "70c5e3d5e33bd3e09dc671f627d378c4",
+    "mtime": 1789606367.9042795,
+    "ast_hash": "701518623839c5c90413b55b01d8eb0a",
     "semantic_hash": ""
   },
   "lib/core/sync/soft_delete_policy.dart": {
@@ -445,8 +445,8 @@
     "semantic_hash": "b9099c39c5b0b265845ec33ee954e703"
   },
   "lib/core/widgets/labeled_text_field.dart": {
-    "mtime": 1789596626.647773,
-    "ast_hash": "7d46145fdc2f15954b41b03dacc049f9",
+    "mtime": 1789604901.1130545,
+    "ast_hash": "7847cc5802e4140083391db2e3a34b75",
     "semantic_hash": ""
   },
   "lib/core/widgets/local_overlay_wrapper.dart": {
@@ -485,8 +485,8 @@
     "semantic_hash": "79f940197abee948fbbb5c483dbab0d3"
   },
   "lib/core/widgets/tag_highlighted_text_field.dart": {
-    "mtime": 1789596626.6487732,
-    "ast_hash": "5786744dbf4beaaff218c07973e56c1d",
+    "mtime": 1789604696.9314067,
+    "ast_hash": "f0009fb3fc0e83ab62a3d31bf771380d",
     "semantic_hash": ""
   },
   "lib/core/widgets/time_selector_popovers.dart": {
@@ -510,8 +510,8 @@
     "semantic_hash": "2efed0b55292048c95a60d4678abc1d3"
   },
   "lib/core/widgets/voyager_text_field.dart": {
-    "mtime": 1789596626.6497726,
-    "ast_hash": "711ac7a21346356942f80d1dd9579db7",
+    "mtime": 1789604696.9319422,
+    "ast_hash": "193e4f1f3905fa119d8000747ea2a910",
     "semantic_hash": ""
   },
   "lib/core/widgets/voyager_time_picker_spinner.dart": {
@@ -855,8 +855,8 @@
     "semantic_hash": "c2b578da8788228fdca158c9743a3901"
   },
   "lib/features/journal/journal_page.dart": {
-    "mtime": 1789591734.2820704,
-    "ast_hash": "8b934ed2ab1d380908aee825e33ad928",
+    "mtime": 1789604751.2370696,
+    "ast_hash": "9f9e90db3d61b82f956836ae8ad66cec",
     "semantic_hash": ""
   },
   "lib/features/search/search_entry_save_helper.dart": {
@@ -1460,8 +1460,8 @@
     "semantic_hash": ""
   },
   "lib/features/finance/finance_budget_panel.dart": {
-    "mtime": 1789250164.71138,
-    "ast_hash": "e00e30f033284c1b0c76acada6804740",
+    "mtime": 1789604896.3020637,
+    "ast_hash": "b81c7f10bec10c76f58e2d68a6fac663",
     "semantic_hash": ""
   },
   "lib/features/finance/finance_category_modal.dart": {
@@ -1985,8 +1985,8 @@
     "semantic_hash": ""
   },
   "lib/features/dream_journal/dream_sticky_note.dart": {
-    "mtime": 1789596626.6497726,
-    "ast_hash": "8b12e983ae57a0143a6ac66e20d4f7da",
+    "mtime": 1789604696.9326794,
+    "ast_hash": "d8070727534ba624043c74ef480119d3",
     "semantic_hash": ""
   },
   "DREAM_JOURNAL.md": {
@@ -2095,13 +2095,13 @@
     "semantic_hash": ""
   },
   "lib/core/widgets/spell_check_field_support.dart": {
-    "mtime": 1788979677.6390529,
-    "ast_hash": "cdd3414ab7b27d81044ecd90e5842925",
+    "mtime": 1789604363.0750632,
+    "ast_hash": "3b2bc02fa01b04242137f76ed4c7543a",
     "semantic_hash": ""
   },
   "lib/core/widgets/spell_check_squiggle_layer.dart": {
-    "mtime": 1789596626.6487732,
-    "ast_hash": "d3cd90d513737964b4bbdade53d94f88",
+    "mtime": 1789604696.930865,
+    "ast_hash": "82e70b3d625722fd22bd0152262b7390",
     "semantic_hash": ""
   },
   "lib/domain/models/life_tracker_models.dart": {
@@ -2115,8 +2115,8 @@
     "semantic_hash": "d622151d2f5fdea66d5d3e5aeacd8aaf"
   },
   "lib/features/life_tracker/bucket_list_popup.dart": {
-    "mtime": 1789596626.6507733,
-    "ast_hash": "fdd06a84775c3e759895b2528de4cc3f",
+    "mtime": 1789604696.9348464,
+    "ast_hash": "3bf51bafc81c73a0de5943874719bfe5",
     "semantic_hash": ""
   },
   "lib/features/life_tracker/life_tracker_page.dart": {
@@ -2255,8 +2255,8 @@
     "semantic_hash": "a341dc55e56c335aece7e304e4ed7151"
   },
   "lib/features/leetcode/leetcode_code_field.dart": {
-    "mtime": 1789596626.6507733,
-    "ast_hash": "b79428aa8a99cadc1f2af45c1726f8b8",
+    "mtime": 1789604696.9342997,
+    "ast_hash": "cbecf4904d172b674358b4db9763504b",
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_dashboard.dart": {
@@ -2725,8 +2725,8 @@
     "semantic_hash": "0e82f4ca7d2146e31e4f07e86a506e74"
   },
   "lib/core/vim/vim_text_overlay.dart": {
-    "mtime": 1789596626.6457691,
-    "ast_hash": "34073f6487ef465b464a99c5384c2803",
+    "mtime": 1789604696.928224,
+    "ast_hash": "dd9873970297960bb57e40a24443b6ce",
     "semantic_hash": ""
   },
   "lib/features/settings/custom_quotes_dialog.dart": {
@@ -2895,8 +2895,8 @@
     "semantic_hash": ""
   },
   "lib/core/widgets/selection_highlight_layer.dart": {
-    "mtime": 1789596626.6487732,
-    "ast_hash": "6715dee2c199b54bc582475f9e67a5b5",
+    "mtime": 1789604696.930865,
+    "ast_hash": "608f6ac73c8a5cc4341a4eb6a76b3b70",
     "semantic_hash": ""
   },
   "test/selection_highlight_layer_test.dart": {
@@ -4455,13 +4455,13 @@
     "semantic_hash": "33f536d1d45c4741e626748a587ba558"
   },
   "lib/core/widgets/autocorrect_flash_layer.dart": {
-    "mtime": 1789596626.6467721,
-    "ast_hash": "6f3dd26d4f7c1d50c31cc9a35d6187c5",
+    "mtime": 1789604696.9287498,
+    "ast_hash": "1df5d518924958040aab1f69c77fc4d9",
     "semantic_hash": ""
   },
   "lib/core/widgets/prose_highlight_layer.dart": {
-    "mtime": 1789596626.647773,
-    "ast_hash": "08354ecd12ca63b299111353ec8e617a",
+    "mtime": 1789604696.930329,
+    "ast_hash": "f41ef52ca49208cedf1565180144425d",
     "semantic_hash": ""
   },
   "lib/core/widgets/prose_highlight_underlay.dart": {
@@ -4800,8 +4800,8 @@
     "semantic_hash": ""
   },
   "lib/core/widgets/line_break_mark_layer.dart": {
-    "mtime": 1789596626.647773,
-    "ast_hash": "d47a2e0e99189c3b1197a927b0628077",
+    "mtime": 1789604696.9298036,
+    "ast_hash": "c2e7b071198ed3d961e73e330cf680d1",
     "semantic_hash": ""
   },
   "lib/domain/models/job_experience_snippet.dart": {
@@ -5170,8 +5170,8 @@
     "semantic_hash": ""
   },
   "MULTILINE_FIELD_SCROLL_INSETS.md": {
-    "mtime": 1789440370.51746,
-    "ast_hash": "e4898ba942fa2548978ffe06e26e7590",
+    "mtime": 1789604538.3431723,
+    "ast_hash": "3ac8dfc79f68f031dbbf138552a4636d",
     "semantic_hash": ""
   },
   "lib/core/widgets/edit_side_panel_host.dart": {
@@ -5245,8 +5245,8 @@
     "semantic_hash": ""
   },
   "JOURNAL_DATA_LOSS_POSTMORTEM.md": {
-    "mtime": 1789574720.3148768,
-    "ast_hash": "9c18f8181dd1642106aedf76d522d80c",
+    "mtime": 1789606564.33633,
+    "ast_hash": "e6b800ec5516fe1ef6f16a0303d4067f",
     "semantic_hash": ""
   },
   "test/sync_outbox_media_drain_test.dart": {
@@ -5255,8 +5255,8 @@
     "semantic_hash": ""
   },
   "test/sync_pending_char_ops_durability_test.dart": {
-    "mtime": 1789577402.37265,
-    "ast_hash": "ff62544409cba73ee6b7dc6d1bc290d5",
+    "mtime": 1789606222.6466272,
+    "ast_hash": "6a8d5538776dcee1452ee8e38413a06a",
     "semantic_hash": ""
   },
   "test/sync_service_lifetime_test.dart": {
@@ -5317,6 +5317,16 @@
   "test/vim_overlay_scroll_follow_test.dart": {
     "mtime": 1789596407.8261156,
     "ast_hash": "75dea8c4169402bff74b6c2cf0fcdd91",
+    "semantic_hash": ""
+  },
+  "test/field_overlay_alignment_test.dart": {
+    "mtime": 1789604950.9991562,
+    "ast_hash": "b48b9ff741c15a32c44d7ec166c869f2",
+    "semantic_hash": ""
+  },
+  "test/multiline_field_scroll_insets_test.dart": {
+    "mtime": 1789605272.645032,
+    "ast_hash": "9e98f0c449e43f45dc4af5ff8af6d854",
     "semantic_hash": ""
   }
 }

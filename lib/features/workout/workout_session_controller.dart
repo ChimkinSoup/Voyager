@@ -204,11 +204,11 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
     for (var order = 0; order < dayEntries.length; order++) {
       final entry = dayEntries[order];
       final exercise = exercisesById[entry.exerciseId]!;
-      if (entry.isCustomPrescription) {
+      if (exercise.isCustomPrescription) {
         for (var setIndex = 0;
-            setIndex < entry.setPrescriptions.length;
+            setIndex < exercise.setPrescriptions.length;
             setIndex++) {
-          final prescription = entry.setPrescriptions[setIndex];
+          final prescription = exercise.setPrescriptions[setIndex];
           final top = prescription.top;
           final drops = prescription.drops;
           logs.add(
@@ -294,7 +294,10 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
     if (set == null) return;
     if (weightKg == null && reps == null) return;
 
-    final segment = state.segmentIndex;
+    // Clamped the way [ActiveWorkoutState.currentSegment] clamps: those are
+    // the numbers on the wheels, so an index left over from a set with more
+    // drops has to edit the segment being shown rather than drop the turn.
+    final segment = state.segmentIndex.clamp(0, set.allSegments.length - 1);
     late final WorkoutSetLog updated;
     if (segment <= 0) {
       updated = set.copyWith(weightKg: weightKg, reps: reps);
@@ -409,6 +412,8 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
             reps: template.reps,
             plannedWeightKg: template.plannedWeightKg,
             plannedReps: template.plannedReps,
+            dropSegments: template.dropSegments,
+            plannedDropSegments: template.plannedDropSegments,
             createdAt: now,
             updatedAt: now,
           ),
@@ -429,6 +434,7 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
       state = state.copyWith(
         logs: remaining,
         cursor: _firstIncompleteIndex(remaining),
+        segmentIndex: 0,
       );
     }
     _invalidate();

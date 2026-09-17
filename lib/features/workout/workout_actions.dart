@@ -37,6 +37,31 @@ class WorkoutActions {
     );
   }
 
+  /// Saves an explicit set recipe (varying sets and/or drops) on the movement.
+  /// Like the target above, it applies everywhere the movement is planned.
+  Future<void> saveExercisePrescription(
+    Exercise exercise, {
+    required List<SetPrescription> prescriptions,
+  }) {
+    return saveExercise(
+      exercise.copyWith(
+        prescriptionMode: WorkoutPrescriptionMode.custom,
+        setPrescriptions: prescriptions,
+      ),
+    );
+  }
+
+  /// Drops the explicit recipe so the movement falls back to its uniform
+  /// sets × reps × weight target.
+  Future<void> clearExercisePrescription(Exercise exercise) {
+    return saveExercise(
+      exercise.copyWith(
+        prescriptionMode: WorkoutPrescriptionMode.inherit,
+        setPrescriptions: const [],
+      ),
+    );
+  }
+
   Future<Exercise> createExercise(String name, {int sortOrder = 0}) async {
     final now = utcNow();
     final exercise = Exercise(
@@ -70,30 +95,6 @@ class WorkoutActions {
     await _ref.read(workoutRepositoryProvider).upsertPlanEntry(entry);
     _ref.read(remoteSyncServiceProvider).pushWorkoutPlanEntry(entry);
     invalidateWorkoutProvidersFrom(_ref);
-  }
-
-  /// Saves a per-day custom set recipe (varying sets and/or drops) on [entry].
-  Future<void> savePlacementPrescription(
-    WorkoutPlanEntry entry, {
-    required List<SetPrescription> prescriptions,
-  }) {
-    return savePlanEntry(
-      entry.copyWith(
-        prescriptionMode: WorkoutPrescriptionMode.custom,
-        setPrescriptions: prescriptions,
-      ),
-    );
-  }
-
-  /// Clears a placement's custom recipe so it inherits the exercise globals
-  /// again.
-  Future<void> clearPlacementPrescription(WorkoutPlanEntry entry) {
-    return savePlanEntry(
-      entry.copyWith(
-        prescriptionMode: WorkoutPrescriptionMode.inherit,
-        setPrescriptions: const [],
-      ),
-    );
   }
 
   /// Places [exerciseId] on [dayIndex] of [planId], appended after whatever is
@@ -237,6 +238,8 @@ Future<void> restoreExercise(
     targetSets: exercise.targetSets,
     targetReps: exercise.targetReps,
     targetWeightKg: exercise.targetWeightKg,
+    prescriptionMode: exercise.prescriptionMode,
+    setPrescriptions: exercise.setPrescriptions,
   );
   await repo.upsertExercise(restored);
   sync.pushExercise(restored);
@@ -258,8 +261,6 @@ Future<void> restoreExercise(
       dayIndex: entry.dayIndex,
       exerciseId: entry.exerciseId,
       sortOrder: entry.sortOrder,
-      prescriptionMode: entry.prescriptionMode,
-      setPrescriptions: entry.setPrescriptions,
     );
     await repo.upsertPlanEntry(row);
     sync.pushWorkoutPlanEntry(row);

@@ -12,9 +12,12 @@ import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/features/workout/workout_prescription_editor.dart';
 import 'package:voyager/features/workout/workout_units.dart';
 
 /// How many performed days the volume heatmap shows. Days the exercise wasn't
@@ -100,7 +103,7 @@ class _ExerciseDetailOverlayState extends State<_ExerciseDetailOverlay>
     final fullScreenRect = Offset.zero & size;
     final reduced = VoyagerMotion.reduced(context);
 
-    return Material(
+    final overlay = Material(
       color: Colors.black.withValues(alpha: 0.001),
       child: AnimatedBuilder(
         animation: _controller,
@@ -160,6 +163,16 @@ class _ExerciseDetailOverlayState extends State<_ExerciseDetailOverlay>
           onClose: _close,
         ),
       ),
+    );
+
+    // Closing is what saves here — every field on the card flushes on
+    // dispose — so the chord runs the same callback the × does. The scope
+    // holds focus itself: nothing on the card autofocuses, and with nothing
+    // focused below it the chord would never reach the scope.
+    return CtrlEnterToSubmitScope(
+      onSubmit: _close,
+      autofocus: true,
+      child: overlay,
     );
   }
 }
@@ -262,6 +275,21 @@ class _ExerciseDetailCardState extends ConsumerState<_ExerciseDetailCard> {
     );
   }
 
+  /// Opens the set-recipe editor and repaints with whatever it wrote.
+  ///
+  /// This one *does* `setState`, unlike [_save] below: the recipe is rendered
+  /// read-only above, so the card has to redraw to show the edit, and there is
+  /// no caret anywhere near it to fight over.
+  Future<void> _editPrescription() async {
+    final unit =
+        ref.read(settingsProvider).valueOrNull?.weightUnit ?? WeightUnit.lb;
+    await editExercisePrescription(context, ref, _exercise, unit);
+    if (!mounted) return;
+    final refreshed = await _repository.getExercise(_exercise.id);
+    if (!mounted || refreshed == null) return;
+    setState(() => _exercise = refreshed);
+  }
+
   /// Persists and pushes an edited copy of the movement. Deliberately does no
   /// `setState` of its own — [_flushCues] calls it from `dispose`, where that
   /// would throw.
@@ -326,7 +354,9 @@ class _ExerciseDetailCardState extends ConsumerState<_ExerciseDetailCard> {
             // hang it on, and a global edit that looks local is exactly the
             // kind of thing you only notice after it has rewritten your week.
             Text(
-              'Applies to every day this movement is planned on',
+              _exercise.isCustomPrescription
+                  ? 'Not in use — the custom sets below are what gets planned'
+                  : 'Applies to every day this movement is planned on',
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
               ),
@@ -336,6 +366,14 @@ class _ExerciseDetailCardState extends ConsumerState<_ExerciseDetailCard> {
               exercise: _exercise,
               unit: unit,
               onChanged: _saveTarget,
+            ),
+            const SizedBox(height: VoyagerSpacing.xl),
+            Text('Sets', style: theme.textTheme.labelLarge),
+            const SizedBox(height: VoyagerSpacing.sm),
+            _PrescriptionSection(
+              exercise: _exercise,
+              unit: unit,
+              onEdit: _editPrescription,
             ),
             const SizedBox(height: VoyagerSpacing.xl),
             Text('Weight per set', style: theme.textTheme.labelLarge),
@@ -362,6 +400,119 @@ class _ExerciseDetailCardState extends ConsumerState<_ExerciseDetailCard> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The movement's set recipe, read-only, with the one button that edits it.
+///
+/// Read-only on purpose: the sets are dialled on wheels in a sheet, and the
+/// point of showing them here is that opening a movement tells you what it is
+/// actually planned at — drops included, which the uniform [_TargetSection]
+/// above cannot express.
+class _PrescriptionSection extends StatelessWidget {
+  const _PrescriptionSection({
+    required this.exercise,
+    required this.unit,
+    required this.onEdit,
+  });
+
+  final Exercise exercise;
+  final WeightUnit unit;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = VoyagerColors.of(context);
+    final custom = exercise.isCustomPrescription;
+
+    return Container(
+      padding: const EdgeInsets.all(VoyagerSpacing.md),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!custom)
+            Text(
+              'Every set the same: ${exercise.targetSets} × '
+              '${exercise.targetReps}'
+              '${exercise.targetWeightKg > 0 ? ' · ${unit.formatKilogramsWithUnit(exercise.targetWeightKg)}' : ''}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            )
+          else
+            for (var i = 0; i < exercise.setPrescriptions.length; i++)
+              _PrescriptionRow(
+                index: i,
+                prescription: exercise.setPrescriptions[i],
+                unit: unit,
+              ),
+          const SizedBox(height: VoyagerSpacing.sm),
+          GlassButton(
+            dense: true,
+            icon: const Icon(PhosphorIconsRegular.listNumbers, size: 14),
+            label: custom ? 'Edit sets' : 'Custom sets',
+            tooltip:
+                'Vary the sets, or add drop sets — on every day this '
+                'movement is planned',
+            onPressed: onEdit,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PrescriptionRow extends StatelessWidget {
+  const _PrescriptionRow({
+    required this.index,
+    required this.prescription,
+    required this.unit,
+  });
+
+  final int index;
+  final SetPrescription prescription;
+  final WeightUnit unit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final segments = [
+      for (final segment in prescription.segments)
+        '${unit.formatKilogramsWithUnit(segment.weightKg)} × ${segment.reps}',
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 52,
+            child: Text(
+              'Set ${index + 1}',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              // An arrow chain rather than a list: a drop set is one
+              // continuous effort, and the chain says so at a glance.
+              segments.join(' → '),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

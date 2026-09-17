@@ -872,6 +872,8 @@ Map<String, dynamic> exerciseToFirestore(Exercise exercise) => {
   'targetSets': exercise.targetSets,
   'targetReps': exercise.targetReps,
   'targetWeightKg': exercise.targetWeightKg,
+  'prescriptionMode': exercise.prescriptionMode.name,
+  'setPrescriptions': [for (final p in exercise.setPrescriptions) p.toJson()],
   'createdAt': _dateToFirestoreRequired(exercise.createdAt),
   'updatedAt': _dateToFirestoreRequired(exercise.updatedAt),
   'version': exercise.version,
@@ -895,6 +897,11 @@ Exercise mergeExerciseFromRemote(
     return local;
   }
 
+  // Both prescription fields fall back to the local value when the remote
+  // payload has no such key: that is a write from a build that predates set
+  // recipes living on the movement, and taking its silence as "inherit, no
+  // sets" would wipe the recipe.
+  final modeName = data['prescriptionMode'] as String?;
   return Exercise(
     id: id,
     name: data['name'] as String? ?? local?.name ?? 'Exercise',
@@ -915,6 +922,13 @@ Exercise mergeExerciseFromRemote(
         (data['targetWeightKg'] as num?)?.toDouble() ??
         local?.targetWeightKg ??
         0,
+    prescriptionMode: modeName == null
+        ? local?.prescriptionMode ?? WorkoutPrescriptionMode.inherit
+        : WorkoutPrescriptionMode.values.asNameMap()[modeName] ??
+              WorkoutPrescriptionMode.inherit,
+    setPrescriptions: data['setPrescriptions'] is List
+        ? setPrescriptionsFromJson(data['setPrescriptions'])
+        : local?.setPrescriptions ?? const [],
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -988,8 +1002,6 @@ Map<String, dynamic> workoutPlanEntryToFirestore(WorkoutPlanEntry entry) => {
   'dayIndex': entry.dayIndex,
   'exerciseId': entry.exerciseId,
   'sortOrder': entry.sortOrder,
-  'prescriptionMode': entry.prescriptionMode.name,
-  'setPrescriptions': [for (final p in entry.setPrescriptions) p.toJson()],
   'createdAt': _dateToFirestoreRequired(entry.createdAt),
   'updatedAt': _dateToFirestoreRequired(entry.updatedAt),
   'version': entry.version,
@@ -1013,31 +1025,12 @@ WorkoutPlanEntry mergeWorkoutPlanEntryFromRemote(
     return local;
   }
 
-  final modeName = data['prescriptionMode'] as String? ?? 'inherit';
-  final mode = WorkoutPrescriptionMode.values.asNameMap()[modeName] ??
-      WorkoutPrescriptionMode.inherit;
-  final prescriptions = <SetPrescription>[];
-  final rawPrescriptions = data['setPrescriptions'];
-  if (rawPrescriptions is List) {
-    for (final item in rawPrescriptions) {
-      if (item is Map<String, dynamic>) {
-        prescriptions.add(SetPrescription.fromJson(item));
-      } else if (item is Map) {
-        prescriptions.add(
-          SetPrescription.fromJson(Map<String, dynamic>.from(item)),
-        );
-      }
-    }
-  }
-
   return WorkoutPlanEntry(
     id: id,
     planId: data['planId'] as String? ?? local?.planId ?? '',
     dayIndex: (data['dayIndex'] as num?)?.toInt() ?? local?.dayIndex ?? 0,
     exerciseId: data['exerciseId'] as String? ?? local?.exerciseId ?? '',
     sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
-    prescriptionMode: mode,
-    setPrescriptions: prescriptions,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -2973,8 +2966,9 @@ bool _remoteClears(Map<String, dynamic> data, String key) =>
 ///  - the whole weather cache, which the weather service already syncs through
 ///    its own keys in this same document;
 ///  - every `dev*` debugging flag;
-///  - `journalEntryListWidth`, `dreamSplitWidth`, and `editSidePanelWidth`,
-///    which are sized for the screen they were dragged on;
+///  - `journalEntryListWidth`, `dreamSplitWidth`, `editSidePanelWidth` and
+///    `workoutLibraryWidth`, which are sized for the screen they were dragged
+///    on;
 ///  - where the user is: `lastSeenNavPage`, the `lastViewed*Id`s, the
 ///    `*ShowAll*` scopes and `todoCompletedSectionExpanded`. These change on
 ///    every page or list switch, and while they synced, merely navigating on a

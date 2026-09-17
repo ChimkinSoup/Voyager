@@ -22,6 +22,33 @@ class ExerciseDragData {
   final Exercise exercise;
 }
 
+/// Bounds on the library rail's draggable width, in the shape the journal's
+/// [JournalEntryListLayout] uses.
+///
+/// The cap exists so the rail can't be dragged wide enough to squeeze the
+/// board: seven weekday columns stop being readable long before they run out
+/// of pixels.
+class WorkoutLibraryLayout {
+  WorkoutLibraryLayout._();
+
+  static const dividerWidth = 12.0;
+  static const defaultWidth = 208.0;
+  static const minWidth = 150.0;
+  static const maxWidth = 400.0;
+
+  /// What the day board needs to still be a board. At the app's minimum
+  /// window this plus [minWidth] and the divider is what fits.
+  static const minBoardWidth = 360.0;
+
+  static double _maxAllowed(double totalWidth) =>
+      (totalWidth - minBoardWidth - dividerWidth).clamp(minWidth, maxWidth);
+
+  /// A hard bound, applied during the drag as well as after it, so the divider
+  /// stops at the edge rather than stretching past and snapping back.
+  static double clampWidth(double width, double totalWidth) =>
+      width.clamp(minWidth, _maxAllowed(totalWidth));
+}
+
 /// The persistent library. Vertical rail on desktop, horizontal strip on a
 /// phone — the same cards either way, since what matters is that they are
 /// always reachable while a day is in view.
@@ -30,10 +57,16 @@ class WorkoutExercisePanel extends ConsumerWidget {
     super.key,
     required this.axis,
     required this.exercises,
+    this.width,
   });
 
   final Axis axis;
   final List<Exercise> exercises;
+
+  /// Rail width when [axis] is vertical. Null takes
+  /// [WorkoutLibraryLayout.defaultWidth]; the horizontal strip ignores it and
+  /// fills the row it sits in.
+  final double? width;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -71,7 +104,7 @@ class WorkoutExercisePanel extends ConsumerWidget {
     ];
 
     return Container(
-      width: horizontal ? null : 208,
+      width: horizontal ? null : (width ?? WorkoutLibraryLayout.defaultWidth),
       padding: const EdgeInsets.all(VoyagerSpacing.md),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface.withValues(alpha: 0.45),

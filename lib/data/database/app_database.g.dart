@@ -8501,6 +8501,17 @@ class $SettingsTableTable extends SettingsTable
     type: DriftSqlType.double,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _workoutLibraryWidthMeta =
+      const VerificationMeta('workoutLibraryWidth');
+  @override
+  late final GeneratedColumn<double> workoutLibraryWidth =
+      GeneratedColumn<double>(
+        'workout_library_width',
+        aliasedName,
+        true,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _showDreamStatisticsMeta =
       const VerificationMeta('showDreamStatistics');
   @override
@@ -8931,6 +8942,7 @@ class $SettingsTableTable extends SettingsTable
     jobProfilePortfolioUrl,
     jobExperienceSnippetsJson,
     dreamSplitWidth,
+    workoutLibraryWidth,
     showDreamStatistics,
     dreamNotesPinned,
     leetcodeUsername,
@@ -9978,6 +9990,15 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('workout_library_width')) {
+      context.handle(
+        _workoutLibraryWidthMeta,
+        workoutLibraryWidth.isAcceptableOrUnknown(
+          data['workout_library_width']!,
+          _workoutLibraryWidthMeta,
+        ),
+      );
+    }
     if (data.containsKey('show_dream_statistics')) {
       context.handle(
         _showDreamStatisticsMeta,
@@ -10652,6 +10673,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.double,
         data['${effectivePrefix}dream_split_width'],
       ),
+      workoutLibraryWidth: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}workout_library_width'],
+      ),
       showDreamStatistics: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}show_dream_statistics'],
@@ -10924,6 +10949,10 @@ class SettingsTableData extends DataClass
   /// the v115 migration.
   final String? jobExperienceSnippetsJson;
   final double? dreamSplitWidth;
+
+  /// Width of the workout planner's exercise library rail. Device-local like
+  /// [journalEntryListWidth] — it is sized for this screen.
+  final double? workoutLibraryWidth;
   final bool showDreamStatistics;
   final bool dreamNotesPinned;
   final String? leetcodeUsername;
@@ -11086,6 +11115,7 @@ class SettingsTableData extends DataClass
     this.jobProfilePortfolioUrl,
     this.jobExperienceSnippetsJson,
     this.dreamSplitWidth,
+    this.workoutLibraryWidth,
     required this.showDreamStatistics,
     required this.dreamNotesPinned,
     this.leetcodeUsername,
@@ -11389,6 +11419,9 @@ class SettingsTableData extends DataClass
     if (!nullToAbsent || dreamSplitWidth != null) {
       map['dream_split_width'] = Variable<double>(dreamSplitWidth);
     }
+    if (!nullToAbsent || workoutLibraryWidth != null) {
+      map['workout_library_width'] = Variable<double>(workoutLibraryWidth);
+    }
     map['show_dream_statistics'] = Variable<bool>(showDreamStatistics);
     map['dream_notes_pinned'] = Variable<bool>(dreamNotesPinned);
     if (!nullToAbsent || leetcodeUsername != null) {
@@ -11615,6 +11648,9 @@ class SettingsTableData extends DataClass
       dreamSplitWidth: dreamSplitWidth == null && nullToAbsent
           ? const Value.absent()
           : Value(dreamSplitWidth),
+      workoutLibraryWidth: workoutLibraryWidth == null && nullToAbsent
+          ? const Value.absent()
+          : Value(workoutLibraryWidth),
       showDreamStatistics: Value(showDreamStatistics),
       dreamNotesPinned: Value(dreamNotesPinned),
       leetcodeUsername: leetcodeUsername == null && nullToAbsent
@@ -11921,6 +11957,9 @@ class SettingsTableData extends DataClass
         json['jobExperienceSnippetsJson'],
       ),
       dreamSplitWidth: serializer.fromJson<double?>(json['dreamSplitWidth']),
+      workoutLibraryWidth: serializer.fromJson<double?>(
+        json['workoutLibraryWidth'],
+      ),
       showDreamStatistics: serializer.fromJson<bool>(
         json['showDreamStatistics'],
       ),
@@ -12182,6 +12221,7 @@ class SettingsTableData extends DataClass
         jobExperienceSnippetsJson,
       ),
       'dreamSplitWidth': serializer.toJson<double?>(dreamSplitWidth),
+      'workoutLibraryWidth': serializer.toJson<double?>(workoutLibraryWidth),
       'showDreamStatistics': serializer.toJson<bool>(showDreamStatistics),
       'dreamNotesPinned': serializer.toJson<bool>(dreamNotesPinned),
       'leetcodeUsername': serializer.toJson<String?>(leetcodeUsername),
@@ -12333,6 +12373,7 @@ class SettingsTableData extends DataClass
     Value<String?> jobProfilePortfolioUrl = const Value.absent(),
     Value<String?> jobExperienceSnippetsJson = const Value.absent(),
     Value<double?> dreamSplitWidth = const Value.absent(),
+    Value<double?> workoutLibraryWidth = const Value.absent(),
     bool? showDreamStatistics,
     bool? dreamNotesPinned,
     Value<String?> leetcodeUsername = const Value.absent(),
@@ -12571,6 +12612,9 @@ class SettingsTableData extends DataClass
     dreamSplitWidth: dreamSplitWidth.present
         ? dreamSplitWidth.value
         : this.dreamSplitWidth,
+    workoutLibraryWidth: workoutLibraryWidth.present
+        ? workoutLibraryWidth.value
+        : this.workoutLibraryWidth,
     showDreamStatistics: showDreamStatistics ?? this.showDreamStatistics,
     dreamNotesPinned: dreamNotesPinned ?? this.dreamNotesPinned,
     leetcodeUsername: leetcodeUsername.present
@@ -12952,6 +12996,9 @@ class SettingsTableData extends DataClass
       dreamSplitWidth: data.dreamSplitWidth.present
           ? data.dreamSplitWidth.value
           : this.dreamSplitWidth,
+      workoutLibraryWidth: data.workoutLibraryWidth.present
+          ? data.workoutLibraryWidth.value
+          : this.workoutLibraryWidth,
       showDreamStatistics: data.showDreamStatistics.present
           ? data.showDreamStatistics.value
           : this.showDreamStatistics,
@@ -13169,6 +13216,7 @@ class SettingsTableData extends DataClass
           ..write('jobProfilePortfolioUrl: $jobProfilePortfolioUrl, ')
           ..write('jobExperienceSnippetsJson: $jobExperienceSnippetsJson, ')
           ..write('dreamSplitWidth: $dreamSplitWidth, ')
+          ..write('workoutLibraryWidth: $workoutLibraryWidth, ')
           ..write('showDreamStatistics: $showDreamStatistics, ')
           ..write('dreamNotesPinned: $dreamNotesPinned, ')
           ..write('leetcodeUsername: $leetcodeUsername, ')
@@ -13314,6 +13362,7 @@ class SettingsTableData extends DataClass
     jobProfilePortfolioUrl,
     jobExperienceSnippetsJson,
     dreamSplitWidth,
+    workoutLibraryWidth,
     showDreamStatistics,
     dreamNotesPinned,
     leetcodeUsername,
@@ -13480,6 +13529,7 @@ class SettingsTableData extends DataClass
           other.jobProfilePortfolioUrl == this.jobProfilePortfolioUrl &&
           other.jobExperienceSnippetsJson == this.jobExperienceSnippetsJson &&
           other.dreamSplitWidth == this.dreamSplitWidth &&
+          other.workoutLibraryWidth == this.workoutLibraryWidth &&
           other.showDreamStatistics == this.showDreamStatistics &&
           other.dreamNotesPinned == this.dreamNotesPinned &&
           other.leetcodeUsername == this.leetcodeUsername &&
@@ -13622,6 +13672,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<String?> jobProfilePortfolioUrl;
   final Value<String?> jobExperienceSnippetsJson;
   final Value<double?> dreamSplitWidth;
+  final Value<double?> workoutLibraryWidth;
   final Value<bool> showDreamStatistics;
   final Value<bool> dreamNotesPinned;
   final Value<String?> leetcodeUsername;
@@ -13762,6 +13813,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.jobProfilePortfolioUrl = const Value.absent(),
     this.jobExperienceSnippetsJson = const Value.absent(),
     this.dreamSplitWidth = const Value.absent(),
+    this.workoutLibraryWidth = const Value.absent(),
     this.showDreamStatistics = const Value.absent(),
     this.dreamNotesPinned = const Value.absent(),
     this.leetcodeUsername = const Value.absent(),
@@ -13903,6 +13955,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.jobProfilePortfolioUrl = const Value.absent(),
     this.jobExperienceSnippetsJson = const Value.absent(),
     this.dreamSplitWidth = const Value.absent(),
+    this.workoutLibraryWidth = const Value.absent(),
     this.showDreamStatistics = const Value.absent(),
     this.dreamNotesPinned = const Value.absent(),
     this.leetcodeUsername = const Value.absent(),
@@ -14044,6 +14097,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<String>? jobProfilePortfolioUrl,
     Expression<String>? jobExperienceSnippetsJson,
     Expression<double>? dreamSplitWidth,
+    Expression<double>? workoutLibraryWidth,
     Expression<bool>? showDreamStatistics,
     Expression<bool>? dreamNotesPinned,
     Expression<String>? leetcodeUsername,
@@ -14268,6 +14322,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (jobExperienceSnippetsJson != null)
         'job_experience_snippets_json': jobExperienceSnippetsJson,
       if (dreamSplitWidth != null) 'dream_split_width': dreamSplitWidth,
+      if (workoutLibraryWidth != null)
+        'workout_library_width': workoutLibraryWidth,
       if (showDreamStatistics != null)
         'show_dream_statistics': showDreamStatistics,
       if (dreamNotesPinned != null) 'dream_notes_pinned': dreamNotesPinned,
@@ -14423,6 +14479,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<String?>? jobProfilePortfolioUrl,
     Value<String?>? jobExperienceSnippetsJson,
     Value<double?>? dreamSplitWidth,
+    Value<double?>? workoutLibraryWidth,
     Value<bool>? showDreamStatistics,
     Value<bool>? dreamNotesPinned,
     Value<String?>? leetcodeUsername,
@@ -14622,6 +14679,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       jobExperienceSnippetsJson:
           jobExperienceSnippetsJson ?? this.jobExperienceSnippetsJson,
       dreamSplitWidth: dreamSplitWidth ?? this.dreamSplitWidth,
+      workoutLibraryWidth: workoutLibraryWidth ?? this.workoutLibraryWidth,
       showDreamStatistics: showDreamStatistics ?? this.showDreamStatistics,
       dreamNotesPinned: dreamNotesPinned ?? this.dreamNotesPinned,
       leetcodeUsername: leetcodeUsername ?? this.leetcodeUsername,
@@ -15141,6 +15199,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     if (dreamSplitWidth.present) {
       map['dream_split_width'] = Variable<double>(dreamSplitWidth.value);
     }
+    if (workoutLibraryWidth.present) {
+      map['workout_library_width'] = Variable<double>(
+        workoutLibraryWidth.value,
+      );
+    }
     if (showDreamStatistics.present) {
       map['show_dream_statistics'] = Variable<bool>(showDreamStatistics.value);
     }
@@ -15378,6 +15441,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('jobProfilePortfolioUrl: $jobProfilePortfolioUrl, ')
           ..write('jobExperienceSnippetsJson: $jobExperienceSnippetsJson, ')
           ..write('dreamSplitWidth: $dreamSplitWidth, ')
+          ..write('workoutLibraryWidth: $workoutLibraryWidth, ')
           ..write('showDreamStatistics: $showDreamStatistics, ')
           ..write('dreamNotesPinned: $dreamNotesPinned, ')
           ..write('leetcodeUsername: $leetcodeUsername, ')
@@ -30923,6 +30987,30 @@ class $ExercisesTableTable extends ExercisesTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _prescriptionModeMeta = const VerificationMeta(
+    'prescriptionMode',
+  );
+  @override
+  late final GeneratedColumn<String> prescriptionMode = GeneratedColumn<String>(
+    'prescription_mode',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('inherit'),
+  );
+  static const VerificationMeta _setPrescriptionsJsonMeta =
+      const VerificationMeta('setPrescriptionsJson');
+  @override
+  late final GeneratedColumn<String> setPrescriptionsJson =
+      GeneratedColumn<String>(
+        'set_prescriptions_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('[]'),
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -30978,6 +31066,8 @@ class $ExercisesTableTable extends ExercisesTable
     targetSets,
     targetReps,
     targetWeightKg,
+    prescriptionMode,
+    setPrescriptionsJson,
     createdAt,
     updatedAt,
     version,
@@ -31044,6 +31134,24 @@ class $ExercisesTableTable extends ExercisesTable
         targetWeightKg.isAcceptableOrUnknown(
           data['target_weight_kg']!,
           _targetWeightKgMeta,
+        ),
+      );
+    }
+    if (data.containsKey('prescription_mode')) {
+      context.handle(
+        _prescriptionModeMeta,
+        prescriptionMode.isAcceptableOrUnknown(
+          data['prescription_mode']!,
+          _prescriptionModeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('set_prescriptions_json')) {
+      context.handle(
+        _setPrescriptionsJsonMeta,
+        setPrescriptionsJson.isAcceptableOrUnknown(
+          data['set_prescriptions_json']!,
+          _setPrescriptionsJsonMeta,
         ),
       );
     }
@@ -31116,6 +31224,14 @@ class $ExercisesTableTable extends ExercisesTable
         DriftSqlType.double,
         data['${effectivePrefix}target_weight_kg'],
       )!,
+      prescriptionMode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}prescription_mode'],
+      )!,
+      setPrescriptionsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}set_prescriptions_json'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -31154,6 +31270,15 @@ class ExercisesTableData extends DataClass
   final int targetSets;
   final int targetReps;
   final double targetWeightKg;
+
+  /// `inherit` | `custom` — see [WorkoutPrescriptionMode]. Custom means the
+  /// three targets above are superseded by [setPrescriptionsJson].
+  final String prescriptionMode;
+
+  /// JSON list of set prescriptions when [prescriptionMode] is custom. Held
+  /// here rather than on the placement so a movement's drop sets follow it
+  /// onto every day it is planned on.
+  final String setPrescriptionsJson;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -31167,6 +31292,8 @@ class ExercisesTableData extends DataClass
     required this.targetSets,
     required this.targetReps,
     required this.targetWeightKg,
+    required this.prescriptionMode,
+    required this.setPrescriptionsJson,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -31185,6 +31312,8 @@ class ExercisesTableData extends DataClass
     map['target_sets'] = Variable<int>(targetSets);
     map['target_reps'] = Variable<int>(targetReps);
     map['target_weight_kg'] = Variable<double>(targetWeightKg);
+    map['prescription_mode'] = Variable<String>(prescriptionMode);
+    map['set_prescriptions_json'] = Variable<String>(setPrescriptionsJson);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -31206,6 +31335,8 @@ class ExercisesTableData extends DataClass
       targetSets: Value(targetSets),
       targetReps: Value(targetReps),
       targetWeightKg: Value(targetWeightKg),
+      prescriptionMode: Value(prescriptionMode),
+      setPrescriptionsJson: Value(setPrescriptionsJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -31229,6 +31360,10 @@ class ExercisesTableData extends DataClass
       targetSets: serializer.fromJson<int>(json['targetSets']),
       targetReps: serializer.fromJson<int>(json['targetReps']),
       targetWeightKg: serializer.fromJson<double>(json['targetWeightKg']),
+      prescriptionMode: serializer.fromJson<String>(json['prescriptionMode']),
+      setPrescriptionsJson: serializer.fromJson<String>(
+        json['setPrescriptionsJson'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -31247,6 +31382,8 @@ class ExercisesTableData extends DataClass
       'targetSets': serializer.toJson<int>(targetSets),
       'targetReps': serializer.toJson<int>(targetReps),
       'targetWeightKg': serializer.toJson<double>(targetWeightKg),
+      'prescriptionMode': serializer.toJson<String>(prescriptionMode),
+      'setPrescriptionsJson': serializer.toJson<String>(setPrescriptionsJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -31263,6 +31400,8 @@ class ExercisesTableData extends DataClass
     int? targetSets,
     int? targetReps,
     double? targetWeightKg,
+    String? prescriptionMode,
+    String? setPrescriptionsJson,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -31276,6 +31415,8 @@ class ExercisesTableData extends DataClass
     targetSets: targetSets ?? this.targetSets,
     targetReps: targetReps ?? this.targetReps,
     targetWeightKg: targetWeightKg ?? this.targetWeightKg,
+    prescriptionMode: prescriptionMode ?? this.prescriptionMode,
+    setPrescriptionsJson: setPrescriptionsJson ?? this.setPrescriptionsJson,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -31299,6 +31440,12 @@ class ExercisesTableData extends DataClass
       targetWeightKg: data.targetWeightKg.present
           ? data.targetWeightKg.value
           : this.targetWeightKg,
+      prescriptionMode: data.prescriptionMode.present
+          ? data.prescriptionMode.value
+          : this.prescriptionMode,
+      setPrescriptionsJson: data.setPrescriptionsJson.present
+          ? data.setPrescriptionsJson.value
+          : this.setPrescriptionsJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -31317,6 +31464,8 @@ class ExercisesTableData extends DataClass
           ..write('targetSets: $targetSets, ')
           ..write('targetReps: $targetReps, ')
           ..write('targetWeightKg: $targetWeightKg, ')
+          ..write('prescriptionMode: $prescriptionMode, ')
+          ..write('setPrescriptionsJson: $setPrescriptionsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -31335,6 +31484,8 @@ class ExercisesTableData extends DataClass
     targetSets,
     targetReps,
     targetWeightKg,
+    prescriptionMode,
+    setPrescriptionsJson,
     createdAt,
     updatedAt,
     version,
@@ -31352,6 +31503,8 @@ class ExercisesTableData extends DataClass
           other.targetSets == this.targetSets &&
           other.targetReps == this.targetReps &&
           other.targetWeightKg == this.targetWeightKg &&
+          other.prescriptionMode == this.prescriptionMode &&
+          other.setPrescriptionsJson == this.setPrescriptionsJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -31367,6 +31520,8 @@ class ExercisesTableCompanion extends UpdateCompanion<ExercisesTableData> {
   final Value<int> targetSets;
   final Value<int> targetReps;
   final Value<double> targetWeightKg;
+  final Value<String> prescriptionMode;
+  final Value<String> setPrescriptionsJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -31381,6 +31536,8 @@ class ExercisesTableCompanion extends UpdateCompanion<ExercisesTableData> {
     this.targetSets = const Value.absent(),
     this.targetReps = const Value.absent(),
     this.targetWeightKg = const Value.absent(),
+    this.prescriptionMode = const Value.absent(),
+    this.setPrescriptionsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -31396,6 +31553,8 @@ class ExercisesTableCompanion extends UpdateCompanion<ExercisesTableData> {
     this.targetSets = const Value.absent(),
     this.targetReps = const Value.absent(),
     this.targetWeightKg = const Value.absent(),
+    this.prescriptionMode = const Value.absent(),
+    this.setPrescriptionsJson = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -31414,6 +31573,8 @@ class ExercisesTableCompanion extends UpdateCompanion<ExercisesTableData> {
     Expression<int>? targetSets,
     Expression<int>? targetReps,
     Expression<double>? targetWeightKg,
+    Expression<String>? prescriptionMode,
+    Expression<String>? setPrescriptionsJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -31429,6 +31590,9 @@ class ExercisesTableCompanion extends UpdateCompanion<ExercisesTableData> {
       if (targetSets != null) 'target_sets': targetSets,
       if (targetReps != null) 'target_reps': targetReps,
       if (targetWeightKg != null) 'target_weight_kg': targetWeightKg,
+      if (prescriptionMode != null) 'prescription_mode': prescriptionMode,
+      if (setPrescriptionsJson != null)
+        'set_prescriptions_json': setPrescriptionsJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -31446,6 +31610,8 @@ class ExercisesTableCompanion extends UpdateCompanion<ExercisesTableData> {
     Value<int>? targetSets,
     Value<int>? targetReps,
     Value<double>? targetWeightKg,
+    Value<String>? prescriptionMode,
+    Value<String>? setPrescriptionsJson,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -31461,6 +31627,8 @@ class ExercisesTableCompanion extends UpdateCompanion<ExercisesTableData> {
       targetSets: targetSets ?? this.targetSets,
       targetReps: targetReps ?? this.targetReps,
       targetWeightKg: targetWeightKg ?? this.targetWeightKg,
+      prescriptionMode: prescriptionMode ?? this.prescriptionMode,
+      setPrescriptionsJson: setPrescriptionsJson ?? this.setPrescriptionsJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -31496,6 +31664,14 @@ class ExercisesTableCompanion extends UpdateCompanion<ExercisesTableData> {
     if (targetWeightKg.present) {
       map['target_weight_kg'] = Variable<double>(targetWeightKg.value);
     }
+    if (prescriptionMode.present) {
+      map['prescription_mode'] = Variable<String>(prescriptionMode.value);
+    }
+    if (setPrescriptionsJson.present) {
+      map['set_prescriptions_json'] = Variable<String>(
+        setPrescriptionsJson.value,
+      );
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -31525,6 +31701,8 @@ class ExercisesTableCompanion extends UpdateCompanion<ExercisesTableData> {
           ..write('targetSets: $targetSets, ')
           ..write('targetReps: $targetReps, ')
           ..write('targetWeightKg: $targetWeightKg, ')
+          ..write('prescriptionMode: $prescriptionMode, ')
+          ..write('setPrescriptionsJson: $setPrescriptionsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -32207,30 +32385,6 @@ class $WorkoutPlanEntriesTableTable extends WorkoutPlanEntriesTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
-  static const VerificationMeta _prescriptionModeMeta = const VerificationMeta(
-    'prescriptionMode',
-  );
-  @override
-  late final GeneratedColumn<String> prescriptionMode = GeneratedColumn<String>(
-    'prescription_mode',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant('inherit'),
-  );
-  static const VerificationMeta _setPrescriptionsJsonMeta =
-      const VerificationMeta('setPrescriptionsJson');
-  @override
-  late final GeneratedColumn<String> setPrescriptionsJson =
-      GeneratedColumn<String>(
-        'set_prescriptions_json',
-        aliasedName,
-        false,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-        defaultValue: const Constant('[]'),
-      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -32283,8 +32437,6 @@ class $WorkoutPlanEntriesTableTable extends WorkoutPlanEntriesTable
     dayIndex,
     exerciseId,
     sortOrder,
-    prescriptionMode,
-    setPrescriptionsJson,
     createdAt,
     updatedAt,
     version,
@@ -32335,24 +32487,6 @@ class $WorkoutPlanEntriesTableTable extends WorkoutPlanEntriesTable
       context.handle(
         _sortOrderMeta,
         sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
-      );
-    }
-    if (data.containsKey('prescription_mode')) {
-      context.handle(
-        _prescriptionModeMeta,
-        prescriptionMode.isAcceptableOrUnknown(
-          data['prescription_mode']!,
-          _prescriptionModeMeta,
-        ),
-      );
-    }
-    if (data.containsKey('set_prescriptions_json')) {
-      context.handle(
-        _setPrescriptionsJsonMeta,
-        setPrescriptionsJson.isAcceptableOrUnknown(
-          data['set_prescriptions_json']!,
-          _setPrescriptionsJsonMeta,
-        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -32415,14 +32549,6 @@ class $WorkoutPlanEntriesTableTable extends WorkoutPlanEntriesTable
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
-      prescriptionMode: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}prescription_mode'],
-      )!,
-      setPrescriptionsJson: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}set_prescriptions_json'],
-      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -32455,12 +32581,6 @@ class WorkoutPlanEntriesTableData extends DataClass
   final int dayIndex;
   final String exerciseId;
   final int sortOrder;
-
-  /// `inherit` | `custom` — see [WorkoutPrescriptionMode].
-  final String prescriptionMode;
-
-  /// JSON list of set prescriptions when [prescriptionMode] is custom.
-  final String setPrescriptionsJson;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -32471,8 +32591,6 @@ class WorkoutPlanEntriesTableData extends DataClass
     required this.dayIndex,
     required this.exerciseId,
     required this.sortOrder,
-    required this.prescriptionMode,
-    required this.setPrescriptionsJson,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -32486,8 +32604,6 @@ class WorkoutPlanEntriesTableData extends DataClass
     map['day_index'] = Variable<int>(dayIndex);
     map['exercise_id'] = Variable<String>(exerciseId);
     map['sort_order'] = Variable<int>(sortOrder);
-    map['prescription_mode'] = Variable<String>(prescriptionMode);
-    map['set_prescriptions_json'] = Variable<String>(setPrescriptionsJson);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -32504,8 +32620,6 @@ class WorkoutPlanEntriesTableData extends DataClass
       dayIndex: Value(dayIndex),
       exerciseId: Value(exerciseId),
       sortOrder: Value(sortOrder),
-      prescriptionMode: Value(prescriptionMode),
-      setPrescriptionsJson: Value(setPrescriptionsJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -32526,10 +32640,6 @@ class WorkoutPlanEntriesTableData extends DataClass
       dayIndex: serializer.fromJson<int>(json['dayIndex']),
       exerciseId: serializer.fromJson<String>(json['exerciseId']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
-      prescriptionMode: serializer.fromJson<String>(json['prescriptionMode']),
-      setPrescriptionsJson: serializer.fromJson<String>(
-        json['setPrescriptionsJson'],
-      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -32545,8 +32655,6 @@ class WorkoutPlanEntriesTableData extends DataClass
       'dayIndex': serializer.toJson<int>(dayIndex),
       'exerciseId': serializer.toJson<String>(exerciseId),
       'sortOrder': serializer.toJson<int>(sortOrder),
-      'prescriptionMode': serializer.toJson<String>(prescriptionMode),
-      'setPrescriptionsJson': serializer.toJson<String>(setPrescriptionsJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -32560,8 +32668,6 @@ class WorkoutPlanEntriesTableData extends DataClass
     int? dayIndex,
     String? exerciseId,
     int? sortOrder,
-    String? prescriptionMode,
-    String? setPrescriptionsJson,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -32572,8 +32678,6 @@ class WorkoutPlanEntriesTableData extends DataClass
     dayIndex: dayIndex ?? this.dayIndex,
     exerciseId: exerciseId ?? this.exerciseId,
     sortOrder: sortOrder ?? this.sortOrder,
-    prescriptionMode: prescriptionMode ?? this.prescriptionMode,
-    setPrescriptionsJson: setPrescriptionsJson ?? this.setPrescriptionsJson,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -32590,12 +32694,6 @@ class WorkoutPlanEntriesTableData extends DataClass
           ? data.exerciseId.value
           : this.exerciseId,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
-      prescriptionMode: data.prescriptionMode.present
-          ? data.prescriptionMode.value
-          : this.prescriptionMode,
-      setPrescriptionsJson: data.setPrescriptionsJson.present
-          ? data.setPrescriptionsJson.value
-          : this.setPrescriptionsJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -32611,8 +32709,6 @@ class WorkoutPlanEntriesTableData extends DataClass
           ..write('dayIndex: $dayIndex, ')
           ..write('exerciseId: $exerciseId, ')
           ..write('sortOrder: $sortOrder, ')
-          ..write('prescriptionMode: $prescriptionMode, ')
-          ..write('setPrescriptionsJson: $setPrescriptionsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -32628,8 +32724,6 @@ class WorkoutPlanEntriesTableData extends DataClass
     dayIndex,
     exerciseId,
     sortOrder,
-    prescriptionMode,
-    setPrescriptionsJson,
     createdAt,
     updatedAt,
     version,
@@ -32644,8 +32738,6 @@ class WorkoutPlanEntriesTableData extends DataClass
           other.dayIndex == this.dayIndex &&
           other.exerciseId == this.exerciseId &&
           other.sortOrder == this.sortOrder &&
-          other.prescriptionMode == this.prescriptionMode &&
-          other.setPrescriptionsJson == this.setPrescriptionsJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -32659,8 +32751,6 @@ class WorkoutPlanEntriesTableCompanion
   final Value<int> dayIndex;
   final Value<String> exerciseId;
   final Value<int> sortOrder;
-  final Value<String> prescriptionMode;
-  final Value<String> setPrescriptionsJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -32672,8 +32762,6 @@ class WorkoutPlanEntriesTableCompanion
     this.dayIndex = const Value.absent(),
     this.exerciseId = const Value.absent(),
     this.sortOrder = const Value.absent(),
-    this.prescriptionMode = const Value.absent(),
-    this.setPrescriptionsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -32686,8 +32774,6 @@ class WorkoutPlanEntriesTableCompanion
     required int dayIndex,
     required String exerciseId,
     this.sortOrder = const Value.absent(),
-    this.prescriptionMode = const Value.absent(),
-    this.setPrescriptionsJson = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -32705,8 +32791,6 @@ class WorkoutPlanEntriesTableCompanion
     Expression<int>? dayIndex,
     Expression<String>? exerciseId,
     Expression<int>? sortOrder,
-    Expression<String>? prescriptionMode,
-    Expression<String>? setPrescriptionsJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -32719,9 +32803,6 @@ class WorkoutPlanEntriesTableCompanion
       if (dayIndex != null) 'day_index': dayIndex,
       if (exerciseId != null) 'exercise_id': exerciseId,
       if (sortOrder != null) 'sort_order': sortOrder,
-      if (prescriptionMode != null) 'prescription_mode': prescriptionMode,
-      if (setPrescriptionsJson != null)
-        'set_prescriptions_json': setPrescriptionsJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -32736,8 +32817,6 @@ class WorkoutPlanEntriesTableCompanion
     Value<int>? dayIndex,
     Value<String>? exerciseId,
     Value<int>? sortOrder,
-    Value<String>? prescriptionMode,
-    Value<String>? setPrescriptionsJson,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -32750,8 +32829,6 @@ class WorkoutPlanEntriesTableCompanion
       dayIndex: dayIndex ?? this.dayIndex,
       exerciseId: exerciseId ?? this.exerciseId,
       sortOrder: sortOrder ?? this.sortOrder,
-      prescriptionMode: prescriptionMode ?? this.prescriptionMode,
-      setPrescriptionsJson: setPrescriptionsJson ?? this.setPrescriptionsJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -32777,14 +32854,6 @@ class WorkoutPlanEntriesTableCompanion
     }
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
-    }
-    if (prescriptionMode.present) {
-      map['prescription_mode'] = Variable<String>(prescriptionMode.value);
-    }
-    if (setPrescriptionsJson.present) {
-      map['set_prescriptions_json'] = Variable<String>(
-        setPrescriptionsJson.value,
-      );
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -32812,8 +32881,6 @@ class WorkoutPlanEntriesTableCompanion
           ..write('dayIndex: $dayIndex, ')
           ..write('exerciseId: $exerciseId, ')
           ..write('sortOrder: $sortOrder, ')
-          ..write('prescriptionMode: $prescriptionMode, ')
-          ..write('setPrescriptionsJson: $setPrescriptionsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -45863,6 +45930,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<String?> jobProfilePortfolioUrl,
       Value<String?> jobExperienceSnippetsJson,
       Value<double?> dreamSplitWidth,
+      Value<double?> workoutLibraryWidth,
       Value<bool> showDreamStatistics,
       Value<bool> dreamNotesPinned,
       Value<String?> leetcodeUsername,
@@ -46005,6 +46073,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<String?> jobProfilePortfolioUrl,
       Value<String?> jobExperienceSnippetsJson,
       Value<double?> dreamSplitWidth,
+      Value<double?> workoutLibraryWidth,
       Value<bool> showDreamStatistics,
       Value<bool> dreamNotesPinned,
       Value<String?> leetcodeUsername,
@@ -46621,6 +46690,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<double> get dreamSplitWidth => $composableBuilder(
     column: $table.dreamSplitWidth,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get workoutLibraryWidth => $composableBuilder(
+    column: $table.workoutLibraryWidth,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -47341,6 +47415,11 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get workoutLibraryWidth => $composableBuilder(
+    column: $table.workoutLibraryWidth,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get showDreamStatistics => $composableBuilder(
     column: $table.showDreamStatistics,
     builder: (column) => ColumnOrderings(column),
@@ -48048,6 +48127,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<double> get workoutLibraryWidth => $composableBuilder(
+    column: $table.workoutLibraryWidth,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get showDreamStatistics => $composableBuilder(
     column: $table.showDreamStatistics,
     builder: (column) => column,
@@ -48334,6 +48418,7 @@ class $$SettingsTableTableTableManager
                 Value<String?> jobProfilePortfolioUrl = const Value.absent(),
                 Value<String?> jobExperienceSnippetsJson = const Value.absent(),
                 Value<double?> dreamSplitWidth = const Value.absent(),
+                Value<double?> workoutLibraryWidth = const Value.absent(),
                 Value<bool> showDreamStatistics = const Value.absent(),
                 Value<bool> dreamNotesPinned = const Value.absent(),
                 Value<String?> leetcodeUsername = const Value.absent(),
@@ -48478,6 +48563,7 @@ class $$SettingsTableTableTableManager
                 jobProfilePortfolioUrl: jobProfilePortfolioUrl,
                 jobExperienceSnippetsJson: jobExperienceSnippetsJson,
                 dreamSplitWidth: dreamSplitWidth,
+                workoutLibraryWidth: workoutLibraryWidth,
                 showDreamStatistics: showDreamStatistics,
                 dreamNotesPinned: dreamNotesPinned,
                 leetcodeUsername: leetcodeUsername,
@@ -48641,6 +48727,7 @@ class $$SettingsTableTableTableManager
                 Value<String?> jobProfilePortfolioUrl = const Value.absent(),
                 Value<String?> jobExperienceSnippetsJson = const Value.absent(),
                 Value<double?> dreamSplitWidth = const Value.absent(),
+                Value<double?> workoutLibraryWidth = const Value.absent(),
                 Value<bool> showDreamStatistics = const Value.absent(),
                 Value<bool> dreamNotesPinned = const Value.absent(),
                 Value<String?> leetcodeUsername = const Value.absent(),
@@ -48785,6 +48872,7 @@ class $$SettingsTableTableTableManager
                 jobProfilePortfolioUrl: jobProfilePortfolioUrl,
                 jobExperienceSnippetsJson: jobExperienceSnippetsJson,
                 dreamSplitWidth: dreamSplitWidth,
+                workoutLibraryWidth: workoutLibraryWidth,
                 showDreamStatistics: showDreamStatistics,
                 dreamNotesPinned: dreamNotesPinned,
                 leetcodeUsername: leetcodeUsername,
@@ -56774,6 +56862,8 @@ typedef $$ExercisesTableTableCreateCompanionBuilder =
       Value<int> targetSets,
       Value<int> targetReps,
       Value<double> targetWeightKg,
+      Value<String> prescriptionMode,
+      Value<String> setPrescriptionsJson,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -56790,6 +56880,8 @@ typedef $$ExercisesTableTableUpdateCompanionBuilder =
       Value<int> targetSets,
       Value<int> targetReps,
       Value<double> targetWeightKg,
+      Value<String> prescriptionMode,
+      Value<String> setPrescriptionsJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -56843,6 +56935,16 @@ class $$ExercisesTableTableFilterComposer
 
   ColumnFilters<double> get targetWeightKg => $composableBuilder(
     column: $table.targetWeightKg,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get prescriptionMode => $composableBuilder(
+    column: $table.prescriptionMode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get setPrescriptionsJson => $composableBuilder(
+    column: $table.setPrescriptionsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -56916,6 +57018,16 @@ class $$ExercisesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get prescriptionMode => $composableBuilder(
+    column: $table.prescriptionMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get setPrescriptionsJson => $composableBuilder(
+    column: $table.setPrescriptionsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -56978,6 +57090,16 @@ class $$ExercisesTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get prescriptionMode => $composableBuilder(
+    column: $table.prescriptionMode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get setPrescriptionsJson => $composableBuilder(
+    column: $table.setPrescriptionsJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -57036,6 +57158,8 @@ class $$ExercisesTableTableTableManager
                 Value<int> targetSets = const Value.absent(),
                 Value<int> targetReps = const Value.absent(),
                 Value<double> targetWeightKg = const Value.absent(),
+                Value<String> prescriptionMode = const Value.absent(),
+                Value<String> setPrescriptionsJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -57050,6 +57174,8 @@ class $$ExercisesTableTableTableManager
                 targetSets: targetSets,
                 targetReps: targetReps,
                 targetWeightKg: targetWeightKg,
+                prescriptionMode: prescriptionMode,
+                setPrescriptionsJson: setPrescriptionsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -57066,6 +57192,8 @@ class $$ExercisesTableTableTableManager
                 Value<int> targetSets = const Value.absent(),
                 Value<int> targetReps = const Value.absent(),
                 Value<double> targetWeightKg = const Value.absent(),
+                Value<String> prescriptionMode = const Value.absent(),
+                Value<String> setPrescriptionsJson = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -57080,6 +57208,8 @@ class $$ExercisesTableTableTableManager
                 targetSets: targetSets,
                 targetReps: targetReps,
                 targetWeightKg: targetWeightKg,
+                prescriptionMode: prescriptionMode,
+                setPrescriptionsJson: setPrescriptionsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -57430,8 +57560,6 @@ typedef $$WorkoutPlanEntriesTableTableCreateCompanionBuilder =
       required int dayIndex,
       required String exerciseId,
       Value<int> sortOrder,
-      Value<String> prescriptionMode,
-      Value<String> setPrescriptionsJson,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -57445,8 +57573,6 @@ typedef $$WorkoutPlanEntriesTableTableUpdateCompanionBuilder =
       Value<int> dayIndex,
       Value<String> exerciseId,
       Value<int> sortOrder,
-      Value<String> prescriptionMode,
-      Value<String> setPrescriptionsJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -57485,16 +57611,6 @@ class $$WorkoutPlanEntriesTableTableFilterComposer
 
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get prescriptionMode => $composableBuilder(
-    column: $table.prescriptionMode,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get setPrescriptionsJson => $composableBuilder(
-    column: $table.setPrescriptionsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -57553,16 +57669,6 @@ class $$WorkoutPlanEntriesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get prescriptionMode => $composableBuilder(
-    column: $table.prescriptionMode,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get setPrescriptionsJson => $composableBuilder(
-    column: $table.setPrescriptionsJson,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -57609,16 +57715,6 @@ class $$WorkoutPlanEntriesTableTableAnnotationComposer
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
-
-  GeneratedColumn<String> get prescriptionMode => $composableBuilder(
-    column: $table.prescriptionMode,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get setPrescriptionsJson => $composableBuilder(
-    column: $table.setPrescriptionsJson,
-    builder: (column) => column,
-  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -57684,8 +57780,6 @@ class $$WorkoutPlanEntriesTableTableTableManager
                 Value<int> dayIndex = const Value.absent(),
                 Value<String> exerciseId = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
-                Value<String> prescriptionMode = const Value.absent(),
-                Value<String> setPrescriptionsJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -57697,8 +57791,6 @@ class $$WorkoutPlanEntriesTableTableTableManager
                 dayIndex: dayIndex,
                 exerciseId: exerciseId,
                 sortOrder: sortOrder,
-                prescriptionMode: prescriptionMode,
-                setPrescriptionsJson: setPrescriptionsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -57712,8 +57804,6 @@ class $$WorkoutPlanEntriesTableTableTableManager
                 required int dayIndex,
                 required String exerciseId,
                 Value<int> sortOrder = const Value.absent(),
-                Value<String> prescriptionMode = const Value.absent(),
-                Value<String> setPrescriptionsJson = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -57725,8 +57815,6 @@ class $$WorkoutPlanEntriesTableTableTableManager
                 dayIndex: dayIndex,
                 exerciseId: exerciseId,
                 sortOrder: sortOrder,
-                prescriptionMode: prescriptionMode,
-                setPrescriptionsJson: setPrescriptionsJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

@@ -56,6 +56,8 @@ class Exercise extends SoftDeletable {
     this.targetSets = kDefaultTargetSets,
     this.targetReps = kDefaultTargetReps,
     this.targetWeightKg = 0,
+    this.prescriptionMode = WorkoutPrescriptionMode.inherit,
+    this.setPrescriptions = const [],
   });
 
   final String name;
@@ -73,6 +75,20 @@ class Exercise extends SoftDeletable {
   final int targetReps;
   final double targetWeightKg;
 
+  /// `custom` when the movement has an explicit set-by-set recipe in
+  /// [setPrescriptions] — varying sets and/or drop sets — rather than the
+  /// uniform [targetSets] × [targetReps] above.
+  ///
+  /// Held on the movement, like the targets and for the same reason: a drop
+  /// set is a property of how the lift is performed, not of the day it was
+  /// dropped on.
+  final WorkoutPrescriptionMode prescriptionMode;
+  final List<SetPrescription> setPrescriptions;
+
+  bool get isCustomPrescription =>
+      prescriptionMode == WorkoutPrescriptionMode.custom &&
+      setPrescriptions.isNotEmpty;
+
   Exercise copyWith({
     String? name,
     String? formCues,
@@ -82,6 +98,8 @@ class Exercise extends SoftDeletable {
     int? targetSets,
     int? targetReps,
     double? targetWeightKg,
+    WorkoutPrescriptionMode? prescriptionMode,
+    List<SetPrescription>? setPrescriptions,
     DateTime? deletedAt,
     int? version,
     bool bumpVersion = true,
@@ -99,6 +117,8 @@ class Exercise extends SoftDeletable {
       targetSets: targetSets ?? this.targetSets,
       targetReps: targetReps ?? this.targetReps,
       targetWeightKg: targetWeightKg ?? this.targetWeightKg,
+      prescriptionMode: prescriptionMode ?? this.prescriptionMode,
+      setPrescriptions: setPrescriptions ?? this.setPrescriptions,
     );
   }
 
@@ -111,6 +131,8 @@ class Exercise extends SoftDeletable {
     'targetSets': targetSets,
     'targetReps': targetReps,
     'targetWeightKg': targetWeightKg,
+    'prescriptionMode': prescriptionMode.name,
+    'setPrescriptions': [for (final p in setPrescriptions) p.toJson()],
     'createdAt': createdAt.toUtc().toIso8601String(),
     'updatedAt': updatedAt.toUtc().toIso8601String(),
     'version': version,
@@ -127,6 +149,11 @@ class Exercise extends SoftDeletable {
       targetSets: json['targetSets'] as int? ?? kDefaultTargetSets,
       targetReps: json['targetReps'] as int? ?? kDefaultTargetReps,
       targetWeightKg: (json['targetWeightKg'] as num?)?.toDouble() ?? 0,
+      prescriptionMode:
+          WorkoutPrescriptionMode.values
+              .asNameMap()[json['prescriptionMode'] as String? ?? 'inherit'] ??
+          WorkoutPrescriptionMode.inherit,
+      setPrescriptions: setPrescriptionsFromJson(json['setPrescriptions']),
       createdAt: DateTime.parse(json['createdAt'] as String).toUtc(),
       updatedAt: DateTime.parse(json['updatedAt'] as String).toUtc(),
       version: json['version'] as int? ?? 0,
@@ -270,15 +297,20 @@ class SetSegment {
     reps: (json['reps'] as num?)?.toInt() ?? 0,
   );
 
+  /// Weight compared in whole grams so that two segments that are equal also
+  /// hash alike — a `< 0.001` tolerance would not, and Dart requires the two
+  /// to agree. A gram is far below anything the wheels can dial.
+  int get _weightGrams => (weightKg * 1000).round();
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is SetSegment &&
-          (weightKg - other.weightKg).abs() < 0.001 &&
+          _weightGrams == other._weightGrams &&
           reps == other.reps;
 
   @override
-  int get hashCode => Object.hash(weightKg, reps);
+  int get hashCode => Object.hash(_weightGrams, reps);
 }
 
 /// One planned set: a top segment plus optional drops.
@@ -332,7 +364,8 @@ SetSegment nextDropSegment(SetSegment previous, WeightUnit unit) {
   return SetSegment(weightKg: next.toDouble(), reps: previous.reps);
 }
 
-/// Seeds a custom placement recipe from an exercise's global uniform targets.
+/// Seeds a custom set recipe from a movement's uniform targets — the starting
+/// point when a movement is switched from inherit to custom.
 List<SetPrescription> seedPrescriptionsFromExercise(Exercise exercise) {
   final top = SetSegment(
     weightKg: exercise.targetWeightKg,
@@ -340,6 +373,21 @@ List<SetPrescription> seedPrescriptionsFromExercise(Exercise exercise) {
   );
   final count = exercise.targetSets < 1 ? 1 : exercise.targetSets;
   return [for (var i = 0; i < count; i++) SetPrescription(segments: [top])];
+}
+
+/// Decodes a `setPrescriptions` array out of an already-parsed JSON payload
+/// (a stored document or a Firestore map), tolerating both `Map<String,
+/// dynamic>` and the plain `Map` the Firestore SDK hands back for nested
+/// objects.
+List<SetPrescription> setPrescriptionsFromJson(Object? raw) {
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map<String, dynamic>)
+        SetPrescription.fromJson(item)
+      else if (item is Map)
+        SetPrescription.fromJson(Map<String, dynamic>.from(item)),
+  ];
 }
 
 String encodeSetPrescriptions(List<SetPrescription> prescriptions) =>
@@ -384,9 +432,9 @@ List<SetSegment> decodeSetSegments(String? raw) {
 
 /// One exercise placed on one day of a plan.
 ///
-/// Placement owns day/order. Numbers come either from the [Exercise] globals
-/// ([WorkoutPrescriptionMode.inherit]) or from [setPrescriptions] when the
-/// placement is in custom mode — so Monday Bench can differ from Thursday.
+/// Placement owns day and order, and nothing else: every number — uniform
+/// target or explicit set recipe — comes from the [Exercise] it points at, so
+/// the same lift is prescribed the same way on every day it appears.
 class WorkoutPlanEntry extends SoftDeletable {
   const WorkoutPlanEntry({
     required super.id,
@@ -398,28 +446,18 @@ class WorkoutPlanEntry extends SoftDeletable {
     required this.dayIndex,
     required this.exerciseId,
     this.sortOrder = 0,
-    this.prescriptionMode = WorkoutPrescriptionMode.inherit,
-    this.setPrescriptions = const [],
   });
 
   final String planId;
   final int dayIndex;
   final String exerciseId;
   final int sortOrder;
-  final WorkoutPrescriptionMode prescriptionMode;
-  final List<SetPrescription> setPrescriptions;
-
-  bool get isCustomPrescription =>
-      prescriptionMode == WorkoutPrescriptionMode.custom &&
-      setPrescriptions.isNotEmpty;
 
   WorkoutPlanEntry copyWith({
     String? planId,
     int? dayIndex,
     String? exerciseId,
     int? sortOrder,
-    WorkoutPrescriptionMode? prescriptionMode,
-    List<SetPrescription>? setPrescriptions,
     DateTime? deletedAt,
     int? version,
     bool bumpVersion = true,
@@ -434,8 +472,6 @@ class WorkoutPlanEntry extends SoftDeletable {
       dayIndex: dayIndex ?? this.dayIndex,
       exerciseId: exerciseId ?? this.exerciseId,
       sortOrder: sortOrder ?? this.sortOrder,
-      prescriptionMode: prescriptionMode ?? this.prescriptionMode,
-      setPrescriptions: setPrescriptions ?? this.setPrescriptions,
     );
   }
 
@@ -445,8 +481,6 @@ class WorkoutPlanEntry extends SoftDeletable {
     'dayIndex': dayIndex,
     'exerciseId': exerciseId,
     'sortOrder': sortOrder,
-    'prescriptionMode': prescriptionMode.name,
-    'setPrescriptions': [for (final p in setPrescriptions) p.toJson()],
     'createdAt': createdAt.toUtc().toIso8601String(),
     'updatedAt': updatedAt.toUtc().toIso8601String(),
     'version': version,
@@ -454,30 +488,12 @@ class WorkoutPlanEntry extends SoftDeletable {
   };
 
   factory WorkoutPlanEntry.fromJson(Map<String, dynamic> json) {
-    final modeName = json['prescriptionMode'] as String? ?? 'inherit';
-    final mode = WorkoutPrescriptionMode.values.asNameMap()[modeName] ??
-        WorkoutPrescriptionMode.inherit;
-    final rawPrescriptions = json['setPrescriptions'];
-    final prescriptions = <SetPrescription>[];
-    if (rawPrescriptions is List) {
-      for (final item in rawPrescriptions) {
-        if (item is Map<String, dynamic>) {
-          prescriptions.add(SetPrescription.fromJson(item));
-        } else if (item is Map) {
-          prescriptions.add(
-            SetPrescription.fromJson(Map<String, dynamic>.from(item)),
-          );
-        }
-      }
-    }
     return WorkoutPlanEntry(
       id: json['id'] as String,
       planId: json['planId'] as String,
       dayIndex: json['dayIndex'] as int? ?? 0,
       exerciseId: json['exerciseId'] as String,
       sortOrder: json['sortOrder'] as int? ?? 0,
-      prescriptionMode: mode,
-      setPrescriptions: prescriptions,
       createdAt: DateTime.parse(json['createdAt'] as String).toUtc(),
       updatedAt: DateTime.parse(json['updatedAt'] as String).toUtc(),
       version: json['version'] as int? ?? 0,

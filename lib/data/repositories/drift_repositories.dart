@@ -3010,6 +3010,7 @@ class DriftSettingsRepository implements SettingsRepository {
       showAnnualizedSubscriptionCost: row.showAnnualizedSubscriptionCost,
       colorPalette: decodeColorPaletteJson(row.colorPaletteJson),
       dreamSplitWidth: row.dreamSplitWidth,
+      workoutLibraryWidth: row.workoutLibraryWidth,
       showDreamStatistics: row.showDreamStatistics,
       dreamNotesPinned: row.dreamNotesPinned,
       leetcodeUsername: row.leetcodeUsername,
@@ -3257,6 +3258,7 @@ class DriftSettingsRepository implements SettingsRepository {
               encodeColorPaletteJson(settings.colorPalette),
             ),
             dreamSplitWidth: Value(settings.dreamSplitWidth),
+            workoutLibraryWidth: Value(settings.workoutLibraryWidth),
             showDreamStatistics: Value(settings.showDreamStatistics),
             dreamNotesPinned: Value(settings.dreamNotesPinned),
             jobProfileLinkedInUrl: Value(settings.jobProfileLinkedInUrl),
@@ -4724,6 +4726,10 @@ class DriftWorkoutRepository implements WorkoutRepository {
             targetSets: Value(exercise.targetSets),
             targetReps: Value(exercise.targetReps),
             targetWeightKg: Value(exercise.targetWeightKg),
+            prescriptionMode: Value(exercise.prescriptionMode.name),
+            setPrescriptionsJson: Value(
+              encodeSetPrescriptions(exercise.setPrescriptions),
+            ),
             createdAt: Value(exercise.createdAt),
             updatedAt: Value(exercise.updatedAt),
             version: Value(exercise.version),
@@ -4855,10 +4861,6 @@ class DriftWorkoutRepository implements WorkoutRepository {
             dayIndex: Value(entry.dayIndex),
             exerciseId: Value(entry.exerciseId),
             sortOrder: Value(entry.sortOrder),
-            prescriptionMode: Value(entry.prescriptionMode.name),
-            setPrescriptionsJson: Value(
-              encodeSetPrescriptions(entry.setPrescriptions),
-            ),
             createdAt: Value(entry.createdAt),
             updatedAt: Value(entry.updatedAt),
             version: Value(entry.version),
@@ -5148,6 +5150,10 @@ class DriftWorkoutRepository implements WorkoutRepository {
     targetSets: row.targetSets,
     targetReps: row.targetReps,
     targetWeightKg: row.targetWeightKg,
+    prescriptionMode:
+        WorkoutPrescriptionMode.values.asNameMap()[row.prescriptionMode] ??
+        WorkoutPrescriptionMode.inherit,
+    setPrescriptions: decodeSetPrescriptions(row.setPrescriptionsJson),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -5174,10 +5180,6 @@ class DriftWorkoutRepository implements WorkoutRepository {
         dayIndex: row.dayIndex,
         exerciseId: row.exerciseId,
         sortOrder: row.sortOrder,
-        prescriptionMode:
-            WorkoutPrescriptionMode.values.asNameMap()[row.prescriptionMode] ??
-            WorkoutPrescriptionMode.inherit,
-        setPrescriptions: decodeSetPrescriptions(row.setPrescriptionsJson),
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         version: row.version,

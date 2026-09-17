@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
@@ -9,6 +11,7 @@ import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/resizable_pane_divider.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/features/workout/workout_actions.dart';
@@ -43,14 +46,75 @@ class WorkoutPage extends ConsumerWidget {
   }
 }
 
-class _Planner extends ConsumerWidget {
+class _Planner extends ConsumerStatefulWidget {
   const _Planner({required this.plans, required this.exercises});
 
   final List<WorkoutPlan> plans;
   final List<Exercise> exercises;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_Planner> createState() => _PlannerState();
+}
+
+class _PlannerState extends ConsumerState<_Planner> {
+  /// Null until the stored width arrives (or the divider is first dragged),
+  /// which reads as [WorkoutLibraryLayout.defaultWidth].
+  double? _libraryWidth;
+  double? _dragStartWidth;
+  var _dragging = false;
+
+  Future<void> _persistLibraryWidth(double? width) async {
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settings = await settingsRepo.getSettings();
+    if (settings.workoutLibraryWidth == width) return;
+    await settingsRepo.saveSettings(
+      width == null
+          ? settings.copyWith(clearWorkoutLibraryWidth: true)
+          : settings.copyWith(workoutLibraryWidth: width),
+    );
+  }
+
+  void _resetLibraryWidth() {
+    setState(() => _libraryWidth = null);
+    unawaited(_persistLibraryWidth(null));
+  }
+
+  void _onDragStart(double storedWidth) {
+    _dragStartWidth = storedWidth;
+    setState(() => _dragging = true);
+  }
+
+  /// The rail is on the *right*, so dragging the divider left has to widen it
+  /// — hence the subtraction. Clamped as it moves rather than after, so the
+  /// divider stops dead at the bound instead of springing back.
+  void _onDragUpdate(double totalDelta, double totalWidth) {
+    final start = _dragStartWidth;
+    if (start == null) return;
+    setState(
+      () => _libraryWidth = WorkoutLibraryLayout.clampWidth(
+        start - totalDelta,
+        totalWidth,
+      ),
+    );
+  }
+
+  void _onDragEnd(double totalWidth) {
+    final width = _libraryWidth;
+    _dragStartWidth = null;
+    final settled = width == null
+        ? null
+        : WorkoutLibraryLayout.clampWidth(width, totalWidth);
+    setState(() {
+      _libraryWidth = settled;
+      _dragging = false;
+    });
+    unawaited(_persistLibraryWidth(settled));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final plans = widget.plans;
+    final exercises = widget.exercises;
     final mode = ref.watch(workoutPlannerModeProvider);
     final weeklyPlan =
         plans.where((p) => p.mode == WorkoutPlanMode.weekly).firstOrNull;
@@ -65,6 +129,9 @@ class _Planner extends ConsumerWidget {
 
     final settings = ref.watch(settingsProvider).valueOrNull;
     final unit = settings?.weightUnit ?? WeightUnit.lb;
+    // Adopted once, the first time settings resolve: after that the local
+    // value is the live one, and re-reading would undo a drag in flight.
+    _libraryWidth ??= settings?.workoutLibraryWidth;
     final weekStartsOnMonday = settings?.weekStartsOnMonday ?? true;
     final weeklyEntries =
         ref.watch(workoutPlanEntriesProvider(weeklyPlan.id)).valueOrNull ??
@@ -124,16 +191,37 @@ class _Planner extends ConsumerWidget {
                       ),
                     ],
                   )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(child: board),
-                      const SizedBox(width: VoyagerSpacing.md),
-                      WorkoutExercisePanel(
-                        axis: Axis.vertical,
-                        exercises: exercises,
-                      ),
-                    ],
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final totalWidth = constraints.maxWidth;
+                      final stored =
+                          _libraryWidth ?? WorkoutLibraryLayout.defaultWidth;
+                      // Already bounded during a drag; re-clamping here would
+                      // fight the pointer on the frame it lands.
+                      final libraryWidth = _dragging
+                          ? stored
+                          : WorkoutLibraryLayout.clampWidth(stored, totalWidth);
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: board),
+                          ResizablePaneDivider(
+                            width: WorkoutLibraryLayout.dividerWidth,
+                            showLine: false,
+                            onDragStart: () => _onDragStart(libraryWidth),
+                            onDragUpdate: (totalDelta) =>
+                                _onDragUpdate(totalDelta, totalWidth),
+                            onDragEnd: () => _onDragEnd(totalWidth),
+                            onDoubleTapReset: _resetLibraryWidth,
+                          ),
+                          WorkoutExercisePanel(
+                            axis: Axis.vertical,
+                            exercises: exercises,
+                            width: libraryWidth,
+                          ),
+                        ],
+                      );
+                    },
                   ),
           ),
         ),
@@ -187,24 +275,7 @@ class _PlannerToolbar extends ConsumerWidget {
             ],
           ),
         ),
-        if (plan.isActive)
-          Chip(
-            avatar: Icon(
-              PhosphorIconsFill.circle,
-              size: 10,
-              color: theme.colorScheme.primary,
-            ),
-            label: const Text('Active plan'),
-            visualDensity: VisualDensity.compact,
-          )
-        else
-          GlassButton(
-            dense: true,
-            label: 'Make active',
-            tooltip: 'Use this plan for today\'s workout, the calendar and '
-                'the analytics stat',
-            onPressed: () => WorkoutActions(ref).setActivePlan(plan.id),
-          ),
+        _ActivePlanButton(plan: plan),
         if (plan.mode == WorkoutPlanMode.cycle) ...[
           _CycleLengthControl(plan: plan),
           _CycleAnchorControl(plan: plan),
@@ -212,6 +283,72 @@ class _PlannerToolbar extends ConsumerWidget {
         AddExerciseButton(exerciseCount: exerciseCount),
         _StartTodayButton(plan: plan),
       ],
+    );
+  }
+}
+
+/// Which plan is driving today's workout, and the press that promotes this one.
+///
+/// One button in both states rather than a button that turns into a chip, and
+/// pinned to the wider of its two labels: the toolbar is a row of pills, and
+/// having one of them change shape the instant it is pressed made the press
+/// feel like it had landed on something else.
+class _ActivePlanButton extends ConsumerWidget {
+  const _ActivePlanButton({required this.plan});
+
+  final WorkoutPlan plan;
+
+  static const _activeLabel = 'Active plan';
+  static const _inactiveLabel = 'Make active';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final active = plan.isActive;
+    // What GlassButton gives a plain `label`. Restated here because holding
+    // the width takes a `child`, and a child brings its own styling.
+    final style = theme.textTheme.labelMedium?.copyWith(
+      color: theme.colorScheme.onSurface.withValues(alpha: active ? 0.4 : 1),
+      fontWeight: FontWeight.normal,
+      letterSpacing: 0.2,
+    );
+
+    return GlassButton(
+      dense: true,
+      color: active ? theme.colorScheme.primary : null,
+      tooltip: active
+          ? 'This plan drives today\'s workout, the calendar and the '
+                'analytics stat'
+          : 'Use this plan for today\'s workout, the calendar and the '
+                'analytics stat',
+      onPressed:
+          active ? null : () => WorkoutActions(ref).setActivePlan(plan.id),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            active ? PhosphorIconsFill.circle : PhosphorIconsRegular.circle,
+            size: 10,
+            color: style?.color,
+          ),
+          const SizedBox(width: 6),
+          // A Stack takes the size of its widest child, so the invisible twin
+          // holds the slot open at whichever label is longer.
+          Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              Opacity(
+                opacity: 0,
+                child: Text(
+                  active ? _inactiveLabel : _activeLabel,
+                  style: style,
+                ),
+              ),
+              Text(active ? _activeLabel : _inactiveLabel, style: style),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -253,9 +390,16 @@ class _CycleLengthControl extends ConsumerWidget {
             padding: EdgeInsets.zero,
             tooltip: 'Shorter cycle',
           ),
-          Text(
-            '${plan.cycleLength}-day',
-            style: theme.textTheme.labelMedium,
+          Padding(
+            // The count sat flush against both steppers, so the three read as
+            // one undifferentiated blob and it was easy to press the wrong end.
+            padding: const EdgeInsets.symmetric(
+              horizontal: VoyagerSpacing.sm,
+            ),
+            child: Text(
+              '${plan.cycleLength}-day',
+              style: theme.textTheme.labelMedium,
+            ),
           ),
           IconButton(
             onPressed: () => setLength(plan.cycleLength + 1),

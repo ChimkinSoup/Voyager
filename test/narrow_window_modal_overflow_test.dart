@@ -59,6 +59,7 @@ import 'package:voyager/features/study/study_name_modal.dart';
 import 'package:voyager/features/todo/todo_manage_sheet.dart';
 import 'package:voyager/features/todo/todo_settings_dialog.dart';
 import 'package:voyager/features/workout/workout_name_modal.dart';
+import 'package:voyager/features/workout/workout_prescription_editor.dart';
 import 'package:voyager/features/workout/workout_target_editor.dart';
 
 import 'narrow_window_harness.dart';
@@ -259,6 +260,18 @@ final _openers = <String, _Opener>{
         ? null
         : (
             showExerciseTargetEditor(
+              c,
+              exercise: exercise,
+              unit: WeightUnit.lb,
+            ),
+          );
+  },
+  'exercise sets': (c, r) async {
+    final exercise = await _first(r.read(exercisesProvider.future));
+    return exercise == null
+        ? null
+        : (
+            showExercisePrescriptionEditor(
               c,
               exercise: exercise,
               unit: WeightUnit.lb,

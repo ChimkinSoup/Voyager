@@ -741,6 +741,10 @@ class SettingsTable extends Table {
   /// the v115 migration.
   TextColumn get jobExperienceSnippetsJson => text().nullable()();
   RealColumn get dreamSplitWidth => real().nullable()();
+
+  /// Width of the workout planner's exercise library rail. Device-local like
+  /// [journalEntryListWidth] — it is sized for this screen.
+  RealColumn get workoutLibraryWidth => real().nullable()();
   BoolColumn get showDreamStatistics =>
       boolean().withDefault(const Constant(false))();
   BoolColumn get dreamNotesPinned =>
@@ -1027,6 +1031,17 @@ class ExercisesTable extends Table {
   IntColumn get targetSets => integer().withDefault(const Constant(3))();
   IntColumn get targetReps => integer().withDefault(const Constant(8))();
   RealColumn get targetWeightKg => real().withDefault(const Constant(0))();
+
+  /// `inherit` | `custom` — see [WorkoutPrescriptionMode]. Custom means the
+  /// three targets above are superseded by [setPrescriptionsJson].
+  TextColumn get prescriptionMode =>
+      text().withDefault(const Constant('inherit'))();
+
+  /// JSON list of set prescriptions when [prescriptionMode] is custom. Held
+  /// here rather than on the placement so a movement's drop sets follow it
+  /// onto every day it is planned on.
+  TextColumn get setPrescriptionsJson =>
+      text().withDefault(const Constant('[]'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -1102,23 +1117,45 @@ UPDATE exercises_table SET
   ), target_weight_kg)
 ''';
 
-/// A placement — which movement sits on which day, in what order. Uniform
-/// targets still live on [ExercisesTable] ([WorkoutPrescriptionMode.inherit]);
-/// custom per-day recipes (varying sets / drops) live on this row.
+/// Lifts the per-placement set recipes onto the movement they belong to, so
+/// existing drop sets survive the move from "custom for this day" to "how this
+/// lift is performed".
+///
+/// Most recently edited placement wins, for the same reason
+/// [kWorkoutTargetBackfillSql] picks that one: several days prescribing the
+/// same lift differently cannot all survive the collapse to one recipe, and
+/// the newest is the likeliest intent.
+///
+/// Bumps `version` so the migrated row outranks the remote copy — which still
+/// carries the recipe on the *entry* — on the next push. `updated_at` is left
+/// alone: this is a migration, not an edit the user made.
+const String kWorkoutPrescriptionBackfillSql = '''
+UPDATE exercises_table SET
+  prescription_mode = 'custom',
+  set_prescriptions_json = COALESCE((
+    SELECT e.set_prescriptions_json FROM workout_plan_entries_table e
+    WHERE e.exercise_id = exercises_table.id AND e.deleted_at IS NULL
+      AND e.prescription_mode = 'custom'
+    ORDER BY e.updated_at DESC LIMIT 1
+  ), set_prescriptions_json),
+  version = version + 1
+WHERE EXISTS (
+  SELECT 1 FROM workout_plan_entries_table e
+  WHERE e.exercise_id = exercises_table.id AND e.deleted_at IS NULL
+    AND e.prescription_mode = 'custom'
+    AND e.set_prescriptions_json NOT IN ('', '[]')
+)
+''';
+
+/// A placement — which movement sits on which day, in what order. Every
+/// number it is performed at lives on [ExercisesTable], uniform targets and
+/// custom set recipes alike.
 class WorkoutPlanEntriesTable extends Table {
   TextColumn get id => text()();
   TextColumn get planId => text()();
   IntColumn get dayIndex => integer()();
   TextColumn get exerciseId => text()();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
-
-  /// `inherit` | `custom` — see [WorkoutPrescriptionMode].
-  TextColumn get prescriptionMode =>
-      text().withDefault(const Constant('inherit'))();
-
-  /// JSON list of set prescriptions when [prescriptionMode] is custom.
-  TextColumn get setPrescriptionsJson =>
-      text().withDefault(const Constant('[]'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -1561,7 +1598,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 116;
+  int get schemaVersion => 117;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2850,22 +2887,55 @@ class AppDatabase extends _$AppDatabase {
         await _moveSnippetListsIntoTables();
       }
       if (from < 116) {
-        await migrator.addColumn(
-          workoutPlanEntriesTable,
-          workoutPlanEntriesTable.prescriptionMode,
-        );
-        await migrator.addColumn(
-          workoutPlanEntriesTable,
-          workoutPlanEntriesTable.setPrescriptionsJson,
-        );
-        await migrator.addColumn(
+        // This step also added `prescription_mode` and `set_prescriptions_json`
+        // to the plan-entry table. v117 moved both onto the movement, so they
+        // are no longer Dart columns and cannot be named here; a database that
+        // did run v116 still has them, and v117 reads them once before
+        // dropping the pair.
+        await _addColumnIfNotExists(
+          migrator,
+          'workout_set_logs_table',
           workoutSetLogsTable,
           workoutSetLogsTable.dropSegmentsJson,
         );
-        await migrator.addColumn(
+        await _addColumnIfNotExists(
+          migrator,
+          'workout_set_logs_table',
           workoutSetLogsTable,
           workoutSetLogsTable.plannedDropSegmentsJson,
         );
+      }
+      if (from < 117) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.workoutLibraryWidth,
+        );
+        // Set recipes moved off the placement and onto the movement, so a
+        // lift's drop sets follow it onto every day it is planned on.
+        await _addColumnIfNotExists(
+          migrator,
+          'exercises_table',
+          exercisesTable,
+          exercisesTable.prescriptionMode,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'exercises_table',
+          exercisesTable,
+          exercisesTable.setPrescriptionsJson,
+        );
+        // Guarded on the column rather than on `from`: a migration test
+        // rewinds `user_version` on a current-schema database, where the old
+        // placement columns are already gone and reading them is a SQL error.
+        if (await _columnExists(
+          'workout_plan_entries_table',
+          'set_prescriptions_json',
+        )) {
+          await customStatement(kWorkoutPrescriptionBackfillSql);
+          // Rebuilds the table from its current schema, dropping the two
+          // columns that no longer exist in Dart.
+          await migrator.alterTable(TableMigration(workoutPlanEntriesTable));
+        }
       }
     },
   );
@@ -3197,13 +3267,17 @@ class AppDatabase extends _$AppDatabase {
     TableInfo table,
     GeneratedColumn<Object> column,
   ) async {
-    final exists = await customSelect(
-      "SELECT 1 FROM pragma_table_info('$tableName') WHERE name = ?",
-      variables: [Variable.withString(column.name)],
-    ).get();
-    if (exists.isEmpty) {
+    if (!await _columnExists(tableName, column.name)) {
       await migrator.addColumn(table, column);
     }
+  }
+
+  Future<bool> _columnExists(String tableName, String columnName) async {
+    final rows = await customSelect(
+      "SELECT 1 FROM pragma_table_info('$tableName') WHERE name = ?",
+      variables: [Variable.withString(columnName)],
+    ).get();
+    return rows.isNotEmpty;
   }
 
   /// Adds a non-nullable `DateTime` column to an existing table.

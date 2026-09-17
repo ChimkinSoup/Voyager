@@ -135,6 +135,7 @@ class AppSettings {
     this.jobProfilePortfolioUrl,
     this.jobExperienceSnippets = const [],
     this.dreamSplitWidth,
+    this.workoutLibraryWidth,
     this.showDreamStatistics = false,
     this.dreamNotesPinned = false,
     this.leetcodeUsername,
@@ -403,6 +404,10 @@ class AppSettings {
   /// [journalEntryListWidth].
   final double? dreamSplitWidth;
 
+  /// Adjustable width of the workout planner's exercise library rail, again
+  /// mirroring [journalEntryListWidth].
+  final double? workoutLibraryWidth;
+
   /// Whether the analytics page shows the "logged a dream today" stat.
   final bool showDreamStatistics;
 
@@ -594,6 +599,7 @@ class AppSettings {
     String? jobProfilePortfolioUrl,
     List<JobExperienceSnippet>? jobExperienceSnippets,
     double? dreamSplitWidth,
+    double? workoutLibraryWidth,
     bool? showDreamStatistics,
     bool? dreamNotesPinned,
     String? leetcodeUsername,
@@ -638,6 +644,7 @@ class AppSettings {
     bool clearCustomStartupPage = false,
     bool clearLastSeenNavPage = false,
     bool clearDreamSplitWidth = false,
+    bool clearWorkoutLibraryWidth = false,
     // Needed by the settings merge: a field the user cleared on another device
     // has to arrive as "cleared" rather than being read as "unspecified" by
     // the `??` fallbacks below and silently keeping the old local value.
@@ -855,6 +862,9 @@ class AppSettings {
       jobExperienceSnippets:
           jobExperienceSnippets ?? this.jobExperienceSnippets,
       colorPalette: colorPalette ?? this.colorPalette,
+      workoutLibraryWidth: clearWorkoutLibraryWidth
+          ? null
+          : (workoutLibraryWidth ?? this.workoutLibraryWidth),
       dreamSplitWidth: clearDreamSplitWidth
           ? null
           : (dreamSplitWidth ?? this.dreamSplitWidth),

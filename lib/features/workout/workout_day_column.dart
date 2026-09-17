@@ -8,7 +8,7 @@ import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/features/workout/exercise_detail_view.dart';
 import 'package:voyager/features/workout/workout_actions.dart';
-import 'package:voyager/features/workout/workout_placement_prescription_editor.dart';
+import 'package:voyager/features/workout/workout_prescription_editor.dart';
 import 'package:voyager/features/workout/workout_target_editor.dart';
 import 'package:voyager/features/workout/workout_exercise_panel.dart';
 import 'package:voyager/features/workout/workout_units.dart';
@@ -270,7 +270,7 @@ class _PlanEntryCard extends ConsumerWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            _placementSummary(entry, resolved, unit),
+            exerciseSummaryLine(resolved, unit),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.labelSmall?.copyWith(
@@ -289,7 +289,7 @@ class _PlanEntryCard extends ConsumerWidget {
           onTap: () => _edit(context, ref, resolved),
         ),
         ContextMenuItem(
-          label: 'Custom sets for this day',
+          label: 'Edit sets and drops',
           icon: PhosphorIconsRegular.listNumbers,
           onTap: () => _editCustom(context, ref, resolved),
         ),
@@ -343,39 +343,21 @@ class _PlanEntryCard extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     Exercise resolved,
-  ) async {
-    final result = await showPlacementPrescriptionEditor(
-      context,
-      exercise: resolved,
-      entry: entry,
-      unit: unit,
-    );
-    if (result == null) return;
-    final actions = WorkoutActions(ref);
-    if (result.clearToInherit) {
-      await actions.clearPlacementPrescription(entry);
-    } else {
-      await actions.savePlacementPrescription(
-        entry,
-        prescriptions: result.prescriptions,
-      );
-    }
-  }
+  ) => editExercisePrescription(context, ref, resolved, unit);
 }
 
-String _placementSummary(
-  WorkoutPlanEntry entry,
-  Exercise exercise,
-  WeightUnit unit,
-) {
-  if (entry.isCustomPrescription) {
-    final n = entry.setPrescriptions.length;
-    final hasDrops = entry.setPrescriptions.any((p) => p.hasDrops);
+/// One line describing what a movement is prescribed at, for the cards that
+/// only have room for one.
+String exerciseSummaryLine(Exercise exercise, WeightUnit unit) {
+  if (exercise.isCustomPrescription) {
+    final n = exercise.setPrescriptions.length;
+    final hasDrops = exercise.setPrescriptions.any((p) => p.hasDrops);
     return hasDrops ? '$n sets (drops)' : '$n sets';
   }
   return '${exercise.targetSets} × ${exercise.targetReps}'
       '${exercise.targetWeightKg > 0 ? ' · ${unit.formatKilogramsWithUnit(exercise.targetWeightKg)}' : ''}';
 }
+
 
 class _EntryDragFeedback extends StatelessWidget {
   const _EntryDragFeedback({required this.label});

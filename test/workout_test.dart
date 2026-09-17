@@ -575,6 +575,120 @@ void main() {
       expect(curl.targetWeightKg, 0);
     });
 
+    test('the v117 backfill lifts a per-day recipe onto the movement',
+        () async {
+      // Rebuild the plan-entry table in its v116 shape so the migration's real
+      // statement runs against the columns it was written for.
+      await db.customStatement('DROP TABLE workout_plan_entries_table');
+      await db.customStatement('''
+        CREATE TABLE workout_plan_entries_table (
+          id TEXT NOT NULL PRIMARY KEY,
+          plan_id TEXT NOT NULL,
+          day_index INTEGER NOT NULL,
+          exercise_id TEXT NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          prescription_mode TEXT NOT NULL DEFAULT 'inherit',
+          set_prescriptions_json TEXT NOT NULL DEFAULT '[]',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          version INTEGER NOT NULL DEFAULT 0,
+          deleted_at TEXT
+        )
+      ''');
+
+      final now = utcNow();
+      for (final id in ['squat', 'curl']) {
+        await repo.upsertExercise(
+          Exercise(id: id, name: id, createdAt: now, updatedAt: now),
+        );
+      }
+
+      Future<void> legacyEntry({
+        required String id,
+        required String exerciseId,
+        required String mode,
+        required List<SetPrescription> prescriptions,
+        required String updatedAt,
+        String? deletedAt,
+      }) {
+        return db.customStatement(
+          'INSERT INTO workout_plan_entries_table (id, plan_id, day_index, '
+          'exercise_id, sort_order, prescription_mode, '
+          'set_prescriptions_json, created_at, updated_at, version, '
+          "deleted_at) VALUES (?, 'p', 0, ?, 0, ?, ?, ?, ?, 0, ?)",
+          [
+            id,
+            exerciseId,
+            mode,
+            encodeSetPrescriptions(prescriptions),
+            updatedAt,
+            updatedAt,
+            deletedAt,
+          ],
+        );
+      }
+
+      await legacyEntry(
+        id: 'old',
+        exerciseId: 'squat',
+        mode: 'custom',
+        prescriptions: const [
+          SetPrescription(segments: [SetSegment(weightKg: 60, reps: 10)]),
+        ],
+        updatedAt: '2026-08-01T00:00:00.000Z',
+      );
+      // Newer placement of the same lift wins the collapse to one recipe.
+      await legacyEntry(
+        id: 'new',
+        exerciseId: 'squat',
+        mode: 'custom',
+        prescriptions: const [
+          SetPrescription(
+            segments: [
+              SetSegment(weightKg: 100, reps: 5),
+              SetSegment(weightKg: 80, reps: 5),
+            ],
+          ),
+        ],
+        updatedAt: '2026-08-05T00:00:00.000Z',
+      );
+      // A tombstoned placement must not out-vote a live one just by being
+      // newer — it is no longer part of the plan.
+      await legacyEntry(
+        id: 'dead',
+        exerciseId: 'squat',
+        mode: 'custom',
+        prescriptions: const [
+          SetPrescription(segments: [SetSegment(weightKg: 5, reps: 1)]),
+        ],
+        updatedAt: '2026-08-09T00:00:00.000Z',
+        deletedAt: '2026-08-09T00:00:00.000Z',
+      );
+      // An inheriting placement leaves its movement alone.
+      await legacyEntry(
+        id: 'plain',
+        exerciseId: 'curl',
+        mode: 'inherit',
+        prescriptions: const [],
+        updatedAt: '2026-08-09T00:00:00.000Z',
+      );
+
+      await db.customStatement(kWorkoutPrescriptionBackfillSql);
+
+      final squat = (await repo.getExercise('squat'))!;
+      expect(squat.isCustomPrescription, isTrue);
+      expect(squat.setPrescriptions.single.top.weightKg, 100);
+      expect(squat.setPrescriptions.single.drops.single.weightKg, 80);
+      // Bumped so the migrated row outranks the remote copy, which still
+      // carries the recipe on the entry.
+      expect(squat.version, greaterThan(0));
+
+      final curl = (await repo.getExercise('curl'))!;
+      expect(curl.isCustomPrescription, isFalse);
+      expect(curl.setPrescriptions, isEmpty);
+      expect(curl.version, 0);
+    });
+
     test('set logs come back ordered by exercise then set', () async {
       final logs = [
         _log(sessionId: 's', exerciseId: 'b', exerciseOrder: 1, setIndex: 0),
@@ -606,6 +720,18 @@ void main() {
         Exercise(
           id: 'bench',
           name: 'Bench',
+          prescriptionMode: WorkoutPrescriptionMode.custom,
+          setPrescriptions: const [
+            SetPrescription(
+              segments: [
+                SetSegment(weightKg: 100, reps: 8),
+                SetSegment(weightKg: 80, reps: 8),
+              ],
+            ),
+            SetPrescription(
+              segments: [SetSegment(weightKg: 90, reps: 10)],
+            ),
+          ],
           createdAt: now,
           updatedAt: now,
         ),
@@ -615,27 +741,15 @@ void main() {
         planId: 'plan',
         dayIndex: 1,
         exerciseId: 'bench',
-        prescriptionMode: WorkoutPrescriptionMode.custom,
-        setPrescriptions: const [
-          SetPrescription(
-            segments: [
-              SetSegment(weightKg: 100, reps: 8),
-              SetSegment(weightKg: 80, reps: 8),
-            ],
-          ),
-          SetPrescription(
-            segments: [SetSegment(weightKg: 90, reps: 10)],
-          ),
-        ],
         createdAt: now,
         updatedAt: now,
       );
       await repo.upsertPlanEntry(entry);
 
-      final storedEntry = (await repo.getPlanEntry('entry'))!;
-      expect(storedEntry.isCustomPrescription, isTrue);
-      expect(storedEntry.setPrescriptions, hasLength(2));
-      expect(storedEntry.setPrescriptions.first.hasDrops, isTrue);
+      final storedExercise = (await repo.getExercise('bench'))!;
+      expect(storedExercise.isCustomPrescription, isTrue);
+      expect(storedExercise.setPrescriptions, hasLength(2));
+      expect(storedExercise.setPrescriptions.first.hasDrops, isTrue);
 
       await repo.upsertSession(
         WorkoutSession(
