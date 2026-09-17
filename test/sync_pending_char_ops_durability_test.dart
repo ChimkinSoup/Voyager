@@ -206,6 +206,81 @@ void main() {
     });
   });
 
+  group('text written to the row outside any editing session', () {
+    test('survives a pull after the row is published without its operations',
+        () async {
+      final before = buildService();
+      final id = await seedSyncedEntry(before);
+      before.dispose();
+
+      // A recovery writes the text straight to SQLite, so no character
+      // operation ever records it.
+      final seeded = (await journalRepo.getEntry(id))!;
+      await journalRepo.upsertEntry(
+        seeded.copyWith(body: 'Hello world', bumpVersion: true),
+      );
+
+      // Any later save publishes the row as it stands: a snapshot at the
+      // row's own revision, beside a log that still spells 'Hello'.
+      final after = buildService();
+      after.pushJournalEntryNow((await journalRepo.getEntry(id))!);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      await after.pullJournalEntries();
+      expect((await journalRepo.getEntry(id))!.body, 'Hello world');
+
+      // What the drain does with the upload the pull found owed.
+      await after.pushOutboxDocument(FirestoreCollections.journalEntries, id);
+      final dbB = AppDatabase.inMemory();
+      addTearDown(dbB.close);
+      final b = buildService(database: dbB, deviceId: 'device-b');
+      await b.pullJournalEntries();
+      expect(
+        (await DriftJournalRepository(dbB).getEntry(id))!.body,
+        'Hello world',
+      );
+    });
+
+    test("a stale row republished at its revision still takes the log's text",
+        () async {
+      final a = buildService();
+      final id = await seedSyncedEntry(a);
+      a.dispose();
+
+      final dbB = AppDatabase.inMemory();
+      addTearDown(dbB.close);
+      final repoB = DriftJournalRepository(dbB);
+      final b = buildService(database: dbB, deviceId: 'device-b');
+      await b.pullJournalEntries();
+      await b.prepareEditingSession(
+        collection: FirestoreCollections.journalEntries,
+        documentId: id,
+        initialText: 'Hello',
+      );
+      b.recordJournalTextChange(entryId: id, before: 'Hello', after: 'Hello there');
+      await b.saveJournalEntryThenScheduleUpload(
+        entryId: id,
+        saveLocal: () async {
+          final current = await repoB.getEntry(id);
+          await repoB.upsertEntry(current!.copyWith(body: 'Hello there'));
+        },
+      );
+      await b.flushDocument(FirestoreCollections.journalEntries, id);
+
+      // A has not pulled B's edit and changes the mood, publishing its stale
+      // 'Hello' as the newest revision.
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      final stale = (await journalRepo.getEntry(id))!.copyWith(mood: 3);
+      await journalRepo.upsertEntry(stale);
+      final a2 = buildService();
+      a2.pushJournalEntryNow(stale);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+
+      await a2.pullJournalEntries();
+      expect((await journalRepo.getEntry(id))!.body, 'Hello there');
+    });
+  });
+
   group('a pulled body pushed into an open editor', () {
     test("does not duplicate the other device's insertion", () async {
       final a = buildService();

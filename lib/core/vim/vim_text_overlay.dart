@@ -284,15 +284,15 @@ class _VimTextOverlayState extends State<VimTextOverlay> {
       searchColor: const Color(0xFFF2B705),
     );
 
+    // Unclipped: the field clips every layer at its border, which is what
+    // lets this paint into the vertical padding the text scrolls through.
     final scrollController = widget.scrollController;
     if (scrollController == null) {
-      return ClipRect(child: CustomPaint(painter: painter));
+      return CustomPaint(painter: painter);
     }
-    return ClipRect(
-      child: ScrollOffsetFollower(
-        controller: scrollController,
-        child: CustomPaint(painter: painter),
-      ),
+    return ScrollOffsetFollower(
+      controller: scrollController,
+      child: CustomPaint(painter: painter),
     );
   }
 }
@@ -1003,6 +1003,10 @@ class VimOverlayHost extends StatelessWidget {
           ),
       ],
     );
+    // The one clip for the field and every layer over it: the layers don't
+    // clip themselves, and a field built with `clipBehavior: Clip.none` paints
+    // its own text and caret past its viewport too.
+    field = ClipRect(child: field);
     // Always wrap while a session is live, not only in Visual: mounting this
     // inherited widget on `V` and unmounting it on Esc rebuilt the field and
     // killed typing on the following `i`.

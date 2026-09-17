@@ -299,28 +299,25 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
       // repositions it on screen, scrolling only ever moves the clipped band
       // around; content past the first viewport-height's worth of lines never
       // paints at all. TextOverflow.visible disables that self-clip so the
-      // outer ClipRect (sized to the viewport, not the document) is the only
-      // clip in effect.
+      // field's own clip at its border is the only clip in effect.
       overflow: TextOverflow.visible,
     );
 
+    // Unclipped: the field clips every layer at its border, which is what
+    // lets this paint into the vertical padding the text scrolls through.
     final scrollController = widget.scrollController;
     if (scrollController == null) {
-      return ClipRect(
-        child: Transform.translate(
-          offset: Offset(0, clearance),
-          child: richText,
-        ),
+      return Transform.translate(
+        offset: Offset(0, clearance),
+        child: richText,
       );
     }
 
-    return ClipRect(
-      child: ScrollOffsetFollower(
-        controller: scrollController,
-        child: Transform.translate(
-          offset: Offset(0, clearance),
-          child: richText,
-        ),
+    return ScrollOffsetFollower(
+      controller: scrollController,
+      child: Transform.translate(
+        offset: Offset(0, clearance),
+        child: richText,
       ),
     );
   }

@@ -2612,25 +2612,39 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                       }
                                       return KeyEventResult.ignored;
                                     },
-                                    child: LabeledTextField(
-                                      label: 'Title',
-                                      controller: _titleController,
-                                      focusNode: _titleFocusNode,
-                                      textInputAction: TextInputAction.next,
-                                      accentColor: accentColor,
-                                      contentPadding: const EdgeInsets.fromLTRB(
-                                        16,
-                                        16,
-                                        40,
-                                        16,
+                                    // 16/16 falls under Material's 48px minimum
+                                    // at desktop density, and the decorator's
+                                    // own re-centring left the Vim overlay 2px
+                                    // above the text — see
+                                    // [LabeledTextField.allowShortHeight]. The
+                                    // 48 comes back from outside, where the
+                                    // field centres text and overlay together.
+                                    child: ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        minHeight: kMinInteractiveDimension,
                                       ),
-                                      onChanged: (value) {
-                                        _metadataDirty = true;
-                                        _listTitlePreview.value = value;
-                                        _scheduleMetadataSave();
-                                      },
-                                      onSubmitted: (_) =>
-                                          _submitTitleAndFocusBody(),
+                                      child: LabeledTextField(
+                                        label: 'Title',
+                                        controller: _titleController,
+                                        focusNode: _titleFocusNode,
+                                        textInputAction: TextInputAction.next,
+                                        accentColor: accentColor,
+                                        allowShortHeight: true,
+                                        contentPadding:
+                                            const EdgeInsets.fromLTRB(
+                                              16,
+                                              16,
+                                              40,
+                                              16,
+                                            ),
+                                        onChanged: (value) {
+                                          _metadataDirty = true;
+                                          _listTitlePreview.value = value;
+                                          _scheduleMetadataSave();
+                                        },
+                                        onSubmitted: (_) =>
+                                            _submitTitleAndFocusBody(),
+                                      ),
                                     ),
                                   ),
                                   if (_selectedEntry != null)
@@ -3504,17 +3518,6 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
           cursorColor: widget.accentColor,
           onChanged: _handleChanged,
           hintText: 'Start writing...',
-          // Vertical contentPadding frames the field's internal scrollable
-          // viewport rather than scrolling away with the text inside it, so a
-          // large value (the previous default of 16) left a permanent blank
-          // strip at the top/bottom whenever the body was scrolled, with the
-          // first/last visible line clipped right at its edge. Top and bottom
-          // are set apart rather than symmetrically: the top carries the
-          // breathing room the first line needs below the border, while the
-          // bottom stays small so the strip under a scrolled body remains
-          // imperceptible. Horizontal padding is unaffected since it isn't
-          // part of the scrollable axis.
-          contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
           decoration: const InputDecoration(
             filled: false,
             border: InputBorder.none,

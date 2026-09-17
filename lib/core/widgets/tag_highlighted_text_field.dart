@@ -388,6 +388,10 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
         undoController: vim.undoController,
         scrollPadding: kVoyagerFieldScrollPadding,
         scrollPhysics: const VoyagerFieldScrollPhysics(),
+        // Multi-line text paints on past its viewport, through the vertical
+        // padding, so a scrolled body reads up to the border; the stack below
+        // clips it there instead.
+        clipBehavior: spellcheckOn ? Clip.none : Clip.hardEdge,
         onChanged: widget.onChanged,
         decoration: decoration,
       ),
@@ -556,6 +560,10 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
       ],
     );
 
+    // The one clip for the field and every layer over it, at the border: the
+    // layers don't clip themselves, and a multi-line field's own text and
+    // caret paint past its viewport.
+    final clipped = ClipRect(child: field);
     // Always wrap while Vim is on, not only in Visual — see
     // [vimSelectionTheme]. Flutter's own selection would paint a block out
     // to the paragraph's widest line behind either overlay.
@@ -563,9 +571,9 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
         ? vimSelectionTheme(
             context: context,
             hideNativeSelection: vim.overlayPaintsSelection || ownSelection,
-            child: field,
+            child: clipped,
           )
-        : field;
+        : clipped;
 
     final bordered = widget.useNotchedBorder
         ? NotchedFieldBorder(

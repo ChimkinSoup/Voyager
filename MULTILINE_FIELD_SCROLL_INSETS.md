@@ -25,7 +25,8 @@ The journal body comment in `journal_page.dart` already documents this framing b
 
 ## Desired behavior
 
-1. **Flush when scrolled.** Once the user scrolls (or the field auto-scrolls the caret), text must sit flush against the top and bottom borders — no permanent blank strip from `contentPadding` on the scroll axis.
+1. **Flush when scrolled.** Once the user scrolls (or the field auto-scrolls the caret), text must run up to the top and bottom borders — no permanent blank strip from `contentPadding` on the scroll axis.
+1a. **Same caret room top and bottom.** A caret moved past either edge of a scrolled body stops the same distance from that border, so the vertical `contentPadding` stays symmetric. At the very end of a document the last line therefore rests that far above the bottom border, mirroring the first line at the start.
 2. **Small indent at rest for the first line.** An empty or short body (nothing scrolled yet) should still give the first line a small top inset so it does not sit glued under the border. That inset must scroll *with* the content, not frame the viewport.
 3. **Clip overflow.** Nothing — caret, selection highlight, spellcheck squiggles, tag/emphasis overlays, Vim caret — may draw past the field border. Prefer clipping over adding a permanent bottom inset just for the caret. Accept that descenders on the last visible line may clip at the border; flush text is the priority.
 4. **All multiline fields.** Scope is every expanding / multiline Voyager field that shares this chrome (`TagHighlightedTextField`, `LabeledTextField`, `VoyagerTextField`, and any other multiline `TextField` wrapped the same way), not journal alone. Search’s journal dialog is a known second repro; other multiline fields should get the same treatment even if they have not been manually tested yet.
@@ -59,7 +60,7 @@ Preserve existing horizontal padding and label/notch alignment (`NotchedFieldBor
 
 ## Acceptance checks
 
-- Journal body, long entry: scroll to top → first visible line flush to top border; scroll to bottom → last visible line flush to bottom border; caret on last line does not paint past the bottom border while blinking.
+- Journal body, long entry: scroll to top → first visible line flush to top border; scroll to the middle and move the caret past the bottom edge → it stops as far from the bottom border as it does from the top when moved past the top edge; caret on last line does not paint past the bottom border while blinking.
 - Journal body, empty/short: first line still has a small top indent before any scroll.
 - Search → open a journal entry with a long body: same flush-when-scrolled behavior top and bottom (today both sides show a permanent gap).
 - Spot-check other multiline fields that use the shared text widgets (notes, dialogs, etc.): no caret spill past the border; no permanent scroll-axis gutter from content padding.

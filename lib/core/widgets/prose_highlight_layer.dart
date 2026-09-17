@@ -104,15 +104,15 @@ class _ProseHighlightLayerState extends State<ProseHighlightLayer> {
       color: widget.color,
     );
 
+    // Unclipped: the field clips every layer at its border, which is what
+    // lets this paint into the vertical padding the text scrolls through.
     final scrollController = widget.scrollController;
     if (scrollController == null) {
-      return ClipRect(child: CustomPaint(painter: painter));
+      return CustomPaint(painter: painter);
     }
-    return ClipRect(
-      child: ScrollOffsetFollower(
-        controller: scrollController,
-        child: CustomPaint(painter: painter),
-      ),
+    return ScrollOffsetFollower(
+      controller: scrollController,
+      child: CustomPaint(painter: painter),
     );
   }
 }

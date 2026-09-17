@@ -748,6 +748,8 @@ class _BucketNoteDialogState extends State<_BucketNoteDialog> {
                 autofocus: true,
                 scrollPadding: kVoyagerFieldScrollPadding,
                 scrollPhysics: const VoyagerFieldScrollPhysics(),
+                // Clipped at the border by [VimOverlayHost] instead.
+                clipBehavior: Clip.none,
                 cursorColor: vim.overlayCaretColor(theme.colorScheme.primary),
                 cursorWidth: vim.overlayCaretWidth,
                 undoController: vim.undoController,

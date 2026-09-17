@@ -200,6 +200,8 @@ class _AutocorrectFlashLayerState extends State<AutocorrectFlashLayer>
       ),
     );
 
+    // Unclipped: the field clips every layer at its border, which is what
+    // lets this paint into the vertical padding the text scrolls through.
     final scrollController = widget.scrollController;
     if (scrollController != null) {
       painted = ScrollOffsetFollower(
@@ -207,7 +209,7 @@ class _AutocorrectFlashLayerState extends State<AutocorrectFlashLayer>
         child: painted,
       );
     }
-    return ClipRect(child: painted);
+    return painted;
   }
 }
 

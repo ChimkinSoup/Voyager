@@ -304,7 +304,38 @@ recurrence names itself instead of silently losing text. If this is ever worth
 a proper test, the lever is an instrumented `JournalRepository` that stalls
 `softDeleteEntry` while the body loses focus.
 
+## Recurrence: the recovery undone by a pull — 2026-09-16
+
+The same entry later held only `Daniel's webiset test\nEarbuds\n` — the first
+30 characters ever typed into it, the only ones that reached
+`sync_operations` before the queue wedged. The row still read `version = 17`,
+`updatedAt = 06:07:15.936043Z`, exactly as the recovery left it, so no save
+wrote that text. A pull did.
+
+The recovery above wrote the body straight to SQLite, so no character operation
+ever recorded it. Publishing that row later — any save without pending
+operations — put a snapshot at the row's own revision beside a log that still
+spelled 30 characters. A pull takes text from the log, and
+`_textOwedByThisDevice` only kept local text that *outranked* the snapshot; a
+tie went to the log. The remote-compare dev tool then reported the entry in
+sync, correctly: it resolves remote text from the same log, and by then both
+sides held the same 30 characters.
+
+**Fixed:** `_textOwedByThisDevice` also keeps a row at the snapshot's own
+revision when it holds every character of the log's text in order and more,
+and queues the owed upload so the replay writes the missing operations. A row
+at the same revision that *lacks* some of the log's characters may be stale
+(another device typed, this one republished before pulling), so the log still
+wins that. Covered by the `text written to the row outside any editing session`
+group in `test/sync_pending_char_ops_durability_test.dart`; the first case
+failed before the change with the recovered text reverted.
+
 ## Standing rules
+
+- A recovery goes through the app's restore path (Settings → Import Backup,
+  `pushRestoredRecords`, which clears the log) or through the editor, never
+  straight into SQLite. Text the operation log never saw is text a pull can
+  take back.
 
 - A write's target and its payload must be captured together, from one owner. An
   id from page state and a body from a child widget on its own async lifecycle

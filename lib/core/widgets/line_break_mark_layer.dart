@@ -98,35 +98,19 @@ class _LineBreakMarkLayerState extends State<LineBreakMarkLayer> {
       em: em,
       color: widget.color,
     );
-    // Clipped top and bottom only, to the field's viewport: a line that runs
-    // right up to the wrap width puts its mark in the padding beside it.
-    final clipper = _ViewportClipper(overhang: em);
-
+    // Unclipped: the field clips every layer at its border, which leaves room
+    // both for a line that runs right up to the wrap width to put its mark in
+    // the padding beside it, and for marks to scroll through the padding above
+    // and below.
     final scrollController = widget.scrollController;
     if (scrollController == null) {
-      return ClipRect(clipper: clipper, child: CustomPaint(painter: painter));
+      return CustomPaint(painter: painter);
     }
-    return ClipRect(
-      clipper: clipper,
-      child: ScrollOffsetFollower(
-        controller: scrollController,
-        child: CustomPaint(painter: painter),
-      ),
+    return ScrollOffsetFollower(
+      controller: scrollController,
+      child: CustomPaint(painter: painter),
     );
   }
-}
-
-class _ViewportClipper extends CustomClipper<Rect> {
-  const _ViewportClipper({required this.overhang});
-
-  final double overhang;
-
-  @override
-  Rect getClip(Size size) =>
-      Rect.fromLTRB(0, 0, size.width + overhang, size.height);
-
-  @override
-  bool shouldReclip(_ViewportClipper old) => old.overhang != overhang;
 }
 
 class _LineBreakMarkPainter extends CustomPainter {

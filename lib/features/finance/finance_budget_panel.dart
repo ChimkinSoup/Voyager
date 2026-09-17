@@ -173,7 +173,7 @@ class _BudgetRow extends ConsumerWidget {
         borderRadius: BorderRadius.circular(10),
         onTap: () => showBudgetModal(context, ref, existing: budget),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

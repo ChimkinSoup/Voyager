@@ -315,6 +315,8 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
                         expands: true,
                         scrollPadding: kVoyagerFieldScrollPadding,
                         scrollPhysics: const VoyagerFieldScrollPhysics(),
+                        // Clipped at the border by [VimOverlayHost] instead.
+                        clipBehavior: Clip.none,
                         contextMenuBuilder: voyagerTextContextMenuBuilder(
                           context,
                           snippetsAllowed: vim.snippetsAllowed,

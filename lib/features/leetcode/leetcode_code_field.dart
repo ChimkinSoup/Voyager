@@ -733,7 +733,9 @@ class _LeetCodeCodeEditorState extends State<_LeetCodeCodeEditor> {
                     child: Text(_longestLine, style: widget.textStyle),
                   ),
                 ),
-                editor,
+                // The layers don't clip themselves; this keeps the Vim caret
+                // and the selection inside the box.
+                ClipRect(child: editor),
               ],
             ),
           ),

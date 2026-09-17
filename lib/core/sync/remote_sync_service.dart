@@ -2118,6 +2118,11 @@ class RemoteSyncService {
                     version: local.version,
                     updatedAt: local.updatedAt,
                   ),
+                  localIsSameRevision: _localIsSameRevision(
+                    data,
+                    version: local.version,
+                    updatedAt: local.updatedAt,
+                  ),
                 );
           if (owed != null) {
             merged = JournalEntry(
@@ -2242,6 +2247,11 @@ class RemoteSyncService {
                   localText: local.body,
                   logText: merged.body,
                   localIsNewer: _localIsNewer(
+                    data,
+                    version: local.version,
+                    updatedAt: local.updatedAt,
+                  ),
+                  localIsSameRevision: _localIsSameRevision(
                     data,
                     version: local.version,
                     updatedAt: local.updatedAt,
@@ -2381,6 +2391,11 @@ class RemoteSyncService {
                       version: local.version,
                       updatedAt: local.updatedAt,
                     ),
+                    localIsSameRevision: _localIsSameRevision(
+                      data,
+                      version: local.version,
+                      updatedAt: local.updatedAt,
+                    ),
                   );
             if (owed != null) {
               merged = TodoTask(
@@ -2500,6 +2515,28 @@ class RemoteSyncService {
     );
   }
 
+  /// Whether the local row is the very revision the resolved snapshot [data]
+  /// describes: same version, same `updatedAt`.
+  bool _localIsSameRevision(
+    Map<String, dynamic> data, {
+    required int version,
+    required DateTime updatedAt,
+  }) {
+    final remoteUpdated = parseFirestoreDate(data['updatedAt']);
+    return parseVersion(data) == version &&
+        remoteUpdated != null &&
+        remoteUpdated.isAtSameMomentAs(updatedAt);
+  }
+
+  /// Whether every character of [part] appears in [whole], in order.
+  static bool _containsInOrder(String whole, String part) {
+    var i = 0;
+    for (var j = 0; j < whole.length && i < part.length; j++) {
+      if (whole.codeUnitAt(j) == part.codeUnitAt(i)) i++;
+    }
+    return i == part.length;
+  }
+
   /// Text a pull must keep instead of the log's [logText], or null when the
   /// log's text is the right one to write.
   ///
@@ -2512,12 +2549,19 @@ class RemoteSyncService {
   /// text over the row, and the outbox replay re-read that reverted row and
   /// published it.
   ///
-  /// Two things say this device has text the log lacks: operations still
+  /// Three things say this device has text the log lacks: operations still
   /// pending in its session (the session has absorbed the log by now, so its
-  /// text is the merge of both), or a local row that outranks the resolved
+  /// text is the merge of both), a local row that outranks the resolved
   /// snapshot and disagrees with it — which, with no session, can only be
-  /// operations lost from memory. The latter is queued so the replay
-  /// re-derives them from the row.
+  /// operations lost from memory — or a row at the snapshot's own revision
+  /// holding every character of the log's text and more. The last is a row
+  /// written without operations (a recovery straight into SQLite) and then
+  /// published as it stood: the snapshot carries the row's version and
+  /// `updatedAt`, so the row no longer outranks it, while the log still spells
+  /// the older text. Only a strict superset qualifies — a row at the same
+  /// revision that lacks some of the log's characters may be stale, and the
+  /// log must win it. The latter two are queued so the replay re-derives the
+  /// missing operations from the row.
   ///
   /// A quarantined conflict on the document also keeps the row as it is: the
   /// conflict's "keep mine" resolves from the row, so writing the log's text
@@ -2528,6 +2572,7 @@ class RemoteSyncService {
     required String localText,
     required String logText,
     required bool localIsNewer,
+    required bool localIsSameRevision,
   }) async {
     if (localText != logText &&
         await _syncConflictRepository?.getConflict(
@@ -2540,7 +2585,9 @@ class RemoteSyncService {
     if (session != null && session.hasPendingOps && session.text != logText) {
       return session.text;
     }
-    if (localIsNewer && localText != logText) {
+    if (localText != logText &&
+        (localIsNewer ||
+            (localIsSameRevision && _containsInOrder(localText, logText)))) {
       if (session == null) {
         unawaited(
           OutboxSyncWorker.recordOwedUpload(

@@ -342,6 +342,12 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
             : TextAlignVertical.center,
         scrollPadding: kVoyagerFieldScrollPadding,
         scrollPhysics: const VoyagerFieldScrollPhysics(),
+        // Multi-line text paints on past its viewport, through the vertical
+        // padding, so a scrolled body reads up to the border; the stack below
+        // clips it there instead. No controller, no stack, so no clip there.
+        clipBehavior: spellcheckOn && _controller != null
+            ? Clip.none
+            : Clip.hardEdge,
       ),
     );
 
@@ -503,6 +509,10 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
             ),
         ],
       );
+      // The one clip for the field and every layer over it, at the border:
+      // the layers don't clip themselves, and a multi-line field's own text
+      // and caret paint past its viewport.
+      field = ClipRect(child: field);
     }
 
     if (vimSession != null || ownSelection) {

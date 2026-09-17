@@ -247,9 +247,13 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     // once the label has floated out of the way (focused or has content),
     // matching standard Material label+hint behavior.
     final floated = _focused || _hasText;
-    final effectiveHint = showLabel
+    final hint = showLabel
         ? (floated ? widget.hintText : null)
         : (widget.hintText ?? widget.label);
+    // An empty hint is no hint. Given one, the decorator still lays out an
+    // empty paragraph, and its baseline sits lower than the text's: the input
+    // moved down under every overlay here, by 0.4px in Iosevka.
+    final effectiveHint = hint == null || hint.isEmpty ? null : hint;
     // The same getter the prose controller was built from, not a second
     // reading of the same three properties: §5.2's invariant is that the
     // paragraph and the layers stacked around it agree about whether emphasis
@@ -312,6 +316,10 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
         undoController: vim.undoController,
         scrollPadding: kVoyagerFieldScrollPadding,
         scrollPhysics: const VoyagerFieldScrollPhysics(),
+        // Multi-line text paints on past its viewport, through the vertical
+        // padding, so a scrolled body reads up to the border; the stack below
+        // clips it there instead.
+        clipBehavior: spellcheckOn ? Clip.none : Clip.hardEdge,
         decoration: InputDecoration(
           isDense: widget.dense || widget.allowShortHeight,
           hintText: effectiveHint,
@@ -493,6 +501,10 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
             ),
         ],
       );
+      // The one clip for the field and every layer over it, at the border:
+      // the layers don't clip themselves, and a multi-line field's own text
+      // and caret paint past its viewport.
+      field = ClipRect(child: field);
     }
 
     if (vimSession != null || ownSelection) {
