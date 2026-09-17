@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_window.dart';
@@ -26,6 +27,10 @@ class FloaterController extends ChangeNotifier with WindowListener {
 
   QuickCaptureKind? get active => _active;
   QuickCaptureKind? _active;
+
+  /// False from a floater opening until the window has the main window's
+  /// placement back, which is after [active] clears.
+  bool get windowAtMainPlacement => _window.atMainPlacement;
 
   /// Shown over the floater for a moment after a save, in place of a toast —
   /// the floater is gone before a toast in the main window could be read.
@@ -84,7 +89,7 @@ class FloaterController extends ChangeNotifier with WindowListener {
       return;
     }
     if (_window.mainWindowOpen) {
-      _openInApp(kind);
+      await _openInApp(kind);
       return;
     }
     _mainFocus = FocusManager.instance.primaryFocus;
@@ -104,7 +109,7 @@ class FloaterController extends ChangeNotifier with WindowListener {
     final kind = _active;
     if (kind == null) return;
     await _dismiss(showMain: true);
-    _openInApp(kind);
+    await _openInApp(kind);
   });
 
   /// Shows [message] briefly, then dismisses.
@@ -122,6 +127,8 @@ class FloaterController extends ChangeNotifier with WindowListener {
       await _dismiss(showMain: true);
     } else {
       await _window.showMain();
+      // For [windowAtMainPlacement], when that restored a placement owed.
+      notifyListeners();
     }
     mainContentOnScreen.value = true;
   });
@@ -168,6 +175,8 @@ class FloaterController extends ChangeNotifier with WindowListener {
     _armed = false;
     notifyListeners();
     await _window.release(showMain: showMain);
+    // For [windowAtMainPlacement].
+    notifyListeners();
     // Hidden again when the floater opened over the tray; a minimized window
     // is covered by WindowVisibility's own minimize tracking.
     mainContentOnScreen.value = await windowManager.isVisible();
@@ -187,11 +196,51 @@ class FloaterController extends ChangeNotifier with WindowListener {
   /// assert.
   void _releaseFloaterFocus() => FocusManager.instance.primaryFocus?.unfocus();
 
-  void _openInApp(QuickCaptureKind kind) {
-    _ref.read(routerProvider).go(kind.path);
+  /// Closes any sheets and dialogs over the app — they would otherwise stay on
+  /// top of the page the hotkey opens — and navigates to [kind]'s page.
+  ///
+  /// The page's request goes out only once the closed modals have unmounted,
+  /// since a transaction sheet hands its draft back from `dispose`, and once
+  /// the shell has switched to the page, since that switch unfocuses whatever
+  /// the page focused before it.
+  Future<void> _openInApp(QuickCaptureKind kind) async {
+    final router = _ref.read(routerProvider);
+    final closing = <Future<Object?>>[];
+    router.routerDelegate.navigatorKey.currentState?.popUntil((route) {
+      if (route.settings is Page) return true;
+      if (route is TransitionRoute) closing.add(route.completed);
+      return false;
+    });
+    router.go(kind.path);
+    await _bounded(Future.wait(closing));
+    await _arrivedAt(router, kind.path);
+    await _bounded(WidgetsBinding.instance.endOfFrame);
     _ref.read(quickCaptureRequestProvider.notifier).state = QuickCaptureRequest(
       kind,
     );
+  }
+
+  /// Caps a wait on route animations and frames, which stall while the
+  /// window produces no frames.
+  static Future<void> _bounded(Future<Object?> future) => future
+      .then<void>((_) {})
+      .timeout(const Duration(seconds: 1), onTimeout: () {});
+
+  static Future<void> _arrivedAt(GoRouter router, String path) async {
+    final delegate = router.routerDelegate;
+    bool arrived() => delegate.currentConfiguration.uri.path == path;
+    if (arrived()) return;
+    final done = Completer<void>();
+    void check() {
+      if (arrived() && !done.isCompleted) done.complete();
+    }
+
+    delegate.addListener(check);
+    try {
+      await _bounded(done.future);
+    } finally {
+      delegate.removeListener(check);
+    }
   }
 
   @override

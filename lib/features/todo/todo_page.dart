@@ -1050,15 +1050,34 @@ class _TodoPageState extends ConsumerState<TodoPage>
   /// quick-add bar's unsaved title. Only into an empty composer — text already
   /// typed here is not the hotkey's to replace — and the title then belongs to
   /// the composer, so the bar stops offering it.
-  void _takeQuickCaptureDraft() {
+  ///
+  /// The whole draft goes with the title: a list picked on the bar that still
+  /// stands becomes the page's list, and a picked due date is dropped — the
+  /// composer has none, and left in the draft it would apply to the next bar.
+  Future<void> _takeQuickCaptureDraft() async {
     final notifier = ref.read(todoCaptureDraftProvider.notifier);
-    final title = notifier.state.title;
+    final draft = notifier.state;
+    final title = draft.title;
     if (title.isNotEmpty && _taskController.text.isEmpty) {
       _taskController.value = TextEditingValue(
         text: title,
         selection: TextSelection.collapsed(offset: title.length),
       );
-      notifier.state = notifier.state.copyWith(title: '');
+      notifier.state = const TodoCaptureDraft();
+      final pickedListId = draft.listId;
+      if (pickedListId != null) {
+        // Off disk, as the bar reads it: [settingsProvider] can lag list
+        // touches.
+        final settings = await ref
+            .read(settingsRepositoryProvider)
+            .getSettings();
+        final lists = await ref.read(todoRepositoryProvider).listLists();
+        if (!mounted) return;
+        if (draft.listIdBasis == settings.lastViewedTodoListId &&
+            lists.any((list) => list.id == pickedListId)) {
+          _selectListFromSwitcher(pickedListId);
+        }
+      }
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _taskFocusNode.requestFocus();
@@ -2650,7 +2669,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
   @override
   Widget build(BuildContext context) {
     ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
-      if (request?.kind == QuickCaptureKind.todo) _takeQuickCaptureDraft();
+      if (request?.kind == QuickCaptureKind.todo) {
+        unawaited(_takeQuickCaptureDraft());
+      }
     });
     final settingsAsync = ref.watch(settingsProvider);
     final settings = settingsAsync.valueOrNull;

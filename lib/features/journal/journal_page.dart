@@ -1218,6 +1218,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       ProviderScope.containerOf(context, listen: false),
     );
     if (!mounted) return;
+    // Held as pending, as [_createEntryOptimistic] does: one created just now
+    // can be missing from the entry list for a few frames, and build's
+    // auto-select would load the newest listed entry over it. Released once
+    // the list has it.
+    _registerPendingEntry(entry);
+    _suppressAutoSelect = true;
     if (!_viewAllJournals && _journalFilter != entry.journalId) {
       await _flushActiveEntryEdits(refreshList: true);
       if (!mounted) return;

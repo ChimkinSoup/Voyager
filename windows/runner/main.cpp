@@ -7,6 +7,18 @@
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  // One process per session: closing only hides Voyager to the tray, and a
+  // second process would fail to register the hotkeys and open the same
+  // database. A second launch hands the running instance the foreground and
+  // asks it to show its window instead. The handle is held until exit.
+  ::CreateMutex(nullptr, FALSE, L"Local\\Voyager.SingleInstance");
+  if (::GetLastError() == ERROR_ALREADY_EXISTS) {
+    ::AllowSetForegroundWindow(ASFW_ANY);
+    ::PostMessage(HWND_BROADCAST, ::RegisterWindowMessage(kShowMainWindowMessage),
+                  0, 0);
+    return EXIT_SUCCESS;
+  }
+
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {

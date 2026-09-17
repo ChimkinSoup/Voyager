@@ -35,7 +35,11 @@ class AppTray with TrayListener {
   void onTrayIconMouseDown() => onOpen();
 
   @override
-  void onTrayIconRightMouseDown() => trayManager.popUpContextMenu();
+  void onTrayIconRightMouseDown() =>
+      // Brought to the front first: Windows only dismisses a menu on
+      // click-away when its owner window is the foreground window.
+      // ignore: deprecated_member_use
+      trayManager.popUpContextMenu(bringAppToFront: true);
 
   @override
   void onTrayMenuItemClick(MenuItem menuItem) {

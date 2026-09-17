@@ -30,8 +30,12 @@ class _FloaterHostState extends ConsumerState<FloaterHost> {
     final controller = ref.watch(floaterControllerProvider);
     final kind = controller.active;
     final media = MediaQuery.of(context);
-    if (kind == null && !media.size.isEmpty) _mainSize = media.size;
-    final frozen = kind == null ? null : _mainSize;
+    // Still frozen after the floater closes, until the window is back at the
+    // main placement: the frames in between are floater-sized, and one hidden
+    // to the tray stays that size until it is next shown.
+    final atMainSize = kind == null && controller.windowAtMainPlacement;
+    if (atMainSize && !media.size.isEmpty) _mainSize = media.size;
+    final frozen = atMainSize ? null : _mainSize;
 
     return Stack(
       fit: StackFit.expand,
@@ -85,18 +89,23 @@ class _FloaterSurface extends StatelessWidget {
           children: [
             // Its own navigator, for the overlays the fields open (popovers,
             // tag suggestions, selection toolbars): the app's navigator is
-            // offstage. Keyed so a replacement starts a fresh route.
-            Navigator(
-              key: ValueKey(kind),
-              onGenerateRoute: (_) => PageRouteBuilder<void>(
-                transitionDuration: Duration.zero,
-                pageBuilder: (_, _, _) => Material(
-                  type: MaterialType.transparency,
-                  child: switch (kind) {
-                    QuickCaptureKind.todo => const TodoFloater(),
-                    QuickCaptureKind.journal => const JournalFloater(),
-                    QuickCaptureKind.finance => const FinanceFloater(),
-                  },
+            // offstage. Keyed so a replacement starts a fresh route. Without a
+            // hero controller: the app's one would pass from the replaced
+            // navigator to its successor, and the ownership check that runs
+            // after that frame null-checks a navigator already gone.
+            HeroControllerScope.none(
+              child: Navigator(
+                key: ValueKey(kind),
+                onGenerateRoute: (_) => PageRouteBuilder<void>(
+                  transitionDuration: Duration.zero,
+                  pageBuilder: (_, _, _) => Material(
+                    type: MaterialType.transparency,
+                    child: switch (kind) {
+                      QuickCaptureKind.todo => const TodoFloater(),
+                      QuickCaptureKind.journal => const JournalFloater(),
+                      QuickCaptureKind.finance => const FinanceFloater(),
+                    },
+                  ),
                 ),
               ),
             ),

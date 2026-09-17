@@ -37,6 +37,10 @@ class FloaterWindow {
 
   bool get isBorrowed => _saved != null;
 
+  /// Whether the window has the main window's own placement: not lent to a
+  /// floater, and not hidden still at a floater's size.
+  bool get atMainPlacement => _saved == null && _owedPlacement == null;
+
   int get _window {
     if (_hwnd == 0 || IsWindow(_hwnd) == 0) _hwnd = _findMainWindow();
     return _hwnd;
@@ -128,16 +132,48 @@ class FloaterWindow {
     } else if (_savedVisible) {
       final foreground = GetForegroundWindow();
       if (foreground != 0 && foreground != hwnd) {
-        SetWindowPos(
-          hwnd,
-          foreground,
-          0,
-          0,
-          0,
-          0,
-          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-        );
+        // Placed after a topmost window, the main window would join the
+        // topmost band; under the top ordinary window instead.
+        final after = _isTopmost(foreground)
+            ? _topOrdinaryWindow(except: hwnd)
+            : foreground;
+        if (after != 0) {
+          SetWindowPos(
+            hwnd,
+            after,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+          );
+        }
       }
+    }
+  }
+
+  static bool _isTopmost(int hwnd) =>
+      GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST != 0;
+
+  /// The highest window in z-order that is on screen and not topmost, or 0.
+  static int _topOrdinaryWindow({required int except}) {
+    final cloaked = calloc<Int32>();
+    try {
+      for (var w = GetTopWindow(0); w != 0; w = GetWindow(w, GW_HWNDNEXT)) {
+        if (w == except ||
+            IsWindowVisible(w) == 0 ||
+            IsIconic(w) != 0 ||
+            _isTopmost(w)) {
+          continue;
+        }
+        // Suspended store apps are "visible" but cloaked, and sit high.
+        cloaked.value = 0;
+        DwmGetWindowAttribute(w, DWMWA_CLOAKED, cloaked, sizeOf<Int32>());
+        if (cloaked.value == 0) return w;
+      }
+      return 0;
+    } finally {
+      free(cloaked);
     }
   }
 

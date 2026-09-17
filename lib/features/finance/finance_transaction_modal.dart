@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -182,6 +184,10 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
   /// back a draft of money already recorded.
   var _saved = false;
 
+  /// Completes when the save in flight has finished, either way; null when no
+  /// save is running.
+  Future<void>? _saveSettled;
+
   void _close() {
     final onClose = widget.onClose;
     if (onClose != null) {
@@ -222,7 +228,16 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
 
   @override
   void dispose() {
-    widget.onDraft?.call(_unsavedDraft());
+    final onDraft = widget.onDraft;
+    final saveSettled = _saveSettled;
+    if (onDraft != null && saveSettled != null) {
+      // Closed while a save is in flight: the fields are a draft only if the
+      // write fails.
+      final draft = _unsavedDraft();
+      unawaited(saveSettled.then((_) => onDraft(_saved ? null : draft)));
+    } else {
+      onDraft?.call(_unsavedDraft());
+    }
     _amountController.dispose();
     _originController.dispose();
     _originFocusNode.dispose();
@@ -332,6 +347,8 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     // reporting that as a failed save would send the user back to re-enter
     // money the ledger has already taken.
     var written = false;
+    final settled = Completer<void>();
+    _saveSettled = settled.future;
     try {
       // Re-read rather than trusting [existing] — see the goal sheet. Also
       // covers a retry of a new entry, whose first attempt is already on disk.
@@ -384,6 +401,9 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                   'it — this will not log a second entry.'
             : 'Could not save: $e';
       });
+    } finally {
+      _saveSettled = null;
+      settled.complete();
     }
   }
 

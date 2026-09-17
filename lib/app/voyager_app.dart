@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:voyager/app/providers.dart';
@@ -41,6 +42,8 @@ class VoyagerApp extends ConsumerStatefulWidget {
 // the local writes it fronts complete in milliseconds.
 const Duration _flushDeadline = Duration(seconds: 2);
 
+const _instanceChannel = MethodChannel('voyager/instance');
+
 class _VoyagerAppState extends ConsumerState<VoyagerApp>
     with WidgetsBindingObserver, WindowListener {
   RemoteSyncService? _remoteSync;
@@ -62,6 +65,12 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       );
       _tray = tray;
       unawaited(tray.install());
+      // A second launch, which exits after asking for this (see main.cpp).
+      _instanceChannel.setMethodCallHandler((call) async {
+        if (call.method == 'showMainWindow') {
+          await ref.read(floaterControllerProvider).showMainWindow();
+        }
+      });
     }
   }
 
@@ -69,6 +78,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   void dispose() {
     if (desktopWindowChromeActive) {
       windowManager.removeListener(this);
+      _instanceChannel.setMethodCallHandler(null);
     }
     unawaited(_tray?.dispose());
     WindowsKeyboardReconciler.instance.uninstall();
@@ -83,9 +93,15 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   }
 
   /// Closing the window hides it to the tray: the process stays up so the
-  /// global hotkeys keep working. [_quit] is the way out.
+  /// global hotkeys keep working. [_quit] is the way out. While a floater has
+  /// the window, closing it closes just the floater.
   @override
   void onWindowClose() async {
+    final floaters = ref.read(floaterControllerProvider);
+    if (floaters.active != null) {
+      await floaters.dismiss();
+      return;
+    }
     mainContentOnScreen.value = false;
     await windowManager.hide();
     try {
