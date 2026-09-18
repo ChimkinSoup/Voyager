@@ -25,20 +25,28 @@ import 'package:voyager/core/widgets/spell_check_field_support.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/features/leetcode/leetcode_code_controller.dart';
 import 'package:voyager/features/leetcode/leetcode_comment_stripper.dart';
+import 'package:voyager/features/leetcode/leetcode_type_highlight.dart';
 
 /// The highlight grammar for a stored `codeLanguage` key, falling back to
 /// Python for anything unrecognised. Public because inline `` `code` `` in the
 /// prose fields is tokenized with the same grammar the code block uses.
 Mode leetCodeHighlightMode(String language) => _modeForLanguage(language);
 
+// Built once: [CodeController] registers a grammar per distinct [Mode]
+// instance, so a fresh copy per controller would pile up registrations.
+final _java = injectPascalCaseTypes(lang_java.java);
+final _cpp = injectPascalCaseTypes(lang_cpp.cpp);
+final _typescript = injectPascalCaseTypes(lang_typescript.typescript);
+final _csharp = injectPascalCaseTypes(lang_cs.cs);
+
 Mode _modeForLanguage(String language) => switch (language) {
-  'java' => lang_java.java,
-  'cpp' => lang_cpp.cpp,
+  'java' => _java,
+  'cpp' => _cpp,
   'javascript' => lang_javascript.javascript,
-  'typescript' => lang_typescript.typescript,
+  'typescript' => _typescript,
   'go' => lang_go.go,
   'rust' => lang_rust.rust,
-  'csharp' => lang_cs.cs,
+  'csharp' => _csharp,
   _ => lang_python.python,
 };
 

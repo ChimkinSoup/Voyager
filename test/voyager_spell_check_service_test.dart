@@ -283,6 +283,35 @@ void main() {
     });
   });
 
+  group('checkIncremental — exclusion zones', () {
+    test('closing a backtick clears squiggles inside the new code span', () {
+      final service = _serviceWith({'the', 'fox'});
+      var text = '';
+      var spans = <SuggestionSpan>[];
+      for (final ch in 'the `qwik foxx`'.split('')) {
+        final newText = text + ch;
+        spans = service.checkIncremental(
+          oldText: text,
+          oldSpans: spans,
+          newText: newText,
+        );
+        text = newText;
+      }
+      expect(_flaggedWords(text, spans), isEmpty);
+    });
+
+    test('deleting a closing backtick flags the words it had covered', () {
+      final service = _serviceWith({'the', 'fox'});
+      const oldText = 'the `qwik foxx`';
+      final spans = service.checkIncremental(
+        oldText: oldText,
+        oldSpans: service.checkTextSync(oldText),
+        newText: 'the `qwik foxx',
+      );
+      expect(_flaggedWords('the `qwik foxx', spans), ['qwik', 'foxx']);
+    });
+  });
+
   group('checkIncremental — fuzz equivalence to checkTextSync', () {
     // The strongest guarantee for offset-shifting logic like this: after any
     // sequence of random edits, the incrementally-maintained result must be
@@ -314,9 +343,11 @@ void main() {
         // mid-word typing). Digits and apostrophes are in the alphabet
         // because they are what decides where a run begins and ends: a
         // window widened without them re-tokenizes half of `xm6's` and
-        // disagrees with the full pass.
+        // disagrees with the full pass. Backticks, `$`, spaces and newlines
+        // decide where an exclusion zone opens and closes, so an edit far
+        // from a word can still change whether that word is checked.
         final pos = rng.nextInt(text.length + 1);
-        const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789'";
+        const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789'`\$ \n";
         final ch = alphabet[rng.nextInt(alphabet.length)];
         return text.substring(0, pos) + ch + text.substring(pos);
       }

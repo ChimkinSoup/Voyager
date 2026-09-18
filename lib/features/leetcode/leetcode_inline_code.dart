@@ -118,7 +118,7 @@ List<(String, TextStyle?)> _tokenize(
   Map<String, TextStyle> styles,
 ) {
   final key = _languageKey(language);
-  final cached = _tokenCache['$key $code'];
+  final cached = _tokenCache['types-v1 $key $code'];
   if (cached != null) {
     return [
       for (final (text, className) in cached)
@@ -149,7 +149,7 @@ List<(String, TextStyle?)> _tokenize(
   final result = length == code.length ? tokens : [(code, null)];
 
   if (_tokenCache.length >= _tokenCacheLimit) _tokenCache.clear();
-  _tokenCache['$key $code'] = result;
+  _tokenCache['types-v1 $key $code'] = result;
   return [
     for (final (text, className) in result)
       (text, className == null ? null : styles[className]),

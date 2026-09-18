@@ -182,7 +182,7 @@ class VoyagerSpellCheckService implements SpellCheckService {
     if (oldText == newText) return oldSpans;
 
     final diff = _computeDiff(oldText, newText);
-    if (diff == null || !_isIncrementalSafe(oldText, diff)) {
+    if (diff == null || !_isIncrementalSafe(oldText, newText, diff)) {
       return checkTextSync(newText, includeSuggestions: includeSuggestions);
     }
     final (prefix, oldEnd, newEnd) = diff;
@@ -289,7 +289,7 @@ class VoyagerSpellCheckService implements SpellCheckService {
   /// guessing at a nonsensical "changed region".
   static const _maxIncrementalEditLength = 200;
 
-  bool _isIncrementalSafe(String oldText, (int, int, int) diff) {
+  bool _isIncrementalSafe(String oldText, String newText, (int, int, int) diff) {
     final (prefix, oldEnd, newEnd) = diff;
     final changedOld = oldEnd - prefix;
     final changedNew = newEnd - prefix;
@@ -303,7 +303,33 @@ class VoyagerSpellCheckService implements SpellCheckService {
     // both short — the length cap above alone won't catch that — so also
     // require most of the old text to still be present.
     if (oldText.isNotEmpty && changedOld > oldText.length ~/ 2) return false;
+    // Backticks, `$` and newlines decide where an exclusion zone opens and
+    // closes, so adding or removing one can wrap or unwrap words far outside
+    // the window — closing `` `qwik foxx` `` must drop the squiggle already
+    // on `qwik`. Neither pair may be empty and a `$` pair rejects a space
+    // just inside it, so an edit right next to a backtick or `$` can flip a
+    // pair too.
+    if (_hasZoneDelimiter(oldText, prefix, oldEnd) ||
+        _hasZoneDelimiter(newText, prefix, newEnd) ||
+        (prefix > 0 && _isPairDelimiter(newText.codeUnitAt(prefix - 1))) ||
+        (newEnd < newText.length && _isPairDelimiter(newText.codeUnitAt(newEnd)))) {
+      return false;
+    }
     return true;
+  }
+
+  static bool _isPairDelimiter(int unit) => unit == _backtick || unit == _dollar;
+
+  static const _backtick = 0x60;
+  static const _dollar = 0x24;
+  static const _newline = 0x0A;
+
+  static bool _hasZoneDelimiter(String text, int start, int end) {
+    for (var i = start; i < end; i++) {
+      final unit = text.codeUnitAt(i);
+      if (unit == _backtick || unit == _dollar || unit == _newline) return true;
+    }
+    return false;
   }
 
   /// The (prefix, oldEnd, newEnd) triple describing where [newText] differs
