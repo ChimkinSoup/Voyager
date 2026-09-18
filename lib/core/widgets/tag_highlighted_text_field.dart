@@ -10,6 +10,7 @@ import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
+import 'package:voyager/core/widgets/field_edge_fade.dart';
 import 'package:voyager/core/widgets/field_hint_style.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/notched_field_border.dart';
@@ -562,8 +563,12 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
 
     // The one clip for the field and every layer over it, at the border: the
     // layers don't clip themselves, and a multi-line field's own text and
-    // caret paint past its viewport.
-    final clipped = ClipRect(child: field);
+    // caret paint past its viewport. Everything a multi-line field paints out
+    // there is text scrolled out of the viewport, so it fades into the fill
+    // instead of being cut off square under the label.
+    final clipped = spellcheckOn
+        ? FieldEdgeFade(padding: overlayPadding, child: field)
+        : ClipRect(child: field);
     // Always wrap while Vim is on, not only in Visual — see
     // [vimSelectionTheme]. Flutter's own selection would paint a block out
     // to the paragraph's widest line behind either overlay.

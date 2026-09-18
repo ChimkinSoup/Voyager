@@ -7,11 +7,11 @@ import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/utils/all_view_destination.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
-import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
+import 'package:voyager/features/hotkeys/floaters/floater_app_icon.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/quick_capture.dart';
 
@@ -225,7 +225,7 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         child: Row(
           children: [
-            Icon(PhosphorIconsRegular.checkCircle, color: accent, size: 22),
+            const FloaterAppIcon(PhosphorIconsRegular.checkCircle, size: 22),
             const SizedBox(width: 10),
             Expanded(
               child: VoyagerTextField(
@@ -259,15 +259,6 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
                 accentColor: accent,
                 onTap: () => _togglePanel(_Panel.list, lists.length),
               ),
-            ),
-            const SizedBox(width: 6),
-            GlassButton(
-              label: 'Open app',
-              height: 36,
-              dense: true,
-              color: accent,
-              onPressed: () =>
-                  ref.read(floaterControllerProvider).openApp(),
             ),
           ],
         ),

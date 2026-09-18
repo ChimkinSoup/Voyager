@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -95,12 +96,23 @@ Future<void> showFinanceTransactionModal(
 /// The modal's form without its sheet, for the finance hotkey floater, which
 /// is not a route: [onClose] stands in for the sheet's pop, after a save and
 /// from the close button alike.
+///
+/// [onSaveErrorHeight] reports how tall the failed-save line is, zero when
+/// there is none. The floater's window is sized to the form, and that line is
+/// the one part of it whose height nothing can predict — the message carries
+/// an exception string — so the window grows by what this reports instead of
+/// the form scrolling inside it.
+///
+/// [leading] goes before the title.
 Widget financeTransactionForm({
   required ProviderContainer container,
   required VoidCallback onClose,
   FinanceTransactionDraft? draft,
   Future<void> Function()? onSaved,
   ValueChanged<FinanceTransactionDraft?>? onDraft,
+  ValueChanged<double>? onSaveErrorHeight,
+  Widget? leading,
+  bool autofocus = true,
 }) {
   return _TransactionModal(
     container: container,
@@ -108,6 +120,9 @@ Widget financeTransactionForm({
     onSaved: onSaved,
     onClose: onClose,
     onDraft: onDraft,
+    onSaveErrorHeight: onSaveErrorHeight,
+    leading: leading,
+    autofocus: autofocus,
   );
 }
 
@@ -119,6 +134,9 @@ class _TransactionModal extends ConsumerStatefulWidget {
     this.onSaved,
     this.onClose,
     this.onDraft,
+    this.onSaveErrorHeight,
+    this.leading,
+    this.autofocus = true,
   });
 
   /// The app-level container, which outlives this sheet. See
@@ -130,6 +148,15 @@ class _TransactionModal extends ConsumerStatefulWidget {
   final Future<void> Function()? onSaved;
   final VoidCallback? onClose;
   final ValueChanged<FinanceTransactionDraft?>? onDraft;
+
+  /// See [financeTransactionForm].
+  final ValueChanged<double>? onSaveErrorHeight;
+
+  /// See [financeTransactionForm].
+  final Widget? leading;
+
+  /// Whether a new transaction's amount field takes focus on mount.
+  final bool autofocus;
 
   @override
   ConsumerState<_TransactionModal> createState() => _TransactionModalState();
@@ -440,6 +467,10 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
               // Header row
               Row(
                 children: [
+                  if (widget.leading case final leading?) ...[
+                    leading,
+                    const SizedBox(width: 8),
+                  ],
                   Text(
                     widget.existing == null
                         ? 'New transaction'
@@ -505,7 +536,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                 listenable: _amountController,
                 builder: (context, _) => VoyagerTextField(
                   controller: _amountController,
-                  autofocus: widget.existing == null,
+                  autofocus: widget.autofocus && widget.existing == null,
                   accentColor: amountColor,
                   cursorColor: amountColor,
                   keyboardType: const TextInputType.numberWithOptions(
@@ -597,15 +628,21 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                   ),
                 ],
               ),
-              if (_saveError != null) ...[
-                const SizedBox(height: 16),
-                Text(
-                  _saveError!,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
-              ],
+              // Mounted even with no error, so its height is reported as
+              // zero and the floater's window shrinks back by it.
+              _reportSaveErrorHeight(
+                _saveError == null
+                    ? const SizedBox.shrink()
+                    : Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: Text(
+                          _saveError!,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.error,
+                          ),
+                        ),
+                      ),
+              ),
               const SizedBox(height: 24),
               ListenableBuilder(
                 listenable: _amountController,
@@ -626,6 +663,15 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     return CtrlEnterToSubmitScope(onSubmit: _save, child: sheet);
   }
 
+  /// Wraps the failed-save line in its height report, for the floater; the
+  /// sheet, which scrolls inside a window it doesn't own, wants none.
+  Widget _reportSaveErrorHeight(Widget child) {
+    final onHeight = widget.onSaveErrorHeight;
+    return onHeight == null
+        ? child
+        : _ReportHeight(onHeight: onHeight, child: child);
+  }
+
   String _formatDate(DateTime d) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -634,5 +680,43 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       return 'Yesterday';
     }
     return DateFormat('MMM d, yyyy').format(d);
+  }
+}
+
+/// Reports its child's height after every layout that changes it.
+///
+/// Measured in the render tree rather than from a build because the failed
+/// save that grows it is a `setState` deep inside the form, and reported off
+/// the frame rather than in a post-frame callback because the listener resizes
+/// the OS window: Win32's `SetWindowPlacement` pumps the message loop, which
+/// re-enters Flutter's frame, and that asserts from anywhere inside one.
+class _ReportHeight extends SingleChildRenderObjectWidget {
+  const _ReportHeight({required this.onHeight, required super.child});
+
+  final ValueChanged<double> onHeight;
+
+  @override
+  _RenderReportHeight createRenderObject(BuildContext context) =>
+      _RenderReportHeight(onHeight);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderReportHeight box) =>
+      box.onHeight = onHeight;
+}
+
+class _RenderReportHeight extends RenderProxyBox {
+  _RenderReportHeight(this.onHeight);
+
+  ValueChanged<double> onHeight;
+  double? _reported;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    if (size.height == _reported) return;
+    _reported = size.height;
+    Timer.run(() {
+      if (attached) onHeight(size.height);
+    });
   }
 }

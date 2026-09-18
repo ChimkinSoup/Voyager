@@ -315,3 +315,41 @@ Remove or retire `QuickTodoPopup` / `QuickJournalPopup` full-page embeds once fl
 - Undo for quick-todo
 - Non-activating floater windows
 - Richer journal “Saved” chrome if debounce feedback is unclear
+
+---
+
+## 14. Known issues
+
+### 14.1 App page drawn inside the journal floater (not confirmed)
+
+**Reported (2026-09-18):** while repeatedly opening the journal floater from another app and Alt+Tabbing away, the main app's page (LeetCode, the page last open) sometimes appeared shrunk down and drawn over part of the journal floater, in the floater's own window in the screen corner, not in the Alt+Tab switcher. Too brief to tell whether it lasted or was one or two frames.
+
+**Status:** not reproduced. Three probe sessions (~25 floater round trips each, quick and slow Alt+Tabs) did not catch it, and it has not been reported since. Nothing was changed for it.
+
+**What should make it impossible:**
+
+- While a floater is up, `FloaterHost` has the app `Offstage`; the two are never painted in the same frame. So any app pixels in the floater window are a stale frame, not a layout bug.
+- `FloaterWindow._cloaked` keeps the window DWM-cloaked across every resize (show, release, owed-placement restore) until `_paintedAt` has seen a frame at the new size, plus one more frame.
+- On release, `onRestore` swaps the app back in while the window is still floater-sized. `FloaterHost` then lays the app out at the frozen main size, cropped top-left. That frame exists, but only while cloaked.
+
+**Suspects, if it comes back:**
+
+1. **Uncloak before the new-size frame is on screen.** `_paintedAt` waits for the Dart frame (`endOfFrame`), not for presentation. A window resized before its swapchain presents at the new size gets its old surface stretched by DWM, which matches "shrunk down". The per-frame waits also time out after 100ms, and the size wait after 500ms, and uncloak regardless.
+2. **Release uncloaking while still floater-sized.** That would show exactly the cropped main-size app described above.
+
+**Evidence gathered (all negative):**
+
+- A size logger (WinEvent hook on `EVENT_OBJECT_CLOAKED`/`UNCLOAKED`/`LOCATIONCHANGE` for the runner window, `GetWindowRect` at the event and at +16/33/66/150ms) over 84 uncloaks: every uncloak was already at its final size, 760×640 for the journal floater and 2906×1826 for the maximized main window. No release uncloaked floater-sized.
+- A frame grabber (on uncloak of a floater-sized window, `CopyFromScreen` of the window's `DWMWA_EXTENDED_FRAME_BOUNDS` at 0/16/33/50/80/300ms, only while Voyager was foreground) compared early grabs to the settled one. Every captured open had the floater on its first visible frame. The only difference found was the journal floater's own loading state (a spinner for ~40ms before the entry loads), which is expected. Most opens could not be grabbed, because Voyager was not yet foreground at the uncloak, so the grabber did not cover every case.
+- Uncloak comes ~50ms after cloak on open (about three frames at 60Hz), 200–400ms on release.
+
+**If it recurs:** note which floater, whether the main window was maximized, and whether it was on open or on dismiss. Then rerun the frame grabber without the foreground guard, capturing only the floater's rect (with the user's OK, since that can pick up whatever is behind it). If suspect 1 is confirmed, a `DwmFlush()` after `_paintedAt`, or waiting for a raster-complete signal rather than `endOfFrame`, is the likely fix. Don't just lengthen the timeouts.
+
+### 14.2 Alt+Tab behaviour around floaters (fixed 2026-09-18, for context)
+
+Findings from the same investigation, which the code in `floater_window.dart` now relies on:
+
+- Alt+Tab membership follows the taskbar tab exactly: `ITaskbarList::DeleteTab` sets the shell view's `showInSwitchers` to 0 and `AddTab` sets it back (read through the undocumented `IApplicationViewCollection`/`IApplicationView` COM interfaces, `CLSID_ImmersiveShell`). So floaters keep the taskbar button, or a switcher opened over one leaves the app out.
+- A window hidden and shown again is re-listed first in Alt+Tab, even without activation. A held Alt+Tab dismisses the floater (the switcher takes focus), so the restore must never hide the window, or the switcher lands on Voyager.
+- Mid-switch, the foreground is one of the shell's `ForegroundStaging` windows (hidden, topmost), then `XamlExplorerHostIslandWindow` ("Task Switching"). The restore therefore goes under the top ordinary window rather than "behind the foreground", or the main window flashes over the switch target.
+- DWM cloaking does not remove a window from Alt+Tab, and activating a window while it is cloaked still counts for Alt+Tab order.

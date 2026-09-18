@@ -24,6 +24,7 @@ import 'package:voyager/core/widgets/geometric_texture.dart';
 import 'package:voyager/core/widgets/paper_texture.dart';
 import 'package:voyager/core/widgets/petal_field.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/features/finance/finance_sheet_warm_up.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_host.dart';
 import 'package:voyager/features/settings/snippets_dialog.dart';
@@ -71,6 +72,32 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
           await ref.read(floaterControllerProvider).showMainWindow();
         }
       });
+      unawaited(_warmUpFinanceSheet());
+    }
+  }
+
+  /// Once startup has settled, so the snapshot's raster work doesn't land on
+  /// the first frames. See [warmUpFinanceSheet].
+  Future<void> _warmUpFinanceSheet() async {
+    await Future<void>.delayed(const Duration(seconds: 3));
+    if (!mounted || !ref.read(authNotifierProvider).isAuthenticated) return;
+    final context = ref
+        .read(routerProvider)
+        .routerDelegate
+        .navigatorKey
+        .currentContext;
+    if (context == null || !context.mounted) return;
+    try {
+      await warmUpFinanceSheet(context);
+    } catch (error, stack) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stack,
+          library: 'VoyagerApp',
+          context: ErrorDescription('while warming up the transaction sheet'),
+        ),
+      );
     }
   }
 

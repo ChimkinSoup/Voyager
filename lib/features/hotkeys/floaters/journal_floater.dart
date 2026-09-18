@@ -13,6 +13,7 @@ import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/features/hotkeys/floaters/floater_app_icon.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/quick_journal_entry.dart';
 import 'package:voyager/features/journal/journal_entry_delete.dart';
@@ -238,7 +239,7 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
           padding: const EdgeInsets.fromLTRB(14, 6, 4, 0),
           child: Row(
             children: [
-              Icon(PhosphorIconsRegular.notePencil, size: 18, color: accent),
+              const FloaterAppIcon(PhosphorIconsRegular.notePencil, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

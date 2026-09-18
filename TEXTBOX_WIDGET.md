@@ -85,6 +85,25 @@ and label revert to neutral) — exactly like a standard Material text field.
 - The gap horizontally starts at `contentPadding.left - 4` (4px breathing
   room around the label), clamped so it never overlaps the rounded corners.
 
+### The label's half of the gutter (`FieldEdgeFade`)
+
+A floated label's lower half hangs *inside* the content area — about 8px of
+it, for a 12px label at 1.35 leading. That used to be dead space, and is not
+any more: a multi-line field paints its paragraph on past its scroll viewport
+so a scrolled body reads flush to the border
+(`MULTILINE_FIELD_SCROLL_INSETS.md`), which put live text straight through the
+label.
+
+`lib/core/widgets/field_edge_fade.dart` is the one clip those fields wrap
+themselves in, and it now dissolves the text into the fill across the vertical
+content padding instead of cutting it off square there. The fade runs exactly
+the gutter the paragraph only reaches by scrolling — pass the field's resolved
+padding, density shift included — so nothing is faded at rest, and it is
+weighted rather than linear so the text is under 4% of its opacity everywhere
+the label's ink sits. `NotchedFieldBorder` paints the fill *behind*
+its child and the label *above* it, so both stay at full strength: only the
+paragraph and the overlay layers stacked on it fade.
+
 ## Using it directly
 
 Most call sites should use one of the three ready-made field widgets below

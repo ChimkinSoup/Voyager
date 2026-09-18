@@ -7,8 +7,22 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_window.dart';
 import 'package:voyager/features/hotkeys/quick_capture.dart';
+import 'package:voyager/features/shell/shell_page_transition.dart';
 import 'package:voyager/routing/app_router.dart';
 import 'package:window_manager/window_manager.dart';
+
+/// The finance floater's window: the transaction form's own height (516) plus
+/// the error line under the amount field (23).
+///
+/// Sized to the form rather than roomily, so it doesn't open above a band of
+/// empty background. The amount's error line has its room reserved rather than
+/// resizing the window, because it comes and goes mid-keystroke — every amount
+/// under a dollar passes through it — and a window that jumped while being
+/// typed into would be worse than the strip it saves. The failed-save line,
+/// which is rare and of no height that can be known in advance, does resize
+/// the window, through [FloaterController.setExtraHeight].
+/// `finance_floater_fits_form_test.dart` holds all of it to the real form.
+const kFinanceFloaterSize = Size(460, 539);
 
 /// Routes global hotkeys and owns the floater lifecycle.
 ///
@@ -49,7 +63,10 @@ class FloaterController extends ChangeNotifier with WindowListener {
       switch (kind) {
         QuickCaptureKind.todo => Size(680, 68 + extraHeight),
         QuickCaptureKind.journal => const Size(380, 320),
-        QuickCaptureKind.finance => const Size(460, 640),
+        QuickCaptureKind.finance => Size(
+          kFinanceFloaterSize.width,
+          kFinanceFloaterSize.height + extraHeight,
+        ),
       };
 
   static FloaterAnchor _anchorFor(QuickCaptureKind kind) => switch (kind) {
@@ -83,9 +100,14 @@ class FloaterController extends ChangeNotifier with WindowListener {
     if (_active != null) {
       await _runFlush();
       _releaseFloaterFocus();
-      _active = kind;
-      notifyListeners();
-      await _window.show(_sizeFor(kind, 0), _anchorFor(kind));
+      await _window.show(
+        _sizeFor(kind, 0),
+        _anchorFor(kind),
+        onShow: () {
+          _active = kind;
+          notifyListeners();
+        },
+      );
       return;
     }
     if (_window.mainWindowOpen) {
@@ -94,22 +116,29 @@ class FloaterController extends ChangeNotifier with WindowListener {
     }
     _mainFocus = FocusManager.instance.primaryFocus;
     _armed = false;
-    _active = kind;
-    notifyListeners();
-    mainContentOnScreen.value = false;
-    await _window.show(_sizeFor(kind, 0), _anchorFor(kind));
+    await _window.show(
+      _sizeFor(kind, 0),
+      _anchorFor(kind),
+      onShow: () {
+        _active = kind;
+        notifyListeners();
+        mainContentOnScreen.value = false;
+      },
+    );
   });
 
   /// Closes the floater, keeping its draft.
   Future<void> dismiss() => _serial(() => _dismiss(showMain: false));
 
-  /// The todo bar's "Open app": closes the floater and takes its capture into
-  /// the main window.
+  /// The floater's icon: closes the floater and takes its capture into the
+  /// main window. The page switch happens first, while the app is still
+  /// hidden behind the floater, so the window comes back already on it.
   Future<void> openApp() => _serial(() async {
     final kind = _active;
     if (kind == null) return;
+    final closing = await _navigateTo(kind);
     await _dismiss(showMain: true);
-    await _openInApp(kind);
+    await _request(kind, closing);
   });
 
   /// Shows [message] briefly, then dismisses.
@@ -133,8 +162,8 @@ class FloaterController extends ChangeNotifier with WindowListener {
     mainContentOnScreen.value = true;
   });
 
-  /// For content that needs more room below the todo bar (its date and list
-  /// pickers).
+  /// For content that needs more room than the floater's own height — the
+  /// todo bar's date and list pickers, the finance form's failed-save line.
   void setExtraHeight(double extraHeight) {
     final kind = _active;
     if (kind == null) return;
@@ -170,11 +199,18 @@ class FloaterController extends ChangeNotifier with WindowListener {
     if (_active == null) return;
     await _runFlush();
     _releaseFloaterFocus();
-    _active = null;
-    _confirmation = null;
     _armed = false;
-    notifyListeners();
-    await _window.release(showMain: showMain);
+    // The app goes back in place of the floater only as the window returns
+    // to its own placement: any sooner, and the floater-sized window shows a
+    // corner of the app for the frames in between.
+    await _window.release(
+      showMain: showMain,
+      onRestore: () {
+        _active = null;
+        _confirmation = null;
+        notifyListeners();
+      },
+    );
     // For [windowAtMainPlacement].
     notifyListeners();
     // Hidden again when the floater opened over the tray; a minimized window
@@ -196,24 +232,59 @@ class FloaterController extends ChangeNotifier with WindowListener {
   /// assert.
   void _releaseFloaterFocus() => FocusManager.instance.primaryFocus?.unfocus();
 
+  Future<void> _openInApp(QuickCaptureKind kind) async =>
+      _request(kind, await _navigateTo(kind));
+
   /// Closes any sheets and dialogs over the app — they would otherwise stay on
-  /// top of the page the hotkey opens — and navigates to [kind]'s page.
-  ///
-  /// The page's request goes out only once the closed modals have unmounted,
-  /// since a transaction sheet hands its draft back from `dispose`, and once
-  /// the shell has switched to the page, since that switch unfocuses whatever
-  /// the page focused before it.
-  Future<void> _openInApp(QuickCaptureKind kind) async {
+  /// top of the page the hotkey opens — and switches to [kind]'s page without
+  /// the shell's crossfade (see [instantShellBranchSwitch]). Returns the
+  /// closing modals' completions.
+  Future<List<Future<Object?>>> _navigateTo(QuickCaptureKind kind) async {
     final router = _ref.read(routerProvider);
     final closing = <Future<Object?>>[];
-    router.routerDelegate.navigatorKey.currentState?.popUntil((route) {
-      if (route.settings is Page) return true;
-      if (route is TransitionRoute) closing.add(route.completed);
-      return false;
-    });
-    router.go(kind.path);
+    final navigator = router.routerDelegate.navigatorKey.currentState;
+    if (_active == null) {
+      navigator?.popUntil((route) {
+        if (route.settings is Page) return true;
+        if (route is TransitionRoute) closing.add(route.completed);
+        return false;
+      });
+    } else if (navigator != null) {
+      // Behind a floater the app's tickers are stopped, so a popped sheet
+      // would only play its closing animation once the window was back. Taken
+      // off at once instead, still disposed, so a sheet's draft comes back.
+      while (true) {
+        Route<dynamic>? top;
+        navigator.popUntil((route) {
+          top = route;
+          return true;
+        });
+        final route = top;
+        if (route == null || route.settings is Page) break;
+        if (route is TransitionRoute) closing.add(route.completed);
+        navigator.removeRoute(route);
+      }
+    }
+    instantShellBranchSwitch = true;
+    try {
+      router.go(kind.path);
+      await _arrivedAt(router, kind.path);
+      await _bounded(WidgetsBinding.instance.endOfFrame);
+    } finally {
+      instantShellBranchSwitch = false;
+    }
+    return closing;
+  }
+
+  /// Hands [kind]'s page its request, once the modals [_navigateTo] closed
+  /// have unmounted, since a transaction sheet hands its draft back from
+  /// `dispose`, and once the shell has switched to the page, since that
+  /// switch unfocuses whatever the page focused before it.
+  Future<void> _request(
+    QuickCaptureKind kind,
+    List<Future<Object?>> closing,
+  ) async {
     await _bounded(Future.wait(closing));
-    await _arrivedAt(router, kind.path);
     await _bounded(WidgetsBinding.instance.endOfFrame);
     _ref.read(quickCaptureRequestProvider.notifier).state = QuickCaptureRequest(
       kind,

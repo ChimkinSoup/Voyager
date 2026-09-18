@@ -10,6 +10,13 @@ import 'package:voyager/core/motion/motion.dart';
 /// shape — curve, recede, layer order — is the same.
 const Duration kShellBranchSwitchDuration = Duration(milliseconds: 260);
 
+/// While true, branch switches land at once instead of crossfading. Held by
+/// the global hotkeys' navigation: the capture opening over the page is the
+/// transition there, and the crossfade running under a blurred sheet costs
+/// more than a frame to raster. Opening from a floater, it also means the
+/// window comes back already showing the page.
+bool instantShellBranchSwitch = false;
+
 /// Keeps all shell branches mounted and switches between them with the same
 /// motion as [VoyagerCrossfadeIndex]'s glass-safe mode: the branch being left
 /// fades out and recedes off the top of the arriving one, which meanwhile
@@ -64,6 +71,12 @@ class _ShellBranchContainerState extends State<ShellBranchContainer>
   void didUpdateWidget(covariant ShellBranchContainer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.currentIndex == _toIndex) return;
+
+    if (instantShellBranchSwitch) {
+      _fromIndex = _toIndex = widget.currentIndex;
+      _progress.value = 1;
+      return;
+    }
 
     // Mid-flight retarget: keep whichever side is more visible as the new
     // outgoing, so tapping through the rail doesn't jump to an empty frame.

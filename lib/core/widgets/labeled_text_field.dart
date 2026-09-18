@@ -5,6 +5,7 @@ import 'package:voyager/core/text/prose_text_span.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
+import 'package:voyager/core/widgets/field_edge_fade.dart';
 import 'package:voyager/core/widgets/field_hint_style.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/line_break_mark_layer.dart';
@@ -503,8 +504,12 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
       );
       // The one clip for the field and every layer over it, at the border:
       // the layers don't clip themselves, and a multi-line field's own text
-      // and caret paint past its viewport.
-      field = ClipRect(child: field);
+      // and caret paint past its viewport. Everything a multi-line field
+      // paints out there is text scrolled out of the viewport, so it fades
+      // into the fill instead of being cut off square under the label.
+      field = spellcheckOn
+          ? FieldEdgeFade(padding: overlayPadding, child: field)
+          : ClipRect(child: field);
     }
 
     if (vimSession != null || ownSelection) {

@@ -94,11 +94,56 @@ const _yearGridWindowYears = 10;
 // Root page
 // ---------------------------------------------------------------------------
 
-class AnalyticsPage extends ConsumerWidget {
+class AnalyticsPage extends ConsumerStatefulWidget {
   const AnalyticsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AnalyticsPage> createState() => _AnalyticsPageState();
+}
+
+class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
+  /// The page as last built, and what it was built from.
+  Widget? _page;
+  Object? _builtFrom;
+
+  /// Rebuilds only in sight, and only when what it shows has changed.
+  ///
+  /// It is a preloaded shell branch, so it stays mounted behind every other
+  /// section, and every journal save invalidates the entries it watches:
+  /// each one recounted the words of every entry and rebuilt every tracker's
+  /// heatmap, 12–20ms a time, twice per save, for a page nobody could see.
+  /// Out of sight — another section showing, or a hotkey floater up — it
+  /// keeps its last build. Coming back into sight flips [TickerMode], which
+  /// rebuilds this, and the page is rebuilt only if its inputs moved on in
+  /// the meantime, so switching to it costs nothing when they haven't.
+  ///
+  /// Everything [_buildPage] reads is watched here too, so the subscriptions
+  /// stay live while the page is hidden.
+  @override
+  Widget build(BuildContext context) {
+    final inSight = TickerMode.valuesOf(context).enabled;
+    final settings = ref.watch(settingsProvider).valueOrNull;
+    final inputs = (
+      ref.watch(allJournalEntriesProvider),
+      ref.watch(trackersProvider),
+      ref.watch(analyticsServiceProvider),
+      ref.watch(periodicPromptServiceProvider),
+      settings,
+      (settings?.showDreamStatistics ?? false)
+          ? ref.watch(allDreamEntriesProvider)
+          : null,
+      (settings?.showWorkoutStatistics ?? false)
+          ? ref.watch(workoutDaysProvider)
+          : null,
+      Theme.of(context),
+    );
+    final page = _page;
+    if (page != null && (!inSight || inputs == _builtFrom)) return page;
+    _builtFrom = inputs;
+    return _page = _buildPage(context);
+  }
+
+  Widget _buildPage(BuildContext context) {
     final entriesAsync = ref.watch(allJournalEntriesProvider);
     final trackersAsync = ref.watch(trackersProvider);
     final analytics = ref.watch(analyticsServiceProvider);

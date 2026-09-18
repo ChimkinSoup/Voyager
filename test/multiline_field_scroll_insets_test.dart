@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -99,6 +100,36 @@ Future<(ByteData, int)> _pixels(WidgetTester tester, GlobalKey key) async {
     return (bytes!, image.width);
   });
   return result!;
+}
+
+/// Whether any pixel in [rect] (boundary coordinates) carries [color]'s ink at
+/// any opacity.
+///
+/// Not an exact match: [FieldEdgeFade] dissolves the last few pixels of a
+/// scrolled paragraph into the fill before the border, so ink in the padding
+/// band arrives blended. Everything behind it — the page, the field's fill —
+/// is neutral, so the colour's own channel leading the other two by a clear
+/// margin identifies it.
+bool _anyTinted((ByteData, int) pixels, Rect rect, Color color) {
+  final (bytes, width) = pixels;
+  final target = [color.r, color.g, color.b];
+  final lead = target.indexOf(target.reduce(math.max));
+  for (var y = rect.top.toInt(); y < rect.bottom.toInt(); y++) {
+    for (var x = rect.left.toInt(); x < rect.right.toInt(); x++) {
+      final i = (y * width + x) * 4;
+      final channels = [
+        bytes.getUint8(i),
+        bytes.getUint8(i + 1),
+        bytes.getUint8(i + 2),
+      ];
+      final rest = [
+        for (var c = 0; c < 3; c++)
+          if (c != lead) channels[c],
+      ].reduce(math.max);
+      if (channels[lead] - rest > 20) return true;
+    }
+  }
+  return false;
 }
 
 /// Whether any pixel in [rect] (boundary coordinates) is exactly [color].
@@ -283,19 +314,22 @@ void main() {
     await tester.pump();
 
     final pixels = await _pixels(tester, boundaryKey);
-    // Clear of the border stroke along the top edge.
+    // Clear of the border stroke along the top edge. Fading into the fill on
+    // the way out is [FieldEdgeFade]'s job — see the label band it keeps clear
+    // in `field_edge_fade_test.dart` — so what is asserted here is that the
+    // paint reaches the band at all, not that it arrives at full strength.
     final strip = Rect.fromLTRB(
       _field.left + 16,
       _field.top + 3,
       _field.left + 120,
       _field.top + 11,
     );
-    expect(_any(pixels, strip, _text), isTrue, reason: 'text');
-    expect(_any(pixels, strip, _selection), isTrue, reason: 'selection');
-    // And none of it above the field.
+    expect(_anyTinted(pixels, strip, _text), isTrue, reason: 'text');
+    expect(_anyTinted(pixels, strip, _selection), isTrue, reason: 'selection');
+    // And none of it above the field, faded or otherwise.
     final above = Rect.fromLTRB(0, 0, _field.right + 40, _field.top);
-    expect(_any(pixels, above, _text), isFalse);
-    expect(_any(pixels, above, _selection), isFalse);
+    expect(_anyTinted(pixels, above, _text), isFalse);
+    expect(_anyTinted(pixels, above, _selection), isFalse);
   });
 
   for (final vim in [false, true]) {
