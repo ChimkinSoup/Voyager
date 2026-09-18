@@ -34,6 +34,7 @@ import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
+import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/study_deck_graph.dart';
@@ -59,6 +60,7 @@ class RemoteSyncService {
     required TrackerRepository trackerRepository,
     required FinanceRepository financeRepository,
     required NotificationRepository notificationRepository,
+    required ReminderRepository reminderRepository,
     required BucketListRepository bucketListRepository,
     required MediaRepository mediaRepository,
     required SettingsRepository settingsRepository,
@@ -85,6 +87,7 @@ class RemoteSyncService {
        _trackerRepository = trackerRepository,
        _financeRepository = financeRepository,
        _notificationRepository = notificationRepository,
+       _reminderRepository = reminderRepository,
        _bucketListRepository = bucketListRepository,
        _mediaRepository = mediaRepository,
        _settingsRepository = settingsRepository,
@@ -112,6 +115,7 @@ class RemoteSyncService {
   final TrackerRepository _trackerRepository;
   final FinanceRepository _financeRepository;
   final NotificationRepository _notificationRepository;
+  final ReminderRepository _reminderRepository;
   final BucketListRepository _bucketListRepository;
   final MediaRepository _mediaRepository;
   final SettingsRepository _settingsRepository;
@@ -1484,6 +1488,31 @@ class RemoteSyncService {
         );
       case FirestoreCollections.dismissedNotifications:
         return pullDismissedNotifications(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.deviceRegistrations:
+        return pullDeviceRegistrations(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.scheduledReminderRules:
+        return pullScheduledReminderRules(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.entityReminders:
+        return pullEntityReminders(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.reminderDeliveryStates:
+        return pullReminderDeliveryStates(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.reminderDeliveryLogs:
+        return pullReminderDeliveryLogs(
           documentIds: documentIds,
           documentData: documentData,
         );
@@ -4278,6 +4307,27 @@ class RemoteSyncService {
           id: record.key,
           payload: dismissedNotificationToFirestore(record),
         );
+      case FirestoreCollections.deviceRegistrations:
+        if (record is! DeviceRegistration) return null;
+        return (id: record.id, payload: deviceRegistrationToFirestore(record));
+      case FirestoreCollections.scheduledReminderRules:
+        if (record is! ScheduledReminderRule) return null;
+        return (
+          id: record.id,
+          payload: scheduledReminderRuleToFirestore(record),
+        );
+      case FirestoreCollections.entityReminders:
+        if (record is! EntityReminder) return null;
+        return (id: record.id, payload: entityReminderToFirestore(record));
+      case FirestoreCollections.reminderDeliveryStates:
+        if (record is! ReminderDeliveryState) return null;
+        return (
+          id: record.id,
+          payload: reminderDeliveryStateToFirestore(record),
+        );
+      case FirestoreCollections.reminderDeliveryLogs:
+        if (record is! ReminderDeliveryLog) return null;
+        return (id: record.id, payload: reminderDeliveryLogToFirestore(record));
       case FirestoreCollections.bucketListItems:
         if (record is! BucketListItem) return null;
         return (id: record.id, payload: bucketListItemToFirestore(record));
@@ -4660,6 +4710,101 @@ class RemoteSyncService {
     );
   }
 
+  Future<bool> pullDeviceRegistrations({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.deviceRegistrations,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _reminderRepository.getDevice(id);
+        await _reminderRepository.upsertDevice(
+          mergeDeviceRegistrationFromRemote(data, id, local: local),
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> pullScheduledReminderRules({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.scheduledReminderRules,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _reminderRepository.getRule(id);
+        await _reminderRepository.upsertRule(
+          mergeScheduledReminderRuleFromRemote(data, id, local: local),
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> pullEntityReminders({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.entityReminders,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _reminderRepository.getEntityReminder(id);
+        await _reminderRepository.upsertEntityReminder(
+          mergeEntityReminderFromRemote(data, id, local: local),
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> pullReminderDeliveryStates({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.reminderDeliveryStates,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _reminderRepository.getDeliveryState(id);
+        await _reminderRepository.upsertDeliveryState(
+          mergeReminderDeliveryStateFromRemote(data, id, local: local),
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> pullReminderDeliveryLogs({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.reminderDeliveryLogs,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _reminderRepository.getLog(id);
+        await _reminderRepository.upsertLog(
+          mergeReminderDeliveryLogFromRemote(data, id, local: local),
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
   Future<bool> pullBucketListItems({
     Set<String>? documentIds,
     Map<String, Map<String, dynamic>>? documentData,
@@ -4917,6 +5062,11 @@ class RemoteSyncService {
     await pullGoalAllocations();
     await pullPinnedNotes();
     await pullDismissedNotifications();
+    await pullDeviceRegistrations();
+    await pullScheduledReminderRules();
+    await pullEntityReminders();
+    await pullReminderDeliveryStates();
+    await pullReminderDeliveryLogs();
     await pullBucketListItems();
     await pullJobStages();
     await pullJobSeasons();
@@ -5041,6 +5191,26 @@ class RemoteSyncService {
       await _notificationRepository.listDismissalRecords(),
     );
     await pushRecords(
+      FirestoreCollections.deviceRegistrations,
+      await _reminderRepository.listDevices(includeDeleted: true),
+    );
+    await pushRecords(
+      FirestoreCollections.scheduledReminderRules,
+      await _reminderRepository.listRules(includeDeleted: true),
+    );
+    await pushRecords(
+      FirestoreCollections.entityReminders,
+      await _reminderRepository.listEntityReminders(includeDeleted: true),
+    );
+    await pushRecords(
+      FirestoreCollections.reminderDeliveryStates,
+      await _reminderRepository.listDeliveryStates(),
+    );
+    await pushRecords(
+      FirestoreCollections.reminderDeliveryLogs,
+      await _reminderRepository.listLogs(includeDeleted: true),
+    );
+    await pushRecords(
       FirestoreCollections.bucketListItems,
       await _bucketListRepository.listItems(includeDeleted: true),
     );
@@ -5147,6 +5317,11 @@ class LiveSyncController {
     FirestoreCollections.goalAllocations,
     FirestoreCollections.pinnedNotes,
     FirestoreCollections.dismissedNotifications,
+    FirestoreCollections.deviceRegistrations,
+    FirestoreCollections.scheduledReminderRules,
+    FirestoreCollections.entityReminders,
+    FirestoreCollections.reminderDeliveryStates,
+    FirestoreCollections.reminderDeliveryLogs,
     FirestoreCollections.bucketListItems,
     FirestoreCollections.jobApplications,
     FirestoreCollections.jobStatusEvents,

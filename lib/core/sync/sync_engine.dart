@@ -402,6 +402,7 @@ class BackgroundSyncOrchestrator {
     required JobRepository jobRepository,
     required RankingRepository rankingRepository,
     required NotificationRepository notificationRepository,
+    required ReminderRepository reminderRepository,
     required BucketListRepository bucketListRepository,
     required SettingsRepository settingsRepository,
     MediaPurge? mediaPurge,
@@ -417,6 +418,7 @@ class BackgroundSyncOrchestrator {
        _jobRepository = jobRepository,
        _rankingRepository = rankingRepository,
        _notificationRepository = notificationRepository,
+       _reminderRepository = reminderRepository,
        _bucketListRepository = bucketListRepository,
        _settingsRepository = settingsRepository,
        _mediaPurge = mediaPurge;
@@ -433,6 +435,7 @@ class BackgroundSyncOrchestrator {
   final JobRepository _jobRepository;
   final RankingRepository _rankingRepository;
   final NotificationRepository _notificationRepository;
+  final ReminderRepository _reminderRepository;
   final BucketListRepository _bucketListRepository;
   final SettingsRepository _settingsRepository;
 
@@ -465,6 +468,8 @@ class BackgroundSyncOrchestrator {
       // The tombstones that let an unpin, an un-dismissal, a removed bucket
       // list item or a removed dictionary word reach the other devices.
       _notificationRepository.purgeExpiredDeleted(cutoff),
+      // Removed reminders, bells and devices, and trimmed history lines.
+      _reminderRepository.purgeExpiredDeleted(cutoff),
       _bucketListRepository.purgeExpiredDeleted(cutoff),
       _settingsRepository.purgeExpiredDeleted(cutoff),
       // Images run on the same 30-day clock as the entries holding them, so

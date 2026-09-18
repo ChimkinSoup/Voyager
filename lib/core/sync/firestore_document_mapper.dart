@@ -20,6 +20,7 @@ import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
+import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/workout_models.dart';
@@ -2781,6 +2782,292 @@ DismissedNotification mergeDismissedNotificationFromRemote(
     // Unlike the other records here a tombstone must be undoable: the same key
     // cycles between dismissed and un-dismissed as the item comes back.
     deletedAt: parseFirestoreDate(data['deletedAt']),
+  );
+}
+
+Map<String, dynamic> deviceRegistrationToFirestore(DeviceRegistration device) => {
+  'id': device.id,
+  'displayName': device.displayName,
+  'platform': device.platform.name,
+  'lastSeenAt': _dateToFirestoreRequired(device.lastSeenAt),
+  'createdAt': _dateToFirestoreRequired(device.createdAt),
+  'updatedAt': _dateToFirestoreRequired(device.updatedAt),
+  'version': device.version,
+  'deletedAt': _dateToFirestore(device.deletedAt),
+};
+
+DeviceRegistration mergeDeviceRegistrationFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  DeviceRegistration? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return DeviceRegistration(
+    id: id,
+    displayName:
+        data['displayName'] as String? ?? local?.displayName ?? 'Device',
+    platform: reminderEnumByName(
+      DevicePlatform.values,
+      data['platform'] as String? ?? local?.platform.name,
+      DevicePlatform.web,
+    ),
+    lastSeenAt:
+        parseFirestoreDate(data['lastSeenAt']) ??
+        local?.lastSeenAt ??
+        remoteUpdated,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> scheduledReminderRuleToFirestore(
+  ScheduledReminderRule rule,
+) {
+  final onceDate = rule.onceLocalDate;
+  return {
+    'id': rule.id,
+    'title': rule.title,
+    'body': rule.body,
+    'enabled': rule.enabled,
+    'scheduleKind': rule.scheduleKind.name,
+    'localTimeMinutes': rule.localTimeMinutes,
+    'weeklyWeekdays': rule.weeklyWeekdays.toList()..sort(),
+    'onceLocalDate': onceDate == null
+        ? null
+        : reminderLocalDateToString(onceDate),
+    'targetDeviceIds': rule.targetDeviceIds,
+    'armedAt': _dateToFirestoreRequired(rule.armedAt),
+    'createdAt': _dateToFirestoreRequired(rule.createdAt),
+    'updatedAt': _dateToFirestoreRequired(rule.updatedAt),
+    'version': rule.version,
+    'deletedAt': _dateToFirestore(rule.deletedAt),
+  };
+}
+
+ScheduledReminderRule mergeScheduledReminderRuleFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  ScheduledReminderRule? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return ScheduledReminderRule(
+    id: id,
+    title: data['title'] as String? ?? local?.title ?? '',
+    body: data['body'] as String?,
+    enabled: data['enabled'] as bool? ?? local?.enabled ?? true,
+    scheduleKind: reminderEnumByName(
+      ReminderScheduleKind.values,
+      data['scheduleKind'] as String? ?? local?.scheduleKind.name,
+      ReminderScheduleKind.daily,
+    ),
+    localTimeMinutes:
+        (data['localTimeMinutes'] as num?)?.toInt() ??
+        local?.localTimeMinutes ??
+        0,
+    weeklyWeekdays: data['weeklyWeekdays'] is List
+        ? {
+            for (final day in data['weeklyWeekdays'] as List)
+              if (day is num) day.toInt(),
+          }
+        : (local?.weeklyWeekdays ?? const {}),
+    onceLocalDate: parseReminderLocalDate(data['onceLocalDate'] as String?),
+    targetDeviceIds: data['targetDeviceIds'] is List
+        ? List<String>.from(data['targetDeviceIds'] as List)
+        : (local?.targetDeviceIds ?? const []),
+    armedAt:
+        parseFirestoreDate(data['armedAt']) ?? local?.armedAt ?? remoteUpdated,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> entityReminderToFirestore(EntityReminder reminder) => {
+  'id': reminder.id,
+  'sourceKind': reminder.sourceKind.name,
+  'entityId': reminder.entityId,
+  'enabled': reminder.enabled,
+  'offsetMinutes': reminder.offsetMinutes,
+  'armedAt': _dateToFirestoreRequired(reminder.armedAt),
+  'createdAt': _dateToFirestoreRequired(reminder.createdAt),
+  'updatedAt': _dateToFirestoreRequired(reminder.updatedAt),
+  'version': reminder.version,
+  'deletedAt': _dateToFirestore(reminder.deletedAt),
+};
+
+EntityReminder mergeEntityReminderFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  EntityReminder? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return EntityReminder(
+    id: id,
+    sourceKind: reminderEnumByName(
+      ReminderSourceKind.values,
+      data['sourceKind'] as String? ?? local?.sourceKind.name,
+      ReminderSourceKind.todo,
+    ),
+    entityId: data['entityId'] as String? ?? local?.entityId ?? '',
+    enabled: data['enabled'] as bool? ?? local?.enabled ?? true,
+    offsetMinutes:
+        (data['offsetMinutes'] as num?)?.toInt() ?? local?.offsetMinutes ?? 0,
+    armedAt:
+        parseFirestoreDate(data['armedAt']) ?? local?.armedAt ?? remoteUpdated,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> reminderDeliveryStateToFirestore(
+  ReminderDeliveryState state,
+) => {
+  'id': state.id,
+  'sourceKind': state.sourceKind.name,
+  'sourceId': state.sourceId,
+  'occurrenceKey': state.occurrenceKey,
+  'status': state.status.name,
+  'snoozeUntil': _dateToFirestore(state.snoozeUntil),
+  'ackedAt': _dateToFirestore(state.ackedAt),
+  'createdAt': _dateToFirestoreRequired(state.createdAt),
+  'updatedAt': _dateToFirestoreRequired(state.updatedAt),
+  'version': state.version,
+};
+
+/// Last writer wins on version, then [ReminderDeliveryState.updatedAt] — so of
+/// an acknowledge and a snooze made concurrently on two devices, the later
+/// press stands (§8).
+ReminderDeliveryState mergeReminderDeliveryStateFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  ReminderDeliveryState? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return ReminderDeliveryState(
+    id: id,
+    sourceKind: reminderEnumByName(
+      ReminderSourceKind.values,
+      data['sourceKind'] as String? ?? local?.sourceKind.name,
+      ReminderSourceKind.scheduledRule,
+    ),
+    sourceId: data['sourceId'] as String? ?? local?.sourceId ?? '',
+    occurrenceKey:
+        data['occurrenceKey'] as String? ?? local?.occurrenceKey ?? '',
+    status: reminderEnumByName(
+      ReminderDeliveryStatus.values,
+      data['status'] as String? ?? local?.status.name,
+      ReminderDeliveryStatus.acked,
+    ),
+    snoozeUntil: parseFirestoreDate(data['snoozeUntil']),
+    ackedAt: parseFirestoreDate(data['ackedAt']),
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+  );
+}
+
+Map<String, dynamic> reminderDeliveryLogToFirestore(ReminderDeliveryLog log) =>
+    {
+      'id': log.id,
+      'deliveryStateId': log.deliveryStateId,
+      'sourceKind': log.sourceKind.name,
+      'sourceId': log.sourceId,
+      'occurrenceKey': log.occurrenceKey,
+      'eventType': log.eventType.name,
+      'deviceId': log.deviceId,
+      'at': _dateToFirestoreRequired(log.at),
+      'detail': log.detail,
+      'createdAt': _dateToFirestoreRequired(log.createdAt),
+      'updatedAt': _dateToFirestoreRequired(log.updatedAt),
+      'version': log.version,
+      'deletedAt': _dateToFirestore(log.deletedAt),
+    };
+
+ReminderDeliveryLog mergeReminderDeliveryLogFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  ReminderDeliveryLog? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return ReminderDeliveryLog(
+    id: id,
+    deliveryStateId:
+        data['deliveryStateId'] as String? ?? local?.deliveryStateId ?? '',
+    sourceKind: reminderEnumByName(
+      ReminderSourceKind.values,
+      data['sourceKind'] as String? ?? local?.sourceKind.name,
+      ReminderSourceKind.scheduledRule,
+    ),
+    sourceId: data['sourceId'] as String? ?? local?.sourceId ?? '',
+    occurrenceKey:
+        data['occurrenceKey'] as String? ?? local?.occurrenceKey ?? '',
+    eventType: reminderEnumByName(
+      ReminderLogEvent.values,
+      data['eventType'] as String? ?? local?.eventType.name,
+      ReminderLogEvent.osFired,
+    ),
+    deviceId: data['deviceId'] as String? ?? local?.deviceId ?? '',
+    at: parseFirestoreDate(data['at']) ?? local?.at ?? remoteUpdated,
+    detail: data['detail'] as String?,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
   );
 }
 

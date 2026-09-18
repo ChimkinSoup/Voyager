@@ -9,6 +9,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/app/voyager_app.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
+import 'package:voyager/core/reminders/device_registration.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/tags/tag_palette.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
@@ -56,6 +57,10 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
   bool? _wasOnline;
   var _resumingSync = false;
 
+  /// Whether the startup pull has run, and with it the merge that makes this
+  /// device's registration safe to write — see [registerThisDevice].
+  var _startupPullDone = false;
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +81,30 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     if (!ref.read(authNotifierProvider).isAuthenticated) return;
     if (OutboxSyncWorker.isInitialized) {
       unawaited(OutboxSyncWorker.instance.startDraining());
+    }
+    if (_startupPullDone) unawaited(_registerThisDevice());
+  }
+
+  /// Registers this device for scheduled reminders, or refreshes when it was
+  /// last seen.
+  Future<void> _registerThisDevice() async {
+    try {
+      await registerThisDevice(
+        ref.read(reminderRepositoryProvider),
+        ref.read(deviceIdProvider),
+      );
+      if (!mounted) return;
+      ref.invalidate(deviceRegistrationsProvider);
+      ref.invalidate(thisDeviceRegistrationProvider);
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'VoyagerBootstrap',
+          context: ErrorDescription('while registering this device'),
+        ),
+      );
     }
   }
 
@@ -236,6 +265,8 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
         pullFromRemote: () async {
           await remoteSync.pullAll();
           if (!mounted) return;
+          _startupPullDone = true;
+          unawaited(_registerThisDevice());
           liveSync.start();
           // The controller is rebuilt with the sync service — signing out and
           // back in swaps both — and a rebuilt one starts stopped. Start each

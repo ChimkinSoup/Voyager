@@ -32,6 +32,7 @@ import 'package:voyager/domain/todo/todo_recurring_completion.dart';
 import 'package:voyager/features/analytics/tracker_entry_row.dart';
 import 'package:voyager/features/calendar/calendar_event_delete.dart';
 import 'package:voyager/features/finance/finance_subscription_modal.dart';
+import 'package:voyager/features/notifications/scheduled_reminders_section.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/core/text/prose_editing_controller.dart';
@@ -91,6 +92,7 @@ class _NotificationInboxPopoverState
                 onShowHidden: () => _hiddenKey.currentState?.reveal(),
               ),
               const _PinnedNotesSection(),
+              const ScheduledRemindersSection(),
               const _FeedSection(),
               const _AnalyticsSection(),
               _HiddenSection(key: _hiddenKey),

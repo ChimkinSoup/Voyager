@@ -38,6 +38,7 @@ import 'package:voyager/core/sync/synced_write_notifier.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
+import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/widgets/geometric_texture.dart';
@@ -87,6 +88,9 @@ import 'package:voyager/domain/services/weather_service.dart';
 import 'package:voyager/features/calendar/calendar_todo_markers.dart';
 
 const _fallbackDeviceId = 'local-device';
+
+/// What [deviceIdProvider] holds until the bootstrap has read the real id.
+const kUnresolvedDeviceId = _fallbackDeviceId;
 const _useCloudFunctions = bool.fromEnvironment(
   'USE_CLOUD_FUNCTIONS',
   defaultValue: true,
@@ -197,6 +201,13 @@ final rankingRepositoryProvider = Provider<RankingRepository>((ref) {
 
 final notificationRepositoryProvider = Provider<NotificationRepository>((ref) {
   return DriftNotificationRepository(
+    ref.watch(databaseProvider),
+    syncedWrites: ref.watch(syncedWriteNotifierProvider),
+  );
+});
+
+final reminderRepositoryProvider = Provider<ReminderRepository>((ref) {
+  return DriftReminderRepository(
     ref.watch(databaseProvider),
     syncedWrites: ref.watch(syncedWriteNotifierProvider),
   );
@@ -329,6 +340,7 @@ final backupCollectionsProvider = Provider<List<BackupCollection>>((ref) {
     trackerRepository: ref.watch(trackerRepositoryProvider),
     financeRepository: ref.watch(financeRepositoryProvider),
     notificationRepository: ref.watch(notificationRepositoryProvider),
+    reminderRepository: ref.watch(reminderRepositoryProvider),
     bucketListRepository: ref.watch(bucketListRepositoryProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
     jobRepository: ref.watch(jobRepositoryProvider),
@@ -527,6 +539,7 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
     trackerRepository: ref.watch(trackerRepositoryProvider),
     financeRepository: ref.watch(financeRepositoryProvider),
     notificationRepository: ref.watch(notificationRepositoryProvider),
+    reminderRepository: ref.watch(reminderRepositoryProvider),
     bucketListRepository: ref.watch(bucketListRepositoryProvider),
     mediaRepository: ref.watch(mediaRepositoryProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
@@ -709,6 +722,7 @@ final backgroundSyncOrchestratorProvider = Provider((ref) {
     jobRepository: ref.watch(jobRepositoryProvider),
     rankingRepository: ref.watch(rankingRepositoryProvider),
     notificationRepository: ref.watch(notificationRepositoryProvider),
+    reminderRepository: ref.watch(reminderRepositoryProvider),
     bucketListRepository: ref.watch(bucketListRepositoryProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
     // Read, not watched: the purge runs once per launch, and rebuilding the
@@ -1571,6 +1585,12 @@ final _secondaryDataProviders = <ProviderOrFamily>[
   pinnedNotesProvider,
   notificationDismissalsProvider,
   notificationFeedProvider,
+  scheduledReminderRulesProvider,
+  entityRemindersProvider,
+  reminderDeliveryStatesProvider,
+  deviceRegistrationsProvider,
+  thisDeviceRegistrationProvider,
+  reminderLogsProvider,
   bucketListItemsProvider,
   tagColorsProvider,
   customWordsProvider,
@@ -1862,6 +1882,48 @@ final pinnedNotesProvider = FutureProvider<List<PinnedNote>>((ref) {
   ref.keepAlive();
   return ref.watch(notificationRepositoryProvider).listPinnedNotes();
 });
+
+final scheduledReminderRulesProvider =
+    FutureProvider<List<ScheduledReminderRule>>((ref) {
+      ref.keepAlive();
+      return ref.watch(reminderRepositoryProvider).listRules();
+    });
+
+final entityRemindersProvider = FutureProvider<List<EntityReminder>>((ref) {
+  ref.keepAlive();
+  return ref.watch(reminderRepositoryProvider).listEntityReminders();
+});
+
+final reminderDeliveryStatesProvider =
+    FutureProvider<List<ReminderDeliveryState>>((ref) {
+      ref.keepAlive();
+      return ref.watch(reminderRepositoryProvider).listDeliveryStates();
+    });
+
+final deviceRegistrationsProvider = FutureProvider<List<DeviceRegistration>>((
+  ref,
+) {
+  ref.keepAlive();
+  return ref.watch(reminderRepositoryProvider).listDevices();
+});
+
+/// This installation's registration, tombstone included: a registration
+/// removed in Settings silences reminders here (see `registerThisDevice`).
+final thisDeviceRegistrationProvider = FutureProvider<DeviceRegistration?>((
+  ref,
+) {
+  return ref
+      .watch(reminderRepositoryProvider)
+      .getDevice(ref.watch(deviceIdProvider));
+});
+
+/// One reminder source's history, newest first, keyed by its source key.
+final reminderLogsProvider =
+    FutureProvider.family<List<ReminderDeliveryLog>, String>((ref, stateId) {
+      return ref
+          .watch(reminderRepositoryProvider)
+          .listLogs(deliveryStateId: stateId);
+    });
 
 final bucketListItemsProvider = FutureProvider<List<BucketListItem>>((ref) {
   ref.keepAlive();

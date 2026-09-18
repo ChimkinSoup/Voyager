@@ -23866,6 +23866,3419 @@ class DismissedNotificationsTableCompanion
   }
 }
 
+class $DeviceRegistrationsTableTable extends DeviceRegistrationsTable
+    with
+        TableInfo<
+          $DeviceRegistrationsTableTable,
+          DeviceRegistrationsTableData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DeviceRegistrationsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _displayNameMeta = const VerificationMeta(
+    'displayName',
+  );
+  @override
+  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
+    'display_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _platformMeta = const VerificationMeta(
+    'platform',
+  );
+  @override
+  late final GeneratedColumn<String> platform = GeneratedColumn<String>(
+    'platform',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastSeenAtMeta = const VerificationMeta(
+    'lastSeenAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastSeenAt = GeneratedColumn<DateTime>(
+    'last_seen_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    displayName,
+    platform,
+    lastSeenAt,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'device_registrations_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DeviceRegistrationsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('display_name')) {
+      context.handle(
+        _displayNameMeta,
+        displayName.isAcceptableOrUnknown(
+          data['display_name']!,
+          _displayNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_displayNameMeta);
+    }
+    if (data.containsKey('platform')) {
+      context.handle(
+        _platformMeta,
+        platform.isAcceptableOrUnknown(data['platform']!, _platformMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_platformMeta);
+    }
+    if (data.containsKey('last_seen_at')) {
+      context.handle(
+        _lastSeenAtMeta,
+        lastSeenAt.isAcceptableOrUnknown(
+          data['last_seen_at']!,
+          _lastSeenAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_lastSeenAtMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  DeviceRegistrationsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DeviceRegistrationsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      displayName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}display_name'],
+      )!,
+      platform: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}platform'],
+      )!,
+      lastSeenAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_seen_at'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $DeviceRegistrationsTableTable createAlias(String alias) {
+    return $DeviceRegistrationsTableTable(attachedDatabase, alias);
+  }
+}
+
+class DeviceRegistrationsTableData extends DataClass
+    implements Insertable<DeviceRegistrationsTableData> {
+  final String id;
+  final String displayName;
+
+  /// [DevicePlatform] by name. Text, not an index: a registration synced from
+  /// a future build naming a platform this one has never heard of has to round
+  /// trip rather than land as some arbitrary neighbour.
+  final String platform;
+  final DateTime lastSeenAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const DeviceRegistrationsTableData({
+    required this.id,
+    required this.displayName,
+    required this.platform,
+    required this.lastSeenAt,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['display_name'] = Variable<String>(displayName);
+    map['platform'] = Variable<String>(platform);
+    map['last_seen_at'] = Variable<DateTime>(lastSeenAt);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  DeviceRegistrationsTableCompanion toCompanion(bool nullToAbsent) {
+    return DeviceRegistrationsTableCompanion(
+      id: Value(id),
+      displayName: Value(displayName),
+      platform: Value(platform),
+      lastSeenAt: Value(lastSeenAt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory DeviceRegistrationsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DeviceRegistrationsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      displayName: serializer.fromJson<String>(json['displayName']),
+      platform: serializer.fromJson<String>(json['platform']),
+      lastSeenAt: serializer.fromJson<DateTime>(json['lastSeenAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'displayName': serializer.toJson<String>(displayName),
+      'platform': serializer.toJson<String>(platform),
+      'lastSeenAt': serializer.toJson<DateTime>(lastSeenAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  DeviceRegistrationsTableData copyWith({
+    String? id,
+    String? displayName,
+    String? platform,
+    DateTime? lastSeenAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => DeviceRegistrationsTableData(
+    id: id ?? this.id,
+    displayName: displayName ?? this.displayName,
+    platform: platform ?? this.platform,
+    lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  DeviceRegistrationsTableData copyWithCompanion(
+    DeviceRegistrationsTableCompanion data,
+  ) {
+    return DeviceRegistrationsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      displayName: data.displayName.present
+          ? data.displayName.value
+          : this.displayName,
+      platform: data.platform.present ? data.platform.value : this.platform,
+      lastSeenAt: data.lastSeenAt.present
+          ? data.lastSeenAt.value
+          : this.lastSeenAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DeviceRegistrationsTableData(')
+          ..write('id: $id, ')
+          ..write('displayName: $displayName, ')
+          ..write('platform: $platform, ')
+          ..write('lastSeenAt: $lastSeenAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    displayName,
+    platform,
+    lastSeenAt,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DeviceRegistrationsTableData &&
+          other.id == this.id &&
+          other.displayName == this.displayName &&
+          other.platform == this.platform &&
+          other.lastSeenAt == this.lastSeenAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class DeviceRegistrationsTableCompanion
+    extends UpdateCompanion<DeviceRegistrationsTableData> {
+  final Value<String> id;
+  final Value<String> displayName;
+  final Value<String> platform;
+  final Value<DateTime> lastSeenAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const DeviceRegistrationsTableCompanion({
+    this.id = const Value.absent(),
+    this.displayName = const Value.absent(),
+    this.platform = const Value.absent(),
+    this.lastSeenAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DeviceRegistrationsTableCompanion.insert({
+    required String id,
+    required String displayName,
+    required String platform,
+    required DateTime lastSeenAt,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       displayName = Value(displayName),
+       platform = Value(platform),
+       lastSeenAt = Value(lastSeenAt),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<DeviceRegistrationsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? displayName,
+    Expression<String>? platform,
+    Expression<DateTime>? lastSeenAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (displayName != null) 'display_name': displayName,
+      if (platform != null) 'platform': platform,
+      if (lastSeenAt != null) 'last_seen_at': lastSeenAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DeviceRegistrationsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? displayName,
+    Value<String>? platform,
+    Value<DateTime>? lastSeenAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return DeviceRegistrationsTableCompanion(
+      id: id ?? this.id,
+      displayName: displayName ?? this.displayName,
+      platform: platform ?? this.platform,
+      lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (displayName.present) {
+      map['display_name'] = Variable<String>(displayName.value);
+    }
+    if (platform.present) {
+      map['platform'] = Variable<String>(platform.value);
+    }
+    if (lastSeenAt.present) {
+      map['last_seen_at'] = Variable<DateTime>(lastSeenAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DeviceRegistrationsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('displayName: $displayName, ')
+          ..write('platform: $platform, ')
+          ..write('lastSeenAt: $lastSeenAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ScheduledReminderRulesTableTable extends ScheduledReminderRulesTable
+    with
+        TableInfo<
+          $ScheduledReminderRulesTableTable,
+          ScheduledReminderRulesTableData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ScheduledReminderRulesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _enabledMeta = const VerificationMeta(
+    'enabled',
+  );
+  @override
+  late final GeneratedColumn<bool> enabled = GeneratedColumn<bool>(
+    'enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _scheduleKindMeta = const VerificationMeta(
+    'scheduleKind',
+  );
+  @override
+  late final GeneratedColumn<String> scheduleKind = GeneratedColumn<String>(
+    'schedule_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _localTimeMinutesMeta = const VerificationMeta(
+    'localTimeMinutes',
+  );
+  @override
+  late final GeneratedColumn<int> localTimeMinutes = GeneratedColumn<int>(
+    'local_time_minutes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _weeklyWeekdaysMeta = const VerificationMeta(
+    'weeklyWeekdays',
+  );
+  @override
+  late final GeneratedColumn<String> weeklyWeekdays = GeneratedColumn<String>(
+    'weekly_weekdays',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _onceLocalDateMeta = const VerificationMeta(
+    'onceLocalDate',
+  );
+  @override
+  late final GeneratedColumn<String> onceLocalDate = GeneratedColumn<String>(
+    'once_local_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _targetDeviceIdsMeta = const VerificationMeta(
+    'targetDeviceIds',
+  );
+  @override
+  late final GeneratedColumn<String> targetDeviceIds = GeneratedColumn<String>(
+    'target_device_ids',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _armedAtMeta = const VerificationMeta(
+    'armedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> armedAt = GeneratedColumn<DateTime>(
+    'armed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    title,
+    body,
+    enabled,
+    scheduleKind,
+    localTimeMinutes,
+    weeklyWeekdays,
+    onceLocalDate,
+    targetDeviceIds,
+    armedAt,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'scheduled_reminder_rules_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ScheduledReminderRulesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    }
+    if (data.containsKey('enabled')) {
+      context.handle(
+        _enabledMeta,
+        enabled.isAcceptableOrUnknown(data['enabled']!, _enabledMeta),
+      );
+    }
+    if (data.containsKey('schedule_kind')) {
+      context.handle(
+        _scheduleKindMeta,
+        scheduleKind.isAcceptableOrUnknown(
+          data['schedule_kind']!,
+          _scheduleKindMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_scheduleKindMeta);
+    }
+    if (data.containsKey('local_time_minutes')) {
+      context.handle(
+        _localTimeMinutesMeta,
+        localTimeMinutes.isAcceptableOrUnknown(
+          data['local_time_minutes']!,
+          _localTimeMinutesMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localTimeMinutesMeta);
+    }
+    if (data.containsKey('weekly_weekdays')) {
+      context.handle(
+        _weeklyWeekdaysMeta,
+        weeklyWeekdays.isAcceptableOrUnknown(
+          data['weekly_weekdays']!,
+          _weeklyWeekdaysMeta,
+        ),
+      );
+    }
+    if (data.containsKey('once_local_date')) {
+      context.handle(
+        _onceLocalDateMeta,
+        onceLocalDate.isAcceptableOrUnknown(
+          data['once_local_date']!,
+          _onceLocalDateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('target_device_ids')) {
+      context.handle(
+        _targetDeviceIdsMeta,
+        targetDeviceIds.isAcceptableOrUnknown(
+          data['target_device_ids']!,
+          _targetDeviceIdsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('armed_at')) {
+      context.handle(
+        _armedAtMeta,
+        armedAt.isAcceptableOrUnknown(data['armed_at']!, _armedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_armedAtMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ScheduledReminderRulesTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ScheduledReminderRulesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      ),
+      enabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enabled'],
+      )!,
+      scheduleKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}schedule_kind'],
+      )!,
+      localTimeMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}local_time_minutes'],
+      )!,
+      weeklyWeekdays: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}weekly_weekdays'],
+      )!,
+      onceLocalDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}once_local_date'],
+      ),
+      targetDeviceIds: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}target_device_ids'],
+      )!,
+      armedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}armed_at'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $ScheduledReminderRulesTableTable createAlias(String alias) {
+    return $ScheduledReminderRulesTableTable(attachedDatabase, alias);
+  }
+}
+
+class ScheduledReminderRulesTableData extends DataClass
+    implements Insertable<ScheduledReminderRulesTableData> {
+  final String id;
+  final String title;
+  final String? body;
+  final bool enabled;
+
+  /// [ReminderScheduleKind] by name.
+  final String scheduleKind;
+
+  /// Minutes from local midnight, 0–1439.
+  final int localTimeMinutes;
+
+  /// Weekly weekdays as a comma-separated list of `DateTime.monday`…`sunday`.
+  final String weeklyWeekdays;
+
+  /// `yyyy-MM-dd` for a once rule. Text rather than an instant: as an instant
+  /// each device would read the date back shifted by its own UTC offset.
+  final String? onceLocalDate;
+
+  /// Target device ids, comma separated. Empty means every device.
+  final String targetDeviceIds;
+  final DateTime armedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const ScheduledReminderRulesTableData({
+    required this.id,
+    required this.title,
+    this.body,
+    required this.enabled,
+    required this.scheduleKind,
+    required this.localTimeMinutes,
+    required this.weeklyWeekdays,
+    this.onceLocalDate,
+    required this.targetDeviceIds,
+    required this.armedAt,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['title'] = Variable<String>(title);
+    if (!nullToAbsent || body != null) {
+      map['body'] = Variable<String>(body);
+    }
+    map['enabled'] = Variable<bool>(enabled);
+    map['schedule_kind'] = Variable<String>(scheduleKind);
+    map['local_time_minutes'] = Variable<int>(localTimeMinutes);
+    map['weekly_weekdays'] = Variable<String>(weeklyWeekdays);
+    if (!nullToAbsent || onceLocalDate != null) {
+      map['once_local_date'] = Variable<String>(onceLocalDate);
+    }
+    map['target_device_ids'] = Variable<String>(targetDeviceIds);
+    map['armed_at'] = Variable<DateTime>(armedAt);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  ScheduledReminderRulesTableCompanion toCompanion(bool nullToAbsent) {
+    return ScheduledReminderRulesTableCompanion(
+      id: Value(id),
+      title: Value(title),
+      body: body == null && nullToAbsent ? const Value.absent() : Value(body),
+      enabled: Value(enabled),
+      scheduleKind: Value(scheduleKind),
+      localTimeMinutes: Value(localTimeMinutes),
+      weeklyWeekdays: Value(weeklyWeekdays),
+      onceLocalDate: onceLocalDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(onceLocalDate),
+      targetDeviceIds: Value(targetDeviceIds),
+      armedAt: Value(armedAt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory ScheduledReminderRulesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ScheduledReminderRulesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      title: serializer.fromJson<String>(json['title']),
+      body: serializer.fromJson<String?>(json['body']),
+      enabled: serializer.fromJson<bool>(json['enabled']),
+      scheduleKind: serializer.fromJson<String>(json['scheduleKind']),
+      localTimeMinutes: serializer.fromJson<int>(json['localTimeMinutes']),
+      weeklyWeekdays: serializer.fromJson<String>(json['weeklyWeekdays']),
+      onceLocalDate: serializer.fromJson<String?>(json['onceLocalDate']),
+      targetDeviceIds: serializer.fromJson<String>(json['targetDeviceIds']),
+      armedAt: serializer.fromJson<DateTime>(json['armedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'title': serializer.toJson<String>(title),
+      'body': serializer.toJson<String?>(body),
+      'enabled': serializer.toJson<bool>(enabled),
+      'scheduleKind': serializer.toJson<String>(scheduleKind),
+      'localTimeMinutes': serializer.toJson<int>(localTimeMinutes),
+      'weeklyWeekdays': serializer.toJson<String>(weeklyWeekdays),
+      'onceLocalDate': serializer.toJson<String?>(onceLocalDate),
+      'targetDeviceIds': serializer.toJson<String>(targetDeviceIds),
+      'armedAt': serializer.toJson<DateTime>(armedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  ScheduledReminderRulesTableData copyWith({
+    String? id,
+    String? title,
+    Value<String?> body = const Value.absent(),
+    bool? enabled,
+    String? scheduleKind,
+    int? localTimeMinutes,
+    String? weeklyWeekdays,
+    Value<String?> onceLocalDate = const Value.absent(),
+    String? targetDeviceIds,
+    DateTime? armedAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => ScheduledReminderRulesTableData(
+    id: id ?? this.id,
+    title: title ?? this.title,
+    body: body.present ? body.value : this.body,
+    enabled: enabled ?? this.enabled,
+    scheduleKind: scheduleKind ?? this.scheduleKind,
+    localTimeMinutes: localTimeMinutes ?? this.localTimeMinutes,
+    weeklyWeekdays: weeklyWeekdays ?? this.weeklyWeekdays,
+    onceLocalDate: onceLocalDate.present
+        ? onceLocalDate.value
+        : this.onceLocalDate,
+    targetDeviceIds: targetDeviceIds ?? this.targetDeviceIds,
+    armedAt: armedAt ?? this.armedAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  ScheduledReminderRulesTableData copyWithCompanion(
+    ScheduledReminderRulesTableCompanion data,
+  ) {
+    return ScheduledReminderRulesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      title: data.title.present ? data.title.value : this.title,
+      body: data.body.present ? data.body.value : this.body,
+      enabled: data.enabled.present ? data.enabled.value : this.enabled,
+      scheduleKind: data.scheduleKind.present
+          ? data.scheduleKind.value
+          : this.scheduleKind,
+      localTimeMinutes: data.localTimeMinutes.present
+          ? data.localTimeMinutes.value
+          : this.localTimeMinutes,
+      weeklyWeekdays: data.weeklyWeekdays.present
+          ? data.weeklyWeekdays.value
+          : this.weeklyWeekdays,
+      onceLocalDate: data.onceLocalDate.present
+          ? data.onceLocalDate.value
+          : this.onceLocalDate,
+      targetDeviceIds: data.targetDeviceIds.present
+          ? data.targetDeviceIds.value
+          : this.targetDeviceIds,
+      armedAt: data.armedAt.present ? data.armedAt.value : this.armedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ScheduledReminderRulesTableData(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('body: $body, ')
+          ..write('enabled: $enabled, ')
+          ..write('scheduleKind: $scheduleKind, ')
+          ..write('localTimeMinutes: $localTimeMinutes, ')
+          ..write('weeklyWeekdays: $weeklyWeekdays, ')
+          ..write('onceLocalDate: $onceLocalDate, ')
+          ..write('targetDeviceIds: $targetDeviceIds, ')
+          ..write('armedAt: $armedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    title,
+    body,
+    enabled,
+    scheduleKind,
+    localTimeMinutes,
+    weeklyWeekdays,
+    onceLocalDate,
+    targetDeviceIds,
+    armedAt,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ScheduledReminderRulesTableData &&
+          other.id == this.id &&
+          other.title == this.title &&
+          other.body == this.body &&
+          other.enabled == this.enabled &&
+          other.scheduleKind == this.scheduleKind &&
+          other.localTimeMinutes == this.localTimeMinutes &&
+          other.weeklyWeekdays == this.weeklyWeekdays &&
+          other.onceLocalDate == this.onceLocalDate &&
+          other.targetDeviceIds == this.targetDeviceIds &&
+          other.armedAt == this.armedAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class ScheduledReminderRulesTableCompanion
+    extends UpdateCompanion<ScheduledReminderRulesTableData> {
+  final Value<String> id;
+  final Value<String> title;
+  final Value<String?> body;
+  final Value<bool> enabled;
+  final Value<String> scheduleKind;
+  final Value<int> localTimeMinutes;
+  final Value<String> weeklyWeekdays;
+  final Value<String?> onceLocalDate;
+  final Value<String> targetDeviceIds;
+  final Value<DateTime> armedAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const ScheduledReminderRulesTableCompanion({
+    this.id = const Value.absent(),
+    this.title = const Value.absent(),
+    this.body = const Value.absent(),
+    this.enabled = const Value.absent(),
+    this.scheduleKind = const Value.absent(),
+    this.localTimeMinutes = const Value.absent(),
+    this.weeklyWeekdays = const Value.absent(),
+    this.onceLocalDate = const Value.absent(),
+    this.targetDeviceIds = const Value.absent(),
+    this.armedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ScheduledReminderRulesTableCompanion.insert({
+    required String id,
+    required String title,
+    this.body = const Value.absent(),
+    this.enabled = const Value.absent(),
+    required String scheduleKind,
+    required int localTimeMinutes,
+    this.weeklyWeekdays = const Value.absent(),
+    this.onceLocalDate = const Value.absent(),
+    this.targetDeviceIds = const Value.absent(),
+    required DateTime armedAt,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       title = Value(title),
+       scheduleKind = Value(scheduleKind),
+       localTimeMinutes = Value(localTimeMinutes),
+       armedAt = Value(armedAt),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<ScheduledReminderRulesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? title,
+    Expression<String>? body,
+    Expression<bool>? enabled,
+    Expression<String>? scheduleKind,
+    Expression<int>? localTimeMinutes,
+    Expression<String>? weeklyWeekdays,
+    Expression<String>? onceLocalDate,
+    Expression<String>? targetDeviceIds,
+    Expression<DateTime>? armedAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (title != null) 'title': title,
+      if (body != null) 'body': body,
+      if (enabled != null) 'enabled': enabled,
+      if (scheduleKind != null) 'schedule_kind': scheduleKind,
+      if (localTimeMinutes != null) 'local_time_minutes': localTimeMinutes,
+      if (weeklyWeekdays != null) 'weekly_weekdays': weeklyWeekdays,
+      if (onceLocalDate != null) 'once_local_date': onceLocalDate,
+      if (targetDeviceIds != null) 'target_device_ids': targetDeviceIds,
+      if (armedAt != null) 'armed_at': armedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ScheduledReminderRulesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? title,
+    Value<String?>? body,
+    Value<bool>? enabled,
+    Value<String>? scheduleKind,
+    Value<int>? localTimeMinutes,
+    Value<String>? weeklyWeekdays,
+    Value<String?>? onceLocalDate,
+    Value<String>? targetDeviceIds,
+    Value<DateTime>? armedAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return ScheduledReminderRulesTableCompanion(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      body: body ?? this.body,
+      enabled: enabled ?? this.enabled,
+      scheduleKind: scheduleKind ?? this.scheduleKind,
+      localTimeMinutes: localTimeMinutes ?? this.localTimeMinutes,
+      weeklyWeekdays: weeklyWeekdays ?? this.weeklyWeekdays,
+      onceLocalDate: onceLocalDate ?? this.onceLocalDate,
+      targetDeviceIds: targetDeviceIds ?? this.targetDeviceIds,
+      armedAt: armedAt ?? this.armedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (enabled.present) {
+      map['enabled'] = Variable<bool>(enabled.value);
+    }
+    if (scheduleKind.present) {
+      map['schedule_kind'] = Variable<String>(scheduleKind.value);
+    }
+    if (localTimeMinutes.present) {
+      map['local_time_minutes'] = Variable<int>(localTimeMinutes.value);
+    }
+    if (weeklyWeekdays.present) {
+      map['weekly_weekdays'] = Variable<String>(weeklyWeekdays.value);
+    }
+    if (onceLocalDate.present) {
+      map['once_local_date'] = Variable<String>(onceLocalDate.value);
+    }
+    if (targetDeviceIds.present) {
+      map['target_device_ids'] = Variable<String>(targetDeviceIds.value);
+    }
+    if (armedAt.present) {
+      map['armed_at'] = Variable<DateTime>(armedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ScheduledReminderRulesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('title: $title, ')
+          ..write('body: $body, ')
+          ..write('enabled: $enabled, ')
+          ..write('scheduleKind: $scheduleKind, ')
+          ..write('localTimeMinutes: $localTimeMinutes, ')
+          ..write('weeklyWeekdays: $weeklyWeekdays, ')
+          ..write('onceLocalDate: $onceLocalDate, ')
+          ..write('targetDeviceIds: $targetDeviceIds, ')
+          ..write('armedAt: $armedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $EntityRemindersTableTable extends EntityRemindersTable
+    with TableInfo<$EntityRemindersTableTable, EntityRemindersTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EntityRemindersTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceKindMeta = const VerificationMeta(
+    'sourceKind',
+  );
+  @override
+  late final GeneratedColumn<String> sourceKind = GeneratedColumn<String>(
+    'source_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _entityIdMeta = const VerificationMeta(
+    'entityId',
+  );
+  @override
+  late final GeneratedColumn<String> entityId = GeneratedColumn<String>(
+    'entity_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _enabledMeta = const VerificationMeta(
+    'enabled',
+  );
+  @override
+  late final GeneratedColumn<bool> enabled = GeneratedColumn<bool>(
+    'enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _offsetMinutesMeta = const VerificationMeta(
+    'offsetMinutes',
+  );
+  @override
+  late final GeneratedColumn<int> offsetMinutes = GeneratedColumn<int>(
+    'offset_minutes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _armedAtMeta = const VerificationMeta(
+    'armedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> armedAt = GeneratedColumn<DateTime>(
+    'armed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sourceKind,
+    entityId,
+    enabled,
+    offsetMinutes,
+    armedAt,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'entity_reminders_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<EntityRemindersTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('source_kind')) {
+      context.handle(
+        _sourceKindMeta,
+        sourceKind.isAcceptableOrUnknown(data['source_kind']!, _sourceKindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceKindMeta);
+    }
+    if (data.containsKey('entity_id')) {
+      context.handle(
+        _entityIdMeta,
+        entityId.isAcceptableOrUnknown(data['entity_id']!, _entityIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entityIdMeta);
+    }
+    if (data.containsKey('enabled')) {
+      context.handle(
+        _enabledMeta,
+        enabled.isAcceptableOrUnknown(data['enabled']!, _enabledMeta),
+      );
+    }
+    if (data.containsKey('offset_minutes')) {
+      context.handle(
+        _offsetMinutesMeta,
+        offsetMinutes.isAcceptableOrUnknown(
+          data['offset_minutes']!,
+          _offsetMinutesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('armed_at')) {
+      context.handle(
+        _armedAtMeta,
+        armedAt.isAcceptableOrUnknown(data['armed_at']!, _armedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_armedAtMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  EntityRemindersTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return EntityRemindersTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      sourceKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_kind'],
+      )!,
+      entityId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_id'],
+      )!,
+      enabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enabled'],
+      )!,
+      offsetMinutes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}offset_minutes'],
+      )!,
+      armedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}armed_at'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $EntityRemindersTableTable createAlias(String alias) {
+    return $EntityRemindersTableTable(attachedDatabase, alias);
+  }
+}
+
+class EntityRemindersTableData extends DataClass
+    implements Insertable<EntityRemindersTableData> {
+  final String id;
+
+  /// [ReminderSourceKind] by name.
+  final String sourceKind;
+  final String entityId;
+  final bool enabled;
+
+  /// Minutes before the entity's base time. 0 is "at time".
+  final int offsetMinutes;
+  final DateTime armedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const EntityRemindersTableData({
+    required this.id,
+    required this.sourceKind,
+    required this.entityId,
+    required this.enabled,
+    required this.offsetMinutes,
+    required this.armedAt,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['source_kind'] = Variable<String>(sourceKind);
+    map['entity_id'] = Variable<String>(entityId);
+    map['enabled'] = Variable<bool>(enabled);
+    map['offset_minutes'] = Variable<int>(offsetMinutes);
+    map['armed_at'] = Variable<DateTime>(armedAt);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  EntityRemindersTableCompanion toCompanion(bool nullToAbsent) {
+    return EntityRemindersTableCompanion(
+      id: Value(id),
+      sourceKind: Value(sourceKind),
+      entityId: Value(entityId),
+      enabled: Value(enabled),
+      offsetMinutes: Value(offsetMinutes),
+      armedAt: Value(armedAt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory EntityRemindersTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return EntityRemindersTableData(
+      id: serializer.fromJson<String>(json['id']),
+      sourceKind: serializer.fromJson<String>(json['sourceKind']),
+      entityId: serializer.fromJson<String>(json['entityId']),
+      enabled: serializer.fromJson<bool>(json['enabled']),
+      offsetMinutes: serializer.fromJson<int>(json['offsetMinutes']),
+      armedAt: serializer.fromJson<DateTime>(json['armedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'sourceKind': serializer.toJson<String>(sourceKind),
+      'entityId': serializer.toJson<String>(entityId),
+      'enabled': serializer.toJson<bool>(enabled),
+      'offsetMinutes': serializer.toJson<int>(offsetMinutes),
+      'armedAt': serializer.toJson<DateTime>(armedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  EntityRemindersTableData copyWith({
+    String? id,
+    String? sourceKind,
+    String? entityId,
+    bool? enabled,
+    int? offsetMinutes,
+    DateTime? armedAt,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => EntityRemindersTableData(
+    id: id ?? this.id,
+    sourceKind: sourceKind ?? this.sourceKind,
+    entityId: entityId ?? this.entityId,
+    enabled: enabled ?? this.enabled,
+    offsetMinutes: offsetMinutes ?? this.offsetMinutes,
+    armedAt: armedAt ?? this.armedAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  EntityRemindersTableData copyWithCompanion(
+    EntityRemindersTableCompanion data,
+  ) {
+    return EntityRemindersTableData(
+      id: data.id.present ? data.id.value : this.id,
+      sourceKind: data.sourceKind.present
+          ? data.sourceKind.value
+          : this.sourceKind,
+      entityId: data.entityId.present ? data.entityId.value : this.entityId,
+      enabled: data.enabled.present ? data.enabled.value : this.enabled,
+      offsetMinutes: data.offsetMinutes.present
+          ? data.offsetMinutes.value
+          : this.offsetMinutes,
+      armedAt: data.armedAt.present ? data.armedAt.value : this.armedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EntityRemindersTableData(')
+          ..write('id: $id, ')
+          ..write('sourceKind: $sourceKind, ')
+          ..write('entityId: $entityId, ')
+          ..write('enabled: $enabled, ')
+          ..write('offsetMinutes: $offsetMinutes, ')
+          ..write('armedAt: $armedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    sourceKind,
+    entityId,
+    enabled,
+    offsetMinutes,
+    armedAt,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is EntityRemindersTableData &&
+          other.id == this.id &&
+          other.sourceKind == this.sourceKind &&
+          other.entityId == this.entityId &&
+          other.enabled == this.enabled &&
+          other.offsetMinutes == this.offsetMinutes &&
+          other.armedAt == this.armedAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class EntityRemindersTableCompanion
+    extends UpdateCompanion<EntityRemindersTableData> {
+  final Value<String> id;
+  final Value<String> sourceKind;
+  final Value<String> entityId;
+  final Value<bool> enabled;
+  final Value<int> offsetMinutes;
+  final Value<DateTime> armedAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const EntityRemindersTableCompanion({
+    this.id = const Value.absent(),
+    this.sourceKind = const Value.absent(),
+    this.entityId = const Value.absent(),
+    this.enabled = const Value.absent(),
+    this.offsetMinutes = const Value.absent(),
+    this.armedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EntityRemindersTableCompanion.insert({
+    required String id,
+    required String sourceKind,
+    required String entityId,
+    this.enabled = const Value.absent(),
+    this.offsetMinutes = const Value.absent(),
+    required DateTime armedAt,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       sourceKind = Value(sourceKind),
+       entityId = Value(entityId),
+       armedAt = Value(armedAt),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<EntityRemindersTableData> custom({
+    Expression<String>? id,
+    Expression<String>? sourceKind,
+    Expression<String>? entityId,
+    Expression<bool>? enabled,
+    Expression<int>? offsetMinutes,
+    Expression<DateTime>? armedAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sourceKind != null) 'source_kind': sourceKind,
+      if (entityId != null) 'entity_id': entityId,
+      if (enabled != null) 'enabled': enabled,
+      if (offsetMinutes != null) 'offset_minutes': offsetMinutes,
+      if (armedAt != null) 'armed_at': armedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EntityRemindersTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? sourceKind,
+    Value<String>? entityId,
+    Value<bool>? enabled,
+    Value<int>? offsetMinutes,
+    Value<DateTime>? armedAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return EntityRemindersTableCompanion(
+      id: id ?? this.id,
+      sourceKind: sourceKind ?? this.sourceKind,
+      entityId: entityId ?? this.entityId,
+      enabled: enabled ?? this.enabled,
+      offsetMinutes: offsetMinutes ?? this.offsetMinutes,
+      armedAt: armedAt ?? this.armedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (sourceKind.present) {
+      map['source_kind'] = Variable<String>(sourceKind.value);
+    }
+    if (entityId.present) {
+      map['entity_id'] = Variable<String>(entityId.value);
+    }
+    if (enabled.present) {
+      map['enabled'] = Variable<bool>(enabled.value);
+    }
+    if (offsetMinutes.present) {
+      map['offset_minutes'] = Variable<int>(offsetMinutes.value);
+    }
+    if (armedAt.present) {
+      map['armed_at'] = Variable<DateTime>(armedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EntityRemindersTableCompanion(')
+          ..write('id: $id, ')
+          ..write('sourceKind: $sourceKind, ')
+          ..write('entityId: $entityId, ')
+          ..write('enabled: $enabled, ')
+          ..write('offsetMinutes: $offsetMinutes, ')
+          ..write('armedAt: $armedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ReminderDeliveryStatesTableTable extends ReminderDeliveryStatesTable
+    with
+        TableInfo<
+          $ReminderDeliveryStatesTableTable,
+          ReminderDeliveryStatesTableData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ReminderDeliveryStatesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceKindMeta = const VerificationMeta(
+    'sourceKind',
+  );
+  @override
+  late final GeneratedColumn<String> sourceKind = GeneratedColumn<String>(
+    'source_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceIdMeta = const VerificationMeta(
+    'sourceId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceId = GeneratedColumn<String>(
+    'source_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _occurrenceKeyMeta = const VerificationMeta(
+    'occurrenceKey',
+  );
+  @override
+  late final GeneratedColumn<String> occurrenceKey = GeneratedColumn<String>(
+    'occurrence_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _snoozeUntilMeta = const VerificationMeta(
+    'snoozeUntil',
+  );
+  @override
+  late final GeneratedColumn<DateTime> snoozeUntil = GeneratedColumn<DateTime>(
+    'snooze_until',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _ackedAtMeta = const VerificationMeta(
+    'ackedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> ackedAt = GeneratedColumn<DateTime>(
+    'acked_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sourceKind,
+    sourceId,
+    occurrenceKey,
+    status,
+    snoozeUntil,
+    ackedAt,
+    createdAt,
+    updatedAt,
+    version,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'reminder_delivery_states_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ReminderDeliveryStatesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('source_kind')) {
+      context.handle(
+        _sourceKindMeta,
+        sourceKind.isAcceptableOrUnknown(data['source_kind']!, _sourceKindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceKindMeta);
+    }
+    if (data.containsKey('source_id')) {
+      context.handle(
+        _sourceIdMeta,
+        sourceId.isAcceptableOrUnknown(data['source_id']!, _sourceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceIdMeta);
+    }
+    if (data.containsKey('occurrence_key')) {
+      context.handle(
+        _occurrenceKeyMeta,
+        occurrenceKey.isAcceptableOrUnknown(
+          data['occurrence_key']!,
+          _occurrenceKeyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_occurrenceKeyMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('snooze_until')) {
+      context.handle(
+        _snoozeUntilMeta,
+        snoozeUntil.isAcceptableOrUnknown(
+          data['snooze_until']!,
+          _snoozeUntilMeta,
+        ),
+      );
+    }
+    if (data.containsKey('acked_at')) {
+      context.handle(
+        _ackedAtMeta,
+        ackedAt.isAcceptableOrUnknown(data['acked_at']!, _ackedAtMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ReminderDeliveryStatesTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ReminderDeliveryStatesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      sourceKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_kind'],
+      )!,
+      sourceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_id'],
+      )!,
+      occurrenceKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}occurrence_key'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      snoozeUntil: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}snooze_until'],
+      ),
+      ackedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}acked_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+    );
+  }
+
+  @override
+  $ReminderDeliveryStatesTableTable createAlias(String alias) {
+    return $ReminderDeliveryStatesTableTable(attachedDatabase, alias);
+  }
+}
+
+class ReminderDeliveryStatesTableData extends DataClass
+    implements Insertable<ReminderDeliveryStatesTableData> {
+  /// `reminderSourceKey` of the source.
+  final String id;
+
+  /// [ReminderSourceKind] by name.
+  final String sourceKind;
+  final String sourceId;
+
+  /// The occurrence the action was taken on; a mismatch against the current
+  /// occurrence is what lets a natural fire replace a snooze.
+  final String occurrenceKey;
+
+  /// [ReminderDeliveryStatus] by name.
+  final String status;
+  final DateTime? snoozeUntil;
+  final DateTime? ackedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  const ReminderDeliveryStatesTableData({
+    required this.id,
+    required this.sourceKind,
+    required this.sourceId,
+    required this.occurrenceKey,
+    required this.status,
+    this.snoozeUntil,
+    this.ackedAt,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['source_kind'] = Variable<String>(sourceKind);
+    map['source_id'] = Variable<String>(sourceId);
+    map['occurrence_key'] = Variable<String>(occurrenceKey);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || snoozeUntil != null) {
+      map['snooze_until'] = Variable<DateTime>(snoozeUntil);
+    }
+    if (!nullToAbsent || ackedAt != null) {
+      map['acked_at'] = Variable<DateTime>(ackedAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    return map;
+  }
+
+  ReminderDeliveryStatesTableCompanion toCompanion(bool nullToAbsent) {
+    return ReminderDeliveryStatesTableCompanion(
+      id: Value(id),
+      sourceKind: Value(sourceKind),
+      sourceId: Value(sourceId),
+      occurrenceKey: Value(occurrenceKey),
+      status: Value(status),
+      snoozeUntil: snoozeUntil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(snoozeUntil),
+      ackedAt: ackedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ackedAt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+    );
+  }
+
+  factory ReminderDeliveryStatesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ReminderDeliveryStatesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      sourceKind: serializer.fromJson<String>(json['sourceKind']),
+      sourceId: serializer.fromJson<String>(json['sourceId']),
+      occurrenceKey: serializer.fromJson<String>(json['occurrenceKey']),
+      status: serializer.fromJson<String>(json['status']),
+      snoozeUntil: serializer.fromJson<DateTime?>(json['snoozeUntil']),
+      ackedAt: serializer.fromJson<DateTime?>(json['ackedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'sourceKind': serializer.toJson<String>(sourceKind),
+      'sourceId': serializer.toJson<String>(sourceId),
+      'occurrenceKey': serializer.toJson<String>(occurrenceKey),
+      'status': serializer.toJson<String>(status),
+      'snoozeUntil': serializer.toJson<DateTime?>(snoozeUntil),
+      'ackedAt': serializer.toJson<DateTime?>(ackedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+    };
+  }
+
+  ReminderDeliveryStatesTableData copyWith({
+    String? id,
+    String? sourceKind,
+    String? sourceId,
+    String? occurrenceKey,
+    String? status,
+    Value<DateTime?> snoozeUntil = const Value.absent(),
+    Value<DateTime?> ackedAt = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+  }) => ReminderDeliveryStatesTableData(
+    id: id ?? this.id,
+    sourceKind: sourceKind ?? this.sourceKind,
+    sourceId: sourceId ?? this.sourceId,
+    occurrenceKey: occurrenceKey ?? this.occurrenceKey,
+    status: status ?? this.status,
+    snoozeUntil: snoozeUntil.present ? snoozeUntil.value : this.snoozeUntil,
+    ackedAt: ackedAt.present ? ackedAt.value : this.ackedAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+  );
+  ReminderDeliveryStatesTableData copyWithCompanion(
+    ReminderDeliveryStatesTableCompanion data,
+  ) {
+    return ReminderDeliveryStatesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      sourceKind: data.sourceKind.present
+          ? data.sourceKind.value
+          : this.sourceKind,
+      sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
+      occurrenceKey: data.occurrenceKey.present
+          ? data.occurrenceKey.value
+          : this.occurrenceKey,
+      status: data.status.present ? data.status.value : this.status,
+      snoozeUntil: data.snoozeUntil.present
+          ? data.snoozeUntil.value
+          : this.snoozeUntil,
+      ackedAt: data.ackedAt.present ? data.ackedAt.value : this.ackedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReminderDeliveryStatesTableData(')
+          ..write('id: $id, ')
+          ..write('sourceKind: $sourceKind, ')
+          ..write('sourceId: $sourceId, ')
+          ..write('occurrenceKey: $occurrenceKey, ')
+          ..write('status: $status, ')
+          ..write('snoozeUntil: $snoozeUntil, ')
+          ..write('ackedAt: $ackedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    sourceKind,
+    sourceId,
+    occurrenceKey,
+    status,
+    snoozeUntil,
+    ackedAt,
+    createdAt,
+    updatedAt,
+    version,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ReminderDeliveryStatesTableData &&
+          other.id == this.id &&
+          other.sourceKind == this.sourceKind &&
+          other.sourceId == this.sourceId &&
+          other.occurrenceKey == this.occurrenceKey &&
+          other.status == this.status &&
+          other.snoozeUntil == this.snoozeUntil &&
+          other.ackedAt == this.ackedAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version);
+}
+
+class ReminderDeliveryStatesTableCompanion
+    extends UpdateCompanion<ReminderDeliveryStatesTableData> {
+  final Value<String> id;
+  final Value<String> sourceKind;
+  final Value<String> sourceId;
+  final Value<String> occurrenceKey;
+  final Value<String> status;
+  final Value<DateTime?> snoozeUntil;
+  final Value<DateTime?> ackedAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<int> rowid;
+  const ReminderDeliveryStatesTableCompanion({
+    this.id = const Value.absent(),
+    this.sourceKind = const Value.absent(),
+    this.sourceId = const Value.absent(),
+    this.occurrenceKey = const Value.absent(),
+    this.status = const Value.absent(),
+    this.snoozeUntil = const Value.absent(),
+    this.ackedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ReminderDeliveryStatesTableCompanion.insert({
+    required String id,
+    required String sourceKind,
+    required String sourceId,
+    required String occurrenceKey,
+    required String status,
+    this.snoozeUntil = const Value.absent(),
+    this.ackedAt = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       sourceKind = Value(sourceKind),
+       sourceId = Value(sourceId),
+       occurrenceKey = Value(occurrenceKey),
+       status = Value(status),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<ReminderDeliveryStatesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? sourceKind,
+    Expression<String>? sourceId,
+    Expression<String>? occurrenceKey,
+    Expression<String>? status,
+    Expression<DateTime>? snoozeUntil,
+    Expression<DateTime>? ackedAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sourceKind != null) 'source_kind': sourceKind,
+      if (sourceId != null) 'source_id': sourceId,
+      if (occurrenceKey != null) 'occurrence_key': occurrenceKey,
+      if (status != null) 'status': status,
+      if (snoozeUntil != null) 'snooze_until': snoozeUntil,
+      if (ackedAt != null) 'acked_at': ackedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ReminderDeliveryStatesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? sourceKind,
+    Value<String>? sourceId,
+    Value<String>? occurrenceKey,
+    Value<String>? status,
+    Value<DateTime?>? snoozeUntil,
+    Value<DateTime?>? ackedAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<int>? rowid,
+  }) {
+    return ReminderDeliveryStatesTableCompanion(
+      id: id ?? this.id,
+      sourceKind: sourceKind ?? this.sourceKind,
+      sourceId: sourceId ?? this.sourceId,
+      occurrenceKey: occurrenceKey ?? this.occurrenceKey,
+      status: status ?? this.status,
+      snoozeUntil: snoozeUntil ?? this.snoozeUntil,
+      ackedAt: ackedAt ?? this.ackedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (sourceKind.present) {
+      map['source_kind'] = Variable<String>(sourceKind.value);
+    }
+    if (sourceId.present) {
+      map['source_id'] = Variable<String>(sourceId.value);
+    }
+    if (occurrenceKey.present) {
+      map['occurrence_key'] = Variable<String>(occurrenceKey.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (snoozeUntil.present) {
+      map['snooze_until'] = Variable<DateTime>(snoozeUntil.value);
+    }
+    if (ackedAt.present) {
+      map['acked_at'] = Variable<DateTime>(ackedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReminderDeliveryStatesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('sourceKind: $sourceKind, ')
+          ..write('sourceId: $sourceId, ')
+          ..write('occurrenceKey: $occurrenceKey, ')
+          ..write('status: $status, ')
+          ..write('snoozeUntil: $snoozeUntil, ')
+          ..write('ackedAt: $ackedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ReminderDeliveryLogsTableTable extends ReminderDeliveryLogsTable
+    with
+        TableInfo<
+          $ReminderDeliveryLogsTableTable,
+          ReminderDeliveryLogsTableData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ReminderDeliveryLogsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deliveryStateIdMeta = const VerificationMeta(
+    'deliveryStateId',
+  );
+  @override
+  late final GeneratedColumn<String> deliveryStateId = GeneratedColumn<String>(
+    'delivery_state_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceKindMeta = const VerificationMeta(
+    'sourceKind',
+  );
+  @override
+  late final GeneratedColumn<String> sourceKind = GeneratedColumn<String>(
+    'source_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceIdMeta = const VerificationMeta(
+    'sourceId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceId = GeneratedColumn<String>(
+    'source_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _occurrenceKeyMeta = const VerificationMeta(
+    'occurrenceKey',
+  );
+  @override
+  late final GeneratedColumn<String> occurrenceKey = GeneratedColumn<String>(
+    'occurrence_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventTypeMeta = const VerificationMeta(
+    'eventType',
+  );
+  @override
+  late final GeneratedColumn<String> eventType = GeneratedColumn<String>(
+    'event_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _atMeta = const VerificationMeta('at');
+  @override
+  late final GeneratedColumn<DateTime> at = GeneratedColumn<DateTime>(
+    'at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _detailMeta = const VerificationMeta('detail');
+  @override
+  late final GeneratedColumn<String> detail = GeneratedColumn<String>(
+    'detail',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    deliveryStateId,
+    sourceKind,
+    sourceId,
+    occurrenceKey,
+    eventType,
+    deviceId,
+    at,
+    detail,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'reminder_delivery_logs_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ReminderDeliveryLogsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('delivery_state_id')) {
+      context.handle(
+        _deliveryStateIdMeta,
+        deliveryStateId.isAcceptableOrUnknown(
+          data['delivery_state_id']!,
+          _deliveryStateIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_deliveryStateIdMeta);
+    }
+    if (data.containsKey('source_kind')) {
+      context.handle(
+        _sourceKindMeta,
+        sourceKind.isAcceptableOrUnknown(data['source_kind']!, _sourceKindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceKindMeta);
+    }
+    if (data.containsKey('source_id')) {
+      context.handle(
+        _sourceIdMeta,
+        sourceId.isAcceptableOrUnknown(data['source_id']!, _sourceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceIdMeta);
+    }
+    if (data.containsKey('occurrence_key')) {
+      context.handle(
+        _occurrenceKeyMeta,
+        occurrenceKey.isAcceptableOrUnknown(
+          data['occurrence_key']!,
+          _occurrenceKeyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_occurrenceKeyMeta);
+    }
+    if (data.containsKey('event_type')) {
+      context.handle(
+        _eventTypeMeta,
+        eventType.isAcceptableOrUnknown(data['event_type']!, _eventTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventTypeMeta);
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    if (data.containsKey('at')) {
+      context.handle(_atMeta, at.isAcceptableOrUnknown(data['at']!, _atMeta));
+    } else if (isInserting) {
+      context.missing(_atMeta);
+    }
+    if (data.containsKey('detail')) {
+      context.handle(
+        _detailMeta,
+        detail.isAcceptableOrUnknown(data['detail']!, _detailMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ReminderDeliveryLogsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ReminderDeliveryLogsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      deliveryStateId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}delivery_state_id'],
+      )!,
+      sourceKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_kind'],
+      )!,
+      sourceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_id'],
+      )!,
+      occurrenceKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}occurrence_key'],
+      )!,
+      eventType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_type'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      at: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}at'],
+      )!,
+      detail: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}detail'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $ReminderDeliveryLogsTableTable createAlias(String alias) {
+    return $ReminderDeliveryLogsTableTable(attachedDatabase, alias);
+  }
+}
+
+class ReminderDeliveryLogsTableData extends DataClass
+    implements Insertable<ReminderDeliveryLogsTableData> {
+  final String id;
+  final String deliveryStateId;
+
+  /// [ReminderSourceKind] by name.
+  final String sourceKind;
+  final String sourceId;
+  final String occurrenceKey;
+
+  /// [ReminderLogEvent] by name.
+  final String eventType;
+  final String deviceId;
+  final DateTime at;
+  final String? detail;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+
+  /// Soft-deletable only so that trimming a long history reaches the other
+  /// devices; nothing else deletes a log line.
+  final DateTime? deletedAt;
+  const ReminderDeliveryLogsTableData({
+    required this.id,
+    required this.deliveryStateId,
+    required this.sourceKind,
+    required this.sourceId,
+    required this.occurrenceKey,
+    required this.eventType,
+    required this.deviceId,
+    required this.at,
+    this.detail,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['delivery_state_id'] = Variable<String>(deliveryStateId);
+    map['source_kind'] = Variable<String>(sourceKind);
+    map['source_id'] = Variable<String>(sourceId);
+    map['occurrence_key'] = Variable<String>(occurrenceKey);
+    map['event_type'] = Variable<String>(eventType);
+    map['device_id'] = Variable<String>(deviceId);
+    map['at'] = Variable<DateTime>(at);
+    if (!nullToAbsent || detail != null) {
+      map['detail'] = Variable<String>(detail);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  ReminderDeliveryLogsTableCompanion toCompanion(bool nullToAbsent) {
+    return ReminderDeliveryLogsTableCompanion(
+      id: Value(id),
+      deliveryStateId: Value(deliveryStateId),
+      sourceKind: Value(sourceKind),
+      sourceId: Value(sourceId),
+      occurrenceKey: Value(occurrenceKey),
+      eventType: Value(eventType),
+      deviceId: Value(deviceId),
+      at: Value(at),
+      detail: detail == null && nullToAbsent
+          ? const Value.absent()
+          : Value(detail),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory ReminderDeliveryLogsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ReminderDeliveryLogsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      deliveryStateId: serializer.fromJson<String>(json['deliveryStateId']),
+      sourceKind: serializer.fromJson<String>(json['sourceKind']),
+      sourceId: serializer.fromJson<String>(json['sourceId']),
+      occurrenceKey: serializer.fromJson<String>(json['occurrenceKey']),
+      eventType: serializer.fromJson<String>(json['eventType']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      at: serializer.fromJson<DateTime>(json['at']),
+      detail: serializer.fromJson<String?>(json['detail']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'deliveryStateId': serializer.toJson<String>(deliveryStateId),
+      'sourceKind': serializer.toJson<String>(sourceKind),
+      'sourceId': serializer.toJson<String>(sourceId),
+      'occurrenceKey': serializer.toJson<String>(occurrenceKey),
+      'eventType': serializer.toJson<String>(eventType),
+      'deviceId': serializer.toJson<String>(deviceId),
+      'at': serializer.toJson<DateTime>(at),
+      'detail': serializer.toJson<String?>(detail),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  ReminderDeliveryLogsTableData copyWith({
+    String? id,
+    String? deliveryStateId,
+    String? sourceKind,
+    String? sourceId,
+    String? occurrenceKey,
+    String? eventType,
+    String? deviceId,
+    DateTime? at,
+    Value<String?> detail = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => ReminderDeliveryLogsTableData(
+    id: id ?? this.id,
+    deliveryStateId: deliveryStateId ?? this.deliveryStateId,
+    sourceKind: sourceKind ?? this.sourceKind,
+    sourceId: sourceId ?? this.sourceId,
+    occurrenceKey: occurrenceKey ?? this.occurrenceKey,
+    eventType: eventType ?? this.eventType,
+    deviceId: deviceId ?? this.deviceId,
+    at: at ?? this.at,
+    detail: detail.present ? detail.value : this.detail,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  ReminderDeliveryLogsTableData copyWithCompanion(
+    ReminderDeliveryLogsTableCompanion data,
+  ) {
+    return ReminderDeliveryLogsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      deliveryStateId: data.deliveryStateId.present
+          ? data.deliveryStateId.value
+          : this.deliveryStateId,
+      sourceKind: data.sourceKind.present
+          ? data.sourceKind.value
+          : this.sourceKind,
+      sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
+      occurrenceKey: data.occurrenceKey.present
+          ? data.occurrenceKey.value
+          : this.occurrenceKey,
+      eventType: data.eventType.present ? data.eventType.value : this.eventType,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      at: data.at.present ? data.at.value : this.at,
+      detail: data.detail.present ? data.detail.value : this.detail,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReminderDeliveryLogsTableData(')
+          ..write('id: $id, ')
+          ..write('deliveryStateId: $deliveryStateId, ')
+          ..write('sourceKind: $sourceKind, ')
+          ..write('sourceId: $sourceId, ')
+          ..write('occurrenceKey: $occurrenceKey, ')
+          ..write('eventType: $eventType, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('at: $at, ')
+          ..write('detail: $detail, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    deliveryStateId,
+    sourceKind,
+    sourceId,
+    occurrenceKey,
+    eventType,
+    deviceId,
+    at,
+    detail,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ReminderDeliveryLogsTableData &&
+          other.id == this.id &&
+          other.deliveryStateId == this.deliveryStateId &&
+          other.sourceKind == this.sourceKind &&
+          other.sourceId == this.sourceId &&
+          other.occurrenceKey == this.occurrenceKey &&
+          other.eventType == this.eventType &&
+          other.deviceId == this.deviceId &&
+          other.at == this.at &&
+          other.detail == this.detail &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class ReminderDeliveryLogsTableCompanion
+    extends UpdateCompanion<ReminderDeliveryLogsTableData> {
+  final Value<String> id;
+  final Value<String> deliveryStateId;
+  final Value<String> sourceKind;
+  final Value<String> sourceId;
+  final Value<String> occurrenceKey;
+  final Value<String> eventType;
+  final Value<String> deviceId;
+  final Value<DateTime> at;
+  final Value<String?> detail;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const ReminderDeliveryLogsTableCompanion({
+    this.id = const Value.absent(),
+    this.deliveryStateId = const Value.absent(),
+    this.sourceKind = const Value.absent(),
+    this.sourceId = const Value.absent(),
+    this.occurrenceKey = const Value.absent(),
+    this.eventType = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.at = const Value.absent(),
+    this.detail = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ReminderDeliveryLogsTableCompanion.insert({
+    required String id,
+    required String deliveryStateId,
+    required String sourceKind,
+    required String sourceId,
+    required String occurrenceKey,
+    required String eventType,
+    required String deviceId,
+    required DateTime at,
+    this.detail = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       deliveryStateId = Value(deliveryStateId),
+       sourceKind = Value(sourceKind),
+       sourceId = Value(sourceId),
+       occurrenceKey = Value(occurrenceKey),
+       eventType = Value(eventType),
+       deviceId = Value(deviceId),
+       at = Value(at),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<ReminderDeliveryLogsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? deliveryStateId,
+    Expression<String>? sourceKind,
+    Expression<String>? sourceId,
+    Expression<String>? occurrenceKey,
+    Expression<String>? eventType,
+    Expression<String>? deviceId,
+    Expression<DateTime>? at,
+    Expression<String>? detail,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (deliveryStateId != null) 'delivery_state_id': deliveryStateId,
+      if (sourceKind != null) 'source_kind': sourceKind,
+      if (sourceId != null) 'source_id': sourceId,
+      if (occurrenceKey != null) 'occurrence_key': occurrenceKey,
+      if (eventType != null) 'event_type': eventType,
+      if (deviceId != null) 'device_id': deviceId,
+      if (at != null) 'at': at,
+      if (detail != null) 'detail': detail,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ReminderDeliveryLogsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? deliveryStateId,
+    Value<String>? sourceKind,
+    Value<String>? sourceId,
+    Value<String>? occurrenceKey,
+    Value<String>? eventType,
+    Value<String>? deviceId,
+    Value<DateTime>? at,
+    Value<String?>? detail,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return ReminderDeliveryLogsTableCompanion(
+      id: id ?? this.id,
+      deliveryStateId: deliveryStateId ?? this.deliveryStateId,
+      sourceKind: sourceKind ?? this.sourceKind,
+      sourceId: sourceId ?? this.sourceId,
+      occurrenceKey: occurrenceKey ?? this.occurrenceKey,
+      eventType: eventType ?? this.eventType,
+      deviceId: deviceId ?? this.deviceId,
+      at: at ?? this.at,
+      detail: detail ?? this.detail,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (deliveryStateId.present) {
+      map['delivery_state_id'] = Variable<String>(deliveryStateId.value);
+    }
+    if (sourceKind.present) {
+      map['source_kind'] = Variable<String>(sourceKind.value);
+    }
+    if (sourceId.present) {
+      map['source_id'] = Variable<String>(sourceId.value);
+    }
+    if (occurrenceKey.present) {
+      map['occurrence_key'] = Variable<String>(occurrenceKey.value);
+    }
+    if (eventType.present) {
+      map['event_type'] = Variable<String>(eventType.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (at.present) {
+      map['at'] = Variable<DateTime>(at.value);
+    }
+    if (detail.present) {
+      map['detail'] = Variable<String>(detail.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ReminderDeliveryLogsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('deliveryStateId: $deliveryStateId, ')
+          ..write('sourceKind: $sourceKind, ')
+          ..write('sourceId: $sourceId, ')
+          ..write('occurrenceKey: $occurrenceKey, ')
+          ..write('eventType: $eventType, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('at: $at, ')
+          ..write('detail: $detail, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $CustomWordsTableTable extends CustomWordsTable
     with TableInfo<$CustomWordsTableTable, CustomWordsTableData> {
   @override
@@ -42346,6 +45759,16 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $DismissedNotificationsTableTable dismissedNotificationsTable =
       $DismissedNotificationsTableTable(this);
+  late final $DeviceRegistrationsTableTable deviceRegistrationsTable =
+      $DeviceRegistrationsTableTable(this);
+  late final $ScheduledReminderRulesTableTable scheduledReminderRulesTable =
+      $ScheduledReminderRulesTableTable(this);
+  late final $EntityRemindersTableTable entityRemindersTable =
+      $EntityRemindersTableTable(this);
+  late final $ReminderDeliveryStatesTableTable reminderDeliveryStatesTable =
+      $ReminderDeliveryStatesTableTable(this);
+  late final $ReminderDeliveryLogsTableTable reminderDeliveryLogsTable =
+      $ReminderDeliveryLogsTableTable(this);
   late final $CustomWordsTableTable customWordsTable = $CustomWordsTableTable(
     this,
   );
@@ -42412,6 +45835,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'idx_todo_tasks_parent_task_id',
     'CREATE INDEX idx_todo_tasks_parent_task_id ON todo_tasks_table (parent_task_id)',
   );
+  late final Index idxReminderDeliveryLogsStateId = Index(
+    'idx_reminder_delivery_logs_state_id',
+    'CREATE INDEX idx_reminder_delivery_logs_state_id ON reminder_delivery_logs_table (delivery_state_id)',
+  );
   late final Index idxMediaAssetsContentHash = Index(
     'idx_media_assets_content_hash',
     'CREATE INDEX idx_media_assets_content_hash ON media_assets_table (content_hash)',
@@ -42462,6 +45889,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     goalAllocationsTable,
     pinnedNotesTable,
     dismissedNotificationsTable,
+    deviceRegistrationsTable,
+    scheduledReminderRulesTable,
+    entityRemindersTable,
+    reminderDeliveryStatesTable,
+    reminderDeliveryLogsTable,
     customWordsTable,
     flaggedWordsTable,
     customQuotesTable,
@@ -42492,6 +45924,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     rankingChildrenTable,
     idxTodoTasksListId,
     idxTodoTasksParentTaskId,
+    idxReminderDeliveryLogsStateId,
     idxMediaAssetsContentHash,
     idxMediaReferencesOwner,
     idxMediaReferencesMediaId,
@@ -53308,6 +56741,1698 @@ typedef $$DismissedNotificationsTableTableProcessedTableManager =
       DismissedNotificationsTableData,
       PrefetchHooks Function()
     >;
+typedef $$DeviceRegistrationsTableTableCreateCompanionBuilder =
+    DeviceRegistrationsTableCompanion Function({
+      required String id,
+      required String displayName,
+      required String platform,
+      required DateTime lastSeenAt,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$DeviceRegistrationsTableTableUpdateCompanionBuilder =
+    DeviceRegistrationsTableCompanion Function({
+      Value<String> id,
+      Value<String> displayName,
+      Value<String> platform,
+      Value<DateTime> lastSeenAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$DeviceRegistrationsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $DeviceRegistrationsTableTable> {
+  $$DeviceRegistrationsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get platform => $composableBuilder(
+    column: $table.platform,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastSeenAt => $composableBuilder(
+    column: $table.lastSeenAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DeviceRegistrationsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $DeviceRegistrationsTableTable> {
+  $$DeviceRegistrationsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get platform => $composableBuilder(
+    column: $table.platform,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastSeenAt => $composableBuilder(
+    column: $table.lastSeenAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DeviceRegistrationsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DeviceRegistrationsTableTable> {
+  $$DeviceRegistrationsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get platform =>
+      $composableBuilder(column: $table.platform, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastSeenAt => $composableBuilder(
+    column: $table.lastSeenAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$DeviceRegistrationsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DeviceRegistrationsTableTable,
+          DeviceRegistrationsTableData,
+          $$DeviceRegistrationsTableTableFilterComposer,
+          $$DeviceRegistrationsTableTableOrderingComposer,
+          $$DeviceRegistrationsTableTableAnnotationComposer,
+          $$DeviceRegistrationsTableTableCreateCompanionBuilder,
+          $$DeviceRegistrationsTableTableUpdateCompanionBuilder,
+          (
+            DeviceRegistrationsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $DeviceRegistrationsTableTable,
+              DeviceRegistrationsTableData
+            >,
+          ),
+          DeviceRegistrationsTableData,
+          PrefetchHooks Function()
+        > {
+  $$DeviceRegistrationsTableTableTableManager(
+    _$AppDatabase db,
+    $DeviceRegistrationsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DeviceRegistrationsTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$DeviceRegistrationsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$DeviceRegistrationsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> displayName = const Value.absent(),
+                Value<String> platform = const Value.absent(),
+                Value<DateTime> lastSeenAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DeviceRegistrationsTableCompanion(
+                id: id,
+                displayName: displayName,
+                platform: platform,
+                lastSeenAt: lastSeenAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String displayName,
+                required String platform,
+                required DateTime lastSeenAt,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DeviceRegistrationsTableCompanion.insert(
+                id: id,
+                displayName: displayName,
+                platform: platform,
+                lastSeenAt: lastSeenAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DeviceRegistrationsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DeviceRegistrationsTableTable,
+      DeviceRegistrationsTableData,
+      $$DeviceRegistrationsTableTableFilterComposer,
+      $$DeviceRegistrationsTableTableOrderingComposer,
+      $$DeviceRegistrationsTableTableAnnotationComposer,
+      $$DeviceRegistrationsTableTableCreateCompanionBuilder,
+      $$DeviceRegistrationsTableTableUpdateCompanionBuilder,
+      (
+        DeviceRegistrationsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $DeviceRegistrationsTableTable,
+          DeviceRegistrationsTableData
+        >,
+      ),
+      DeviceRegistrationsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$ScheduledReminderRulesTableTableCreateCompanionBuilder =
+    ScheduledReminderRulesTableCompanion Function({
+      required String id,
+      required String title,
+      Value<String?> body,
+      Value<bool> enabled,
+      required String scheduleKind,
+      required int localTimeMinutes,
+      Value<String> weeklyWeekdays,
+      Value<String?> onceLocalDate,
+      Value<String> targetDeviceIds,
+      required DateTime armedAt,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$ScheduledReminderRulesTableTableUpdateCompanionBuilder =
+    ScheduledReminderRulesTableCompanion Function({
+      Value<String> id,
+      Value<String> title,
+      Value<String?> body,
+      Value<bool> enabled,
+      Value<String> scheduleKind,
+      Value<int> localTimeMinutes,
+      Value<String> weeklyWeekdays,
+      Value<String?> onceLocalDate,
+      Value<String> targetDeviceIds,
+      Value<DateTime> armedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$ScheduledReminderRulesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $ScheduledReminderRulesTableTable> {
+  $$ScheduledReminderRulesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get enabled => $composableBuilder(
+    column: $table.enabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get scheduleKind => $composableBuilder(
+    column: $table.scheduleKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get localTimeMinutes => $composableBuilder(
+    column: $table.localTimeMinutes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get weeklyWeekdays => $composableBuilder(
+    column: $table.weeklyWeekdays,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get onceLocalDate => $composableBuilder(
+    column: $table.onceLocalDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get targetDeviceIds => $composableBuilder(
+    column: $table.targetDeviceIds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get armedAt => $composableBuilder(
+    column: $table.armedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ScheduledReminderRulesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $ScheduledReminderRulesTableTable> {
+  $$ScheduledReminderRulesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get enabled => $composableBuilder(
+    column: $table.enabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get scheduleKind => $composableBuilder(
+    column: $table.scheduleKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get localTimeMinutes => $composableBuilder(
+    column: $table.localTimeMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get weeklyWeekdays => $composableBuilder(
+    column: $table.weeklyWeekdays,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get onceLocalDate => $composableBuilder(
+    column: $table.onceLocalDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get targetDeviceIds => $composableBuilder(
+    column: $table.targetDeviceIds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get armedAt => $composableBuilder(
+    column: $table.armedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ScheduledReminderRulesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ScheduledReminderRulesTableTable> {
+  $$ScheduledReminderRulesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<bool> get enabled =>
+      $composableBuilder(column: $table.enabled, builder: (column) => column);
+
+  GeneratedColumn<String> get scheduleKind => $composableBuilder(
+    column: $table.scheduleKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get localTimeMinutes => $composableBuilder(
+    column: $table.localTimeMinutes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get weeklyWeekdays => $composableBuilder(
+    column: $table.weeklyWeekdays,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get onceLocalDate => $composableBuilder(
+    column: $table.onceLocalDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get targetDeviceIds => $composableBuilder(
+    column: $table.targetDeviceIds,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get armedAt =>
+      $composableBuilder(column: $table.armedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$ScheduledReminderRulesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ScheduledReminderRulesTableTable,
+          ScheduledReminderRulesTableData,
+          $$ScheduledReminderRulesTableTableFilterComposer,
+          $$ScheduledReminderRulesTableTableOrderingComposer,
+          $$ScheduledReminderRulesTableTableAnnotationComposer,
+          $$ScheduledReminderRulesTableTableCreateCompanionBuilder,
+          $$ScheduledReminderRulesTableTableUpdateCompanionBuilder,
+          (
+            ScheduledReminderRulesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $ScheduledReminderRulesTableTable,
+              ScheduledReminderRulesTableData
+            >,
+          ),
+          ScheduledReminderRulesTableData,
+          PrefetchHooks Function()
+        > {
+  $$ScheduledReminderRulesTableTableTableManager(
+    _$AppDatabase db,
+    $ScheduledReminderRulesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ScheduledReminderRulesTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ScheduledReminderRulesTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ScheduledReminderRulesTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String?> body = const Value.absent(),
+                Value<bool> enabled = const Value.absent(),
+                Value<String> scheduleKind = const Value.absent(),
+                Value<int> localTimeMinutes = const Value.absent(),
+                Value<String> weeklyWeekdays = const Value.absent(),
+                Value<String?> onceLocalDate = const Value.absent(),
+                Value<String> targetDeviceIds = const Value.absent(),
+                Value<DateTime> armedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ScheduledReminderRulesTableCompanion(
+                id: id,
+                title: title,
+                body: body,
+                enabled: enabled,
+                scheduleKind: scheduleKind,
+                localTimeMinutes: localTimeMinutes,
+                weeklyWeekdays: weeklyWeekdays,
+                onceLocalDate: onceLocalDate,
+                targetDeviceIds: targetDeviceIds,
+                armedAt: armedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String title,
+                Value<String?> body = const Value.absent(),
+                Value<bool> enabled = const Value.absent(),
+                required String scheduleKind,
+                required int localTimeMinutes,
+                Value<String> weeklyWeekdays = const Value.absent(),
+                Value<String?> onceLocalDate = const Value.absent(),
+                Value<String> targetDeviceIds = const Value.absent(),
+                required DateTime armedAt,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ScheduledReminderRulesTableCompanion.insert(
+                id: id,
+                title: title,
+                body: body,
+                enabled: enabled,
+                scheduleKind: scheduleKind,
+                localTimeMinutes: localTimeMinutes,
+                weeklyWeekdays: weeklyWeekdays,
+                onceLocalDate: onceLocalDate,
+                targetDeviceIds: targetDeviceIds,
+                armedAt: armedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ScheduledReminderRulesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ScheduledReminderRulesTableTable,
+      ScheduledReminderRulesTableData,
+      $$ScheduledReminderRulesTableTableFilterComposer,
+      $$ScheduledReminderRulesTableTableOrderingComposer,
+      $$ScheduledReminderRulesTableTableAnnotationComposer,
+      $$ScheduledReminderRulesTableTableCreateCompanionBuilder,
+      $$ScheduledReminderRulesTableTableUpdateCompanionBuilder,
+      (
+        ScheduledReminderRulesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $ScheduledReminderRulesTableTable,
+          ScheduledReminderRulesTableData
+        >,
+      ),
+      ScheduledReminderRulesTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$EntityRemindersTableTableCreateCompanionBuilder =
+    EntityRemindersTableCompanion Function({
+      required String id,
+      required String sourceKind,
+      required String entityId,
+      Value<bool> enabled,
+      Value<int> offsetMinutes,
+      required DateTime armedAt,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$EntityRemindersTableTableUpdateCompanionBuilder =
+    EntityRemindersTableCompanion Function({
+      Value<String> id,
+      Value<String> sourceKind,
+      Value<String> entityId,
+      Value<bool> enabled,
+      Value<int> offsetMinutes,
+      Value<DateTime> armedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$EntityRemindersTableTableFilterComposer
+    extends Composer<_$AppDatabase, $EntityRemindersTableTable> {
+  $$EntityRemindersTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entityId => $composableBuilder(
+    column: $table.entityId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get enabled => $composableBuilder(
+    column: $table.enabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get offsetMinutes => $composableBuilder(
+    column: $table.offsetMinutes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get armedAt => $composableBuilder(
+    column: $table.armedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$EntityRemindersTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $EntityRemindersTableTable> {
+  $$EntityRemindersTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityId => $composableBuilder(
+    column: $table.entityId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get enabled => $composableBuilder(
+    column: $table.enabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get offsetMinutes => $composableBuilder(
+    column: $table.offsetMinutes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get armedAt => $composableBuilder(
+    column: $table.armedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$EntityRemindersTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EntityRemindersTableTable> {
+  $$EntityRemindersTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get entityId =>
+      $composableBuilder(column: $table.entityId, builder: (column) => column);
+
+  GeneratedColumn<bool> get enabled =>
+      $composableBuilder(column: $table.enabled, builder: (column) => column);
+
+  GeneratedColumn<int> get offsetMinutes => $composableBuilder(
+    column: $table.offsetMinutes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get armedAt =>
+      $composableBuilder(column: $table.armedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$EntityRemindersTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $EntityRemindersTableTable,
+          EntityRemindersTableData,
+          $$EntityRemindersTableTableFilterComposer,
+          $$EntityRemindersTableTableOrderingComposer,
+          $$EntityRemindersTableTableAnnotationComposer,
+          $$EntityRemindersTableTableCreateCompanionBuilder,
+          $$EntityRemindersTableTableUpdateCompanionBuilder,
+          (
+            EntityRemindersTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $EntityRemindersTableTable,
+              EntityRemindersTableData
+            >,
+          ),
+          EntityRemindersTableData,
+          PrefetchHooks Function()
+        > {
+  $$EntityRemindersTableTableTableManager(
+    _$AppDatabase db,
+    $EntityRemindersTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EntityRemindersTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EntityRemindersTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$EntityRemindersTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> sourceKind = const Value.absent(),
+                Value<String> entityId = const Value.absent(),
+                Value<bool> enabled = const Value.absent(),
+                Value<int> offsetMinutes = const Value.absent(),
+                Value<DateTime> armedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => EntityRemindersTableCompanion(
+                id: id,
+                sourceKind: sourceKind,
+                entityId: entityId,
+                enabled: enabled,
+                offsetMinutes: offsetMinutes,
+                armedAt: armedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String sourceKind,
+                required String entityId,
+                Value<bool> enabled = const Value.absent(),
+                Value<int> offsetMinutes = const Value.absent(),
+                required DateTime armedAt,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => EntityRemindersTableCompanion.insert(
+                id: id,
+                sourceKind: sourceKind,
+                entityId: entityId,
+                enabled: enabled,
+                offsetMinutes: offsetMinutes,
+                armedAt: armedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$EntityRemindersTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $EntityRemindersTableTable,
+      EntityRemindersTableData,
+      $$EntityRemindersTableTableFilterComposer,
+      $$EntityRemindersTableTableOrderingComposer,
+      $$EntityRemindersTableTableAnnotationComposer,
+      $$EntityRemindersTableTableCreateCompanionBuilder,
+      $$EntityRemindersTableTableUpdateCompanionBuilder,
+      (
+        EntityRemindersTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $EntityRemindersTableTable,
+          EntityRemindersTableData
+        >,
+      ),
+      EntityRemindersTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$ReminderDeliveryStatesTableTableCreateCompanionBuilder =
+    ReminderDeliveryStatesTableCompanion Function({
+      required String id,
+      required String sourceKind,
+      required String sourceId,
+      required String occurrenceKey,
+      required String status,
+      Value<DateTime?> snoozeUntil,
+      Value<DateTime?> ackedAt,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<int> rowid,
+    });
+typedef $$ReminderDeliveryStatesTableTableUpdateCompanionBuilder =
+    ReminderDeliveryStatesTableCompanion Function({
+      Value<String> id,
+      Value<String> sourceKind,
+      Value<String> sourceId,
+      Value<String> occurrenceKey,
+      Value<String> status,
+      Value<DateTime?> snoozeUntil,
+      Value<DateTime?> ackedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<int> rowid,
+    });
+
+class $$ReminderDeliveryStatesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $ReminderDeliveryStatesTableTable> {
+  $$ReminderDeliveryStatesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get occurrenceKey => $composableBuilder(
+    column: $table.occurrenceKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get snoozeUntil => $composableBuilder(
+    column: $table.snoozeUntil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get ackedAt => $composableBuilder(
+    column: $table.ackedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ReminderDeliveryStatesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $ReminderDeliveryStatesTableTable> {
+  $$ReminderDeliveryStatesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get occurrenceKey => $composableBuilder(
+    column: $table.occurrenceKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get snoozeUntil => $composableBuilder(
+    column: $table.snoozeUntil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get ackedAt => $composableBuilder(
+    column: $table.ackedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ReminderDeliveryStatesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ReminderDeliveryStatesTableTable> {
+  $$ReminderDeliveryStatesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourceId =>
+      $composableBuilder(column: $table.sourceId, builder: (column) => column);
+
+  GeneratedColumn<String> get occurrenceKey => $composableBuilder(
+    column: $table.occurrenceKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get snoozeUntil => $composableBuilder(
+    column: $table.snoozeUntil,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get ackedAt =>
+      $composableBuilder(column: $table.ackedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+}
+
+class $$ReminderDeliveryStatesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ReminderDeliveryStatesTableTable,
+          ReminderDeliveryStatesTableData,
+          $$ReminderDeliveryStatesTableTableFilterComposer,
+          $$ReminderDeliveryStatesTableTableOrderingComposer,
+          $$ReminderDeliveryStatesTableTableAnnotationComposer,
+          $$ReminderDeliveryStatesTableTableCreateCompanionBuilder,
+          $$ReminderDeliveryStatesTableTableUpdateCompanionBuilder,
+          (
+            ReminderDeliveryStatesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $ReminderDeliveryStatesTableTable,
+              ReminderDeliveryStatesTableData
+            >,
+          ),
+          ReminderDeliveryStatesTableData,
+          PrefetchHooks Function()
+        > {
+  $$ReminderDeliveryStatesTableTableTableManager(
+    _$AppDatabase db,
+    $ReminderDeliveryStatesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ReminderDeliveryStatesTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ReminderDeliveryStatesTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ReminderDeliveryStatesTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> sourceKind = const Value.absent(),
+                Value<String> sourceId = const Value.absent(),
+                Value<String> occurrenceKey = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime?> snoozeUntil = const Value.absent(),
+                Value<DateTime?> ackedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ReminderDeliveryStatesTableCompanion(
+                id: id,
+                sourceKind: sourceKind,
+                sourceId: sourceId,
+                occurrenceKey: occurrenceKey,
+                status: status,
+                snoozeUntil: snoozeUntil,
+                ackedAt: ackedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String sourceKind,
+                required String sourceId,
+                required String occurrenceKey,
+                required String status,
+                Value<DateTime?> snoozeUntil = const Value.absent(),
+                Value<DateTime?> ackedAt = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ReminderDeliveryStatesTableCompanion.insert(
+                id: id,
+                sourceKind: sourceKind,
+                sourceId: sourceId,
+                occurrenceKey: occurrenceKey,
+                status: status,
+                snoozeUntil: snoozeUntil,
+                ackedAt: ackedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ReminderDeliveryStatesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ReminderDeliveryStatesTableTable,
+      ReminderDeliveryStatesTableData,
+      $$ReminderDeliveryStatesTableTableFilterComposer,
+      $$ReminderDeliveryStatesTableTableOrderingComposer,
+      $$ReminderDeliveryStatesTableTableAnnotationComposer,
+      $$ReminderDeliveryStatesTableTableCreateCompanionBuilder,
+      $$ReminderDeliveryStatesTableTableUpdateCompanionBuilder,
+      (
+        ReminderDeliveryStatesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $ReminderDeliveryStatesTableTable,
+          ReminderDeliveryStatesTableData
+        >,
+      ),
+      ReminderDeliveryStatesTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$ReminderDeliveryLogsTableTableCreateCompanionBuilder =
+    ReminderDeliveryLogsTableCompanion Function({
+      required String id,
+      required String deliveryStateId,
+      required String sourceKind,
+      required String sourceId,
+      required String occurrenceKey,
+      required String eventType,
+      required String deviceId,
+      required DateTime at,
+      Value<String?> detail,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$ReminderDeliveryLogsTableTableUpdateCompanionBuilder =
+    ReminderDeliveryLogsTableCompanion Function({
+      Value<String> id,
+      Value<String> deliveryStateId,
+      Value<String> sourceKind,
+      Value<String> sourceId,
+      Value<String> occurrenceKey,
+      Value<String> eventType,
+      Value<String> deviceId,
+      Value<DateTime> at,
+      Value<String?> detail,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$ReminderDeliveryLogsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $ReminderDeliveryLogsTableTable> {
+  $$ReminderDeliveryLogsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deliveryStateId => $composableBuilder(
+    column: $table.deliveryStateId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get occurrenceKey => $composableBuilder(
+    column: $table.occurrenceKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventType => $composableBuilder(
+    column: $table.eventType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get at => $composableBuilder(
+    column: $table.at,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get detail => $composableBuilder(
+    column: $table.detail,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ReminderDeliveryLogsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $ReminderDeliveryLogsTableTable> {
+  $$ReminderDeliveryLogsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deliveryStateId => $composableBuilder(
+    column: $table.deliveryStateId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get occurrenceKey => $composableBuilder(
+    column: $table.occurrenceKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventType => $composableBuilder(
+    column: $table.eventType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get at => $composableBuilder(
+    column: $table.at,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get detail => $composableBuilder(
+    column: $table.detail,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ReminderDeliveryLogsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ReminderDeliveryLogsTableTable> {
+  $$ReminderDeliveryLogsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get deliveryStateId => $composableBuilder(
+    column: $table.deliveryStateId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourceId =>
+      $composableBuilder(column: $table.sourceId, builder: (column) => column);
+
+  GeneratedColumn<String> get occurrenceKey => $composableBuilder(
+    column: $table.occurrenceKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get eventType =>
+      $composableBuilder(column: $table.eventType, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get at =>
+      $composableBuilder(column: $table.at, builder: (column) => column);
+
+  GeneratedColumn<String> get detail =>
+      $composableBuilder(column: $table.detail, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$ReminderDeliveryLogsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ReminderDeliveryLogsTableTable,
+          ReminderDeliveryLogsTableData,
+          $$ReminderDeliveryLogsTableTableFilterComposer,
+          $$ReminderDeliveryLogsTableTableOrderingComposer,
+          $$ReminderDeliveryLogsTableTableAnnotationComposer,
+          $$ReminderDeliveryLogsTableTableCreateCompanionBuilder,
+          $$ReminderDeliveryLogsTableTableUpdateCompanionBuilder,
+          (
+            ReminderDeliveryLogsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $ReminderDeliveryLogsTableTable,
+              ReminderDeliveryLogsTableData
+            >,
+          ),
+          ReminderDeliveryLogsTableData,
+          PrefetchHooks Function()
+        > {
+  $$ReminderDeliveryLogsTableTableTableManager(
+    _$AppDatabase db,
+    $ReminderDeliveryLogsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ReminderDeliveryLogsTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ReminderDeliveryLogsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ReminderDeliveryLogsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> deliveryStateId = const Value.absent(),
+                Value<String> sourceKind = const Value.absent(),
+                Value<String> sourceId = const Value.absent(),
+                Value<String> occurrenceKey = const Value.absent(),
+                Value<String> eventType = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<DateTime> at = const Value.absent(),
+                Value<String?> detail = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ReminderDeliveryLogsTableCompanion(
+                id: id,
+                deliveryStateId: deliveryStateId,
+                sourceKind: sourceKind,
+                sourceId: sourceId,
+                occurrenceKey: occurrenceKey,
+                eventType: eventType,
+                deviceId: deviceId,
+                at: at,
+                detail: detail,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String deliveryStateId,
+                required String sourceKind,
+                required String sourceId,
+                required String occurrenceKey,
+                required String eventType,
+                required String deviceId,
+                required DateTime at,
+                Value<String?> detail = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ReminderDeliveryLogsTableCompanion.insert(
+                id: id,
+                deliveryStateId: deliveryStateId,
+                sourceKind: sourceKind,
+                sourceId: sourceId,
+                occurrenceKey: occurrenceKey,
+                eventType: eventType,
+                deviceId: deviceId,
+                at: at,
+                detail: detail,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ReminderDeliveryLogsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ReminderDeliveryLogsTableTable,
+      ReminderDeliveryLogsTableData,
+      $$ReminderDeliveryLogsTableTableFilterComposer,
+      $$ReminderDeliveryLogsTableTableOrderingComposer,
+      $$ReminderDeliveryLogsTableTableAnnotationComposer,
+      $$ReminderDeliveryLogsTableTableCreateCompanionBuilder,
+      $$ReminderDeliveryLogsTableTableUpdateCompanionBuilder,
+      (
+        ReminderDeliveryLogsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $ReminderDeliveryLogsTableTable,
+          ReminderDeliveryLogsTableData
+        >,
+      ),
+      ReminderDeliveryLogsTableData,
+      PrefetchHooks Function()
+    >;
 typedef $$CustomWordsTableTableCreateCompanionBuilder =
     CustomWordsTableCompanion Function({
       required String word,
@@ -62572,6 +67697,30 @@ class $AppDatabaseManager {
       $$DismissedNotificationsTableTableTableManager(
         _db,
         _db.dismissedNotificationsTable,
+      );
+  $$DeviceRegistrationsTableTableTableManager get deviceRegistrationsTable =>
+      $$DeviceRegistrationsTableTableTableManager(
+        _db,
+        _db.deviceRegistrationsTable,
+      );
+  $$ScheduledReminderRulesTableTableTableManager
+  get scheduledReminderRulesTable =>
+      $$ScheduledReminderRulesTableTableTableManager(
+        _db,
+        _db.scheduledReminderRulesTable,
+      );
+  $$EntityRemindersTableTableTableManager get entityRemindersTable =>
+      $$EntityRemindersTableTableTableManager(_db, _db.entityRemindersTable);
+  $$ReminderDeliveryStatesTableTableTableManager
+  get reminderDeliveryStatesTable =>
+      $$ReminderDeliveryStatesTableTableTableManager(
+        _db,
+        _db.reminderDeliveryStatesTable,
+      );
+  $$ReminderDeliveryLogsTableTableTableManager get reminderDeliveryLogsTable =>
+      $$ReminderDeliveryLogsTableTableTableManager(
+        _db,
+        _db.reminderDeliveryLogsTable,
       );
   $$CustomWordsTableTableTableManager get customWordsTable =>
       $$CustomWordsTableTableTableManager(_db, _db.customWordsTable);

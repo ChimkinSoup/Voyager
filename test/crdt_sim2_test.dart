@@ -73,6 +73,7 @@ void main() {
       trackerRepository: DriftTrackerRepository(db),
       financeRepository: DriftFinanceRepository(db),
       notificationRepository: DriftNotificationRepository(db),
+      reminderRepository: DriftReminderRepository(db),
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
       settingsRepository: DriftSettingsRepository(db),

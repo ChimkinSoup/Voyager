@@ -744,7 +744,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     // well as silently dropping [deletedAt].
     final edited = event == null
         ? CalendarEvent(
-            id: newId(),
+            // The panel names the new event, so a bell set on it lands on
+            // this row.
+            id: result['id'] as String? ?? newId(),
             calendarId:
                 result['calendarId'] as String? ??
                 _selectedCalendarId ??

@@ -17,6 +17,7 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
+import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
@@ -144,6 +145,7 @@ List<BackupCollection> collectionsFor(AppDatabase db) => buildBackupCollections(
   trackerRepository: DriftTrackerRepository(db),
   financeRepository: DriftFinanceRepository(db),
   notificationRepository: DriftNotificationRepository(db),
+  reminderRepository: DriftReminderRepository(db),
   bucketListRepository: DriftBucketListRepository(db),
   mediaRepository: DriftMediaRepository(db),
   settingsRepository: DriftSettingsRepository(db),
@@ -188,6 +190,7 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
   final trackerRepo = DriftTrackerRepository(db);
   final financeRepo = DriftFinanceRepository(db);
   final notificationRepo = DriftNotificationRepository(db);
+  final reminderRepo = DriftReminderRepository(db);
   final bucketListRepo = DriftBucketListRepository(db);
   final settingsRepo = DriftSettingsRepository(db);
   final jobRepo = DriftJobRepository(db);
@@ -579,6 +582,68 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
     DismissedNotification(
       key: 'task:task-1',
       dismissedAt: now,
+      updatedAt: now,
+    ),
+  );
+  await reminderRepo.upsertDevice(
+    DeviceRegistration(
+      id: 'device-1',
+      displayName: 'Desk PC',
+      platform: DevicePlatform.windows,
+      lastSeenAt: now,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await reminderRepo.upsertRule(
+    ScheduledReminderRule(
+      id: 'rule-1',
+      title: 'Vitamins',
+      body: 'with breakfast',
+      scheduleKind: ReminderScheduleKind.weekly,
+      localTimeMinutes: 8 * 60,
+      weeklyWeekdays: const {1, 3},
+      targetDeviceIds: const ['device-1'],
+      armedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await reminderRepo.upsertEntityReminder(
+    EntityReminder(
+      id: 'todo:task-1',
+      sourceKind: ReminderSourceKind.todo,
+      entityId: 'task-1',
+      enabled: true,
+      offsetMinutes: 15,
+      armedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await reminderRepo.upsertDeliveryState(
+    ReminderDeliveryState(
+      id: 'rule:rule-1',
+      sourceKind: ReminderSourceKind.scheduledRule,
+      sourceId: 'rule-1',
+      occurrenceKey: '2026-03-04T08:00',
+      status: ReminderDeliveryStatus.snoozed,
+      snoozeUntil: now,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await reminderRepo.upsertLog(
+    ReminderDeliveryLog(
+      id: 'log-1',
+      deliveryStateId: 'rule:rule-1',
+      sourceKind: ReminderSourceKind.scheduledRule,
+      sourceId: 'rule-1',
+      occurrenceKey: '2026-03-04T08:00',
+      eventType: ReminderLogEvent.snoozed10m,
+      deviceId: 'device-1',
+      at: now,
+      createdAt: now,
       updatedAt: now,
     ),
   );
@@ -996,6 +1061,11 @@ void main() {
         'goal_allocations_table',
         'pinned_notes_table',
         'dismissed_notifications_table',
+        'device_registrations_table',
+        'scheduled_reminder_rules_table',
+        'entity_reminders_table',
+        'reminder_delivery_states_table',
+        'reminder_delivery_logs_table',
         'bucket_list_items_table',
         'job_applications_table',
         'job_status_events_table',
@@ -1367,6 +1437,7 @@ void main() {
           trackerRepository: DriftTrackerRepository(db),
           financeRepository: DriftFinanceRepository(db),
           notificationRepository: DriftNotificationRepository(db),
+          reminderRepository: DriftReminderRepository(db),
           bucketListRepository: DriftBucketListRepository(db),
           mediaRepository: DriftMediaRepository(db),
           settingsRepository: DriftSettingsRepository(db),
@@ -1627,6 +1698,7 @@ void main() {
           trackerRepository: DriftTrackerRepository(db),
           financeRepository: DriftFinanceRepository(db),
           notificationRepository: DriftNotificationRepository(db),
+          reminderRepository: DriftReminderRepository(db),
           bucketListRepository: DriftBucketListRepository(db),
           mediaRepository: DriftMediaRepository(db),
           settingsRepository: DriftSettingsRepository(db),
@@ -1711,6 +1783,7 @@ void main() {
           trackerRepository: DriftTrackerRepository(db),
           financeRepository: DriftFinanceRepository(db),
           notificationRepository: DriftNotificationRepository(db),
+          reminderRepository: DriftReminderRepository(db),
           bucketListRepository: DriftBucketListRepository(db),
           mediaRepository: DriftMediaRepository(db),
           settingsRepository: DriftSettingsRepository(db),

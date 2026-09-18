@@ -10,6 +10,7 @@ import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
+import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -176,6 +177,58 @@ abstract class NotificationRepository {
     DismissedNotification dismissal, {
     bool recordLocalActivity = true,
   });
+
+  Future<void> purgeExpiredDeleted(DateTime now);
+}
+
+/// Scheduled reminders, the bells on todos and events, what the user last did
+/// about each, their history, and the devices reminders are aimed at
+/// (`SCHEDULED_REMINDERS_HLD.md`). All of it syncs.
+abstract class ReminderRepository {
+  Future<List<DeviceRegistration>> listDevices({bool includeDeleted = false});
+  Future<DeviceRegistration?> getDevice(String id);
+  Future<void> upsertDevice(
+    DeviceRegistration device, {
+    bool recordLocalActivity = true,
+  });
+
+  Future<List<ScheduledReminderRule>> listRules({bool includeDeleted = false});
+  Future<ScheduledReminderRule?> getRule(String id);
+  Future<void> upsertRule(
+    ScheduledReminderRule rule, {
+    bool recordLocalActivity = true,
+  });
+
+  Future<List<EntityReminder>> listEntityReminders({
+    bool includeDeleted = false,
+  });
+  Future<EntityReminder?> getEntityReminder(String id);
+  Future<void> upsertEntityReminder(
+    EntityReminder reminder, {
+    bool recordLocalActivity = true,
+  });
+
+  Future<List<ReminderDeliveryState>> listDeliveryStates();
+  Future<ReminderDeliveryState?> getDeliveryState(String id);
+  Future<void> upsertDeliveryState(
+    ReminderDeliveryState state, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Newest first. [deliveryStateId] narrows it to one source's history.
+  Future<List<ReminderDeliveryLog>> listLogs({
+    String? deliveryStateId,
+    bool includeDeleted = false,
+  });
+  Future<ReminderDeliveryLog?> getLog(String id);
+  Future<void> upsertLog(
+    ReminderDeliveryLog log, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Writes [log], then tombstones that source's lines beyond the newest
+  /// [keep] so a daily reminder's history does not grow without end.
+  Future<void> appendLog(ReminderDeliveryLog log, {int keep = 50});
 
   Future<void> purgeExpiredDeleted(DateTime now);
 }

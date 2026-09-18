@@ -26,6 +26,7 @@ import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
+import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
@@ -1466,6 +1467,434 @@ class DriftNotificationRepository implements NotificationRepository {
         version: row.version,
         deletedAt: row.deletedAt,
       );
+}
+
+/// Reminders, their bells, delivery states and history
+/// (`SCHEDULED_REMINDERS_HLD.md` §8).
+/// Scheduled reminders, entity bells, delivery state, history and device
+/// registrations. Every write goes through [SyncedWriteNotifier].
+class DriftReminderRepository implements ReminderRepository {
+  DriftReminderRepository(this._db, {SyncedWriteNotifier? syncedWrites})
+    : _syncedWrites = syncedWrites;
+
+  final AppDatabase _db;
+  final SyncedWriteNotifier? _syncedWrites;
+  final _policy = const SoftDeletePolicy();
+
+  // --- Devices --------------------------------------------------------------
+
+  @override
+  Future<List<DeviceRegistration>> listDevices({
+    bool includeDeleted = false,
+  }) async {
+    final rows = await (_db.select(
+      _db.deviceRegistrationsTable,
+    )..orderBy([(t) => OrderingTerm.asc(t.createdAt)])).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapDevice)
+        .toList();
+  }
+
+  @override
+  Future<DeviceRegistration?> getDevice(String id) async {
+    final row = await (_db.select(
+      _db.deviceRegistrationsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapDevice(row);
+  }
+
+  @override
+  Future<void> upsertDevice(
+    DeviceRegistration device, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.deviceRegistrationsTable)
+        .insertOnConflictUpdate(
+          DeviceRegistrationsTableCompanion(
+            id: Value(device.id),
+            displayName: Value(device.displayName),
+            platform: Value(device.platform.name),
+            lastSeenAt: Value(device.lastSeenAt),
+            createdAt: Value(device.createdAt),
+            updatedAt: Value(device.updatedAt),
+            version: Value(device.version),
+            deletedAt: Value(device.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.deviceRegistrations, device);
+    }
+  }
+
+  DeviceRegistration _mapDevice(DeviceRegistrationsTableData row) =>
+      DeviceRegistration(
+        id: row.id,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        version: row.version,
+        deletedAt: row.deletedAt,
+        displayName: row.displayName,
+        platform: reminderEnumByName(
+          DevicePlatform.values,
+          row.platform,
+          DevicePlatform.web,
+        ),
+        lastSeenAt: row.lastSeenAt,
+      );
+
+  // --- Rules ----------------------------------------------------------------
+
+  @override
+  Future<List<ScheduledReminderRule>> listRules({
+    bool includeDeleted = false,
+  }) async {
+    final rows = await (_db.select(
+      _db.scheduledReminderRulesTable,
+    )..orderBy([(t) => OrderingTerm.asc(t.createdAt)])).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapRule)
+        .toList();
+  }
+
+  @override
+  Future<ScheduledReminderRule?> getRule(String id) async {
+    final row = await (_db.select(
+      _db.scheduledReminderRulesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapRule(row);
+  }
+
+  @override
+  Future<void> upsertRule(
+    ScheduledReminderRule rule, {
+    bool recordLocalActivity = true,
+  }) async {
+    final onceDate = rule.onceLocalDate;
+    await _db
+        .into(_db.scheduledReminderRulesTable)
+        .insertOnConflictUpdate(
+          ScheduledReminderRulesTableCompanion(
+            id: Value(rule.id),
+            title: Value(rule.title),
+            body: Value(rule.body),
+            enabled: Value(rule.enabled),
+            scheduleKind: Value(rule.scheduleKind.name),
+            localTimeMinutes: Value(rule.localTimeMinutes),
+            weeklyWeekdays: Value(
+              (rule.weeklyWeekdays.toList()..sort()).join(','),
+            ),
+            onceLocalDate: Value(
+              onceDate == null ? null : reminderLocalDateToString(onceDate),
+            ),
+            targetDeviceIds: Value(jsonEncode(rule.targetDeviceIds)),
+            armedAt: Value(rule.armedAt),
+            createdAt: Value(rule.createdAt),
+            updatedAt: Value(rule.updatedAt),
+            version: Value(rule.version),
+            deletedAt: Value(rule.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(
+        FirestoreCollections.scheduledReminderRules,
+        rule,
+      );
+    }
+  }
+
+  ScheduledReminderRule _mapRule(ScheduledReminderRulesTableData row) =>
+      ScheduledReminderRule(
+        id: row.id,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        version: row.version,
+        deletedAt: row.deletedAt,
+        title: row.title,
+        body: row.body,
+        enabled: row.enabled,
+        scheduleKind: reminderEnumByName(
+          ReminderScheduleKind.values,
+          row.scheduleKind,
+          ReminderScheduleKind.daily,
+        ),
+        localTimeMinutes: row.localTimeMinutes,
+        weeklyWeekdays: {
+          for (final part in row.weeklyWeekdays.split(','))
+            if (int.tryParse(part) case final day?) day,
+        },
+        onceLocalDate: parseReminderLocalDate(row.onceLocalDate),
+        targetDeviceIds: List<String>.from(
+          jsonDecode(row.targetDeviceIds) as List,
+        ),
+        armedAt: row.armedAt,
+      );
+
+  // --- Entity bells ---------------------------------------------------------
+
+  @override
+  Future<List<EntityReminder>> listEntityReminders({
+    bool includeDeleted = false,
+  }) async {
+    final rows = await _db.select(_db.entityRemindersTable).get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapEntityReminder)
+        .toList();
+  }
+
+  @override
+  Future<EntityReminder?> getEntityReminder(String id) async {
+    final row = await (_db.select(
+      _db.entityRemindersTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapEntityReminder(row);
+  }
+
+  @override
+  Future<void> upsertEntityReminder(
+    EntityReminder reminder, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.entityRemindersTable)
+        .insertOnConflictUpdate(
+          EntityRemindersTableCompanion(
+            id: Value(reminder.id),
+            sourceKind: Value(reminder.sourceKind.name),
+            entityId: Value(reminder.entityId),
+            enabled: Value(reminder.enabled),
+            offsetMinutes: Value(reminder.offsetMinutes),
+            armedAt: Value(reminder.armedAt),
+            createdAt: Value(reminder.createdAt),
+            updatedAt: Value(reminder.updatedAt),
+            version: Value(reminder.version),
+            deletedAt: Value(reminder.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.entityReminders, reminder);
+    }
+  }
+
+  EntityReminder _mapEntityReminder(EntityRemindersTableData row) =>
+      EntityReminder(
+        id: row.id,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        version: row.version,
+        deletedAt: row.deletedAt,
+        sourceKind: reminderEnumByName(
+          ReminderSourceKind.values,
+          row.sourceKind,
+          ReminderSourceKind.todo,
+        ),
+        entityId: row.entityId,
+        enabled: row.enabled,
+        offsetMinutes: row.offsetMinutes,
+        armedAt: row.armedAt,
+      );
+
+  // --- Delivery state -------------------------------------------------------
+
+  @override
+  Future<List<ReminderDeliveryState>> listDeliveryStates() async {
+    final rows = await _db.select(_db.reminderDeliveryStatesTable).get();
+    return rows.map(_mapState).toList();
+  }
+
+  @override
+  Future<ReminderDeliveryState?> getDeliveryState(String id) async {
+    final row = await (_db.select(
+      _db.reminderDeliveryStatesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapState(row);
+  }
+
+  @override
+  Future<void> upsertDeliveryState(
+    ReminderDeliveryState state, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.reminderDeliveryStatesTable)
+        .insertOnConflictUpdate(
+          ReminderDeliveryStatesTableCompanion(
+            id: Value(state.id),
+            sourceKind: Value(state.sourceKind.name),
+            sourceId: Value(state.sourceId),
+            occurrenceKey: Value(state.occurrenceKey),
+            status: Value(state.status.name),
+            snoozeUntil: Value(state.snoozeUntil),
+            ackedAt: Value(state.ackedAt),
+            createdAt: Value(state.createdAt),
+            updatedAt: Value(state.updatedAt),
+            version: Value(state.version),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(
+        FirestoreCollections.reminderDeliveryStates,
+        state,
+      );
+    }
+  }
+
+  ReminderDeliveryState _mapState(ReminderDeliveryStatesTableData row) =>
+      ReminderDeliveryState(
+        id: row.id,
+        sourceKind: reminderEnumByName(
+          ReminderSourceKind.values,
+          row.sourceKind,
+          ReminderSourceKind.scheduledRule,
+        ),
+        sourceId: row.sourceId,
+        occurrenceKey: row.occurrenceKey,
+        status: reminderEnumByName(
+          ReminderDeliveryStatus.values,
+          row.status,
+          ReminderDeliveryStatus.acked,
+        ),
+        snoozeUntil: row.snoozeUntil,
+        ackedAt: row.ackedAt,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        version: row.version,
+      );
+
+  // --- History --------------------------------------------------------------
+
+  @override
+  Future<List<ReminderDeliveryLog>> listLogs({
+    String? deliveryStateId,
+    bool includeDeleted = false,
+  }) async {
+    final query = _db.select(_db.reminderDeliveryLogsTable)
+      ..orderBy([(t) => OrderingTerm.desc(t.at)]);
+    if (deliveryStateId != null) {
+      query.where((t) => t.deliveryStateId.equals(deliveryStateId));
+    }
+    final rows = await query.get();
+    return rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .map(_mapLog)
+        .toList();
+  }
+
+  @override
+  Future<ReminderDeliveryLog?> getLog(String id) async {
+    final row = await (_db.select(
+      _db.reminderDeliveryLogsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapLog(row);
+  }
+
+  @override
+  Future<void> upsertLog(
+    ReminderDeliveryLog log, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.reminderDeliveryLogsTable)
+        .insertOnConflictUpdate(
+          ReminderDeliveryLogsTableCompanion(
+            id: Value(log.id),
+            deliveryStateId: Value(log.deliveryStateId),
+            sourceKind: Value(log.sourceKind.name),
+            sourceId: Value(log.sourceId),
+            occurrenceKey: Value(log.occurrenceKey),
+            eventType: Value(log.eventType.name),
+            deviceId: Value(log.deviceId),
+            at: Value(log.at),
+            detail: Value(log.detail),
+            createdAt: Value(log.createdAt),
+            updatedAt: Value(log.updatedAt),
+            version: Value(log.version),
+            deletedAt: Value(log.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(FirestoreCollections.reminderDeliveryLogs, log);
+    }
+  }
+
+  @override
+  Future<void> appendLog(ReminderDeliveryLog log, {int keep = 50}) async {
+    await upsertLog(log);
+    final live = await listLogs(deliveryStateId: log.deliveryStateId);
+    if (live.length <= keep) return;
+    final now = utcNow();
+    final trimmed = [
+      for (final old in live.skip(keep))
+        ReminderDeliveryLog(
+          id: old.id,
+          createdAt: old.createdAt,
+          updatedAt: now,
+          version: old.version + 1,
+          deletedAt: now,
+          deliveryStateId: old.deliveryStateId,
+          sourceKind: old.sourceKind,
+          sourceId: old.sourceId,
+          occurrenceKey: old.occurrenceKey,
+          eventType: old.eventType,
+          deviceId: old.deviceId,
+          at: old.at,
+          detail: old.detail,
+        ),
+    ];
+    for (final old in trimmed) {
+      await upsertLog(old, recordLocalActivity: false);
+    }
+    _syncedWrites?.notify(FirestoreCollections.reminderDeliveryLogs, trimmed);
+  }
+
+  ReminderDeliveryLog _mapLog(ReminderDeliveryLogsTableData row) =>
+      ReminderDeliveryLog(
+        id: row.id,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        version: row.version,
+        deletedAt: row.deletedAt,
+        deliveryStateId: row.deliveryStateId,
+        sourceKind: reminderEnumByName(
+          ReminderSourceKind.values,
+          row.sourceKind,
+          ReminderSourceKind.scheduledRule,
+        ),
+        sourceId: row.sourceId,
+        occurrenceKey: row.occurrenceKey,
+        eventType: reminderEnumByName(
+          ReminderLogEvent.values,
+          row.eventType,
+          ReminderLogEvent.osFired,
+        ),
+        deviceId: row.deviceId,
+        at: row.at,
+        detail: row.detail,
+      );
+
+  @override
+  Future<void> purgeExpiredDeleted(DateTime now) async {
+    final cutoff = _policy.purgeCutoff(now);
+    await (_db.delete(_db.deviceRegistrationsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.deviceRegistrations, t.id)))
+        .go();
+    await (_db.delete(_db.scheduledReminderRulesTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.scheduledReminderRules, t.id)))
+        .go();
+    await (_db.delete(_db.entityRemindersTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.entityReminders, t.id)))
+        .go();
+    await (_db.delete(_db.reminderDeliveryLogsTable)
+          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.reminderDeliveryLogs, t.id)))
+        .go();
+  }
 }
 
 class DriftBucketListRepository implements BucketListRepository {

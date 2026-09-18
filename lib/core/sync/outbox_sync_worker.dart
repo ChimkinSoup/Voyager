@@ -595,6 +595,31 @@ class OutboxSyncWorker {
           DriftNotificationRepository(_db).getDismissal,
           dismissedNotificationToFirestore,
         );
+      case FirestoreCollections.deviceRegistrations:
+        return byId(
+          DriftReminderRepository(_db).getDevice,
+          deviceRegistrationToFirestore,
+        );
+      case FirestoreCollections.scheduledReminderRules:
+        return byId(
+          DriftReminderRepository(_db).getRule,
+          scheduledReminderRuleToFirestore,
+        );
+      case FirestoreCollections.entityReminders:
+        return byId(
+          DriftReminderRepository(_db).getEntityReminder,
+          entityReminderToFirestore,
+        );
+      case FirestoreCollections.reminderDeliveryStates:
+        return byId(
+          DriftReminderRepository(_db).getDeliveryState,
+          reminderDeliveryStateToFirestore,
+        );
+      case FirestoreCollections.reminderDeliveryLogs:
+        return byId(
+          DriftReminderRepository(_db).getLog,
+          reminderDeliveryLogToFirestore,
+        );
       case FirestoreCollections.bucketListItems:
         return byId(
           DriftBucketListRepository(_db).getItem,

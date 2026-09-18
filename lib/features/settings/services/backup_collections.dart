@@ -111,6 +111,7 @@ List<BackupCollection> buildBackupCollections({
   required TrackerRepository trackerRepository,
   required FinanceRepository financeRepository,
   required NotificationRepository notificationRepository,
+  required ReminderRepository reminderRepository,
   required BucketListRepository bucketListRepository,
   required SettingsRepository settingsRepository,
   required JobRepository jobRepository,
@@ -697,6 +698,89 @@ List<BackupCollection> buildBackupCollections({
           recordLocalActivity: false,
         );
         return note;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.deviceRegistrations,
+      read: () async => [
+        for (final device in await reminderRepository.listDevices(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: device.id, data: deviceRegistrationToFirestore(device)),
+      ],
+      restore: (id, data) async {
+        final device = mergeDeviceRegistrationFromRemote(data, id);
+        await reminderRepository.upsertDevice(
+          device,
+          recordLocalActivity: false,
+        );
+        return device;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.scheduledReminderRules,
+      read: () async => [
+        for (final rule in await reminderRepository.listRules(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: rule.id, data: scheduledReminderRuleToFirestore(rule)),
+      ],
+      restore: (id, data) async {
+        final rule = mergeScheduledReminderRuleFromRemote(data, id);
+        await reminderRepository.upsertRule(rule, recordLocalActivity: false);
+        return rule;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.entityReminders,
+      read: () async => [
+        for (final reminder in await reminderRepository.listEntityReminders(
+          includeDeleted: true,
+        ))
+          BackupRecord(
+            id: reminder.id,
+            data: entityReminderToFirestore(reminder),
+          ),
+      ],
+      restore: (id, data) async {
+        final reminder = mergeEntityReminderFromRemote(data, id);
+        await reminderRepository.upsertEntityReminder(
+          reminder,
+          recordLocalActivity: false,
+        );
+        return reminder;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.reminderDeliveryStates,
+      read: () async => [
+        for (final state in await reminderRepository.listDeliveryStates())
+          BackupRecord(
+            id: state.id,
+            data: reminderDeliveryStateToFirestore(state),
+          ),
+      ],
+      restore: (id, data) async {
+        final state = mergeReminderDeliveryStateFromRemote(data, id);
+        await reminderRepository.upsertDeliveryState(
+          state,
+          recordLocalActivity: false,
+        );
+        return state;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.reminderDeliveryLogs,
+      read: () async => [
+        for (final log in await reminderRepository.listLogs(
+          includeDeleted: true,
+        ))
+          BackupRecord(id: log.id, data: reminderDeliveryLogToFirestore(log)),
+      ],
+      restore: (id, data) async {
+        final log = mergeReminderDeliveryLogFromRemote(data, id);
+        await reminderRepository.upsertLog(log, recordLocalActivity: false);
+        return log;
       },
     ),
     BackupCollection(

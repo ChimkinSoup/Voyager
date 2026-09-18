@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,6 +24,10 @@ import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/core/reminders/reminder_engine.dart';
+import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/domain/models/reminder_models.dart';
+import 'package:voyager/features/notifications/reminder_bell_button.dart';
 
 /// Geometry of the floating close ✕ and the gap the form leaves under it.
 ///
@@ -86,6 +92,15 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
   bool _isDatePopoverOpen = false;
   bool _isTimePopoverOpen = false;
   bool _isRepeatPopoverOpen = false;
+  bool _isReminderPopoverOpen = false;
+
+  /// The event's id — made up front for a new event, so its bell can be
+  /// written against the row the page is about to create.
+  late final String _eventId;
+
+  /// The bell as it will be saved; null is off. Committed with the rest of the
+  /// form, so discarding the panel discards a bell change too.
+  int? _reminderOffset;
   bool _intentionalDiscard = false;
   bool _closingAfterSave = false;
   late final FocusNode _allDayFocusNode;
@@ -94,6 +109,12 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
   void initState() {
     super.initState();
     final e = widget.event;
+    _eventId = e?.id ?? newId();
+    _reminderOffset = entityReminderOffset(
+      ref.read(entityRemindersProvider).valueOrNull ?? const [],
+      ReminderSourceKind.calendarEvent,
+      _eventId,
+    );
     _titleController = TextEditingController(text: e?.title ?? '');
     _notesController = TextEditingController(text: e?.notes ?? '');
     _lastNotesText = _notesController.text;
@@ -249,6 +270,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
         'colorValue': _colorValue,
         'recurrence': _recurrence,
         'calendarId': _calendarId,
+        'id': _eventId,
       };
 
   /// Returns true when the form is valid and [onSave] was called.
@@ -262,8 +284,26 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       return false;
     }
     _closingAfterSave = true;
+    unawaited(_saveReminder());
     widget.onSave(_buildPayload(title));
     return true;
+  }
+
+  Future<void> _saveReminder() async {
+    // Captured first: saving closes the panel.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final offset = _reminderOffset;
+    final changed = await setEntityReminder(
+      container.read(reminderRepositoryProvider),
+      kind: ReminderSourceKind.calendarEvent,
+      entityId: _eventId,
+      offsetMinutes: offset,
+    );
+    if (!changed) return;
+    container.invalidate(entityRemindersProvider);
+    if (offset != null) {
+      unawaited(container.read(reminderOsNotifierProvider).requestPermission());
+    }
   }
 
   void _submit() {
@@ -271,7 +311,10 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     // sub-popover is open — and onSave's Navigator.pop() would then pop the
     // sub-popover instead of the panel, leaving _closingAfterSave latched and
     // every later edit silently discarded on dismissal.
-    if (_isDatePopoverOpen || _isTimePopoverOpen || _isRepeatPopoverOpen) {
+    if (_isDatePopoverOpen ||
+        _isTimePopoverOpen ||
+        _isRepeatPopoverOpen ||
+        _isReminderPopoverOpen) {
       return;
     }
     _trySave();
@@ -688,6 +731,14 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                         onPressed: () => _openRepeatPopover(buttonContext),
                       ),
                     ),
+                  ReminderBellButton(
+                    offsetMinutes: _reminderOffset,
+                    accentColor: accent,
+                    onOpenChanged: (open) =>
+                        setState(() => _isReminderPopoverOpen = open),
+                    onChanged: (minutes) =>
+                        setState(() => _reminderOffset = minutes),
+                  ),
                 ],
               ),
               const SizedBox(height: 10),

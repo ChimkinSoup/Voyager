@@ -476,6 +476,145 @@ class DismissedNotificationsTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Installations signed in to the account, so a reminder can be aimed at some
+/// devices and not others (`SCHEDULED_REMINDERS_HLD.md` §4.1).
+///
+/// [id] is the device id `ensureDeviceId` persists, which is why a
+/// registration needs no separate key of its own.
+class DeviceRegistrationsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get displayName => text()();
+
+  /// [DevicePlatform] by name. Text, not an index: a registration synced from
+  /// a future build naming a platform this one has never heard of has to round
+  /// trip rather than land as some arbitrary neighbour.
+  TextColumn get platform => text()();
+  DateTimeColumn get lastSeenAt => dateTime()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// The Inbox's Scheduled reminders (§4.2).
+class ScheduledReminderRulesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get title => text()();
+  TextColumn get body => text().nullable()();
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
+
+  /// [ReminderScheduleKind] by name.
+  TextColumn get scheduleKind => text()();
+
+  /// Minutes from local midnight, 0–1439.
+  IntColumn get localTimeMinutes => integer()();
+
+  /// Weekly weekdays as a comma-separated list of `DateTime.monday`…`sunday`.
+  TextColumn get weeklyWeekdays => text().withDefault(const Constant(''))();
+
+  /// `yyyy-MM-dd` for a once rule. Text rather than an instant: as an instant
+  /// each device would read the date back shifted by its own UTC offset.
+  TextColumn get onceLocalDate => text().nullable()();
+
+  /// Target device ids, comma separated. Empty means every device.
+  TextColumn get targetDeviceIds => text().withDefault(const Constant('[]'))();
+  DateTimeColumn get armedAt => dateTime()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// The bell on a todo or calendar event (§4.5). [id] is `reminderSourceKey`
+/// of the entity.
+class EntityRemindersTable extends Table {
+  TextColumn get id => text()();
+
+  /// [ReminderSourceKind] by name.
+  TextColumn get sourceKind => text()();
+  TextColumn get entityId => text()();
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
+
+  /// Minutes before the entity's base time. 0 is "at time".
+  IntColumn get offsetMinutes => integer().withDefault(const Constant(0))();
+  DateTimeColumn get armedAt => dateTime()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// What the user last did about a reminder source (§4.3): one row per source,
+/// which is what keeps a rule down to one sticky however many days go
+/// unacknowledged.
+///
+/// No tombstone column. Nothing deletes a delivery state — a newer occurrence
+/// replaces the row in place — so there is no removal to carry to the other
+/// devices.
+class ReminderDeliveryStatesTable extends Table {
+  /// `reminderSourceKey` of the source.
+  TextColumn get id => text()();
+
+  /// [ReminderSourceKind] by name.
+  TextColumn get sourceKind => text()();
+  TextColumn get sourceId => text()();
+
+  /// The occurrence the action was taken on; a mismatch against the current
+  /// occurrence is what lets a natural fire replace a snooze.
+  TextColumn get occurrenceKey => text()();
+
+  /// [ReminderDeliveryStatus] by name.
+  TextColumn get status => text()();
+  DateTimeColumn get snoozeUntil => dateTime().nullable()();
+  DateTimeColumn get ackedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One line of a reminder's debug history (§4.6).
+@TableIndex(
+  name: 'idx_reminder_delivery_logs_state_id',
+  columns: {#deliveryStateId},
+)
+class ReminderDeliveryLogsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get deliveryStateId => text()();
+
+  /// [ReminderSourceKind] by name.
+  TextColumn get sourceKind => text()();
+  TextColumn get sourceId => text()();
+  TextColumn get occurrenceKey => text()();
+
+  /// [ReminderLogEvent] by name.
+  TextColumn get eventType => text()();
+  TextColumn get deviceId => text()();
+  DateTimeColumn get at => dateTime()();
+  TextColumn get detail => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+
+  /// Soft-deletable only so that trimming a long history reaches the other
+  /// devices; nothing else deletes a log line.
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// The Life Tracker bubble's bucket list.
 class BucketListItemsTable extends Table {
   TextColumn get id => text()();
@@ -1566,6 +1705,11 @@ class RankingChildrenTable extends Table {
     GoalAllocationsTable,
     PinnedNotesTable,
     DismissedNotificationsTable,
+    DeviceRegistrationsTable,
+    ScheduledReminderRulesTable,
+    EntityRemindersTable,
+    ReminderDeliveryStatesTable,
+    ReminderDeliveryLogsTable,
     CustomWordsTable,
     FlaggedWordsTable,
     CustomQuotesTable,
@@ -1600,7 +1744,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 118;
+  int get schemaVersion => 119;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -2943,6 +3087,19 @@ class AppDatabase extends _$AppDatabase {
         await _addSettingsColumnIfNotExists(
           migrator,
           settingsTable.financeHotkey,
+        );
+      }
+      if (from < 119) {
+        await migrator.createTable(deviceRegistrationsTable);
+        await migrator.createTable(scheduledReminderRulesTable);
+        await migrator.createTable(entityRemindersTable);
+        await migrator.createTable(reminderDeliveryStatesTable);
+        await migrator.createTable(reminderDeliveryLogsTable);
+        // Declared via @TableIndex, so createAll() covers fresh databases;
+        // existing ones need it made here.
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_reminder_delivery_logs_state_id '
+          'ON reminder_delivery_logs_table (delivery_state_id)',
         );
       }
     },

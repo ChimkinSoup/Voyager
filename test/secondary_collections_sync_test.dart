@@ -54,6 +54,7 @@ class _Device {
       trackerRepository: trackers,
       financeRepository: finance,
       notificationRepository: notifications,
+      reminderRepository: DriftReminderRepository(db, syncedWrites: syncedWrites),
       bucketListRepository: bucketList,
       mediaRepository: DriftMediaRepository(db),
       settingsRepository: settings,

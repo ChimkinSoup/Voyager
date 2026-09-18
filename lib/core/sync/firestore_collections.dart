@@ -39,6 +39,16 @@ abstract final class FirestoreCollections {
   static const goalAllocations = 'goal_allocations';
   static const pinnedNotes = 'pinned_notes';
   static const dismissedNotifications = 'dismissed_notifications';
+  static const deviceRegistrations = 'device_registrations';
+  static const scheduledReminderRules = 'scheduled_reminder_rules';
+
+  /// The bell on a todo or calendar event. Its own collection rather than
+  /// fields on the task or event: a task is CRDT-backed, and toggling a bell
+  /// should neither bump its version against a notes edit on another device
+  /// nor ride through that merge.
+  static const entityReminders = 'entity_reminders';
+  static const reminderDeliveryStates = 'reminder_delivery_states';
+  static const reminderDeliveryLogs = 'reminder_delivery_logs';
   static const bucketListItems = 'bucket_list_items';
   static const jobApplications = 'job_applications';
   static const jobStatusEvents = 'job_status_events';
@@ -114,6 +124,11 @@ abstract final class FirestoreCollections {
     goalAllocations,
     pinnedNotes,
     dismissedNotifications,
+    deviceRegistrations,
+    scheduledReminderRules,
+    entityReminders,
+    reminderDeliveryStates,
+    reminderDeliveryLogs,
     bucketListItems,
     jobApplications,
     jobStatusEvents,

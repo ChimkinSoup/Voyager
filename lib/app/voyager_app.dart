@@ -10,6 +10,7 @@ import 'package:voyager/core/caps_lock/caps_lock_indicator_scope.dart';
 import 'package:voyager/core/dev/perf_stall_logger.dart';
 import 'package:voyager/core/motion/modal_scrim_observer.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
+import 'package:voyager/core/reminders/reminder_engine.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
 import 'package:voyager/core/spellcheck/autocorrect_enabled_scope.dart';
@@ -27,6 +28,7 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/finance/finance_sheet_warm_up.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_host.dart';
+import 'package:voyager/features/notifications/reminder_sticky_stack.dart';
 import 'package:voyager/features/settings/snippets_dialog.dart';
 import 'package:voyager/routing/app_router.dart';
 import 'package:window_manager/window_manager.dart';
@@ -51,11 +53,21 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   final _selectionOnResume = PreserveSelectionOnAppResume();
 
   AppTray? _tray;
+  StreamSubscription<String>? _reminderTaps;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // A reminder notification brings its sticky forward — tapped while the
+    // app runs, or the tap that launched it.
+    final reminderOs = ref.read(reminderOsNotifierProvider);
+    _reminderTaps = reminderOs.taps.listen(_focusReminder);
+    unawaited(
+      reminderOs.launchSourceKey().then((key) {
+        if (key != null && mounted) _focusReminder(key);
+      }),
+    );
     _selectionOnResume.install();
     WindowsKeyboardReconciler.instance.install();
     if (desktopWindowChromeActive) {
@@ -101,8 +113,16 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     }
   }
 
+  void _focusReminder(String sourceKey) {
+    if (desktopWindowChromeActive) {
+      unawaited(ref.read(floaterControllerProvider).showMainWindow());
+    }
+    ref.read(reminderEngineProvider).focus(sourceKey);
+  }
+
   @override
   void dispose() {
+    unawaited(_reminderTaps?.cancel());
     if (desktopWindowChromeActive) {
       windowManager.removeListener(this);
       _instanceChannel.setMethodCallHandler(null);
@@ -157,6 +177,8 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(resyncWindowsKeyboardState());
+      // Timers do not run while a phone app is suspended.
+      ref.read(reminderEngineProvider).refresh();
     }
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
@@ -237,6 +259,9 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
                             RepaintBoundary(
                               child: child ?? const SizedBox.shrink(),
                             ),
+                            // Inside the floater host, so a floater that has
+                            // the window never shows the main app's stickies.
+                            const ReminderStickyStack(),
                           ],
                         ),
                       ),

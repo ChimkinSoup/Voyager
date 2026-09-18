@@ -34,6 +34,9 @@ import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/repeat_selector_popover.dart';
+import 'package:voyager/core/reminders/reminder_engine.dart';
+import 'package:voyager/domain/models/reminder_models.dart';
+import 'package:voyager/features/notifications/reminder_bell_button.dart';
 import 'package:voyager/domain/models/recurrence_rule.dart';
 import 'package:voyager/core/widgets/clamp_to_target_bounds.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
@@ -801,6 +804,24 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     }
   }
 
+  /// Sets the task's reminder bell, which saves at once like every other
+  /// control on this panel.
+  Future<void> _setReminder(int? offsetMinutes) async {
+    // Captured first: the panel may close while the write runs.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final changed = await setEntityReminder(
+      container.read(reminderRepositoryProvider),
+      kind: ReminderSourceKind.todo,
+      entityId: widget.task.id,
+      offsetMinutes: offsetMinutes,
+    );
+    if (!changed) return;
+    container.invalidate(entityRemindersProvider);
+    if (offsetMinutes != null) {
+      unawaited(container.read(reminderOsNotifierProvider).requestPermission());
+    }
+  }
+
   Future<void> _clearDueDate() async {
     final hadDueDate = widget.task.dueDate != null;
     setState(() => _dueDate = null);
@@ -1332,6 +1353,20 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                       disabledTooltip: 'Set a due date to repeat',
                       onPressed: () => _openRepeatPicker(buttonContext),
                     ),
+                  ),
+                  ReminderBellButton(
+                    offsetMinutes: entityReminderOffset(
+                      ref.watch(entityRemindersProvider).valueOrNull ??
+                          const [],
+                      ReminderSourceKind.todo,
+                      widget.task.id,
+                    ),
+                    accentColor: listColor,
+                    // A reminder counts back from the due date, so without
+                    // one there is nothing to count from.
+                    enabled: _dueDate != null,
+                    disabledTooltip: 'Set a due date to add a reminder',
+                    onChanged: (minutes) => unawaited(_setReminder(minutes)),
                   ),
                 ],
               ),

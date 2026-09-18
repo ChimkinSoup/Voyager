@@ -163,6 +163,9 @@ void main() {
       reason: 'the logger is not built until asked for',
     );
 
+    // Below the fold in this short window, under the Scheduled section.
+    await tester.ensureVisible(find.text('Log stats'));
+    await tester.pumpAndSettle();
     // The trigger's ink sits behind the label so the whole row highlights,
     // so tap that rather than the (pointer-ignoring) label itself.
     await tester.tap(

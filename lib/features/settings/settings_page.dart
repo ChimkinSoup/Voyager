@@ -24,6 +24,7 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/settings/custom_quotes_dialog.dart';
+import 'package:voyager/features/settings/devices_section.dart';
 import 'package:voyager/features/settings/dictionary_dialog.dart';
 import 'package:voyager/features/settings/job_experience_snippets_dialog.dart';
 import 'package:voyager/features/settings/media_storage_dialog.dart';
@@ -509,6 +510,8 @@ class SettingsPage extends ConsumerWidget {
                 : null,
           ),
           const _MediaStorageTile(),
+          const SizedBox(height: 16),
+          const DevicesSettingsSection(),
           const SizedBox(height: 16),
           Text('Navigation', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
