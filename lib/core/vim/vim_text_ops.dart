@@ -762,8 +762,9 @@ VimRange vimAbsorbPrecedingNewline(String text, VimRange range) {
 // Text transformations
 // ---------------------------------------------------------------------------
 
-/// Number of spaces one `>>` step adds. Two matches the surrounding Dart and
-/// Markdown this app is mostly used to write.
+/// Number of spaces one `>>` step adds by default. Two matches the
+/// surrounding Dart and Markdown this app is mostly used to write; a field
+/// with its own indent width (the LeetCode editor) passes that instead.
 const int kVimShiftWidth = 2;
 
 /// Indents (or with [indent] false, dedents) every line the span touches.
@@ -774,13 +775,14 @@ const int kVimShiftWidth = 2;
   int endOffset, {
   required bool indent,
   int count = 1,
+  int shiftWidth = kVimShiftWidth,
 }) {
   final firstLine = vimLineStart(text, math.min(startOffset, endOffset));
   final lastLineEnd = vimLineEnd(text, math.max(startOffset, endOffset));
   final prefix = text.substring(0, firstLine);
   final body = text.substring(firstLine, lastLineEnd);
   final suffix = text.substring(lastLineEnd);
-  final pad = ' ' * (kVimShiftWidth * count);
+  final pad = ' ' * (shiftWidth * count);
 
   final lines = body.split('\n');
   final shifted = lines.map((line) {
@@ -796,7 +798,7 @@ const int kVimShiftWidth = 2;
         removed++;
         i++;
       } else if (c == _kTab) {
-        removed += kVimShiftWidth;
+        removed += shiftWidth;
         i++;
       } else {
         break;

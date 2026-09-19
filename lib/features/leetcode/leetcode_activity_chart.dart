@@ -6,7 +6,6 @@ import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/analytics/stat_number_format.dart';
-import 'package:voyager/features/calendar/calendar_day_grid.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_bubble.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_data.dart';
 
@@ -429,7 +428,7 @@ class _LegendCapsule extends StatelessWidget {
             builder: (context, t, _) {
               final onFill = Color.lerp(
                 theme.colorScheme.onSurfaceVariant,
-                calendarContrastingLabelColor(color),
+                onColorLabel(color),
                 t,
               )!;
               return Container(

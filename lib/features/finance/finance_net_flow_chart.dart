@@ -9,7 +9,6 @@ import 'package:voyager/core/widgets/chart_hover_bubble.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/services/finance_analytics.dart';
 import 'package:voyager/features/analytics/stat_number_format.dart';
-import 'package:voyager/features/calendar/calendar_day_grid.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_bubble.dart';
 
@@ -712,7 +711,7 @@ class _LegendCapsule extends StatelessWidget {
             builder: (context, t, _) {
               final onFill = Color.lerp(
                 theme.colorScheme.onSurfaceVariant,
-                calendarContrastingLabelColor(color),
+                onColorLabel(color),
                 t,
               )!;
               return Container(

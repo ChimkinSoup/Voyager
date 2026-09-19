@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
@@ -126,6 +127,7 @@ class VimSession {
     required this.isMultiline,
     this.isFieldFocused = _alwaysFocused,
     this.trySnippetUndo,
+    this.shiftWidth = kVimShiftWidth,
     UndoHistoryController? undoController,
   }) : undoController = undoController ?? UndoHistoryController(),
        _ownsUndoController = undoController == null;
@@ -166,6 +168,9 @@ class VimSession {
   /// undo path without holding a session that settings sync may recreate.
   /// Null in tests that do not care, and a no-op when snippets are off.
   final bool Function()? trySnippetUndo;
+
+  /// Spaces one `>>` / `<<` moves a line by.
+  final int shiftWidth;
 
   /// Undo stack for the host field, driven by `u` and `<C-r>`.
   ///
@@ -250,6 +255,13 @@ class VimSession {
   /// Sticky column for `j`/`k`, so moving through a ragged paragraph doesn't
   /// creep left one short line at a time.
   int _desiredColumn = 0;
+
+  /// The `gj`/`gk` equivalent of [_desiredColumn]: the field's own display-line
+  /// walker, which keeps the pixel x the run started at. Reused only while the
+  /// caret is still where the last `gj`/`gk` left it ([_displayLineRunCaret])
+  /// and the layout it measured is unchanged; anything else starts afresh.
+  VerticalCaretMovementRun? _displayLineRun;
+  int _displayLineRunCaret = -1;
 
   // --- repeat / dot state ---------------------------------------------------
   final List<String> _commandKeys = <String>[];
@@ -786,6 +798,14 @@ class VimSession {
       }
       return KeyEventResult.handled;
     }
+    // `g<Down>` / `g<Up>` are `gj` / `gk`; spelled as the letters so `.`
+    // replays them.
+    if (_await == _Await.gPrefix &&
+        (key == LogicalKeyboardKey.arrowDown ||
+            key == LogicalKeyboardKey.arrowUp)) {
+      _handleChar(key == LogicalKeyboardKey.arrowDown ? 'j' : 'k');
+      return KeyEventResult.handled;
+    }
     if (key == LogicalKeyboardKey.arrowDown) {
       _moveVertically(_takeCount());
       return KeyEventResult.handled;
@@ -1270,6 +1290,48 @@ class VimSession {
     _clearPending();
   }
 
+  /// `gj` / `gk`: move by lines as the field wraps them, not by `\n`.
+  ///
+  /// An exclusive charwise motion, as in Vim, so `dgj` cuts to the same
+  /// screen column one display line down rather than taking whole lines.
+  /// Stops at the first or last display line; a move that gets nowhere
+  /// cancels any pending operator.
+  void _moveDisplayLines(int deltaLines) {
+    final editable = resolveEditableState()?.renderEditable;
+    if (editable == null) {
+      _clearPending();
+      return;
+    }
+    final origin = _cursor;
+    var run = _displayLineRun;
+    if (run == null || _displayLineRunCaret != origin || !run.isValid) {
+      run = editable.startVerticalCaretMovement(TextPosition(offset: origin));
+    }
+    var moved = 0;
+    while (moved < deltaLines.abs() &&
+        (deltaLines > 0 ? run.moveNext() : run.movePrevious())) {
+      moved++;
+    }
+    if (moved == 0) {
+      _clearPending();
+      return;
+    }
+    final text = _text;
+    var target = run.current.offset;
+    // Past the end of a soft-wrapped line the painter answers the offset the
+    // *next* display line starts at, marked upstream. Offsets carry no
+    // affinity here, so that would put the block caret on the wrong line —
+    // step back onto the wrapped line's own last character instead.
+    if (run.current.affinity == TextAffinity.upstream &&
+        target > 0 &&
+        text[target - 1] != '\n') {
+      target--;
+    }
+    _applyMotion(VimMotion.exclusive(target));
+    _displayLineRun = run;
+    _displayLineRunCaret = _cursor;
+  }
+
   // ==========================================================================
   // Motions feeding operators
   // ==========================================================================
@@ -1424,6 +1486,7 @@ class VimSession {
           start,
           math.max(start, end - 1),
           indent: op == '>',
+          shiftWidth: shiftWidth,
         );
         if (wasVisual) _setMode(VimMode.normal);
         _writeText(result.text, result.caret);
@@ -1740,6 +1803,10 @@ class VimSession {
       case '_':
         if (_blockVisualLineHorizontal()) return;
         _applyMotion(VimMotion.inclusive(vimLastNonBlank(_text, _cursor)));
+      case 'j':
+        _moveDisplayLines(_takeCount());
+      case 'k':
+        _moveDisplayLines(-_takeCount());
       case 'u':
       case 'U':
       case '~':

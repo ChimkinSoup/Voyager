@@ -3959,7 +3959,7 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
         child: CustomPaint(
           size: const Size(14, 14),
           painter: _CheckMarkPainter(
-            color: Color.lerp(accent, VoyagerColors.of(context).onAccent, p)!,
+            color: Color.lerp(accent, onColorLabel(accent), p)!,
           ),
         ),
       ),

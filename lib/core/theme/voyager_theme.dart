@@ -3,6 +3,12 @@ import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/domain/models/enums.dart' show AppThemeMode;
 
+/// Label color for text/icons painted on a solid [background] that the user
+/// picked — the theme accent, or an event/list/category color. Pale fills get
+/// dark text in either theme; everything else gets [light].
+Color onColorLabel(Color background, {Color light = Colors.white}) =>
+    background.computeLuminance() > 0.55 ? const Color(0xFF1B1B22) : light;
+
 /// The concrete surface tones for one theme.
 ///
 /// Both themes are built from the same widget-theme body; only these tones and
@@ -125,9 +131,7 @@ class VoyagerTheme {
     // The accent is user-chosen and can land anywhere on the luminance range,
     // so the label color on top of it is picked from the accent itself rather
     // than from the theme — a pale accent needs dark text in either theme.
-    final onAccent = accent.computeLuminance() > 0.55
-        ? const Color(0xFF1B1B22)
-        : Colors.white;
+    final onAccent = onColorLabel(accent);
 
     final colorScheme = palette.isDark
         ? ColorScheme.dark(
@@ -432,9 +436,7 @@ class VoyagerColors extends ThemeExtension<VoyagerColors> {
       subtleShadowAlpha: VoyagerShadows.subtleAlpha(palette),
       strongShadowAlpha: VoyagerShadows.strongAlpha(palette),
       shadowBlurScale: VoyagerShadows.blurScale(palette),
-      onAccent: accent.computeLuminance() > 0.55
-          ? const Color(0xFF1B1B22)
-          : Colors.white,
+      onAccent: onColorLabel(accent),
       chartGrid: ink.withValues(alpha: palette.isDark ? 0.12 : 0.11),
       // The direction "toward more light" flips between themes: on dark a
       // highlight brightens toward white, on cream it deepens toward slate.

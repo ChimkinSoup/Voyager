@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/recurrence_rule.dart';
 import 'package:voyager/domain/services/recurrence_engine.dart';
@@ -459,10 +460,7 @@ class _WeekdayChips extends StatelessWidget {
                         style: theme.textTheme.labelSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: isOn
-                              ? (ThemeData.estimateBrightnessForColor(accent) ==
-                                      Brightness.light
-                                  ? Colors.black
-                                  : Colors.white)
+                              ? onColorLabel(accent)
                               : theme.colorScheme.onSurface
                                   .withValues(alpha: 0.7),
                         ),

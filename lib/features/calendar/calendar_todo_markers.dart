@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/theme/palette_color.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
@@ -410,9 +411,7 @@ class CalendarWeekTaskBar extends StatelessWidget {
             final iconSize = compact ? 8.0 : 10.0;
             final gap = compact ? 2.0 : 4.0;
             final showText = width >= iconSize + gap + 8;
-            final contentColor = ThemeData.estimateBrightnessForColor(color) == Brightness.dark
-                ? Colors.white
-                : Colors.black87;
+            final contentColor = onColorLabel(color);
 
             return Container(
               padding: EdgeInsets.symmetric(horizontal: hPad),
@@ -585,7 +584,7 @@ class CalendarWeekEventBlock extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 10,
-                        color: calendarContrastingLabelColor(color),
+                        color: onColorLabel(color),
                       ),
                     )
                   : const SizedBox.shrink(),

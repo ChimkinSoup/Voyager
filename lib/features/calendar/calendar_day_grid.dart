@@ -413,11 +413,6 @@ Color calendarAdjacentMonthColor(BuildContext context) => Theme.of(
   context,
 ).colorScheme.onSurface.withValues(alpha: calendarAdjacentMonthTextOpacity);
 
-/// Black or white, whichever contrasts better against [background] — used for
-/// text/icons painted directly on an arbitrary calendar color.
-Color calendarContrastingLabelColor(Color background) =>
-    background.computeLuminance() < 0.5 ? Colors.white : Colors.black;
-
 TextStyle calendarWeekdayLabelStyle(
   BuildContext context, {
   double? fontSize,
@@ -1005,7 +1000,7 @@ class CalendarDayNumber extends StatelessWidget {
     Color textColor;
     if (isToday) {
       textColor = accentColor != null
-          ? calendarContrastingLabelColor(todayColor)
+          ? onColorLabel(todayColor)
           : Theme.of(context).colorScheme.onPrimary;
     } else if (muted && adjacentTextT != null) {
       textColor = Color.lerp(
@@ -1690,6 +1685,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
                     style: AppFonts.style(
                       fontSize: eventFontSize * expandT.clamp(0.6, 1.0),
                       height: 1,
+                      color: onColorLabel(color),
                     ),
                   ),
                 ),
@@ -2143,7 +2139,13 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
                       event.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppFonts.style(fontSize: 11, height: 1),
+                      style: AppFonts.style(
+                        fontSize: 11,
+                        height: 1,
+                        color: onColorLabel(
+                          paletteColor(event.colorValue, context),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -2279,7 +2281,11 @@ class CalendarDayEventBar extends StatelessWidget {
                       event.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppFonts.style(fontSize: fontSize, height: 1),
+                      style: AppFonts.style(
+                        fontSize: fontSize,
+                        height: 1,
+                        color: onColorLabel(eventColor),
+                      ),
                     )
                   : null,
             ),

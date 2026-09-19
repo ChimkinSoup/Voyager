@@ -2085,8 +2085,8 @@
     "semantic_hash": ""
   },
   "lib/core/spellcheck/voyager_spell_check_service.dart": {
-    "mtime": 1789585079.5481713,
-    "ast_hash": "07a0553fcb873a5320a31e522f58bdaa",
+    "mtime": 1789748039.6392176,
+    "ast_hash": "f271bdbbb7f3cc629f9e05675ed4fd42",
     "semantic_hash": ""
   },
   "lib/core/widgets/spell_check_field_support.dart": {
@@ -2170,8 +2170,8 @@
     "semantic_hash": ""
   },
   "test/voyager_spell_check_service_test.dart": {
-    "mtime": 1789586032.3746016,
-    "ast_hash": "2a3e0f7482ee4928606e26d4e4376077",
+    "mtime": 1789747787.9275928,
+    "ast_hash": "28f51f988cff92f6d10749c486cea4ef",
     "semantic_hash": ""
   },
   "LIFE_TRACKER.md": {
@@ -2250,8 +2250,8 @@
     "semantic_hash": "a341dc55e56c335aece7e304e4ed7151"
   },
   "lib/features/leetcode/leetcode_code_field.dart": {
-    "mtime": 1789604696.9342997,
-    "ast_hash": "cbecf4904d172b674358b4db9763504b",
+    "mtime": 1789751150.7448726,
+    "ast_hash": "470c63f0332771cf344f9865957b8206",
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_dashboard.dart": {
@@ -3230,8 +3230,8 @@
     "semantic_hash": "b1e20d753c44a88decabbbaaecbb978a"
   },
   "lib/features/leetcode/leetcode_inline_code.dart": {
-    "mtime": 1789180606.0766444,
-    "ast_hash": "a9eda1d36b4324b45dd00cd0303e3f8f",
+    "mtime": 1789750741.0894966,
+    "ast_hash": "7da93e7e56dfc64673e708110173cb56",
     "semantic_hash": ""
   },
   "test/dense_field_vertical_centering_test.dart": {
@@ -5522,6 +5522,21 @@
   "AUDIT_TESTING.md": {
     "mtime": 1789630139.787722,
     "ast_hash": "40547230ac5ae3d8d3863a4310878f02",
+    "semantic_hash": ""
+  },
+  "lib/features/leetcode/leetcode_type_highlight.dart": {
+    "mtime": 1789751081.950495,
+    "ast_hash": "f852983f62cd8d486c7684948e997e7a",
+    "semantic_hash": ""
+  },
+  "test/leetcode_type_highlight_test.dart": {
+    "mtime": 1789751081.9544954,
+    "ast_hash": "7c42ae7fdfe90b750f9ace119fa08ad6",
+    "semantic_hash": ""
+  },
+  "LEETCODE_TYPE_HIGHLIGHT_HLD.md": {
+    "mtime": 1789747381.6076696,
+    "ast_hash": "ccf94976930096fc3af0f88fa7ab4560",
     "semantic_hash": ""
   }
 }

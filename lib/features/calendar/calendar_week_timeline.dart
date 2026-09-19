@@ -5,6 +5,7 @@ import 'dart:math' show max;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/features/calendar/calendar_day_entries.dart';
@@ -107,7 +108,7 @@ class CalendarWeekDayDateLabel extends StatelessWidget {
     final accent = accentColor ?? theme.colorScheme.primary;
     final textColor = isToday
         ? (accentColor != null
-              ? calendarContrastingLabelColor(accent)
+              ? onColorLabel(accent)
               : theme.colorScheme.onPrimary)
         : theme.colorScheme.onSurfaceVariant;
     final labelText = _weekDayDateLabelFormat.format(date);

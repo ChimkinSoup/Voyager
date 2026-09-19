@@ -244,10 +244,7 @@ class _FanCount extends StatelessWidget {
       child: Text(
         '+$count',
         style: TextStyle(
-          // Picked from the accent's luminance — see VoyagerColors.onAccent.
-          color: accent.computeLuminance() > 0.55
-              ? const Color(0xFF1B1B22)
-              : Colors.white,
+          color: onColorLabel(accent),
           fontSize: 10,
           fontWeight: FontWeight.w600,
           height: 1.2,

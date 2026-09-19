@@ -13,6 +13,7 @@ import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/theme/palette_color.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
@@ -1920,9 +1921,7 @@ class _MiniCheckbox extends StatelessWidget {
           ? Icon(
               PhosphorIconsBold.check,
               size: 10,
-              color: accent.computeLuminance() > 0.5
-                  ? Colors.black
-                  : Colors.white,
+              color: onColorLabel(accent),
             )
           : null,
     );

@@ -12,6 +12,7 @@ import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/dev_settings_controller.dart';
 import 'package:voyager/core/theme/palette_color.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
@@ -4048,7 +4049,7 @@ class _ViewModeSegmentedControl extends StatelessWidget {
     final selectedBackground = accentColor ?? colorScheme.primary;
     const unselectedBackground = Colors.transparent;
     final selectedForeground = accentColor != null
-        ? calendarContrastingLabelColor(selectedBackground)
+        ? onColorLabel(selectedBackground)
         : colorScheme.onPrimary;
     final unselectedForeground = colorScheme.onSurface;
 

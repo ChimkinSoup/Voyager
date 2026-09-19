@@ -6,6 +6,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/theme/palette_color.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -437,8 +438,7 @@ class _ColorSwatch extends StatelessWidget {
     final diameter = radius * 2;
     
     final swatchColor = paletteColor(colorValue, context);
-    final isDark = swatchColor.computeLuminance() < 0.5;
-    final checkColor = isDark ? Colors.white : Colors.black;
+    final checkColor = onColorLabel(swatchColor);
 
     return InkWell(
       onTap: onTap,

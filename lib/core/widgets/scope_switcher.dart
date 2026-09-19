@@ -88,7 +88,10 @@ class ScopeSwitcher<T> extends StatelessWidget {
                         items: items,
                         selectedValue: selectedValue,
                         onSelected: onSelected,
-                        accent: accent,
+                        // Resolved here, outside the popover: inside it the
+                        // theme's primary is re-tinted to [accent], so the
+                        // all-scope row would wear the open scope's colour.
+                        appAccent: theme.colorScheme.primary,
                       ),
                     ),
             child: Padding(
@@ -143,17 +146,16 @@ class _ScopeMenu<T> extends StatelessWidget {
     required this.items,
     required this.selectedValue,
     required this.onSelected,
-    required this.accent,
+    required this.appAccent,
   });
 
   final List<ScopeSwitcherItem<T>> items;
   final T selectedValue;
   final ValueChanged<T> onSelected;
-  final Color accent;
+  final Color appAccent;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return ConstrainedBox(
       constraints: const BoxConstraints(maxHeight: 320),
       child: ListView(
@@ -164,7 +166,7 @@ class _ScopeMenu<T> extends StatelessWidget {
             _ScopeMenuRow(
               label: item.label,
               count: item.count,
-              color: item.color ?? theme.colorScheme.primary,
+              color: item.color ?? appAccent,
               selected: item.value == selectedValue,
               onTap: () {
                 Navigator.of(context).pop();

@@ -3610,7 +3610,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
                     onPressed: _save,
                     label: 'Save',
                     color: accent,
-                    textColor: VoyagerColors.of(context).onAccent,
+                    textColor: onColorLabel(accent),
                     dense: true,
                   ),
                   const SizedBox(width: 8),
@@ -5932,7 +5932,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                 SegmentedButton<TrackerStyle>(
                   showSelectedIcon: false,
                   style: SegmentedButton.styleFrom(
-                    selectedForegroundColor: VoyagerColors.of(context).onAccent,
+                    selectedForegroundColor: onColorLabel(accent),
                     selectedBackgroundColor: accent,
                   ),
                   segments: const [

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
@@ -1180,11 +1181,16 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
             Positioned(
               top: 4,
               right: 4,
-              child: IconButton(
-                onPressed: Navigator.of(context).pop,
-                icon: const Icon(PhosphorIconsRegular.x, size: 18),
-                visualDensity: VisualDensity.compact,
-                tooltip: 'Close',
+              // Out of the Tab order: traversal goes by on-screen position,
+              // so once the form scrolls under this pinned button it became
+              // an invisible stop between whichever fields sat level with it.
+              child: ExcludeFocus(
+                child: IconButton(
+                  onPressed: Navigator.of(context).pop,
+                  icon: const Icon(PhosphorIconsRegular.x, size: 18),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Close',
+                ),
               ),
             ),
           ],
@@ -1410,14 +1416,22 @@ class _SolutionFields extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        VoyagerTextField(
-          controller: editors.explanation,
-          accentColor: accentColor,
-          maxLines: 6,
-          minLines: 3,
-          decoration: const InputDecoration(
-            labelText: 'Explanation',
-            hintText: 'Walk through the logic in plain language',
+        // Tab is swallowed here so a stray press mid-write-up doesn't jump
+        // to the language pills below. Consumed rather than just stopped, or
+        // the key would fall through to the platform and type a tab.
+        Shortcuts(
+          shortcuts: const {
+            SingleActivator(LogicalKeyboardKey.tab): DoNothingIntent(),
+          },
+          child: VoyagerTextField(
+            controller: editors.explanation,
+            accentColor: accentColor,
+            maxLines: 6,
+            minLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Explanation',
+              hintText: 'Walk through the logic in plain language',
+            ),
           ),
         ),
         const SizedBox(height: 16),

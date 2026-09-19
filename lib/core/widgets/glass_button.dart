@@ -219,7 +219,21 @@ class _GlassButtonState extends State<GlassButton>
             : theme.colorScheme.primary);
 
     // Ink Slate on cream glass, bone on the dark plate — both are onSurface.
-    final defaultFg = widget.textColor ?? theme.colorScheme.onSurface;
+    // A tinted dark button is a near-solid wafer of [color], so a pale tint
+    // needs dark text instead.
+    final defaultFg = widget.textColor ??
+        (isDark && widget.color != null
+            ? onColorLabel(
+                Color.alphaBlend(
+                  widget.color!.withValues(
+                    alpha: widget.glassOpacity ??
+                        GlassButton.defaultGlassOpacity(isDark),
+                  ),
+                  theme.colorScheme.surface,
+                ),
+                light: theme.colorScheme.onSurface,
+              )
+            : theme.colorScheme.onSurface);
 
     final fgColor = isInteractive
         ? defaultFg

@@ -181,7 +181,7 @@ class _VoyagerCheckboxState extends State<VoyagerCheckbox>
         child: CustomPaint(
           size: const Size(14, 14),
           painter: CheckMarkPainter(
-            color: Color.lerp(accent, VoyagerColors.of(context).onAccent, p)!,
+            color: Color.lerp(accent, onColorLabel(accent), p)!,
           ),
         ),
       ),

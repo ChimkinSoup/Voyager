@@ -12,6 +12,7 @@ import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/text/prose_paste.dart';
 import 'package:voyager/core/vim/vim_anchored_chrome.dart';
 import 'package:voyager/core/vim/vim_session.dart';
+import 'package:voyager/core/vim/vim_text_ops.dart';
 
 /// What the host field needs to know about its Vim session while building.
 ///
@@ -211,6 +212,7 @@ class VimTextScope extends StatefulWidget {
     this.snippetsAllowed = true,
     this.autocorrectAllowed = true,
     this.capsLockIndicatorAllowed = true,
+    this.shiftWidth = kVimShiftWidth,
   });
 
   /// Whether this field gets Vim at all. False for password boxes, numeric
@@ -251,6 +253,10 @@ class VimTextScope extends StatefulWidget {
   /// unlike [snippetsAllowed] the snippet *editor* keeps it, since nothing
   /// about a badge beside the caret makes a trigger less literal.
   final bool capsLockIndicatorAllowed;
+
+  /// Spaces one `>>` / `<<` moves a line by. Code editors pass their own Tab
+  /// width so the two ways of indenting agree.
+  final int shiftWidth;
 
   final Color? accentColor;
 
@@ -451,6 +457,7 @@ class _VimTextScopeState extends State<VimTextScope> {
         isFieldFocused: () => _scopeNode.hasFocus,
         undoController: _undoController,
         isMultiline: () => widget.multiline,
+        shiftWidth: widget.shiftWidth,
         // Looked up live: settings sync can replace [_snippetSession].
         trySnippetUndo: () =>
             _snippetSession?.undoLastExpansion(

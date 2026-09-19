@@ -32,10 +32,17 @@ class ShellBranchContainer extends StatefulWidget {
     super.key,
     required this.currentIndex,
     required this.children,
+    this.navigatorKeys = const [],
   });
 
   final int currentIndex;
   final List<Widget> children;
+
+  /// Each branch's navigator, index-aligned with [children]. Popovers, menus
+  /// and dropdowns push onto the branch's own navigator, and branches stay
+  /// mounted while hidden, so one left open would still be open on return.
+  /// Leaving a branch pops them.
+  final List<GlobalKey<NavigatorState>> navigatorKeys;
 
   @override
   State<ShellBranchContainer> createState() => _ShellBranchContainerState();
@@ -72,6 +79,8 @@ class _ShellBranchContainerState extends State<ShellBranchContainer>
     super.didUpdateWidget(oldWidget);
     if (widget.currentIndex == _toIndex) return;
 
+    _dismissPopups(_toIndex);
+
     if (instantShellBranchSwitch) {
       _fromIndex = _toIndex = widget.currentIndex;
       _progress.value = 1;
@@ -88,6 +97,16 @@ class _ShellBranchContainerState extends State<ShellBranchContainer>
     _toIndex = widget.currentIndex;
     _progress.duration = _duration;
     _progress.forward(from: 0);
+  }
+
+  void _dismissPopups(int index) {
+    if (index >= widget.navigatorKeys.length) return;
+    final key = widget.navigatorKeys[index];
+    // After the frame: popping marks the navigator dirty, which is best kept
+    // out of this build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      key.currentState?.popUntil((route) => route is! PopupRoute);
+    });
   }
 
   @override
@@ -177,6 +196,10 @@ ShellNavigationContainerBuilder shellBranchContainerBuilder =
     ) {
       return ShellBranchContainer(
         currentIndex: navigationShell.currentIndex,
+        navigatorKeys: [
+          for (final branch in navigationShell.route.branches)
+            branch.navigatorKey,
+        ],
         children: children,
       );
     };

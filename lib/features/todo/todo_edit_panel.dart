@@ -1698,6 +1698,12 @@ class _SubtaskRowState extends State<_SubtaskRow>
     final textStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
       color: _displayCompleted ? strikeColor : null,
     );
+    // The strut EditableText builds for itself when it is handed none, so the
+    // line box is the same height in both states and the row does not resize
+    // either.
+    final strutStyle = textStyle == null
+        ? null
+        : StrutStyle.fromTextStyle(textStyle, forceStrutHeight: true);
 
     final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -1716,8 +1722,8 @@ class _SubtaskRowState extends State<_SubtaskRow>
             onChanged: _handleToggle,
           ),
           Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
+            child: Builder(
+              builder: (context) {
                 final hoverColor = Theme.of(
                   context,
                 ).colorScheme.onSurface.withValues(alpha: 0.06);
@@ -1798,48 +1804,34 @@ class _SubtaskRowState extends State<_SubtaskRow>
                             ),
                             child: Align(
                               alignment: Alignment.centerLeft,
-                              child: Text(
-                                widget.subtask.title,
-                                style: textStyle,
-                                // The strut EditableText builds for itself
-                                // when it is handed none, so the line box is
-                                // the same height in both states and the row
-                                // does not resize either.
-                                strutStyle: textStyle == null
-                                    ? null
-                                    : StrutStyle.fromTextStyle(
-                                        textStyle,
-                                        forceStrutHeight: true,
-                                      ),
+                              // Painted on the Text itself, so the strike
+                              // shares its exact box and line metrics rather
+                              // than guessing at where the padding and the
+                              // centring put the words.
+                              child: AnimatedBuilder(
+                                animation: _strikeProgress,
+                                builder: (context, child) => CustomPaint(
+                                  foregroundPainter: _displayCompleted
+                                      ? _MultilineStrikePainter(
+                                          text: widget.subtask.title,
+                                          style: textStyle ?? const TextStyle(),
+                                          strutStyle: strutStyle,
+                                          progress: _strikeProgress.value
+                                              .clamp(0.0, 1.0),
+                                          color: strikeColor,
+                                          textDirection:
+                                              Directionality.of(context),
+                                        )
+                                      : null,
+                                  child: child,
+                                ),
+                                child: Text(
+                                  widget.subtask.title,
+                                  style: textStyle,
+                                  strutStyle: strutStyle,
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                      ),
-                    if (_displayCompleted && !_editing)
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: AnimatedBuilder(
-                            animation: _strikeProgress,
-                            builder: (context, _) {
-                              return CustomPaint(
-                                painter: _MultilineStrikePainter(
-                                  text: widget.subtask.title,
-                                  style: textStyle ?? const TextStyle(),
-                                  progress: _strikeProgress.value.clamp(
-                                    0.0,
-                                    1.0,
-                                  ),
-                                  color: strikeColor,
-                                  textDirection: Directionality.of(context),
-                                  maxWidth: constraints.maxWidth,
-                                  textPadding: const EdgeInsets.symmetric(
-                                    vertical: 12,
-                                    horizontal: 12,
-                                  ),
-                                ),
-                              );
-                            },
                           ),
                         ),
                       ),
@@ -1877,31 +1869,39 @@ class _MultilineStrikePainter extends CustomPainter {
   _MultilineStrikePainter({
     required this.text,
     required this.style,
+    required this.strutStyle,
     required this.progress,
     required this.color,
     required this.textDirection,
-    required this.maxWidth,
-    this.textPadding = EdgeInsets.zero,
   });
 
   final String text;
   final TextStyle style;
+  final StrutStyle? strutStyle;
   final double progress;
   final Color color;
   final TextDirection textDirection;
-  final double maxWidth;
-  final EdgeInsets textPadding;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (progress <= 0) return;
 
-    final layoutWidth = maxWidth - textPadding.horizontal;
+    // The font's own line-through, with the glyphs themselves transparent:
+    // it lands where the task rows' strike does, through the middle of the
+    // lowercase letters, which no offset computed from the line box can.
     final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
+      text: TextSpan(
+        text: text,
+        style: style.copyWith(
+          color: Colors.transparent,
+          decoration: TextDecoration.lineThrough,
+          decorationColor: color,
+        ),
+      ),
+      strutStyle: strutStyle,
       textDirection: textDirection,
       maxLines: null,
-    )..layout(maxWidth: layoutWidth > 0 ? layoutWidth : 0);
+    )..layout(maxWidth: size.width);
 
     final metrics = painter.computeLineMetrics();
     if (metrics.isEmpty) return;
@@ -1911,19 +1911,22 @@ class _MultilineStrikePainter extends CustomPainter {
       (sum, line) => sum + line.width,
     );
     var remaining = totalLength * progress;
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 1.5;
 
     for (final line in metrics) {
       if (remaining <= 0) break;
       final drawWidth = remaining < line.width ? remaining : line.width;
-      final y = textPadding.top + line.baseline - line.ascent + line.height / 2;
-      canvas.drawLine(
-        Offset(line.left + textPadding.left, y),
-        Offset(line.left + textPadding.left + drawWidth, y),
-        paint,
-      );
+      canvas
+        ..save()
+        ..clipRect(
+          Rect.fromLTWH(
+            line.left,
+            line.baseline - line.ascent,
+            drawWidth,
+            line.height,
+          ),
+        );
+      painter.paint(canvas, Offset.zero);
+      canvas.restore();
       remaining -= line.width;
     }
   }
@@ -1932,7 +1935,6 @@ class _MultilineStrikePainter extends CustomPainter {
   bool shouldRepaint(covariant _MultilineStrikePainter oldDelegate) {
     return oldDelegate.progress != progress ||
         oldDelegate.text != text ||
-        oldDelegate.color != color ||
-        oldDelegate.maxWidth != maxWidth;
+        oldDelegate.color != color;
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 
 class ContextualPopover extends StatelessWidget {
@@ -189,7 +190,10 @@ class _ContextualPopoverAccentHostState extends State<ContextualPopoverAccentHos
       final base = Theme.of(context);
       popover = Theme(
         data: base.copyWith(
-          colorScheme: base.colorScheme.copyWith(primary: _accentColor),
+          colorScheme: base.colorScheme.copyWith(
+            primary: _accentColor,
+            onPrimary: onColorLabel(_accentColor!),
+          ),
         ),
         child: popover,
       );

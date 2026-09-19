@@ -9,6 +9,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
@@ -399,7 +400,10 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     final accent = paletteColor(_colorValue, context);
     final baseTheme = Theme.of(context);
     final eventTheme = baseTheme.copyWith(
-      colorScheme: baseTheme.colorScheme.copyWith(primary: accent),
+      colorScheme: baseTheme.colorScheme.copyWith(
+        primary: accent,
+        onPrimary: onColorLabel(accent),
+      ),
       popupMenuTheme: VoyagerMenuTheme.popupMenuTheme(
         textTheme: baseTheme.textTheme,
         onSurface: baseTheme.colorScheme.onSurface,

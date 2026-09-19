@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 
 class SelectorPill extends StatelessWidget {
   const SelectorPill({
@@ -43,9 +44,7 @@ class SelectorPill extends StatelessWidget {
         ? accent
         : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5);
     final foregroundColor = filled
-        ? (ThemeData.estimateBrightnessForColor(accent) == Brightness.light
-              ? Colors.black
-              : Colors.white)
+        ? onColorLabel(accent)
         : theme.colorScheme.onSurface;
 
     return Material(

@@ -284,6 +284,8 @@ class LeetCodeCodeSurface extends StatelessWidget {
       // through code is chrome the editor never asked for, and the gutter,
       // highlight and Vim block are already competing for that strip.
       capsLockIndicatorAllowed: false,
+      // `>>` / `<<` move by the same width Tab does.
+      shiftWidth: kLeetCodeEditorParams.tabSpaces,
       controller: controller,
       multiline: true,
       accentColor: theme.colorScheme.primary,

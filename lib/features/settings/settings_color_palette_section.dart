@@ -169,8 +169,10 @@ class _SettingsColorPaletteSectionState
                 }) =>
                     null,
                 inputFormatters: [
-                  LengthLimitingTextInputFormatter(6),
+                  // Filter before limiting, so a pasted "#f2d5cf" loses its
+                  // "#" rather than its last digit.
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9A-Fa-f]')),
+                  LengthLimitingTextInputFormatter(6),
                 ],
                 decoration: const InputDecoration(
                   hintText: 'Add custom color (e.g. 7C9EFF)',
