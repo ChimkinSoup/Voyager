@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:voyager/core/motion/motion.dart';
@@ -371,32 +373,64 @@ class _PopoverLayoutDelegate extends SingleChildLayoutDelegate {
     this.height,
   });
 
+  /// Kept between the popover and the viewport's edges, and between the
+  /// popover and the trigger it is placed off.
+  static const double _margin = 8;
+
   final Rect targetRect;
   final double width;
   final double? height;
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    // A hotkey floater's window is barely larger than the popovers opened
+    // inside it — the reminder floater is 484 wide and its date picker asks
+    // for 500 — and a child laid out larger than the viewport can only be
+    // positioned off its edge, where it is cut rather than scrolled. Capped
+    // to what there is to show it in; a popover that already fits is left at
+    // the size it asked for.
+    final maxWidth = math.min(
+      width,
+      math.max(0.0, constraints.maxWidth - _margin * 2),
+    );
+    final maxHeight = math.min(
+      height ?? constraints.maxHeight,
+      math.max(0.0, constraints.maxHeight - _margin * 2),
+    );
     return BoxConstraints(
-      minWidth: width,
-      maxWidth: width,
+      minWidth: maxWidth,
+      maxWidth: maxWidth,
       minHeight: 0,
-      maxHeight: height ?? constraints.maxHeight,
+      maxHeight: maxHeight,
     );
   }
 
   @override
   Offset getPositionForChild(Size size, Size childSize) {
-    double y = targetRect.bottom + 8;
+    double y = targetRect.bottom + _margin;
     if (y + childSize.height > size.height) {
       // Place above if it goes off screen
-      y = targetRect.top - childSize.height - 8;
+      y = targetRect.top - childSize.height - _margin;
     }
     double x = targetRect.left;
     if (x + childSize.width > size.width) {
-      x = size.width - childSize.width - 8;
+      x = size.width - childSize.width - _margin;
     }
-    return Offset(x, y);
+    // With no room on either side of the trigger, the flip above and the
+    // shift left both land past the viewport's own edge — which is where the
+    // date picker lost its month header and its first column. Held inside it
+    // instead, so a popover too big to place well is still whole.
+    return Offset(
+      _confine(x, childSize.width, size.width),
+      _confine(y, childSize.height, size.height),
+    );
+  }
+
+  static double _confine(double value, double extent, double available) {
+    return value.clamp(
+      _margin,
+      math.max(_margin, available - extent - _margin),
+    );
   }
 
   @override

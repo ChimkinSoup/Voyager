@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,6 +40,10 @@ const double _kLeadingSlot = 40;
 /// How far the editor's On row reaches past the form on each side, so its
 /// hover fill has room around the label and the switch.
 const double _kTogglePadding = 12;
+
+/// The editor's width, the same in the dialog and in the hotkey floater —
+/// which sizes its window to it (see `kReminderFloaterSize`).
+const double kReminderFormWidth = 460 + _kTogglePadding * 2;
 
 /// The Inbox's Scheduled section (`SCHEDULED_REMINDERS_HLD.md` §6.2): create,
 /// edit, switch off and delete reminders, and see where each one stands.
@@ -491,10 +496,42 @@ Future<void> showScheduledReminderEditor(
   );
 }
 
+/// The editor without its dialog, for the reminder hotkey floater, which is
+/// not a route: [onClose] stands in for the dialog's pop, from Cancel, the
+/// close button and after a save alike, and [onSaved] runs in between once
+/// the rule is written.
+///
+/// [leading] goes before the title.
+Widget scheduledReminderForm({
+  required VoidCallback onClose,
+  VoidCallback? onSaved,
+  Widget? leading,
+}) {
+  return _ScheduledReminderEditor(
+    onClose: onClose,
+    onSaved: onSaved,
+    leading: leading,
+  );
+}
+
 class _ScheduledReminderEditor extends ConsumerStatefulWidget {
-  const _ScheduledReminderEditor({this.existing});
+  const _ScheduledReminderEditor({
+    this.existing,
+    this.onClose,
+    this.onSaved,
+    this.leading,
+  });
 
   final ScheduledReminderRule? existing;
+
+  /// See [scheduledReminderForm]. Null in the dialog, which pops instead.
+  final VoidCallback? onClose;
+
+  /// See [scheduledReminderForm].
+  final VoidCallback? onSaved;
+
+  /// See [scheduledReminderForm].
+  final Widget? leading;
 
   @override
   ConsumerState<_ScheduledReminderEditor> createState() =>
@@ -544,13 +581,25 @@ class _ScheduledReminderEditorState
 
   DateTime get _timeAsDateTime => atLocalMinutes(DateTime.now(), _minutes);
 
+  /// The date picker's own size, in the dialog where there is room for it.
+  static const _oncePickerSize = Size(500, 380);
+
   Future<void> _pickTime(BuildContext buttonContext) async {
     if (_kind == ReminderScheduleKind.once) {
+      // The hotkey floater's window is narrower than the picker wants, and
+      // squeezed to fit it the quick-pick row wraps onto a second line —
+      // which costs the calendar its last week of the month. Where the width
+      // has to give, the height is taken back from the window, which has
+      // nothing else on it to crowd.
+      final viewport = MediaQuery.sizeOf(context);
+      final narrowed = viewport.width - 16 < _oncePickerSize.width;
       final picked = await showContextualPopover<DateTime>(
         context: context,
         buttonContext: buttonContext,
-        width: 500,
-        height: 380,
+        width: _oncePickerSize.width,
+        height: narrowed
+            ? math.max(_oncePickerSize.height, viewport.height - 16)
+            : _oncePickerSize.height,
         builder: (_) => DateTimeSelectorPopover(
           initialDateTime: atLocalMinutes(_onceDate, _minutes),
         ),
@@ -646,7 +695,18 @@ class _ScheduledReminderEditorState
     await ref.read(reminderRepositoryProvider).upsertRule(rule);
     ref.invalidate(scheduledReminderRulesProvider);
     unawaited(ref.read(reminderOsNotifierProvider).requestPermission());
-    if (mounted) Navigator.of(context).pop();
+    if (!mounted) return;
+    widget.onSaved?.call();
+    _close();
+  }
+
+  void _close() {
+    final onClose = widget.onClose;
+    if (onClose == null) {
+      Navigator.of(context).pop();
+      return;
+    }
+    onClose();
   }
 
   static bool _sameDays(Set<int> a, Set<int> b) =>
@@ -675,17 +735,222 @@ class _ScheduledReminderEditorState
     // back to everything except the On row, whose hover fill is the one thing
     // meant to reach past the form — so its label can line up with the
     // headings above it without sitting against the fill's edge.
-    final dialog = AlertDialog(
-      contentPadding: const EdgeInsets.fromLTRB(
-        _kTogglePadding,
-        16,
-        _kTogglePadding,
-        24,
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: _kTogglePadding),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LabeledTextField(
+                label: 'Title',
+                controller: _title,
+                autofocus: existing == null,
+                textInputAction: TextInputAction.next,
+                onChanged: (_) {
+                  if (_error != null) setState(() => _error = null);
+                },
+              ),
+              const SizedBox(height: 12),
+              LabeledTextField(
+                label: 'Note (optional)',
+                controller: _body,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => unawaited(_save()),
+              ),
+              label('Repeats'),
+              SegmentedButton<ReminderScheduleKind>(
+                segments: const [
+                  ButtonSegment(
+                    value: ReminderScheduleKind.daily,
+                    label: Text('Daily'),
+                  ),
+                  ButtonSegment(
+                    value: ReminderScheduleKind.weekly,
+                    label: Text('Weekly'),
+                  ),
+                  ButtonSegment(
+                    value: ReminderScheduleKind.once,
+                    label: Text('Once'),
+                  ),
+                ],
+                selected: {_kind},
+                showSelectedIcon: false,
+                onSelectionChanged: (selection) =>
+                    setState(() => _kind = selection.first),
+              ),
+              const SizedBox(height: 16),
+              // The time, and for a weekly rule its days, share one row: the
+              // pills say what they set, so a label above them only repeats it.
+              Row(
+                children: [
+                  Builder(
+                    builder: (buttonContext) => SelectorPill(
+                      icon: PhosphorIconsRegular.clock,
+                      label: timeLabel,
+                      onTap: () => unawaited(_pickTime(buttonContext)),
+                    ),
+                  ),
+                  if (_kind == ReminderScheduleKind.weekly) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (
+                            var day = DateTime.monday;
+                            day <= DateTime.sunday;
+                            day++
+                          )
+                            SelectorPill(
+                              dense: true,
+                              // 2024-01-01 was a Monday.
+                              label: DateFormat.E().format(
+                                DateTime(2024, 1, day),
+                              ),
+                              isActive: _weekdays.contains(day),
+                              fillWhenActive: true,
+                              onTap: () => setState(() {
+                                if (!_weekdays.remove(day)) {
+                                  _weekdays.add(day);
+                                }
+                                _error = null;
+                              }),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              label('Devices'),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  SelectorPill(
+                    dense: true,
+                    label: 'All devices',
+                    isActive: _allDevices,
+                    fillWhenActive: true,
+                    onTap: () => setState(() {
+                      _allDevices = true;
+                      _error = null;
+                    }),
+                  ),
+                  for (final device in devices)
+                    SelectorPill(
+                      dense: true,
+                      label: device.id == thisDeviceId
+                          ? '${device.displayName} (this device)'
+                          : device.displayName,
+                      isActive: !_allDevices && _deviceIds.contains(device.id),
+                      fillWhenActive: true,
+                      onTap: () => setState(() {
+                        if (_allDevices) {
+                          _allDevices = false;
+                          _deviceIds = {device.id};
+                        } else if (!_deviceIds.remove(device.id)) {
+                          _deviceIds.add(device.id);
+                        }
+                        _error = null;
+                      }),
+                    ),
+                ],
+              ),
+              if (devices.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    'Devices appear here once they have signed in.',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+        SwitchListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: _kTogglePadding,
+          ),
+          title: const Text('On'),
+          value: _enabled,
+          onChanged: (value) => setState(() => _enabled = value),
+        ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: _kTogglePadding),
+            child: Text(
+              _error!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+          ),
+      ],
+    );
+
+    final actions = [
+      if (existing != null)
+        GlassButton(
+          dense: true,
+          label: 'History',
+          onPressed: () => unawaited(
+            showReminderHistoryDialog(
+              context,
+              sourceKey: reminderSourceKey(
+                ReminderSourceKind.scheduledRule,
+                existing.id,
+              ),
+              title: existing.title,
+            ),
+          ),
+        ),
+      GlassButton(dense: true, label: 'Cancel', onPressed: _close),
+      GlassButton(
+        dense: true,
+        label: existing == null ? 'Create' : 'Save',
+        onPressed: () => unawaited(_save()),
       ),
-      title: Text(existing == null ? 'New reminder' : 'Edit reminder'),
-      content: SizedBox(
-        width: 460 + _kTogglePadding * 2,
-        child: VoyagerScrollView(
+    ];
+
+    final Widget body;
+    if (widget.onClose == null) {
+      body = AlertDialog(
+        contentPadding: const EdgeInsets.fromLTRB(
+          _kTogglePadding,
+          16,
+          _kTogglePadding,
+          24,
+        ),
+        title: Text(existing == null ? 'New reminder' : 'Edit reminder'),
+        content: SizedBox(
+          width: kReminderFormWidth,
+          child: VoyagerScrollView(child: content),
+        ),
+        actions: actions,
+      );
+    } else {
+      // The floater window is the dialog's surface: same form at the same
+      // width, with the title row and the actions the dialog draws for it
+      // laid out flush to the window instead. Everything scrolls together, so
+      // a weekly rule's day pills or a long device list grow inside a window
+      // whose height is fixed.
+      body = VoyagerScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            _kTogglePadding,
+            12,
+            _kTogglePadding,
+            20,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -694,197 +959,46 @@ class _ScheduledReminderEditorState
                 padding: const EdgeInsets.symmetric(
                   horizontal: _kTogglePadding,
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                child: Row(
                   children: [
-                    LabeledTextField(
-                      label: 'Title',
-                      controller: _title,
-                      autofocus: existing == null,
-                      textInputAction: TextInputAction.next,
-                      onChanged: (_) {
-                        if (_error != null) setState(() => _error = null);
-                      },
+                    if (widget.leading case final leading?) ...[
+                      leading,
+                      const SizedBox(width: 8),
+                    ],
+                    Text('New reminder', style: theme.textTheme.titleMedium),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: _close,
+                      icon: const Icon(PhosphorIconsRegular.x, size: 18),
+                      tooltip: 'Close',
+                      padding: EdgeInsets.zero,
+                      constraints: kMinTouchTarget,
                     ),
-                    const SizedBox(height: 12),
-                    LabeledTextField(
-                      label: 'Note (optional)',
-                      controller: _body,
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => unawaited(_save()),
-                    ),
-                    label('Repeats'),
-                    SegmentedButton<ReminderScheduleKind>(
-                      segments: const [
-                        ButtonSegment(
-                          value: ReminderScheduleKind.daily,
-                          label: Text('Daily'),
-                        ),
-                        ButtonSegment(
-                          value: ReminderScheduleKind.weekly,
-                          label: Text('Weekly'),
-                        ),
-                        ButtonSegment(
-                          value: ReminderScheduleKind.once,
-                          label: Text('Once'),
-                        ),
-                      ],
-                      selected: {_kind},
-                      showSelectedIcon: false,
-                      onSelectionChanged: (selection) =>
-                          setState(() => _kind = selection.first),
-                    ),
-                    const SizedBox(height: 16),
-                    // The time, and for a weekly rule its days, share one row: the
-                    // pills say what they set, so a label above them only repeats it.
-                    Row(
-                      children: [
-                        Builder(
-                          builder: (buttonContext) => SelectorPill(
-                            icon: PhosphorIconsRegular.clock,
-                            label: timeLabel,
-                            onTap: () => unawaited(_pickTime(buttonContext)),
-                          ),
-                        ),
-                        if (_kind == ReminderScheduleKind.weekly) ...[
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                for (
-                                  var day = DateTime.monday;
-                                  day <= DateTime.sunday;
-                                  day++
-                                )
-                                  SelectorPill(
-                                    dense: true,
-                                    // 2024-01-01 was a Monday.
-                                    label: DateFormat.E().format(
-                                      DateTime(2024, 1, day),
-                                    ),
-                                    isActive: _weekdays.contains(day),
-                                    fillWhenActive: true,
-                                    onTap: () => setState(() {
-                                      if (!_weekdays.remove(day)) {
-                                        _weekdays.add(day);
-                                      }
-                                      _error = null;
-                                    }),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    label('Devices'),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        SelectorPill(
-                          dense: true,
-                          label: 'All devices',
-                          isActive: _allDevices,
-                          fillWhenActive: true,
-                          onTap: () => setState(() {
-                            _allDevices = true;
-                            _error = null;
-                          }),
-                        ),
-                        for (final device in devices)
-                          SelectorPill(
-                            dense: true,
-                            label: device.id == thisDeviceId
-                                ? '${device.displayName} (this device)'
-                                : device.displayName,
-                            isActive:
-                                !_allDevices && _deviceIds.contains(device.id),
-                            fillWhenActive: true,
-                            onTap: () => setState(() {
-                              if (_allDevices) {
-                                _allDevices = false;
-                                _deviceIds = {device.id};
-                              } else if (!_deviceIds.remove(device.id)) {
-                                _deviceIds.add(device.id);
-                              }
-                              _error = null;
-                            }),
-                          ),
-                      ],
-                    ),
-                    if (devices.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          'Devices appear here once they have signed in.',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 8),
                   ],
                 ),
               ),
-              SwitchListTile(
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: _kTogglePadding,
+              content,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(_kTogglePadding, 8, 0, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    for (final action in actions)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: action,
+                      ),
+                  ],
                 ),
-                title: const Text('On'),
-                value: _enabled,
-                onChanged: (value) => setState(() => _enabled = value),
               ),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: _kTogglePadding,
-                  ),
-                  child: Text(
-                    _error!,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.error,
-                    ),
-                  ),
-                ),
             ],
           ),
         ),
-      ),
-      actions: [
-        if (existing != null)
-          GlassButton(
-            dense: true,
-            label: 'History',
-            onPressed: () => unawaited(
-              showReminderHistoryDialog(
-                context,
-                sourceKey: reminderSourceKey(
-                  ReminderSourceKind.scheduledRule,
-                  existing.id,
-                ),
-                title: existing.title,
-              ),
-            ),
-          ),
-        GlassButton(
-          dense: true,
-          label: 'Cancel',
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        GlassButton(
-          dense: true,
-          label: existing == null ? 'Create' : 'Save',
-          onPressed: () => unawaited(_save()),
-        ),
-      ],
-    );
+      );
+    }
     return CtrlEnterToSubmitScope(
       onSubmit: () => unawaited(_save()),
-      child: dialog,
+      child: body,
     );
   }
 }

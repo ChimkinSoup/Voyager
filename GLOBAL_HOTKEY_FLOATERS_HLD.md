@@ -239,6 +239,24 @@ Always-on-top window hosting the **full** existing transaction entry flow (`show
 
 ---
 
+## 7a. Reminder floater (added 2026-09-20)
+
+### 7a.1 UI
+
+Centered always-on-top window hosting the Inbox's **“New reminder”** editor (`ScheduledRemindersSection`'s `showScheduledReminderEditor`) — title, note, repeat kind, time/days, devices, On — laid out flush to the window instead of inside the dialog's card, with the floater's app icon before the title and a close button opposite it. Same form, same width; only the dialog chrome is dropped.
+
+### 7a.2 Draft & dismiss
+
+- **No draft**: a reminder is a short one-shot form, so click-outside/replace discards what was typed and the next open starts fresh.
+- Successful save: “Reminder added” confirmation over the floater, then dismiss.
+- Window height is fixed, with room reserved for the validation line; a device list longer than one row scrolls inside it.
+
+### 7a.3 In-app path (main focused)
+
+No page owns reminders, so there is **no navigation**: sheets and dialogs over the app are cleared and the same editor opens over whatever page is showing (`AppShell` listens for the request). The floater's icon does the same, after showing the main window.
+
+---
+
 ## 8. Hotkeys
 
 | Action | Default | Floater | In-app (main focused) |
@@ -246,8 +264,9 @@ Always-on-top window hosting the **full** existing transaction entry flow (`show
 | Todo | `Ctrl+Alt+T` | Quick-add bar | Todo page + focus composer (+ draft) |
 | Journal | `Ctrl+Alt+J` | Bottom-right notepad | Journal page + today’s QJE |
 | Finance | `Ctrl+Alt+F` | Full transaction floater | Finance page + transaction flow |
+| Reminder | `Ctrl+Alt+R` | “New reminder” editor | Editor over the current page |
 
-Settings continue to **display** combos as read-only on Windows; no editor in this work. Persist `financeHotkey` alongside existing journal/todo settings fields.
+Settings continue to **display** combos as read-only on Windows; no editor in this work. Persist `financeHotkey` and `reminderHotkey` alongside existing journal/todo settings fields.
 
 ---
 

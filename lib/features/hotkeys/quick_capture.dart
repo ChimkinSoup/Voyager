@@ -7,12 +7,14 @@ import 'package:voyager/features/finance/finance_transaction_modal.dart';
 enum QuickCaptureKind {
   todo('/todo'),
   journal('/journal'),
-  finance('/finance');
+  finance('/finance'),
+  reminder(null);
 
   const QuickCaptureKind(this.path);
 
-  /// The shell page the in-app path navigates to.
-  final String path;
+  /// The shell page the in-app path navigates to, or null for a capture no
+  /// page owns — the reminder editor opens over whatever page is showing.
+  final String? path;
 }
 
 /// The quick-add bar's unsaved state. Session memory only: nothing here is

@@ -2,6 +2,7 @@
 const defaultJournalHotkey = 'Ctrl+Alt+J';
 const defaultTodoHotkey = 'Ctrl+Alt+T';
 const defaultFinanceHotkey = 'Ctrl+Alt+F';
+const defaultReminderHotkey = 'Ctrl+Alt+R';
 
 const legacyJournalHotkey = 'Ctrl+Shift+J';
 const legacyTodoHotkey = 'Ctrl+Shift+T';

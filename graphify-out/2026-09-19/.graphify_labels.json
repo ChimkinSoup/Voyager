@@ -1049,5 +1049,8 @@
   "1047": "_TrackerDialog",
   "1048": "_LifeTreeCanvasState",
   "1049": "_revealEvent",
-  "1050": "_revealTask"
+  "1050": "_revealTask",
+  "1051": "_PinnedNoteRowState",
+  "1052": "WeatherForecastChart",
+  "1053": "_TrackModal"
 }

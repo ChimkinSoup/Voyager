@@ -7,6 +7,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_window.dart';
 import 'package:voyager/features/hotkeys/quick_capture.dart';
+import 'package:voyager/features/notifications/scheduled_reminders_section.dart';
 import 'package:voyager/features/shell/shell_page_transition.dart';
 import 'package:voyager/routing/app_router.dart';
 import 'package:window_manager/window_manager.dart';
@@ -23,6 +24,18 @@ import 'package:window_manager/window_manager.dart';
 /// the window, through [FloaterController.setExtraHeight].
 /// `finance_floater_fits_form_test.dart` holds all of it to the real form.
 const kFinanceFloaterSize = Size(460, 539);
+
+/// The reminder floater's window: the editor's own width (see
+/// [kReminderFormWidth]) and the height of its default form — a daily rule
+/// with this device registered — plus the validation line under it (17).
+///
+/// Sized to the form rather than roomily, so it doesn't open above a band of
+/// empty background. The validation line has its room reserved because it is
+/// one Create away in the ordinary course of things and would otherwise push
+/// the buttons out of the window. Nothing resizes this window: what grows
+/// beyond that — more devices than fit a row — scrolls inside it.
+/// `reminder_floater_fits_form_test.dart` holds both figures to the real form.
+const kReminderFloaterSize = Size(kReminderFormWidth, 495);
 
 /// Routes global hotkeys and owns the floater lifecycle.
 ///
@@ -67,12 +80,14 @@ class FloaterController extends ChangeNotifier with WindowListener {
           kFinanceFloaterSize.width,
           kFinanceFloaterSize.height + extraHeight,
         ),
+        QuickCaptureKind.reminder => kReminderFloaterSize,
       };
 
   static FloaterAnchor _anchorFor(QuickCaptureKind kind) => switch (kind) {
     QuickCaptureKind.todo => FloaterAnchor.upperCenter,
     QuickCaptureKind.journal => FloaterAnchor.bottomRight,
     QuickCaptureKind.finance => FloaterAnchor.center,
+    QuickCaptureKind.reminder => FloaterAnchor.center,
   };
 
   /// Operations run one at a time: a blur, a hotkey and a save can all land
@@ -237,8 +252,9 @@ class FloaterController extends ChangeNotifier with WindowListener {
 
   /// Closes any sheets and dialogs over the app — they would otherwise stay on
   /// top of the page the hotkey opens — and switches to [kind]'s page without
-  /// the shell's crossfade (see [instantShellBranchSwitch]). Returns the
-  /// closing modals' completions.
+  /// the shell's crossfade (see [instantShellBranchSwitch]). A kind no page
+  /// owns stays where it is and only clears the modals. Returns the closing
+  /// modals' completions.
   Future<List<Future<Object?>>> _navigateTo(QuickCaptureKind kind) async {
     final router = _ref.read(routerProvider);
     final closing = <Future<Object?>>[];
@@ -265,10 +281,12 @@ class FloaterController extends ChangeNotifier with WindowListener {
         navigator.removeRoute(route);
       }
     }
+    final path = kind.path;
+    if (path == null) return closing;
     instantShellBranchSwitch = true;
     try {
-      router.go(kind.path);
-      await _arrivedAt(router, kind.path);
+      router.go(path);
+      await _arrivedAt(router, path);
       await _bounded(WidgetsBinding.instance.endOfFrame);
     } finally {
       instantShellBranchSwitch = false;

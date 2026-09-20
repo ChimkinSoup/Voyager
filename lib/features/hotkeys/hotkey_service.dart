@@ -8,6 +8,7 @@ abstract class HotkeyService {
     required String journalHotkey,
     required String todoHotkey,
     required String financeHotkey,
+    required String reminderHotkey,
     required void Function(QuickCaptureKind kind) onHotkey,
   });
 
@@ -22,6 +23,7 @@ class WindowsHotkeyService implements HotkeyService {
     required String journalHotkey,
     required String todoHotkey,
     required String financeHotkey,
+    required String reminderHotkey,
     required void Function(QuickCaptureKind kind) onHotkey,
   }) async {
     await dispose();
@@ -29,6 +31,7 @@ class WindowsHotkeyService implements HotkeyService {
       QuickCaptureKind.journal: journalHotkey,
       QuickCaptureKind.todo: todoHotkey,
       QuickCaptureKind.finance: financeHotkey,
+      QuickCaptureKind.reminder: reminderHotkey,
     };
     for (final MapEntry(key: kind, value: combo) in combos.entries) {
       final key = parseHotKey(combo);
@@ -53,6 +56,7 @@ class NoOpHotkeyService implements HotkeyService {
     required String journalHotkey,
     required String todoHotkey,
     required String financeHotkey,
+    required String reminderHotkey,
     required void Function(QuickCaptureKind kind) onHotkey,
   }) async {}
 

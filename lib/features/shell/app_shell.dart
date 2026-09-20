@@ -20,8 +20,10 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/calendar/calendar_page.dart';
 import 'package:voyager/features/dev/dev_cache_status_tile.dart';
 import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
+import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:voyager/features/notifications/notification_bell.dart';
 import 'package:voyager/features/notifications/notification_inbox_popover.dart';
+import 'package:voyager/features/notifications/scheduled_reminders_section.dart';
 import 'package:voyager/features/journal/geometric_texture_warmup.dart';
 import 'package:voyager/features/shell/shell_back_interceptor.dart';
 import 'package:voyager/features/shell/shell_bottom_nav.dart';
@@ -44,6 +46,13 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // The reminder hotkey's in-app path. It lives here rather than on a page
+    // because no page owns reminders: the editor opens over whatever is
+    // showing, the same one the Inbox's Scheduled section opens.
+    ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
+      if (request?.kind != QuickCaptureKind.reminder) return;
+      unawaited(showScheduledReminderEditor(context));
+    });
     final settings = ref.watch(settingsProvider).value ?? const AppSettings();
     final orderedDestinations = getOrderedDestinations(
       settings,

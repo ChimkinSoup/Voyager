@@ -189,6 +189,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
         journalHotkey: settings.journalHotkey,
         todoHotkey: settings.todoHotkey,
         financeHotkey: settings.financeHotkey,
+        reminderHotkey: settings.reminderHotkey,
         onHotkey: floaters.onHotkey,
       );
     } catch (error, stackTrace) {

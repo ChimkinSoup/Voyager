@@ -33,6 +33,7 @@ class AppSettings {
     this.journalHotkey = defaultJournalHotkey,
     this.todoHotkey = defaultTodoHotkey,
     this.financeHotkey = defaultFinanceHotkey,
+    this.reminderHotkey = defaultReminderHotkey,
     this.calendarNavigateLeftKey = defaultCalendarNavigateLeftKey,
     this.calendarNavigateRightKey = defaultCalendarNavigateRightKey,
     this.srsFailKey = defaultStudyFailKey,
@@ -206,6 +207,7 @@ class AppSettings {
   final String journalHotkey;
   final String todoHotkey;
   final String financeHotkey;
+  final String reminderHotkey;
   final String calendarNavigateLeftKey;
   final String calendarNavigateRightKey;
 
@@ -498,6 +500,7 @@ class AppSettings {
     String? journalHotkey,
     String? todoHotkey,
     String? financeHotkey,
+    String? reminderHotkey,
     String? calendarNavigateLeftKey,
     String? calendarNavigateRightKey,
     String? srsFailKey,
@@ -675,6 +678,7 @@ class AppSettings {
       journalHotkey: journalHotkey ?? this.journalHotkey,
       todoHotkey: todoHotkey ?? this.todoHotkey,
       financeHotkey: financeHotkey ?? this.financeHotkey,
+      reminderHotkey: reminderHotkey ?? this.reminderHotkey,
       calendarNavigateLeftKey:
           calendarNavigateLeftKey ?? this.calendarNavigateLeftKey,
       calendarNavigateRightKey:

@@ -679,6 +679,8 @@ class SettingsTable extends Table {
       text().withDefault(const Constant(defaultTodoHotkey))();
   TextColumn get financeHotkey =>
       text().withDefault(const Constant(defaultFinanceHotkey))();
+  TextColumn get reminderHotkey =>
+      text().withDefault(const Constant(defaultReminderHotkey))();
   TextColumn get calendarNavigateLeftKey =>
       text().withDefault(const Constant(defaultCalendarNavigateLeftKey))();
   TextColumn get calendarNavigateRightKey =>
@@ -1763,7 +1765,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 120;
+  int get schemaVersion => 121;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3125,6 +3127,12 @@ class AppDatabase extends _$AppDatabase {
         // Nothing to backfill: a problem's past reviews were only ever counted,
         // never dated, so the activity chart's reviewed line starts here.
         await migrator.createTable(leetCodeReviewLogTable);
+      }
+      if (from < 121) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.reminderHotkey,
+        );
       }
     },
   );

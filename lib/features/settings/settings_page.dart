@@ -668,6 +668,10 @@ class SettingsPage extends ConsumerWidget {
               title: const Text('Finance hotkey'),
               subtitle: Text(settings.financeHotkey),
             ),
+            ListTile(
+              title: const Text('Reminder hotkey'),
+              subtitle: Text(settings.reminderHotkey),
+            ),
           ],
           if (isAndroid)
             const ListTile(
