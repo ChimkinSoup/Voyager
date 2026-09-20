@@ -66,8 +66,18 @@ class _ScheduledRemindersSectionState
         ref.watch(scheduledReminderRulesProvider).valueOrNull ??
         const <ScheduledReminderRule>[];
     final engine = ref.watch(reminderEngineProvider);
-    final visible = _expanded ? rules : rules.take(_kVisibleRules).toList();
-    final folded = rules.length - visible.length;
+    // Soonest first, so the fold below keeps the reminders that are next.
+    final ordered = [
+      for (final rule in rules)
+        (
+          rule: rule,
+          view: engine.view(
+            reminderSourceKey(ReminderSourceKind.scheduledRule, rule.id),
+          ),
+        ),
+    ]..sort(_bySoonest);
+    final visible = _expanded ? ordered : ordered.take(_kVisibleRules).toList();
+    final folded = ordered.length - visible.length;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -111,13 +121,11 @@ class _ScheduledRemindersSectionState
             )
           else
             const SizedBox(height: 6),
-          for (final rule in visible)
+          for (final entry in visible)
             _ScheduledRuleRow(
-              key: ValueKey(rule.id),
-              rule: rule,
-              view: engine.view(
-                reminderSourceKey(ReminderSourceKind.scheduledRule, rule.id),
-              ),
+              key: ValueKey(entry.rule.id),
+              rule: entry.rule,
+              view: entry.view,
             ),
           if (folded > 0 || (_expanded && rules.length > _kVisibleRules))
             Align(
@@ -131,6 +139,36 @@ class _ScheduledRemindersSectionState
       ),
     );
   }
+}
+
+/// When a rule next wants attention: a due one's moment has already passed,
+/// so it sorts above anything still to come. Null for one that is off,
+/// completed or out of occurrences — nothing is coming for those.
+DateTime? _nextMoment(ReminderSourceView? view) {
+  final evaluation = view?.evaluation;
+  if (evaluation == null) return null;
+  if (evaluation.phase == ReminderPhase.due) return evaluation.dueSince;
+  return evaluation.nextFireAt;
+}
+
+/// Soonest first, with the rules that have no next moment after them.
+///
+/// Creation order breaks a tie: [List.sort] is not stable, and without it two
+/// rules sharing a fire time could swap places on any rebuild — which is now
+/// every minute.
+int _bySoonest(
+  ({ScheduledReminderRule rule, ReminderSourceView? view}) a,
+  ({ScheduledReminderRule rule, ReminderSourceView? view}) b,
+) {
+  final at = _nextMoment(a.view);
+  final bt = _nextMoment(b.view);
+  if (at != null && bt != null) {
+    final byTime = at.compareTo(bt);
+    if (byTime != 0) return byTime;
+  } else if (at != bt) {
+    return at == null ? 1 : -1;
+  }
+  return a.rule.createdAt.compareTo(b.rule.createdAt);
 }
 
 enum _RuleAction { edit, toggle, history, delete }
@@ -443,6 +481,20 @@ class _OverflowEntry extends StatelessWidget {
   }
 }
 
+/// "[lead] 15 hours (Tomorrow 9:00 AM)" — the countdown to [at], with the
+/// clock time after it only when [at] lands on another day. Today, the
+/// countdown is the whole answer and the bracket only repeats the cadence.
+String _countdown(String lead, DateTime at, DateTime now) {
+  final local = at.toLocal();
+  final today =
+      local.year == now.year &&
+      local.month == now.month &&
+      local.day == now.day;
+  final distance = reminderDistanceLabel(at, now);
+  if (today) return '$lead $distance';
+  return '$lead $distance (${reminderWhenLabel(at, now)})';
+}
+
 /// A rule's standing, for its Inbox row.
 ({String label, bool emphasized}) scheduledRuleStatus(
   ScheduledReminderRule rule,
@@ -469,15 +521,14 @@ class _OverflowEntry extends StatelessWidget {
       return (label: 'Due', emphasized: true);
     case ReminderPhase.snoozed:
       return (
-        label:
-            'Snoozed until ${reminderWhenLabel(evaluation.snoozeUntil!, now)}',
+        label: _countdown('Snoozed for', evaluation.snoozeUntil!, now),
         emphasized: false,
       );
     case ReminderPhase.pending:
     case ReminderPhase.acked:
       final next = evaluation.nextFireAt;
       if (next == null) return (label: 'Passed', emphasized: false);
-      return (label: 'Next ${reminderWhenLabel(next, now)}', emphasized: false);
+      return (label: _countdown('Next in', next, now), emphasized: false);
   }
 }
 

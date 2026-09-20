@@ -146,7 +146,10 @@ class ReminderEngine extends ChangeNotifier {
     _evaluate();
   }
 
-  void _evaluate() {
+  /// [fromTimer] marks the once-a-minute wake, which notifies whether or not
+  /// anything moved: the Inbox counts down between events ("Next in 11
+  /// minutes"), and nothing in the signature below changes as it does.
+  void _evaluate({bool fromTimer = false}) {
     if (_disposed) return;
     final rules = _rules;
     final bells = _bells;
@@ -256,7 +259,7 @@ class ReminderEngine extends ChangeNotifier {
             '${v.evaluation?.snoozeUntil}|${v.evaluation?.nextFireAt}|'
             '${v.rule?.enabled}',
     ].join('\n');
-    if (signature != _viewSignature) {
+    if (fromTimer || signature != _viewSignature) {
       _viewSignature = signature;
       notifyListeners();
     }
@@ -367,7 +370,7 @@ class ReminderEngine extends ChangeNotifier {
       if (until < delay) delay = until;
     }
     if (delay < const Duration(seconds: 1)) delay = const Duration(seconds: 1);
-    _timer = Timer(delay, _evaluate);
+    _timer = Timer(delay, () => _evaluate(fromTimer: true));
   }
 
   /// Re-evaluates now — for an app resume, where timers may have slept.

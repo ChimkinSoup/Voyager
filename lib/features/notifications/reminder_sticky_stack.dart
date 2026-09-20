@@ -284,7 +284,7 @@ class _StickyReminderCardState extends ConsumerState<_StickyReminderCard>
               children: [
                 GlassButton(
                   dense: true,
-                  label: 'Remind me in 10 min',
+                  label: 'Snooze 10 min',
                   enabled: !_busy,
                   onPressed: () => _run(
                     (engine) => engine.snooze(
@@ -295,7 +295,7 @@ class _StickyReminderCardState extends ConsumerState<_StickyReminderCard>
                 ),
                 GlassButton(
                   dense: true,
-                  label: 'Remind me tomorrow',
+                  label: 'Tomorrow',
                   enabled: !_busy,
                   onPressed: () => _run(
                     (engine) =>

@@ -203,6 +203,88 @@ void main() {
   });
 
 
+  // `x` on the last character of a line cuts the character and then clamps the
+  // caret back onto the line, which is the same text-and-caret pair a
+  // backspace one place to the right writes. The editor's keystroke rules used
+  // to read it that way: on the closing half of an auto-closed pair `x` took
+  // both halves and left the caret past the line's last character, where every
+  // later `x` did nothing at all.
+  testWidgets('x takes one character at a time off the end of a line', (
+    tester,
+  ) async {
+    await pumpInput(tester, vimEnabled: true, text: '        for ``');
+    controller.selection = const TextSelection.collapsed(offset: 14);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
+    await tester.pump();
+    expect(controller.text, '        for `');
+
+    // Through the indent too: `x` there used to eat a whole tab stop, the
+    // backspace-outdent rule misreading the same clamped caret.
+    for (var i = 0; i < 13; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
+      await tester.pump();
+      expect(controller.text.length, 12 - i);
+    }
+    await finish(tester);
+  });
+
+  // Undo and redo restore a value, which is no more a keystroke than a Vim
+  // edit is. Read as one, the restore after a space typed into a line's indent
+  // came back outdented to the tab stop below — and, because the rewrite made
+  // the restored value not stick, tripped UndoHistory's own assert.
+  testWidgets('Ctrl+Z gives back the indent it was typed into', (tester) async {
+    await pumpInput(tester, vimEnabled: true, text: '');
+    final state = tester.state<EditableTextState>(
+      find.byType(EditableText).last,
+    );
+    // Two text changes, each far enough apart to land its own undo entry.
+    state.updateEditingValue(
+      const TextEditingValue(
+        text: '       ',
+        selection: TextSelection.collapsed(offset: 7),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    state.updateEditingValue(
+      const TextEditingValue(
+        text: '        ',
+        selection: TextSelection.collapsed(offset: 8),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+    await tester.pump();
+    expect(controller.text, '       ');
+    await finish(tester);
+  });
+
+  // The same restore, reached through Vim's own `u` rather than an intent.
+  // `x` yanks the space it cuts and `p` puts it back one place along, so the
+  // entry `u` returns to sits one character behind the caret — the shape a
+  // backspace writes.
+  testWidgets('u gives back the indent p pasted into', (tester) async {
+    await pumpInput(tester, vimEnabled: true, text: '        ');
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(controller.text, '        ');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+    await tester.pump();
+    expect(controller.text, '       ');
+    await finish(tester);
+  });
+
   testWidgets('Visual mode uses VimTextOverlay instead of SelectionHighlightLayer',
       (tester) async {
     await pumpInput(tester, vimEnabled: true, text: 'abc');

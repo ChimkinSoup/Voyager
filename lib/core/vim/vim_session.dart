@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/text/code_line_comment.dart';
+import 'package:voyager/core/text/typing_rewrites.dart';
 import 'package:voyager/core/vim/vim_text_ops.dart';
 
 /// The editing modes Voyager's Vim layer implements.
@@ -324,10 +325,17 @@ class VimSession {
 
   void _applyValue(TextEditingValue value) {
     final state = resolveEditableState();
+    // Every write here is a finished edit, never a keystroke — see
+    // [suppressTypingRewrites] for what reinterpreting one costs.
     if (state != null) {
-      state.userUpdateTextEditingValue(value, SelectionChangedCause.keyboard);
+      suppressTypingRewrites(
+        () => state.userUpdateTextEditingValue(
+          value,
+          SelectionChangedCause.keyboard,
+        ),
+      );
     } else if (isFieldFocused()) {
-      textController.value = value;
+      suppressTypingRewrites(() => textController.value = value);
     } else {
       // Focus has moved on and this write is stale — see [isFieldFocused].
       return;
@@ -750,7 +758,9 @@ class VimSession {
     if (key == LogicalKeyboardKey.keyR) {
       if (undoController.value.canRedo) {
         // Same UndoHistory assert as `u` — see [suppressListEditingWrites].
-        suppressListEditingWrites(undoController.redo);
+        suppressListEditingWrites(
+          () => suppressTypingRewrites(undoController.redo),
+        );
       }
       return KeyEventResult.handled;
     }
@@ -1234,7 +1244,9 @@ class VimSession {
           // and trip `widget.value.value == nextValue`. Suspend those writes
           // for the restore; gate on canUndo so a no-op `u` stays quiet.
           if (!undone && undoController.value.canUndo) {
-            suppressListEditingWrites(undoController.undo);
+            suppressListEditingWrites(
+              () => suppressTypingRewrites(undoController.undo),
+            );
           }
           _clearPending();
         }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:voyager/core/text/code_line_comment.dart';
 import 'package:voyager/core/text/newline_normalization.dart';
+import 'package:voyager/core/text/typing_rewrites.dart';
 
 /// Modifiers [CodeController] ships with, minus [CloseBlockModifier].
 ///
@@ -43,11 +44,16 @@ class LeetCodeCodeController extends CodeController {
     // `\r` never reaches the buffer: every offset below counts a line break as
     // one character. See [normalizeNewlinesInValue].
     final incoming = normalizeNewlinesInValue(newValue);
-    final adjusted = applyLeetCodeCodeEdits(
-      current: current,
-      incoming: incoming,
-      tabSpaces: params.tabSpaces,
-    );
+    // Every rule below reads the incoming value as a keystroke. A write that
+    // is already a finished edit must not be re-read that way — see
+    // [suppressTypingRewrites].
+    final adjusted = typingRewritesSuppressed
+        ? null
+        : applyLeetCodeCodeEdits(
+            current: current,
+            incoming: incoming,
+            tabSpaces: params.tabSpaces,
+          );
     if (adjusted == null) {
       super.value = preferUpstreamAffinityAtLineBreak(incoming);
       return;

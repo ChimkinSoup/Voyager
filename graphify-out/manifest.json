@@ -125,8 +125,8 @@
     "semantic_hash": "17e52eb33a0fc696097fe0601ac2c857"
   },
   "lib/app/providers.dart": {
-    "mtime": 1789870901.5863647,
-    "ast_hash": "a95bf21b99fdf77fbe866dc03f675559",
+    "mtime": 1789931261.0112636,
+    "ast_hash": "69f4dc73c6c42044ffa3663dfa8b1837",
     "semantic_hash": ""
   },
   "lib/app/voyager_app.dart": {
@@ -190,14 +190,14 @@
     "semantic_hash": "2cbedaf2ff4e302c86d74b3b0d9c215a"
   },
   "lib/core/dev/dev_settings_controller.dart": {
-    "mtime": 1785374159.1251943,
-    "ast_hash": "7a8afd923903b2929657af1978f4080b",
-    "semantic_hash": "7a8afd923903b2929657af1978f4080b"
+    "mtime": 1789930975.7725387,
+    "ast_hash": "13a999e349c76f2f2bf6ce0d7d94fb01",
+    "semantic_hash": ""
   },
   "lib/core/dev/journal_debug_logger.dart": {
-    "mtime": 1786836611.8424797,
-    "ast_hash": "2cd31f97f288c67baf51da2e10d35310",
-    "semantic_hash": "2cd31f97f288c67baf51da2e10d35310"
+    "mtime": 1789931248.1419654,
+    "ast_hash": "5671ba87d929b57dea10b6e5f2b93125",
+    "semantic_hash": ""
   },
   "lib/core/dev/out_of_sync_journal_entry_purge.dart": {
     "mtime": 1782616768.0825882,
@@ -215,9 +215,9 @@
     "semantic_hash": "aa133ff9a7b61ad62a4cc6b08ec0b54e"
   },
   "lib/core/dev/todo_sort_debug_logger.dart": {
-    "mtime": 1787428984.258371,
-    "ast_hash": "7561f325e7535a9a70bf9842efc9133b",
-    "semantic_hash": "7561f325e7535a9a70bf9842efc9133b"
+    "mtime": 1789931248.1429646,
+    "ast_hash": "a2bcfa16e4df59ed419ff2ee6d353e80",
+    "semantic_hash": ""
   },
   "lib/core/dev/warmup_tracker.dart": {
     "mtime": 1782087495.4399464,
@@ -260,13 +260,13 @@
     "semantic_hash": "40a61969d0beb81cef9740bfe061dac2"
   },
   "lib/core/sync/firestore_collections.dart": {
-    "mtime": 1789867013.9061656,
-    "ast_hash": "c96868735d22b32daaadb6a65656ddea",
+    "mtime": 1789929519.7633982,
+    "ast_hash": "940e0611b81e0851f37ea51a56afda0b",
     "semantic_hash": ""
   },
   "lib/core/sync/firestore_document_mapper.dart": {
-    "mtime": 1789881209.0674841,
-    "ast_hash": "8b2c48cdadd4057ef215b67954bf879f",
+    "mtime": 1789929519.801423,
+    "ast_hash": "445ad01117686a8989cb60e13ef76005",
     "semantic_hash": ""
   },
   "lib/core/sync/firestore_pull_service.dart": {
@@ -295,8 +295,8 @@
     "semantic_hash": "d643cdfd556db3bb0c54b5e81b388b54"
   },
   "lib/core/sync/remote_sync_service.dart": {
-    "mtime": 1789867055.1127102,
-    "ast_hash": "e9548dd99c8388685a4fc5f3193718cc",
+    "mtime": 1789929519.8634782,
+    "ast_hash": "842e0b750a9de0857433bbdd03b2f3c7",
     "semantic_hash": ""
   },
   "lib/core/sync/soft_delete_policy.dart": {
@@ -305,8 +305,8 @@
     "semantic_hash": "0916c5c18155fa74ffb2053c0ccd620a"
   },
   "lib/core/sync/sync_activity.dart": {
-    "mtime": 1789434381.4329138,
-    "ast_hash": "4714fa84f2acd42576cbcc46b2e8892b",
+    "mtime": 1789931248.1419654,
+    "ast_hash": "708c3a329ee6308ae6656ddd90628f05",
     "semantic_hash": ""
   },
   "lib/core/sync/sync_conflict_detector.dart": {
@@ -525,13 +525,13 @@
     "semantic_hash": "268a7a3a47fa90c40e8ac8c6e3402cf9"
   },
   "lib/data/database/app_database.dart": {
-    "mtime": 1789881209.065483,
-    "ast_hash": "a9410861472bb60d310472deba6fade0",
+    "mtime": 1789929519.60475,
+    "ast_hash": "02a2b2971dd54ad0879028dd8dd12ea3",
     "semantic_hash": ""
   },
   "lib/data/database/app_database.g.dart": {
-    "mtime": 1789880402.6849482,
-    "ast_hash": "bb9d9cc6a95d89b6d6407692661e0d3f",
+    "mtime": 1789927457.3910766,
+    "ast_hash": "af47f9e4b2720d64ba943479206692c1",
     "semantic_hash": ""
   },
   "lib/data/remote/cloud_function_weather_client.dart": {
@@ -570,8 +570,8 @@
     "semantic_hash": ""
   },
   "lib/data/repositories/drift_repositories.dart": {
-    "mtime": 1789881209.0664828,
-    "ast_hash": "17416d5fac80bcb10bfcda49d538fdbb",
+    "mtime": 1789929519.7374096,
+    "ast_hash": "45c65adfdd79f45f248ec3d74d706a4e",
     "semantic_hash": ""
   },
   "lib/data/services/quotes_loader.dart": {
@@ -600,8 +600,8 @@
     "semantic_hash": "99fbc479ff56b530b339467a5cbf13c6"
   },
   "lib/domain/models/settings_models.dart": {
-    "mtime": 1789881240.4491043,
-    "ast_hash": "9b61eda369b147e469bca92ab89090a9",
+    "mtime": 1789929519.74939,
+    "ast_hash": "cf68e95270d6136d3f7d0661c6907ee1",
     "semantic_hash": ""
   },
   "lib/domain/models/soft_deletable.dart": {
@@ -625,8 +625,8 @@
     "semantic_hash": "0470e19f81b240da2c32387ab7101422"
   },
   "lib/domain/repositories/repositories.dart": {
-    "mtime": 1789866989.568556,
-    "ast_hash": "7460fb9a7acce64de847bee097932232",
+    "mtime": 1789929519.7593977,
+    "ast_hash": "ee9805b38921d345f2d97c6c9ba28ae8",
     "semantic_hash": ""
   },
   "lib/domain/repositories/weather_api_client.dart": {
@@ -765,8 +765,8 @@
     "semantic_hash": "aac4ee448a88b2342eada019a7b677f0"
   },
   "lib/features/calendar/calendar_page.dart": {
-    "mtime": 1789772324.193812,
-    "ast_hash": "f217969a2d9c0f3d941e17686648c107",
+    "mtime": 1789931298.989184,
+    "ast_hash": "42dad4bb54da7db0072a28039889a353",
     "semantic_hash": ""
   },
   "lib/features/calendar/calendar_todo_markers.dart": {
@@ -830,8 +830,8 @@
     "semantic_hash": ""
   },
   "lib/features/dev/dev_weather_api_tile.dart": {
-    "mtime": 1789574688.9758754,
-    "ast_hash": "1f41a3aaa2857b4e9b59bfefe0dbb4cf",
+    "mtime": 1789931298.990188,
+    "ast_hash": "eeaf4b9c7fd54b68b6d35235ef441d33",
     "semantic_hash": ""
   },
   "lib/features/hotkeys/hotkey_service.dart": {
@@ -845,13 +845,13 @@
     "semantic_hash": "d8524d52776d157b11c52a9bcb9b9125"
   },
   "lib/features/journal/journal_list_actions.dart": {
-    "mtime": 1787417130.3576584,
-    "ast_hash": "c2b578da8788228fdca158c9743a3901",
-    "semantic_hash": "c2b578da8788228fdca158c9743a3901"
+    "mtime": 1789931324.9560795,
+    "ast_hash": "391a1bcc2f3c780930c06e7a51e172ea",
+    "semantic_hash": ""
   },
   "lib/features/journal/journal_page.dart": {
-    "mtime": 1789662778.7790704,
-    "ast_hash": "db121fbaf5c81ae28c4efe44977ea1d9",
+    "mtime": 1789931324.955077,
+    "ast_hash": "be6da013d8571d5baedbeecf4109aaaf",
     "semantic_hash": ""
   },
   "lib/features/search/search_entry_save_helper.dart": {
@@ -895,14 +895,14 @@
     "semantic_hash": "b5a15edc83e7e993ae96eb801e3d331d"
   },
   "lib/features/shell/app_shell.dart": {
-    "mtime": 1789881283.4819255,
-    "ast_hash": "dc6d3e86481108203b0390400463210b",
+    "mtime": 1789931344.5020704,
+    "ast_hash": "cb7ecf1b81f80fa47093b64837b537d3",
     "semantic_hash": ""
   },
   "lib/features/shell/shell_destinations.dart": {
-    "mtime": 1788385370.7558975,
-    "ast_hash": "9ff56ffc83d868bcc8fafa757afcb15a",
-    "semantic_hash": "9ff56ffc83d868bcc8fafa757afcb15a"
+    "mtime": 1789928533.3812346,
+    "ast_hash": "06f372ef9bbe9ccfe210f35e84291505",
+    "semantic_hash": ""
   },
   "lib/features/shell/shell_keyboard_shortcuts.dart": {
     "mtime": 1783737748.5356715,
@@ -935,9 +935,9 @@
     "semantic_hash": "47546a71a214b6f7c9480956c85132e5"
   },
   "lib/features/shell/weather_forecast_chart.dart": {
-    "mtime": 1784841064.1171134,
-    "ast_hash": "06a6eb333c6b5cd1d621927ec9e04047",
-    "semantic_hash": "06a6eb333c6b5cd1d621927ec9e04047"
+    "mtime": 1789931344.5040712,
+    "ast_hash": "573db4910b01e4c7772c5b352780d928",
+    "semantic_hash": ""
   },
   "lib/features/shell/weather_forecast_chart_transition.dart": {
     "mtime": 1782412114.110746,
@@ -960,9 +960,9 @@
     "semantic_hash": ""
   },
   "lib/features/todo/todo_list_actions.dart": {
-    "mtime": 1788385370.761407,
-    "ast_hash": "eabaf73dab4c154a20e9084e46469227",
-    "semantic_hash": "eabaf73dab4c154a20e9084e46469227"
+    "mtime": 1789931324.9610717,
+    "ast_hash": "f53aed617e59a4acb4501178145753b4",
+    "semantic_hash": ""
   },
   "lib/features/todo/todo_manage_sheet.dart": {
     "mtime": 1789190190.1075566,
@@ -970,8 +970,8 @@
     "semantic_hash": ""
   },
   "lib/features/todo/todo_page.dart": {
-    "mtime": 1789772186.649437,
-    "ast_hash": "aa47fbc10e8b21aec88b4f2b3b390394",
+    "mtime": 1789931324.9590707,
+    "ast_hash": "adacca4a6349d94df1b0f0e678aca9fd",
     "semantic_hash": ""
   },
   "lib/firebase_options.dart": {
@@ -1065,8 +1065,8 @@
     "semantic_hash": ""
   },
   "test/import_export_test.dart": {
-    "mtime": 1789867814.5125325,
-    "ast_hash": "d9c4ff4f48d0ba4d4dcc069a2393ecb2",
+    "mtime": 1789929519.9155948,
+    "ast_hash": "4687fd9e40b71b693f6324d99642dcd8",
     "semantic_hash": ""
   },
   "test/journal_weather_snapshot_test.dart": {
@@ -1975,8 +1975,8 @@
     "semantic_hash": "5d88b6668f8e692752beb8e06b5c4198"
   },
   "lib/features/dream_journal/dream_journal_page.dart": {
-    "mtime": 1789579341.8293314,
-    "ast_hash": "1ac5b4c564279c2a4121b2c2c960a817",
+    "mtime": 1789931298.9911852,
+    "ast_hash": "cab39b2e42e839a79041b535f429602a",
     "semantic_hash": ""
   },
   "lib/features/dream_journal/dream_sticky_note.dart": {
@@ -2250,8 +2250,8 @@
     "semantic_hash": "a341dc55e56c335aece7e304e4ed7151"
   },
   "lib/features/leetcode/leetcode_code_field.dart": {
-    "mtime": 1789858405.1021645,
-    "ast_hash": "675be2c4a74d465f7efc49d267d0fdfa",
+    "mtime": 1789945328.9883323,
+    "ast_hash": "da2f2877314bc991a8baa21b748d01a7",
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_dashboard.dart": {
@@ -2270,9 +2270,9 @@
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_page.dart": {
-    "mtime": 1786836611.9214616,
-    "ast_hash": "2a507fcde8d865a956b13bb70bab9f04",
-    "semantic_hash": "2a507fcde8d865a956b13bb70bab9f04"
+    "mtime": 1789931664.2279732,
+    "ast_hash": "c35c4dc658d218326e9dc85191a472f9",
+    "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_progress_rings.dart": {
     "mtime": 1786836611.9219787,
@@ -2300,8 +2300,8 @@
     "semantic_hash": "eba0d0d0a461afe506d87461c8fc07e1"
   },
   "lib/features/leetcode/leetcode_track_modal.dart": {
-    "mtime": 1789769128.9320617,
-    "ast_hash": "4abb511e9b27aa847cd6324ed17e457f",
+    "mtime": 1789929519.5572395,
+    "ast_hash": "4996c28de9302f0f53278a310accca8e",
     "semantic_hash": ""
   },
   "lib/features/life_tracker/life_tree_figure.dart": {
@@ -2355,8 +2355,8 @@
     "semantic_hash": "71f96412ce45ef77aa7e5cfb06650c66"
   },
   "lib/features/study/study_keyboard_shortcuts.dart": {
-    "mtime": 1789142058.8602724,
-    "ast_hash": "db37ec14f0f9fb7106c9539114d582f7",
+    "mtime": 1789928572.743026,
+    "ast_hash": "a4801625e14e252b9297dab4a886e528",
     "semantic_hash": ""
   },
   "lib/features/study/study_move_modal.dart": {
@@ -2530,8 +2530,8 @@
     "semantic_hash": "2367047e534b1cad8faac9219162cac9"
   },
   "lib/features/workout/workout_page.dart": {
-    "mtime": 1789684676.7847416,
-    "ast_hash": "bfb3568b922cc4d7e16e119dc55155ca",
+    "mtime": 1789931298.9931855,
+    "ast_hash": "e00d26d03a2bcd09cdc45d5b8c4947c9",
     "semantic_hash": ""
   },
   "lib/features/workout/workout_session_controller.dart": {
@@ -2650,13 +2650,13 @@
     "semantic_hash": "d0cbb589d2d23536aacb5eb9bea8d073"
   },
   "lib/core/vim/vim_session.dart": {
-    "mtime": 1789858394.6578462,
-    "ast_hash": "3a4983d982118e190ad56d43d5271f83",
+    "mtime": 1789945437.9020412,
+    "ast_hash": "142468f9482fe7e85e1f216951c15ef5",
     "semantic_hash": ""
   },
   "lib/core/vim/vim_text_ops.dart": {
-    "mtime": 1789760751.038992,
-    "ast_hash": "c130cbc7bec398f69cf2b5217dc53ab9",
+    "mtime": 1789934978.370516,
+    "ast_hash": "c688c6af47b43b88fe885af519204aa6",
     "semantic_hash": ""
   },
   "lib/core/vim/vim_text_scope.dart": {
@@ -2695,9 +2695,9 @@
     "semantic_hash": "44252da553ec59ff77c1a09803fe92b2"
   },
   "test/vim_session_test.dart": {
-    "mtime": 1788399485.9420567,
-    "ast_hash": "b60d3035dfee65899e4b21f3c8b56c6d",
-    "semantic_hash": "b60d3035dfee65899e4b21f3c8b56c6d"
+    "mtime": 1789935762.2215621,
+    "ast_hash": "a7b446c291aa2602163d14acd58a444a",
+    "semantic_hash": ""
   },
   "test/vim_text_ops_test.dart": {
     "mtime": 1788385370.7804909,
@@ -2805,8 +2805,8 @@
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_cram_page.dart": {
-    "mtime": 1789269348.1575835,
-    "ast_hash": "2491e4d5cae52af93d1498566f1533eb",
+    "mtime": 1789930915.6545155,
+    "ast_hash": "a062af2465fc4922356564ed152c991d",
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_mini_flashcard.dart": {
@@ -2820,8 +2820,8 @@
     "semantic_hash": "2f95fe6277fd7d12fd3a0cb4c6ac9801"
   },
   "lib/features/leetcode/leetcode_session_page.dart": {
-    "mtime": 1789867238.7729714,
-    "ast_hash": "7176ec15c360412a7e72351825fcec4b",
+    "mtime": 1789930907.41594,
+    "ast_hash": "99900bd220f58240f62e042cc91aacb2",
     "semantic_hash": ""
   },
   "lib/features/study/study_grading_row.dart": {
@@ -2925,8 +2925,8 @@
     "semantic_hash": "e9e01722bea277df400ea51f9b949af5"
   },
   "test/leetcode_code_field_vim_test.dart": {
-    "mtime": 1789858485.2955358,
-    "ast_hash": "badd93129a9aaa34003e95a63749cdb0",
+    "mtime": 1789945459.1088862,
+    "ast_hash": "cb2a77f7aef70ef88b4a3a30ae7d509c",
     "semantic_hash": ""
   },
   "test/char_ops_encoder_isolate_test.dart": {
@@ -3200,14 +3200,14 @@
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_code_controller.dart": {
-    "mtime": 1788399418.7196543,
-    "ast_hash": "3d31497f42eb4f2b3e47ec1451d87065",
-    "semantic_hash": "3d31497f42eb4f2b3e47ec1451d87065"
+    "mtime": 1789944644.5311298,
+    "ast_hash": "0f418bc6dde49c8163eec3bcb166020e",
+    "semantic_hash": ""
   },
   "test/leetcode_code_editing_test.dart": {
-    "mtime": 1788399470.074681,
-    "ast_hash": "b19f38e0d58ca4122e0706795b74eca1",
-    "semantic_hash": "b19f38e0d58ca4122e0706795b74eca1"
+    "mtime": 1789935721.8834805,
+    "ast_hash": "0f384cb32ab82b71bad708bf78d01ec6",
+    "semantic_hash": ""
   },
   "lib/core/text/newline_normalization.dart": {
     "mtime": 1786836611.8561666,
@@ -3230,8 +3230,8 @@
     "semantic_hash": "b1e20d753c44a88decabbbaaecbb978a"
   },
   "lib/features/leetcode/leetcode_inline_code.dart": {
-    "mtime": 1789750741.0894966,
-    "ast_hash": "7da93e7e56dfc64673e708110173cb56",
+    "mtime": 1789928088.058096,
+    "ast_hash": "449dfd0a890765f452967d24e0a3c6d7",
     "semantic_hash": ""
   },
   "test/dense_field_vertical_centering_test.dart": {
@@ -3260,8 +3260,8 @@
     "semantic_hash": "94be620cc9ed1a24000a491341e71df2"
   },
   "lib/features/settings/services/backup_collections.dart": {
-    "mtime": 1789867064.8391645,
-    "ast_hash": "a46bbe2d4f15816dadb66a6c2383316e",
+    "mtime": 1789929519.8835928,
+    "ast_hash": "5c3b68ea2c03b0ed2be06aaca29f8a86",
     "semantic_hash": ""
   },
   "test/leetcode_solutions_display_test.dart": {
@@ -3510,9 +3510,9 @@
     "semantic_hash": "76dbb4f838dab36bf9e284cc60ded9ac"
   },
   "lib/features/journal/journal_settings_dialog.dart": {
-    "mtime": 1787417130.3592286,
-    "ast_hash": "49d8f9d79cfe10132ffad43a91e3d44c",
-    "semantic_hash": "49d8f9d79cfe10132ffad43a91e3d44c"
+    "mtime": 1789931324.9560795,
+    "ast_hash": "47556f2b72a1aadb0d1b3d8feba0f2b0",
+    "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_comment_stripper.dart": {
     "mtime": 1789871504.856087,
@@ -3520,9 +3520,9 @@
     "semantic_hash": ""
   },
   "lib/features/todo/todo_settings_dialog.dart": {
-    "mtime": 1787182793.143106,
-    "ast_hash": "561c789354899cf3b70f2d3be0360341",
-    "semantic_hash": "561c789354899cf3b70f2d3be0360341"
+    "mtime": 1789931324.9620726,
+    "ast_hash": "1317527371b105b02f137061d0f5dbf8",
+    "semantic_hash": ""
   },
   "test/journal_per_journal_settings_test.dart": {
     "mtime": 1788385370.7704856,
@@ -3630,8 +3630,8 @@
     "semantic_hash": ""
   },
   "lib/features/jobs/jobs_page.dart": {
-    "mtime": 1789857123.709111,
-    "ast_hash": "0d0b2ae8cb17e4139ab20100ac710193",
+    "mtime": 1789931298.99219,
+    "ast_hash": "7bf07533813997d7936e1d822b3a14fa",
     "semantic_hash": ""
   },
   "lib/features/jobs/jobs_providers.dart": {
@@ -4035,8 +4035,8 @@
     "semantic_hash": "eba1c9c7d9e0b175bec4fef54cc46f55"
   },
   "lib/features/rankings/rankings_page.dart": {
-    "mtime": 1789517620.5763977,
-    "ast_hash": "dd01b0a9116f0596616c13084b306980",
+    "mtime": 1789931298.9931855,
+    "ast_hash": "bd01209eaeb6b07c9e965656a27e5900",
     "semantic_hash": ""
   },
   "lib/features/rankings/rankings_providers.dart": {
@@ -4305,13 +4305,13 @@
     "semantic_hash": "2892ebd79c3b59bb5840d443c5ecf8f1"
   },
   "lib/features/leetcode/leetcode_scratch_host.dart": {
-    "mtime": 1788221972.2882407,
-    "ast_hash": "5476bbbc4d71b22c17b6d60a370931ab",
-    "semantic_hash": "5476bbbc4d71b22c17b6d60a370931ab"
+    "mtime": 1789929519.513384,
+    "ast_hash": "47dab6124b3be765af62933473fbb717",
+    "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_scratch_pad.dart": {
-    "mtime": 1789862947.7824814,
-    "ast_hash": "f5aa627cd298392d8c4f749bbd771af6",
+    "mtime": 1789931213.0508246,
+    "ast_hash": "9d373cc7a86b89901a5a5b9a169839bd",
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_scratch_session.dart": {
@@ -5345,13 +5345,13 @@
     "semantic_hash": ""
   },
   "lib/core/reminders/reminder_engine.dart": {
-    "mtime": 1789666204.550846,
-    "ast_hash": "006531854fb217ce5b0ffef7ed56c865",
+    "mtime": 1789941505.3721623,
+    "ast_hash": "eeec635f35f755f076855aedd159c1dc",
     "semantic_hash": ""
   },
   "lib/core/reminders/reminder_labels.dart": {
-    "mtime": 1789666407.5439043,
-    "ast_hash": "7142f967ada2fe855b50bf882221eb99",
+    "mtime": 1789940543.7373059,
+    "ast_hash": "d4eeb7bf8dd2cfa5dd43cf3e0c55d8f1",
     "semantic_hash": ""
   },
   "lib/core/reminders/reminder_os_notifier.dart": {
@@ -5435,13 +5435,13 @@
     "semantic_hash": ""
   },
   "lib/features/notifications/reminder_sticky_stack.dart": {
-    "mtime": 1789666204.5216632,
-    "ast_hash": "01a4d2e3723cb17b523ec6f8e9d6fcf7",
+    "mtime": 1789940566.9732487,
+    "ast_hash": "e799fc14261f93920fa8505352efd47c",
     "semantic_hash": ""
   },
   "lib/features/notifications/scheduled_reminders_section.dart": {
-    "mtime": 1789886829.1058342,
-    "ast_hash": "343224f3450a66a4a4be0b2274bbe285",
+    "mtime": 1789943921.8090606,
+    "ast_hash": "444548cc006e7bc313fafb12a18a1f23",
     "semantic_hash": ""
   },
   "lib/features/settings/devices_section.dart": {
@@ -5612,6 +5612,86 @@
   "test/reminder_floater_picker_fits_test.dart": {
     "mtime": 1789886790.4311192,
     "ast_hash": "d6b612aab44ccd31f482c29fa77165c7",
+    "semantic_hash": ""
+  },
+  "lib/core/text/code_line_comment.dart": {
+    "mtime": 1789935627.3079967,
+    "ast_hash": "fa676649f386eeda1b1e4a44b3b4acda",
+    "semantic_hash": ""
+  },
+  "lib/domain/models/leetcode_cheat_models.dart": {
+    "mtime": 1789927258.7356737,
+    "ast_hash": "1f62d40f467efd05c302567675ba6b4e",
+    "semantic_hash": ""
+  },
+  "lib/features/leetcode/leetcode_cheat_actions.dart": {
+    "mtime": 1789931344.501072,
+    "ast_hash": "b5b7f031587691fe510ef4bb57a4aa41",
+    "semantic_hash": ""
+  },
+  "lib/features/leetcode/leetcode_cheat_entry.dart": {
+    "mtime": 1789930944.9491644,
+    "ast_hash": "44d215540af7263aec2ea2b390584886",
+    "semantic_hash": ""
+  },
+  "lib/features/leetcode/leetcode_cheat_export.dart": {
+    "mtime": 1789929519.483871,
+    "ast_hash": "b03f1326661c4b33660553e1fe93243c",
+    "semantic_hash": ""
+  },
+  "lib/features/leetcode/leetcode_cheat_providers.dart": {
+    "mtime": 1789927957.538966,
+    "ast_hash": "55728f7bfd1cdc81c7ed1afe425308ac",
+    "semantic_hash": ""
+  },
+  "lib/features/leetcode/leetcode_cheat_search.dart": {
+    "mtime": 1789928044.660659,
+    "ast_hash": "a601621896822317475fa43cb0e9733f",
+    "semantic_hash": ""
+  },
+  "lib/features/leetcode/leetcode_cheat_sheet.dart": {
+    "mtime": 1789944137.746255,
+    "ast_hash": "aa2483fc966b9ff7806066e51614e2dd",
+    "semantic_hash": ""
+  },
+  "lib/features/leetcode/leetcode_cheat_text.dart": {
+    "mtime": 1789929519.5103824,
+    "ast_hash": "97fcb744d97d874dce228806cd784060",
+    "semantic_hash": ""
+  },
+  "test/dev_settings_persist_test.dart": {
+    "mtime": 1789931444.4349353,
+    "ast_hash": "cf1d5eed19b45c44d4e958490fc24f35",
+    "semantic_hash": ""
+  },
+  "test/leetcode_cheat_sheet_migration_test.dart": {
+    "mtime": 1789929519.900596,
+    "ast_hash": "ee9264dc4a8bd7f7ab5ca27afbb7f1d0",
+    "semantic_hash": ""
+  },
+  "test/leetcode_cheat_sheet_test.dart": {
+    "mtime": 1789929656.1078734,
+    "ast_hash": "189b189bfd43677ac84bf1ea5a619d32",
+    "semantic_hash": ""
+  },
+  "test/leetcode_cheat_sheet_widget_test.dart": {
+    "mtime": 1789938096.0061395,
+    "ast_hash": "4bcb0aa92bd6fde39688e036ff4726bd",
+    "semantic_hash": ""
+  },
+  "LEETCODE_CHEAT_SHEET_HLD.md": {
+    "mtime": 1789929859.3818543,
+    "ast_hash": "75ceede9129b771440bcefe91843f9ac",
+    "semantic_hash": ""
+  },
+  "lib/core/text/typing_rewrites.dart": {
+    "mtime": 1789945308.938299,
+    "ast_hash": "ab3bbf034dd4caafc73fd13067cf141f",
+    "semantic_hash": ""
+  },
+  "SESSION_RESUME_HLD.md": {
+    "mtime": 1789946409.6133034,
+    "ast_hash": "fd8eb28bb468d8e34c492c7ac382035d",
     "semantic_hash": ""
   }
 }

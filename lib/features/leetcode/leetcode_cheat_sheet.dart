@@ -1070,13 +1070,16 @@ class _ViewingBody extends StatelessWidget {
               onTap: () => onToggleSection(section.id),
             ),
             if (!collapsed.contains(section.id))
-              for (final entry in data.entriesOf(section.id))
+              for (final (index, entry)
+                  in data.entriesOf(section.id).indexed) ...[
+                if (index > 0) const _EntryDivider(),
                 _ViewingEntry(
                   entry: entry,
                   languageKey: tab.languageKey,
                   onCopy: () => onCopyCommand(entry),
                   onEdit: () => onEditEntry(entry),
                 ),
+              ],
             const SizedBox(height: 18),
           ],
           if (sections.isEmpty)
@@ -1111,27 +1114,44 @@ class _SectionHeading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
+        padding: const EdgeInsets.fromLTRB(6, 10, 6, 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: Text(
-                name,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    name,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: accent,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
                 ),
-              ),
+                Icon(
+                  collapsed
+                      ? PhosphorIconsRegular.caretRight
+                      : PhosphorIconsRegular.caretDown,
+                  size: 16,
+                  color: accent.withValues(alpha: 0.7),
+                ),
+              ],
             ),
-            Icon(
-              collapsed
-                  ? PhosphorIconsRegular.caretRight
-                  : PhosphorIconsRegular.caretDown,
-              size: 16,
-              color: theme.colorScheme.onSurfaceVariant,
+            // The heading's own rule: heavier than the hairline between
+            // entries, so a section boundary still outranks an item boundary.
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: SizedBox(
+                height: 1,
+                child: ColoredBox(color: accent.withValues(alpha: 0.32)),
+              ),
             ),
           ],
         ),
@@ -1180,55 +1200,99 @@ class _ViewingEntryState extends State<_ViewingEntry> {
         onTap: widget.onCopy,
         onDoubleTap: widget.onEdit,
         behavior: HitTestBehavior.opaque,
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: LeetCodeCheatCommandText(
-                      entry.command,
-                      languageKey: widget.languageKey,
-                      keywords: widget.keywords,
-                      style: theme.textTheme.bodyMedium ?? const TextStyle(),
-                    ),
-                  ),
-                  if (_hovered)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Icon(
-                        PhosphorIconsRegular.copy,
-                        size: 14,
-                        color: theme.colorScheme.onSurfaceVariant,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: _hovered
+                ? theme.colorScheme.primary.withValues(alpha: 0.05)
+                : null,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: LeetCodeCheatCommandText(
+                        entry.command,
+                        languageKey: widget.languageKey,
+                        keywords: widget.keywords,
+                        style: theme.textTheme.bodyMedium ?? const TextStyle(),
                       ),
                     ),
-                  // Absent when unset — no placeholder, no em dash.
-                  if (complexity != null && complexity.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: _ComplexityBadge(complexity),
-                    ),
-                ],
-              ),
-              if (entry.description.trim().isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 3),
-                  child: LeetCodeCheatDescription(
-                    entry.description,
-                    languageKey: widget.languageKey,
-                    keywords: widget.keywords,
-                    style:
-                        theme.textTheme.bodySmall?.copyWith(
+                    if (_hovered)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Icon(
+                          PhosphorIconsRegular.copy,
+                          size: 14,
                           color: theme.colorScheme.onSurfaceVariant,
-                        ) ??
-                        const TextStyle(),
-                  ),
+                        ),
+                      ),
+                    // Absent when unset — no placeholder, no em dash.
+                    if (complexity != null && complexity.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: _ComplexityBadge(complexity),
+                      ),
+                  ],
                 ),
-            ],
+                // Indented behind an accent rule: the prose is what the code
+                // is not, and the offset says so before a word is read.
+                if (entry.description.trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 5, left: 10),
+                    child: Container(
+                      padding: const EdgeInsets.only(left: 10),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          left: BorderSide(
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: 0.3,
+                            ),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                      child: LeetCodeCheatDescription(
+                        entry.description,
+                        languageKey: widget.languageKey,
+                        keywords: widget.keywords,
+                        style:
+                            theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              height: 1.35,
+                            ) ??
+                            const TextStyle(),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The hairline between two entries of the same section — faint enough to
+/// read as a seam rather than a border, so a long section still scans as one
+/// block while each item keeps its own edges.
+class _EntryDivider extends StatelessWidget {
+  const _EntryDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: SizedBox(
+        height: 1,
+        child: ColoredBox(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.14),
         ),
       ),
     );
@@ -1243,17 +1307,18 @@ class _ComplexityBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
-        color: theme.colorScheme.onSurface.withValues(alpha: 0.07),
+        color: accent.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         text,
         style: theme.textTheme.labelSmall?.copyWith(
           fontFamily: AppFonts.monoFamily,
-          color: theme.colorScheme.onSurfaceVariant,
+          color: accent,
         ),
       ),
     );
@@ -1310,11 +1375,13 @@ class _SearchResults extends StatelessWidget {
             child: Text(
               hit.section.name,
               style: theme.textTheme.labelMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+                color: theme.colorScheme.primary,
               ),
             ),
           ),
         );
+      } else {
+        children.add(const _EntryDivider());
       }
       children.add(
         _ViewingEntry(
@@ -1471,6 +1538,7 @@ class _EditingSection extends StatelessWidget {
                   onChanged: nameEditor.onChanged,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.primary,
                   ),
                   decoration: const InputDecoration(
                     isDense: true,
@@ -1592,19 +1660,26 @@ class _EditingEntry extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           // A normal prose field — spell-check, snippets and Vim all on,
-          // exactly as every other prose field in the app.
-          VoyagerTextField(
-            controller: editors.description,
-            focusNode: editors.descriptionFocus,
-            onChanged: (_) => editors.schedule(),
-            maxLines: null,
-            minLines: 2,
-            style: theme.textTheme.bodySmall,
-            decoration: const InputDecoration(
-              isDense: true,
-              hintText: 'What it does',
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          // exactly as every other prose field in the app. Inset to match the
+          // indent Viewing gives the same text.
+          Padding(
+            padding: const EdgeInsets.only(left: 20, right: 28),
+            child: VoyagerTextField(
+              controller: editors.description,
+              focusNode: editors.descriptionFocus,
+              onChanged: (_) => editors.schedule(),
+              maxLines: null,
+              minLines: 2,
+              style: theme.textTheme.bodySmall,
+              decoration: const InputDecoration(
+                isDense: true,
+                hintText: 'What it does',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
+              ),
             ),
           ),
         ],

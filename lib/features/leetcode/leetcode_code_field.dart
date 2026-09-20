@@ -13,6 +13,7 @@ import 'package:highlight/languages/python.dart' as lang_python;
 import 'package:highlight/languages/rust.dart' as lang_rust;
 import 'package:highlight/languages/typescript.dart' as lang_typescript;
 import 'package:voyager/core/constants/leetcode_constants.dart';
+import 'package:voyager/core/text/typing_rewrites.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
@@ -685,22 +686,28 @@ class _LeetCodeCodeEditorState extends State<_LeetCodeCodeEditor> {
                   ),
                 ),
               ),
-            TextField(
-              controller: widget.controller,
-              focusNode: _focusNode,
-              readOnly: widget.readOnly,
-              style: widget.textStyle,
-              strutStyle: strutStyle,
-              // Held back for [VimTextOverlay] below — see [overlayCaretColor].
-              cursorColor: vim.overlayCaretColor(widget.cursorColor),
-              cursorWidth: vim.overlayCaretWidth,
-              undoController: vim.undoController,
-              maxLines: null,
-              autocorrect: false,
-              enableSuggestions: false,
-              scrollPadding: kVoyagerFieldScrollPadding,
-              scrollPhysics: const VoyagerFieldScrollPhysics(),
-              decoration: _codeDecoration,
+            // [LeetCodeCodeController] reads an incoming value by keystroke
+            // shape, and a restored one is not a keystroke — Ctrl+Z over a
+            // space typed into an indent came back outdented.
+            TypingRewriteUndoGuard(
+              child: TextField(
+                controller: widget.controller,
+                focusNode: _focusNode,
+                readOnly: widget.readOnly,
+                style: widget.textStyle,
+                strutStyle: strutStyle,
+                // Held back for [VimTextOverlay] below — see
+                // [overlayCaretColor].
+                cursorColor: vim.overlayCaretColor(widget.cursorColor),
+                cursorWidth: vim.overlayCaretWidth,
+                undoController: vim.undoController,
+                maxLines: null,
+                autocorrect: false,
+                enableSuggestions: false,
+                scrollPadding: kVoyagerFieldScrollPadding,
+                scrollPhysics: const VoyagerFieldScrollPhysics(),
+                decoration: _codeDecoration,
+              ),
             ),
             // Vim alone, unlike the prose fields, which mount this for a
             // snippet session too: this one turns snippets off at the scope

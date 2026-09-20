@@ -22,6 +22,18 @@ String reminderWhenLabel(DateTime at, DateTime now) {
   return '${DateFormat.MMMd().format(local)}, $time';
 }
 
+/// "under a minute", "12 minutes", "14 hours", "4 days" — how far off [at]
+/// is from [now], in its largest whole unit. Composes with "in ..." and
+/// "for ...".
+String reminderDistanceLabel(DateTime at, DateTime now) {
+  final until = at.difference(now);
+  if (until < const Duration(minutes: 1)) return 'under a minute';
+  String unit(int n, String name) => '$n $name${n == 1 ? '' : 's'}';
+  if (until < const Duration(hours: 1)) return unit(until.inMinutes, 'minute');
+  if (until < const Duration(days: 1)) return unit(until.inHours, 'hour');
+  return unit(until.inDays, 'day');
+}
+
 /// "Daily · 8:00 AM", "Mon, Thu · 8:00 AM", "Once · Sep 20, 9:00 AM".
 String reminderCadenceLabel(ScheduledReminderRule rule) {
   final time = formatTime12Hour(
