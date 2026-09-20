@@ -10,7 +10,8 @@ import 'package:voyager/core/sync/crdt_document_resolver.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
-import 'package:voyager/core/utils/journal_tags.dart';import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/core/utils/journal_tags.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/sync/pending_text_merge.dart';
@@ -30,6 +31,7 @@ import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/leetcode_cheat_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
@@ -148,7 +150,8 @@ class RemoteSyncService {
   final Map<String, Future<void>> _remoteSaveChains = {};
   final Map<String, int> _localSaveGenerations = {};
   final Set<String> _activelyEditedDocuments = {};
-  final PendingTextMergeBuffer _pendingTextMergeBuffer = PendingTextMergeBuffer();
+  final PendingTextMergeBuffer _pendingTextMergeBuffer =
+      PendingTextMergeBuffer();
 
   /// Operation-log length that triggers compaction — see
   /// [compactOperationLog]. High enough that ordinary editing never pays for
@@ -381,9 +384,7 @@ class RemoteSyncService {
     } else if (start >= before.length - sharedTail) {
       at = onto.length - (before.length - start);
     } else {
-      final found = deleted.isEmpty
-          ? -1
-          : onto.indexOf(deleted, shared);
+      final found = deleted.isEmpty ? -1 : onto.indexOf(deleted, shared);
       if (found >= 0 && found + deleted.length <= onto.length - sharedTail) {
         at = found;
       } else {
@@ -487,7 +488,8 @@ class RemoteSyncService {
   Future<void> resolveConflictKeepRemote(SyncConflict conflict) async {
     final repo = _syncConflictRepository;
     if (repo == null) return;
-    final remote = jsonDecode(conflict.remotePayloadJson) as Map<String, dynamic>;
+    final remote =
+        jsonDecode(conflict.remotePayloadJson) as Map<String, dynamic>;
     if (conflict.collection == FirestoreCollections.journalEntries) {
       final local = await _journalRepository.getEntry(conflict.documentId);
       final merged = mergeJournalEntryFromRemote(
@@ -627,8 +629,9 @@ class RemoteSyncService {
     // todo list the two differ. Passing the local id there matched nothing, so
     // the document's entire operation history stayed behind — ready to be
     // resolved back over any later document that reuses the id.
-    final operationsDeleted =
-        await _syncRepository.deleteOperationsForDocument(firestoreDocId);
+    final operationsDeleted = await _syncRepository.deleteOperationsForDocument(
+      firestoreDocId,
+    );
 
     _charOpRegistry.removeSession(collection, documentId);
     _pendingTextMergeBuffer.clearDocument(collection, documentId);
@@ -1339,6 +1342,11 @@ class RemoteSyncService {
     await pullTodoTasks();
     await pullLeetCodeProblems();
     await pullLeetCodeReviewLog();
+    // Parents before children, so the orphan filter in the read query never
+    // hides a section or entry whose tab simply has not landed yet.
+    await pullLeetCodeCheatTabs();
+    await pullLeetCodeCheatSections();
+    await pullLeetCodeCheatEntries();
     await pullStudyFolders();
     await pullStudyDecks();
     await pullStudyCards();
@@ -1422,6 +1430,21 @@ class RemoteSyncService {
         );
       case FirestoreCollections.leetcodeReviewLog:
         return pullLeetCodeReviewLog(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.leetcodeCheatTabs:
+        return pullLeetCodeCheatTabs(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.leetcodeCheatSections:
+        return pullLeetCodeCheatSections(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.leetcodeCheatEntries:
+        return pullLeetCodeCheatEntries(
           documentIds: documentIds,
           documentData: documentData,
         );
@@ -1551,10 +1574,7 @@ class RemoteSyncService {
           documentData: documentData,
         );
       case FirestoreCollections.assets:
-        return pullAssets(
-          documentIds: documentIds,
-          documentData: documentData,
-        );
+        return pullAssets(documentIds: documentIds, documentData: documentData);
       case FirestoreCollections.assetValuations:
         return pullAssetValuations(
           documentIds: documentIds,
@@ -1730,6 +1750,74 @@ class RemoteSyncService {
         final local = await _leetCodeRepository.getReviewLog(id);
         final merged = mergeLeetCodeReviewLogFromRemote(data, id, local: local);
         await _leetCodeRepository.logReview(merged, recordLocalActivity: false);
+      },
+    );
+  }
+
+  Future<bool> pullLeetCodeCheatTabs({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.leetcodeCheatTabs,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _leetCodeRepository.getCheatTab(id);
+        final merged = mergeLeetCodeCheatTabFromRemote(data, id, local: local);
+        await _leetCodeRepository.upsertCheatTab(
+          merged,
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> pullLeetCodeCheatSections({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.leetcodeCheatSections,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _leetCodeRepository.getCheatSection(id);
+        final merged = mergeLeetCodeCheatSectionFromRemote(
+          data,
+          id,
+          local: local,
+        );
+        await _leetCodeRepository.upsertCheatSection(
+          merged,
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> pullLeetCodeCheatEntries({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.leetcodeCheatEntries,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _leetCodeRepository.getCheatEntry(id);
+        final merged = mergeLeetCodeCheatEntryFromRemote(
+          data,
+          id,
+          local: local,
+        );
+        await _leetCodeRepository.upsertCheatEntry(
+          merged,
+          recordLocalActivity: false,
+        );
       },
     );
   }
@@ -2207,7 +2295,9 @@ class RemoteSyncService {
             );
           }
           final payloadWithOps = Map<String, dynamic>.from(data);
-          payloadWithOps['_remoteCharOps'] = remoteCharOps.map((o) => o.toJson()).toList();
+          payloadWithOps['_remoteCharOps'] = remoteCharOps
+              .map((o) => o.toJson())
+              .toList();
 
           await _quarantineConflict(
             collection: FirestoreCollections.journalEntries,
@@ -2215,7 +2305,9 @@ class RemoteSyncService {
             reason: detection.reason,
             local: local == null
                 ? null
-                : SyncConflictDetector.payloadJson(journalEntryToFirestore(local)),
+                : SyncConflictDetector.payloadJson(
+                    journalEntryToFirestore(local),
+                  ),
             remote: SyncConflictDetector.payloadJson(payloadWithOps),
             localTitle: local?.title,
             remoteTitle: data['title'] as String?,
@@ -2229,9 +2321,7 @@ class RemoteSyncService {
           data,
           id,
           local: local,
-          crdtText: fromCrdt
-              ? CrdtTextFields.fromJournalPayload(data)
-              : null,
+          crdtText: fromCrdt ? CrdtTextFields.fromJournalPayload(data) : null,
         );
         if (local != null &&
             isDocumentEditing(FirestoreCollections.journalEntries, id)) {
@@ -2342,7 +2432,9 @@ class RemoteSyncService {
             );
           }
           final payloadWithOps = Map<String, dynamic>.from(data);
-          payloadWithOps['_remoteCharOps'] = remoteCharOps.map((o) => o.toJson()).toList();
+          payloadWithOps['_remoteCharOps'] = remoteCharOps
+              .map((o) => o.toJson())
+              .toList();
 
           await _quarantineConflict(
             collection: FirestoreCollections.dreamEntries,
@@ -2350,7 +2442,9 @@ class RemoteSyncService {
             reason: detection.reason,
             local: local == null
                 ? null
-                : SyncConflictDetector.payloadJson(dreamEntryToFirestore(local)),
+                : SyncConflictDetector.payloadJson(
+                    dreamEntryToFirestore(local),
+                  ),
             remote: SyncConflictDetector.payloadJson(payloadWithOps),
             localTitle: local?.title,
             remoteTitle: data['title'] as String?,
@@ -2364,9 +2458,7 @@ class RemoteSyncService {
           data,
           id,
           local: local,
-          crdtText: fromCrdt
-              ? CrdtTextFields.fromDreamPayload(data)
-              : null,
+          crdtText: fromCrdt ? CrdtTextFields.fromDreamPayload(data) : null,
         );
         if (local != null &&
             isDocumentEditing(FirestoreCollections.dreamEntries, id)) {
@@ -2420,10 +2512,7 @@ class RemoteSyncService {
             );
           }
         }
-        await _dreamRepository.upsertEntry(
-          merged,
-          recordLocalActivity: false,
-        );
+        await _dreamRepository.upsertEntry(merged, recordLocalActivity: false);
       },
     );
   }
@@ -2444,10 +2533,7 @@ class RemoteSyncService {
           orElse: () => null,
         );
         final merged = mergeTodoListFromRemote(data, id, local: local);
-        await _todoRepository.upsertList(
-          merged,
-          recordLocalActivity: false,
-        );
+        await _todoRepository.upsertList(merged, recordLocalActivity: false);
       },
     );
   }
@@ -2486,7 +2572,9 @@ class RemoteSyncService {
           );
           if (detection.isConflict) {
             final payloadWithOps = Map<String, dynamic>.from(data);
-            payloadWithOps['_remoteCharOps'] = remoteCharOps.map((o) => o.toJson()).toList();
+            payloadWithOps['_remoteCharOps'] = remoteCharOps
+                .map((o) => o.toJson())
+                .toList();
 
             await _quarantineConflict(
               collection: FirestoreCollections.todoTasks,
@@ -2494,7 +2582,9 @@ class RemoteSyncService {
               reason: detection.reason,
               local: local == null
                   ? null
-                  : SyncConflictDetector.payloadJson(todoTaskToFirestore(local)),
+                  : SyncConflictDetector.payloadJson(
+                      todoTaskToFirestore(local),
+                    ),
               remote: SyncConflictDetector.payloadJson(payloadWithOps),
               localTitle: local?.title,
               remoteTitle: data['title'] as String?,
@@ -2517,10 +2607,7 @@ class RemoteSyncService {
               documentId: id,
               remoteText: merged.notes ?? '',
             );
-            merged = merged.copyWith(
-              notes: local.notes,
-              bumpVersion: false,
-            );
+            merged = merged.copyWith(notes: local.notes, bumpVersion: false);
           } else {
             _pendingTextMergeBuffer.recordRemoteText(
               FirestoreCollections.todoTasks,
@@ -2566,10 +2653,7 @@ class RemoteSyncService {
               );
             }
           }
-          await _todoRepository.upsertTask(
-            merged,
-            recordLocalActivity: false,
-          );
+          await _todoRepository.upsertTask(merged, recordLocalActivity: false);
           localTasks?[id] = merged;
         } on StateError {
           // Skip malformed remote documents.
@@ -2850,6 +2934,102 @@ class RemoteSyncService {
     );
   }
 
+  void pushLeetCodeCheatTab(LeetCodeCheatTab tab) {
+    cancelDocument(FirestoreCollections.leetcodeCheatTabs, tab.id);
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.leetcodeCheatTabs,
+        tab.id,
+        () => _uploadRecordNow(
+          collection: FirestoreCollections.leetcodeCheatTabs,
+          localId: tab.id,
+          payload: leetCodeCheatTabToFirestore(tab),
+        ),
+      ),
+    );
+  }
+
+  void pushLeetCodeCheatSection(LeetCodeCheatSection section) {
+    cancelDocument(FirestoreCollections.leetcodeCheatSections, section.id);
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.leetcodeCheatSections,
+        section.id,
+        () => _uploadRecordNow(
+          collection: FirestoreCollections.leetcodeCheatSections,
+          localId: section.id,
+          payload: leetCodeCheatSectionToFirestore(section),
+        ),
+      ),
+    );
+  }
+
+  /// Batched counterpart to [pushLeetCodeCheatSection]: a renormalized
+  /// reorder, and the cascade that goes with deleting the tab they sit in.
+  Future<void> pushLeetCodeCheatSectionsBatch(
+    List<LeetCodeCheatSection> sections,
+  ) async {
+    if (sections.isEmpty) return;
+    for (final section in sections) {
+      cancelDocument(FirestoreCollections.leetcodeCheatSections, section.id);
+    }
+    final payloads = {
+      for (final section in sections)
+        section.id: leetCodeCheatSectionToFirestore(section),
+    };
+    for (final entry in payloads.entries) {
+      _markSelfEcho(
+        FirestoreCollections.leetcodeCheatSections,
+        entry.key,
+        entry.value,
+      );
+    }
+    await _runRemoteBatchSave(
+      FirestoreCollections.leetcodeCheatSections,
+      payloads,
+    );
+  }
+
+  void pushLeetCodeCheatEntry(LeetCodeCheatEntry entry) {
+    cancelDocument(FirestoreCollections.leetcodeCheatEntries, entry.id);
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.leetcodeCheatEntries,
+        entry.id,
+        () => _uploadRecordNow(
+          collection: FirestoreCollections.leetcodeCheatEntries,
+          localId: entry.id,
+          payload: leetCodeCheatEntryToFirestore(entry),
+        ),
+      ),
+    );
+  }
+
+  /// Batched counterpart to [pushLeetCodeCheatEntry].
+  Future<void> pushLeetCodeCheatEntriesBatch(
+    List<LeetCodeCheatEntry> entries,
+  ) async {
+    if (entries.isEmpty) return;
+    for (final entry in entries) {
+      cancelDocument(FirestoreCollections.leetcodeCheatEntries, entry.id);
+    }
+    final payloads = {
+      for (final entry in entries)
+        entry.id: leetCodeCheatEntryToFirestore(entry),
+    };
+    for (final entry in payloads.entries) {
+      _markSelfEcho(
+        FirestoreCollections.leetcodeCheatEntries,
+        entry.key,
+        entry.value,
+      );
+    }
+    await _runRemoteBatchSave(
+      FirestoreCollections.leetcodeCheatEntries,
+      payloads,
+    );
+  }
+
   void pushCustomQuote(CustomQuote quote) {
     cancelDocument(FirestoreCollections.customQuotes, quote.id);
     unawaited(
@@ -3023,7 +3203,11 @@ class RemoteSyncService {
       for (final log in logs) log.id: workoutSetLogToFirestore(log),
     };
     for (final entry in payloads.entries) {
-      _markSelfEcho(FirestoreCollections.workoutSetLogs, entry.key, entry.value);
+      _markSelfEcho(
+        FirestoreCollections.workoutSetLogs,
+        entry.key,
+        entry.value,
+      );
     }
     await _runRemoteBatchSave(FirestoreCollections.workoutSetLogs, payloads);
   }
@@ -3168,10 +3352,7 @@ class RemoteSyncService {
         entry.value,
       );
     }
-    await _runRemoteBatchSave(
-      FirestoreCollections.rankingCategories,
-      payloads,
-    );
+    await _runRemoteBatchSave(FirestoreCollections.rankingCategories, payloads);
   }
 
   void pushRankingParent(RankingParent parent) {
@@ -3585,8 +3766,9 @@ class RemoteSyncService {
     if (session.opsReplacedBy(text).any((op) => op.clientId != deviceId)) {
       final logText = session.text;
       _charOpRegistry.removeSession(collection, documentId);
-      final textField =
-          collection == FirestoreCollections.todoTasks ? 'notes' : 'body';
+      final textField = collection == FirestoreCollections.todoTasks
+          ? 'notes'
+          : 'body';
       await _quarantineConflict(
         collection: collection,
         documentId: documentId,
@@ -3658,11 +3840,9 @@ class RemoteSyncService {
     String documentId,
     Future<void> Function() remoteSave,
   ) {
-    return _runInDocumentChains(
-      collection,
-      [documentId],
-      () => _runRemoteSaveNow(collection, documentId, remoteSave),
-    );
+    return _runInDocumentChains(collection, [
+      documentId,
+    ], () => _runRemoteSaveNow(collection, documentId, remoteSave));
   }
 
   /// Runs [upload] once every upload already started for any of [documentIds]
@@ -3983,10 +4163,7 @@ class RemoteSyncService {
     );
   }
 
-  Future<void> _uploadTodoTaskNow(
-    TodoTask task, {
-    bool bumpVersion = false,
-  }) {
+  Future<void> _uploadTodoTaskNow(TodoTask task, {bool bumpVersion = false}) {
     return _uploadCrdtDocumentNow(
       collection: FirestoreCollections.todoTasks,
       documentId: task.id,
@@ -4139,7 +4316,9 @@ class RemoteSyncService {
       await compactOperationLog(documentId, knownOperations: ops);
     } catch (error, stackTrace) {
       // Housekeeping must never take editing down with it.
-      debugPrint('[sync] op-log compaction failed for $documentId: $error\n$stackTrace');
+      debugPrint(
+        '[sync] op-log compaction failed for $documentId: $error\n$stackTrace',
+      );
     }
   }
 
@@ -4337,6 +4516,18 @@ class RemoteSyncService {
       case FirestoreCollections.leetcodeReviewLog:
         if (record is! LeetCodeReviewLog) return null;
         return (id: record.id, payload: leetCodeReviewLogToFirestore(record));
+      case FirestoreCollections.leetcodeCheatTabs:
+        if (record is! LeetCodeCheatTab) return null;
+        return (id: record.id, payload: leetCodeCheatTabToFirestore(record));
+      case FirestoreCollections.leetcodeCheatSections:
+        if (record is! LeetCodeCheatSection) return null;
+        return (
+          id: record.id,
+          payload: leetCodeCheatSectionToFirestore(record),
+        );
+      case FirestoreCollections.leetcodeCheatEntries:
+        if (record is! LeetCodeCheatEntry) return null;
+        return (id: record.id, payload: leetCodeCheatEntryToFirestore(record));
       case FirestoreCollections.studyFolders:
         if (record is! StudyFolder) return null;
         return (id: record.id, payload: studyFolderToFirestore(record));
@@ -5124,7 +5315,9 @@ class RemoteSyncService {
   /// record wins and nothing is uploaded. Uploads carry no version check, so
   /// if that check can't be made (offline), the snippet waits for a later pull
   /// rather than risking an upload over the newer record.
-  Future<bool> _adoptLegacySnippets(Map<String, dynamic> settingsDocument) async {
+  Future<bool> _adoptLegacySnippets(
+    Map<String, dynamic> settingsDocument,
+  ) async {
     final legacy = await _settingsRepository.unknownLegacySnippets(
       settingsDocument,
     );
@@ -5151,8 +5344,8 @@ class RemoteSyncService {
             record,
             merge: (data) =>
                 mergeJobExperienceSnippetFromRemote(data, record.item.id),
-            write: (merged) => _settingsRepository
-                .upsertJobExperienceSnippetRecord(
+            write: (merged) =>
+                _settingsRepository.upsertJobExperienceSnippetRecord(
                   merged,
                   recordLocalActivity: false,
                 ),
@@ -5274,16 +5467,13 @@ class RemoteSyncService {
       FirestoreCollections.calendars,
       await _calendarRepository.listCalendars(includeDeleted: true),
     );
-    await pushRecords(
-      FirestoreCollections.calendarEvents,
-      [
-        for (final event in await _calendarRepository.listEvents(
-          includeDeleted: true,
-        ))
-          // Google-imported events are rebuilt per device and never sync.
-          if (event.source != EventSource.google) event,
-      ],
-    );
+    await pushRecords(FirestoreCollections.calendarEvents, [
+      for (final event in await _calendarRepository.listEvents(
+        includeDeleted: true,
+      ))
+        // Google-imported events are rebuilt per device and never sync.
+        if (event.source != EventSource.google) event,
+    ]);
 
     final trackers = await _trackerRepository.listTrackers(
       includeDeleted: true,
@@ -5438,6 +5628,9 @@ class LiveSyncController {
     FirestoreCollections.todoTasks,
     FirestoreCollections.leetcodeProblems,
     FirestoreCollections.leetcodeReviewLog,
+    FirestoreCollections.leetcodeCheatTabs,
+    FirestoreCollections.leetcodeCheatSections,
+    FirestoreCollections.leetcodeCheatEntries,
     FirestoreCollections.studyFolders,
     FirestoreCollections.studyDecks,
     FirestoreCollections.studyCards,

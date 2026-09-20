@@ -25,6 +25,7 @@ class StudyKeyboardShortcuts extends ConsumerStatefulWidget {
     this.onRedo,
     this.onFocusScratch,
     this.arrowsNavigateHistory = false,
+    this.suppressed = false,
   });
 
   final Widget child;
@@ -50,6 +51,16 @@ class StudyKeyboardShortcuts extends ConsumerStatefulWidget {
   /// already mean fail/pass and mirror the swipe.
   final bool arrowsNavigateHistory;
 
+  /// Whether something the page knows about, but [_enabled] cannot see, owns
+  /// the keyboard right now.
+  ///
+  /// The tests below ask "am I the thing on screen" of the *route*, and a
+  /// route pushed on the root navigator above a shell branch answers yes to
+  /// all of them — which is why [mediaLightboxIsOpen] has to be consulted
+  /// separately. This is the same escape hatch for a caller's own overlay:
+  /// the LeetCode cheat sheet passes it while its sheet is up.
+  final bool suppressed;
+
   @override
   ConsumerState<StudyKeyboardShortcuts> createState() =>
       _StudyKeyboardShortcutsState();
@@ -71,6 +82,7 @@ class _StudyKeyboardShortcutsState
 
   bool _enabled() {
     if (!mounted) return false;
+    if (widget.suppressed) return false;
     final route = ModalRoute.of(context);
     if (route?.isCurrent != true) return false;
     if (isTextInputFocused()) return false;

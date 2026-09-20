@@ -580,9 +580,9 @@
     "semantic_hash": "d1a6fb8c3a13f54b8bd2ed92e3e3abd6"
   },
   "lib/domain/models/analytics_models.dart": {
-    "mtime": 1787708414.445344,
-    "ast_hash": "948f20b04c18bc67c97baf2edfec5c64",
-    "semantic_hash": "948f20b04c18bc67c97baf2edfec5c64"
+    "mtime": 1789888234.6307964,
+    "ast_hash": "e65c04d0ce6f1c3538df0dc350000f2d",
+    "semantic_hash": ""
   },
   "lib/domain/models/calendar_models.dart": {
     "mtime": 1789058492.4237218,
@@ -635,9 +635,9 @@
     "semantic_hash": "31298516fc69bcbaf9c6ccd642a403cf"
   },
   "lib/domain/services/analytics_service.dart": {
-    "mtime": 1787683082.3089738,
-    "ast_hash": "01e3b7b73c5c6d7e042c21c6bb7f7066",
-    "semantic_hash": "01e3b7b73c5c6d7e042c21c6bb7f7066"
+    "mtime": 1789888234.6313193,
+    "ast_hash": "7b853132be3ee03d43dd13bfb576027e",
+    "semantic_hash": ""
   },
   "lib/domain/services/calendar_recurrence.dart": {
     "mtime": 1788802744.2425573,
@@ -675,9 +675,9 @@
     "semantic_hash": "72e9746220a5cc25e3ea6ec3f1e8c548"
   },
   "lib/domain/services/periodic_prompt_service.dart": {
-    "mtime": 1787688983.9371297,
-    "ast_hash": "abfeb61b66b844aec6e37d291fdafd29",
-    "semantic_hash": "abfeb61b66b844aec6e37d291fdafd29"
+    "mtime": 1789888234.6318665,
+    "ast_hash": "6d6f50c019e2723165b4e73c130066ef",
+    "semantic_hash": ""
   },
   "lib/domain/services/quote_bank.dart": {
     "mtime": 1781993762.2137506,
@@ -715,8 +715,8 @@
     "semantic_hash": "b9fea4da159a0ca225202f54d989b784"
   },
   "lib/features/analytics/analytics_page.dart": {
-    "mtime": 1789772186.6464329,
-    "ast_hash": "4902f3adf2c0dcab6323269af4e2673b",
+    "mtime": 1789888157.6912327,
+    "ast_hash": "0658ba7e50183e371b415cf3a1d92e20",
     "semantic_hash": ""
   },
   "lib/features/analytics/heatmap_calendar.dart": {
@@ -1495,9 +1495,9 @@
     "semantic_hash": "8890ea91f5243b70119b84d2146a823f"
   },
   "test/derived_stat_trackers_test.dart": {
-    "mtime": 1784596204.8834538,
-    "ast_hash": "a493e32c26373a470f2ad2c542a8538b",
-    "semantic_hash": "a493e32c26373a470f2ad2c542a8538b"
+    "mtime": 1789888203.6875992,
+    "ast_hash": "f7d8e2d4b14a489a6bd3846a085429a0",
+    "semantic_hash": ""
   },
   "test/finance_analytics_test.dart": {
     "mtime": 1789189600.2586346,
@@ -1510,9 +1510,9 @@
     "semantic_hash": ""
   },
   "test/interpolate_consecutive_test.dart": {
-    "mtime": 1784596204.8844538,
-    "ast_hash": "2bafa94f4f8ef7afff4bdb223d824571",
-    "semantic_hash": "2bafa94f4f8ef7afff4bdb223d824571"
+    "mtime": 1789888216.6983068,
+    "ast_hash": "24ea56f261c2bca36b577f8b197bb5a6",
+    "semantic_hash": ""
   },
   "test/journal_entries_tracker_test.dart": {
     "mtime": 1784596204.8854542,
@@ -5425,8 +5425,8 @@
     "semantic_hash": ""
   },
   "lib/features/hotkeys/quick_journal_entry.dart": {
-    "mtime": 1789881180.2391014,
-    "ast_hash": "debc3ed459bb749a1498f9ca53d7f4bf",
+    "mtime": 1789888667.1530373,
+    "ast_hash": "46699f78f8b9b97efad344405d0a9fdf",
     "semantic_hash": ""
   },
   "lib/features/notifications/reminder_bell_button.dart": {
@@ -5485,8 +5485,8 @@
     "semantic_hash": ""
   },
   "test/quick_journal_entry_test.dart": {
-    "mtime": 1789662778.7885983,
-    "ast_hash": "c7c032c8c89a89964fd01ddab28affd0",
+    "mtime": 1789888641.2232974,
+    "ast_hash": "6f256037c43b7c2ce5dedd31310f8cb2",
     "semantic_hash": ""
   },
   "test/reminder_engine_test.dart": {

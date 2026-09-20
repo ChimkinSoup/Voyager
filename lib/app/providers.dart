@@ -406,6 +406,8 @@ final syncActivityProvider = ChangeNotifierProvider<SyncActivityController>((
 ) {
   final controller = SyncActivityController(
     settingsRepository: ref.watch(settingsRepositoryProvider),
+    saveSettings: (settings) =>
+        ref.read(settingsProvider.notifier).saveSettings(settings),
   );
   unawaited(controller.loadFromSettings());
   ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {
@@ -2142,10 +2144,9 @@ class GeometricTextureParamsNotifier
   Future<void> _persist(GeometricTextureParams params) async {
     final repo = _ref.read(settingsRepositoryProvider);
     final settings = await repo.getSettings();
-    await repo.saveSettings(
-      appSettingsWithGeometricTextureParams(settings, params),
-    );
-    _ref.invalidate(settingsProvider);
+    await _ref
+        .read(settingsProvider.notifier)
+        .saveSettings(appSettingsWithGeometricTextureParams(settings, params));
   }
 
   @override
@@ -2200,10 +2201,9 @@ class GeometricWaveParamsNotifier extends StateNotifier<GeometricWaveParams> {
   Future<void> _persist(GeometricWaveParams params) async {
     final repo = _ref.read(settingsRepositoryProvider);
     final settings = await repo.getSettings();
-    await repo.saveSettings(
-      appSettingsWithGeometricWaveParams(settings, params),
-    );
-    _ref.invalidate(settingsProvider);
+    await _ref
+        .read(settingsProvider.notifier)
+        .saveSettings(appSettingsWithGeometricWaveParams(settings, params));
   }
 
   @override
@@ -2286,6 +2286,8 @@ final journalDebugLoggerProvider = ChangeNotifierProvider<JournalDebugLogger>((
   final controller = JournalDebugLogger(
     settingsRepository: ref.watch(settingsRepositoryProvider),
     journalRepository: ref.watch(journalRepositoryProvider),
+    saveSettings: (settings) =>
+        ref.read(settingsProvider.notifier).saveSettings(settings),
   );
   unawaited(controller.loadFromSettings());
   ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {
@@ -2299,6 +2301,8 @@ final todoSortDebugLoggerProvider = ChangeNotifierProvider<TodoSortDebugLogger>(
     final controller = TodoSortDebugLogger(
       settingsRepository: ref.watch(settingsRepositoryProvider),
       todoRepository: ref.watch(todoRepositoryProvider),
+      saveSettings: (settings) =>
+          ref.read(settingsProvider.notifier).saveSettings(settings),
     );
     unawaited(controller.loadFromSettings());
     ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {
@@ -2313,6 +2317,8 @@ final devSettingsProvider = ChangeNotifierProvider<DevSettingsController>((
 ) {
   final controller = DevSettingsController(
     settingsRepository: ref.watch(settingsRepositoryProvider),
+    saveSettings: (settings) =>
+        ref.read(settingsProvider.notifier).saveSettings(settings),
   );
   unawaited(controller.loadFromSettings());
   ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {

@@ -7,6 +7,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/features/leetcode/leetcode_cheat_providers.dart';
 import 'package:voyager/features/leetcode/leetcode_scratch_draft_store.dart';
 import 'package:voyager/features/leetcode/leetcode_scratch_pad.dart';
 import 'package:voyager/features/leetcode/leetcode_scratch_session.dart';
@@ -44,12 +45,19 @@ mixin LeetCodeScratchHost<T extends ConsumerStatefulWidget>
 
   bool get scratchEnabled => _scratch != null;
 
-  /// Whether the pad currently owns the session's input.
+  /// Whether something other than the card owns the session's input.
   ///
   /// Grading and the cram swipe both stop here: with the caret in the pad the
-  /// user is typing, and while the fullscreen editor is up the card is not
-  /// even on screen.
-  bool get scratchHasSessionInput => _padFocus.hasFocus || _expanding;
+  /// user is typing, while the fullscreen editor is up the card is not even on
+  /// screen, and while the cheat sheet is up the session is behind a scrim.
+  ///
+  /// Read rather than watched — this is called from key and gesture handlers
+  /// as well as from `build`. The pages watch the provider themselves, which
+  /// is what rebuilds them when the sheet opens or closes.
+  bool get scratchHasSessionInput =>
+      _padFocus.hasFocus ||
+      _expanding ||
+      ref.read(leetCodeCheatSheetOpenProvider);
 
   @override
   void initState() {
@@ -130,7 +138,6 @@ mixin LeetCodeScratchHost<T extends ConsumerStatefulWidget>
   /// visibly finished with a pad, which is every problem advance.
   void flushScratch() => _scratch?.flushNow();
 
-
   /// Focuses the pad, and opens it fullscreen — the locked behaviour for `C`,
   /// which is one key for "I want to write code now".
   void focusScratch() {
@@ -181,10 +188,7 @@ mixin LeetCodeScratchHost<T extends ConsumerStatefulWidget>
   ///
   /// [cardKey] and the card's own size cap stay exactly as the page had them —
   /// with the pad off, this returns the card in the same box it always used.
-  Widget buildScratchArea({
-    required GlobalKey cardKey,
-    required Widget card,
-  }) {
+  Widget buildScratchArea({required GlobalKey cardKey, required Widget card}) {
     final controller = _scratch;
     final problem = scratchCurrentProblem;
 
@@ -198,9 +202,7 @@ mixin LeetCodeScratchHost<T extends ConsumerStatefulWidget>
         );
 
         if (controller == null || problem == null) {
-          return Center(
-            child: sizedCard(math.min(constraints.maxWidth, 760)),
-          );
+          return Center(child: sizedCard(math.min(constraints.maxWidth, 760)));
         }
 
         final entry = controller.entryFor(problem);

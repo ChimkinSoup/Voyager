@@ -12,9 +12,19 @@ import 'package:voyager/domain/repositories/repositories.dart';
 /// 2. Add a field + getter/setter here and include it in [applySettings] / [_persist].
 /// 3. Wire the Dev page toggle through this controller instead of a [StateProvider].
 class DevSettingsController extends ChangeNotifier {
-  DevSettingsController({this._settingsRepository});
+  DevSettingsController({
+    required this._saveSettings,
+    this._settingsRepository,
+  });
 
   final SettingsRepository? _settingsRepository;
+
+  /// How a flipped toggle is written. The provider hands over the settings
+  /// notifier's save rather than the repository's: a write straight to the
+  /// repository leaves the *published* [AppSettings] holding the old dev
+  /// flags, and the next whole-object save built on that copy — a menu
+  /// elsewhere in the app flipping its own flag — writes them back.
+  final Future<void> Function(AppSettings settings) _saveSettings;
 
   bool showCacheStatus = false;
   bool showCalendarZoomPrewarm = false;
@@ -151,7 +161,7 @@ class DevSettingsController extends ChangeNotifier {
     final repo = _settingsRepository;
     if (repo == null) return;
     final settings = await repo.getSettings();
-    await repo.saveSettings(
+    await _saveSettings(
       settings.copyWith(
         devShowCacheStatus: showCacheStatus,
         devShowCalendarZoomPrewarm: showCalendarZoomPrewarm,

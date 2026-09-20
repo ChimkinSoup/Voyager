@@ -21,6 +21,7 @@ import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/leetcode_api_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/features/leetcode/leetcode_cheat_entry.dart';
 import 'package:voyager/features/leetcode/leetcode_code_controller.dart';
 import 'package:voyager/features/leetcode/leetcode_code_field.dart';
 import 'package:voyager/features/leetcode/leetcode_search_popover.dart';
@@ -267,10 +268,12 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     _tagsController = TextEditingController(text: draft.tags);
     _descriptionController = TextEditingController(text: draft.description);
     _exampleControllers.addAll([
-      for (final example in draft.examples) TextEditingController(text: example),
+      for (final example in draft.examples)
+        TextEditingController(text: example),
     ]);
     _solutionEditors.addAll([
-      for (final solution in draft.solutions) _SolutionEditors.fromDraft(solution),
+      for (final solution in draft.solutions)
+        _SolutionEditors.fromDraft(solution),
       if (draft.solutions.isEmpty)
         _SolutionEditors.empty(language: leetCodeCodeLanguages.first),
     ]);
@@ -1185,11 +1188,20 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
               // so once the form scrolls under this pinned button it became
               // an invisible stop between whichever fields sat level with it.
               child: ExcludeFocus(
-                child: IconButton(
-                  onPressed: Navigator.of(context).pop,
-                  icon: const Icon(PhosphorIconsRegular.x, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Close',
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // The sheet stacks above this bottom sheet rather than
+                    // replacing it: the track draft is untouched, so closing
+                    // the cheat sheet returns to the form exactly as it was.
+                    const LeetCodeCheatSheetIconButton(size: 18),
+                    IconButton(
+                      onPressed: Navigator.of(context).pop,
+                      icon: const Icon(PhosphorIconsRegular.x, size: 18),
+                      visualDensity: VisualDensity.compact,
+                      tooltip: 'Close',
+                    ),
+                  ],
                 ),
               ),
             ),

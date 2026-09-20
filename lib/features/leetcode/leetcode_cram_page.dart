@@ -13,6 +13,8 @@ import 'package:voyager/domain/services/leetcode_srs_engine.dart';
 import 'package:voyager/features/leetcode/leetcode_actions.dart';
 import 'package:voyager/features/leetcode/leetcode_detail_view.dart';
 import 'package:voyager/features/leetcode/leetcode_flashcard.dart';
+import 'package:voyager/features/leetcode/leetcode_cheat_entry.dart';
+import 'package:voyager/features/leetcode/leetcode_cheat_providers.dart';
 import 'package:voyager/features/leetcode/leetcode_scratch_host.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 import 'package:voyager/features/study/study_history_controls.dart';
@@ -315,6 +317,9 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
                 onUndo: _canUndo ? _undo : null,
                 onRedo: _canRedo ? _redo : null,
                 onFocusScratch: scratchEnabled ? focusScratch : null,
+                // See the session page: the sheet's route is above this one on
+                // the root navigator, so nothing else rebuilds when it opens.
+                suppressed: ref.watch(leetCodeCheatSheetOpenProvider),
                 child: _complete
                     ? _CramComplete(
                         onDone: () => Navigator.of(context).pop(),
@@ -330,15 +335,16 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
                                   onPressed: () => Navigator.of(context).pop(),
                                   icon: const Icon(PhosphorIconsRegular.x),
                                 ),
-                                // Balances the two history buttons on the right, so
+                                // Balances the three buttons on the right, so
                                 // the title stays centred.
-                                const SizedBox(width: 48),
+                                const SizedBox(width: 96),
                                 const Spacer(),
                                 Text(
                                   'Cram mode',
                                   style: theme.textTheme.titleMedium,
                                 ),
                                 const Spacer(),
+                                const LeetCodeCheatSheetIconButton(),
                                 StudyHistoryControls(
                                   onUndo: _canUndo ? _undo : null,
                                   onRedo: _canRedo ? _redo : null,

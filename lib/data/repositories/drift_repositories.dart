@@ -21,6 +21,7 @@ import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/leetcode_cheat_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
@@ -235,8 +236,7 @@ class DriftJournalRepository implements JournalRepository {
 
     final rows = await query.get();
     return {
-      for (final row in rows)
-        row.read(journalIdCol)!: row.read(countCol)!,
+      for (final row in rows) row.read(journalIdCol)!: row.read(countCol)!,
     };
   }
 
@@ -312,13 +312,17 @@ class DriftJournalRepository implements JournalRepository {
     // seconds. A NULL `deletedAt` never satisfies the comparison, so live rows
     // are excluded for free.
     final cutoff = _policy.purgeCutoff(now);
-    await (_db.delete(_db.journalEntriesTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.journalEntries, t.id)))
+    await (_db.delete(_db.journalEntriesTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.journalEntries, t.id),
+        ))
         .go();
-    await (_db.delete(_db.journalsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.journals, t.id)))
+    await (_db.delete(_db.journalsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.journals, t.id),
+        ))
         .go();
   }
 
@@ -460,11 +464,11 @@ class DriftDreamRepository implements DreamRepository {
 
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
-    await (_db.delete(_db.dreamEntriesTable)
-          ..where(
-            (t) => t.deletedAt.isSmallerOrEqualValue(_policy.purgeCutoff(now)) &
-                _notOwedUpload(_db, FirestoreCollections.dreamEntries, t.id),
-          ))
+    await (_db.delete(_db.dreamEntriesTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(_policy.purgeCutoff(now)) &
+              _notOwedUpload(_db, FirestoreCollections.dreamEntries, t.id),
+        ))
         .go();
   }
 
@@ -594,21 +598,17 @@ class DriftLeetCodeRepository implements LeetCodeRepository {
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
     final cutoff = _policy.purgeCutoff(now);
-    await (_db.delete(_db.leetCodeProblemsTable)
-          ..where(
-            (t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-                _notOwedUpload(_db, FirestoreCollections.leetcodeProblems, t.id),
-          ))
+    await (_db.delete(_db.leetCodeProblemsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.leetcodeProblems, t.id),
+        ))
         .go();
-    await (_db.delete(_db.leetCodeReviewLogTable)
-          ..where(
-            (t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-                _notOwedUpload(
-                  _db,
-                  FirestoreCollections.leetcodeReviewLog,
-                  t.id,
-                ),
-          ))
+    await (_db.delete(_db.leetCodeReviewLogTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.leetcodeReviewLog, t.id),
+        ))
         .go();
   }
 
@@ -708,6 +708,513 @@ class DriftLeetCodeRepository implements LeetCodeRepository {
         version: row.version,
         deletedAt: row.deletedAt,
       );
+
+  // --- Cheat sheet ---------------------------------------------------------
+
+  @override
+  Future<List<LeetCodeCheatTab>> listCheatTabs({
+    bool includeDeleted = false,
+  }) async {
+    final rows =
+        await (_db.select(_db.leetCodeCheatTabsTable)..orderBy([
+              (t) => OrderingTerm.asc(t.position),
+              (t) => OrderingTerm.asc(t.createdAt),
+              (t) => OrderingTerm.asc(t.id),
+            ]))
+            .get();
+    return [
+      for (final row in rows)
+        if (includeDeleted || row.deletedAt == null) _mapCheatTab(row),
+    ];
+  }
+
+  @override
+  Future<LeetCodeCheatTab?> getCheatTab(String id) async {
+    final row = await (_db.select(
+      _db.leetCodeCheatTabsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapCheatTab(row);
+  }
+
+  @override
+  Future<void> upsertCheatTab(
+    LeetCodeCheatTab tab, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.leetCodeCheatTabsTable)
+        .insertOnConflictUpdate(_cheatTabCompanion(tab));
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.leetcodeCheatTabs);
+    }
+  }
+
+  @override
+  Future<List<LeetCodeCheatSection>> listCheatSections({
+    String? tabId,
+    bool includeDeleted = false,
+  }) async {
+    final rows =
+        await (_db.select(_db.leetCodeCheatSectionsTable)..orderBy([
+              (t) => OrderingTerm.asc(t.position),
+              (t) => OrderingTerm.asc(t.createdAt),
+              (t) => OrderingTerm.asc(t.id),
+            ]))
+            .get();
+    // Orphans are filtered out here rather than chased down on delete — a
+    // section whose tab is tombstoned is simply never read.
+    final liveTabIds = includeDeleted
+        ? null
+        : {for (final tab in await listCheatTabs()) tab.id};
+    return [
+      for (final row in rows)
+        if (tabId == null || row.tabId == tabId)
+          if (includeDeleted ||
+              (row.deletedAt == null && liveTabIds!.contains(row.tabId)))
+            _mapCheatSection(row),
+    ];
+  }
+
+  @override
+  Future<LeetCodeCheatSection?> getCheatSection(String id) async {
+    final row = await (_db.select(
+      _db.leetCodeCheatSectionsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapCheatSection(row);
+  }
+
+  @override
+  Future<void> upsertCheatSection(
+    LeetCodeCheatSection section, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.leetCodeCheatSectionsTable)
+        .insertOnConflictUpdate(_cheatSectionCompanion(section));
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(
+        FirestoreCollections.leetcodeCheatSections,
+      );
+    }
+  }
+
+  @override
+  Future<List<LeetCodeCheatEntry>> listCheatEntries({
+    String? sectionId,
+    bool includeDeleted = false,
+  }) async {
+    final rows =
+        await (_db.select(_db.leetCodeCheatEntriesTable)..orderBy([
+              (t) => OrderingTerm.asc(t.position),
+              (t) => OrderingTerm.asc(t.createdAt),
+              (t) => OrderingTerm.asc(t.id),
+            ]))
+            .get();
+    // [listCheatSections] already joins through live tabs, so a section id it
+    // returns is one whose whole chain is live.
+    final liveSectionIds = includeDeleted
+        ? null
+        : {for (final section in await listCheatSections()) section.id};
+    return [
+      for (final row in rows)
+        if (sectionId == null || row.sectionId == sectionId)
+          if (includeDeleted ||
+              (row.deletedAt == null &&
+                  liveSectionIds!.contains(row.sectionId)))
+            _mapCheatEntry(row),
+    ];
+  }
+
+  @override
+  Future<LeetCodeCheatEntry?> getCheatEntry(String id) async {
+    final row = await (_db.select(
+      _db.leetCodeCheatEntriesTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapCheatEntry(row);
+  }
+
+  @override
+  Future<void> upsertCheatEntry(
+    LeetCodeCheatEntry entry, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.leetCodeCheatEntriesTable)
+        .insertOnConflictUpdate(_cheatEntryCompanion(entry));
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.leetcodeCheatEntries);
+    }
+  }
+
+  @override
+  Future<List<LeetCodeCheatSection>> renormalizeCheatSections(
+    List<LeetCodeCheatSection> ordered,
+  ) async {
+    final written = _renumbered(
+      ordered,
+      positionOf: (s) => s.position,
+      withPosition: (s, p) => s.copyWith(position: p),
+    );
+    if (written.isEmpty) return const [];
+    await _db.batch((batch) {
+      for (final section in written) {
+        batch.update(
+          _db.leetCodeCheatSectionsTable,
+          _cheatSectionCompanion(section),
+          where: (t) => t.id.equals(section.id),
+        );
+      }
+    });
+    _syncActivity?.recordLocalSave(FirestoreCollections.leetcodeCheatSections);
+    return written;
+  }
+
+  @override
+  Future<List<LeetCodeCheatEntry>> renormalizeCheatEntries(
+    List<LeetCodeCheatEntry> ordered,
+  ) async {
+    final written = _renumbered(
+      ordered,
+      positionOf: (e) => e.position,
+      withPosition: (e, p) => e.copyWith(position: p),
+    );
+    if (written.isEmpty) return const [];
+    await _db.batch((batch) {
+      for (final entry in written) {
+        batch.update(
+          _db.leetCodeCheatEntriesTable,
+          _cheatEntryCompanion(entry),
+          where: (t) => t.id.equals(entry.id),
+        );
+      }
+    });
+    _syncActivity?.recordLocalSave(FirestoreCollections.leetcodeCheatEntries);
+    return written;
+  }
+
+  /// [ordered] spread back onto even [kCheatPositionStep] gaps, skipping rows
+  /// already sitting on the position they would be given.
+  List<T> _renumbered<T>(
+    List<T> ordered, {
+    required double Function(T) positionOf,
+    required T Function(T, double) withPosition,
+  }) {
+    final written = <T>[];
+    for (var i = 0; i < ordered.length; i++) {
+      final target = (i + 1) * kCheatPositionStep;
+      if (positionOf(ordered[i]) == target) continue;
+      written.add(withPosition(ordered[i], target));
+    }
+    return written;
+  }
+
+  @override
+  Future<LeetCodeCheatEntry> softDeleteCheatEntry(String id) async {
+    final existing = await getCheatEntry(id);
+    if (existing == null) throw StateError('no cheat entry $id');
+    if (existing.isDeleted) throw StateError('cheat entry $id is deleted');
+    final entry = existing.copyWith(deletedAt: utcNow());
+    await upsertCheatEntry(entry);
+    return entry;
+  }
+
+  @override
+  Future<LeetCodeCheatEntry> restoreCheatEntry(String id) async {
+    final existing = await getCheatEntry(id);
+    abortIfAlreadyRestored(
+      found: existing != null,
+      deletedAt: existing?.deletedAt,
+    );
+    if (existing == null) throw StateError('no deleted cheat entry $id');
+    final entry = existing.copyWith(
+      clearDeletedAt: true,
+      version: restoreVersionFrom(
+        preDeleteVersion: existing.version,
+        currentVersion: existing.version,
+      ),
+    );
+    await upsertCheatEntry(entry);
+    return entry;
+  }
+
+  @override
+  Future<({LeetCodeCheatSection section, List<LeetCodeCheatEntry> entries})>
+  softDeleteCheatSection(String id) async {
+    final existing = await getCheatSection(id);
+    if (existing == null) throw StateError('no cheat section $id');
+    // A second delete would stamp the section with a new instant while its
+    // entries keep the first one, and the restore — which matches instants
+    // exactly — would then bring back none of them.
+    if (existing.isDeleted) throw StateError('cheat section $id is deleted');
+    final now = utcNow();
+    final section = existing.copyWith(deletedAt: now);
+    final entries = [
+      for (final entry in await listCheatEntries(sectionId: id))
+        entry.copyWith(deletedAt: now, touch: false),
+    ];
+    await _writeCheatSectionCascade(section, entries);
+    return (section: section, entries: entries);
+  }
+
+  @override
+  Future<({LeetCodeCheatSection section, List<LeetCodeCheatEntry> entries})>
+  restoreCheatSection(String id) async {
+    final existing = await getCheatSection(id);
+    abortIfAlreadyRestored(
+      found: existing != null,
+      deletedAt: existing?.deletedAt,
+    );
+    if (existing == null) throw StateError('no deleted cheat section $id');
+    final cascade = existing.deletedAt!;
+    final section = existing.copyWith(
+      clearDeletedAt: true,
+      version: restoreVersionFrom(
+        preDeleteVersion: existing.version,
+        currentVersion: existing.version,
+      ),
+    );
+    final entries = [
+      for (final entry in await listCheatEntries(
+        sectionId: id,
+        includeDeleted: true,
+      ))
+        if (entry.deletedAt == cascade)
+          entry.copyWith(clearDeletedAt: true, touch: false),
+    ];
+    await _writeCheatSectionCascade(section, entries);
+    return (section: section, entries: entries);
+  }
+
+  @override
+  Future<
+    ({
+      LeetCodeCheatTab tab,
+      List<LeetCodeCheatSection> sections,
+      List<LeetCodeCheatEntry> entries,
+    })
+  >
+  softDeleteCheatTab(String id) async {
+    final existing = await getCheatTab(id);
+    if (existing == null) throw StateError('no cheat tab $id');
+    if (existing.isDeleted) throw StateError('cheat tab $id is deleted');
+    final now = utcNow();
+    final tab = existing.copyWith(deletedAt: now);
+    final sections = [
+      for (final section in await listCheatSections(tabId: id))
+        section.copyWith(deletedAt: now, touch: false),
+    ];
+    final entries = <LeetCodeCheatEntry>[];
+    for (final section in sections) {
+      for (final entry in await listCheatEntries(sectionId: section.id)) {
+        entries.add(entry.copyWith(deletedAt: now, touch: false));
+      }
+    }
+    await _writeCheatTabCascade(tab, sections, entries);
+    return (tab: tab, sections: sections, entries: entries);
+  }
+
+  @override
+  Future<
+    ({
+      LeetCodeCheatTab tab,
+      List<LeetCodeCheatSection> sections,
+      List<LeetCodeCheatEntry> entries,
+    })
+  >
+  restoreCheatTab(String id) async {
+    final existing = await getCheatTab(id);
+    abortIfAlreadyRestored(
+      found: existing != null,
+      deletedAt: existing?.deletedAt,
+    );
+    if (existing == null) throw StateError('no deleted cheat tab $id');
+    final cascade = existing.deletedAt!;
+    final tab = existing.copyWith(
+      clearDeletedAt: true,
+      version: restoreVersionFrom(
+        preDeleteVersion: existing.version,
+        currentVersion: existing.version,
+      ),
+    );
+    final sections = [
+      for (final section in await listCheatSections(
+        tabId: id,
+        includeDeleted: true,
+      ))
+        if (section.deletedAt == cascade)
+          section.copyWith(clearDeletedAt: true, touch: false),
+    ];
+    final entries = <LeetCodeCheatEntry>[];
+    for (final section in sections) {
+      for (final entry in await listCheatEntries(
+        sectionId: section.id,
+        includeDeleted: true,
+      )) {
+        if (entry.deletedAt == cascade) {
+          entries.add(entry.copyWith(clearDeletedAt: true, touch: false));
+        }
+      }
+    }
+    await _writeCheatTabCascade(tab, sections, entries);
+    return (tab: tab, sections: sections, entries: entries);
+  }
+
+  Future<void> _writeCheatSectionCascade(
+    LeetCodeCheatSection section,
+    List<LeetCodeCheatEntry> entries,
+  ) async {
+    await _db.transaction(() async {
+      await _db
+          .into(_db.leetCodeCheatSectionsTable)
+          .insertOnConflictUpdate(_cheatSectionCompanion(section));
+      await _db.batch((batch) {
+        for (final entry in entries) {
+          batch.update(
+            _db.leetCodeCheatEntriesTable,
+            _cheatEntryCompanion(entry),
+            where: (t) => t.id.equals(entry.id),
+          );
+        }
+      });
+    });
+    _syncActivity?.recordLocalSave(FirestoreCollections.leetcodeCheatSections);
+    if (entries.isNotEmpty) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.leetcodeCheatEntries);
+    }
+  }
+
+  Future<void> _writeCheatTabCascade(
+    LeetCodeCheatTab tab,
+    List<LeetCodeCheatSection> sections,
+    List<LeetCodeCheatEntry> entries,
+  ) async {
+    await _db.transaction(() async {
+      await _db
+          .into(_db.leetCodeCheatTabsTable)
+          .insertOnConflictUpdate(_cheatTabCompanion(tab));
+      await _db.batch((batch) {
+        for (final section in sections) {
+          batch.update(
+            _db.leetCodeCheatSectionsTable,
+            _cheatSectionCompanion(section),
+            where: (t) => t.id.equals(section.id),
+          );
+        }
+        for (final entry in entries) {
+          batch.update(
+            _db.leetCodeCheatEntriesTable,
+            _cheatEntryCompanion(entry),
+            where: (t) => t.id.equals(entry.id),
+          );
+        }
+      });
+    });
+    _syncActivity?.recordLocalSave(FirestoreCollections.leetcodeCheatTabs);
+    if (sections.isNotEmpty) {
+      _syncActivity?.recordLocalSave(
+        FirestoreCollections.leetcodeCheatSections,
+      );
+    }
+    if (entries.isNotEmpty) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.leetcodeCheatEntries);
+    }
+  }
+
+  @override
+  Future<List<LeetCodeCheatTab>> getAllCheatTabs() async {
+    final rows = await _db.select(_db.leetCodeCheatTabsTable).get();
+    return rows.map(_mapCheatTab).toList();
+  }
+
+  @override
+  Future<List<LeetCodeCheatSection>> getAllCheatSections() async {
+    final rows = await _db.select(_db.leetCodeCheatSectionsTable).get();
+    return rows.map(_mapCheatSection).toList();
+  }
+
+  @override
+  Future<List<LeetCodeCheatEntry>> getAllCheatEntries() async {
+    final rows = await _db.select(_db.leetCodeCheatEntriesTable).get();
+    return rows.map(_mapCheatEntry).toList();
+  }
+
+  LeetCodeCheatTab _mapCheatTab(LeetCodeCheatTabsTableData row) =>
+      LeetCodeCheatTab(
+        id: row.id,
+        name: row.name,
+        languageKey: row.languageKey,
+        position: row.position,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        version: row.version,
+        deletedAt: row.deletedAt,
+      );
+
+  LeetCodeCheatSection _mapCheatSection(LeetCodeCheatSectionsTableData row) =>
+      LeetCodeCheatSection(
+        id: row.id,
+        tabId: row.tabId,
+        name: row.name,
+        position: row.position,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        version: row.version,
+        deletedAt: row.deletedAt,
+      );
+
+  LeetCodeCheatEntry _mapCheatEntry(LeetCodeCheatEntriesTableData row) =>
+      LeetCodeCheatEntry(
+        id: row.id,
+        sectionId: row.sectionId,
+        command: row.command,
+        description: row.description,
+        complexity: row.complexity,
+        position: row.position,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        version: row.version,
+        deletedAt: row.deletedAt,
+      );
+
+  LeetCodeCheatTabsTableCompanion _cheatTabCompanion(LeetCodeCheatTab tab) =>
+      LeetCodeCheatTabsTableCompanion(
+        id: Value(tab.id),
+        name: Value(tab.name),
+        languageKey: Value(tab.languageKey),
+        position: Value(tab.position),
+        createdAt: Value(tab.createdAt),
+        updatedAt: Value(tab.updatedAt),
+        version: Value(tab.version),
+        deletedAt: Value(tab.deletedAt),
+      );
+
+  LeetCodeCheatSectionsTableCompanion _cheatSectionCompanion(
+    LeetCodeCheatSection section,
+  ) => LeetCodeCheatSectionsTableCompanion(
+    id: Value(section.id),
+    tabId: Value(section.tabId),
+    name: Value(section.name),
+    position: Value(section.position),
+    createdAt: Value(section.createdAt),
+    updatedAt: Value(section.updatedAt),
+    version: Value(section.version),
+    deletedAt: Value(section.deletedAt),
+  );
+
+  LeetCodeCheatEntriesTableCompanion _cheatEntryCompanion(
+    LeetCodeCheatEntry entry,
+  ) => LeetCodeCheatEntriesTableCompanion(
+    id: Value(entry.id),
+    sectionId: Value(entry.sectionId),
+    command: Value(entry.command),
+    description: Value(entry.description),
+    complexity: Value(entry.complexity),
+    position: Value(entry.position),
+    createdAt: Value(entry.createdAt),
+    updatedAt: Value(entry.updatedAt),
+    version: Value(entry.version),
+    deletedAt: Value(entry.deletedAt),
+  );
 }
 
 class DriftTodoRepository implements TodoRepository {
@@ -770,9 +1277,9 @@ class DriftTodoRepository implements TodoRepository {
   // direct write skipped entirely.
   @override
   Future<void> softDeleteList(String id) async {
-    final list = (await listLists(
-      includeDeleted: true,
-    )).cast<TodoListModel?>().firstWhere((l) => l!.id == id, orElse: () => null);
+    final list = (await listLists(includeDeleted: true))
+        .cast<TodoListModel?>()
+        .firstWhere((l) => l!.id == id, orElse: () => null);
     if (list == null || list.deletedAt != null) return;
     await upsertList(list.copyWith(deletedAt: utcNow()));
   }
@@ -807,13 +1314,16 @@ class DriftTodoRepository implements TodoRepository {
 
   @override
   Future<List<TodoTask>> listSubtasks(String parentTaskId) async {
-    final rows = await (_db.select(
-      _db.todoTasksTable,
-    )
-      ..where((t) => t.parentTaskId.equals(parentTaskId))
-      ..orderBy([
-        (t) => OrderingTerm(expression: t.sortOrder, mode: OrderingMode.asc)
-      ])).get();
+    final rows =
+        await (_db.select(_db.todoTasksTable)
+              ..where((t) => t.parentTaskId.equals(parentTaskId))
+              ..orderBy([
+                (t) => OrderingTerm(
+                  expression: t.sortOrder,
+                  mode: OrderingMode.asc,
+                ),
+              ]))
+            .get();
     return rows.where((r) => r.deletedAt == null).map(_mapTask).toList();
   }
 
@@ -882,30 +1392,27 @@ class DriftTodoRepository implements TodoRepository {
   }) async {
     if (tasks.isEmpty) return;
     await _db.batch((b) {
-      b.insertAllOnConflictUpdate(
-        _db.todoTasksTable,
-        [
-          for (final task in tasks)
-            TodoTasksTableCompanion(
-              id: Value(task.id),
-              listId: Value(task.listId),
-              parentTaskId: Value(task.parentTaskId),
-              title: Value(task.title),
-              notes: Value(task.notes),
-              dueDate: Value(task.dueDate),
-              completed: Value(task.completed),
-              starred: Value(task.starred),
-              sortOrder: Value(task.sortOrder),
-                dueDateSetAt: Value(task.dueDateSetAt),
-              recurrence: Value(task.recurrence.toStorage()),
-              recurrenceAnchor: Value(task.recurrenceAnchor),
-              createdAt: Value(task.createdAt),
-              updatedAt: Value(task.updatedAt),
-              version: Value(task.version),
-              deletedAt: Value(task.deletedAt),
-            ),
-        ],
-      );
+      b.insertAllOnConflictUpdate(_db.todoTasksTable, [
+        for (final task in tasks)
+          TodoTasksTableCompanion(
+            id: Value(task.id),
+            listId: Value(task.listId),
+            parentTaskId: Value(task.parentTaskId),
+            title: Value(task.title),
+            notes: Value(task.notes),
+            dueDate: Value(task.dueDate),
+            completed: Value(task.completed),
+            starred: Value(task.starred),
+            sortOrder: Value(task.sortOrder),
+            dueDateSetAt: Value(task.dueDateSetAt),
+            recurrence: Value(task.recurrence.toStorage()),
+            recurrenceAnchor: Value(task.recurrenceAnchor),
+            createdAt: Value(task.createdAt),
+            updatedAt: Value(task.updatedAt),
+            version: Value(task.version),
+            deletedAt: Value(task.deletedAt),
+          ),
+      ]);
     });
     if (recordLocalActivity) {
       _syncActivity?.recordLocalSave(FirestoreCollections.todoTasks);
@@ -922,13 +1429,17 @@ class DriftTodoRepository implements TodoRepository {
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
     final cutoff = _policy.purgeCutoff(now);
-    await (_db.delete(_db.todoListsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.todoLists, t.id)))
+    await (_db.delete(_db.todoListsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.todoLists, t.id),
+        ))
         .go();
-    await (_db.delete(_db.todoTasksTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.todoTasks, t.id)))
+    await (_db.delete(_db.todoTasksTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.todoTasks, t.id),
+        ))
         .go();
   }
 
@@ -1152,13 +1663,17 @@ class DriftCalendarRepository implements CalendarRepository {
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
     final cutoff = _policy.purgeCutoff(now);
-    await (_db.delete(_db.calendarEventsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.calendarEvents, t.id)))
+    await (_db.delete(_db.calendarEventsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.calendarEvents, t.id),
+        ))
         .go();
-    await (_db.delete(_db.calendarsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.calendars, t.id)))
+    await (_db.delete(_db.calendarsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.calendars, t.id),
+        ))
         .go();
   }
 
@@ -1271,12 +1786,13 @@ class DriftTrackerRepository implements TrackerRepository {
     String trackerId, {
     bool includeDeleted = false,
   }) async {
-    final rows = await (_db.select(_db.trackerValuesTable)..where(
-          (t) => includeDeleted
-              ? t.trackerId.equals(trackerId)
-              : t.trackerId.equals(trackerId) & t.deletedAt.isNull(),
-        ))
-        .get();
+    final rows =
+        await (_db.select(_db.trackerValuesTable)..where(
+              (t) => includeDeleted
+                  ? t.trackerId.equals(trackerId)
+                  : t.trackerId.equals(trackerId) & t.deletedAt.isNull(),
+            ))
+            .get();
     return rows.map(_mapValue).toList();
   }
 
@@ -1324,13 +1840,17 @@ class DriftTrackerRepository implements TrackerRepository {
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
     final cutoff = _policy.purgeCutoff(now);
-    await (_db.delete(_db.trackersTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.trackers, t.id)))
+    await (_db.delete(_db.trackersTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.trackers, t.id),
+        ))
         .go();
-    await (_db.delete(_db.trackerValuesTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.trackerValues, t.id)))
+    await (_db.delete(_db.trackerValuesTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.trackerValues, t.id),
+        ))
         .go();
   }
 
@@ -1382,11 +1902,12 @@ class DriftNotificationRepository implements NotificationRepository {
   final _policy = const SoftDeletePolicy();
 
   @override
-  Future<List<PinnedNote>> listPinnedNotes({bool includeDeleted = false}) async {
-    final rows =
-        await (_db.select(_db.pinnedNotesTable)
-              ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
-            .get();
+  Future<List<PinnedNote>> listPinnedNotes({
+    bool includeDeleted = false,
+  }) async {
+    final rows = await (_db.select(
+      _db.pinnedNotesTable,
+    )..orderBy([(t) => OrderingTerm.asc(t.createdAt)])).get();
     return rows
         .where((r) => includeDeleted || r.deletedAt == null)
         .map(_mapNote)
@@ -1513,13 +2034,21 @@ class DriftNotificationRepository implements NotificationRepository {
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
     final cutoff = _policy.purgeCutoff(now);
-    await (_db.delete(_db.pinnedNotesTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.pinnedNotes, t.id)))
+    await (_db.delete(_db.pinnedNotesTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.pinnedNotes, t.id),
+        ))
         .go();
-    await (_db.delete(_db.dismissedNotificationsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.dismissedNotifications, t.id)))
+    await (_db.delete(_db.dismissedNotificationsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(
+                _db,
+                FirestoreCollections.dismissedNotifications,
+                t.id,
+              ),
+        ))
         .go();
   }
 
@@ -1597,7 +2126,10 @@ class DriftReminderRepository implements ReminderRepository {
           ),
         );
     if (recordLocalActivity) {
-      _syncedWrites?.notifyOne(FirestoreCollections.deviceRegistrations, device);
+      _syncedWrites?.notifyOne(
+        FirestoreCollections.deviceRegistrations,
+        device,
+      );
     }
   }
 
@@ -1951,21 +2483,41 @@ class DriftReminderRepository implements ReminderRepository {
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
     final cutoff = _policy.purgeCutoff(now);
-    await (_db.delete(_db.deviceRegistrationsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.deviceRegistrations, t.id)))
+    await (_db.delete(_db.deviceRegistrationsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(
+                _db,
+                FirestoreCollections.deviceRegistrations,
+                t.id,
+              ),
+        ))
         .go();
-    await (_db.delete(_db.scheduledReminderRulesTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.scheduledReminderRules, t.id)))
+    await (_db.delete(_db.scheduledReminderRulesTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(
+                _db,
+                FirestoreCollections.scheduledReminderRules,
+                t.id,
+              ),
+        ))
         .go();
-    await (_db.delete(_db.entityRemindersTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.entityReminders, t.id)))
+    await (_db.delete(_db.entityRemindersTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.entityReminders, t.id),
+        ))
         .go();
-    await (_db.delete(_db.reminderDeliveryLogsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.reminderDeliveryLogs, t.id)))
+    await (_db.delete(_db.reminderDeliveryLogsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(
+                _db,
+                FirestoreCollections.reminderDeliveryLogs,
+                t.id,
+              ),
+        ))
         .go();
   }
 }
@@ -2044,11 +2596,11 @@ class DriftBucketListRepository implements BucketListRepository {
 
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
-    await (_db.delete(_db.bucketListItemsTable)
-          ..where(
-            (t) => t.deletedAt.isSmallerOrEqualValue(_policy.purgeCutoff(now)) &
-                _notOwedUpload(_db, FirestoreCollections.bucketListItems, t.id),
-          ))
+    await (_db.delete(_db.bucketListItemsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(_policy.purgeCutoff(now)) &
+              _notOwedUpload(_db, FirestoreCollections.bucketListItems, t.id),
+        ))
         .go();
   }
 
@@ -2194,7 +2746,10 @@ class DriftFinanceRepository implements FinanceRepository {
           ),
         );
     if (recordLocalActivity) {
-      _syncedWrites?.notifyOne(FirestoreCollections.subscriptions, subscription);
+      _syncedWrites?.notifyOne(
+        FirestoreCollections.subscriptions,
+        subscription,
+      );
     }
   }
 
@@ -2273,8 +2828,9 @@ class DriftFinanceRepository implements FinanceRepository {
         .where((r) => includeDeleted || r.deletedAt == null)
         .map(_mapCategory)
         .toList();
-    categories
-        .sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    categories.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
     return categories;
   }
 
@@ -2298,7 +2854,10 @@ class DriftFinanceRepository implements FinanceRepository {
           ),
         );
     if (recordLocalActivity) {
-      _syncedWrites?.notifyOne(FirestoreCollections.financeCategories, category);
+      _syncedWrites?.notifyOne(
+        FirestoreCollections.financeCategories,
+        category,
+      );
     }
   }
 
@@ -2752,7 +3311,10 @@ class DriftFinanceRepository implements FinanceRepository {
           ),
         );
     if (recordLocalActivity) {
-      _syncedWrites?.notifyOne(FirestoreCollections.goalAllocations, allocation);
+      _syncedWrites?.notifyOne(
+        FirestoreCollections.goalAllocations,
+        allocation,
+      );
     }
   }
 
@@ -2826,7 +3388,8 @@ class DriftFinanceRepository implements FinanceRepository {
     assetId: row.assetId,
     roomId: row.roomId,
     // Tolerant for the same reason as the transaction type in [_map].
-    kind: RoomEventKind.values.asNameMap()[row.kind] ??
+    kind:
+        RoomEventKind.values.asNameMap()[row.kind] ??
         RoomEventKind.contribution,
     amountCents: row.amountCents,
     occurredAt: row.occurredAt,
@@ -2869,45 +3432,65 @@ class DriftFinanceRepository implements FinanceRepository {
     final cutoff = _policy.purgeCutoff(now);
     // Valuations before assets and allocations before goals, as the row-by-row
     // version did: the child rows reference the parent.
-    await (_db.delete(_db.transactionsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.transactions, t.id)))
+    await (_db.delete(_db.transactionsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.transactions, t.id),
+        ))
         .go();
-    await (_db.delete(_db.subscriptionsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.subscriptions, t.id)))
+    await (_db.delete(_db.subscriptionsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.subscriptions, t.id),
+        ))
         .go();
-    await (_db.delete(_db.budgetsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.budgets, t.id)))
+    await (_db.delete(_db.budgetsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.budgets, t.id),
+        ))
         .go();
-    await (_db.delete(_db.financeCategoriesTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.financeCategories, t.id)))
+    await (_db.delete(_db.financeCategoriesTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.financeCategories, t.id),
+        ))
         .go();
-    await (_db.delete(_db.assetValuationsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.assetValuations, t.id)))
+    await (_db.delete(_db.assetValuationsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.assetValuations, t.id),
+        ))
         .go();
-    await (_db.delete(_db.assetsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.assets, t.id)))
+    await (_db.delete(_db.assetsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.assets, t.id),
+        ))
         .go();
-    await (_db.delete(_db.assetRoomEventsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.assetRoomEvents, t.id)))
+    await (_db.delete(_db.assetRoomEventsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.assetRoomEvents, t.id),
+        ))
         .go();
-    await (_db.delete(_db.contributionRoomsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.contributionRooms, t.id)))
+    await (_db.delete(_db.contributionRoomsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.contributionRooms, t.id),
+        ))
         .go();
-    await (_db.delete(_db.goalAllocationsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.goalAllocations, t.id)))
+    await (_db.delete(_db.goalAllocationsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.goalAllocations, t.id),
+        ))
         .go();
-    await (_db.delete(_db.savingsGoalsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.savingsGoals, t.id)))
+    await (_db.delete(_db.savingsGoalsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.savingsGoals, t.id),
+        ))
         .go();
   }
 
@@ -2941,8 +3524,8 @@ class DriftFinanceRepository implements FinanceRepository {
     // Tolerant like the sync path's _enumFromName: byName throws on anything
     // it doesn't recognise, and one row written by a newer build would fail
     // the whole query and take the entire finance page down with it.
-    type: TransactionType.values.asNameMap()[row.type] ??
-        TransactionType.expense,
+    type:
+        TransactionType.values.asNameMap()[row.type] ?? TransactionType.expense,
     amountCents: row.amountCents,
     origin: row.origin,
     note: row.note,
@@ -3059,10 +3642,9 @@ class DriftMediaRepository implements MediaRepository {
   ) async {
     if (states.isEmpty) return const [];
     final names = [for (final state in states) state.name];
-    final rows =
-        await (_db.select(_db.mediaAssetsTable)
-              ..where((t) => t.uploadState.isIn(names) & t.deletedAt.isNull()))
-            .get();
+    final rows = await (_db.select(
+      _db.mediaAssetsTable,
+    )..where((t) => t.uploadState.isIn(names) & t.deletedAt.isNull())).get();
     return rows.map(_mapAsset).toList();
   }
 
@@ -3072,10 +3654,9 @@ class DriftMediaRepository implements MediaRepository {
   ) async {
     if (states.isEmpty) return const [];
     final names = [for (final state in states) state.name];
-    final rows =
-        await (_db.select(_db.mediaAssetsTable)
-              ..where((t) => t.downloadState.isIn(names) & t.deletedAt.isNull()))
-            .get();
+    final rows = await (_db.select(
+      _db.mediaAssetsTable,
+    )..where((t) => t.downloadState.isIn(names) & t.deletedAt.isNull())).get();
     return rows.map(_mapAsset).toList();
   }
 
@@ -3125,11 +3706,9 @@ class DriftMediaRepository implements MediaRepository {
 
   @override
   Future<List<MediaReference>> listReferencesForAsset(String mediaId) async {
-    final rows =
-        await (_db.select(_db.mediaReferencesTable)..where(
-              (t) => t.mediaId.equals(mediaId) & t.deletedAt.isNull(),
-            ))
-            .get();
+    final rows = await (_db.select(
+      _db.mediaReferencesTable,
+    )..where((t) => t.mediaId.equals(mediaId) & t.deletedAt.isNull())).get();
     return rows.map(_mapReference).toList();
   }
 
@@ -3259,9 +3838,11 @@ class DriftMediaRepository implements MediaRepository {
     // References first, so that an asset whose last reference expires in this
     // same pass is seen as unreferenced by the sweep below rather than
     // surviving until the next launch.
-    await (_db.delete(_db.mediaReferencesTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.mediaReferences, t.id)))
+    await (_db.delete(_db.mediaReferencesTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.mediaReferences, t.id),
+        ))
         .go();
 
     // Both clocks purge on the same rule: an image the user deleted and an
@@ -3277,9 +3858,7 @@ class DriftMediaRepository implements MediaRepository {
     if (expired.isEmpty) return const [];
 
     final ids = [for (final row in expired) row.id];
-    await (_db.delete(
-      _db.mediaAssetsTable,
-    )..where((t) => t.id.isIn(ids))).go();
+    await (_db.delete(_db.mediaAssetsTable)..where((t) => t.id.isIn(ids))).go();
     return expired.map(_mapAsset).toList();
   }
 
@@ -3421,6 +4000,10 @@ class DriftSettingsRepository implements SettingsRepository {
       lastViewedJournalId: row.lastViewedJournalId,
       lastViewedTodoListId: row.lastViewedTodoListId,
       lastViewedCalendarId: row.lastViewedCalendarId,
+      leetCodeCheatLastTabId: row.leetCodeCheatLastTabId,
+      leetCodeCheatCollapsedSections: List<String>.from(
+        jsonDecode(row.leetCodeCheatCollapsedSectionsJson) as List,
+      ),
       defaultJournalId: row.defaultJournalId,
       defaultTodoListId: row.defaultTodoListId,
       journalShowAllEntries: row.journalShowAllEntries,
@@ -3557,8 +4140,7 @@ class DriftSettingsRepository implements SettingsRepository {
     // preference another device changed more recently.
     final previous = await _readSettings();
     final syncedFieldsChanged =
-        previous == null ||
-        !_sameSyncedSettings(previous, settings);
+        previous == null || !_sameSyncedSettings(previous, settings);
     final effective = recordLocalActivity && syncedFieldsChanged
         ? settings.copyWith(updatedAt: utcNow())
         : settings;
@@ -3615,10 +4197,12 @@ class DriftSettingsRepository implements SettingsRepository {
             weekStartsOnMonday: Value(settings.weekStartsOnMonday),
             showQuotes: Value(settings.showQuotes),
             customQuotesOnly: Value(settings.customQuotesOnly),
-            showDefaultTrackersInGrid:
-                Value(settings.showDefaultTrackersInGrid),
-            showDefaultTrackersInCalendar:
-                Value(settings.showDefaultTrackersInCalendar),
+            showDefaultTrackersInGrid: Value(
+              settings.showDefaultTrackersInGrid,
+            ),
+            showDefaultTrackersInCalendar: Value(
+              settings.showDefaultTrackersInCalendar,
+            ),
             journalHotkey: Value(settings.journalHotkey),
             todoHotkey: Value(settings.todoHotkey),
             financeHotkey: Value(settings.financeHotkey),
@@ -3634,9 +4218,7 @@ class DriftSettingsRepository implements SettingsRepository {
             vimModeEnabled: Value(settings.vimModeEnabled),
             snippetsEnabled: Value(settings.snippetsEnabled),
             autocorrectEnabled: Value(settings.autocorrectEnabled),
-            capsLockIndicatorEnabled: Value(
-              settings.capsLockIndicatorEnabled,
-            ),
+            capsLockIndicatorEnabled: Value(settings.capsLockIndicatorEnabled),
             mediaRemoteUploadsEnabled: Value(
               settings.mediaRemoteUploadsEnabled,
             ),
@@ -3651,13 +4233,15 @@ class DriftSettingsRepository implements SettingsRepository {
             lastViewedJournalId: Value(settings.lastViewedJournalId),
             lastViewedTodoListId: Value(settings.lastViewedTodoListId),
             lastViewedCalendarId: Value(settings.lastViewedCalendarId),
+            leetCodeCheatLastTabId: Value(settings.leetCodeCheatLastTabId),
+            leetCodeCheatCollapsedSectionsJson: Value(
+              jsonEncode(settings.leetCodeCheatCollapsedSections),
+            ),
             defaultJournalId: Value(settings.defaultJournalId),
             defaultTodoListId: Value(settings.defaultTodoListId),
             journalShowAllEntries: Value(settings.journalShowAllEntries),
             todoShowAllTasks: Value(settings.todoShowAllTasks),
-            calendarShowAllCalendars: Value(
-              settings.calendarShowAllCalendars,
-            ),
+            calendarShowAllCalendars: Value(settings.calendarShowAllCalendars),
             weatherLocationLabel: Value(settings.weatherLocationLabel),
             weatherLat: Value(settings.weatherLat),
             weatherLon: Value(settings.weatherLon),
@@ -3672,65 +4256,89 @@ class DriftSettingsRepository implements SettingsRepository {
             devShowSyncUploads: Value(settings.devShowSyncUploads),
             devShowSyncDownloads: Value(settings.devShowSyncDownloads),
             devShowCacheStatus: Value(settings.devShowCacheStatus),
-            devShowCalendarZoomPrewarm: Value(settings.devShowCalendarZoomPrewarm),
-            devShowCalendarInstantViewSwitch:
-                Value(settings.devShowCalendarInstantViewSwitch),
-            devSlowCalendarAnimations: Value(settings.devSlowCalendarAnimations),
+            devShowCalendarZoomPrewarm: Value(
+              settings.devShowCalendarZoomPrewarm,
+            ),
+            devShowCalendarInstantViewSwitch: Value(
+              settings.devShowCalendarInstantViewSwitch,
+            ),
+            devSlowCalendarAnimations: Value(
+              settings.devSlowCalendarAnimations,
+            ),
             devTodoSortDebugLog: Value(settings.devTodoSortDebugLog),
             devJournalDebugLog: Value(settings.devJournalDebugLog),
             devForceConflictUi: Value(settings.devForceConflictUi),
-            devShowConflictDocumentIds:
-                Value(settings.devShowConflictDocumentIds),
-            devShowJournalRemotePullButton:
-                Value(settings.devShowJournalRemotePullButton),
+            devShowConflictDocumentIds: Value(
+              settings.devShowConflictDocumentIds,
+            ),
+            devShowJournalRemotePullButton: Value(
+              settings.devShowJournalRemotePullButton,
+            ),
             devShowFpsCounter: Value(settings.devShowFpsCounter),
             devDisableCache: Value(settings.devDisableCache),
             geometricTextureScale: Value(settings.geometricTextureScale),
-            geometricTextureIntensity: Value(settings.geometricTextureIntensity),
-            geometricTextureFocalSpread:
-                Value(settings.geometricTextureFocalSpread),
-            geometricTextureFocalPointX:
-                Value(settings.geometricTextureFocalPointX),
-            geometricTextureFocalPointY:
-                Value(settings.geometricTextureFocalPointY),
-            geometricTextureVariationFloor:
-                Value(settings.geometricTextureVariationFloor),
+            geometricTextureIntensity: Value(
+              settings.geometricTextureIntensity,
+            ),
+            geometricTextureFocalSpread: Value(
+              settings.geometricTextureFocalSpread,
+            ),
+            geometricTextureFocalPointX: Value(
+              settings.geometricTextureFocalPointX,
+            ),
+            geometricTextureFocalPointY: Value(
+              settings.geometricTextureFocalPointY,
+            ),
+            geometricTextureVariationFloor: Value(
+              settings.geometricTextureVariationFloor,
+            ),
             geometricWaveEnabled: Value(settings.geometricWaveEnabled),
             geometricWaveShape: Value(settings.geometricWaveShape.name),
-            geometricWaveDirectionDegrees:
-                Value(settings.geometricWaveDirectionDegrees),
+            geometricWaveDirectionDegrees: Value(
+              settings.geometricWaveDirectionDegrees,
+            ),
             geometricWaveSpeed: Value(settings.geometricWaveSpeed),
             geometricWaveWidth: Value(settings.geometricWaveWidth),
             geometricWavePeriod: Value(settings.geometricWavePeriod),
-            geometricWavePopHoldSeconds:
-                Value(settings.geometricWavePopHoldSeconds),
+            geometricWavePopHoldSeconds: Value(
+              settings.geometricWavePopHoldSeconds,
+            ),
             geometricWavePopScale: Value(settings.geometricWavePopScale),
-            geometricWavePopBrightness:
-                Value(settings.geometricWavePopBrightness),
+            geometricWavePopBrightness: Value(
+              settings.geometricWavePopBrightness,
+            ),
             geometricWaveMaskDensity: Value(settings.geometricWaveMaskDensity),
-            geometricWaveMaskClusterScale:
-                Value(settings.geometricWaveMaskClusterScale),
-            geometricWaveTwinkleSparsity:
-                Value(settings.geometricWaveTwinkleSparsity),
-            geometricWaveShadowLightDegrees:
-                Value(settings.geometricWaveShadowLightDegrees),
-            geometricWaveShadowOffset:
-                Value(settings.geometricWaveShadowOffset),
-            geometricWaveShadowSoftness:
-                Value(settings.geometricWaveShadowSoftness),
-            geometricWaveShadowStrength:
-                Value(settings.geometricWaveShadowStrength),
-            geometricWavePopBrightnessVariance:
-                Value(settings.geometricWavePopBrightnessVariance),
+            geometricWaveMaskClusterScale: Value(
+              settings.geometricWaveMaskClusterScale,
+            ),
+            geometricWaveTwinkleSparsity: Value(
+              settings.geometricWaveTwinkleSparsity,
+            ),
+            geometricWaveShadowLightDegrees: Value(
+              settings.geometricWaveShadowLightDegrees,
+            ),
+            geometricWaveShadowOffset: Value(
+              settings.geometricWaveShadowOffset,
+            ),
+            geometricWaveShadowSoftness: Value(
+              settings.geometricWaveShadowSoftness,
+            ),
+            geometricWaveShadowStrength: Value(
+              settings.geometricWaveShadowStrength,
+            ),
+            geometricWavePopBrightnessVariance: Value(
+              settings.geometricWavePopBrightnessVariance,
+            ),
             geometricWaveTiltAmount: Value(settings.geometricWaveTiltAmount),
             geometricWaveTiltShading: Value(settings.geometricWaveTiltShading),
-            geometricWaveMassLagSeconds:
-                Value(settings.geometricWaveMassLagSeconds),
+            geometricWaveMassLagSeconds: Value(
+              settings.geometricWaveMassLagSeconds,
+            ),
             geometricWaveMassSpring: Value(settings.geometricWaveMassSpring),
-            geometricWaveScatterMode:
-                Value(settings.geometricWaveScatterMode),
-            geometricWaveScatterLitAmount:
-                Value(settings.geometricWaveScatterLitAmount),
+            geometricWaveScatterMode: Value(settings.geometricWaveScatterMode),
+            geometricWaveScatterLitAmount: Value(
+              settings.geometricWaveScatterLitAmount,
+            ),
             weatherForecastJson: Value(settings.weatherForecastJson),
             weatherChartTempColor: Value(settings.weatherChartTempColor),
             weatherChartRainColor: Value(settings.weatherChartRainColor),
@@ -3756,10 +4364,12 @@ class DriftSettingsRepository implements SettingsRepository {
             startupPageMode: Value(settings.startupPageMode.name),
             customStartupPage: Value(settings.customStartupPage),
             lastSeenNavPage: Value(settings.lastSeenNavPage),
-            todoCompletedSectionExpanded:
-                Value(settings.todoCompletedSectionExpanded),
-            showAnnualizedSubscriptionCost:
-                Value(settings.showAnnualizedSubscriptionCost),
+            todoCompletedSectionExpanded: Value(
+              settings.todoCompletedSectionExpanded,
+            ),
+            showAnnualizedSubscriptionCost: Value(
+              settings.showAnnualizedSubscriptionCost,
+            ),
             colorPaletteJson: Value(
               encodeColorPaletteJson(settings.colorPalette),
             ),
@@ -4129,22 +4739,34 @@ class DriftSettingsRepository implements SettingsRepository {
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
     final cutoff = _policy.purgeCutoff(now);
-    await (_db.delete(
-      _db.customWordsTable,
-    )..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.customWords, t.word))).go();
-    await (_db.delete(
-      _db.flaggedWordsTable,
-    )..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.flaggedWords, t.word))).go();
-    await (_db.delete(
-      _db.snippetsTable,
-    )..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.snippets, t.id))).go();
-    await (_db.delete(
-      _db.jobExperienceSnippetsTable,
-    )..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.jobExperienceSnippets, t.id))).go();
+    await (_db.delete(_db.customWordsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.customWords, t.word),
+        ))
+        .go();
+    await (_db.delete(_db.flaggedWordsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.flaggedWords, t.word),
+        ))
+        .go();
+    await (_db.delete(_db.snippetsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.snippets, t.id),
+        ))
+        .go();
+    await (_db.delete(_db.jobExperienceSnippetsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(
+                _db,
+                FirestoreCollections.jobExperienceSnippets,
+                t.id,
+              ),
+        ))
+        .go();
   }
 
   TagColorRecord _mapTagColor(TagColorsTableData row) => TagColorRecord(
@@ -4181,7 +4803,9 @@ class DriftSettingsRepository implements SettingsRepository {
   );
 
   @override
-  Future<List<CustomQuote>> getCustomQuotes({bool includeDeleted = false}) async {
+  Future<List<CustomQuote>> getCustomQuotes({
+    bool includeDeleted = false,
+  }) async {
     final rows = await (_db.select(
       _db.customQuotesTable,
     )..orderBy([(t) => OrderingTerm.desc(t.createdAt)])).get();
@@ -4403,10 +5027,8 @@ class DriftSettingsRepository implements SettingsRepository {
       after: after,
       idOf: (snippet) => snippet.id,
       read: () => getJobExperienceSnippetRecords(includeDeleted: true),
-      write: (record) => upsertJobExperienceSnippetRecord(
-        record,
-        recordLocalActivity: false,
-      ),
+      write: (record) =>
+          upsertJobExperienceSnippetRecord(record, recordLocalActivity: false),
     );
     _syncedWrites?.notify(FirestoreCollections.jobExperienceSnippets, written);
   }
@@ -4524,23 +5146,25 @@ class DriftSyncConflictRepository implements SyncConflictRepository {
 
   @override
   Future<List<SyncConflict>> listConflicts() async {
-    final rows = await (_db.select(_db.syncConflictsTable)
-          ..orderBy([(t) => OrderingTerm.desc(t.detectedAt)]))
-        .get();
+    final rows = await (_db.select(
+      _db.syncConflictsTable,
+    )..orderBy([(t) => OrderingTerm.desc(t.detectedAt)])).get();
     return rows.map(_map).toList();
   }
 
   @override
   Future<SyncConflict?> getConflict(String id) async {
-    final row = await (_db.select(_db.syncConflictsTable)
-          ..where((t) => t.id.equals(id)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.syncConflictsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
     return row == null ? null : _map(row);
   }
 
   @override
   Future<void> upsertConflict(SyncConflict conflict) async {
-    await _db.into(_db.syncConflictsTable).insertOnConflictUpdate(
+    await _db
+        .into(_db.syncConflictsTable)
+        .insertOnConflictUpdate(
           SyncConflictsTableCompanion(
             id: Value(conflict.id),
             collection: Value(conflict.collection),
@@ -4559,8 +5183,9 @@ class DriftSyncConflictRepository implements SyncConflictRepository {
 
   @override
   Future<void> deleteConflict(String id) async {
-    await (_db.delete(_db.syncConflictsTable)..where((t) => t.id.equals(id)))
-        .go();
+    await (_db.delete(
+      _db.syncConflictsTable,
+    )..where((t) => t.id.equals(id))).go();
   }
 
   @override
@@ -4568,12 +5193,10 @@ class DriftSyncConflictRepository implements SyncConflictRepository {
     String collection,
     String documentId,
   ) async {
-    await (_db.delete(_db.syncConflictsTable)
-          ..where(
-            (t) =>
-                t.collection.equals(collection) &
-                t.documentId.equals(documentId),
-          ))
+    await (_db.delete(_db.syncConflictsTable)..where(
+          (t) =>
+              t.collection.equals(collection) & t.documentId.equals(documentId),
+        ))
         .go();
   }
 
@@ -4606,7 +5229,9 @@ class DriftStudyRepository implements StudyRepository {
     bool includeDeleted = false,
   }) async {
     final rows = await _db.select(_db.studyFoldersTable).get();
-    final all = rows.where((r) => includeDeleted || r.deletedAt == null).toList();
+    final all = rows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .toList();
     if (parentFolderId != null) {
       return all
           .where((r) => r.parentFolderId == parentFolderId)
@@ -4618,7 +5243,10 @@ class DriftStudyRepository implements StudyRepository {
     // root rather than losing it. See STUDY.md's "Ghost Parent" case.
     final validIds = all.map((r) => r.id).toSet();
     return all
-        .where((r) => r.parentFolderId == null || !validIds.contains(r.parentFolderId))
+        .where(
+          (r) =>
+              r.parentFolderId == null || !validIds.contains(r.parentFolderId),
+        )
         .map(_mapFolder)
         .toList();
   }
@@ -4712,7 +5340,9 @@ class DriftStudyRepository implements StudyRepository {
     bool includeDeleted = false,
   }) async {
     final deckRows = await _db.select(_db.studyDecksTable).get();
-    final decks = deckRows.where((r) => includeDeleted || r.deletedAt == null).toList();
+    final decks = deckRows
+        .where((r) => includeDeleted || r.deletedAt == null)
+        .toList();
     if (parentFolderId != null) {
       return decks
           .where((r) => r.parentFolderId == parentFolderId)
@@ -4726,7 +5356,9 @@ class DriftStudyRepository implements StudyRepository {
         .toSet();
     return decks
         .where(
-          (r) => r.parentFolderId == null || !validFolderIds.contains(r.parentFolderId),
+          (r) =>
+              r.parentFolderId == null ||
+              !validFolderIds.contains(r.parentFolderId),
         )
         .map(_mapDeck)
         .toList();
@@ -4741,7 +5373,10 @@ class DriftStudyRepository implements StudyRepository {
   }
 
   @override
-  Future<void> upsertDeck(StudyDeck deck, {bool recordLocalActivity = true}) async {
+  Future<void> upsertDeck(
+    StudyDeck deck, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.studyDecksTable)
         .insertOnConflictUpdate(
@@ -4805,7 +5440,10 @@ class DriftStudyRepository implements StudyRepository {
   }
 
   @override
-  Future<void> upsertCard(StudyCard card, {bool recordLocalActivity = true}) async {
+  Future<void> upsertCard(
+    StudyCard card, {
+    bool recordLocalActivity = true,
+  }) async {
     await _db
         .into(_db.studyCardsTable)
         .insertOnConflictUpdate(
@@ -4998,9 +5636,11 @@ class DriftStudyRepository implements StudyRepository {
   @override
   Future<int> countDueCards({DateTime? now}) async {
     final n = now ?? utcNow();
-    final rows = await (_db.select(_db.studyCardsTable)
-          ..where((t) => t.deletedAt.isNull() & t.dueAt.isSmallerOrEqualValue(n)))
-        .get();
+    final rows =
+        await (_db.select(_db.studyCardsTable)..where(
+              (t) => t.deletedAt.isNull() & t.dueAt.isSmallerOrEqualValue(n),
+            ))
+            .get();
     return rows.length;
   }
 
@@ -5009,25 +5649,35 @@ class DriftStudyRepository implements StudyRepository {
     // Cards, then decks, then folders — children before their parents, as the
     // row-by-row version did.
     final cutoff = _policy.purgeCutoff(now);
-    await (_db.delete(_db.studyCardsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.studyCards, t.id)))
+    await (_db.delete(_db.studyCardsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.studyCards, t.id),
+        ))
         .go();
-    await (_db.delete(_db.studyDecksTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.studyDecks, t.id)))
+    await (_db.delete(_db.studyDecksTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.studyDecks, t.id),
+        ))
         .go();
-    await (_db.delete(_db.studyFoldersTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.studyFolders, t.id)))
+    await (_db.delete(_db.studyFoldersTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.studyFolders, t.id),
+        ))
         .go();
-    await (_db.delete(_db.studyReviewLogTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.studyReviewLog, t.id)))
+    await (_db.delete(_db.studyReviewLogTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.studyReviewLog, t.id),
+        ))
         .go();
-    await (_db.delete(_db.studyDeckLinksTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.studyDeckLinks, t.id)))
+    await (_db.delete(_db.studyDeckLinksTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.studyDeckLinks, t.id),
+        ))
         .go();
   }
 
@@ -5249,9 +5899,7 @@ class DriftWorkoutRepository implements WorkoutRepository {
 
   @override
   Future<void> softDeleteExercise(String id) async {
-    await (_db.update(
-      _db.exercisesTable,
-    )..where((t) => t.id.equals(id))).write(
+    await (_db.update(_db.exercisesTable)..where((t) => t.id.equals(id))).write(
       ExercisesTableCompanion(
         deletedAt: Value(utcNow()),
         updatedAt: Value(utcNow()),
@@ -5557,21 +6205,33 @@ class DriftWorkoutRepository implements WorkoutRepository {
     // Set logs, then sessions, then plan entries, then exercises — children
     // before their parents, as the row-by-row version did.
     final cutoff = _policy.purgeCutoff(now);
-    await (_db.delete(_db.workoutSetLogsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.workoutSetLogs, t.id)))
+    await (_db.delete(_db.workoutSetLogsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.workoutSetLogs, t.id),
+        ))
         .go();
-    await (_db.delete(_db.workoutSessionsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.workoutSessions, t.id)))
+    await (_db.delete(_db.workoutSessionsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.workoutSessions, t.id),
+        ))
         .go();
-    await (_db.delete(_db.workoutPlanEntriesTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.workoutPlanEntries, t.id)))
+    await (_db.delete(_db.workoutPlanEntriesTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(
+                _db,
+                FirestoreCollections.workoutPlanEntries,
+                t.id,
+              ),
+        ))
         .go();
-    await (_db.delete(_db.exercisesTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.exercises, t.id)))
+    await (_db.delete(_db.exercisesTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.exercises, t.id),
+        ))
         .go();
   }
 
@@ -5616,7 +6276,9 @@ class DriftWorkoutRepository implements WorkoutRepository {
   }
 
   @override
-  Future<List<WorkoutSetLog>> getAllSetLogs({bool includeDeleted = true}) async {
+  Future<List<WorkoutSetLog>> getAllSetLogs({
+    bool includeDeleted = true,
+  }) async {
     final rows = await _db.select(_db.workoutSetLogsTable).get();
     return rows
         .where((r) => includeDeleted || r.deletedAt == null)
@@ -6155,13 +6817,17 @@ class DriftJobRepository implements JobRepository {
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
     final cutoff = _policy.purgeCutoff(now);
-    await (_db.delete(_db.jobStatusEventsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.jobStatusEvents, t.id)))
+    await (_db.delete(_db.jobStatusEventsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.jobStatusEvents, t.id),
+        ))
         .go();
-    await (_db.delete(_db.jobApplicationsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.jobApplications, t.id)))
+    await (_db.delete(_db.jobApplicationsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.jobApplications, t.id),
+        ))
         .go();
     // A seed's tombstone is kept for good: it is the only thing telling
     // ensureSeeded that the seed was deleted rather than never added.
@@ -6179,13 +6845,17 @@ class DriftJobRepository implements JobRepository {
               t.id.like('seed-%').not(),
         ))
         .go();
-    await (_db.delete(_db.jobCategoriesTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.jobCategories, t.id)))
+    await (_db.delete(_db.jobCategoriesTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.jobCategories, t.id),
+        ))
         .go();
-    await (_db.delete(_db.jobSeasonsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.jobSeasons, t.id)))
+    await (_db.delete(_db.jobSeasonsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.jobSeasons, t.id),
+        ))
         .go();
   }
 
@@ -6232,9 +6902,7 @@ class DriftJobRepository implements JobRepository {
     applicationUrl: Value(application.applicationUrl),
     notes: Value(application.notes),
     seasonIdsJson: Value(jsonEncode(application.seasonIds)),
-    fieldUpdatedAtJson: Value(
-      encodeJobFieldStamps(application.fieldUpdatedAt),
-    ),
+    fieldUpdatedAtJson: Value(encodeJobFieldStamps(application.fieldUpdatedAt)),
     createdAt: Value(application.createdAt),
     updatedAt: Value(application.updatedAt),
     version: Value(application.version),
@@ -6393,10 +7061,9 @@ class DriftRankingRepository implements RankingRepository {
   Future<List<RankingCategory>> listCategories({
     bool includeDeleted = false,
   }) async {
-    final rows =
-        await (_db.select(_db.rankingCategoriesTable)
-              ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
-            .get();
+    final rows = await (_db.select(
+      _db.rankingCategoriesTable,
+    )..orderBy([(t) => OrderingTerm.asc(t.sortOrder)])).get();
     return [
       for (final row in rows)
         if (includeDeleted || row.deletedAt == null) _mapCategory(row),
@@ -6526,81 +7193,85 @@ class DriftRankingRepository implements RankingRepository {
     required int scoreMax,
     required bool isParentTemplate,
   }) {
-    return _db.transaction(() async {
-      final category = await getCategory(categoryId);
-      if (category == null) throw StateError('no ranking category $categoryId');
-      final template = isParentTemplate
-          ? category.parentTemplate
-          : category.childTemplate;
-      final field = template.where((f) => f.id == fieldId).firstOrNull;
-      // Already there — a second confirm, or a rescale another device made.
-      // Rescaling again from the old max would halve the values twice.
-      if (field == null || field.scoreMax == scoreMax) return null;
+    return _db
+        .transaction(() async {
+          final category = await getCategory(categoryId);
+          if (category == null)
+            throw StateError('no ranking category $categoryId');
+          final template = isParentTemplate
+              ? category.parentTemplate
+              : category.childTemplate;
+          final field = template.where((f) => f.id == fieldId).firstOrNull;
+          // Already there — a second confirm, or a rescale another device made.
+          // Rescaling again from the old max would halve the values twice.
+          if (field == null || field.scoreMax == scoreMax) return null;
 
-      final precision = rankingFieldPrecision(
-        field,
-        overallPrecision: isParentTemplate
-            ? category.parentScorePrecision
-            : category.childScorePrecision,
-      );
-      Map<String, RankingFieldValue>? rescaled(
-        Map<String, RankingFieldValue> values,
-      ) {
-        final value = values[fieldId];
-        if (value?.score == null) return null;
-        return {
-          ...values,
-          fieldId: value!.copyWith(
-            score: rescaleRankingScore(
-              value.score!,
-              fromMax: field.scoreMax,
-              toMax: scoreMax,
-              precision: precision,
-            ),
-          ),
-        };
-      }
+          final precision = rankingFieldPrecision(
+            field,
+            overallPrecision: isParentTemplate
+                ? category.parentScorePrecision
+                : category.childScorePrecision,
+          );
+          Map<String, RankingFieldValue>? rescaled(
+            Map<String, RankingFieldValue> values,
+          ) {
+            final value = values[fieldId];
+            if (value?.score == null) return null;
+            return {
+              ...values,
+              fieldId: value!.copyWith(
+                score: rescaleRankingScore(
+                  value.score!,
+                  fromMax: field.scoreMax,
+                  toMax: scoreMax,
+                  precision: precision,
+                ),
+              ),
+            };
+          }
 
-      // Deleted rows too: anything in the trash comes back on this category's
-      // scale, not the one it was deleted under.
-      final parents = <RankingParent>[];
-      final children = <RankingChild>[];
-      if (isParentTemplate) {
-        for (final parent in await listParents(
-          categoryId,
-          includeDeleted: true,
-        )) {
-          final values = rescaled(parent.fieldValues);
-          if (values == null) continue;
-          parents.add(parent.copyWith(fieldValues: values, touch: false));
-        }
-      } else {
-        for (final child in await listChildrenOfCategory(
-          categoryId,
-          includeDeleted: true,
-        )) {
-          final values = rescaled(child.fieldValues);
-          if (values == null) continue;
-          children.add(child.copyWith(fieldValues: values, touch: false));
-        }
-      }
+          // Deleted rows too: anything in the trash comes back on this category's
+          // scale, not the one it was deleted under.
+          final parents = <RankingParent>[];
+          final children = <RankingChild>[];
+          if (isParentTemplate) {
+            for (final parent in await listParents(
+              categoryId,
+              includeDeleted: true,
+            )) {
+              final values = rescaled(parent.fieldValues);
+              if (values == null) continue;
+              parents.add(parent.copyWith(fieldValues: values, touch: false));
+            }
+          } else {
+            for (final child in await listChildrenOfCategory(
+              categoryId,
+              includeDeleted: true,
+            )) {
+              final values = rescaled(child.fieldValues);
+              if (values == null) continue;
+              children.add(child.copyWith(fieldValues: values, touch: false));
+            }
+          }
 
-      final nextTemplate = [
-        for (final existing in template)
-          if (existing.id == fieldId)
-            existing.copyWith(scoreMax: scoreMax)
-          else
-            existing,
-      ];
-      final next = isParentTemplate
-          ? category.copyWith(parentTemplate: nextTemplate)
-          : category.copyWith(childTemplate: nextTemplate);
-      await _writeCascadeRows(next, parents, children);
-      return (category: next, parents: parents, children: children);
-    }).then((result) {
-      if (result != null) _recordCascadeSave(result.parents, result.children);
-      return result;
-    });
+          final nextTemplate = [
+            for (final existing in template)
+              if (existing.id == fieldId)
+                existing.copyWith(scoreMax: scoreMax)
+              else
+                existing,
+          ];
+          final next = isParentTemplate
+              ? category.copyWith(parentTemplate: nextTemplate)
+              : category.copyWith(childTemplate: nextTemplate);
+          await _writeCascadeRows(next, parents, children);
+          return (category: next, parents: parents, children: children);
+        })
+        .then((result) {
+          if (result != null)
+            _recordCascadeSave(result.parents, result.children);
+          return result;
+        });
   }
 
   @override
@@ -6609,59 +7280,63 @@ class DriftRankingRepository implements RankingRepository {
     required int scoreMax,
     required bool isParent,
   }) {
-    return _db.transaction(() async {
-      final category = await getCategory(categoryId);
-      if (category == null) throw StateError('no ranking category $categoryId');
-      final fromMax = isParent
-          ? category.parentScoreMax
-          : category.childScoreMax;
-      if (fromMax == scoreMax) return null;
-      final precision = isParent
-          ? category.parentScorePrecision
-          : category.childScorePrecision;
+    return _db
+        .transaction(() async {
+          final category = await getCategory(categoryId);
+          if (category == null)
+            throw StateError('no ranking category $categoryId');
+          final fromMax = isParent
+              ? category.parentScoreMax
+              : category.childScoreMax;
+          if (fromMax == scoreMax) return null;
+          final precision = isParent
+              ? category.parentScorePrecision
+              : category.childScorePrecision;
 
-      double? rescaled(double? score) {
-        if (score == null) return null;
-        final next = rescaleRankingScore(
-          score,
-          fromMax: fromMax,
-          toMax: scoreMax,
-          precision: precision,
-        );
-        return next == score ? null : next;
-      }
+          double? rescaled(double? score) {
+            if (score == null) return null;
+            final next = rescaleRankingScore(
+              score,
+              fromMax: fromMax,
+              toMax: scoreMax,
+              precision: precision,
+            );
+            return next == score ? null : next;
+          }
 
-      final parents = <RankingParent>[];
-      final children = <RankingChild>[];
-      if (isParent) {
-        for (final parent in await listParents(
-          categoryId,
-          includeDeleted: true,
-        )) {
-          final score = rescaled(parent.overallScore);
-          if (score == null) continue;
-          parents.add(parent.copyWith(overallScore: score, touch: false));
-        }
-      } else {
-        for (final child in await listChildrenOfCategory(
-          categoryId,
-          includeDeleted: true,
-        )) {
-          final score = rescaled(child.overallScore);
-          if (score == null) continue;
-          children.add(child.copyWith(overallScore: score, touch: false));
-        }
-      }
+          final parents = <RankingParent>[];
+          final children = <RankingChild>[];
+          if (isParent) {
+            for (final parent in await listParents(
+              categoryId,
+              includeDeleted: true,
+            )) {
+              final score = rescaled(parent.overallScore);
+              if (score == null) continue;
+              parents.add(parent.copyWith(overallScore: score, touch: false));
+            }
+          } else {
+            for (final child in await listChildrenOfCategory(
+              categoryId,
+              includeDeleted: true,
+            )) {
+              final score = rescaled(child.overallScore);
+              if (score == null) continue;
+              children.add(child.copyWith(overallScore: score, touch: false));
+            }
+          }
 
-      final next = isParent
-          ? category.copyWith(parentScoreMax: scoreMax)
-          : category.copyWith(childScoreMax: scoreMax);
-      await _writeCascadeRows(next, parents, children);
-      return (category: next, parents: parents, children: children);
-    }).then((result) {
-      if (result != null) _recordCascadeSave(result.parents, result.children);
-      return result;
-    });
+          final next = isParent
+              ? category.copyWith(parentScoreMax: scoreMax)
+              : category.copyWith(childScoreMax: scoreMax);
+          await _writeCascadeRows(next, parents, children);
+          return (category: next, parents: parents, children: children);
+        })
+        .then((result) {
+          if (result != null)
+            _recordCascadeSave(result.parents, result.children);
+          return result;
+        });
   }
 
   Future<void> _writeCascade(
@@ -6669,9 +7344,7 @@ class DriftRankingRepository implements RankingRepository {
     List<RankingParent> parents,
     List<RankingChild> children,
   ) async {
-    await _db.transaction(
-      () => _writeCascadeRows(category, parents, children),
-    );
+    await _db.transaction(() => _writeCascadeRows(category, parents, children));
     _recordCascadeSave(parents, children);
   }
 
@@ -6767,9 +7440,8 @@ class DriftRankingRepository implements RankingRepository {
   }
 
   @override
-  Future<({RankingParent parent, List<RankingChild> children})> softDeleteParent(
-    String id,
-  ) async {
+  Future<({RankingParent parent, List<RankingChild> children})>
+  softDeleteParent(String id) async {
     final existing = await getParent(id);
     if (existing == null) throw StateError('no ranking parent $id');
     // See [softDeleteCategory]: a second stamp would strand the children.
@@ -6974,17 +7646,23 @@ class DriftRankingRepository implements RankingRepository {
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
     final cutoff = _policy.purgeCutoff(now);
-    await (_db.delete(_db.rankingChildrenTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.rankingChildren, t.id)))
+    await (_db.delete(_db.rankingChildrenTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.rankingChildren, t.id),
+        ))
         .go();
-    await (_db.delete(_db.rankingParentsTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.rankingParents, t.id)))
+    await (_db.delete(_db.rankingParentsTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.rankingParents, t.id),
+        ))
         .go();
-    await (_db.delete(_db.rankingCategoriesTable)
-          ..where((t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.rankingCategories, t.id)))
+    await (_db.delete(_db.rankingCategoriesTable)..where(
+          (t) =>
+              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _notOwedUpload(_db, FirestoreCollections.rankingCategories, t.id),
+        ))
         .go();
   }
 
@@ -6994,7 +7672,9 @@ class DriftRankingRepository implements RankingRepository {
   }) => listCategories(includeDeleted: includeDeleted);
 
   @override
-  Future<List<RankingParent>> getAllParents({bool includeDeleted = true}) async {
+  Future<List<RankingParent>> getAllParents({
+    bool includeDeleted = true,
+  }) async {
     final rows = await _db.select(_db.rankingParentsTable).get();
     return [
       for (final row in rows)
@@ -7003,7 +7683,9 @@ class DriftRankingRepository implements RankingRepository {
   }
 
   @override
-  Future<List<RankingChild>> getAllChildren({bool includeDeleted = true}) async {
+  Future<List<RankingChild>> getAllChildren({
+    bool includeDeleted = true,
+  }) async {
     final rows = await _db.select(_db.rankingChildrenTable).get();
     return [
       for (final row in rows)
@@ -7011,34 +7693,33 @@ class DriftRankingRepository implements RankingRepository {
     ];
   }
 
-  RankingCategoriesTableCompanion _categoryCompanion(RankingCategory category) =>
-      RankingCategoriesTableCompanion(
-        id: Value(category.id),
-        name: Value(category.name),
-        colorValue: Value(category.colorValue),
-        iconKey: Value(category.iconKey),
-        sortOrder: Value(category.sortOrder),
-        childUnitsEnabled: Value(category.childUnitsEnabled),
-        childUnitLabel: Value(category.childUnitLabel),
-        imagesOnParent: Value(category.imagesOnParent),
-        imagesOnChild: Value(category.imagesOnChild),
-        parentScoreMax: Value(category.parentScoreMax),
-        childScoreMax: Value(category.childScoreMax),
-        parentScorePrecision: Value(category.parentScorePrecision.name),
-        childScorePrecision: Value(category.childScorePrecision.name),
-        parentTemplateJson: Value(
-          encodeRankingTemplate(category.parentTemplate),
-        ),
-        childTemplateJson: Value(encodeRankingTemplate(category.childTemplate)),
-        sortMode: Value(category.sortMode.name),
-        sortFieldId: Value(category.sortFieldId),
-        sortAscending: Value(category.sortAscending),
-        archivedAt: Value(category.archivedAt),
-        createdAt: Value(category.createdAt),
-        updatedAt: Value(category.updatedAt),
-        version: Value(category.version),
-        deletedAt: Value(category.deletedAt),
-      );
+  RankingCategoriesTableCompanion _categoryCompanion(
+    RankingCategory category,
+  ) => RankingCategoriesTableCompanion(
+    id: Value(category.id),
+    name: Value(category.name),
+    colorValue: Value(category.colorValue),
+    iconKey: Value(category.iconKey),
+    sortOrder: Value(category.sortOrder),
+    childUnitsEnabled: Value(category.childUnitsEnabled),
+    childUnitLabel: Value(category.childUnitLabel),
+    imagesOnParent: Value(category.imagesOnParent),
+    imagesOnChild: Value(category.imagesOnChild),
+    parentScoreMax: Value(category.parentScoreMax),
+    childScoreMax: Value(category.childScoreMax),
+    parentScorePrecision: Value(category.parentScorePrecision.name),
+    childScorePrecision: Value(category.childScorePrecision.name),
+    parentTemplateJson: Value(encodeRankingTemplate(category.parentTemplate)),
+    childTemplateJson: Value(encodeRankingTemplate(category.childTemplate)),
+    sortMode: Value(category.sortMode.name),
+    sortFieldId: Value(category.sortFieldId),
+    sortAscending: Value(category.sortAscending),
+    archivedAt: Value(category.archivedAt),
+    createdAt: Value(category.createdAt),
+    updatedAt: Value(category.updatedAt),
+    version: Value(category.version),
+    deletedAt: Value(category.deletedAt),
+  );
 
   RankingParentsTableCompanion _parentCompanion(RankingParent parent) =>
       RankingParentsTableCompanion(
@@ -7070,7 +7751,9 @@ class DriftRankingRepository implements RankingRepository {
         notes: Value(child.notes),
         fieldValuesJson: Value(encodeRankingFieldValues(child.fieldValues)),
         sortOrder: Value(child.sortOrder),
-        fieldUpdatedAtJson: Value(encodeRankingFieldStamps(child.fieldUpdatedAt)),
+        fieldUpdatedAtJson: Value(
+          encodeRankingFieldStamps(child.fieldUpdatedAt),
+        ),
         createdAt: Value(child.createdAt),
         updatedAt: Value(child.updatedAt),
         version: Value(child.version),

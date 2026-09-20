@@ -9,6 +9,7 @@ import 'package:voyager/features/dream_journal/dream_journal_page.dart';
 import 'package:voyager/features/finance/finance_page.dart';
 import 'package:voyager/features/jobs/jobs_page.dart';
 import 'package:voyager/features/journal/journal_page.dart';
+import 'package:voyager/features/leetcode/leetcode_cheat_entry.dart';
 import 'package:voyager/features/leetcode/leetcode_page.dart';
 import 'package:voyager/features/life_tracker/life_tracker_page.dart';
 import 'package:voyager/features/rankings/rankings_page.dart';
@@ -92,7 +93,12 @@ const shellDestinations = <ShellDestination>[
     path: '/leetcode',
     icon: PhosphorIconsRegular.code,
     label: 'LeetCode',
-    page: LeetCodePage(),
+    // The scope mounts `Ctrl+Shift+C` for this branch. It wraps the branch
+    // rather than the page inside it so the chord survives a pushed session
+    // or cram route, and it re-checks the router's location at key time —
+    // the shell keeps every branch alive, so mount-time gating alone would
+    // claim the chord while the user is on Journal.
+    page: LeetCodeCheatSheetScope(child: LeetCodePage()),
   ),
   ShellDestination(
     path: '/rankings',

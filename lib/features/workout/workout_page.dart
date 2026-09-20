@@ -65,9 +65,10 @@ class _PlannerState extends ConsumerState<_Planner> {
 
   Future<void> _persistLibraryWidth(double? width) async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
     final settings = await settingsRepo.getSettings();
     if (settings.workoutLibraryWidth == width) return;
-    await settingsRepo.saveSettings(
+    await settingsNotifier.saveSettings(
       width == null
           ? settings.copyWith(clearWorkoutLibraryWidth: true)
           : settings.copyWith(workoutLibraryWidth: width),

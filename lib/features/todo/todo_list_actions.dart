@@ -315,10 +315,9 @@ Future<bool> deleteTodoList(
   final settingsRepo = ref.read(settingsRepositoryProvider);
   final settings = await settingsRepo.getSettings();
   if (settings.defaultTodoListId == list.id) {
-    await settingsRepo.saveSettings(
-      settings.copyWith(clearDefaultTodoListId: true),
-    );
-    ref.invalidate(settingsProvider);
+    await ref
+        .read(settingsProvider.notifier)
+        .saveSettings(settings.copyWith(clearDefaultTodoListId: true));
   }
   final deletedList = (await repo.listLists(
     includeDeleted: true,

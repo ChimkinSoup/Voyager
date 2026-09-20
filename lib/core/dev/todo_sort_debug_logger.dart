@@ -15,6 +15,7 @@ const _maxLogBytes = 2 * 1024 * 1024;
 /// Persists a rolling text log of todo list state and sort-related mutations.
 class TodoSortDebugLogger extends ChangeNotifier {
   TodoSortDebugLogger({
+    required this._saveSettings,
     SettingsRepository? settingsRepository,
     TodoRepository? todoRepository,
   })  : _settingsRepository = settingsRepository,
@@ -22,6 +23,12 @@ class TodoSortDebugLogger extends ChangeNotifier {
 
   final SettingsRepository? _settingsRepository;
   final TodoRepository? _todoRepository;
+
+  /// How a flipped toggle is written: the settings notifier's save rather
+  /// than the repository's, so the published [AppSettings] carries the new
+  /// flag. A write straight to the repository leaves it behind, and the next
+  /// whole-object save built on that copy puts the old value back.
+  final Future<void> Function(AppSettings settings) _saveSettings;
 
   bool enabled = false;
   Future<void>? _writeChain = Future<void>.value();
@@ -47,7 +54,7 @@ class TodoSortDebugLogger extends ChangeNotifier {
     final repo = _settingsRepository;
     if (repo != null) {
       final settings = await repo.getSettings();
-      await repo.saveSettings(settings.copyWith(devTodoSortDebugLog: value));
+      await _saveSettings(settings.copyWith(devTodoSortDebugLog: value));
     }
 
     if (value) {

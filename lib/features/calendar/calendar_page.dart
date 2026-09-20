@@ -261,13 +261,14 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
   Future<void> _persistCalendarView() async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
     final settings = await settingsRepo.getSettings();
     final showAll = _selectedCalendarId == null;
     if (settings.lastViewedCalendarId == _lastSpecificCalendarId &&
         settings.calendarShowAllCalendars == showAll) {
       return;
     }
-    await settingsRepo.saveSettings(
+    await settingsNotifier.saveSettings(
       settings.copyWith(
         lastViewedCalendarId: _lastSpecificCalendarId,
         calendarShowAllCalendars: showAll,

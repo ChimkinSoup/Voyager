@@ -59,6 +59,8 @@ class AppSettings {
     this.lastViewedJournalId,
     this.lastViewedTodoListId,
     this.lastViewedCalendarId,
+    this.leetCodeCheatLastTabId,
+    this.leetCodeCheatCollapsedSections = const [],
     this.defaultJournalId,
     this.defaultTodoListId,
     this.journalShowAllEntries = false,
@@ -278,6 +280,16 @@ class AppSettings {
   /// Paired with [calendarShowAllCalendars] for the same reason the journal
   /// and todo ids are paired with their all-view flags.
   final String? lastViewedCalendarId;
+
+  /// The cheat sheet tab this device was last on. Device-local, and a stale id
+  /// is expected rather than exceptional — the tab may have been deleted on
+  /// another device or not yet pulled to this one, and the sheet falls back to
+  /// the first tab by position.
+  final String? leetCodeCheatLastTabId;
+
+  /// Cheat sheet section ids collapsed on this device. Ids for sections that
+  /// no longer exist are inert; they are pruned opportunistically on write.
+  final List<String> leetCodeCheatCollapsedSections;
 
   /// The journal the journal page always opens into. When set it wins over
   /// both [lastViewedJournalId] and [journalShowAllEntries]; null restores
@@ -527,6 +539,8 @@ class AppSettings {
     String? lastViewedJournalId,
     String? lastViewedTodoListId,
     String? lastViewedCalendarId,
+    String? leetCodeCheatLastTabId,
+    List<String>? leetCodeCheatCollapsedSections,
     String? defaultJournalId,
     String? defaultTodoListId,
     bool? journalShowAllEntries,
@@ -643,6 +657,7 @@ class AppSettings {
     bool clearLastViewedJournalId = false,
     bool clearLastViewedTodoListId = false,
     bool clearLastViewedCalendarId = false,
+    bool clearLeetCodeCheatLastTabId = false,
     bool clearDefaultJournalId = false,
     bool clearDefaultTodoListId = false,
     bool clearJournalEntryListWidth = false,
@@ -717,6 +732,11 @@ class AppSettings {
       lastViewedCalendarId: clearLastViewedCalendarId
           ? null
           : (lastViewedCalendarId ?? this.lastViewedCalendarId),
+      leetCodeCheatLastTabId: clearLeetCodeCheatLastTabId
+          ? null
+          : (leetCodeCheatLastTabId ?? this.leetCodeCheatLastTabId),
+      leetCodeCheatCollapsedSections:
+          leetCodeCheatCollapsedSections ?? this.leetCodeCheatCollapsedSections,
       defaultJournalId: clearDefaultJournalId
           ? null
           : (defaultJournalId ?? this.defaultJournalId),
@@ -758,7 +778,8 @@ class AppSettings {
       devShowCacheStatus: devShowCacheStatus ?? this.devShowCacheStatus,
       devShowCalendarZoomPrewarm:
           devShowCalendarZoomPrewarm ?? this.devShowCalendarZoomPrewarm,
-      devShowCalendarInstantViewSwitch: devShowCalendarInstantViewSwitch ??
+      devShowCalendarInstantViewSwitch:
+          devShowCalendarInstantViewSwitch ??
           this.devShowCalendarInstantViewSwitch,
       devSlowCalendarAnimations:
           devSlowCalendarAnimations ?? this.devSlowCalendarAnimations,
@@ -767,8 +788,8 @@ class AppSettings {
       devForceConflictUi: devForceConflictUi ?? this.devForceConflictUi,
       devShowConflictDocumentIds:
           devShowConflictDocumentIds ?? this.devShowConflictDocumentIds,
-      devShowJournalRemotePullButton: devShowJournalRemotePullButton ??
-          this.devShowJournalRemotePullButton,
+      devShowJournalRemotePullButton:
+          devShowJournalRemotePullButton ?? this.devShowJournalRemotePullButton,
       devShowFpsCounter: devShowFpsCounter ?? this.devShowFpsCounter,
       devDisableCache: devDisableCache ?? this.devDisableCache,
       geometricTextureScale:
@@ -781,8 +802,8 @@ class AppSettings {
           geometricTextureFocalPointX ?? this.geometricTextureFocalPointX,
       geometricTextureFocalPointY:
           geometricTextureFocalPointY ?? this.geometricTextureFocalPointY,
-      geometricTextureVariationFloor: geometricTextureVariationFloor ??
-          this.geometricTextureVariationFloor,
+      geometricTextureVariationFloor:
+          geometricTextureVariationFloor ?? this.geometricTextureVariationFloor,
       geometricWaveEnabled: geometricWaveEnabled ?? this.geometricWaveEnabled,
       geometricWaveShape: geometricWaveShape ?? this.geometricWaveShape,
       geometricWaveDirectionDegrees:
@@ -792,7 +813,8 @@ class AppSettings {
       geometricWavePeriod: geometricWavePeriod ?? this.geometricWavePeriod,
       geometricWavePopHoldSeconds:
           geometricWavePopHoldSeconds ?? this.geometricWavePopHoldSeconds,
-      geometricWavePopScale: geometricWavePopScale ?? this.geometricWavePopScale,
+      geometricWavePopScale:
+          geometricWavePopScale ?? this.geometricWavePopScale,
       geometricWavePopBrightness:
           geometricWavePopBrightness ?? this.geometricWavePopBrightness,
       geometricWaveMaskDensity:
@@ -842,7 +864,9 @@ class AppSettings {
       editSidePanelWidth: clearEditSidePanelWidth
           ? null
           : (editSidePanelWidth ?? this.editSidePanelWidth),
-      navPageOrder: clearNavPageOrder ? null : (navPageOrder ?? this.navPageOrder),
+      navPageOrder: clearNavPageOrder
+          ? null
+          : (navPageOrder ?? this.navPageOrder),
       startupPageMode: startupPageMode ?? this.startupPageMode,
       customStartupPage: clearCustomStartupPage
           ? null
@@ -852,11 +876,12 @@ class AppSettings {
           : (lastSeenNavPage ?? this.lastSeenNavPage),
       todoCompletedSectionExpanded:
           todoCompletedSectionExpanded ?? this.todoCompletedSectionExpanded,
-      showAnnualizedSubscriptionCost: showAnnualizedSubscriptionCost ??
-          this.showAnnualizedSubscriptionCost,
+      showAnnualizedSubscriptionCost:
+          showAnnualizedSubscriptionCost ?? this.showAnnualizedSubscriptionCost,
       jobsHiddenColumns: jobsHiddenColumns ?? this.jobsHiddenColumns,
       jobsIncludeArchived: jobsIncludeArchived ?? this.jobsIncludeArchived,
-      rankingsCollapsedQueueCategories: rankingsCollapsedQueueCategories ??
+      rankingsCollapsedQueueCategories:
+          rankingsCollapsedQueueCategories ??
           this.rankingsCollapsedQueueCategories,
       jobProfileLinkedInUrl: clearJobProfileLinkedInUrl
           ? null
@@ -889,8 +914,7 @@ class AppSettings {
           leetCodeHideQuestionName ?? this.leetCodeHideQuestionName,
       leetCodeHideDescription:
           leetCodeHideDescription ?? this.leetCodeHideDescription,
-      leetCodeHideExamples:
-          leetCodeHideExamples ?? this.leetCodeHideExamples,
+      leetCodeHideExamples: leetCodeHideExamples ?? this.leetCodeHideExamples,
       leetCodeHideComplexity:
           leetCodeHideComplexity ?? this.leetCodeHideComplexity,
       leetCodeHideCode: leetCodeHideCode ?? this.leetCodeHideCode,

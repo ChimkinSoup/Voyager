@@ -11,6 +11,8 @@ import 'package:voyager/domain/services/leetcode_srs_engine.dart';
 import 'package:voyager/features/leetcode/leetcode_actions.dart';
 import 'package:voyager/features/leetcode/leetcode_detail_view.dart';
 import 'package:voyager/features/leetcode/leetcode_flashcard.dart';
+import 'package:voyager/features/leetcode/leetcode_cheat_entry.dart';
+import 'package:voyager/features/leetcode/leetcode_cheat_providers.dart';
 import 'package:voyager/features/leetcode/leetcode_scratch_host.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 import 'package:voyager/features/study/study_grading_row.dart';
@@ -285,6 +287,10 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
                 onRedo: _canRedo ? _redo : null,
                 onFocusScratch: scratchEnabled ? focusScratch : null,
                 arrowsNavigateHistory: true,
+                // Watched, not read: the sheet's route sits above this one on
+                // the root navigator, so nothing else here rebuilds when it
+                // opens — and the grading row below has to dim with it.
+                suppressed: ref.watch(leetCodeCheatSheetOpenProvider),
                 child: queue.isEmpty
                     ? _SessionComplete(
                         onDone: () => Navigator.of(context).pop(),
@@ -300,12 +306,13 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
                                   onPressed: () => Navigator.of(context).pop(),
                                   icon: const Icon(PhosphorIconsRegular.x),
                                 ),
-                                // Balances the two history buttons on the right, so
+                                // Balances the three buttons on the right, so
                                 // the counter stays centred.
-                                const SizedBox(width: 48),
+                                const SizedBox(width: 96),
                                 const Spacer(),
                                 _SessionCounter(queue: queue),
                                 const Spacer(),
+                                const LeetCodeCheatSheetIconButton(),
                                 StudyHistoryControls(
                                   onUndo: _canUndo ? _undo : null,
                                   onRedo: _canRedo ? _redo : null,

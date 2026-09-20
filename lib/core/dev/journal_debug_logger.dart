@@ -58,6 +58,7 @@ class JournalPageDebugSnapshot {
 /// Persists a rolling text log of journal page UI state and save actions.
 class JournalDebugLogger extends ChangeNotifier {
   JournalDebugLogger({
+    required this._saveSettings,
     SettingsRepository? settingsRepository,
     JournalRepository? journalRepository,
   })  : _settingsRepository = settingsRepository,
@@ -65,6 +66,12 @@ class JournalDebugLogger extends ChangeNotifier {
 
   final SettingsRepository? _settingsRepository;
   final JournalRepository? _journalRepository;
+
+  /// How a flipped toggle is written: the settings notifier's save rather
+  /// than the repository's, so the published [AppSettings] carries the new
+  /// flag. A write straight to the repository leaves it behind, and the next
+  /// whole-object save built on that copy puts the old value back.
+  final Future<void> Function(AppSettings settings) _saveSettings;
 
   bool enabled = false;
   Future<void>? _writeChain = Future<void>.value();
@@ -110,7 +117,7 @@ class JournalDebugLogger extends ChangeNotifier {
     final repo = _settingsRepository;
     if (repo != null) {
       final settings = await repo.getSettings();
-      await repo.saveSettings(settings.copyWith(devJournalDebugLog: value));
+      await _saveSettings(settings.copyWith(devJournalDebugLog: value));
     }
 
     if (value) {

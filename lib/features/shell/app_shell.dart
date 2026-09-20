@@ -269,8 +269,9 @@ class _ShellBranchChangeFlusherState
       final currentPath = shellPathForIndex(widget.branchIndex);
       PerfStallLogger.instance.breadcrumb('switched page to $currentPath');
       final repo = ref.read(settingsRepositoryProvider);
+      final settingsNotifier = ref.read(settingsProvider.notifier);
       repo.getSettings().then((s) {
-        repo.saveSettings(s.copyWith(lastSeenNavPage: currentPath));
+        settingsNotifier.saveSettings(s.copyWith(lastSeenNavPage: currentPath));
       });
     }
   }

@@ -235,10 +235,9 @@ Future<bool> deleteJournalList(
     final settingsRepo = ref.read(settingsRepositoryProvider);
     final settings = await settingsRepo.getSettings();
     if (settings.defaultJournalId == journal.id) {
-      await settingsRepo.saveSettings(
-        settings.copyWith(clearDefaultJournalId: true),
-      );
-      ref.invalidate(settingsProvider);
+      await ref
+          .read(settingsProvider.notifier)
+          .saveSettings(settings.copyWith(clearDefaultJournalId: true));
     }
   } catch (error, stackTrace) {
     onLocalDeleteFailed?.call();

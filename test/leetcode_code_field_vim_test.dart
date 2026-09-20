@@ -113,6 +113,32 @@ void main() {
     expect(find.text('NORMAL'), findsNothing);
   });
 
+  testWidgets('Enter in Insert mode indents past a trailing comment', (
+    tester,
+  ) async {
+    // Insert mode leaves Enter to the field, so the indent comes from the
+    // controller's own rule rather than the Vim layer.
+    const line = '    if x:  # walk the array';
+    await pumpInput(tester, vimEnabled: true, text: line);
+    controller.selection = const TextSelection.collapsed(
+      offset: line.length,
+    );
+    await tester.pump();
+    expect(find.text('NORMAL'), findsNothing);
+
+    // What the platform sends on Enter: the whole text, break included.
+    tester.testTextInput.updateEditingValue(
+      TextEditingValue(
+        text: '$line\n',
+        selection: TextSelection.collapsed(offset: line.length + 1),
+      ),
+    );
+    await tester.pump();
+
+    expect(controller.text, '$line\n        ');
+    await finish(tester);
+  });
+
   testWidgets('o opens the body of a block, as Enter does', (tester) async {
     await pumpInput(
       tester,

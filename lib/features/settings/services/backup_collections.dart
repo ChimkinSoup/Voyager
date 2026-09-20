@@ -80,10 +80,7 @@ const _metadataFields = {
 
 /// Whether two payloads describe the same record content, ignoring sync
 /// bookkeeping. `deletedAt` is content: a tombstone differs from a live row.
-bool backupContentEquals(
-  Map<String, dynamic> a,
-  Map<String, dynamic> b,
-) {
+bool backupContentEquals(Map<String, dynamic> a, Map<String, dynamic> b) {
   Map<String, dynamic> content(Map<String, dynamic> payload) => {
     for (final entry in payload.entries)
       if (!_metadataFields.contains(entry.key)) entry.key: entry.value,
@@ -199,7 +196,10 @@ List<BackupCollection> buildBackupCollections({
         for (final problem in await leetCodeRepository.getAllProblems(
           includeDeleted: true,
         ))
-          BackupRecord(id: problem.id, data: leetCodeProblemToFirestore(problem)),
+          BackupRecord(
+            id: problem.id,
+            data: leetCodeProblemToFirestore(problem),
+          ),
       ],
       restore: (id, data) async {
         final problem = mergeLeetCodeProblemFromRemote(data, id);
@@ -222,6 +222,66 @@ List<BackupCollection> buildBackupCollections({
         final log = mergeLeetCodeReviewLogFromRemote(data, id);
         await leetCodeRepository.logReview(log);
         return log;
+      },
+    ),
+    // Tabs before sections before entries: a restore writes them in registry
+    // order, and the read query joins through live parents.
+    BackupCollection(
+      name: FirestoreCollections.leetcodeCheatTabs,
+      read: () async => [
+        for (final tab in await leetCodeRepository.getAllCheatTabs())
+          BackupRecord(id: tab.id, data: leetCodeCheatTabToFirestore(tab)),
+      ],
+      restore: (id, data) async {
+        final local = await leetCodeRepository.getCheatTab(id);
+        final tab = mergeLeetCodeCheatTabFromRemote(data, id, local: local);
+        await leetCodeRepository.upsertCheatTab(
+          tab,
+          recordLocalActivity: false,
+        );
+        return tab;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.leetcodeCheatSections,
+      read: () async => [
+        for (final section in await leetCodeRepository.getAllCheatSections())
+          BackupRecord(
+            id: section.id,
+            data: leetCodeCheatSectionToFirestore(section),
+          ),
+      ],
+      restore: (id, data) async {
+        final local = await leetCodeRepository.getCheatSection(id);
+        final section = mergeLeetCodeCheatSectionFromRemote(
+          data,
+          id,
+          local: local,
+        );
+        await leetCodeRepository.upsertCheatSection(
+          section,
+          recordLocalActivity: false,
+        );
+        return section;
+      },
+    ),
+    BackupCollection(
+      name: FirestoreCollections.leetcodeCheatEntries,
+      read: () async => [
+        for (final entry in await leetCodeRepository.getAllCheatEntries())
+          BackupRecord(
+            id: entry.id,
+            data: leetCodeCheatEntryToFirestore(entry),
+          ),
+      ],
+      restore: (id, data) async {
+        final local = await leetCodeRepository.getCheatEntry(id);
+        final entry = mergeLeetCodeCheatEntryFromRemote(data, id, local: local);
+        await leetCodeRepository.upsertCheatEntry(
+          entry,
+          recordLocalActivity: false,
+        );
+        return entry;
       },
     ),
     BackupCollection(
@@ -364,7 +424,10 @@ List<BackupCollection> buildBackupCollections({
         for (final session in await workoutRepository.getAllSessions(
           includeDeleted: true,
         ))
-          BackupRecord(id: session.id, data: workoutSessionToFirestore(session)),
+          BackupRecord(
+            id: session.id,
+            data: workoutSessionToFirestore(session),
+          ),
       ],
       restore: (id, data) async {
         final session = mergeWorkoutSessionFromRemote(data, id);
@@ -539,7 +602,10 @@ List<BackupCollection> buildBackupCollections({
         for (final category in await financeRepository.listCategories(
           includeDeleted: true,
         ))
-          BackupRecord(id: category.id, data: financeCategoryToFirestore(category)),
+          BackupRecord(
+            id: category.id,
+            data: financeCategoryToFirestore(category),
+          ),
       ],
       restore: (id, data) async {
         final category = mergeFinanceCategoryFromRemote(data, id);
@@ -556,7 +622,10 @@ List<BackupCollection> buildBackupCollections({
         for (final transaction in await financeRepository.listTransactions(
           includeDeleted: true,
         ))
-          BackupRecord(id: transaction.id, data: transactionToFirestore(transaction)),
+          BackupRecord(
+            id: transaction.id,
+            data: transactionToFirestore(transaction),
+          ),
       ],
       restore: (id, data) async {
         final transaction = mergeTransactionFromRemote(data, id);
@@ -573,7 +642,10 @@ List<BackupCollection> buildBackupCollections({
         for (final subscription in await financeRepository.listSubscriptions(
           includeDeleted: true,
         ))
-          BackupRecord(id: subscription.id, data: subscriptionToFirestore(subscription)),
+          BackupRecord(
+            id: subscription.id,
+            data: subscriptionToFirestore(subscription),
+          ),
       ],
       restore: (id, data) async {
         final subscription = mergeSubscriptionFromRemote(data, id);
@@ -594,7 +666,10 @@ List<BackupCollection> buildBackupCollections({
       ],
       restore: (id, data) async {
         final budget = mergeBudgetFromRemote(data, id);
-        await financeRepository.upsertBudget(budget, recordLocalActivity: false);
+        await financeRepository.upsertBudget(
+          budget,
+          recordLocalActivity: false,
+        );
         return budget;
       },
     ),
@@ -635,7 +710,10 @@ List<BackupCollection> buildBackupCollections({
         for (final valuation in await financeRepository.listAssetValuations(
           includeDeleted: true,
         ))
-          BackupRecord(id: valuation.id, data: assetValuationToFirestore(valuation)),
+          BackupRecord(
+            id: valuation.id,
+            data: assetValuationToFirestore(valuation),
+          ),
       ],
       restore: (id, data) async {
         final valuation = mergeAssetValuationFromRemote(data, id);
@@ -686,7 +764,10 @@ List<BackupCollection> buildBackupCollections({
         for (final allocation in await financeRepository.listGoalAllocations(
           includeDeleted: true,
         ))
-          BackupRecord(id: allocation.id, data: goalAllocationToFirestore(allocation)),
+          BackupRecord(
+            id: allocation.id,
+            data: goalAllocationToFirestore(allocation),
+          ),
       ],
       restore: (id, data) async {
         final allocation = mergeGoalAllocationFromRemote(data, id);
@@ -720,7 +801,10 @@ List<BackupCollection> buildBackupCollections({
         for (final device in await reminderRepository.listDevices(
           includeDeleted: true,
         ))
-          BackupRecord(id: device.id, data: deviceRegistrationToFirestore(device)),
+          BackupRecord(
+            id: device.id,
+            data: deviceRegistrationToFirestore(device),
+          ),
       ],
       restore: (id, data) async {
         final device = mergeDeviceRegistrationFromRemote(data, id);
@@ -737,7 +821,10 @@ List<BackupCollection> buildBackupCollections({
         for (final rule in await reminderRepository.listRules(
           includeDeleted: true,
         ))
-          BackupRecord(id: rule.id, data: scheduledReminderRuleToFirestore(rule)),
+          BackupRecord(
+            id: rule.id,
+            data: scheduledReminderRuleToFirestore(rule),
+          ),
       ],
       restore: (id, data) async {
         final rule = mergeScheduledReminderRuleFromRemote(data, id);
@@ -801,8 +888,8 @@ List<BackupCollection> buildBackupCollections({
       name: FirestoreCollections.dismissedNotifications,
       // Keyed by the dismissal key, not a uuid.
       read: () async => [
-        for (final dismissal in await notificationRepository
-            .listDismissalRecords())
+        for (final dismissal
+            in await notificationRepository.listDismissalRecords())
           BackupRecord(
             id: dismissal.key,
             data: dismissedNotificationToFirestore(dismissal),

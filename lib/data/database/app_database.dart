@@ -88,9 +88,11 @@ class LeetCodeProblemsTable extends Table {
   TextColumn get titleSlug => text().nullable()();
   TextColumn get difficulty => text()();
   TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
+
   /// Problem statement for the flashcard front. Nullable so existing rows
   /// stay null until the user edits or re-fetches from LeetCode.
   TextColumn get description => text().nullable()();
+
   /// JSON array of worked examples, one string each. Existing rows default to
   /// an empty array — "no examples" — until the user adds some by hand.
   TextColumn get examplesJson => text().withDefault(const Constant('[]'))();
@@ -108,8 +110,7 @@ class LeetCodeProblemsTable extends Table {
   TextColumn get timeComplexity => text().nullable()();
   TextColumn get spaceComplexity => text().nullable()();
   TextColumn get explanation => text().withDefault(const Constant(''))();
-  TextColumn get codeLanguage =>
-      text().withDefault(const Constant('python'))();
+  TextColumn get codeLanguage => text().withDefault(const Constant('python'))();
   TextColumn get code => text().withDefault(const Constant(''))();
   TextColumn get notes => text().nullable()();
   DateTimeColumn get solvedAt => dateTime()();
@@ -235,8 +236,7 @@ class CalendarEventsTable extends Table {
   TextColumn get notes => text().withDefault(const Constant(''))();
   TextColumn get source => text().withDefault(const Constant('local'))();
   TextColumn get externalId => text().nullable()();
-  TextColumn get recurrence =>
-      text().withDefault(const Constant('none'))();
+  TextColumn get recurrence => text().withDefault(const Constant('none'))();
 
   /// Inclusive last local date an occurrence may start on. Set when a series is
   /// truncated by "this and all future events".
@@ -745,6 +745,23 @@ class SettingsTable extends Table {
   /// and todo pair is (see below).
   TextColumn get lastViewedCalendarId => text().nullable()();
 
+  /// The cheat sheet tab this device was last on, and the section ids it has
+  /// collapsed, as a JSON array.
+  ///
+  /// Device-local: both are deliberately absent from `settingsSyncPayload`,
+  /// which is what keeps writing them from moving [updatedAt] — that clock is
+  /// reserved for synced fields, and letting a tab switch move it would let
+  /// merely opening the sheet overwrite a preference another device changed
+  /// more recently.
+  ///
+  /// A stale id is expected rather than exceptional: the tab may have been
+  /// deleted on another device, or not yet pulled to this one. Readers fall
+  /// back to the first tab by position, and collapsed ids for dead sections
+  /// are inert until a write prunes them.
+  TextColumn get leetCodeCheatLastTabId => text().nullable()();
+  TextColumn get leetCodeCheatCollapsedSectionsJson =>
+      text().withDefault(const Constant('[]'))();
+
   /// The journal the journal page always opens into, overriding
   /// [lastViewedJournalId] and [journalShowAllEntries]. Null means "restore
   /// whatever was last open", which is the behaviour this column replaced.
@@ -870,7 +887,8 @@ class SettingsTable extends Table {
   RealColumn get geometricWaveScatterLitAmount =>
       real().withDefault(const Constant(0.12))();
   TextColumn get navPageOrderJson => text().nullable()();
-  TextColumn get startupPageMode => text().withDefault(const Constant('first'))();
+  TextColumn get startupPageMode =>
+      text().withDefault(const Constant('first'))();
   TextColumn get customStartupPage => text().nullable()();
   TextColumn get lastSeenNavPage => text().nullable()();
   BoolColumn get todoCompletedSectionExpanded =>
@@ -969,7 +987,8 @@ class SettingsTable extends Table {
   /// Which one-time upload of the newly synced collections this device has
   /// run — see `RemoteSyncService.syncBackfillVersion`. Device-local, so it
   /// stays out of [settingsSyncPayload].
-  IntColumn get syncBackfillVersion => integer().withDefault(const Constant(0))();
+  IntColumn get syncBackfillVersion =>
+      integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -1051,8 +1070,7 @@ class SnippetsTable extends Table {
   TextColumn get trigger => text()();
   TextColumn get replacement => text()();
   BoolColumn get autoExpand => boolean().withDefault(const Constant(false))();
-  BoolColumn get wordBoundary =>
-      boolean().withDefault(const Constant(false))();
+  BoolColumn get wordBoundary => boolean().withDefault(const Constant(false))();
   RealColumn get position => real()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -1243,7 +1261,8 @@ class WorkoutPlansTable extends Table {
 /// the same version — would both re-win on the next pull and register as a
 /// hard metadata collision in `sync_conflict_detector.dart`. `updated_at` is
 /// deliberately left alone: this is a migration, not an edit the user made.
-const String kJournalMoodBackfillSql = '''
+const String kJournalMoodBackfillSql =
+    '''
 UPDATE journal_entries_table
 SET mood = $kDefaultMood, version = version + 1
 WHERE mood IS NULL AND deleted_at IS NULL
@@ -1357,8 +1376,7 @@ class WorkoutSetLogsTable extends Table {
   IntColumn get plannedReps => integer().withDefault(const Constant(0))();
 
   /// JSON list of drop segments after the top weight/reps columns.
-  TextColumn get dropSegmentsJson =>
-      text().withDefault(const Constant('[]'))();
+  TextColumn get dropSegmentsJson => text().withDefault(const Constant('[]'))();
   TextColumn get plannedDropSegmentsJson =>
       text().withDefault(const Constant('[]'))();
   BoolColumn get completed => boolean().withDefault(const Constant(false))();
@@ -1607,6 +1625,7 @@ class RankingCategoriesTable extends Table {
       boolean().withDefault(const Constant(false))();
   IntColumn get parentScoreMax => integer().withDefault(const Constant(5))();
   IntColumn get childScoreMax => integer().withDefault(const Constant(5))();
+
   /// [RankingScorePrecision] by `name`. Replaced the two half-step booleans in
   /// schema 100, which had no way to spell a tenth.
   TextColumn get parentScorePrecision =>
@@ -1698,6 +1717,64 @@ class RankingChildrenTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// One tab of the LeetCode cheat sheet. [languageKey] is a
+/// `leetCodeCodeLanguages` key or null — null means "no highlighting",
+/// which is what makes a "Patterns" or "Big-O" tab legal.
+class LeetCodeCheatTabsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get languageKey => text().nullable()();
+  RealColumn get position => real()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One section heading under a tab. Exactly one level of these — the sheet has
+/// no sub-sections.
+@TableIndex(name: 'idx_leetcode_cheat_sections_tab', columns: {#tabId})
+class LeetCodeCheatSectionsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get tabId => text()();
+  TextColumn get name => text()();
+  RealColumn get position => real()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One command, what it does, and optionally its complexity.
+///
+/// A record per entry rather than a blob per section: two devices editing
+/// different commands — the realistic case by a wide margin — then never
+/// conflict at all, which is what lets the sheet skip the character-level CRDT.
+@TableIndex(name: 'idx_leetcode_cheat_entries_section', columns: {#sectionId})
+class LeetCodeCheatEntriesTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get sectionId => text()();
+  TextColumn get command => text()();
+  TextColumn get description => text().withDefault(const Constant(''))();
+
+  /// Null, not empty string, when unset — the badge's presence is the flag.
+  TextColumn get complexity => text().nullable()();
+  RealColumn get position => real()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(
   tables: [
     JournalsTable,
@@ -1759,13 +1836,16 @@ class RankingChildrenTable extends Table {
     RankingCategoriesTable,
     RankingParentsTable,
     RankingChildrenTable,
+    LeetCodeCheatTabsTable,
+    LeetCodeCheatSectionsTable,
+    LeetCodeCheatEntriesTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 121;
+  int get schemaVersion => 122;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1846,10 +1926,7 @@ class AppDatabase extends _$AppDatabase {
         );
       }
       if (from < 11) {
-        await migrator.addColumn(
-          settingsTable,
-          settingsTable.colorPaletteJson,
-        );
+        await migrator.addColumn(settingsTable, settingsTable.colorPaletteJson);
         await customStatement(
           'UPDATE settings_table SET color_palette_json = ? WHERE color_palette_json IS NULL',
           [encodeColorPaletteJson(defaultColorPalette)],
@@ -1944,10 +2021,7 @@ class AppDatabase extends _$AppDatabase {
         );
       }
       if (from < 23) {
-        await migrator.addColumn(
-          todoTasksTable,
-          todoTasksTable.dueDateSetAt,
-        );
+        await migrator.addColumn(todoTasksTable, todoTasksTable.dueDateSetAt);
       }
       if (from < 24) {
         await migrator.addColumn(
@@ -1957,7 +2031,10 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 25) {
         await migrator.addColumn(journalsTable, journalsTable.version);
-        await migrator.addColumn(journalEntriesTable, journalEntriesTable.version);
+        await migrator.addColumn(
+          journalEntriesTable,
+          journalEntriesTable.version,
+        );
         await migrator.addColumn(todoListsTable, todoListsTable.version);
         await migrator.addColumn(todoTasksTable, todoTasksTable.version);
       }
@@ -2022,10 +2099,22 @@ class AppDatabase extends _$AppDatabase {
         );
       }
       if (from < 33) {
-        await _addSettingsColumnIfNotExists(migrator, settingsTable.navPageOrderJson);
-        await _addSettingsColumnIfNotExists(migrator, settingsTable.startupPageMode);
-        await _addSettingsColumnIfNotExists(migrator, settingsTable.customStartupPage);
-        await _addSettingsColumnIfNotExists(migrator, settingsTable.lastSeenNavPage);
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.navPageOrderJson,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.startupPageMode,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.customStartupPage,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.lastSeenNavPage,
+        );
       }
       if (from < 34) {
         await migrator.addColumn(trackersTable, trackersTable.trackingStyle);
@@ -2397,10 +2486,7 @@ class AppDatabase extends _$AppDatabase {
         await migrator.createTable(workoutPlanEntriesTable);
         await migrator.createTable(workoutSessionsTable);
         await migrator.createTable(workoutSetLogsTable);
-        await _addSettingsColumnIfNotExists(
-          migrator,
-          settingsTable.weightUnit,
-        );
+        await _addSettingsColumnIfNotExists(migrator, settingsTable.weightUnit);
         await _addSettingsColumnIfNotExists(
           migrator,
           settingsTable.workoutRestTimerEnabled,
@@ -2447,9 +2533,7 @@ class AppDatabase extends _$AppDatabase {
           await customStatement(kWorkoutTargetBackfillSql);
           // Rebuilds the table from its current schema, dropping the three
           // columns that no longer exist in Dart.
-          await migrator.alterTable(
-            TableMigration(workoutPlanEntriesTable),
-          );
+          await migrator.alterTable(TableMigration(workoutPlanEntriesTable));
         }
       }
       if (from < 69) {
@@ -3134,6 +3218,31 @@ class AppDatabase extends _$AppDatabase {
           settingsTable.reminderHotkey,
         );
       }
+      if (from < 122) {
+        await migrator.createTable(leetCodeCheatTabsTable);
+        await migrator.createTable(leetCodeCheatSectionsTable);
+        await migrator.createTable(leetCodeCheatEntriesTable);
+        // Declared via @TableIndex, so createAll() covers fresh databases;
+        // existing ones need them made here.
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_leetcode_cheat_sections_tab '
+          'ON leet_code_cheat_sections_table (tab_id)',
+        );
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_leetcode_cheat_entries_section '
+          'ON leet_code_cheat_entries_table (section_id)',
+        );
+        // Device-local, so no backfill: an existing row gets null and '[]',
+        // which read as "no tab remembered" and "nothing collapsed".
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.leetCodeCheatLastTabId,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.leetCodeCheatCollapsedSectionsJson,
+        );
+      }
     },
   );
 
@@ -3230,14 +3339,14 @@ class AppDatabase extends _$AppDatabase {
         );
       }
       if (raw == day.toIso8601String()) continue;
-      await (update(jobApplicationsTable)
-            ..where((t) => t.id.equals(row.read<String>('id'))))
-          .write(
-            JobApplicationsTableCompanion(
-              dateApplied: Value(day),
-              version: Value(row.read<int>('version') + 1),
-            ),
-          );
+      await (update(
+        jobApplicationsTable,
+      )..where((t) => t.id.equals(row.read<String>('id')))).write(
+        JobApplicationsTableCompanion(
+          dateApplied: Value(day),
+          version: Value(row.read<int>('version') + 1),
+        ),
+      );
     }
   }
 
@@ -3283,17 +3392,17 @@ class AppDatabase extends _$AppDatabase {
       seedRowsById.putIfAbsent(seed.id, () => []).add(row);
     }
 
-    for (final MapEntry(key: seedId, value: seedRows)
-        in seedRowsById.entries) {
+    for (final MapEntry(key: seedId, value: seedRows) in seedRowsById.entries) {
       if (existingIds.contains(seedId)) continue;
-      final untouched = [
-        for (final row in seedRows)
-          if (row.read<int>('version') == 0) row,
-      ]..sort((a, b) {
-          final aLive = a.data['deleted_at'] == null ? 0 : 1;
-          final bLive = b.data['deleted_at'] == null ? 0 : 1;
-          return aLive - bLive;
-        });
+      final untouched =
+          [
+            for (final row in seedRows)
+              if (row.read<int>('version') == 0) row,
+          ]..sort((a, b) {
+            final aLive = a.data['deleted_at'] == null ? 0 : 1;
+            final bLive = b.data['deleted_at'] == null ? 0 : 1;
+            return aLive - bLive;
+          });
       if (untouched.isEmpty) {
         await customInsert(
           'INSERT INTO $table (id, name, created_at, updated_at, version, '
@@ -3838,10 +3947,9 @@ class AppDatabase extends _$AppDatabase {
     )..where((t) => t.cadence.equals('weekly'))).get();
     if (weekly.isEmpty) return;
 
-    final rows = await (select(trackerValuesTable)..where(
-          (v) => v.trackerId.isIn(weekly.map((t) => t.id).toList()),
-        ))
-        .get();
+    final rows = await (select(
+      trackerValuesTable,
+    )..where((v) => v.trackerId.isIn(weekly.map((t) => t.id).toList()))).get();
 
     for (final row in rows) {
       final local = row.periodStart;

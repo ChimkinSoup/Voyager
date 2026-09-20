@@ -424,6 +424,45 @@ void main() {
       c.dispose();
     });
 
+    test('Enter past a trailing comment still opens the block', () {
+      const line = '    if (nums[m] > nums[r]) { // lower portion is right';
+      final c = LeetCodeCodeController(text: line);
+      c.selection = const TextSelection.collapsed(offset: line.length);
+      c.value = addChar(c.value, '\n');
+      expect(c.text, '$line\n        ');
+      expect(c.selection.baseOffset, line.length + 9);
+      c.dispose();
+    });
+
+    test('Enter past a trailing # comment opens a : block', () {
+      const line = '    for i in range(n):  # walk the array';
+      final c = LeetCodeCodeController(text: line);
+      c.selection = const TextSelection.collapsed(offset: line.length);
+      c.value = addChar(c.value, '\n');
+      expect(c.text, '$line\n        ');
+      c.dispose();
+    });
+
+    test('a // inside a string is not a comment', () {
+      // Stripping there would leave `url = "http:`, whose `:` would open a
+      // block that is not there.
+      const line = '    url = "http://example.com"';
+      final c = LeetCodeCodeController(text: line);
+      c.selection = const TextSelection.collapsed(offset: line.length);
+      c.value = addChar(c.value, '\n');
+      expect(c.text, '$line\n    ');
+      c.dispose();
+    });
+
+    test('a trailing comment with no opener keeps the line indent', () {
+      const line = '    total += 1; // count it';
+      final c = LeetCodeCodeController(text: line);
+      c.selection = const TextSelection.collapsed(offset: line.length);
+      c.value = addChar(c.value, '\n');
+      expect(c.text, '$line\n    ');
+      c.dispose();
+    });
+
     test('collapsing a one-character selection is not a surround', () {
       // Double-click a lone `{`, then click to its right. The click sends the
       // same text back with the caret at offset 1, which is byte-for-byte what

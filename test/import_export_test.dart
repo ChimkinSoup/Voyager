@@ -19,6 +19,7 @@ import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/leetcode_cheat_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
@@ -94,10 +95,7 @@ class MockFirestoreBatch extends Fake implements WriteBatch {
 
   @override
   void set<T>(DocumentReference<T> document, T data, [SetOptions? options]) {
-    sets.add({
-      'path': document.path,
-      'data': data,
-    });
+    sets.add({'path': document.path, 'data': data});
   }
 
   @override
@@ -283,8 +281,45 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       reviewedAt: now,
     ),
   );
+  await leetCodeRepo.upsertCheatTab(
+    LeetCodeCheatTab(
+      id: 'cheat-tab-1',
+      name: 'Java',
+      languageKey: 'java',
+      position: kCheatPositionStep,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await leetCodeRepo.upsertCheatSection(
+    LeetCodeCheatSection(
+      id: 'cheat-section-1',
+      tabId: 'cheat-tab-1',
+      name: 'ArrayList',
+      position: kCheatPositionStep,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
+  await leetCodeRepo.upsertCheatEntry(
+    LeetCodeCheatEntry(
+      id: 'cheat-entry-1',
+      sectionId: 'cheat-section-1',
+      command: '.add(e)',
+      description: 'Appends to the back.',
+      complexity: 'O(1) amortized',
+      position: kCheatPositionStep,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
   await studyRepo.upsertFolder(
-    StudyFolder(id: 'folder-1', name: 'Biology', createdAt: now, updatedAt: now),
+    StudyFolder(
+      id: 'folder-1',
+      name: 'Biology',
+      createdAt: now,
+      updatedAt: now,
+    ),
   );
   await studyRepo.upsertDeck(
     StudyDeck(
@@ -317,7 +352,12 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
     ),
   );
   await studyRepo.upsertDeck(
-    StudyDeck(id: 'deck-2', name: 'Biology hub', createdAt: now, updatedAt: now),
+    StudyDeck(
+      id: 'deck-2',
+      name: 'Biology hub',
+      createdAt: now,
+      updatedAt: now,
+    ),
   );
   await studyRepo.upsertDeckLink(
     StudyDeckLink(
@@ -587,11 +627,7 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
     ),
   );
   await notificationRepo.upsertDismissal(
-    DismissedNotification(
-      key: 'task:task-1',
-      dismissedAt: now,
-      updatedAt: now,
-    ),
+    DismissedNotification(key: 'task:task-1', dismissedAt: now, updatedAt: now),
   );
   await reminderRepo.upsertDevice(
     DeviceRegistration(
@@ -746,7 +782,12 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
     ),
   );
   await jobRepo.upsertSeason(
-    JobSeason(id: 'season-1', name: 'Fall 2025', createdAt: now, updatedAt: now),
+    JobSeason(
+      id: 'season-1',
+      name: 'Fall 2025',
+      createdAt: now,
+      updatedAt: now,
+    ),
   );
   await jobRepo.upsertCompany(
     JobCompany(
@@ -811,7 +852,6 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
 }
 
 void main() {
-
   group('Backup media binaries', () {
     late Directory sourceMediaDir;
     late Directory targetMediaDir;
@@ -850,11 +890,7 @@ void main() {
           updatedAt: now,
         ),
       );
-      await sourceStore.writeBytes(
-        contentHash,
-        MediaImageFormat.jpeg,
-        bytes,
-      );
+      await sourceStore.writeBytes(contentHash, MediaImageFormat.jpeg, bytes);
 
       final exported = await DataExportService(
         collections: collectionsFor(source),
@@ -1011,7 +1047,10 @@ void main() {
         FirestoreCollections.workoutSessions,
         FirestoreCollections.workoutSetLogs,
       );
-      expectBefore(FirestoreCollections.assets, FirestoreCollections.assetValuations);
+      expectBefore(
+        FirestoreCollections.assets,
+        FirestoreCollections.assetValuations,
+      );
       expectBefore(
         FirestoreCollections.contributionRooms,
         FirestoreCollections.assets,
@@ -1041,6 +1080,9 @@ void main() {
         'todo_tasks_table',
         'leet_code_problems_table',
         'leet_code_review_log_table',
+        'leet_code_cheat_tabs_table',
+        'leet_code_cheat_sections_table',
+        'leet_code_cheat_entries_table',
         'study_folders_table',
         'study_decks_table',
         'study_cards_table',
@@ -1103,7 +1145,8 @@ void main() {
       expect(
         db.allTables.map((t) => t.actualTableName).toSet(),
         {...backedUp, ...localOnly},
-        reason: 'a new table must be added to buildBackupCollections, or '
+        reason:
+            'a new table must be added to buildBackupCollections, or '
             'listed here as deliberately local-only',
       );
       await db.close();
@@ -1146,14 +1189,19 @@ void main() {
         };
         for (final record in before) {
           final id = record['id'] as String;
-          expect(afterById.containsKey(id), isTrue, reason: '$name/$id missing');
+          expect(
+            afterById.containsKey(id),
+            isTrue,
+            reason: '$name/$id missing',
+          );
           expect(
             backupContentEquals(
               afterById[id]!['data'] as Map<String, dynamic>,
               record['data'] as Map<String, dynamic>,
             ),
             isTrue,
-            reason: '$name/$id came back different:\n'
+            reason:
+                '$name/$id came back different:\n'
                 'expected ${record['data']}\n'
                 'actual   ${afterById[id]!['data']}',
           );
@@ -1216,28 +1264,31 @@ void main() {
   });
 
   group('Backup change detection', () {
-    test('re-importing an unchanged backup writes and uploads nothing', () async {
-      final db = AppDatabase.inMemory();
-      await seedOneOfEverything(db);
-      final exported = await exporterFor(db).buildArchiveContents();
-      final zip = await writeBackupZip(exported, 'voyager_unchanged');
+    test(
+      're-importing an unchanged backup writes and uploads nothing',
+      () async {
+        final db = AppDatabase.inMemory();
+        await seedOneOfEverything(db);
+        final exported = await exporterFor(db).buildArchiveContents();
+        final zip = await writeBackupZip(exported, 'voyager_unchanged');
 
-      final uploader = RecordingUploader();
-      final summary = await importerFor(db, uploader).importFromZip(zip);
+        final uploader = RecordingUploader();
+        final summary = await importerFor(db, uploader).importFromZip(zip);
 
-      expect(summary.restoredTotal, 0);
-      expect(summary.restoredByCollection, isEmpty);
-      expect(summary.settingsRestored, isFalse);
-      expect(uploader.records, isEmpty);
-      expect(uploader.settings, isNull);
+        expect(summary.restoredTotal, 0);
+        expect(summary.restoredByCollection, isEmpty);
+        expect(summary.settingsRestored, isFalse);
+        expect(uploader.records, isEmpty);
+        expect(uploader.settings, isNull);
 
-      final manifest = exported['manifest.json'] as Map<String, dynamic>;
-      final counts = manifest['collections'] as Map<String, int>;
-      expect(summary.skipped, counts.values.reduce((a, b) => a + b));
+        final manifest = exported['manifest.json'] as Map<String, dynamic>;
+        final counts = manifest['collections'] as Map<String, int>;
+        expect(summary.skipped, counts.values.reduce((a, b) => a + b));
 
-      await zip.delete();
-      await db.close();
-    });
+        await zip.delete();
+        await db.close();
+      },
+    );
 
     test('only the records that differ are restored and uploaded', () async {
       final db = AppDatabase.inMemory();
@@ -1262,7 +1313,10 @@ void main() {
         FirestoreCollections.journalEntries: 1,
       });
       expect(uploader.records.keys, [FirestoreCollections.journalEntries]);
-      expect(uploader.records[FirestoreCollections.journalEntries], hasLength(1));
+      expect(
+        uploader.records[FirestoreCollections.journalEntries],
+        hasLength(1),
+      );
 
       final restored = (await journalRepo.getEntry('entry-1'))!;
       expect(restored.body, 'It rained.');
@@ -1310,7 +1364,8 @@ void main() {
       expect(
         restored.version,
         10,
-        reason: 'one past the higher of the local and backup versions, so the '
+        reason:
+            'one past the higher of the local and backup versions, so the '
             'next pull cannot undo the restore',
       );
 
@@ -1456,10 +1511,7 @@ void main() {
         pushSettings: uploader.pushSettings,
       );
 
-      await expectLater(
-        importer.importFromZip(zip),
-        throwsA(isA<Exception>()),
-      );
+      await expectLater(importer.importFromZip(zip), throwsA(isA<Exception>()));
 
       // The restore of 'good' happened before 'bad' threw; the transaction
       // must have taken it back out again.
@@ -1475,31 +1527,36 @@ void main() {
     // The rest of the suite drives buildArchiveContents and
     // generateBackupZipIsolate by hand, which left exportDataToZip itself --
     // the compute() hop and the write -- with no coverage at all.
-    test('exportDataToZip writes a readable archive to the chosen file', () async {
-      final db = AppDatabase.inMemory();
-      addTearDown(db.close);
-      await seedOneOfEverything(db);
+    test(
+      'exportDataToZip writes a readable archive to the chosen file',
+      () async {
+        final db = AppDatabase.inMemory();
+        addTearDown(db.close);
+        await seedOneOfEverything(db);
 
-      final destination = File(
-        '${Directory.systemTemp.path}/voyager_export_destination.zip',
-      );
-      addTearDown(() async {
-        if (destination.existsSync()) await destination.delete();
-      });
-
-      final written = await exporterFor(db).exportDataToZip(destination);
-
-      expect(written.path, destination.path);
-      final archive = ZipDecoder().decodeBytes(await destination.readAsBytes());
-      expect(archive.findFile(backupManifestFileName), isNotNull);
-      for (final name in FirestoreCollections.records) {
-        expect(
-          archive.findFile('$name.json'),
-          isNotNull,
-          reason: '$name is missing from the archive',
+        final destination = File(
+          '${Directory.systemTemp.path}/voyager_export_destination.zip',
         );
-      }
-    });
+        addTearDown(() async {
+          if (destination.existsSync()) await destination.delete();
+        });
+
+        final written = await exporterFor(db).exportDataToZip(destination);
+
+        expect(written.path, destination.path);
+        final archive = ZipDecoder().decodeBytes(
+          await destination.readAsBytes(),
+        );
+        expect(archive.findFile(backupManifestFileName), isNotNull);
+        for (final name in FirestoreCollections.records) {
+          expect(
+            archive.findFile('$name.json'),
+            isNotNull,
+            reason: '$name is missing from the archive',
+          );
+        }
+      },
+    );
 
     test('DataExportService JSON Chunking Test', () {
       final entries = List.generate(
@@ -1547,23 +1604,27 @@ void main() {
       await db.transaction(() async {
         for (int i = 0; i < 1200; i++) {
           final entryId = 'entry-$i';
-          await db.into(db.journalEntriesTable).insert(
-            JournalEntriesTableCompanion.insert(
-              id: entryId,
-              journalId: 'journal-1',
-              title: 'Entry $i',
-              body: 'Body $i',
-              entryDate: DateTime.now().toUtc(),
-              createdAt: DateTime.now().toUtc(),
-              updatedAt: DateTime.now().toUtc(),
-            ),
-          );
-          await db.into(db.pendingUploadsTable).insert(
-            PendingUploadsTableCompanion.insert(
-              documentId: entryId,
-              collectionName: FirestoreCollections.journalEntries,
-            ),
-          );
+          await db
+              .into(db.journalEntriesTable)
+              .insert(
+                JournalEntriesTableCompanion.insert(
+                  id: entryId,
+                  journalId: 'journal-1',
+                  title: 'Entry $i',
+                  body: 'Body $i',
+                  entryDate: DateTime.now().toUtc(),
+                  createdAt: DateTime.now().toUtc(),
+                  updatedAt: DateTime.now().toUtc(),
+                ),
+              );
+          await db
+              .into(db.pendingUploadsTable)
+              .insert(
+                PendingUploadsTableCompanion.insert(
+                  documentId: entryId,
+                  collectionName: FirestoreCollections.journalEntries,
+                ),
+              );
         }
       });
 
@@ -1604,24 +1665,28 @@ void main() {
 
         final entryId = 'entry-force-close-123';
         // 1. Insert record to SQLite directly
-        await db.into(db.journalEntriesTable).insert(
-          JournalEntriesTableCompanion.insert(
-            id: entryId,
-            journalId: 'journal-1',
-            title: 'Unsaved Title',
-            body: 'Pending upload',
-            entryDate: DateTime.now().toUtc(),
-            createdAt: DateTime.now().toUtc(),
-            updatedAt: DateTime.now().toUtc(),
-          ),
-        );
+        await db
+            .into(db.journalEntriesTable)
+            .insert(
+              JournalEntriesTableCompanion.insert(
+                id: entryId,
+                journalId: 'journal-1',
+                title: 'Unsaved Title',
+                body: 'Pending upload',
+                entryDate: DateTime.now().toUtc(),
+                createdAt: DateTime.now().toUtc(),
+                updatedAt: DateTime.now().toUtc(),
+              ),
+            );
         // 2. Insert into PendingUploadsTable (simulating force-closed outbox state)
-        await db.into(db.pendingUploadsTable).insert(
-          PendingUploadsTableCompanion.insert(
-            documentId: entryId,
-            collectionName: FirestoreCollections.journalEntries,
-          ),
-        );
+        await db
+            .into(db.pendingUploadsTable)
+            .insert(
+              PendingUploadsTableCompanion.insert(
+                documentId: entryId,
+                collectionName: FirestoreCollections.journalEntries,
+              ),
+            );
 
         OutboxSyncWorker.initialize(
           db,
@@ -1633,7 +1698,9 @@ void main() {
 
         // 3. Query fake firestore
         final snap = await fakeFirestore
-            .doc('users/test-user-123/${FirestoreCollections.journalEntries}/$entryId')
+            .doc(
+              'users/test-user-123/${FirestoreCollections.journalEntries}/$entryId',
+            )
             .get();
         expect(snap.exists, isTrue);
         expect(snap.data()?['title'], 'Unsaved Title');
@@ -1673,15 +1740,20 @@ void main() {
         );
 
         // Add to pending outbox (simulating in-flight change)
-        await db.into(db.pendingUploadsTable).insert(
-          PendingUploadsTableCompanion.insert(
-            documentId: docId,
-            collectionName: FirestoreCollections.journalEntries,
-          ),
-        );
+        await db
+            .into(db.pendingUploadsTable)
+            .insert(
+              PendingUploadsTableCompanion.insert(
+                documentId: docId,
+                collectionName: FirestoreCollections.journalEntries,
+              ),
+            );
 
         // Set up Sync Repository & Remote Sync Service
-        final syncRepo = FirestoreSyncRepository(fakeFirestore, fakeAuth.currentUserId!);
+        final syncRepo = FirestoreSyncRepository(
+          fakeFirestore,
+          fakeAuth.currentUserId!,
+        );
         final syncEngine = SyncEngine(
           syncRepository: syncRepo,
           deviceId: 'device-test',
@@ -1754,7 +1826,9 @@ void main() {
 
         // Query the fake firestore - it should have pushed the NEWER merged version, not the old Local Version.
         final snap = await fakeFirestore
-            .doc('users/test-user-123/${FirestoreCollections.journalEntries}/$docId')
+            .doc(
+              'users/test-user-123/${FirestoreCollections.journalEntries}/$docId',
+            )
             .get();
         expect(snap.data()?['title'], 'Remote Version (Newer)');
         expect(snap.data()?['version'], 2);
@@ -1827,7 +1901,8 @@ void main() {
           expect(
             uploaded.docs,
             hasLength(records.length),
-            reason: '${collection.name} did not reach Firestore — '
+            reason:
+                '${collection.name} did not reach Firestore — '
                 'RemoteSyncService._recordDocument is probably missing a case',
           );
         }

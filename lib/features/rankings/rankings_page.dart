@@ -78,9 +78,10 @@ class _RankingsPageState extends ConsumerState<RankingsPage>
 
   Future<void> _persistEditSidePanelWidth(double? width) async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
     final settings = await settingsRepo.getSettings();
     if (settings.editSidePanelWidth == width) return;
-    await settingsRepo.saveSettings(
+    await settingsNotifier.saveSettings(
       width == null
           ? settings.copyWith(clearEditSidePanelWidth: true)
           : settings.copyWith(editSidePanelWidth: width),

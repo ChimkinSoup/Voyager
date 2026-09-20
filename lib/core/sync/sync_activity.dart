@@ -30,10 +30,18 @@ class _SyncActivitySlot {
 }
 
 class SyncActivityController extends ChangeNotifier {
-  SyncActivityController({SettingsRepository? settingsRepository})
-    : _settingsRepository = settingsRepository;
+  SyncActivityController({
+    required this._saveSettings,
+    SettingsRepository? settingsRepository,
+  }) : _settingsRepository = settingsRepository;
 
   final SettingsRepository? _settingsRepository;
+
+  /// How a flipped toggle is written: the settings notifier's save rather
+  /// than the repository's, so the published [AppSettings] carries the new
+  /// flag. A write straight to the repository leaves it behind, and the next
+  /// whole-object save built on that copy puts the old value back.
+  final Future<void> Function(AppSettings settings) _saveSettings;
 
   static const _displayDuration = Duration(milliseconds: 900);
   static const _flickerGap = Duration(milliseconds: 80);
@@ -156,7 +164,7 @@ class SyncActivityController extends ChangeNotifier {
     final repo = _settingsRepository;
     if (repo == null) return;
     final settings = await repo.getSettings();
-    await repo.saveSettings(
+    await _saveSettings(
       settings.copyWith(
         devShowSyncLocalSaves: showLocalSaves,
         devShowSyncUploads: showUploads,

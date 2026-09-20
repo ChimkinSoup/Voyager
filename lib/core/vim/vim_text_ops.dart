@@ -274,10 +274,26 @@ int vimVerticalMove(
 // ---------------------------------------------------------------------------
 
 /// Vim's `w`/`W`: start of the next word.
-int vimWordForward(String text, int offset, {bool big = false}) {
+///
+/// [stopAtLineEnd] is Vim's `eol` flag, set while an operator is pending: the
+/// motion then stops at the end of the starting line rather than crossing it,
+/// so `dw` on a line's last word eats the word alone and leaves the line break
+/// — and the line below — where they are.
+int vimWordForward(
+  String text,
+  int offset, {
+  bool big = false,
+  bool stopAtLineEnd = false,
+}) {
   final n = text.length;
   var o = offset.clamp(0, n);
   if (o >= n) return n;
+
+  final limit = !stopAtLineEnd
+      ? n
+      : _isNewline(text, o)
+      ? o + 1
+      : vimLineEnd(text, o);
 
   final startClass = _classAt(text, o, big);
   if (startClass != VimCharClass.blank) {
@@ -288,10 +304,12 @@ int vimWordForward(String text, int offset, {bool big = false}) {
   while (o < n && _classAt(text, o, big) == VimCharClass.blank) {
     // An empty line is a word of its own in Vim, so `w` stops on it rather
     // than skipping the whole blank gap.
-    if (_isNewline(text, o) && _isNewline(text, o + 1)) return o + 1;
+    if (_isNewline(text, o) && _isNewline(text, o + 1)) {
+      return math.min(o + 1, limit);
+    }
     o++;
   }
-  return o;
+  return math.min(o, limit);
 }
 
 /// Vim's `b`/`B`: start of the previous word.
@@ -327,6 +345,26 @@ int vimWordEnd(String text, int offset, {bool big = false}) {
     o++;
   }
   return o;
+}
+
+/// Vim's `cw`/`cW` special case: with the caret on a non-blank they behave
+/// like `ce`/`cE`, changing to the end of the word under the caret instead of
+/// swallowing the whitespace after it. On the word's last character that end
+/// is the caret itself, so `cw` changes just that one character.
+///
+/// Returns null when the caret sits on whitespace, where `cw` keeps the plain
+/// `w` behaviour.
+int? vimChangeWordEnd(String text, int offset, {bool big = false}) {
+  final n = text.length;
+  final o = offset.clamp(0, n);
+  if (o >= n) return null;
+  final cls = _classAt(text, o, big);
+  if (cls == VimCharClass.blank) return null;
+  var end = o;
+  while (end + 1 < n && _classAt(text, end + 1, big) == cls) {
+    end++;
+  }
+  return end;
 }
 
 // ---------------------------------------------------------------------------

@@ -58,13 +58,13 @@ class _JournalSettingsDialog extends ConsumerWidget {
     required bool isDefault,
   }) async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
     final settings = await settingsRepo.getSettings();
-    await settingsRepo.saveSettings(
+    await settingsNotifier.saveSettings(
       isDefault
           ? settings.copyWith(defaultJournalId: journalId)
           : settings.copyWith(clearDefaultJournalId: true),
     );
-    ref.invalidate(settingsProvider);
   }
 
   @override

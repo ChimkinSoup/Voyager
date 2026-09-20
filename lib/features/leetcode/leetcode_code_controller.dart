@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
+import 'package:voyager/core/text/code_line_comment.dart';
 import 'package:voyager/core/text/newline_normalization.dart';
 
 /// Modifiers [CodeController] ships with, minus [CloseBlockModifier].
@@ -122,6 +123,13 @@ TextEditingValue? applyLeetCodeCodeEdits({
     tabSpaces: tabSpaces,
   );
   if (entered != null) return entered;
+
+  final opened = _smartEnterPastComment(
+    current: current,
+    incoming: incoming,
+    tabSpaces: tabSpaces,
+  );
+  if (opened != null) return opened;
 
   final emptied = _deleteEmptyPair(current: current, incoming: incoming);
   if (emptied != null) return emptied;
@@ -418,6 +426,43 @@ TextEditingValue? _smartEnterBetweenPair({
   return TextEditingValue(
     text: next,
     selection: TextSelection.collapsed(offset: caret),
+  );
+}
+
+/// Enter at the end of a line whose opener is followed by a comment still
+/// opens the block.
+///
+/// The stock [IndentModifier] indents by the last non-blank character before
+/// the caret alone, so the `{` in `if (x) { // note` is hidden behind the
+/// comment and the new line came out at the opener's own indent. Reading the
+/// code before the comment restores the level.
+///
+/// A line with no comment is left to that modifier, which already handles it.
+TextEditingValue? _smartEnterPastComment({
+  required TextEditingValue current,
+  required TextEditingValue incoming,
+  required int tabSpaces,
+}) {
+  final insert = _singleInsert(current, incoming);
+  if (insert == null || insert.char != '\n') return null;
+
+  final text = current.text;
+  final at = insert.at;
+  final prefix = text.substring(_lineStart(text, at), at);
+  if (codeLineCommentStart(prefix) == prefix.length) return null;
+  final code = codeBeforeLineComment(prefix);
+  if (code.isEmpty) return null;
+  final last = code[code.length - 1];
+  if (last != '{' && last != ':') return null;
+
+  var indent = 0;
+  while (indent < code.length && code[indent] == ' ') {
+    indent++;
+  }
+  final inserted = '\n${' ' * (indent + tabSpaces)}';
+  return TextEditingValue(
+    text: text.replaceRange(at, at, inserted),
+    selection: TextSelection.collapsed(offset: at + inserted.length),
   );
 }
 

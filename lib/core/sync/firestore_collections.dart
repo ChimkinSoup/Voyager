@@ -7,6 +7,13 @@ abstract final class FirestoreCollections {
   static const todoTasks = 'todo_tasks';
   static const leetcodeProblems = 'leetcode_problems';
   static const leetcodeReviewLog = 'leetcode_review_log';
+
+  /// The LeetCode cheat sheet's three levels. One record per tab, per section
+  /// and per entry: two devices editing different commands then never conflict
+  /// at all, which is what lets the sheet stay [snapshotOnly].
+  static const leetcodeCheatTabs = 'leetcode_cheat_tabs';
+  static const leetcodeCheatSections = 'leetcode_cheat_sections';
+  static const leetcodeCheatEntries = 'leetcode_cheat_entries';
   static const studyFolders = 'study_folders';
   static const studyDecks = 'study_decks';
   static const studyCards = 'study_cards';
@@ -60,6 +67,7 @@ abstract final class FirestoreCollections {
   static const rankingCategories = 'ranking_categories';
   static const rankingParents = 'ranking_parents';
   static const rankingChildren = 'ranking_children';
+
   /// The owner tag rankings' images carry on their [MediaReference]s, per
   /// `MEDIA.md`. Not a collection of records — a picture hangs off either a
   /// parent or a child, and one tag over both is what lets the page ask "does
@@ -97,6 +105,9 @@ abstract final class FirestoreCollections {
     todoTasks,
     leetcodeProblems,
     leetcodeReviewLog,
+    leetcodeCheatTabs,
+    leetcodeCheatSections,
+    leetcodeCheatEntries,
     studyFolders,
     studyDecks,
     studyCards,

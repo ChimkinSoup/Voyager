@@ -869,14 +869,14 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
 
   Future<void> _persistSplitWidth(double? width) async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
     final settings = await settingsRepo.getSettings();
     if (settings.dreamSplitWidth == width) return;
-    await settingsRepo.saveSettings(
+    await settingsNotifier.saveSettings(
       width == null
           ? settings.copyWith(clearDreamSplitWidth: true)
           : settings.copyWith(dreamSplitWidth: width),
     );
-    ref.invalidate(settingsProvider);
   }
 
   /// Re-seeds the open dream from a freshly-pulled row.

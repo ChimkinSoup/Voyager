@@ -7543,6 +7543,29 @@ class $SettingsTableTable extends SettingsTable
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _leetCodeCheatLastTabIdMeta =
+      const VerificationMeta('leetCodeCheatLastTabId');
+  @override
+  late final GeneratedColumn<String> leetCodeCheatLastTabId =
+      GeneratedColumn<String>(
+        'leet_code_cheat_last_tab_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _leetCodeCheatCollapsedSectionsJsonMeta =
+      const VerificationMeta('leetCodeCheatCollapsedSectionsJson');
+  @override
+  late final GeneratedColumn<String> leetCodeCheatCollapsedSectionsJson =
+      GeneratedColumn<String>(
+        'leet_code_cheat_collapsed_sections_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('[]'),
+      );
   static const VerificationMeta _defaultJournalIdMeta = const VerificationMeta(
     'defaultJournalId',
   );
@@ -8889,6 +8912,8 @@ class $SettingsTableTable extends SettingsTable
     lastViewedJournalId,
     lastViewedTodoListId,
     lastViewedCalendarId,
+    leetCodeCheatLastTabId,
+    leetCodeCheatCollapsedSectionsJson,
     defaultJournalId,
     defaultTodoListId,
     journalShowAllEntries,
@@ -9326,6 +9351,24 @@ class $SettingsTableTable extends SettingsTable
         lastViewedCalendarId.isAcceptableOrUnknown(
           data['last_viewed_calendar_id']!,
           _lastViewedCalendarIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('leet_code_cheat_last_tab_id')) {
+      context.handle(
+        _leetCodeCheatLastTabIdMeta,
+        leetCodeCheatLastTabId.isAcceptableOrUnknown(
+          data['leet_code_cheat_last_tab_id']!,
+          _leetCodeCheatLastTabIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('leet_code_cheat_collapsed_sections_json')) {
+      context.handle(
+        _leetCodeCheatCollapsedSectionsJsonMeta,
+        leetCodeCheatCollapsedSectionsJson.isAcceptableOrUnknown(
+          data['leet_code_cheat_collapsed_sections_json']!,
+          _leetCodeCheatCollapsedSectionsJsonMeta,
         ),
       );
     }
@@ -10409,6 +10452,14 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}last_viewed_calendar_id'],
       ),
+      leetCodeCheatLastTabId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}leet_code_cheat_last_tab_id'],
+      ),
+      leetCodeCheatCollapsedSectionsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}leet_code_cheat_collapsed_sections_json'],
+      )!,
       defaultJournalId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}default_journal_id'],
@@ -10901,6 +10952,22 @@ class SettingsTableData extends DataClass
   /// and todo pair is (see below).
   final String? lastViewedCalendarId;
 
+  /// The cheat sheet tab this device was last on, and the section ids it has
+  /// collapsed, as a JSON array.
+  ///
+  /// Device-local: both are deliberately absent from `settingsSyncPayload`,
+  /// which is what keeps writing them from moving [updatedAt] — that clock is
+  /// reserved for synced fields, and letting a tab switch move it would let
+  /// merely opening the sheet overwrite a preference another device changed
+  /// more recently.
+  ///
+  /// A stale id is expected rather than exceptional: the tab may have been
+  /// deleted on another device, or not yet pulled to this one. Readers fall
+  /// back to the first tab by position, and collapsed ids for dead sections
+  /// are inert until a write prunes them.
+  final String? leetCodeCheatLastTabId;
+  final String leetCodeCheatCollapsedSectionsJson;
+
   /// The journal the journal page always opens into, overriding
   /// [lastViewedJournalId] and [journalShowAllEntries]. Null means "restore
   /// whatever was last open", which is the behaviour this column replaced.
@@ -11092,6 +11159,8 @@ class SettingsTableData extends DataClass
     this.lastViewedJournalId,
     this.lastViewedTodoListId,
     this.lastViewedCalendarId,
+    this.leetCodeCheatLastTabId,
+    required this.leetCodeCheatCollapsedSectionsJson,
     this.defaultJournalId,
     this.defaultTodoListId,
     required this.journalShowAllEntries,
@@ -11270,6 +11339,14 @@ class SettingsTableData extends DataClass
     if (!nullToAbsent || lastViewedCalendarId != null) {
       map['last_viewed_calendar_id'] = Variable<String>(lastViewedCalendarId);
     }
+    if (!nullToAbsent || leetCodeCheatLastTabId != null) {
+      map['leet_code_cheat_last_tab_id'] = Variable<String>(
+        leetCodeCheatLastTabId,
+      );
+    }
+    map['leet_code_cheat_collapsed_sections_json'] = Variable<String>(
+      leetCodeCheatCollapsedSectionsJson,
+    );
     if (!nullToAbsent || defaultJournalId != null) {
       map['default_journal_id'] = Variable<String>(defaultJournalId);
     }
@@ -11571,6 +11648,12 @@ class SettingsTableData extends DataClass
       lastViewedCalendarId: lastViewedCalendarId == null && nullToAbsent
           ? const Value.absent()
           : Value(lastViewedCalendarId),
+      leetCodeCheatLastTabId: leetCodeCheatLastTabId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(leetCodeCheatLastTabId),
+      leetCodeCheatCollapsedSectionsJson: Value(
+        leetCodeCheatCollapsedSectionsJson,
+      ),
       defaultJournalId: defaultJournalId == null && nullToAbsent
           ? const Value.absent()
           : Value(defaultJournalId),
@@ -11815,6 +11898,12 @@ class SettingsTableData extends DataClass
       ),
       lastViewedCalendarId: serializer.fromJson<String?>(
         json['lastViewedCalendarId'],
+      ),
+      leetCodeCheatLastTabId: serializer.fromJson<String?>(
+        json['leetCodeCheatLastTabId'],
+      ),
+      leetCodeCheatCollapsedSectionsJson: serializer.fromJson<String>(
+        json['leetCodeCheatCollapsedSectionsJson'],
       ),
       defaultJournalId: serializer.fromJson<String?>(json['defaultJournalId']),
       defaultTodoListId: serializer.fromJson<String?>(
@@ -12128,6 +12217,12 @@ class SettingsTableData extends DataClass
       'lastViewedJournalId': serializer.toJson<String?>(lastViewedJournalId),
       'lastViewedTodoListId': serializer.toJson<String?>(lastViewedTodoListId),
       'lastViewedCalendarId': serializer.toJson<String?>(lastViewedCalendarId),
+      'leetCodeCheatLastTabId': serializer.toJson<String?>(
+        leetCodeCheatLastTabId,
+      ),
+      'leetCodeCheatCollapsedSectionsJson': serializer.toJson<String>(
+        leetCodeCheatCollapsedSectionsJson,
+      ),
       'defaultJournalId': serializer.toJson<String?>(defaultJournalId),
       'defaultTodoListId': serializer.toJson<String?>(defaultTodoListId),
       'journalShowAllEntries': serializer.toJson<bool>(journalShowAllEntries),
@@ -12360,6 +12455,8 @@ class SettingsTableData extends DataClass
     Value<String?> lastViewedJournalId = const Value.absent(),
     Value<String?> lastViewedTodoListId = const Value.absent(),
     Value<String?> lastViewedCalendarId = const Value.absent(),
+    Value<String?> leetCodeCheatLastTabId = const Value.absent(),
+    String? leetCodeCheatCollapsedSectionsJson,
     Value<String?> defaultJournalId = const Value.absent(),
     Value<String?> defaultTodoListId = const Value.absent(),
     bool? journalShowAllEntries,
@@ -12520,6 +12617,12 @@ class SettingsTableData extends DataClass
     lastViewedCalendarId: lastViewedCalendarId.present
         ? lastViewedCalendarId.value
         : this.lastViewedCalendarId,
+    leetCodeCheatLastTabId: leetCodeCheatLastTabId.present
+        ? leetCodeCheatLastTabId.value
+        : this.leetCodeCheatLastTabId,
+    leetCodeCheatCollapsedSectionsJson:
+        leetCodeCheatCollapsedSectionsJson ??
+        this.leetCodeCheatCollapsedSectionsJson,
     defaultJournalId: defaultJournalId.present
         ? defaultJournalId.value
         : this.defaultJournalId,
@@ -12826,6 +12929,13 @@ class SettingsTableData extends DataClass
       lastViewedCalendarId: data.lastViewedCalendarId.present
           ? data.lastViewedCalendarId.value
           : this.lastViewedCalendarId,
+      leetCodeCheatLastTabId: data.leetCodeCheatLastTabId.present
+          ? data.leetCodeCheatLastTabId.value
+          : this.leetCodeCheatLastTabId,
+      leetCodeCheatCollapsedSectionsJson:
+          data.leetCodeCheatCollapsedSectionsJson.present
+          ? data.leetCodeCheatCollapsedSectionsJson.value
+          : this.leetCodeCheatCollapsedSectionsJson,
       defaultJournalId: data.defaultJournalId.present
           ? data.defaultJournalId.value
           : this.defaultJournalId,
@@ -13189,6 +13299,10 @@ class SettingsTableData extends DataClass
           ..write('lastViewedJournalId: $lastViewedJournalId, ')
           ..write('lastViewedTodoListId: $lastViewedTodoListId, ')
           ..write('lastViewedCalendarId: $lastViewedCalendarId, ')
+          ..write('leetCodeCheatLastTabId: $leetCodeCheatLastTabId, ')
+          ..write(
+            'leetCodeCheatCollapsedSectionsJson: $leetCodeCheatCollapsedSectionsJson, ',
+          )
           ..write('defaultJournalId: $defaultJournalId, ')
           ..write('defaultTodoListId: $defaultTodoListId, ')
           ..write('journalShowAllEntries: $journalShowAllEntries, ')
@@ -13361,6 +13475,8 @@ class SettingsTableData extends DataClass
     lastViewedJournalId,
     lastViewedTodoListId,
     lastViewedCalendarId,
+    leetCodeCheatLastTabId,
+    leetCodeCheatCollapsedSectionsJson,
     defaultJournalId,
     defaultTodoListId,
     journalShowAllEntries,
@@ -13511,6 +13627,9 @@ class SettingsTableData extends DataClass
           other.lastViewedJournalId == this.lastViewedJournalId &&
           other.lastViewedTodoListId == this.lastViewedTodoListId &&
           other.lastViewedCalendarId == this.lastViewedCalendarId &&
+          other.leetCodeCheatLastTabId == this.leetCodeCheatLastTabId &&
+          other.leetCodeCheatCollapsedSectionsJson ==
+              this.leetCodeCheatCollapsedSectionsJson &&
           other.defaultJournalId == this.defaultJournalId &&
           other.defaultTodoListId == this.defaultTodoListId &&
           other.journalShowAllEntries == this.journalShowAllEntries &&
@@ -13675,6 +13794,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<String?> lastViewedJournalId;
   final Value<String?> lastViewedTodoListId;
   final Value<String?> lastViewedCalendarId;
+  final Value<String?> leetCodeCheatLastTabId;
+  final Value<String> leetCodeCheatCollapsedSectionsJson;
   final Value<String?> defaultJournalId;
   final Value<String?> defaultTodoListId;
   final Value<bool> journalShowAllEntries;
@@ -13818,6 +13939,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.lastViewedJournalId = const Value.absent(),
     this.lastViewedTodoListId = const Value.absent(),
     this.lastViewedCalendarId = const Value.absent(),
+    this.leetCodeCheatLastTabId = const Value.absent(),
+    this.leetCodeCheatCollapsedSectionsJson = const Value.absent(),
     this.defaultJournalId = const Value.absent(),
     this.defaultTodoListId = const Value.absent(),
     this.journalShowAllEntries = const Value.absent(),
@@ -13962,6 +14085,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.lastViewedJournalId = const Value.absent(),
     this.lastViewedTodoListId = const Value.absent(),
     this.lastViewedCalendarId = const Value.absent(),
+    this.leetCodeCheatLastTabId = const Value.absent(),
+    this.leetCodeCheatCollapsedSectionsJson = const Value.absent(),
     this.defaultJournalId = const Value.absent(),
     this.defaultTodoListId = const Value.absent(),
     this.journalShowAllEntries = const Value.absent(),
@@ -14106,6 +14231,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<String>? lastViewedJournalId,
     Expression<String>? lastViewedTodoListId,
     Expression<String>? lastViewedCalendarId,
+    Expression<String>? leetCodeCheatLastTabId,
+    Expression<String>? leetCodeCheatCollapsedSectionsJson,
     Expression<String>? defaultJournalId,
     Expression<String>? defaultTodoListId,
     Expression<bool>? journalShowAllEntries,
@@ -14267,6 +14394,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'last_viewed_todo_list_id': lastViewedTodoListId,
       if (lastViewedCalendarId != null)
         'last_viewed_calendar_id': lastViewedCalendarId,
+      if (leetCodeCheatLastTabId != null)
+        'leet_code_cheat_last_tab_id': leetCodeCheatLastTabId,
+      if (leetCodeCheatCollapsedSectionsJson != null)
+        'leet_code_cheat_collapsed_sections_json':
+            leetCodeCheatCollapsedSectionsJson,
       if (defaultJournalId != null) 'default_journal_id': defaultJournalId,
       if (defaultTodoListId != null) 'default_todo_list_id': defaultTodoListId,
       if (journalShowAllEntries != null)
@@ -14492,6 +14624,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<String?>? lastViewedJournalId,
     Value<String?>? lastViewedTodoListId,
     Value<String?>? lastViewedCalendarId,
+    Value<String?>? leetCodeCheatLastTabId,
+    Value<String>? leetCodeCheatCollapsedSectionsJson,
     Value<String?>? defaultJournalId,
     Value<String?>? defaultTodoListId,
     Value<bool>? journalShowAllEntries,
@@ -14645,6 +14779,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       lastViewedJournalId: lastViewedJournalId ?? this.lastViewedJournalId,
       lastViewedTodoListId: lastViewedTodoListId ?? this.lastViewedTodoListId,
       lastViewedCalendarId: lastViewedCalendarId ?? this.lastViewedCalendarId,
+      leetCodeCheatLastTabId:
+          leetCodeCheatLastTabId ?? this.leetCodeCheatLastTabId,
+      leetCodeCheatCollapsedSectionsJson:
+          leetCodeCheatCollapsedSectionsJson ??
+          this.leetCodeCheatCollapsedSectionsJson,
       defaultJournalId: defaultJournalId ?? this.defaultJournalId,
       defaultTodoListId: defaultTodoListId ?? this.defaultTodoListId,
       journalShowAllEntries:
@@ -14954,6 +15093,16 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     if (lastViewedCalendarId.present) {
       map['last_viewed_calendar_id'] = Variable<String>(
         lastViewedCalendarId.value,
+      );
+    }
+    if (leetCodeCheatLastTabId.present) {
+      map['leet_code_cheat_last_tab_id'] = Variable<String>(
+        leetCodeCheatLastTabId.value,
+      );
+    }
+    if (leetCodeCheatCollapsedSectionsJson.present) {
+      map['leet_code_cheat_collapsed_sections_json'] = Variable<String>(
+        leetCodeCheatCollapsedSectionsJson.value,
       );
     }
     if (defaultJournalId.present) {
@@ -15440,6 +15589,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('lastViewedJournalId: $lastViewedJournalId, ')
           ..write('lastViewedTodoListId: $lastViewedTodoListId, ')
           ..write('lastViewedCalendarId: $lastViewedCalendarId, ')
+          ..write('leetCodeCheatLastTabId: $leetCodeCheatLastTabId, ')
+          ..write(
+            'leetCodeCheatCollapsedSectionsJson: $leetCodeCheatCollapsedSectionsJson, ',
+          )
           ..write('defaultJournalId: $defaultJournalId, ')
           ..write('defaultTodoListId: $defaultTodoListId, ')
           ..write('journalShowAllEntries: $journalShowAllEntries, ')
@@ -46184,6 +46337,1672 @@ class RankingChildrenTableCompanion
   }
 }
 
+class $LeetCodeCheatTabsTableTable extends LeetCodeCheatTabsTable
+    with TableInfo<$LeetCodeCheatTabsTableTable, LeetCodeCheatTabsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LeetCodeCheatTabsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _languageKeyMeta = const VerificationMeta(
+    'languageKey',
+  );
+  @override
+  late final GeneratedColumn<String> languageKey = GeneratedColumn<String>(
+    'language_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<double> position = GeneratedColumn<double>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    languageKey,
+    position,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'leet_code_cheat_tabs_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LeetCodeCheatTabsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('language_key')) {
+      context.handle(
+        _languageKeyMeta,
+        languageKey.isAcceptableOrUnknown(
+          data['language_key']!,
+          _languageKeyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_positionMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LeetCodeCheatTabsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LeetCodeCheatTabsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      languageKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}language_key'],
+      ),
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}position'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $LeetCodeCheatTabsTableTable createAlias(String alias) {
+    return $LeetCodeCheatTabsTableTable(attachedDatabase, alias);
+  }
+}
+
+class LeetCodeCheatTabsTableData extends DataClass
+    implements Insertable<LeetCodeCheatTabsTableData> {
+  final String id;
+  final String name;
+  final String? languageKey;
+  final double position;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const LeetCodeCheatTabsTableData({
+    required this.id,
+    required this.name,
+    this.languageKey,
+    required this.position,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || languageKey != null) {
+      map['language_key'] = Variable<String>(languageKey);
+    }
+    map['position'] = Variable<double>(position);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  LeetCodeCheatTabsTableCompanion toCompanion(bool nullToAbsent) {
+    return LeetCodeCheatTabsTableCompanion(
+      id: Value(id),
+      name: Value(name),
+      languageKey: languageKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(languageKey),
+      position: Value(position),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory LeetCodeCheatTabsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LeetCodeCheatTabsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      languageKey: serializer.fromJson<String?>(json['languageKey']),
+      position: serializer.fromJson<double>(json['position']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'languageKey': serializer.toJson<String?>(languageKey),
+      'position': serializer.toJson<double>(position),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  LeetCodeCheatTabsTableData copyWith({
+    String? id,
+    String? name,
+    Value<String?> languageKey = const Value.absent(),
+    double? position,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => LeetCodeCheatTabsTableData(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    languageKey: languageKey.present ? languageKey.value : this.languageKey,
+    position: position ?? this.position,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  LeetCodeCheatTabsTableData copyWithCompanion(
+    LeetCodeCheatTabsTableCompanion data,
+  ) {
+    return LeetCodeCheatTabsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      languageKey: data.languageKey.present
+          ? data.languageKey.value
+          : this.languageKey,
+      position: data.position.present ? data.position.value : this.position,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LeetCodeCheatTabsTableData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('languageKey: $languageKey, ')
+          ..write('position: $position, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    languageKey,
+    position,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LeetCodeCheatTabsTableData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.languageKey == this.languageKey &&
+          other.position == this.position &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class LeetCodeCheatTabsTableCompanion
+    extends UpdateCompanion<LeetCodeCheatTabsTableData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String?> languageKey;
+  final Value<double> position;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const LeetCodeCheatTabsTableCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.languageKey = const Value.absent(),
+    this.position = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LeetCodeCheatTabsTableCompanion.insert({
+    required String id,
+    required String name,
+    this.languageKey = const Value.absent(),
+    required double position,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       position = Value(position),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<LeetCodeCheatTabsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? languageKey,
+    Expression<double>? position,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (languageKey != null) 'language_key': languageKey,
+      if (position != null) 'position': position,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LeetCodeCheatTabsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String?>? languageKey,
+    Value<double>? position,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return LeetCodeCheatTabsTableCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      languageKey: languageKey ?? this.languageKey,
+      position: position ?? this.position,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (languageKey.present) {
+      map['language_key'] = Variable<String>(languageKey.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<double>(position.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LeetCodeCheatTabsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('languageKey: $languageKey, ')
+          ..write('position: $position, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $LeetCodeCheatSectionsTableTable extends LeetCodeCheatSectionsTable
+    with
+        TableInfo<
+          $LeetCodeCheatSectionsTableTable,
+          LeetCodeCheatSectionsTableData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LeetCodeCheatSectionsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _tabIdMeta = const VerificationMeta('tabId');
+  @override
+  late final GeneratedColumn<String> tabId = GeneratedColumn<String>(
+    'tab_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<double> position = GeneratedColumn<double>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    tabId,
+    name,
+    position,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'leet_code_cheat_sections_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LeetCodeCheatSectionsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('tab_id')) {
+      context.handle(
+        _tabIdMeta,
+        tabId.isAcceptableOrUnknown(data['tab_id']!, _tabIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_tabIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_positionMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LeetCodeCheatSectionsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LeetCodeCheatSectionsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      tabId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tab_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}position'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $LeetCodeCheatSectionsTableTable createAlias(String alias) {
+    return $LeetCodeCheatSectionsTableTable(attachedDatabase, alias);
+  }
+}
+
+class LeetCodeCheatSectionsTableData extends DataClass
+    implements Insertable<LeetCodeCheatSectionsTableData> {
+  final String id;
+  final String tabId;
+  final String name;
+  final double position;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const LeetCodeCheatSectionsTableData({
+    required this.id,
+    required this.tabId,
+    required this.name,
+    required this.position,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['tab_id'] = Variable<String>(tabId);
+    map['name'] = Variable<String>(name);
+    map['position'] = Variable<double>(position);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  LeetCodeCheatSectionsTableCompanion toCompanion(bool nullToAbsent) {
+    return LeetCodeCheatSectionsTableCompanion(
+      id: Value(id),
+      tabId: Value(tabId),
+      name: Value(name),
+      position: Value(position),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory LeetCodeCheatSectionsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LeetCodeCheatSectionsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      tabId: serializer.fromJson<String>(json['tabId']),
+      name: serializer.fromJson<String>(json['name']),
+      position: serializer.fromJson<double>(json['position']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'tabId': serializer.toJson<String>(tabId),
+      'name': serializer.toJson<String>(name),
+      'position': serializer.toJson<double>(position),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  LeetCodeCheatSectionsTableData copyWith({
+    String? id,
+    String? tabId,
+    String? name,
+    double? position,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => LeetCodeCheatSectionsTableData(
+    id: id ?? this.id,
+    tabId: tabId ?? this.tabId,
+    name: name ?? this.name,
+    position: position ?? this.position,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  LeetCodeCheatSectionsTableData copyWithCompanion(
+    LeetCodeCheatSectionsTableCompanion data,
+  ) {
+    return LeetCodeCheatSectionsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      tabId: data.tabId.present ? data.tabId.value : this.tabId,
+      name: data.name.present ? data.name.value : this.name,
+      position: data.position.present ? data.position.value : this.position,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LeetCodeCheatSectionsTableData(')
+          ..write('id: $id, ')
+          ..write('tabId: $tabId, ')
+          ..write('name: $name, ')
+          ..write('position: $position, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    tabId,
+    name,
+    position,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LeetCodeCheatSectionsTableData &&
+          other.id == this.id &&
+          other.tabId == this.tabId &&
+          other.name == this.name &&
+          other.position == this.position &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class LeetCodeCheatSectionsTableCompanion
+    extends UpdateCompanion<LeetCodeCheatSectionsTableData> {
+  final Value<String> id;
+  final Value<String> tabId;
+  final Value<String> name;
+  final Value<double> position;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const LeetCodeCheatSectionsTableCompanion({
+    this.id = const Value.absent(),
+    this.tabId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.position = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LeetCodeCheatSectionsTableCompanion.insert({
+    required String id,
+    required String tabId,
+    required String name,
+    required double position,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       tabId = Value(tabId),
+       name = Value(name),
+       position = Value(position),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<LeetCodeCheatSectionsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? tabId,
+    Expression<String>? name,
+    Expression<double>? position,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (tabId != null) 'tab_id': tabId,
+      if (name != null) 'name': name,
+      if (position != null) 'position': position,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LeetCodeCheatSectionsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? tabId,
+    Value<String>? name,
+    Value<double>? position,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return LeetCodeCheatSectionsTableCompanion(
+      id: id ?? this.id,
+      tabId: tabId ?? this.tabId,
+      name: name ?? this.name,
+      position: position ?? this.position,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (tabId.present) {
+      map['tab_id'] = Variable<String>(tabId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<double>(position.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LeetCodeCheatSectionsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('tabId: $tabId, ')
+          ..write('name: $name, ')
+          ..write('position: $position, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $LeetCodeCheatEntriesTableTable extends LeetCodeCheatEntriesTable
+    with
+        TableInfo<
+          $LeetCodeCheatEntriesTableTable,
+          LeetCodeCheatEntriesTableData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LeetCodeCheatEntriesTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sectionIdMeta = const VerificationMeta(
+    'sectionId',
+  );
+  @override
+  late final GeneratedColumn<String> sectionId = GeneratedColumn<String>(
+    'section_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _commandMeta = const VerificationMeta(
+    'command',
+  );
+  @override
+  late final GeneratedColumn<String> command = GeneratedColumn<String>(
+    'command',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _complexityMeta = const VerificationMeta(
+    'complexity',
+  );
+  @override
+  late final GeneratedColumn<String> complexity = GeneratedColumn<String>(
+    'complexity',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<double> position = GeneratedColumn<double>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sectionId,
+    command,
+    description,
+    complexity,
+    position,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'leet_code_cheat_entries_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LeetCodeCheatEntriesTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('section_id')) {
+      context.handle(
+        _sectionIdMeta,
+        sectionId.isAcceptableOrUnknown(data['section_id']!, _sectionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sectionIdMeta);
+    }
+    if (data.containsKey('command')) {
+      context.handle(
+        _commandMeta,
+        command.isAcceptableOrUnknown(data['command']!, _commandMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_commandMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('complexity')) {
+      context.handle(
+        _complexityMeta,
+        complexity.isAcceptableOrUnknown(data['complexity']!, _complexityMeta),
+      );
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_positionMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LeetCodeCheatEntriesTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LeetCodeCheatEntriesTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      sectionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}section_id'],
+      )!,
+      command: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}command'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      )!,
+      complexity: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}complexity'],
+      ),
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}position'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $LeetCodeCheatEntriesTableTable createAlias(String alias) {
+    return $LeetCodeCheatEntriesTableTable(attachedDatabase, alias);
+  }
+}
+
+class LeetCodeCheatEntriesTableData extends DataClass
+    implements Insertable<LeetCodeCheatEntriesTableData> {
+  final String id;
+  final String sectionId;
+  final String command;
+  final String description;
+
+  /// Null, not empty string, when unset — the badge's presence is the flag.
+  final String? complexity;
+  final double position;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const LeetCodeCheatEntriesTableData({
+    required this.id,
+    required this.sectionId,
+    required this.command,
+    required this.description,
+    this.complexity,
+    required this.position,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['section_id'] = Variable<String>(sectionId);
+    map['command'] = Variable<String>(command);
+    map['description'] = Variable<String>(description);
+    if (!nullToAbsent || complexity != null) {
+      map['complexity'] = Variable<String>(complexity);
+    }
+    map['position'] = Variable<double>(position);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  LeetCodeCheatEntriesTableCompanion toCompanion(bool nullToAbsent) {
+    return LeetCodeCheatEntriesTableCompanion(
+      id: Value(id),
+      sectionId: Value(sectionId),
+      command: Value(command),
+      description: Value(description),
+      complexity: complexity == null && nullToAbsent
+          ? const Value.absent()
+          : Value(complexity),
+      position: Value(position),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory LeetCodeCheatEntriesTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LeetCodeCheatEntriesTableData(
+      id: serializer.fromJson<String>(json['id']),
+      sectionId: serializer.fromJson<String>(json['sectionId']),
+      command: serializer.fromJson<String>(json['command']),
+      description: serializer.fromJson<String>(json['description']),
+      complexity: serializer.fromJson<String?>(json['complexity']),
+      position: serializer.fromJson<double>(json['position']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'sectionId': serializer.toJson<String>(sectionId),
+      'command': serializer.toJson<String>(command),
+      'description': serializer.toJson<String>(description),
+      'complexity': serializer.toJson<String?>(complexity),
+      'position': serializer.toJson<double>(position),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  LeetCodeCheatEntriesTableData copyWith({
+    String? id,
+    String? sectionId,
+    String? command,
+    String? description,
+    Value<String?> complexity = const Value.absent(),
+    double? position,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => LeetCodeCheatEntriesTableData(
+    id: id ?? this.id,
+    sectionId: sectionId ?? this.sectionId,
+    command: command ?? this.command,
+    description: description ?? this.description,
+    complexity: complexity.present ? complexity.value : this.complexity,
+    position: position ?? this.position,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  LeetCodeCheatEntriesTableData copyWithCompanion(
+    LeetCodeCheatEntriesTableCompanion data,
+  ) {
+    return LeetCodeCheatEntriesTableData(
+      id: data.id.present ? data.id.value : this.id,
+      sectionId: data.sectionId.present ? data.sectionId.value : this.sectionId,
+      command: data.command.present ? data.command.value : this.command,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      complexity: data.complexity.present
+          ? data.complexity.value
+          : this.complexity,
+      position: data.position.present ? data.position.value : this.position,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LeetCodeCheatEntriesTableData(')
+          ..write('id: $id, ')
+          ..write('sectionId: $sectionId, ')
+          ..write('command: $command, ')
+          ..write('description: $description, ')
+          ..write('complexity: $complexity, ')
+          ..write('position: $position, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    sectionId,
+    command,
+    description,
+    complexity,
+    position,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LeetCodeCheatEntriesTableData &&
+          other.id == this.id &&
+          other.sectionId == this.sectionId &&
+          other.command == this.command &&
+          other.description == this.description &&
+          other.complexity == this.complexity &&
+          other.position == this.position &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class LeetCodeCheatEntriesTableCompanion
+    extends UpdateCompanion<LeetCodeCheatEntriesTableData> {
+  final Value<String> id;
+  final Value<String> sectionId;
+  final Value<String> command;
+  final Value<String> description;
+  final Value<String?> complexity;
+  final Value<double> position;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const LeetCodeCheatEntriesTableCompanion({
+    this.id = const Value.absent(),
+    this.sectionId = const Value.absent(),
+    this.command = const Value.absent(),
+    this.description = const Value.absent(),
+    this.complexity = const Value.absent(),
+    this.position = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LeetCodeCheatEntriesTableCompanion.insert({
+    required String id,
+    required String sectionId,
+    required String command,
+    this.description = const Value.absent(),
+    this.complexity = const Value.absent(),
+    required double position,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       sectionId = Value(sectionId),
+       command = Value(command),
+       position = Value(position),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<LeetCodeCheatEntriesTableData> custom({
+    Expression<String>? id,
+    Expression<String>? sectionId,
+    Expression<String>? command,
+    Expression<String>? description,
+    Expression<String>? complexity,
+    Expression<double>? position,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sectionId != null) 'section_id': sectionId,
+      if (command != null) 'command': command,
+      if (description != null) 'description': description,
+      if (complexity != null) 'complexity': complexity,
+      if (position != null) 'position': position,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LeetCodeCheatEntriesTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? sectionId,
+    Value<String>? command,
+    Value<String>? description,
+    Value<String?>? complexity,
+    Value<double>? position,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return LeetCodeCheatEntriesTableCompanion(
+      id: id ?? this.id,
+      sectionId: sectionId ?? this.sectionId,
+      command: command ?? this.command,
+      description: description ?? this.description,
+      complexity: complexity ?? this.complexity,
+      position: position ?? this.position,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (sectionId.present) {
+      map['section_id'] = Variable<String>(sectionId.value);
+    }
+    if (command.present) {
+      map['command'] = Variable<String>(command.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (complexity.present) {
+      map['complexity'] = Variable<String>(complexity.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<double>(position.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LeetCodeCheatEntriesTableCompanion(')
+          ..write('id: $id, ')
+          ..write('sectionId: $sectionId, ')
+          ..write('command: $command, ')
+          ..write('description: $description, ')
+          ..write('complexity: $complexity, ')
+          ..write('position: $position, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -46299,6 +48118,12 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $RankingParentsTableTable(this);
   late final $RankingChildrenTableTable rankingChildrenTable =
       $RankingChildrenTableTable(this);
+  late final $LeetCodeCheatTabsTableTable leetCodeCheatTabsTable =
+      $LeetCodeCheatTabsTableTable(this);
+  late final $LeetCodeCheatSectionsTableTable leetCodeCheatSectionsTable =
+      $LeetCodeCheatSectionsTableTable(this);
+  late final $LeetCodeCheatEntriesTableTable leetCodeCheatEntriesTable =
+      $LeetCodeCheatEntriesTableTable(this);
   late final Index idxTodoTasksListId = Index(
     'idx_todo_tasks_list_id',
     'CREATE INDEX idx_todo_tasks_list_id ON todo_tasks_table (list_id)',
@@ -46330,6 +48155,14 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final Index idxRankingChildrenParent = Index(
     'idx_ranking_children_parent',
     'CREATE INDEX idx_ranking_children_parent ON ranking_children_table (parent_id)',
+  );
+  late final Index idxLeetcodeCheatSectionsTab = Index(
+    'idx_leetcode_cheat_sections_tab',
+    'CREATE INDEX idx_leetcode_cheat_sections_tab ON leet_code_cheat_sections_table (tab_id)',
+  );
+  late final Index idxLeetcodeCheatEntriesSection = Index(
+    'idx_leetcode_cheat_entries_section',
+    'CREATE INDEX idx_leetcode_cheat_entries_section ON leet_code_cheat_entries_table (section_id)',
   );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -46395,6 +48228,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     rankingCategoriesTable,
     rankingParentsTable,
     rankingChildrenTable,
+    leetCodeCheatTabsTable,
+    leetCodeCheatSectionsTable,
+    leetCodeCheatEntriesTable,
     idxTodoTasksListId,
     idxTodoTasksParentTaskId,
     idxReminderDeliveryLogsStateId,
@@ -46403,6 +48239,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     idxMediaReferencesMediaId,
     idxRankingParentsCategory,
     idxRankingChildrenParent,
+    idxLeetcodeCheatSectionsTab,
+    idxLeetcodeCheatEntriesSection,
   ];
   @override
   DriftDatabaseOptions get options =>
@@ -49810,6 +51648,8 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<String?> lastViewedJournalId,
       Value<String?> lastViewedTodoListId,
       Value<String?> lastViewedCalendarId,
+      Value<String?> leetCodeCheatLastTabId,
+      Value<String> leetCodeCheatCollapsedSectionsJson,
       Value<String?> defaultJournalId,
       Value<String?> defaultTodoListId,
       Value<bool> journalShowAllEntries,
@@ -49955,6 +51795,8 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<String?> lastViewedJournalId,
       Value<String?> lastViewedTodoListId,
       Value<String?> lastViewedCalendarId,
+      Value<String?> leetCodeCheatLastTabId,
+      Value<String> leetCodeCheatCollapsedSectionsJson,
       Value<String?> defaultJournalId,
       Value<String?> defaultTodoListId,
       Value<bool> journalShowAllEntries,
@@ -50263,6 +52105,17 @@ class $$SettingsTableTableFilterComposer
     column: $table.lastViewedCalendarId,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<String> get leetCodeCheatLastTabId => $composableBuilder(
+    column: $table.leetCodeCheatLastTabId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get leetCodeCheatCollapsedSectionsJson =>
+      $composableBuilder(
+        column: $table.leetCodeCheatCollapsedSectionsJson,
+        builder: (column) => ColumnFilters(column),
+      );
 
   ColumnFilters<String> get defaultJournalId => $composableBuilder(
     column: $table.defaultJournalId,
@@ -50990,6 +52843,17 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get leetCodeCheatLastTabId => $composableBuilder(
+    column: $table.leetCodeCheatLastTabId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get leetCodeCheatCollapsedSectionsJson =>
+      $composableBuilder(
+        column: $table.leetCodeCheatCollapsedSectionsJson,
+        builder: (column) => ColumnOrderings(column),
+      );
+
   ColumnOrderings<String> get defaultJournalId => $composableBuilder(
     column: $table.defaultJournalId,
     builder: (column) => ColumnOrderings(column),
@@ -51712,6 +53576,17 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get leetCodeCheatLastTabId => $composableBuilder(
+    column: $table.leetCodeCheatLastTabId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get leetCodeCheatCollapsedSectionsJson =>
+      $composableBuilder(
+        column: $table.leetCodeCheatCollapsedSectionsJson,
+        builder: (column) => column,
+      );
+
   GeneratedColumn<String> get defaultJournalId => $composableBuilder(
     column: $table.defaultJournalId,
     builder: (column) => column,
@@ -52313,6 +54188,9 @@ class $$SettingsTableTableTableManager
                 Value<String?> lastViewedJournalId = const Value.absent(),
                 Value<String?> lastViewedTodoListId = const Value.absent(),
                 Value<String?> lastViewedCalendarId = const Value.absent(),
+                Value<String?> leetCodeCheatLastTabId = const Value.absent(),
+                Value<String> leetCodeCheatCollapsedSectionsJson =
+                    const Value.absent(),
                 Value<String?> defaultJournalId = const Value.absent(),
                 Value<String?> defaultTodoListId = const Value.absent(),
                 Value<bool> journalShowAllEntries = const Value.absent(),
@@ -52475,6 +54353,9 @@ class $$SettingsTableTableTableManager
                 lastViewedJournalId: lastViewedJournalId,
                 lastViewedTodoListId: lastViewedTodoListId,
                 lastViewedCalendarId: lastViewedCalendarId,
+                leetCodeCheatLastTabId: leetCodeCheatLastTabId,
+                leetCodeCheatCollapsedSectionsJson:
+                    leetCodeCheatCollapsedSectionsJson,
                 defaultJournalId: defaultJournalId,
                 defaultTodoListId: defaultTodoListId,
                 journalShowAllEntries: journalShowAllEntries,
@@ -52626,6 +54507,9 @@ class $$SettingsTableTableTableManager
                 Value<String?> lastViewedJournalId = const Value.absent(),
                 Value<String?> lastViewedTodoListId = const Value.absent(),
                 Value<String?> lastViewedCalendarId = const Value.absent(),
+                Value<String?> leetCodeCheatLastTabId = const Value.absent(),
+                Value<String> leetCodeCheatCollapsedSectionsJson =
+                    const Value.absent(),
                 Value<String?> defaultJournalId = const Value.absent(),
                 Value<String?> defaultTodoListId = const Value.absent(),
                 Value<bool> journalShowAllEntries = const Value.absent(),
@@ -52788,6 +54672,9 @@ class $$SettingsTableTableTableManager
                 lastViewedJournalId: lastViewedJournalId,
                 lastViewedTodoListId: lastViewedTodoListId,
                 lastViewedCalendarId: lastViewedCalendarId,
+                leetCodeCheatLastTabId: leetCodeCheatLastTabId,
+                leetCodeCheatCollapsedSectionsJson:
+                    leetCodeCheatCollapsedSectionsJson,
                 defaultJournalId: defaultJournalId,
                 defaultTodoListId: defaultTodoListId,
                 journalShowAllEntries: journalShowAllEntries,
@@ -68368,6 +70255,878 @@ typedef $$RankingChildrenTableTableProcessedTableManager =
       RankingChildrenTableData,
       PrefetchHooks Function()
     >;
+typedef $$LeetCodeCheatTabsTableTableCreateCompanionBuilder =
+    LeetCodeCheatTabsTableCompanion Function({
+      required String id,
+      required String name,
+      Value<String?> languageKey,
+      required double position,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$LeetCodeCheatTabsTableTableUpdateCompanionBuilder =
+    LeetCodeCheatTabsTableCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String?> languageKey,
+      Value<double> position,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$LeetCodeCheatTabsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $LeetCodeCheatTabsTableTable> {
+  $$LeetCodeCheatTabsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get languageKey => $composableBuilder(
+    column: $table.languageKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LeetCodeCheatTabsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $LeetCodeCheatTabsTableTable> {
+  $$LeetCodeCheatTabsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get languageKey => $composableBuilder(
+    column: $table.languageKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LeetCodeCheatTabsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LeetCodeCheatTabsTableTable> {
+  $$LeetCodeCheatTabsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get languageKey => $composableBuilder(
+    column: $table.languageKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$LeetCodeCheatTabsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LeetCodeCheatTabsTableTable,
+          LeetCodeCheatTabsTableData,
+          $$LeetCodeCheatTabsTableTableFilterComposer,
+          $$LeetCodeCheatTabsTableTableOrderingComposer,
+          $$LeetCodeCheatTabsTableTableAnnotationComposer,
+          $$LeetCodeCheatTabsTableTableCreateCompanionBuilder,
+          $$LeetCodeCheatTabsTableTableUpdateCompanionBuilder,
+          (
+            LeetCodeCheatTabsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $LeetCodeCheatTabsTableTable,
+              LeetCodeCheatTabsTableData
+            >,
+          ),
+          LeetCodeCheatTabsTableData,
+          PrefetchHooks Function()
+        > {
+  $$LeetCodeCheatTabsTableTableTableManager(
+    _$AppDatabase db,
+    $LeetCodeCheatTabsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LeetCodeCheatTabsTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$LeetCodeCheatTabsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$LeetCodeCheatTabsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> languageKey = const Value.absent(),
+                Value<double> position = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LeetCodeCheatTabsTableCompanion(
+                id: id,
+                name: name,
+                languageKey: languageKey,
+                position: position,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                Value<String?> languageKey = const Value.absent(),
+                required double position,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LeetCodeCheatTabsTableCompanion.insert(
+                id: id,
+                name: name,
+                languageKey: languageKey,
+                position: position,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LeetCodeCheatTabsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LeetCodeCheatTabsTableTable,
+      LeetCodeCheatTabsTableData,
+      $$LeetCodeCheatTabsTableTableFilterComposer,
+      $$LeetCodeCheatTabsTableTableOrderingComposer,
+      $$LeetCodeCheatTabsTableTableAnnotationComposer,
+      $$LeetCodeCheatTabsTableTableCreateCompanionBuilder,
+      $$LeetCodeCheatTabsTableTableUpdateCompanionBuilder,
+      (
+        LeetCodeCheatTabsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $LeetCodeCheatTabsTableTable,
+          LeetCodeCheatTabsTableData
+        >,
+      ),
+      LeetCodeCheatTabsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$LeetCodeCheatSectionsTableTableCreateCompanionBuilder =
+    LeetCodeCheatSectionsTableCompanion Function({
+      required String id,
+      required String tabId,
+      required String name,
+      required double position,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$LeetCodeCheatSectionsTableTableUpdateCompanionBuilder =
+    LeetCodeCheatSectionsTableCompanion Function({
+      Value<String> id,
+      Value<String> tabId,
+      Value<String> name,
+      Value<double> position,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$LeetCodeCheatSectionsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $LeetCodeCheatSectionsTableTable> {
+  $$LeetCodeCheatSectionsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get tabId => $composableBuilder(
+    column: $table.tabId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LeetCodeCheatSectionsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $LeetCodeCheatSectionsTableTable> {
+  $$LeetCodeCheatSectionsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get tabId => $composableBuilder(
+    column: $table.tabId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LeetCodeCheatSectionsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LeetCodeCheatSectionsTableTable> {
+  $$LeetCodeCheatSectionsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get tabId =>
+      $composableBuilder(column: $table.tabId, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<double> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$LeetCodeCheatSectionsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LeetCodeCheatSectionsTableTable,
+          LeetCodeCheatSectionsTableData,
+          $$LeetCodeCheatSectionsTableTableFilterComposer,
+          $$LeetCodeCheatSectionsTableTableOrderingComposer,
+          $$LeetCodeCheatSectionsTableTableAnnotationComposer,
+          $$LeetCodeCheatSectionsTableTableCreateCompanionBuilder,
+          $$LeetCodeCheatSectionsTableTableUpdateCompanionBuilder,
+          (
+            LeetCodeCheatSectionsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $LeetCodeCheatSectionsTableTable,
+              LeetCodeCheatSectionsTableData
+            >,
+          ),
+          LeetCodeCheatSectionsTableData,
+          PrefetchHooks Function()
+        > {
+  $$LeetCodeCheatSectionsTableTableTableManager(
+    _$AppDatabase db,
+    $LeetCodeCheatSectionsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LeetCodeCheatSectionsTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$LeetCodeCheatSectionsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$LeetCodeCheatSectionsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> tabId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<double> position = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LeetCodeCheatSectionsTableCompanion(
+                id: id,
+                tabId: tabId,
+                name: name,
+                position: position,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String tabId,
+                required String name,
+                required double position,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LeetCodeCheatSectionsTableCompanion.insert(
+                id: id,
+                tabId: tabId,
+                name: name,
+                position: position,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LeetCodeCheatSectionsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LeetCodeCheatSectionsTableTable,
+      LeetCodeCheatSectionsTableData,
+      $$LeetCodeCheatSectionsTableTableFilterComposer,
+      $$LeetCodeCheatSectionsTableTableOrderingComposer,
+      $$LeetCodeCheatSectionsTableTableAnnotationComposer,
+      $$LeetCodeCheatSectionsTableTableCreateCompanionBuilder,
+      $$LeetCodeCheatSectionsTableTableUpdateCompanionBuilder,
+      (
+        LeetCodeCheatSectionsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $LeetCodeCheatSectionsTableTable,
+          LeetCodeCheatSectionsTableData
+        >,
+      ),
+      LeetCodeCheatSectionsTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$LeetCodeCheatEntriesTableTableCreateCompanionBuilder =
+    LeetCodeCheatEntriesTableCompanion Function({
+      required String id,
+      required String sectionId,
+      required String command,
+      Value<String> description,
+      Value<String?> complexity,
+      required double position,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$LeetCodeCheatEntriesTableTableUpdateCompanionBuilder =
+    LeetCodeCheatEntriesTableCompanion Function({
+      Value<String> id,
+      Value<String> sectionId,
+      Value<String> command,
+      Value<String> description,
+      Value<String?> complexity,
+      Value<double> position,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$LeetCodeCheatEntriesTableTableFilterComposer
+    extends Composer<_$AppDatabase, $LeetCodeCheatEntriesTableTable> {
+  $$LeetCodeCheatEntriesTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sectionId => $composableBuilder(
+    column: $table.sectionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get command => $composableBuilder(
+    column: $table.command,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get complexity => $composableBuilder(
+    column: $table.complexity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LeetCodeCheatEntriesTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $LeetCodeCheatEntriesTableTable> {
+  $$LeetCodeCheatEntriesTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sectionId => $composableBuilder(
+    column: $table.sectionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get command => $composableBuilder(
+    column: $table.command,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get complexity => $composableBuilder(
+    column: $table.complexity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LeetCodeCheatEntriesTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LeetCodeCheatEntriesTableTable> {
+  $$LeetCodeCheatEntriesTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sectionId =>
+      $composableBuilder(column: $table.sectionId, builder: (column) => column);
+
+  GeneratedColumn<String> get command =>
+      $composableBuilder(column: $table.command, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get complexity => $composableBuilder(
+    column: $table.complexity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$LeetCodeCheatEntriesTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LeetCodeCheatEntriesTableTable,
+          LeetCodeCheatEntriesTableData,
+          $$LeetCodeCheatEntriesTableTableFilterComposer,
+          $$LeetCodeCheatEntriesTableTableOrderingComposer,
+          $$LeetCodeCheatEntriesTableTableAnnotationComposer,
+          $$LeetCodeCheatEntriesTableTableCreateCompanionBuilder,
+          $$LeetCodeCheatEntriesTableTableUpdateCompanionBuilder,
+          (
+            LeetCodeCheatEntriesTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $LeetCodeCheatEntriesTableTable,
+              LeetCodeCheatEntriesTableData
+            >,
+          ),
+          LeetCodeCheatEntriesTableData,
+          PrefetchHooks Function()
+        > {
+  $$LeetCodeCheatEntriesTableTableTableManager(
+    _$AppDatabase db,
+    $LeetCodeCheatEntriesTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LeetCodeCheatEntriesTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$LeetCodeCheatEntriesTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$LeetCodeCheatEntriesTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> sectionId = const Value.absent(),
+                Value<String> command = const Value.absent(),
+                Value<String> description = const Value.absent(),
+                Value<String?> complexity = const Value.absent(),
+                Value<double> position = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LeetCodeCheatEntriesTableCompanion(
+                id: id,
+                sectionId: sectionId,
+                command: command,
+                description: description,
+                complexity: complexity,
+                position: position,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String sectionId,
+                required String command,
+                Value<String> description = const Value.absent(),
+                Value<String?> complexity = const Value.absent(),
+                required double position,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LeetCodeCheatEntriesTableCompanion.insert(
+                id: id,
+                sectionId: sectionId,
+                command: command,
+                description: description,
+                complexity: complexity,
+                position: position,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LeetCodeCheatEntriesTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LeetCodeCheatEntriesTableTable,
+      LeetCodeCheatEntriesTableData,
+      $$LeetCodeCheatEntriesTableTableFilterComposer,
+      $$LeetCodeCheatEntriesTableTableOrderingComposer,
+      $$LeetCodeCheatEntriesTableTableAnnotationComposer,
+      $$LeetCodeCheatEntriesTableTableCreateCompanionBuilder,
+      $$LeetCodeCheatEntriesTableTableUpdateCompanionBuilder,
+      (
+        LeetCodeCheatEntriesTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $LeetCodeCheatEntriesTableTable,
+          LeetCodeCheatEntriesTableData
+        >,
+      ),
+      LeetCodeCheatEntriesTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -68527,4 +71286,20 @@ class $AppDatabaseManager {
       $$RankingParentsTableTableTableManager(_db, _db.rankingParentsTable);
   $$RankingChildrenTableTableTableManager get rankingChildrenTable =>
       $$RankingChildrenTableTableTableManager(_db, _db.rankingChildrenTable);
+  $$LeetCodeCheatTabsTableTableTableManager get leetCodeCheatTabsTable =>
+      $$LeetCodeCheatTabsTableTableTableManager(
+        _db,
+        _db.leetCodeCheatTabsTable,
+      );
+  $$LeetCodeCheatSectionsTableTableTableManager
+  get leetCodeCheatSectionsTable =>
+      $$LeetCodeCheatSectionsTableTableTableManager(
+        _db,
+        _db.leetCodeCheatSectionsTable,
+      );
+  $$LeetCodeCheatEntriesTableTableTableManager get leetCodeCheatEntriesTable =>
+      $$LeetCodeCheatEntriesTableTableTableManager(
+        _db,
+        _db.leetCodeCheatEntriesTable,
+      );
 }

@@ -5,6 +5,7 @@ import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/leetcode_cheat_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
@@ -22,7 +23,10 @@ import 'package:voyager/domain/models/sync_conflict.dart';
 abstract class JournalRepository {
   Future<List<Journal>> listJournals({bool includeDeleted = false});
   Future<Journal?> getJournal(String id);
-  Future<void> upsertJournal(Journal journal, {bool recordLocalActivity = true});
+  Future<void> upsertJournal(
+    Journal journal, {
+    bool recordLocalActivity = true,
+  });
   Future<void> softDeleteJournal(String id);
   Future<void> softDeleteEntriesInJournal(String journalId);
   Future<void> deleteAllJournals();
@@ -38,7 +42,10 @@ abstract class JournalRepository {
   });
   Future<Map<String, int>> countEntriesByJournal({bool includeDeleted = false});
   Future<JournalEntry?> getEntry(String id);
-  Future<void> upsertEntry(JournalEntry entry, {bool recordLocalActivity = true});
+  Future<void> upsertEntry(
+    JournalEntry entry, {
+    bool recordLocalActivity = true,
+  });
   Future<void> softDeleteEntry(String id);
   Future<void> hardDeleteEntry(String id);
   Future<void> purgeExpiredDeleted(DateTime now);
@@ -92,11 +99,99 @@ abstract class LeetCodeRepository {
   /// Live reviews only, oldest first. What the activity chart and calendar
   /// count.
   Future<List<LeetCodeReviewLog>> listReviewLogs();
+
+  // --- Cheat sheet (LEETCODE_CHEAT_SHEET_HLD.md) ---------------------------
+  //
+  // Three collections rather than one blob per tab, so two devices editing
+  // different commands never conflict. Reads join through live parents: a
+  // section under a tombstoned tab, or an entry under a tombstoned section, is
+  // filtered out by the query rather than chased down.
+
+  Future<List<LeetCodeCheatTab>> listCheatTabs({bool includeDeleted = false});
+  Future<LeetCodeCheatTab?> getCheatTab(String id);
+  Future<void> upsertCheatTab(
+    LeetCodeCheatTab tab, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Sections of [tabId], by position. Omit [tabId] for every section whose
+  /// tab is live — what the cross-tab search and "copy everything" want.
+  Future<List<LeetCodeCheatSection>> listCheatSections({
+    String? tabId,
+    bool includeDeleted = false,
+  });
+  Future<LeetCodeCheatSection?> getCheatSection(String id);
+  Future<void> upsertCheatSection(
+    LeetCodeCheatSection section, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Entries of [sectionId], by position. Omit [sectionId] for every entry
+  /// whose section and tab are both live.
+  Future<List<LeetCodeCheatEntry>> listCheatEntries({
+    String? sectionId,
+    bool includeDeleted = false,
+  });
+  Future<LeetCodeCheatEntry?> getCheatEntry(String id);
+  Future<void> upsertCheatEntry(
+    LeetCodeCheatEntry entry, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Rewrites [ordered]'s positions in one batch. Called when a drag closes
+  /// the gap between two neighbours past [kCheatPositionFloor]; returns the
+  /// rows as written so the caller can push exactly those.
+  Future<List<LeetCodeCheatSection>> renormalizeCheatSections(
+    List<LeetCodeCheatSection> ordered,
+  );
+  Future<List<LeetCodeCheatEntry>> renormalizeCheatEntries(
+    List<LeetCodeCheatEntry> ordered,
+  );
+
+  /// Tombstones the entry.
+  Future<LeetCodeCheatEntry> softDeleteCheatEntry(String id);
+  Future<LeetCodeCheatEntry> restoreCheatEntry(String id);
+
+  /// Tombstones the section and every live entry under it, stamping all of
+  /// them with one `deletedAt` instant — [restoreCheatSection] clears only the
+  /// rows carrying that exact instant, which is what keeps an entry deleted on
+  /// its own from riding back in.
+  Future<({LeetCodeCheatSection section, List<LeetCodeCheatEntry> entries})>
+  softDeleteCheatSection(String id);
+  Future<({LeetCodeCheatSection section, List<LeetCodeCheatEntry> entries})>
+  restoreCheatSection(String id);
+
+  /// [softDeleteCheatSection] one level up: the tab, its sections, and their
+  /// entries, as one undo unit.
+  Future<
+    ({
+      LeetCodeCheatTab tab,
+      List<LeetCodeCheatSection> sections,
+      List<LeetCodeCheatEntry> entries,
+    })
+  >
+  softDeleteCheatTab(String id);
+  Future<
+    ({
+      LeetCodeCheatTab tab,
+      List<LeetCodeCheatSection> sections,
+      List<LeetCodeCheatEntry> entries,
+    })
+  >
+  restoreCheatTab(String id);
+
+  /// Tombstones included — the backup registry wants them.
+  Future<List<LeetCodeCheatTab>> getAllCheatTabs();
+  Future<List<LeetCodeCheatSection>> getAllCheatSections();
+  Future<List<LeetCodeCheatEntry>> getAllCheatEntries();
 }
 
 abstract class TodoRepository {
   Future<List<TodoListModel>> listLists({bool includeDeleted = false});
-  Future<void> upsertList(TodoListModel list, {bool recordLocalActivity = true});
+  Future<void> upsertList(
+    TodoListModel list, {
+    bool recordLocalActivity = true,
+  });
   Future<void> softDeleteList(String id);
 
   /// Soft-deletes every task in [listId], subtasks included, and returns the
@@ -134,7 +229,10 @@ abstract class CalendarRepository {
   });
   Future<void> softDeleteCalendar(String id);
   Future<void> softDeleteEventsInCalendar(String calendarId);
-  Future<void> reassignEventsCalendar(String fromCalendarId, String toCalendarId);
+  Future<void> reassignEventsCalendar(
+    String fromCalendarId,
+    String toCalendarId,
+  );
 
   Future<List<CalendarEvent>> listEvents({
     String? calendarId,
@@ -167,7 +265,10 @@ abstract class TrackerRepository {
     bool includeDeleted = false,
   });
   Future<TrackerValue?> getValue(String id);
-  Future<void> upsertValue(TrackerValue value, {bool recordLocalActivity = true});
+  Future<void> upsertValue(
+    TrackerValue value, {
+    bool recordLocalActivity = true,
+  });
   Future<void> softDeleteValue(String id);
 
   Future<void> purgeExpiredDeleted(DateTime now);
@@ -378,7 +479,10 @@ abstract class StudyRepository {
     bool includeDeleted = false,
   });
   Future<StudyFolder?> getFolder(String id);
-  Future<void> upsertFolder(StudyFolder folder, {bool recordLocalActivity = true});
+  Future<void> upsertFolder(
+    StudyFolder folder, {
+    bool recordLocalActivity = true,
+  });
   Future<void> softDeleteFolder(String id);
 
   /// True if moving [folderId] under [targetParentFolderId] would create a
@@ -396,11 +500,15 @@ abstract class StudyRepository {
   Future<void> softDeleteDeck(String id);
   Future<void> moveDeck(String deckId, String? newParentFolderId);
 
-  Future<List<StudyCard>> listCards(String deckId, {bool includeDeleted = false});
+  Future<List<StudyCard>> listCards(
+    String deckId, {
+    bool includeDeleted = false,
+  });
   Future<StudyCard?> getCard(String id);
   Future<void> upsertCard(StudyCard card, {bool recordLocalActivity = true});
   Future<void> softDeleteCard(String id);
   Future<void> moveCards(List<String> cardIds, String targetDeckId);
+
   /// Copies each card in [cardIds] into its own deck, returning the source
   /// card id mapped to the id of the copy.
   ///
@@ -541,7 +649,9 @@ abstract class MediaRepository {
 
   /// Assets whose bytes this device is meant to be moving, in either
   /// direction. Drives both transfer queues.
-  Future<List<MediaAsset>> listAssetsByUploadState(Set<MediaUploadState> states);
+  Future<List<MediaAsset>> listAssetsByUploadState(
+    Set<MediaUploadState> states,
+  );
   Future<List<MediaAsset>> listAssetsByDownloadState(
     Set<MediaDownloadState> states,
   );
@@ -802,6 +912,7 @@ abstract class JobRepository {
     JobCompany company, {
     bool recordLocalActivity = true,
   });
+
   /// See [softDeleteStage].
   Future<JobCompany?> softDeleteCompany(String id);
 
@@ -823,7 +934,10 @@ abstract class JobRepository {
   softDeleteCategory(String id);
 
   Future<List<JobSeason>> listSeasons({bool includeDeleted = false});
-  Future<void> upsertSeason(JobSeason season, {bool recordLocalActivity = true});
+  Future<void> upsertSeason(
+    JobSeason season, {
+    bool recordLocalActivity = true,
+  });
 
   /// Rewrites season sort order to match [orderedIds]. Returns only the
   /// seasons whose position actually moved, so the caller pushes the minimum.
@@ -918,6 +1032,7 @@ abstract class RankingRepository {
     String categoryId, {
     bool includeDeleted = false,
   });
+
   /// Live entries per category id, in one grouped query. A category with none
   /// is absent.
   Future<Map<String, int>> countParentsByCategory();
@@ -929,9 +1044,8 @@ abstract class RankingRepository {
 
   /// Tombstones the parent and its children. Returns both so the caller can
   /// push them and offer an undo.
-  Future<({RankingParent parent, List<RankingChild> children})> softDeleteParent(
-    String id,
-  );
+  Future<({RankingParent parent, List<RankingChild> children})>
+  softDeleteParent(String id);
 
   Future<({RankingParent parent, List<RankingChild> children})> restoreParent(
     String id,
@@ -945,6 +1059,7 @@ abstract class RankingRepository {
     String parentId, {
     bool includeDeleted = false,
   });
+
   /// Every unit under every entry in [categoryId], in one query.
   Future<List<RankingChild>> listChildrenOfCategory(
     String categoryId, {
@@ -1008,9 +1123,8 @@ abstract class SyncRepository {
   /// than re-merging it.
   Stream<Map<String, Map<String, dynamic>>> watchCollection(String collection);
   Future<Map<String, dynamic>?> getDocument(String collection, String id);
-  Future<List<({String id, Map<String, dynamic> data})>> listCollectionDocuments(
-    String collection,
-  );
+  Future<List<({String id, Map<String, dynamic> data})>>
+  listCollectionDocuments(String collection);
   Future<Map<String, dynamic>?> getRemoteSettings();
   Future<void> upsertRemoteSettings(Map<String, dynamic> data);
 

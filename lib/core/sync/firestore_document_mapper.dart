@@ -15,6 +15,7 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/leetcode_cheat_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/media_models.dart';
@@ -84,7 +85,8 @@ String? _dateToFirestore(DateTime? value) => value?.toUtc().toIso8601String();
 /// clock time with no timezone marker, which is off by the device's UTC
 /// offset from the real instant once compared elsewhere (e.g. in the sync
 /// conflict UI). Always normalize to UTC before serializing.
-String _dateToFirestoreRequired(DateTime value) => value.toUtc().toIso8601String();
+String _dateToFirestoreRequired(DateTime value) =>
+    value.toUtc().toIso8601String();
 
 int parseVersion(Map<String, dynamic> data) =>
     (data['version'] as num?)?.toInt() ?? 0;
@@ -209,10 +211,10 @@ Journal mergeJournalFromRemote(
     colorValue: data.containsKey('colorValue')
         ? data['colorValue'] as int?
         : local?.colorValue,
-    guidedJournaling: data['guidedJournaling'] as bool? ??
-        local?.guidedJournaling ??
-        false,
-    promptCycleDays: (data['promptCycleDays'] as num?)?.toInt() ??
+    guidedJournaling:
+        data['guidedJournaling'] as bool? ?? local?.guidedJournaling ?? false,
+    promptCycleDays:
+        (data['promptCycleDays'] as num?)?.toInt() ??
         local?.promptCycleDays ??
         7,
     showMood: data['showMood'] as bool? ?? local?.showMood ?? true,
@@ -220,7 +222,8 @@ Journal mergeJournalFromRemote(
     showQuotes: data['showQuotes'] as bool? ?? local?.showQuotes ?? true,
     includeInAllView:
         data['includeInAllView'] as bool? ?? local?.includeInAllView ?? true,
-    createdAt: parseFirestoreDate(data['createdAt']) ??
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
     updatedAt: remoteUpdated,
@@ -345,7 +348,8 @@ LeetCodeProblem mergeLeetCodeProblemFromRemote(
     // written before either existed has neither key, and keeps what this
     // device already has rather than being blanked.
     solutions: _mergeLeetCodeSolutions(data, local),
-    solvedAt: parseFirestoreDate(data['solvedAt']) ??
+    solvedAt:
+        parseFirestoreDate(data['solvedAt']) ??
         local?.solvedAt ??
         remoteUpdated,
     interval: (data['interval'] as num?)?.toDouble() ?? local?.interval ?? 0,
@@ -357,7 +361,8 @@ LeetCodeProblem mergeLeetCodeProblemFromRemote(
         ? parseFirestoreDate(data['dueAt'])
         : local?.dueAt,
     reviewCount: data['reviewCount'] as int? ?? local?.reviewCount ?? 0,
-    createdAt: parseFirestoreDate(data['createdAt']) ??
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
     updatedAt: remoteUpdated,
@@ -392,6 +397,168 @@ LeetCodeReviewLog mergeLeetCodeReviewLogFromRemote(
     grade: StudyGrade.values.byName(data['grade'] as String? ?? 'good'),
     reviewedAt:
         parseFirestoreDate(data['reviewedAt']) ?? local?.reviewedAt ?? utcNow(),
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> leetCodeCheatTabToFirestore(LeetCodeCheatTab tab) => {
+  'id': tab.id,
+  'name': tab.name,
+  'languageKey': tab.languageKey,
+  'position': tab.position,
+  'createdAt': _dateToFirestoreRequired(tab.createdAt),
+  'updatedAt': _dateToFirestoreRequired(tab.updatedAt),
+  'version': tab.version,
+  'deletedAt': _dateToFirestore(tab.deletedAt),
+};
+
+/// Plain version-then-updatedAt, as every snapshot-only record resolves.
+///
+/// A tab, a section and an entry are separate documents, so the realistic
+/// concurrent case — two devices editing different commands — never reaches a
+/// merge at all. Two devices editing the *same* record loses one side's text,
+/// which `LEETCODE_CHEAT_SHEET_HLD.md` §5.3 accepts.
+LeetCodeCheatTab mergeLeetCodeCheatTabFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  LeetCodeCheatTab? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return LeetCodeCheatTab(
+    id: id,
+    name: data['name'] as String? ?? local?.name ?? '',
+    // A remote written before the field existed carries no key; a tab whose
+    // language was cleared carries an explicit null. Only the first should
+    // keep the local value, so the key's presence is what decides.
+    languageKey: data.containsKey('languageKey')
+        ? data['languageKey'] as String?
+        : local?.languageKey,
+    position:
+        (data['position'] as num?)?.toDouble() ??
+        local?.position ??
+        kCheatPositionStep,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> leetCodeCheatSectionToFirestore(
+  LeetCodeCheatSection section,
+) => {
+  'id': section.id,
+  'tabId': section.tabId,
+  'name': section.name,
+  'position': section.position,
+  'createdAt': _dateToFirestoreRequired(section.createdAt),
+  'updatedAt': _dateToFirestoreRequired(section.updatedAt),
+  'version': section.version,
+  'deletedAt': _dateToFirestore(section.deletedAt),
+};
+
+/// [mergeLeetCodeCheatTabFromRemote] for a section.
+LeetCodeCheatSection mergeLeetCodeCheatSectionFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  LeetCodeCheatSection? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return LeetCodeCheatSection(
+    id: id,
+    tabId: data['tabId'] as String? ?? local?.tabId ?? '',
+    name: data['name'] as String? ?? local?.name ?? '',
+    position:
+        (data['position'] as num?)?.toDouble() ??
+        local?.position ??
+        kCheatPositionStep,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
+Map<String, dynamic> leetCodeCheatEntryToFirestore(LeetCodeCheatEntry entry) =>
+    {
+      'id': entry.id,
+      'sectionId': entry.sectionId,
+      'command': entry.command,
+      'description': entry.description,
+      'complexity': entry.complexity,
+      'position': entry.position,
+      'createdAt': _dateToFirestoreRequired(entry.createdAt),
+      'updatedAt': _dateToFirestoreRequired(entry.updatedAt),
+      'version': entry.version,
+      'deletedAt': _dateToFirestore(entry.deletedAt),
+    };
+
+/// [mergeLeetCodeCheatTabFromRemote] for an entry.
+LeetCodeCheatEntry mergeLeetCodeCheatEntryFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  LeetCodeCheatEntry? local,
+}) {
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  final remoteVersion = parseVersion(data);
+  if (local != null &&
+      !remoteVersionWins(
+        remoteVersion: remoteVersion,
+        localVersion: local.version,
+        remoteUpdated: remoteUpdated,
+        localUpdated: local.updatedAt,
+      )) {
+    return local;
+  }
+
+  return LeetCodeCheatEntry(
+    id: id,
+    sectionId: data['sectionId'] as String? ?? local?.sectionId ?? '',
+    command: data['command'] as String? ?? local?.command ?? '',
+    description: data['description'] as String? ?? local?.description ?? '',
+    // Null and absent differ here too: null is a complexity the user cleared,
+    // and the badge's presence is the only flag the entry has.
+    complexity: data.containsKey('complexity')
+        ? data['complexity'] as String?
+        : local?.complexity,
+    position:
+        (data['position'] as num?)?.toDouble() ??
+        local?.position ??
+        kCheatPositionStep,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
     version: remoteVersion,
     deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
   );
@@ -500,8 +667,7 @@ SyncedListItem<T> _mergedListItem<T>(
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
   return SyncedListItem(
     item: item,
-    position:
-        (data['position'] as num?)?.toDouble() ?? local?.position ?? 0,
+    position: (data['position'] as num?)?.toDouble() ?? local?.position ?? 0,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -551,7 +717,8 @@ StudyFolder mergeStudyFolderFromRemote(
     colorValue: data.containsKey('colorValue')
         ? data['colorValue'] as int?
         : local?.colorValue,
-    createdAt: parseFirestoreDate(data['createdAt']) ??
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
     updatedAt: remoteUpdated,
@@ -597,7 +764,8 @@ StudyDeck mergeStudyDeckFromRemote(
     colorValue: data.containsKey('colorValue')
         ? data['colorValue'] as int?
         : local?.colorValue,
-    createdAt: parseFirestoreDate(data['createdAt']) ??
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
     updatedAt: remoteUpdated,
@@ -636,11 +804,11 @@ StudyDeckLink mergeStudyDeckLinkFromRemote(
 
   return StudyDeckLink(
     id: id,
-    parentDeckId:
-        data['parentDeckId'] as String? ?? local?.parentDeckId ?? '',
+    parentDeckId: data['parentDeckId'] as String? ?? local?.parentDeckId ?? '',
     childDeckId: data['childDeckId'] as String? ?? local?.childDeckId ?? '',
     enabled: data['enabled'] as bool? ?? local?.enabled ?? true,
-    createdAt: parseFirestoreDate(data['createdAt']) ??
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
     updatedAt: remoteUpdated,
@@ -689,8 +857,10 @@ StudyCard mergeStudyCardFromRemote(
     interval: (data['interval'] as num?)?.toDouble() ?? local?.interval ?? 0,
     ease: (data['ease'] as num?)?.toDouble() ?? local?.ease ?? 2.5,
     dueAt: parseFirestoreDate(data['dueAt']) ?? local?.dueAt ?? remoteUpdated,
-    reviewCount: (data['reviewCount'] as num?)?.toInt() ?? local?.reviewCount ?? 0,
-    createdAt: parseFirestoreDate(data['createdAt']) ??
+    reviewCount:
+        (data['reviewCount'] as num?)?.toInt() ?? local?.reviewCount ?? 0,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
     updatedAt: remoteUpdated,
@@ -800,8 +970,7 @@ MediaReference mergeMediaReferenceFromRemote(
   // *Firestore* id on the wire, so it has to come back through the same
   // legacy mapping the parent document itself does — otherwise the gallery
   // on the device that pulled it hangs off an id no local row has.
-  final collection =
-      data['collection'] as String? ?? local?.collection ?? '';
+  final collection = data['collection'] as String? ?? local?.collection ?? '';
   final rawDocumentId =
       data['documentId'] as String? ?? local?.documentId ?? '';
 
@@ -815,8 +984,7 @@ MediaReference mergeMediaReferenceFromRemote(
       data['facet'],
       local?.facet ?? MediaFacet.gallery,
     ),
-    sortOrder:
-        (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
+    sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
     displayWidthPx:
         (data['displayWidthPx'] as num?)?.toInt() ?? local?.displayWidthPx,
     createdAt:
@@ -1522,8 +1690,7 @@ JobCategory mergeJobCategoryFromRemote(
   return JobCategory(
     id: id,
     name: data['name'] as String? ?? local?.name ?? '',
-    colorValue:
-        (data['colorValue'] as num?)?.toInt() ?? local?.colorValue ?? 0,
+    colorValue: (data['colorValue'] as num?)?.toInt() ?? local?.colorValue ?? 0,
     sortOrder: (data['sortOrder'] as num?)?.toInt() ?? local?.sortOrder ?? 0,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
@@ -1612,7 +1779,8 @@ JournalEntry mergeJournalEntryFromRemote(
 }) {
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
   final remoteVersion = parseVersion(data);
-  final metadataRemoteWins = local == null ||
+  final metadataRemoteWins =
+      local == null ||
       remoteVersionWins(
         remoteVersion: remoteVersion,
         localVersion: local.version,
@@ -1652,7 +1820,9 @@ JournalEntry mergeJournalEntryFromRemote(
     id: id,
     journalId: journalReferenceIdFromFirestore(
       metadataRemoteWins
-          ? (data['journalId'] as String? ?? local?.journalId ?? legacyJournalId)
+          ? (data['journalId'] as String? ??
+                local?.journalId ??
+                legacyJournalId)
           : local!.journalId,
     ),
     title: metadataRemoteWins
@@ -1662,13 +1832,13 @@ JournalEntry mergeJournalEntryFromRemote(
     richBodyJson: richBodyJson,
     entryDate: metadataRemoteWins
         ? (parseFirestoreDate(data['entryDate']) ??
-            local?.entryDate ??
-            remoteUpdated)
+              local?.entryDate ??
+              remoteUpdated)
         : local!.entryDate,
     timestamp: metadataRemoteWins
         ? (data.containsKey('timestamp')
-            ? parseFirestoreDate(data['timestamp'])
-            : local?.timestamp)
+              ? parseFirestoreDate(data['timestamp'])
+              : local?.timestamp)
         : local!.timestamp,
     tags: tags,
     mood: metadataRemoteWins
@@ -1676,30 +1846,35 @@ JournalEntry mergeJournalEntryFromRemote(
         : local!.mood,
     quoteId: metadataRemoteWins
         ? (data.containsKey('quoteId')
-            ? data['quoteId'] as String?
-            : local?.quoteId)
+              ? data['quoteId'] as String?
+              : local?.quoteId)
         : local!.quoteId,
     customQuote: metadataRemoteWins
         ? (data.containsKey('customQuote')
-            ? data['customQuote'] as String?
-            : local?.customQuote)
+              ? data['customQuote'] as String?
+              : local?.customQuote)
         : local!.customQuote,
     weatherIcon: metadataRemoteWins
         ? (data.containsKey('weatherIcon')
-            ? data['weatherIcon'] as String?
-            : local?.weatherIcon)
+              ? data['weatherIcon'] as String?
+              : local?.weatherIcon)
         : local!.weatherIcon,
     guidedPrompt: metadataRemoteWins
         ? (data.containsKey('guidedPrompt')
-            ? data['guidedPrompt'] as String?
-            : local?.guidedPrompt)
+              ? data['guidedPrompt'] as String?
+              : local?.guidedPrompt)
         : local!.guidedPrompt,
-    createdAt: parseFirestoreDate(data['createdAt']) ??
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
     updatedAt: resolvedUpdated,
     version: resolvedVersion,
-    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt, remoteWins: metadataRemoteWins),
+    deletedAt: mergeDeletedAtFromRemote(
+      data,
+      local?.deletedAt,
+      remoteWins: metadataRemoteWins,
+    ),
   );
 }
 
@@ -1739,7 +1914,8 @@ TodoListModel mergeTodoListFromRemote(
         : local?.colorValue,
     includeInAllView:
         data['includeInAllView'] as bool? ?? local?.includeInAllView ?? true,
-    createdAt: parseFirestoreDate(data['createdAt']) ??
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
     updatedAt: remoteUpdated,
@@ -1775,7 +1951,8 @@ TodoTask mergeTodoTaskFromRemote(
 }) {
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
   final remoteVersion = parseVersion(data);
-  final metadataRemoteWins = local == null ||
+  final metadataRemoteWins =
+      local == null ||
       remoteVersionWins(
         remoteVersion: remoteVersion,
         localVersion: local.version,
@@ -1815,8 +1992,8 @@ TodoTask mergeTodoTaskFromRemote(
     notes: notes,
     dueDate: metadataRemoteWins
         ? (data.containsKey('dueDate')
-            ? parseFirestoreDate(data['dueDate'])
-            : local?.dueDate)
+              ? parseFirestoreDate(data['dueDate'])
+              : local?.dueDate)
         : local!.dueDate,
     completed: metadataRemoteWins
         ? (data['completed'] as bool? ?? local?.completed ?? false)
@@ -1829,30 +2006,35 @@ TodoTask mergeTodoTaskFromRemote(
         : local!.sortOrder,
     dueDateSetAt: metadataRemoteWins
         ? (data.containsKey('dueDateSetAt')
-            ? parseFirestoreDate(data['dueDateSetAt'])
-            : local?.dueDateSetAt)
+              ? parseFirestoreDate(data['dueDateSetAt'])
+              : local?.dueDateSetAt)
         : local!.dueDateSetAt,
     parentTaskId: metadataRemoteWins
         ? (data.containsKey('parentTaskId')
-            ? data['parentTaskId'] as String?
-            : local?.parentTaskId)
+              ? data['parentTaskId'] as String?
+              : local?.parentTaskId)
         : local!.parentTaskId,
     recurrence: metadataRemoteWins
         ? (data.containsKey('recurrence')
-            ? RecurrenceRule.parse(data['recurrence'] as String?)
-            : (local?.recurrence ?? RecurrenceRule.none))
+              ? RecurrenceRule.parse(data['recurrence'] as String?)
+              : (local?.recurrence ?? RecurrenceRule.none))
         : local!.recurrence,
     recurrenceAnchor: metadataRemoteWins
         ? (data.containsKey('recurrenceAnchor')
-            ? parseFirestoreDate(data['recurrenceAnchor'])
-            : local?.recurrenceAnchor)
+              ? parseFirestoreDate(data['recurrenceAnchor'])
+              : local?.recurrenceAnchor)
         : local!.recurrenceAnchor,
-    createdAt: parseFirestoreDate(data['createdAt']) ??
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
     updatedAt: resolvedUpdated,
     version: resolvedVersion,
-    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt, remoteWins: metadataRemoteWins),
+    deletedAt: mergeDeletedAtFromRemote(
+      data,
+      local?.deletedAt,
+      remoteWins: metadataRemoteWins,
+    ),
   );
 }
 
@@ -1877,7 +2059,8 @@ DreamEntry mergeDreamEntryFromRemote(
 }) {
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
   final remoteVersion = parseVersion(data);
-  final metadataRemoteWins = local == null ||
+  final metadataRemoteWins =
+      local == null ||
       remoteVersionWins(
         remoteVersion: remoteVersion,
         localVersion: local.version,
@@ -1920,16 +2103,21 @@ DreamEntry mergeDreamEntryFromRemote(
         : local!.notes,
     entryDate: metadataRemoteWins
         ? (parseFirestoreDate(data['entryDate']) ??
-            local?.entryDate ??
-            remoteUpdated)
+              local?.entryDate ??
+              remoteUpdated)
         : local!.entryDate,
     tags: tags,
-    createdAt: parseFirestoreDate(data['createdAt']) ??
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
         remoteUpdated,
     updatedAt: resolvedUpdated,
     version: resolvedVersion,
-    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt, remoteWins: metadataRemoteWins),
+    deletedAt: mergeDeletedAtFromRemote(
+      data,
+      local?.deletedAt,
+      remoteWins: metadataRemoteWins,
+    ),
   );
 }
 
@@ -2816,16 +3004,17 @@ DismissedNotification mergeDismissedNotificationFromRemote(
   );
 }
 
-Map<String, dynamic> deviceRegistrationToFirestore(DeviceRegistration device) => {
-  'id': device.id,
-  'displayName': device.displayName,
-  'platform': device.platform.name,
-  'lastSeenAt': _dateToFirestoreRequired(device.lastSeenAt),
-  'createdAt': _dateToFirestoreRequired(device.createdAt),
-  'updatedAt': _dateToFirestoreRequired(device.updatedAt),
-  'version': device.version,
-  'deletedAt': _dateToFirestore(device.deletedAt),
-};
+Map<String, dynamic> deviceRegistrationToFirestore(DeviceRegistration device) =>
+    {
+      'id': device.id,
+      'displayName': device.displayName,
+      'platform': device.platform.name,
+      'lastSeenAt': _dateToFirestoreRequired(device.lastSeenAt),
+      'createdAt': _dateToFirestoreRequired(device.createdAt),
+      'updatedAt': _dateToFirestoreRequired(device.updatedAt),
+      'version': device.version,
+      'deletedAt': _dateToFirestore(device.deletedAt),
+    };
 
 DeviceRegistration mergeDeviceRegistrationFromRemote(
   Map<String, dynamic> data,
@@ -3680,9 +3869,8 @@ List<RankingTemplateField> _templateFromRemote(
   if (value is! List) return fallback;
   final fields = [
     for (final entry in value)
-      if (entry is Map) RankingTemplateField.fromJson(
-        Map<String, dynamic>.from(entry),
-      ),
+      if (entry is Map)
+        RankingTemplateField.fromJson(Map<String, dynamic>.from(entry)),
   ];
   fields.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
   return fields;
@@ -3988,9 +4176,7 @@ RankingMergeResult<RankingParent> resolveRankingParentFromRemote(
     ),
     starred: data['starred'] as bool? ?? local?.starred ?? false,
     queueSortOrder:
-        (data['queueSortOrder'] as num?)?.toInt() ??
-        local?.queueSortOrder ??
-        0,
+        (data['queueSortOrder'] as num?)?.toInt() ?? local?.queueSortOrder ?? 0,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

@@ -547,27 +547,30 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
   Future<void> _persistLastViewedJournal(String journalId) async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
     final settings = await settingsRepo.getSettings();
     if (settings.lastViewedJournalId == journalId) return;
-    await settingsRepo.saveSettings(
+    await settingsNotifier.saveSettings(
       settings.copyWith(lastViewedJournalId: journalId),
     );
   }
 
   Future<void> _persistShowAllJournals(bool showAll) async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
     final settings = await settingsRepo.getSettings();
     if (settings.journalShowAllEntries == showAll) return;
-    await settingsRepo.saveSettings(
+    await settingsNotifier.saveSettings(
       settings.copyWith(journalShowAllEntries: showAll),
     );
   }
 
   Future<void> _persistEntryListWidth(double? width) async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
     final settings = await settingsRepo.getSettings();
     if (settings.journalEntryListWidth == width) return;
-    await settingsRepo.saveSettings(
+    await settingsNotifier.saveSettings(
       width == null
           ? settings.copyWith(clearJournalEntryListWidth: true)
           : settings.copyWith(journalEntryListWidth: width),

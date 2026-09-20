@@ -14,6 +14,7 @@ import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/features/leetcode/leetcode_cheat_entry.dart';
 import 'package:voyager/features/leetcode/leetcode_code_controller.dart';
 import 'package:voyager/features/leetcode/leetcode_code_field.dart';
 import 'package:voyager/features/leetcode/leetcode_comment_stripper.dart';
@@ -284,16 +285,15 @@ Future<void> openLeetCodeScratchOverlay(
       barrierDismissible: false,
       transitionDuration: Duration.zero,
       reverseTransitionDuration: Duration.zero,
-      pageBuilder: (context, animation, secondaryAnimation) =>
-          _ScratchOverlay(
-            problem: problem,
-            controller: controller,
-            anchorRect: anchorRect,
-            language: language,
-            onCodeChanged: onCodeChanged,
-            onLanguageChanged: onLanguageChanged,
-            onClear: onClear,
-          ),
+      pageBuilder: (context, animation, secondaryAnimation) => _ScratchOverlay(
+        problem: problem,
+        controller: controller,
+        anchorRect: anchorRect,
+        language: language,
+        onCodeChanged: onCodeChanged,
+        onLanguageChanged: onLanguageChanged,
+        onClear: onClear,
+      ),
     ),
   );
 }
@@ -566,94 +566,126 @@ class _ExpandedCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                GlassButton(
-                  dense: true,
-                  height: 32,
-                  icon: const Icon(PhosphorIconsRegular.x),
-                  tooltip: 'Close the scratch pad',
-                  onPressed: onClose,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  // The card behind this may be hiding the question name, and
-                  // the pad is opened during that same review — a title in the
-                  // toolbar would hand straight back what the card is
-                  // withholding. The slot keeps its width either way, so the
-                  // buttons don't move when the setting is on.
-                  child: Consumer(
-                    builder: (context, ref, _) {
-                      final hidden =
-                          ref
-                              .watch(settingsProvider)
-                              .valueOrNull
-                              ?.leetCodeHideQuestionName ??
-                          false;
-                      return Text(
-                        hidden ? 'Scratch' : problem.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall,
-                      );
-                    },
+            LayoutBuilder(
+              builder: (context, constraints) => Row(
+                children: [
+                  GlassButton(
+                    dense: true,
+                    height: 32,
+                    icon: const Icon(PhosphorIconsRegular.x),
+                    tooltip: 'Close the scratch pad',
+                    onPressed: onClose,
                   ),
-                ),
-                const SizedBox(width: 8),
-                GlassButton(
-                  dense: true,
-                  height: 32,
-                  icon: const Icon(PhosphorIconsRegular.copy),
-                  label: 'Copy',
-                  tooltip: 'Copy what you typed',
-                  onPressed: onCopy,
-                ),
-                const SizedBox(width: 6),
-                GlassButton(
-                  dense: true,
-                  height: 32,
-                  icon: const Icon(PhosphorIconsRegular.arrowSquareOut),
-                  label: 'Open',
-                  // Kept visible rather than removed, so the row does not
-                  // change shape between problems — but coloured as the dead
-                  // control it is when the title has no slug to link to.
-                  color: hasUrl ? null : theme.colorScheme.error,
-                  tooltip: hasUrl
-                      ? 'Open this problem on LeetCode'
-                      : 'This problem has no LeetCode link',
-                  onPressed: hasUrl ? onOpenOnLeetCode : null,
-                ),
-                const SizedBox(width: 6),
-                GlassButton(
-                  dense: true,
-                  height: 32,
-                  icon: const Icon(PhosphorIconsRegular.eraser),
-                  label: 'Clear',
-                  tooltip: 'Reset the pad to its starter template',
-                  onPressed: onClear,
-                ),
-                const SizedBox(width: 6),
-                GlassButton(
-                  dense: true,
-                  height: 32,
-                  icon: const Icon(Icons.comments_disabled_outlined),
-                  label: 'Strip',
-                  tooltip:
-                      'Remove ${labelForLeetCodeLanguage(language)} comments '
-                      'and the trailing blank line',
-                  onPressed: onStrip,
-                ),
-                const SizedBox(width: 6),
-                GlassButton(
-                  dense: true,
-                  height: 32,
-                  icon: const Icon(PhosphorIconsRegular.columns),
-                  label: 'Compare',
-                  color: comparing ? theme.colorScheme.primary : null,
-                  tooltip: 'Compare against the saved solution',
-                  onPressed: onToggleCompare,
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Expanded(
+                    // The card behind this may be hiding the question name, and
+                    // the pad is opened during that same review — a title in the
+                    // toolbar would hand straight back what the card is
+                    // withholding. The slot keeps its width either way, so the
+                    // buttons don't move when the setting is on.
+                    child: Consumer(
+                      builder: (context, ref, _) {
+                        final hidden =
+                            ref
+                                .watch(settingsProvider)
+                                .valueOrNull
+                                ?.leetCodeHideQuestionName ??
+                            false;
+                        return Text(
+                          hidden ? 'Scratch' : problem.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall,
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Six labelled buttons are wider than the window's 720px
+                  // minimum leaves once the title has ellipsised away, so the
+                  // group scales down instead of overflowing the row. The cap is
+                  // never reached at a normal window width, where they draw at
+                  // full size. Reserved: the ✕ and the two gaps around the
+                  // title.
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: (constraints.maxWidth - 52).clamp(
+                        0.0,
+                        double.infinity,
+                      ),
+                    ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Heads the group: the sheet opens on the root navigator, so
+                          // it renders above this editor rather than inside it — and its
+                          // scrim, not this one, takes the tap that dismisses it.
+                          const LeetCodeCheatSheetButton(dense: true),
+                          const SizedBox(width: 6),
+                          GlassButton(
+                            dense: true,
+                            height: 32,
+                            icon: const Icon(PhosphorIconsRegular.copy),
+                            label: 'Copy',
+                            tooltip: 'Copy what you typed',
+                            onPressed: onCopy,
+                          ),
+                          const SizedBox(width: 6),
+                          GlassButton(
+                            dense: true,
+                            height: 32,
+                            icon: const Icon(
+                              PhosphorIconsRegular.arrowSquareOut,
+                            ),
+                            label: 'Open',
+                            // Kept visible rather than removed, so the row does not
+                            // change shape between problems — but coloured as the dead
+                            // control it is when the title has no slug to link to.
+                            color: hasUrl ? null : theme.colorScheme.error,
+                            tooltip: hasUrl
+                                ? 'Open this problem on LeetCode'
+                                : 'This problem has no LeetCode link',
+                            onPressed: hasUrl ? onOpenOnLeetCode : null,
+                          ),
+                          const SizedBox(width: 6),
+                          GlassButton(
+                            dense: true,
+                            height: 32,
+                            icon: const Icon(PhosphorIconsRegular.eraser),
+                            label: 'Clear',
+                            tooltip: 'Reset the pad to its starter template',
+                            onPressed: onClear,
+                          ),
+                          const SizedBox(width: 6),
+                          GlassButton(
+                            dense: true,
+                            height: 32,
+                            icon: const Icon(Icons.comments_disabled_outlined),
+                            label: 'Strip',
+                            tooltip:
+                                'Remove ${labelForLeetCodeLanguage(language)} comments '
+                                'and the trailing blank line',
+                            onPressed: onStrip,
+                          ),
+                          const SizedBox(width: 6),
+                          GlassButton(
+                            dense: true,
+                            height: 32,
+                            icon: const Icon(PhosphorIconsRegular.columns),
+                            label: 'Compare',
+                            color: comparing ? theme.colorScheme.primary : null,
+                            tooltip: 'Compare against the saved solution',
+                            onPressed: onToggleCompare,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 10),
             SizedBox(
@@ -849,7 +881,8 @@ class _DiffPane extends StatelessWidget {
   /// spacer holding the two columns in step, and takes no colour at all.
   Color? _tint(LeetCodeDiffRow row, ThemeData theme) {
     final mine = side == _DiffSide.left ? row.left : row.right;
-    if (mine == null) return theme.colorScheme.onSurface.withValues(alpha: 0.03);
+    if (mine == null)
+      return theme.colorScheme.onSurface.withValues(alpha: 0.03);
     return switch (row.kind) {
       LeetCodeDiffKind.same => null,
       LeetCodeDiffKind.changed || LeetCodeDiffKind.removed =>
@@ -863,9 +896,10 @@ class _DiffPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final textStyle = AppFonts.style(
-      fontSize: 13,
-    ).copyWith(fontFamily: AppFonts.monoFamily, color: theme.colorScheme.onSurface);
+    final textStyle = AppFonts.style(fontSize: 13).copyWith(
+      fontFamily: AppFonts.monoFamily,
+      color: theme.colorScheme.onSurface,
+    );
     final numberStyle = textStyle.copyWith(
       color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
     );

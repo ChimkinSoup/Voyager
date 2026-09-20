@@ -43,8 +43,7 @@ class _DevWeatherApiTileState extends ConsumerState<DevWeatherApiTile> {
   }
 
   Future<void> _save(AppSettings settings) async {
-    await ref.read(settingsRepositoryProvider).saveSettings(settings);
-    ref.invalidate(settingsProvider);
+    await ref.read(settingsProvider.notifier).saveSettings(settings);
     ref.invalidate(weatherApiClientProvider);
     ref.invalidate(currentWeatherProvider);
   }

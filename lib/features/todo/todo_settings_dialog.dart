@@ -40,13 +40,13 @@ class _TodoListSettingsDialog extends ConsumerWidget {
   /// structural rather than something the UI has to police.
   Future<void> _saveDefaultList(WidgetRef ref, {required bool isDefault}) async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
     final settings = await settingsRepo.getSettings();
-    await settingsRepo.saveSettings(
+    await settingsNotifier.saveSettings(
       isDefault
           ? settings.copyWith(defaultTodoListId: listId)
           : settings.copyWith(clearDefaultTodoListId: true),
     );
-    ref.invalidate(settingsProvider);
   }
 
   @override

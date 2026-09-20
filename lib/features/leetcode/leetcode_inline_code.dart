@@ -112,11 +112,16 @@ const _tokenCacheLimit = 512;
 /// Returns a single unstyled token when the grammar produces anything other
 /// than [code] verbatim: the chip's painted background is positioned from the
 /// prose's own offsets, so text that doesn't round-trip would misalign it.
+/// A null [language] means "no grammar to tokenize against" — a cheat sheet
+/// tab with no `languageKey`. The run stays in the code font on its chip and
+/// simply goes unstyled, rather than being coloured by whichever grammar the
+/// fallback happened to pick.
 List<(String, TextStyle?)> _tokenize(
   String code,
-  String language,
+  String? language,
   Map<String, TextStyle> styles,
 ) {
+  if (language == null) return [(code, null)];
   final key = _languageKey(language);
   final cached = _tokenCache['types-v1 $key $code'];
   if (cached != null) {
@@ -209,8 +214,9 @@ class LeetCodeProseText extends StatelessWidget {
   /// vertical metrics, so a chip mid-sentence doesn't shift the line.
   final TextStyle? style;
 
-  /// The problem's `codeLanguage`, used to tokenize the snippets.
-  final String language;
+  /// The problem's `codeLanguage`, used to tokenize the snippets. Null leaves
+  /// them untokenized — see [_tokenize].
+  final String? language;
 
   /// Search terms to emphasise, as [keywordSpans] does elsewhere.
   final List<String> keywords;

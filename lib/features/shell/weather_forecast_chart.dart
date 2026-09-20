@@ -364,6 +364,7 @@ Future<void> pickWeatherChartColor(
   required bool isTemp,
 }) async {
   final repo = ref.read(settingsRepositoryProvider);
+  final settingsNotifier = ref.read(settingsProvider.notifier);
   final settings = await repo.getSettings();
   final palette = ref.read(colorPaletteProvider);
   var selected = normalizeColorValue(
@@ -384,7 +385,7 @@ Future<void> pickWeatherChartColor(
   );
 
   if (result == null) return;
-  await repo.saveSettings(
+  await settingsNotifier.saveSettings(
     settings.copyWith(
       weatherChartTempColor: isTemp ? result : settings.weatherChartTempColor,
       weatherChartRainColor: isTemp ? settings.weatherChartRainColor : result,
@@ -394,7 +395,6 @@ Future<void> pickWeatherChartColor(
     temp: isTemp ? result : settings.weatherChartTempColor,
     rain: isTemp ? settings.weatherChartRainColor : result,
   );
-  ref.invalidate(settingsProvider);
 }
 
 class WeatherChartLegendRow extends ConsumerWidget {

@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
+import 'package:voyager/core/text/code_line_comment.dart';
 import 'package:voyager/core/vim/vim_text_ops.dart';
 
 /// The editing modes Voyager's Vim layer implements.
@@ -996,15 +997,46 @@ class VimSession {
       case 'w':
       case 'W':
         if (_blockVisualLineHorizontal()) return;
-        _applyMotion(
-          VimMotion.exclusive(
-            _repeat(
-              _cursor,
-              _takeCount(),
-              (o) => vimWordForward(_text, o, big: ch == 'W'),
+        {
+          final big = ch == 'W';
+          final count = _takeCount();
+          final changeEnd = _operator == 'c'
+              ? vimChangeWordEnd(_text, _cursor, big: big)
+              : null;
+          if (changeEnd != null) {
+            // Vim maps `cw` to `ce` on a non-blank: the whitespace after the
+            // word is left for the insert that follows. Any further counts
+            // then run as plain `e`.
+            _applyMotion(
+              VimMotion.inclusive(
+                _repeat(
+                  changeEnd,
+                  count - 1,
+                  (o) => vimWordEnd(_text, o, big: big),
+                ),
+              ),
+            );
+            return;
+          }
+          // Only the last word moved over honours Vim's operator `eol` rule,
+          // so the leading repetitions cross lines as usual.
+          final stopAtLineEnd = _operator != null;
+          final start = _repeat(
+            _cursor,
+            count - 1,
+            (o) => vimWordForward(_text, o, big: big),
+          );
+          _applyMotion(
+            VimMotion.exclusive(
+              vimWordForward(
+                _text,
+                start,
+                big: big,
+                stopAtLineEnd: stopAtLineEnd,
+              ),
             ),
-          ),
-        );
+          );
+        }
       case 'b':
       case 'B':
         if (_blockVisualLineHorizontal()) return;
@@ -1655,7 +1687,13 @@ class VimSession {
     if (vimFirstNonBlank(text, _cursor) == vimLineEnd(text, _cursor)) {
       return indent;
     }
-    final last = text[vimLastNonBlank(text, _cursor)];
+    // A trailing comment hides the opener, so read the code before it: Enter
+    // on `if (x) { // note` opens the block, and `o` has to match.
+    final code = codeBeforeLineComment(
+      text.substring(vimLineStart(text, _cursor), vimLineEnd(text, _cursor)),
+    );
+    if (code.isEmpty) return indent;
+    final last = code[code.length - 1];
     if (last != ':' && last != '{') return indent;
     return indent + ' ' * shiftWidth;
   }
