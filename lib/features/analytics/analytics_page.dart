@@ -175,7 +175,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               : null;
           final today = DateTime.now();
           final dreamLoggedToday = dreamEntriesAsync?.valueOrNull?.any((e) {
-                final d = e.entryDate;
+                final d = e.entryDate.toLocal();
                 return d.year == today.year &&
                     d.month == today.month &&
                     d.day == today.day;

@@ -96,6 +96,23 @@ void main() {
     test('is empty when there are no entries', () {
       expect(streakTrackerValues(const []), isEmpty);
     });
+
+    // The repository hands back `entryDate` in UTC (drift reads the stored
+    // `...Z` string as a UTC DateTime), while every date the user sees — and
+    // every day the series is keyed by — is local. Reading `.year/.month/.day`
+    // straight off the UTC value files a late-evening entry under the *next*
+    // day everywhere west of UTC, merging it with the following morning's.
+    test('buckets a UTC entryDate by its local day, not its UTC day', () {
+      final lateNight = DateTime(2026, 7, 1, 23);
+      final nextMorning = DateTime(2026, 7, 2, 10);
+      final values = streakTrackerValues([
+        _entry('a', lateNight.toUtc()),
+        _entry('b', nextMorning.toUtc()),
+      ]);
+      final byDay = _byDay(values);
+      expect(byDay[DateTime(2026, 7, 1)], 1);
+      expect(byDay[DateTime(2026, 7, 2)], 2);
+    });
   });
 
   group('wordCountTrackerValues', () {
@@ -133,6 +150,16 @@ void main() {
         wordCountTrackerValues(const [], countWords: analytics.countWords),
         isEmpty,
       );
+    });
+
+    test('buckets a UTC entryDate by its local day', () {
+      final values = wordCountTrackerValues([
+        _entry('a', DateTime(2026, 7, 1, 23).toUtc(), body: 'one two'),
+        _entry('b', DateTime(2026, 7, 2, 10).toUtc(), body: 'three'),
+      ], countWords: analytics.countWords);
+      final byDay = _byDay(values);
+      expect(byDay[DateTime(2026, 7, 1)], 2);
+      expect(byDay[DateTime(2026, 7, 2)], 1);
     });
   });
 }

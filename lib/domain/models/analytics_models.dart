@@ -240,7 +240,7 @@ List<TrackerValue> dreamLoggedTrackerValues(List<DreamEntry> entries) {
     // An abandoned "New dream" has neither, and must not mark the day
     // logged.
     if (entry.title.trim().isEmpty && entry.body.trim().isEmpty) continue;
-    final d = entry.entryDate;
+    final d = entry.entryDate.toLocal();
     days.add(DateTime(d.year, d.month, d.day));
   }
   final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
@@ -354,7 +354,7 @@ class TrackerValue extends SoftDeletable {
 List<TrackerValue> journalEntriesTrackerValues(List<JournalEntry> entries) {
   final days = <DateTime>{};
   for (final entry in entries) {
-    final d = entry.entryDate;
+    final d = entry.entryDate.toLocal();
     days.add(DateTime(d.year, d.month, d.day));
   }
   final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
@@ -380,14 +380,11 @@ List<TrackerValue> journalEntriesTrackerValues(List<JournalEntry> entries) {
 /// interpolation can't smooth over a day the user wrote nothing.
 List<DateTime> _dailySpan(List<JournalEntry> entries) {
   if (entries.isEmpty) return const [];
-  var first = DateTime(
-    entries.first.entryDate.year,
-    entries.first.entryDate.month,
-    entries.first.entryDate.day,
-  );
+  final firstDate = entries.first.entryDate.toLocal();
+  var first = DateTime(firstDate.year, firstDate.month, firstDate.day);
   var last = first;
   for (final entry in entries) {
-    final d = entry.entryDate;
+    final d = entry.entryDate.toLocal();
     final day = DateTime(d.year, d.month, d.day);
     if (day.isBefore(first)) first = day;
     if (day.isAfter(last)) last = day;
@@ -413,14 +410,11 @@ List<DateTime> _dailySpan(List<JournalEntry> entries) {
 /// visibly drops to the baseline when a streak breaks instead of being
 /// interpolated straight across the gap.
 List<TrackerValue> streakTrackerValues(List<JournalEntry> entries) {
-  final journaled = <DateTime>{
-    for (final entry in entries)
-      DateTime(
-        entry.entryDate.year,
-        entry.entryDate.month,
-        entry.entryDate.day,
-      ),
-  };
+  final journaled = <DateTime>{};
+  for (final entry in entries) {
+    final d = entry.entryDate.toLocal();
+    journaled.add(DateTime(d.year, d.month, d.day));
+  }
   final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   final values = <TrackerValue>[];
   var run = 0;
@@ -453,7 +447,7 @@ List<TrackerValue> wordCountTrackerValues(
 }) {
   final wordsByDay = <DateTime, int>{};
   for (final entry in entries) {
-    final d = entry.entryDate;
+    final d = entry.entryDate.toLocal();
     final day = DateTime(d.year, d.month, d.day);
     wordsByDay[day] = (wordsByDay[day] ?? 0) + countWords(entry.body);
   }

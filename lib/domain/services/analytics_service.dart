@@ -180,10 +180,15 @@ class AnalyticsService {
         }
       }
       if (segIdx == null) {
-        // Outside range: clamp to nearest endpoint
+        // Before the first record the series simply didn't exist yet, so it
+        // reads as a flat zero baseline. Clamping to the first known value
+        // instead — as the trailing side still does — back-fills a fiction:
+        // a journaling streak whose first point is 1 would draw a solid
+        // "1 day streak, every day" line across months with no entries at all.
         if (day < knownSpots.first.x) {
-          result.add(FlSpot(day.toDouble(), knownSpots.first.y));
+          result.add(FlSpot(day.toDouble(), 0));
         } else {
+          // Past the last record, clamp to the final value.
           result.add(FlSpot(day.toDouble(), knownSpots.last.y));
         }
         continue;

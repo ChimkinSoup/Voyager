@@ -58,4 +58,25 @@ void main() {
     // overshoot, so the cap is what's keeping the first case in range.
     expect(spots.any((s) => s.y > 10), isTrue);
   });
+
+  // The window is a fixed span ending today, so a tracker whose history is
+  // shorter than the window has an empty prefix. Back-filling it with the
+  // first known value invents history: a journaling streak that starts at 1
+  // would read "1 day streak" on every day before the first entry ever
+  // existed.
+  test('days before the first record read 0, not the first known value', () {
+    final spots = analytics.interpolateConsecutive(
+      values: [value(20, 4), value(21, 5)],
+      from: from,
+      to: from.add(const Duration(days: 30)),
+      maxDays: 30,
+    );
+
+    for (final spot in spots.where((s) => s.x < 20)) {
+      expect(spot.y, 0, reason: 'day ${spot.x}');
+    }
+    expect(spots.firstWhere((s) => s.x == 20).y, 4);
+    // The trailing side still clamps to the last known value.
+    expect(spots.last.y, 5);
+  });
 }

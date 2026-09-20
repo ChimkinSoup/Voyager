@@ -132,13 +132,8 @@ class PeriodicPromptService {
     if (entries.isEmpty) return 0;
     final days =
         entries
-            .map(
-              (e) => DateTime(
-                e.entryDate.year,
-                e.entryDate.month,
-                e.entryDate.day,
-              ),
-            )
+            .map((e) => e.entryDate.toLocal())
+            .map((d) => DateTime(d.year, d.month, d.day))
             .toSet()
             .toList()
           ..sort();

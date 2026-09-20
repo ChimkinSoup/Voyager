@@ -25,7 +25,10 @@ class _MemoryPointerStore implements QuickJournalPointerStore {
 }
 
 void main() {
-  setUpAll(() => driftRuntimeOptions.dontWarnAboutMultipleDatabases = true);
+  setUpAll(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+  });
 
   late AppDatabase db;
   late _MemoryPointerStore pointers;
@@ -71,6 +74,15 @@ void main() {
     expect(first.body, isEmpty);
     final stored = await DriftJournalRepository(db).getEntry(first.id);
     expect(stored, isNotNull);
+  });
+
+  test('gets a quote even with a cold quote bank', () async {
+    final entry = await resolveQuickJournalEntry(container);
+
+    expect(entry.customQuote, isNotNull);
+    expect(entry.quoteId, isNotNull);
+    final stored = await DriftJournalRepository(db).getEntry(entry.id);
+    expect(stored!.customQuote, entry.customQuote);
   });
 
   test('concurrent opens share one entry', () async {

@@ -10,6 +10,7 @@ import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/utils/all_view_destination.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/settings_models.dart';
 
 /// Which entry is today's Quick Journal Entry — the one the journal hotkey
 /// opens, from the notepad floater or in the app.
@@ -132,9 +133,19 @@ Future<JournalEntry> _resolve(ProviderContainer container) async {
   final weather = container
       .read(weatherServiceProvider)
       .readCachedSnapshot(settings);
-  final quote = container.read(quotesLoadedProvider).hasValue
-      ? container.read(quoteBankProvider).nextQuote()
-      : null;
+  // Awaited, rather than read for whatever the bank already holds: the hotkey
+  // can fire before the startup warm-up has loaded it — or instead of it, with
+  // the cache disabled — and reading the loading state left that day's entry
+  // with no quote for good, since nothing revisits it afterwards. The pool is
+  // a few hundred bytes beside the reads above, and a pool that fails to load
+  // must not take the notepad down with it.
+  Quote? quote;
+  try {
+    await container.read(quotesLoadedProvider.future);
+    quote = container.read(quoteBankProvider).nextQuote();
+  } catch (error) {
+    debugPrint('Quick journal quote could not be drawn: $error');
+  }
   final now = utcNow();
   final entry = JournalEntry(
     id: newId(),
