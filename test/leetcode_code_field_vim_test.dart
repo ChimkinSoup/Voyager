@@ -113,6 +113,70 @@ void main() {
     expect(find.text('NORMAL'), findsNothing);
   });
 
+  testWidgets('o opens the body of a block, as Enter does', (tester) async {
+    await pumpInput(
+      tester,
+      vimEnabled: true,
+      text: 'class Solution:\n    def f(self):\n        pass',
+    );
+    // On the `def` line, which ends in `:` four spaces in.
+    controller.selection = const TextSelection.collapsed(offset: 20);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyO);
+    await tester.pump();
+
+    expect(
+      controller.text,
+      'class Solution:\n    def f(self):\n        \n        pass',
+    );
+    expect(controller.selection.baseOffset, 41);
+    await finish(tester);
+  });
+
+  testWidgets('o below a plain line keeps that line indent', (tester) async {
+    await pumpInput(
+      tester,
+      vimEnabled: true,
+      text: 'class Solution:\n    def f(self):\n        pass',
+    );
+    // On `pass`, which opens no block.
+    controller.selection = const TextSelection.collapsed(offset: 42);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyO);
+    await tester.pump();
+
+    expect(
+      controller.text,
+      'class Solution:\n    def f(self):\n        pass\n        ',
+    );
+    await finish(tester);
+  });
+
+  testWidgets('O above a block line stays at that line indent', (tester) async {
+    await pumpInput(
+      tester,
+      vimEnabled: true,
+      text: 'class Solution:\n    def f(self):\n        pass',
+    );
+    controller.selection = const TextSelection.collapsed(offset: 20);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyO, character: 'O');
+    await tester.pump();
+
+    expect(
+      controller.text,
+      'class Solution:\n    \n    def f(self):\n        pass',
+    );
+    await finish(tester);
+  });
+
+
   testWidgets('Visual mode uses VimTextOverlay instead of SelectionHighlightLayer',
       (tester) async {
     await pumpInput(tester, vimEnabled: true, text: 'abc');

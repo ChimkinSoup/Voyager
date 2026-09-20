@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
+import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/features/search/search_page.dart';
 
@@ -17,9 +19,16 @@ const searchHarnessJournalId = 'harness-journal';
 
 /// Pumps a real [SearchPage] over an in-memory database holding one journal and
 /// [entries], and returns the database so callers can assert what was written.
+///
+/// [dreams] seeds the dream scope the `/dream` command switches the page to.
+///
+/// [vimEnabled] publishes the user's Vim keybindings setting to the page's
+/// fields, which changes who owns Escape.
 Future<AppDatabase> pumpSearchPage(
   WidgetTester tester, {
   required List<JournalEntry> Function(DateTime now) entries,
+  List<DreamEntry> Function(DateTime now)? dreams,
+  bool vimEnabled = false,
   List<Override> extraOverrides = const [],
 }) async {
   final db = AppDatabase.inMemory();
@@ -37,6 +46,12 @@ Future<AppDatabase> pumpSearchPage(
   );
   for (final entry in entries(now)) {
     await repo.upsertEntry(entry);
+  }
+  if (dreams != null) {
+    final dreamRepo = DriftDreamRepository(db);
+    for (final dream in dreams(now)) {
+      await dreamRepo.upsertEntry(dream);
+    }
   }
 
   final container = ProviderContainer(
@@ -56,10 +71,13 @@ Future<AppDatabase> pumpSearchPage(
       container: container,
       // A tall window: the results list and the entry dialog both need room,
       // and the dialog's body field alone is 480 logical pixels.
-      child: const MaterialApp(
-        home: MediaQuery(
-          data: MediaQueryData(size: Size(1200, 1400)),
-          child: Scaffold(body: SearchPage()),
+      child: VimEnabledScope(
+        enabled: vimEnabled,
+        child: const MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(size: Size(1200, 1400)),
+            child: Scaffold(body: SearchPage()),
+          ),
         ),
       ),
     ),

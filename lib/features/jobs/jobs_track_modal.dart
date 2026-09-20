@@ -526,6 +526,10 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
           context,
           message: 'Could not save the application',
           icon: PhosphorIconsRegular.warningCircle,
+          // Without a dwell the toast has no clock, and with no actions
+          // nothing else would ever take it away. Long enough to read that
+          // the save failed, then gone — the retry is the Save button.
+          dwell: const Duration(seconds: 4),
         );
       }
       return;

@@ -45,11 +45,25 @@ class SlowJobsTrackDraftStore implements JobsTrackDraftStore {
   Future<void> clear() async => draft = null;
 }
 
+/// Throws on the save the Track form's Save button drives, so the form has to
+/// report a failure it cannot recover from.
+class _FailingSaveRepository extends DriftJobRepository {
+  _FailingSaveRepository(super.db);
+
+  @override
+  Future<JobCompany?> writeApplication(
+    JobApplication application, {
+    List<JobStatusEvent> events = const [],
+    String? registerCompany,
+  }) async => throw StateError('disk full');
+}
+
 Future<_Harness> pumpJobs(
   WidgetTester tester, {
   Future<void> Function(DriftJobRepository repo)? seed,
   JobsTrackDraft? draft,
   JobsTrackDraftStore? store,
+  List<Override> overrides = const [],
 }) async {
   // Tall enough for the whole form: the sheet takes 94% of the window and the
   // notes box alone is 180px.
@@ -70,6 +84,7 @@ Future<_Harness> pumpJobs(
       syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
       weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
       jobsTrackDraftStoreProvider.overrideWithValue(store ?? drafts),
+      ...overrides,
     ],
   );
   addTearDown(container.dispose);
@@ -579,5 +594,32 @@ void main() {
       );
       expect(JobsTrackDraft(company: 'Tesla', savedAt: utcNow()).hasText, true);
     });
+  });
+
+  // The failure toast carries no actions and used to carry no dwell, so the
+  // one thing the form could still say stayed said for the life of the app.
+  testWidgets('the failed-save toast dismisses itself', (tester) async {
+    await pumpJobs(
+      tester,
+      overrides: [
+        jobRepositoryProvider.overrideWith(
+          (ref) => _FailingSaveRepository(ref.watch(databaseProvider)),
+        ),
+      ],
+    );
+    await openForm(tester);
+
+    await typeInto(tester, 'Company', 'Datadog');
+    await typeInto(tester, 'Role title', 'SWE');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not save the application'), findsOneWidget);
+    // The form is still up, with the Save button live again.
+    expect(find.text('Track an application'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not save the application'), findsNothing);
   });
 }

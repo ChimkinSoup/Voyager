@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/layout/touch_target.dart';
-import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 class DateSelectorPopover extends StatefulWidget {
   final DateTime initialStartDate;
@@ -250,38 +249,46 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
         children: [
           const SizedBox(height: 8),
           // Zone A: Quick Actions
-          VoyagerScrollView(
-            scrollDirection: Axis.horizontal,
+          // Not a scroller: the three chips fit the narrowest pane the
+          // popover opens at (the date-and-time popover's left half), and a
+          // horizontal scroller here slid them sideways under a stray
+          // trackpad swipe. A [Wrap] rather than a [Row] so that a wider
+          // label — or the fixed-pitch font a widget test renders with, which
+          // is half again as wide — folds onto a second line instead of
+          // overflowing.
+          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
               children: chips.map((c) {
                 final chipDate = c['date'] as DateTime;
                 final isSelected = _isQuickChipSelected(chipDate);
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6.0),
-                  child: ActionChip(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                    label: Text(
-                      c['label'] as String,
-                      style: TextStyle(
-                        color: isSelected
-                            ? theme.colorScheme.onPrimary
-                            : theme.colorScheme.onSurface,
-                      ),
+                return ActionChip(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                  // Half the default: the labels have to sit inside the
+                  // pane at their natural width, unabbreviated.
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  label: Text(
+                    c['label'] as String,
+                    style: TextStyle(
+                      color: isSelected
+                          ? theme.colorScheme.onPrimary
+                          : theme.colorScheme.onSurface,
                     ),
-                    backgroundColor: isSelected
-                        ? accent
-                        : Colors.transparent,
-                    side: isSelected
-                        ? BorderSide(color: accent, width: 1)
-                        : BorderSide(
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.2,
-                            ),
-                            width: 1,
-                          ),
-                    onPressed: () => _submitQuickAction(chipDate),
                   ),
+                  backgroundColor: isSelected
+                      ? accent
+                      : Colors.transparent,
+                  side: isSelected
+                      ? BorderSide(color: accent, width: 1)
+                      : BorderSide(
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.2,
+                          ),
+                          width: 1,
+                        ),
+                  onPressed: () => _submitQuickAction(chipDate),
                 );
               }).toList(),
             ),

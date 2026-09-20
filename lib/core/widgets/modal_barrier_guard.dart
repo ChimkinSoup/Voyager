@@ -17,8 +17,13 @@ import 'package:flutter/rendering.dart';
 /// which is where the user aimed it.
 mixin GuardedModalBarrier<T> on ModalRoute<T> {
   @override
-  Widget buildModalBarrier() =>
-      _ModalBarrierGuard(route: this, child: super.buildModalBarrier());
+  Widget buildModalBarrier() => guardBarrier(super.buildModalBarrier());
+
+  /// The same guard, for a route that builds its own barrier rather than
+  /// taking the one [ModalRoute] builds.
+  @protected
+  Widget guardBarrier(Widget barrier) =>
+      _ModalBarrierGuard(route: this, child: barrier);
 }
 
 class _ModalBarrierGuard extends SingleChildRenderObjectWidget {

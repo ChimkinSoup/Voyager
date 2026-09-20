@@ -768,6 +768,99 @@ class RemoteSyncService {
     return published;
   }
 
+  /// [forceOverwriteJournalEntryText] for a dream: the Search page's dream
+  /// popup saves a body without ever having held a sequential CRDT session,
+  /// and `dreamEntries` is CRDT-backed too (see
+  /// [FirestoreCollections.crdtBacked]), so the same wipe-and-reseed is owed.
+  ///
+  /// Every note on the journal version applies here — why the published row is
+  /// persisted before it is uploaded, why an open editor's live chain is
+  /// rebased rather than replaced, and why a failed wipe writes nothing and
+  /// queues instead.
+  Future<DreamEntry> forceOverwriteDreamEntryText(
+    DreamEntry entry, {
+    bool queueOnFailure = true,
+  }) async {
+    const collection = FirestoreCollections.dreamEntries;
+
+    if (_charOpRegistry.session(collection, entry.id) != null) {
+      final published = await _persistPublishedDreamRevision(entry);
+      await _rebaseCharOpsOnLiveChain(
+        collection: collection,
+        documentId: published.id,
+        target: published.body,
+      );
+      await _uploadDreamEntryNow(published);
+      await OutboxSyncWorker.recordSuccess(
+        collection: collection,
+        documentId: published.id,
+      );
+      return published;
+    }
+
+    try {
+      await _syncRepository.deleteOperationsForDocument(entry.id);
+    } catch (error, stackTrace) {
+      if (!queueOnFailure) rethrow;
+      await OutboxSyncWorker.recordCrdtOverwrite(
+        collection: collection,
+        documentId: entry.id,
+      );
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'RemoteSyncService',
+          context: ErrorDescription(
+            'while wiping the operation log for dream ${entry.id}; the text '
+            'rewrite was queued for a later attempt',
+          ),
+        ),
+      );
+      return entry;
+    }
+
+    final published = await _persistPublishedDreamRevision(entry);
+    _charOpRegistry.resetSession(
+      collection: collection,
+      documentId: published.id,
+      clientId: deviceId,
+      text: '',
+    );
+    _charOpRegistry.recordTextChange(
+      collection: collection,
+      documentId: published.id,
+      clientId: deviceId,
+      before: '',
+      after: published.body,
+    );
+    try {
+      await _uploadDreamEntryNow(published);
+    } catch (_) {
+      if (queueOnFailure) {
+        await OutboxSyncWorker.recordCrdtOverwrite(
+          collection: collection,
+          documentId: published.id,
+        );
+      }
+      rethrow;
+    }
+
+    _charOpRegistry.removeSession(collection, published.id);
+    await OutboxSyncWorker.recordSuccess(
+      collection: collection,
+      documentId: published.id,
+    );
+    return published;
+  }
+
+  /// [_persistPublishedRevision] for a dream.
+  Future<DreamEntry> _persistPublishedDreamRevision(DreamEntry entry) async {
+    final published = entry.copyWith(bumpVersion: true);
+    await _dreamRepository.upsertEntry(published, recordLocalActivity: false);
+    return published;
+  }
+
   /// Hard-deletes a journal entry from Firestore (if present) and this device.
   Future<({int remoteOperationsDeleted, bool localDeleted})>
   purgeJournalEntryEverywhere(String entryId) async {
@@ -3377,6 +3470,12 @@ class RemoteSyncService {
       case FirestoreCollections.dreamEntries:
         final entry = await _dreamRepository.getEntry(documentId);
         if (entry == null) return;
+        if (forceCrdtOverwrite) {
+          // A rewrite the Search popup's dream dialog could not publish when
+          // it was made — see [forceOverwriteDreamEntryText].
+          await forceOverwriteDreamEntryText(entry, queueOnFailure: false);
+          return;
+        }
         if (!await _recoverLostOperations(
           collection,
           documentId,

@@ -213,6 +213,7 @@ class VimTextScope extends StatefulWidget {
     this.autocorrectAllowed = true,
     this.capsLockIndicatorAllowed = true,
     this.shiftWidth = kVimShiftWidth,
+    this.smartIndent = false,
   });
 
   /// Whether this field gets Vim at all. False for password boxes, numeric
@@ -257,6 +258,11 @@ class VimTextScope extends StatefulWidget {
   /// Spaces one `>>` / `<<` moves a line by. Code editors pass their own Tab
   /// width so the two ways of indenting agree.
   final int shiftWidth;
+
+  /// Whether `o` opens a deeper line below one ending in `:` or `{`. True for
+  /// code editors, whose Enter indents the same way — see
+  /// `VimSession.smartIndent`.
+  final bool smartIndent;
 
   final Color? accentColor;
 
@@ -458,6 +464,7 @@ class _VimTextScopeState extends State<VimTextScope> {
         undoController: _undoController,
         isMultiline: () => widget.multiline,
         shiftWidth: widget.shiftWidth,
+        smartIndent: widget.smartIndent,
         // Looked up live: settings sync can replace [_snippetSession].
         trySnippetUndo: () =>
             _snippetSession?.undoLastExpansion(

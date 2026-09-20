@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
+import 'package:voyager/core/widgets/modal_barrier_guard.dart';
 
 class ContextualPopover extends StatelessWidget {
   const ContextualPopover({
@@ -230,7 +231,8 @@ abstract final class ContextualPopoverAccent {
   }
 }
 
-class _ContextualPopoverRoute<T> extends PopupRoute<T> {
+class _ContextualPopoverRoute<T> extends PopupRoute<T>
+    with GuardedModalBarrier<T> {
   _ContextualPopoverRoute({
     required this.targetRect,
     required this.builder,
@@ -254,10 +256,37 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T> {
 
   final CapturedThemes capturedThemes;
 
+  /// Set the moment either exit asks to close, so this popover asks once.
+  ///
+  /// `maybePop` resolves the pop in a microtask, so a second click arriving
+  /// inside the same frame still sees this route as current and would pop the
+  /// route below it. The tap-through exit below pops synchronously and so
+  /// cannot double up on itself, but it can still fire on a click that lands
+  /// in the same frame as a barrier dismissal that has not resolved yet.
+  bool _dismissRequested = false;
+
   @override
   Widget buildModalBarrier() {
     final region = tapThroughRect;
-    final barrier = super.buildModalBarrier();
+    // Built here rather than taken from `super` for the one thing the base
+    // barrier hard-codes: it answers a tap with `Navigator.maybePop`, which
+    // finds whatever is current *then*. Two clicks inside one frame both land
+    // on this barrier — the first pop is still a pending microtask when the
+    // second is hit-tested, so [GuardedModalBarrier] cannot see it coming —
+    // and the second would pop the surface the popover was opened from.
+    // [barrierColor] is transparent, so this is the branch the base takes.
+    final barrier = guardBarrier(
+      ModalBarrier(
+        dismissible: barrierDismissible,
+        semanticsLabel: barrierLabel,
+        barrierSemanticsDismissible: semanticsDismissible,
+        onDismiss: () {
+          if (_dismissRequested || !isCurrent) return;
+          _dismissRequested = true;
+          navigator?.maybePop();
+        },
+      ),
+    );
     if (region == null) return barrier;
     return _TapThroughBarrier(
       region: region,
@@ -266,7 +295,9 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T> {
       // clicking the pill again would never close the menu.
       except: targetRect,
       onTapThrough: () {
-        if (isCurrent) navigator?.pop();
+        if (_dismissRequested || !isCurrent) return;
+        _dismissRequested = true;
+        navigator?.pop();
       },
       child: barrier,
     );

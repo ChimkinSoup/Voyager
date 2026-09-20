@@ -286,6 +286,8 @@ class LeetCodeCodeSurface extends StatelessWidget {
       capsLockIndicatorAllowed: false,
       // `>>` / `<<` move by the same width Tab does.
       shiftWidth: kLeetCodeEditorParams.tabSpaces,
+      // `o` opens the body of a `:` or `{` line, as Enter does here.
+      smartIndent: true,
       controller: controller,
       multiline: true,
       accentColor: theme.colorScheme.primary,

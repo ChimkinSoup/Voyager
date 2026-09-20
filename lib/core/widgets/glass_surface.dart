@@ -42,6 +42,44 @@ class GlassSurface extends StatelessWidget {
   /// (e.g. a popover anchored to a colored tag).
   final Color? accentBorder;
 
+  /// How much of the backdrop's colour survives the material, and how much of
+  /// its contrast.
+  ///
+  /// A blur spreads what is behind the surface out but does not weaken it, so
+  /// a bright or saturated thing back there arrives as a soft glow or a colour
+  /// cast with nothing visible causing it — a blush. Draining most of the
+  /// saturation and pulling what is left toward the surface's own tone is what
+  /// makes "something is behind this" read as depth instead of as a smudge.
+  static const _backdropSaturation = 0.18;
+  static const _backdropContrast = 0.22;
+
+  /// Blurs the backdrop, then drains it toward [tint].
+  ///
+  /// The colour work has to ride on the same filter as the blur: a
+  /// [BackdropFilter] takes one filter, and anything painted afterwards
+  /// composites over the surface's own fill rather than over what it sampled.
+  static ImageFilter _backdropFilter(double sigma, Color tint) {
+    const s = _backdropSaturation;
+    const c = _backdropContrast;
+    // Luma weights, so a drained backdrop keeps its brightness ordering.
+    const lr = 0.2126, lg = 0.7152, lb = 0.0722;
+    // Saturation toward luma, then contrast toward `tint`, folded into one
+    // matrix: out = c * desaturate(in) + (1 - c) * tint.
+    double keep(double luma) => c * (luma + s * (1 - luma));
+    double drop(double luma) => c * luma * (1 - s);
+    double pivot(double channel) => (1 - c) * channel;
+    final blur = ImageFilter.blur(sigmaX: sigma, sigmaY: sigma);
+    return ImageFilter.compose(
+      outer: ColorFilter.matrix(<double>[
+        keep(lr), drop(lg), drop(lb), 0, pivot(tint.r * 255),
+        drop(lr), keep(lg), drop(lb), 0, pivot(tint.g * 255),
+        drop(lr), drop(lg), keep(lb), 0, pivot(tint.b * 255),
+        0, 0, 0, 1, 0,
+      ]),
+      inner: blur,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -61,9 +99,12 @@ class GlassSurface extends StatelessWidget {
     Widget surface = ClipRRect(
       borderRadius: borderRadius,
       child: BackdropFilter(
+        // High contrast fills to 0.97, so there is no backdrop left to drain
+        // and nothing to drain it for — the branch stays exactly the bare
+        // zero-sigma blur that "no filtering" is read off.
         filter: nearSolid
             ? ImageFilter.blur(sigmaX: 0, sigmaY: 0)
-            : ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+            : _backdropFilter(blurSigma, baseTint),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: baseTint.withValues(alpha: fillAlpha),

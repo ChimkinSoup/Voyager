@@ -590,7 +590,8 @@ class _Toolbar extends StatelessWidget {
             const SizedBox(width: 6),
             GlassButton(
               dense: true,
-              height: 28,
+              // The height the field's border draws at, so the two line up.
+              height: 36,
               label: 'Clear',
               onPressed: onClearFilters,
             ),

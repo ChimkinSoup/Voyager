@@ -11,6 +11,9 @@ abstract final class ShellPageStorageKeys {
   static const journalPreview = PageStorageKey<String>('shell.journal.preview');
   static const todoTaskList = PageStorageKey<String>('shell.todo.taskList');
   static const searchResults = PageStorageKey<String>('shell.search.results');
+  static const searchDreamResults = PageStorageKey<String>(
+    'shell.search.dreamResults',
+  );
   static const settingsList = PageStorageKey<String>('shell.settings.list');
   static const analyticsList = PageStorageKey<String>('shell.analytics.list');
   static const devList = PageStorageKey<String>('shell.dev.list');

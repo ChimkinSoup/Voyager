@@ -8,6 +8,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
@@ -70,14 +71,19 @@ void main() {
         );
 
         // Laid out at its natural width, so nothing was squeezed to an
-        // ellipsis to make the row fit.
-        final text = tester.widget<Text>(find.text(label));
+        // ellipsis to make the row fit. Measured off the paragraph's own span
+        // rather than the Text widget's `style`, which carries the colour and
+        // nothing else: the family and size come from the theme, and a
+        // painter built without them measures a different font entirely.
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.text(label),
+        );
         final painter = TextPainter(
-          text: TextSpan(text: label, style: text.style),
+          text: paragraph.text,
           textDirection: ui.TextDirection.ltr,
         )..layout();
         expect(
-          tester.getSize(find.text(label)).width,
+          paragraph.size.width,
           closeTo(painter.width, 0.5),
           reason: '"$label" was truncated to fit',
         );

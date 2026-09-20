@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/text/list_text_editing.dart';
+import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/text/prose_text_span.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/core/media/widgets/media_drop_target.dart';
@@ -37,9 +39,15 @@ import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
+import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/features/dream_journal/dream_journal_page.dart';
+import 'package:voyager/features/dream_journal/dream_sticky_note.dart';
 import 'package:voyager/features/journal/journal_entry_delete.dart';
+import 'package:voyager/features/search/dream_search.dart';
+import 'package:voyager/features/search/search_dream_save_helper.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
+import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
@@ -88,16 +96,104 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   List<JournalEntry>? _haystackEntries;
   int _haystackRevision = -1;
 
+  /// Whether the query field is searching dreams rather than journal entries.
+  /// Entered by typing [dreamSearchCommand], left through the scope chip, Esc,
+  /// or Backspace on an empty query.
+  bool _dreamScope = false;
+
+  /// [_localUpdates] and [_deletedIds] for the dream scope, pruned the same
+  /// way by [_mergeAndPruneDreams]. Its own list needs its own ScrollPosition
+  /// too: the two result sets are unrelated, so an offset from one must not
+  /// carry into the other.
+  final Map<String, DreamEntry> _dreamUpdates = {};
+  final Set<String> _deletedDreamIds = {};
+  final _dreamResultsController = ScrollController();
+
+  /// Whether a Vim session owns the query field, and with it Escape.
+  ///
+  /// Read here rather than in [_handleQueryKey]: `VimEnabledScope.of`
+  /// registers an inherited dependency, and that callback runs from a key
+  /// dispatch rather than a build — the same reason the Todo page reads
+  /// [TickerMode] through its notifier.
+  bool _vimOwnsEscape = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _vimOwnsEscape = VimEnabledScope.of(context);
+  }
+
   @override
   void dispose() {
     _queryDebounce?.cancel();
     _queryController.dispose();
     _queryFocusNode.dispose();
     _resultsController.dispose();
+    _dreamResultsController.dispose();
     super.dispose();
   }
 
-  void _onQueryChanged(String _) {
+  /// Switches the field to dreams, carrying whatever followed the command over
+  /// as the query — the same handoff the Todo composer's `/search` performs.
+  ///
+  /// Applied immediately rather than through [_queryDebounce]: the command
+  /// text leaving the field is the user's confirmation that it was recognised,
+  /// and a debounced apply would leave `/dream` on screen for a frame first.
+  void _enterDreamScope(String query) {
+    _queryDebounce?.cancel();
+    _queryController.value = TextEditingValue(
+      text: query,
+      selection: TextSelection.collapsed(offset: query.length),
+    );
+    setState(() {
+      _dreamScope = true;
+      _activeQuery = query;
+    });
+    if (_resultsController.hasClients) _resultsController.jumpTo(0);
+  }
+
+  void _exitDreamScope() {
+    _queryDebounce?.cancel();
+    _queryController.clear();
+    setState(() {
+      _dreamScope = false;
+      _activeQuery = '';
+    });
+    if (_dreamResultsController.hasClients) _dreamResultsController.jumpTo(0);
+    _queryFocusNode.requestFocus();
+  }
+
+  /// Escape and a Backspace on an empty query both leave the dream scope —
+  /// the chip is the only thing left to delete at that point, so Backspace
+  /// deleting it is what the field already looks like it would do.
+  ///
+  /// Escape is given up entirely while Vim is on. This callback is installed
+  /// through `TagHighlightedTextField.onKeyEvent`, which lands in the focus
+  /// node's slot — and [VimTextScope] deliberately sits *above* the field so
+  /// that slot stays free, so claiming Escape here takes it before Vim ever
+  /// sees it. That breaks the invariant Vim is written around: Escape leaves
+  /// Insert and never leaves the field. Backspace is still taken, because the
+  /// query is empty by then and Normal mode's `h` has nothing to move over;
+  /// it and the chip's own button are the exits a Vim user is left with.
+  KeyEventResult _handleQueryKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent || !_dreamScope) return KeyEventResult.ignored;
+    if ((event.logicalKey == LogicalKeyboardKey.escape && !_vimOwnsEscape) ||
+        (event.logicalKey == LogicalKeyboardKey.backspace &&
+            _queryController.text.isEmpty)) {
+      _exitDreamScope();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _onQueryChanged(String value) {
+    if (!_dreamScope) {
+      final handoff = dreamSearchCommandQuery(value);
+      if (handoff != null) {
+        _enterDreamScope(handoff);
+        return;
+      }
+    }
     _queryDebounce?.cancel();
     _queryDebounce = Timer(_queryDebounceDelay, () {
       if (!mounted) return;
@@ -107,7 +203,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       // from a narrow result set survives into the next one — clearing the
       // query lands the user somewhere arbitrary in the full list instead of
       // at the best matches.
-      if (_resultsController.hasClients) _resultsController.jumpTo(0);
+      final results = _dreamScope
+          ? _dreamResultsController
+          : _resultsController;
+      if (results.hasClients) results.jumpTo(0);
     });
   }
 
@@ -148,6 +247,28 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     return [
       for (final e in entries)
         if (!_deletedIds.contains(e.id)) _localUpdates[e.id] ?? e,
+    ];
+  }
+
+  /// [_mergeAndPrune] for the dream scope.
+  ///
+  /// No revision counter beside it: nothing here is cached against the merged
+  /// list, so a change only has to reach the next build — which the setState
+  /// that mutated either collection already does.
+  List<DreamEntry> _mergeAndPruneDreams(List<DreamEntry> entries) {
+    final entryIndex = {for (final e in entries) e.id: e};
+    _dreamUpdates.removeWhere((id, local) {
+      final live = entryIndex[id];
+      return live == null ||
+          live.version > local.version ||
+          (live.version == local.version &&
+              !live.updatedAt.isBefore(local.updatedAt));
+    });
+    _deletedDreamIds.removeWhere((id) => !entryIndex.containsKey(id));
+
+    return [
+      for (final e in entries)
+        if (!_deletedDreamIds.contains(e.id)) _dreamUpdates[e.id] ?? e,
     ];
   }
 
@@ -314,6 +435,119 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     _invalidateEntryCaches();
   }
 
+  /// [_deleteEntry] for a dream.
+  ///
+  /// Written out here rather than shared with the Dream Journal page's own
+  /// delete: that one is bound up with the page's selection, its pending "New
+  /// dream" row and its editor flushes, none of which exist here. What is
+  /// shared is the part that has to be exact — soft-delete, re-read, push the
+  /// tombstone the delete actually produced.
+  Future<void> _deleteDream(DreamEntry entry) async {
+    // Captured while this widget is certainly mounted: the toast that offers
+    // the undo outlives the row it deleted, and a `WidgetRef` would not.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete dream?',
+      message: 'This dream will be moved to trash.',
+    );
+    if (!confirmed || !mounted) return;
+
+    final repository = container.read(dreamRepositoryProvider);
+    final DreamEntry snapshot;
+    try {
+      // Read off disk rather than taken from `entry`: the list this came from
+      // lags an in-flight save, and restoring from a stale snapshot would
+      // quietly roll the last edit back with the undo.
+      snapshot = await repository.getEntry(entry.id) ?? entry;
+      await repository.softDeleteEntry(entry.id);
+      // The row the delete produced, not one rebuilt from the list's
+      // snapshot — see the note on the Dream Journal page's delete: a
+      // tombstone pushed at a version Firestore has already passed loses the
+      // next pull and the dream comes back everywhere.
+      final tombstone = await repository.getEntry(entry.id);
+      if (tombstone != null) {
+        container.read(remoteSyncServiceProvider).pushDreamEntryNow(tombstone);
+      }
+    } catch (error, stackTrace) {
+      _reportActionFailure(
+        error,
+        stackTrace,
+        'while deleting a dream from Search',
+        'Could not delete dream.',
+      );
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _deletedDreamIds.add(entry.id);
+      _dreamUpdates.remove(entry.id);
+    });
+    container.invalidate(allDreamEntriesProvider);
+
+    showSoftDeleteUndoToast(
+      overlay: overlay,
+      message: deletedMessage(snapshot.title, fallback: 'dream'),
+      restore: () => _undoDreamDelete(container, snapshot),
+    );
+  }
+
+  /// Brings back a dream the toast's Undo was pressed for.
+  ///
+  /// Rebuilt field by field rather than `copyWith`'d, because `copyWith` reads
+  /// `deletedAt ?? this.deletedAt` and so cannot clear a tombstone.
+  Future<void> _undoDreamDelete(
+    ProviderContainer container,
+    DreamEntry snapshot,
+  ) async {
+    final repository = container.read(dreamRepositoryProvider);
+    // Resolved against disk rather than the snapshot: an eight-second offer is
+    // long enough for a pull to land a newer revision, and a restore written
+    // under it loses the next pull and deletes the dream again.
+    final current = await repository.getEntry(snapshot.id);
+    abortIfAlreadyRestored(
+      found: current != null,
+      deletedAt: current?.deletedAt,
+    );
+    final restored = DreamEntry(
+      id: snapshot.id,
+      createdAt: snapshot.createdAt,
+      updatedAt: utcNow(),
+      version: restoreVersionFrom(
+        preDeleteVersion: snapshot.version,
+        currentVersion: current?.version,
+      ),
+      title: snapshot.title,
+      body: snapshot.body,
+      notes: snapshot.notes,
+      entryDate: snapshot.entryDate,
+      tags: snapshot.tags,
+    );
+    try {
+      await repository.upsertEntry(restored);
+      container.read(remoteSyncServiceProvider).pushDreamEntryNow(restored);
+    } finally {
+      // In a `finally` because the hide has to go however the restore ended:
+      // the results re-derive either way — back if the write landed, still
+      // gone if it did not.
+      container.invalidate(allDreamEntriesProvider);
+      if (mounted) {
+        setState(() => _deletedDreamIds.remove(restored.id));
+      }
+    }
+  }
+
+  Future<void> _showDreamStatistics(DreamEntry entry) async {
+    final wordCount = ref.read(analyticsServiceProvider).countWords(entry.body);
+    await showVoyagerDialog<void>(
+      context: context,
+      builder: (context) =>
+          DreamStatisticsDialog(entry: entry, wordCount: wordCount),
+    );
+  }
+
   /// Both providers this page reads are `keepAlive`, so a failed future is
   /// cached and nothing in the page can re-request it — a transient database
   /// lock at startup left the search tab showing a raw exception string until
@@ -347,139 +581,307 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          TagHighlightedTextField(
-            controller: _queryController,
-            focusNode: _queryFocusNode,
-            // Search only ever looks at journal entries (see
-            // SearchService.searchEntries), so it completes against theirs.
-            tagScope: TagScope.journal,
-            cursorColor: accentColor,
-            hintText: 'Search keywords or #tag',
-            onChanged: _onQueryChanged,
-            decoration: const InputDecoration(
-              filled: false,
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-            ),
+          Row(
+            children: [
+              if (_dreamScope) ...[
+                _DreamScopeChip(
+                  accentColor: accentColor,
+                  onRemove: _exitDreamScope,
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: TagHighlightedTextField(
+                  controller: _queryController,
+                  focusNode: _queryFocusNode,
+                  // Completion follows the scope: the field filters journal
+                  // entries (see SearchService.searchEntries) or dreams (see
+                  // filterDreamEntries), and each has its own tag pool.
+                  tagScope: _dreamScope ? TagScope.dream : TagScope.journal,
+                  onKeyEvent: _handleQueryKey,
+                  cursorColor: accentColor,
+                  hintText: _dreamScope
+                      ? 'Search dreams or #tag'
+                      : 'Search keywords or #tag',
+                  onChanged: _onQueryChanged,
+                  decoration: const InputDecoration(
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Expanded(
-            child: entriesAsync.when(
-              skipLoadingOnReload: true,
-              data: (entries) => journalsAsync.when(
-                skipLoadingOnReload: true,
-                data: (journals) {
-                  final mergedEntries = _mergeAndPrune(entries);
-                  final parsedQuery = _parseSearchQuery(_activeQuery);
-                  final results = search.searchEntries(
-                    entries: mergedEntries,
-                    query: parsedQuery.keywords,
-                    tagFilter: parsedQuery.tags.isEmpty
-                        ? null
-                        : parsedQuery.tags,
-                    foldedText: _foldedText(entries, mergedEntries),
-                  );
-                  final keywords = parsedQuery.keywords
-                      .split(RegExp(r'\s+'))
-                      .where((k) => k.isNotEmpty)
-                      .toList();
-                  return KeepAliveScrollList(
-                    storageKey: ShellPageStorageKeys.searchResults,
-                    controller: _resultsController,
-                    itemCount: results.length,
-                    itemBuilder: (_, i) {
-                      final entry = results[i];
-                      final bodyStyle = theme.textTheme.bodyMedium!;
-                      // Results show stored prose, so the markers render the
-                      // same way they do in the editor (§10).
-                      final emphasisTheme = ProseEmphasisTheme.of(
-                        theme.colorScheme,
-                        theme.colorScheme.primary,
-                      );
-                      return ContextMenuRegion(
-                        items: [
-                          ContextMenuItem(
-                            label: 'Statistics',
-                            icon: PhosphorIconsRegular.chartBar,
-                            onTap: () => showJournalEntryStatisticsDialog(
-                              context,
-                              ref,
-                              entry,
-                            ),
-                          ),
-                          ContextMenuItem(
-                            label: 'Change Journal',
-                            icon: PhosphorIconsRegular.folder,
-                            onTap: () =>
-                                unawaited(_changeEntryJournal(entry, journals)),
-                          ),
-                          ContextMenuItem(
-                            label: 'Delete',
-                            icon: PhosphorIconsRegular.trash,
-                            isDestructive: true,
-                            onTap: () => unawaited(_deleteEntry(entry)),
-                          ),
-                        ],
-                        child: ListTile(
-                          title: searchHighlightedText(
-                            entry.title.isEmpty ? 'Untitled' : entry.title,
-                            style: bodyStyle.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                            keywords: keywords,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            emphasisTheme: emphasisTheme,
-                            brightness: theme.brightness,
-                          ),
-                          subtitle: searchHighlightedText(
-                            searchSnippet(entry.body, keywords: keywords),
-                            style: bodyStyle,
-                            keywords: keywords,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            emphasisTheme: emphasisTheme,
-                            brightness: theme.brightness,
-                          ),
-                          onTap: () async {
-                            await showVoyagerDialog<void>(
-                              context: context,
-                              builder: (context) => _SearchEntryDialog(
-                                entry: entry,
-                                journals: journals,
-                                onSaved: (updatedEntry) {
-                                  if (mounted) {
-                                    setState(() {
-                                      _localUpdates[updatedEntry.id] =
-                                          updatedEntry;
-                                      _localRevision++;
-                                    });
-                                    _invalidateEntryCaches();
-                                  }
+            child: _dreamScope
+                ? _dreamResults(theme, accentColor)
+                : entriesAsync.when(
+                    skipLoadingOnReload: true,
+                    data: (entries) => journalsAsync.when(
+                      skipLoadingOnReload: true,
+                      data: (journals) {
+                        final mergedEntries = _mergeAndPrune(entries);
+                        final parsedQuery = _parseSearchQuery(_activeQuery);
+                        final results = search.searchEntries(
+                          entries: mergedEntries,
+                          query: parsedQuery.keywords,
+                          tagFilter: parsedQuery.tags.isEmpty
+                              ? null
+                              : parsedQuery.tags,
+                          foldedText: _foldedText(entries, mergedEntries),
+                        );
+                        final keywords = parsedQuery.keywords
+                            .split(RegExp(r'\s+'))
+                            .where((k) => k.isNotEmpty)
+                            .toList();
+                        return KeepAliveScrollList(
+                          storageKey: ShellPageStorageKeys.searchResults,
+                          controller: _resultsController,
+                          itemCount: results.length,
+                          itemBuilder: (_, i) {
+                            final entry = results[i];
+                            final bodyStyle = theme.textTheme.bodyMedium!;
+                            // Results show stored prose, so the markers render the
+                            // same way they do in the editor (§10).
+                            final emphasisTheme = ProseEmphasisTheme.of(
+                              theme.colorScheme,
+                              theme.colorScheme.primary,
+                            );
+                            return ContextMenuRegion(
+                              items: [
+                                ContextMenuItem(
+                                  label: 'Statistics',
+                                  icon: PhosphorIconsRegular.chartBar,
+                                  onTap: () => showJournalEntryStatisticsDialog(
+                                    context,
+                                    ref,
+                                    entry,
+                                  ),
+                                ),
+                                ContextMenuItem(
+                                  label: 'Change Journal',
+                                  icon: PhosphorIconsRegular.folder,
+                                  onTap: () => unawaited(
+                                    _changeEntryJournal(entry, journals),
+                                  ),
+                                ),
+                                ContextMenuItem(
+                                  label: 'Delete',
+                                  icon: PhosphorIconsRegular.trash,
+                                  isDestructive: true,
+                                  onTap: () => unawaited(_deleteEntry(entry)),
+                                ),
+                              ],
+                              child: ListTile(
+                                title: searchHighlightedText(
+                                  entry.title.isEmpty
+                                      ? 'Untitled'
+                                      : entry.title,
+                                  style: bodyStyle.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  keywords: keywords,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  emphasisTheme: emphasisTheme,
+                                  brightness: theme.brightness,
+                                ),
+                                subtitle: searchHighlightedText(
+                                  searchSnippet(entry.body, keywords: keywords),
+                                  style: bodyStyle,
+                                  keywords: keywords,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  emphasisTheme: emphasisTheme,
+                                  brightness: theme.brightness,
+                                ),
+                                onTap: () async {
+                                  await showVoyagerDialog<void>(
+                                    context: context,
+                                    builder: (context) => _SearchEntryDialog(
+                                      entry: entry,
+                                      journals: journals,
+                                      onSaved: (updatedEntry) {
+                                        if (mounted) {
+                                          setState(() {
+                                            _localUpdates[updatedEntry.id] =
+                                                updatedEntry;
+                                            _localRevision++;
+                                          });
+                                          _invalidateEntryCaches();
+                                        }
+                                      },
+                                    ),
+                                  );
                                 },
                               ),
                             );
                           },
-                        ),
-                      );
-                    },
+                        );
+                      },
+                      loading: () =>
+                          const Center(child: CircularProgressIndicator()),
+                      error: (e, _) => _loadFailure(
+                        'Could not load journals.',
+                        () => ref.invalidate(journalsProvider),
+                      ),
+                    ),
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => _loadFailure(
+                      'Could not load entries.',
+                      () => ref.invalidate(
+                        journalListEntriesProvider(allJournalEntriesScope),
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The results list for the dream scope.
+  ///
+  /// Watched here rather than beside the journal providers in [build] so a
+  /// user who never types [dreamSearchCommand] never pays for reading every
+  /// dream row off disk.
+  Widget _dreamResults(ThemeData theme, Color accentColor) {
+    final dreamsAsync = ref.watch(allDreamEntriesProvider);
+    return dreamsAsync.when(
+      skipLoadingOnReload: true,
+      data: (dreams) {
+        final merged = _mergeAndPruneDreams(
+          sortDreamEntriesNewestFirst(dreams),
+        );
+        final parsedQuery = _parseSearchQuery(_activeQuery);
+        final results = filterDreamEntries(
+          entries: merged,
+          query: parsedQuery.keywords,
+          tagFilter: parsedQuery.tags.isEmpty ? null : parsedQuery.tags,
+        );
+        final keywords = parsedQuery.keywords
+            .split(RegExp(r'\s+'))
+            .where((k) => k.isNotEmpty)
+            .toList();
+        final bodyStyle = theme.textTheme.bodyMedium!;
+        final emphasisTheme = ProseEmphasisTheme.of(
+          theme.colorScheme,
+          theme.colorScheme.primary,
+        );
+        return KeepAliveScrollList(
+          storageKey: ShellPageStorageKeys.searchDreamResults,
+          controller: _dreamResultsController,
+          itemCount: results.length,
+          itemBuilder: (_, i) {
+            final entry = results[i];
+            return ContextMenuRegion(
+              items: [
+                ContextMenuItem(
+                  label: 'Statistics',
+                  icon: PhosphorIconsRegular.chartBar,
+                  onTap: () => unawaited(_showDreamStatistics(entry)),
+                ),
+                ContextMenuItem(
+                  label: 'Delete',
+                  icon: PhosphorIconsRegular.trash,
+                  isDestructive: true,
+                  onTap: () => unawaited(_deleteDream(entry)),
+                ),
+              ],
+              child: ListTile(
+                title: searchHighlightedText(
+                  entry.title.isEmpty ? 'Untitled' : entry.title,
+                  style: bodyStyle.copyWith(fontWeight: FontWeight.w600),
+                  keywords: keywords,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  emphasisTheme: emphasisTheme,
+                  brightness: theme.brightness,
+                ),
+                subtitle: searchHighlightedText(
+                  searchSnippet(entry.body, keywords: keywords),
+                  style: bodyStyle,
+                  keywords: keywords,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  emphasisTheme: emphasisTheme,
+                  brightness: theme.brightness,
+                ),
+                trailing: Text(
+                  DateFormat.yMMMd().format(entry.entryDate.toLocal()),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                onTap: () async {
+                  await showVoyagerDialog<void>(
+                    context: context,
+                    builder: (context) => _SearchDreamDialog(
+                      entry: entry,
+                      accentColor: accentColor,
+                      onSaved: (updated) {
+                        if (!mounted) return;
+                        setState(() => _dreamUpdates[updated.id] = updated);
+                        ref.invalidate(allDreamEntriesProvider);
+                      },
+                    ),
                   );
                 },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => _loadFailure(
-                  'Could not load journals.',
-                  () => ref.invalidate(journalsProvider),
-                ),
               ),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => _loadFailure(
-                'Could not load entries.',
-                () => ref.invalidate(
-                  journalListEntriesProvider(allJournalEntriesScope),
-                ),
-              ),
-            ),
+            );
+          },
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => _loadFailure(
+        'Could not load dreams.',
+        () => ref.invalidate(allDreamEntriesProvider),
+      ),
+    );
+  }
+}
+
+/// The scope indicator the query field grows when [dreamSearchCommand] is
+/// typed: the command itself leaves the field, and this stands in its place
+/// until it is removed.
+class _DreamScopeChip extends StatelessWidget {
+  const _DreamScopeChip({required this.accentColor, required this.onRemove});
+
+  final Color accentColor;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.only(left: 10, right: 4),
+      decoration: BoxDecoration(
+        color: accentColor.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: accentColor.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(PhosphorIconsRegular.moon, size: 14, color: accentColor),
+          const SizedBox(width: 6),
+          Text(
+            'Dream journals',
+            style: theme.textTheme.labelMedium?.copyWith(color: accentColor),
+          ),
+          IconButton(
+            tooltip: 'Search journal entries',
+            iconSize: 14,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            padding: EdgeInsets.zero,
+            color: accentColor,
+            onPressed: onRemove,
+            icon: const Icon(PhosphorIconsRegular.x),
           ),
         ],
       ),
@@ -1045,4 +1447,419 @@ class _EntryBaseline {
   final String weatherIcon;
   final DateTime entryDate;
   final String journalId;
+}
+
+/// [_SearchEntryDialog] for a dream: the same popup editor, without the
+/// journal, mood, weather and image rows a dream does not have, and with the
+/// Dream Journal page's corner scratchpad so the dream's notes are editable
+/// from here too.
+class _SearchDreamDialog extends ConsumerStatefulWidget {
+  const _SearchDreamDialog({
+    required this.entry,
+    required this.accentColor,
+    required this.onSaved,
+  });
+
+  final DreamEntry entry;
+  final Color accentColor;
+  final void Function(DreamEntry) onSaved;
+
+  @override
+  ConsumerState<_SearchDreamDialog> createState() => _SearchDreamDialogState();
+}
+
+class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _bodyController;
+  late final TextEditingController _notesController;
+  late final FocusNode _titleFocusNode;
+  late final FocusNode _bodyFocusNode;
+  late final FocusNode _notesFocusNode;
+  late DreamEntry _entry;
+  String _lastNotesText = '';
+
+  /// What the last save published (or, until then, what the dream was opened
+  /// with). [_isDirty] is the difference between it and the live buffer.
+  late _DreamBaseline _baseline;
+
+  /// Serialises this dialog's saves, for the same reason the journal one does:
+  /// each wipes and re-seeds the dream's remote operation log, which two
+  /// overlapping calls must never interleave.
+  Future<void> _saveChain = Future<void>.value();
+
+  late final Future<void> Function() _lifecycleFlushCallback;
+
+  DreamWriteCoordinator? _coordinator;
+  RemoteSyncService? _remoteSync;
+
+  bool _isDatePickerOpen = false;
+
+  /// Set by the two gestures that mean *throw this away*: the Close button and
+  /// Escape. Everything else that ends the dialog still writes the buffer.
+  bool _discarded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycleFlushCallback = _lifecycleFlush;
+    PendingFlushRegistry.instance.register(_lifecycleFlushCallback);
+    _entry = widget.entry;
+    _titleController = TextEditingController(text: _entry.title);
+    _bodyController = TextEditingController(text: _entry.body);
+    _notesController = TextEditingController(text: _entry.notes ?? '');
+    _lastNotesText = _notesController.text;
+
+    _titleFocusNode = FocusNode();
+    _titleFocusNode.onKeyEvent = (node, event) {
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+      if (event.logicalKey == LogicalKeyboardKey.tab &&
+          !HardwareKeyboard.instance.isShiftPressed) {
+        _bodyFocusNode.requestFocus();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.enter &&
+          !HardwareKeyboard.instance.isShiftPressed) {
+        _saveAndClose();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+
+    // Installed by TagHighlightedTextField rather than assigned here — see
+    // the note in [_SearchEntryDialogState.initState].
+    _bodyFocusNode = FocusNode();
+    // The scratchpad has no completion popup to share the slot with, so this
+    // one is assigned directly, exactly as the Dream Journal page does it.
+    _notesFocusNode = FocusNode();
+    _notesFocusNode.onKeyEvent = _handleNotesKey;
+
+    _baseline = _DreamBaseline(
+      title: _entry.title,
+      body: _entry.body,
+      notes: _notesController.text,
+      entryDate: _entry.entryDate,
+    );
+  }
+
+  @override
+  void dispose() {
+    PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
+    if (_isDirty && !_discarded) {
+      unawaited(_save());
+    }
+    _titleController.dispose();
+    _bodyController.dispose();
+    _notesController.dispose();
+    _titleFocusNode.dispose();
+    _bodyFocusNode.dispose();
+    _notesFocusNode.dispose();
+    super.dispose();
+  }
+
+  /// Whether the live buffer differs from what was last persisted, trimmed the
+  /// same way [_save] trims before writing.
+  bool get _isDirty {
+    final b = _baseline;
+    return _titleController.text.trim() != b.title.trim() ||
+        _bodyController.text.trimRight() != b.body.trimRight() ||
+        _notesController.text.trimRight() != b.notes.trimRight() ||
+        _entry.entryDate != b.entryDate;
+  }
+
+  KeyEventResult _handleBodyKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.enter &&
+        !HardwareKeyboard.instance.isShiftPressed) {
+      _saveAndClose();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// The scratchpad continues lists as it does on the Dream Journal page. No
+  /// save is scheduled off it: this dialog writes on close, not on a debounce.
+  void _handleNotesChanged(String _) {
+    applyListEditing(
+      controller: _notesController,
+      previousText: _lastNotesText,
+    );
+    _lastNotesText = _notesController.text;
+  }
+
+  /// The other half of the scratchpad's list editing — the part
+  /// [_handleNotesChanged] can't see, because neither key changes the text on
+  /// its own. Without it Tab fell through to focus traversal and left the note
+  /// entirely, and Backspace behind a bare marker deleted one character of it
+  /// instead of the marker.
+  KeyEventResult _handleNotesKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.tab) {
+      final outdent = HardwareKeyboard.instance.isShiftPressed;
+      if (handleListTab(controller: _notesController, outdent: outdent)) {
+        // Routed through the handler typing uses so _lastNotesText stays in
+        // step for the next keystroke.
+        _handleNotesChanged(_notesController.text);
+        return KeyEventResult.handled;
+      }
+    }
+    if (event.logicalKey == LogicalKeyboardKey.backspace) {
+      if (handleListBackspace(controller: _notesController)) {
+        _handleNotesChanged(_notesController.text);
+        return KeyEventResult.handled;
+      }
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// Persists the buffer if it differs from [_baseline], and publishes it.
+  ///
+  /// The same shape as [_SearchEntryDialogState._save], including why the
+  /// baseline moves before the write lands and why a failed write re-arms it.
+  Future<void> _save() {
+    if (!_isDirty) return _saveChain;
+
+    // Read synchronously, before anything is awaited, so the snapshot and the
+    // dirty flag can't disagree with each other.
+    final title = _titleController.text.trim();
+    final body = _bodyController.text.trimRight();
+    final notes = _notesController.text.trimRight();
+    final snapshot = _DreamBaseline(
+      title: title,
+      body: body,
+      notes: notes,
+      entryDate: _entry.entryDate,
+    );
+    final previous = _baseline;
+    _baseline = snapshot;
+
+    // Cached references, so nothing calls ref.read() during dispose().
+    final helper = SearchDreamSaveHelper(
+      coordinator: _coordinator ?? ref.read(dreamWriteCoordinatorProvider),
+      remoteSync: _remoteSync ?? ref.read(remoteSyncServiceProvider),
+    );
+    final entryId = _entry.id;
+
+    _saveChain = _saveChain
+        .then((_) async {
+          final updated = await helper.saveEntry(
+            // Re-read rather than closing over a captured row: an earlier link in
+            // the chain may have replaced it with the one it published.
+            baseline: _entry,
+            title: snapshot.title,
+            body: snapshot.body,
+            notes: snapshot.notes,
+            entryDate: snapshot.entryDate,
+          );
+          if (updated == null) {
+            // Nothing reached disk. Re-arm so a later close retries instead of
+            // dropping the edit — unless the user has typed since, in which case a
+            // newer snapshot already owns the baseline.
+            if (identical(_baseline, snapshot)) _baseline = previous;
+            return;
+          }
+          if (mounted) setState(() => _entry = updated);
+          widget.onSaved(updated);
+        })
+        .catchError((Object error, StackTrace stackTrace) {
+          if (identical(_baseline, snapshot)) _baseline = previous;
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: error,
+              stack: stackTrace,
+              library: 'SearchPage',
+              context: ErrorDescription(
+                'while saving dream $entryId from Search',
+              ),
+            ),
+          );
+        });
+    return _saveChain;
+  }
+
+  Future<void> _lifecycleFlush() => _save();
+
+  /// Closes first, then saves: the popup disappearing is the user's
+  /// confirmation that Enter landed, so it must not wait on the write.
+  void _saveAndClose() {
+    unawaited(_save());
+    if (mounted) Navigator.pop(context);
+  }
+
+  /// Leaves without writing: the buffer is dropped and the dream stays as it
+  /// was on disk. [dispose] is what would otherwise persist it, so the flag
+  /// has to be set before the pop rather than passed out of it.
+  void _discardAndClose() {
+    _discarded = true;
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _changeEntryDateAndTime(BuildContext buttonContext) async {
+    setState(() => _isDatePickerOpen = true);
+    final pickedDt = await showContextualPopover<DateTime>(
+      context: context,
+      buttonContext: buttonContext,
+      width: 500,
+      height: 380,
+      accentColor: widget.accentColor,
+      builder: (ctx) => DateTimeSelectorPopover(
+        initialDateTime: _entry.entryDate.toLocal(),
+        accentColor: widget.accentColor,
+      ),
+    );
+    if (mounted) setState(() => _isDatePickerOpen = false);
+    if (pickedDt == null) return;
+
+    // Shown immediately, then left for _save to notice. No version bump here:
+    // this copy has not been written anywhere, and claiming a version the disk
+    // doesn't have would outrank the row it came from.
+    final updatedImmediate = _entry.copyWith(
+      entryDate: pickedDt.toUtc(),
+      bumpVersion: false,
+    );
+    if (mounted) {
+      setState(() => _entry = updatedImmediate);
+      widget.onSaved(updatedImmediate);
+    }
+    // Through _save so this joins the same per-dialog queue as everything
+    // else.
+    await _save();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _coordinator = ref.watch(dreamWriteCoordinatorProvider);
+    _remoteSync = ref.watch(remoteSyncServiceProvider);
+
+    final accent = widget.accentColor;
+    final dialogWidth = math.min(920.0, MediaQuery.sizeOf(context).width - 48);
+
+    final dialog = EnterToSubmitScope(
+      onSubmit: () async {
+        if (context.mounted) Navigator.pop(context);
+      },
+      // Escape reads as Close, not as a second Save — see the journal dialog.
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          DismissIntent: CallbackAction<DismissIntent>(
+            onInvoke: (_) {
+              _discardAndClose();
+              return null;
+            },
+          ),
+        },
+        child: AlertDialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 24,
+          ),
+          title: const Text('Dream'),
+          content: SizedBox(
+            width: dialogWidth,
+            child: VoyagerScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  LabeledTextField(
+                    label: 'Title',
+                    controller: _titleController,
+                    focusNode: _titleFocusNode,
+                    textInputAction: TextInputAction.done,
+                    accentColor: accent,
+                    onSubmitted: (_) => _saveAndClose(),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Builder(
+                        builder: (ctx) {
+                          final local = _entry.entryDate.toLocal();
+                          return SelectorPill(
+                            dense: false,
+                            ellipsize: false,
+                            isActive: _isDatePickerOpen,
+                            label:
+                                '${DateFormat.yMMMd().format(local)}'
+                                ' at ${formatTime12Hour(local)}',
+                            accentColor: accent,
+                            onTap: () => _changeEntryDateAndTime(ctx),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 480,
+                    // The scratchpad floats over the body the way it does on
+                    // the Dream Journal page — [DreamStickyNote] is a
+                    // [Positioned], so it needs this Stack to sit in.
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: TagHighlightedTextField(
+                            controller: _bodyController,
+                            focusNode: _bodyFocusNode,
+                            tagScope: TagScope.dream,
+                            onKeyEvent: _handleBodyKey,
+                            cursorColor: accent,
+                            expands: true,
+                            hintText: 'Describe your dream...',
+                            decoration: const InputDecoration(
+                              filled: false,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                            ),
+                          ),
+                        ),
+                        DreamStickyNote(
+                          controller: _notesController,
+                          focusNode: _notesFocusNode,
+                          accentColor: accent,
+                          onChanged: _handleNotesChanged,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            GlassButton(
+              onPressed: _discardAndClose,
+              label: 'Close',
+              dense: true,
+            ),
+            GlassButton(
+              onPressed: _saveAndClose,
+              label: 'Save',
+              color: accent,
+              dense: true,
+            ),
+          ],
+        ),
+      ),
+    );
+    // Save, not the Close that unfocused Enter maps to above: the chord is an
+    // explicit commit wherever the focus is.
+    return CtrlEnterToSubmitScope(onSubmit: _saveAndClose, child: dialog);
+  }
+}
+
+/// What [_SearchDreamDialogState] last persisted, for the dirty check. A class
+/// for the same identity-comparison reason as [_EntryBaseline].
+class _DreamBaseline {
+  const _DreamBaseline({
+    required this.title,
+    required this.body,
+    required this.notes,
+    required this.entryDate,
+  });
+
+  final String title;
+  final String body;
+  final String notes;
+  final DateTime entryDate;
 }

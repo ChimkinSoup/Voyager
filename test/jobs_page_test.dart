@@ -17,6 +17,7 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/core/constants/job_constants.dart';
 import 'package:voyager/features/jobs/jobs_charts.dart';
 import 'package:voyager/features/jobs/jobs_edit_panel.dart';
 import 'package:voyager/features/jobs/jobs_page.dart';
@@ -993,5 +994,33 @@ void main() {
       settings.jobsHiddenColumns.toSet(),
       {JobColumn.notes.id, JobColumn.season.id},
     );
+  });
+
+  // The name-taken toast carries no actions and used to carry no dwell, so it
+  // sat on screen — click-through — for the life of the app.
+  testWidgets('the duplicate stage name toast dismisses itself', (
+    tester,
+  ) async {
+    await pumpJobsPage(tester, seed: (repo) async {});
+
+    await tester.tap(
+      find.byTooltip('Manage stages, categories and seasons'),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New stage'));
+    await tester.pumpAndSettle();
+    // A seeded stage, so the name is already taken.
+    await tester.enterText(find.byType(TextField).last, jobDefaultStage);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('A stage named "$jobDefaultStage" already exists'),
+      findsOneWidget,
+    );
+
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('already exists'), findsNothing);
   });
 }

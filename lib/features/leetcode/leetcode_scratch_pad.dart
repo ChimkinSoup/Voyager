@@ -327,6 +327,11 @@ class _ScratchOverlayState extends State<_ScratchOverlay>
       context,
       message: 'Code copied',
       icon: PhosphorIconsRegular.check,
+      // Without a dwell the toast has no clock, and this one carries no
+      // actions — so it stays click-through on screen for the life of the app
+      // with nothing to dismiss it. Same wait the Copy in `leetcode_actions`
+      // gives the toast it raises for the saved solution.
+      dwell: const Duration(milliseconds: 1400),
     );
   }
 

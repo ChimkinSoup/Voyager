@@ -327,6 +327,10 @@ class _StagesTabState extends ConsumerState<_StagesTab> {
       context,
       message: 'A stage named "${name.trim()}" already exists',
       icon: PhosphorIconsRegular.warningCircle,
+      // A toast raised without a dwell has no clock, and this one carries no
+      // actions either — so it would sit on screen for the life of the app.
+      // Long enough to read the name back before it goes.
+      dwell: const Duration(seconds: 4),
     );
   }
 

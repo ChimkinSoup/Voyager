@@ -128,6 +128,7 @@ class VimSession {
     this.isFieldFocused = _alwaysFocused,
     this.trySnippetUndo,
     this.shiftWidth = kVimShiftWidth,
+    this.smartIndent = false,
     UndoHistoryController? undoController,
   }) : undoController = undoController ?? UndoHistoryController(),
        _ownsUndoController = undoController == null;
@@ -171,6 +172,11 @@ class VimSession {
 
   /// Spaces one `>>` / `<<` moves a line by.
   final int shiftWidth;
+
+  /// Vim's `smartindent`: whether a line opened below one that ends in `:` or
+  /// `{` starts one [shiftWidth] deeper. On for code fields, whose Enter does
+  /// the same — see [_autoIndent].
+  final bool smartIndent;
 
   /// Undo stack for the host field, driven by `u` and `<C-r>`.
   ///
@@ -1631,13 +1637,27 @@ class VimSession {
   /// while the newline is the single inserted character — so an indent added
   /// here would cost the bullet rather than add to it. `O` opens no such
   /// continuation, so it indents on a list line like anywhere else.
+  ///
+  /// Under [smartIndent] a line opened *below* one that ends in `:` or `{`
+  /// gets one [shiftWidth] more, which is what Enter does in the same field
+  /// (`IndentModifier`): `o` on `def f(self):` opens the body, not a sibling
+  /// of the `def`. `O` opens above the line it was pressed on, where Enter
+  /// would add nothing, so it stays at the plain indent.
   String _autoIndent({required bool below}) {
     if (below && isOnListLine(textController)) return '';
     final text = _text;
-    return text.substring(
+    final indent = text.substring(
       vimLineStart(text, _cursor),
       vimFirstNonBlank(text, _cursor),
     );
+    if (!below || !smartIndent) return indent;
+    // A blank line has no last character to open a block with.
+    if (vimFirstNonBlank(text, _cursor) == vimLineEnd(text, _cursor)) {
+      return indent;
+    }
+    final last = text[vimLastNonBlank(text, _cursor)];
+    if (last != ':' && last != '{') return indent;
+    return indent + ' ' * shiftWidth;
   }
 
   // ==========================================================================
