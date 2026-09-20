@@ -484,6 +484,9 @@ and it is spent here because checking something off is the most-repeated satisfy
 - **Do** read semantic colors from `VoyagerColors.of(context)` — `hairline`, `strongHairline`,
   `scrim`, `shadow`, `chartGrid`, `highlightWash`, `onAccent`. Each one exists because the
   naive value (`Colors.white` at 10%, black shadow, white highlight) fails in one theme.
+- **Do** label a chromatic fill through `onColorLabel` / `onAccent` / `onPrimary`, never a
+  local luminance test. It scales the fill toward black until the ink clears 4.5:1, so the
+  label stays hue-linked to the plate; dark fills fall through to the theme's light ink.
 - **Do** multiply every blur radius by `shadowBlurScale`.
 - **Do** blend toward `highlightWash` to make something read as lifted — white on dark, Ink
   Slate on light.

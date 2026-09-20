@@ -178,7 +178,7 @@ void main() {
     expect((topSpace - bottomSpace).abs(), lessThan(1.0));
   });
 
-  testWidgets('GlassButton standardizes text and icon color to onSurface',
+  testWidgets('GlassButton labels a tinted wafer legibly, icon matching text',
       (WidgetTester tester) async {
     final ThemeData theme = ThemeData.dark();
     await tester.pumpWidget(
@@ -197,15 +197,32 @@ void main() {
       ),
     );
 
-    // A tinted button is still labelled in the theme's ink, never in black —
-    // on a dark plate black ink is unreadable.
+    // A tinted button is labelled off the wafer that is actually painted, not
+    // off the theme: the plate is near-solid [Colors.blue], and the theme's own
+    // ink only reaches 2.7:1 on it.
+    final Color plate = Color.alphaBlend(
+      Colors.blue.withValues(
+        alpha: GlassButton.defaultGlassOpacity(true),
+      ),
+      theme.colorScheme.surface,
+    );
+
     final Text textWidget = tester.widget(find.text('Standardized Label'));
-    expect(textWidget.style?.color, equals(theme.colorScheme.onSurface));
+    final Color label = textWidget.style!.color!;
+    expect(_contrast(label, plate), greaterThanOrEqualTo(4.5));
 
     final IconTheme iconThemeWidget = tester.widget(find.ancestor(
       of: find.byIcon(Icons.star),
       matching: find.byType(IconTheme),
     ).first);
-    expect(iconThemeWidget.data.color, equals(theme.colorScheme.onSurface));
+    expect(iconThemeWidget.data.color, equals(label));
   });
+}
+
+double _contrast(Color a, Color b) {
+  final x = a.computeLuminance();
+  final y = b.computeLuminance();
+  final lighter = x > y ? x : y;
+  final darker = x > y ? y : x;
+  return (lighter + 0.05) / (darker + 0.05);
 }

@@ -3,11 +3,70 @@ import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/domain/models/enums.dart' show AppThemeMode;
 
+/// The contrast a label has to clear against the fill it sits on.
+const double _labelContrastFloor = 4.5;
+
+/// The neutral dark ink, for themes whose `onSurface` is light.
+const Color _neutralInk = Color(0xFF2B303B);
+
+double _contrastRatio(Color a, Color b) {
+  final x = a.computeLuminance();
+  final y = b.computeLuminance();
+  final lighter = x > y ? x : y;
+  final darker = x > y ? y : x;
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/// [background] scaled toward black — hue held — as far as it needs to go to
+/// clear [_labelContrastFloor] against itself, or null when no amount of
+/// scaling gets there because the fill is already dark.
+///
+/// Walking down from the top returns the *lightest* ink that qualifies, which
+/// is the one that still looks related to the plate.
+Color? _hueLinkedInk(Color background) {
+  for (var step = 95; step >= 5; step -= 5) {
+    final scale = step / 100;
+    final ink = Color.from(
+      alpha: 1,
+      red: background.r * scale,
+      green: background.g * scale,
+      blue: background.b * scale,
+    );
+    if (_contrastRatio(ink, background) >= _labelContrastFloor) return ink;
+  }
+  return null;
+}
+
 /// Label color for text/icons painted on a solid [background] that the user
-/// picked — the theme accent, or an event/list/category color. Pale fills get
-/// dark text in either theme; everything else gets [light].
-Color onColorLabel(Color background, {Color light = Colors.white}) =>
-    background.computeLuminance() > 0.55 ? const Color(0xFF1B1B22) : light;
+/// picked — the theme accent, or an event/list/category color.
+///
+/// The dark candidate is *hue-linked*: the fill itself scaled toward black,
+/// which is the same move the curated light ramp was built with (see
+/// `kTagPaletteLight`) — hue held, so the label still reads as family with the
+/// plate under it. It wins whenever it clears [_labelContrastFloor]. Only a
+/// fill too dark to scale any further falls through to the higher-contrast of
+/// [light] and a neutral ink, which is how dark fills keep their light label.
+///
+/// [themeInk] is the theme's `onSurface`, and supplies whichever neutral the
+/// active theme names: bone as the light label on dark, Ink Slate as the dark
+/// label on cream. Left off, the pair is white and Ink Slate.
+///
+/// [background] must be opaque. A translucent fill has to be composited onto
+/// its real backdrop first, or the ratios describe a color no one ever sees.
+Color onColorLabel(Color background, {Color? light, Color? themeInk}) {
+  final hueLinked = _hueLinkedInk(background);
+  if (hueLinked != null) return hueLinked;
+
+  final ink = themeInk ?? _neutralInk;
+  final inkIsLight = ink.computeLuminance() > 0.5;
+  final lightLabel = light ?? (inkIsLight ? ink : Colors.white);
+  final darkLabel = inkIsLight ? _neutralInk : ink;
+
+  return _contrastRatio(lightLabel, background) >=
+          _contrastRatio(darkLabel, background)
+      ? lightLabel
+      : darkLabel;
+}
 
 /// The concrete surface tones for one theme.
 ///
@@ -131,7 +190,7 @@ class VoyagerTheme {
     // The accent is user-chosen and can land anywhere on the luminance range,
     // so the label color on top of it is picked from the accent itself rather
     // than from the theme — a pale accent needs dark text in either theme.
-    final onAccent = onColorLabel(accent);
+    final onAccent = onColorLabel(accent, themeInk: palette.onSurface);
 
     final colorScheme = palette.isDark
         ? ColorScheme.dark(
@@ -436,7 +495,7 @@ class VoyagerColors extends ThemeExtension<VoyagerColors> {
       subtleShadowAlpha: VoyagerShadows.subtleAlpha(palette),
       strongShadowAlpha: VoyagerShadows.strongAlpha(palette),
       shadowBlurScale: VoyagerShadows.blurScale(palette),
-      onAccent: onColorLabel(accent),
+      onAccent: onColorLabel(accent, themeInk: palette.onSurface),
       chartGrid: ink.withValues(alpha: palette.isDark ? 0.12 : 0.11),
       // The direction "toward more light" flips between themes: on dark a
       // highlight brightens toward white, on cream it deepens toward slate.

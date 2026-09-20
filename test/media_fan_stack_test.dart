@@ -25,6 +25,14 @@ Uint8List pngOf(int seed) {
   return img.encodePng(image);
 }
 
+double _contrast(Color a, Color b) {
+  final x = a.computeLuminance();
+  final y = b.computeLuminance();
+  final lighter = x > y ? x : y;
+  final darker = x > y ? y : x;
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 void main() {
   late Directory tempDir;
   late AppDatabase db;
@@ -132,11 +140,14 @@ void main() {
   testWidgets('the count badge takes dark text on a pale accent', (
     tester,
   ) async {
+    const accent = Color(0xFFF5F0C8);
     await attach(tester, 5);
-    await pumpFan(tester, accentColor: const Color(0xFFF5F0C8));
+    await pumpFan(tester, accentColor: accent);
 
     final badge = tester.widget<Text>(find.text('+2'));
-    expect(badge.style?.color, const Color(0xFF1B1B22));
+    final label = badge.style!.color!;
+    expect(label.computeLuminance(), lessThan(accent.computeLuminance()));
+    expect(_contrast(label, accent), greaterThanOrEqualTo(4.5));
   });
 
   testWidgets('the fan opens the lightbox on every image, not just the three', (
