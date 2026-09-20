@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/widgets/chart_hover_bubble.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
-import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_bubble.dart';
@@ -38,26 +36,29 @@ const _monthNames = [
 ];
 
 /// A year of solving at a glance: every day tinted by how many problems it
-/// holds, in the app's accent rather than per difficulty, with the difficulty
-/// breakdown reserved for the hover bubble.
+/// holds, in the app's accent rather than per difficulty, with the full
+/// breakdown — the three tiers and the day's reviews — reserved for the hover
+/// bubble.
 ///
-/// One colour is the point. The sparkline above it already splits the three
-/// tiers apart; this view answers the other question — which days did any work
-/// happen at all — and three-colour squares would have made that unreadable.
+/// One colour is the point. The sparkline above it already splits the series
+/// apart; this view answers the other question — which days did any work
+/// happen at all — and multi-colour squares would have made that unreadable.
+/// Unfiltered it counts solves only, for the same reason: mixing reviews into
+/// the tint would stop the grid meaning one thing.
 ///
-/// [difficulty] is the sparkline legend's selection reaching down here: the
-/// grid counts only that tier and tints in that tier's colour, so a click up
-/// top re-reads the whole page rather than half of it. The scale rebases with
-/// it — see [leetCodeBusiestDayInYear].
+/// [series] is the sparkline legend's selection reaching down here: the grid
+/// counts only that series and tints in its colour, so a click up top re-reads
+/// the whole page rather than half of it. The scale rebases with it — see
+/// [leetCodeBusiestDayInYear].
 class LeetCodeActivityCalendar extends ConsumerStatefulWidget {
   const LeetCodeActivityCalendar({
     super.key,
     required this.byDay,
-    this.difficulty,
+    this.series,
   });
 
   final Map<DateTime, LeetCodeDayCounts> byDay;
-  final LeetCodeDifficulty? difficulty;
+  final LeetCodeActivitySeries? series;
 
   @override
   ConsumerState<LeetCodeActivityCalendar> createState() =>
@@ -133,7 +134,7 @@ class _LeetCodeActivityCalendarState
     final busiest = leetCodeBusiestDayInYear(
       widget.byDay,
       _year,
-      difficulty: widget.difficulty,
+      series: widget.series,
     );
 
     return Column(
@@ -196,7 +197,7 @@ class _LeetCodeActivityCalendarState
                                             ),
                                             byDay: widget.byDay,
                                             busiest: busiest,
-                                            difficulty: widget.difficulty,
+                                            series: widget.series,
                                             weekStartsMonday: weekStartsMonday,
                                             onHover: _onHover,
                                             onHoverEnd: _endHover,
@@ -226,9 +227,9 @@ class _LeetCodeActivityCalendarState
                             counts:
                                 widget.byDay[hover.date] ??
                                 LeetCodeDayCounts.zero,
-                            // The grid is counting one tier while the filter
+                            // The grid is counting one series while the filter
                             // is on, so its bubble reads the same way.
-                            only: widget.difficulty,
+                            only: widget.series,
                           ),
                         );
                       },
@@ -249,7 +250,7 @@ class _MonthTile extends StatelessWidget {
     required this.month,
     required this.byDay,
     required this.busiest,
-    required this.difficulty,
+    required this.series,
     required this.weekStartsMonday,
     required this.onHover,
     required this.onHoverEnd,
@@ -258,7 +259,7 @@ class _MonthTile extends StatelessWidget {
   final DateTime month;
   final Map<DateTime, LeetCodeDayCounts> byDay;
   final int busiest;
-  final LeetCodeDifficulty? difficulty;
+  final LeetCodeActivitySeries? series;
   final bool weekStartsMonday;
   final void Function(DateTime date, Offset globalPosition) onHover;
   final ValueChanged<DateTime> onHoverEnd;
@@ -310,7 +311,7 @@ class _MonthTile extends StatelessWidget {
                             month: month,
                             counts: byDay[cells[row * 7 + col]],
                             busiest: busiest,
-                            difficulty: difficulty,
+                            series: series,
                             onHover: onHover,
                             onHoverEnd: onHoverEnd,
                           ),
@@ -332,7 +333,7 @@ class _DayCell extends StatelessWidget {
     required this.month,
     required this.counts,
     required this.busiest,
-    required this.difficulty,
+    required this.series,
     required this.onHover,
     required this.onHoverEnd,
   });
@@ -341,7 +342,7 @@ class _DayCell extends StatelessWidget {
   final DateTime month;
   final LeetCodeDayCounts? counts;
   final int busiest;
-  final LeetCodeDifficulty? difficulty;
+  final LeetCodeActivitySeries? series;
   final void Function(DateTime date, Offset globalPosition) onHover;
   final ValueChanged<DateTime> onHoverEnd;
 
@@ -349,15 +350,15 @@ class _DayCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     // Unfiltered the grid stays in the app's accent — "some work happened" is
-    // one question with one colour. Filtered, it borrows the tier's own colour
-    // so the squares and the curve above them are obviously the same series.
-    final accent = difficulty == null
+    // one question with one colour. Filtered, it borrows the series' own colour
+    // so the squares and the curve above them are obviously the same line.
+    final accent = series == null
         ? theme.colorScheme.primary
-        : colorForLeetCodeDifficulty(difficulty!);
+        : colorForLeetCodeActivitySeries(context, series!);
     final inMonth = date.month == month.month && date.year == month.year;
-    final total = difficulty == null
+    final total = series == null
         ? counts?.total ?? 0
-        : counts?.countFor(difficulty!) ?? 0;
+        : counts?.countForSeries(series!) ?? 0;
     // Days spilling in from an adjacent month stay neutral, exactly as they do
     // on the analytics year heatmap: only the days that belong to this tile
     // light up, and each of them lights up in its own month's tile.

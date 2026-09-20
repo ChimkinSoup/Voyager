@@ -6,6 +6,7 @@ abstract final class FirestoreCollections {
   static const todoLists = 'todo_lists';
   static const todoTasks = 'todo_tasks';
   static const leetcodeProblems = 'leetcode_problems';
+  static const leetcodeReviewLog = 'leetcode_review_log';
   static const studyFolders = 'study_folders';
   static const studyDecks = 'study_decks';
   static const studyCards = 'study_cards';
@@ -95,6 +96,7 @@ abstract final class FirestoreCollections {
     todoLists,
     todoTasks,
     leetcodeProblems,
+    leetcodeReviewLog,
     studyFolders,
     studyDecks,
     studyCards,

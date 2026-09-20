@@ -2,10 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/chart_hover_bubble.dart';
-import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_data.dart';
 
 /// Gap between the pointer and the bubble it summons, on whichever side the
@@ -13,21 +11,21 @@ import 'package:voyager/features/leetcode/leetcode_activity_data.dart';
 const double _kBubbleGap = 10;
 
 /// The hover card both LeetCode activity surfaces show: the day, then how many
-/// problems of each difficulty it holds.
+/// problems of each difficulty it holds and how many it went back over.
 ///
 /// Built on the app's chart bubble chrome ([chartTooltipBubbleColor] and
 /// friends) rather than its [ChartHoverBubble] widget, because that widget
-/// prints a single value line and this one prints a three-row breakdown. The
+/// prints a single value line and this one prints a four-row breakdown. The
 /// card around them is deliberately identical — a hover bubble on the LeetCode
 /// page should not read as a different kind of object from one on the
 /// analytics page.
 ///
-/// All three difficulties are always listed, zeros included and muted, so the
-/// bubble keeps its size and its rows stay in the same place as the pointer
-/// sweeps across days.
+/// Every series is always listed, zeros included and muted, so the bubble keeps
+/// its size and its rows stay in the same place as the pointer sweeps across
+/// days.
 ///
-/// [only] is the legend's filter: with a tier selected the surface underneath
-/// is counting just that tier, and a bubble still reciting all three would be
+/// [only] is the legend's filter: with a series selected the surface underneath
+/// is counting just that one, and a bubble still reciting all four would be
 /// answering a question the page is no longer asking.
 class LeetCodeActivityBubble extends StatelessWidget {
   const LeetCodeActivityBubble({
@@ -39,7 +37,7 @@ class LeetCodeActivityBubble extends StatelessWidget {
 
   final DateTime date;
   final LeetCodeDayCounts counts;
-  final LeetCodeDifficulty? only;
+  final LeetCodeActivitySeries? only;
 
   @override
   Widget build(BuildContext context) {
@@ -68,11 +66,11 @@ class LeetCodeActivityBubble extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              for (final difficulty
-                  in only == null ? LeetCodeDifficulty.values : [only!])
+              for (final series
+                  in only == null ? LeetCodeActivitySeries.values : [only!])
                 _BreakdownRow(
-                  difficulty: difficulty,
-                  count: counts.countFor(difficulty),
+                  series: series,
+                  count: counts.countForSeries(series),
                 ),
             ],
           ),
@@ -83,16 +81,16 @@ class LeetCodeActivityBubble extends StatelessWidget {
 }
 
 class _BreakdownRow extends StatelessWidget {
-  const _BreakdownRow({required this.difficulty, required this.count});
+  const _BreakdownRow({required this.series, required this.count});
 
-  final LeetCodeDifficulty difficulty;
+  final LeetCodeActivitySeries series;
   final int count;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = colorForLeetCodeDifficulty(difficulty);
-    // A day with none of this difficulty greys out exactly the way an empty
+    final color = colorForLeetCodeActivitySeries(context, series);
+    // A day with none of this series greys out exactly the way an empty
     // period does on the analytics bubbles — see [chartTooltipMutedValueColor].
     final muted = count == 0;
     return Padding(
@@ -109,7 +107,7 @@ class _BreakdownRow extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            labelForLeetCodeDifficulty(difficulty),
+            labelForLeetCodeActivitySeries(series),
             style: theme.textTheme.labelSmall?.copyWith(
               fontSize: 11,
               color: muted

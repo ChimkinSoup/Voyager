@@ -1,5 +1,7 @@
+import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
+import 'package:voyager/domain/models/study_models.dart';
 
 /// One way of solving a problem: the approach, what it costs, the walkthrough,
 /// the code, and whatever the user wanted to remember about *this* way of
@@ -373,4 +375,80 @@ List<LeetCodeProblem> sortLeetCodeProblemsNewestFirst(
 ) {
   final sorted = problems.toList()..sort(compareLeetCodeProblemsNewestFirst);
   return sorted;
+}
+
+/// One graded pass over a problem in a Review Deck session — the row
+/// [LeetCodeProblem.reviewCount] only ever knew the total of.
+///
+/// Append-only in the same sense [StudyReviewLog] is: every field but the
+/// tombstone is fixed at insert, and undoing a grade soft-deletes the row
+/// rather than rewriting it, so a grade given and then taken back stops being
+/// counted. [version] is what carries that across devices — conflict
+/// resolution is version-first, and a tombstone left at the live row's version
+/// would lose to it. There is no `updatedAt` to fall back on.
+///
+/// Cram sessions write nothing here: they never persist a grade, so there is
+/// no review to record.
+class LeetCodeReviewLog {
+  const LeetCodeReviewLog({
+    required this.id,
+    required this.problemId,
+    required this.grade,
+    required this.reviewedAt,
+    this.version = 0,
+    this.deletedAt,
+  });
+
+  final String id;
+  final String problemId;
+  final StudyGrade grade;
+
+  /// UTC, same as [LeetCodeProblem.solvedAt] — bucketed into local days by
+  /// [leetCodeReviewsByDay].
+  final DateTime reviewedAt;
+  final int version;
+  final DateTime? deletedAt;
+
+  bool get isDeleted => deletedAt != null;
+
+  /// The tombstone for this row, one version above it.
+  LeetCodeReviewLog deleted() => LeetCodeReviewLog(
+    id: id,
+    problemId: problemId,
+    grade: grade,
+    reviewedAt: reviewedAt,
+    version: version + 1,
+    deletedAt: utcNow(),
+  );
+
+  /// This row live again at [version], undoing [deleted].
+  LeetCodeReviewLog restored({required int version}) => LeetCodeReviewLog(
+    id: id,
+    problemId: problemId,
+    grade: grade,
+    reviewedAt: reviewedAt,
+    version: version,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'problemId': problemId,
+    'grade': grade.name,
+    'reviewedAt': reviewedAt.toUtc().toIso8601String(),
+    'version': version,
+    'deletedAt': deletedAt?.toUtc().toIso8601String(),
+  };
+
+  factory LeetCodeReviewLog.fromJson(Map<String, dynamic> json) {
+    return LeetCodeReviewLog(
+      id: json['id'] as String,
+      problemId: json['problemId'] as String,
+      grade: StudyGrade.values.byName(json['grade'] as String? ?? 'good'),
+      reviewedAt: DateTime.parse(json['reviewedAt'] as String).toUtc(),
+      version: json['version'] as int? ?? 0,
+      deletedAt: json['deletedAt'] != null
+          ? DateTime.parse(json['deletedAt'] as String).toUtc()
+          : null,
+    );
+  }
 }

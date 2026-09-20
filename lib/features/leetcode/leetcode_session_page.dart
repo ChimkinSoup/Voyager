@@ -48,6 +48,7 @@ class _GradeStep {
   const _GradeStep({
     required this.before,
     required this.after,
+    required this.log,
     required this.queueBefore,
     required this.queueAfter,
   });
@@ -55,6 +56,11 @@ class _GradeStep {
   /// The problem's SRS state on either side of the grade.
   final LeetCodeProblem before;
   final LeetCodeProblem after;
+
+  /// The row the grade appended to the review log, taken back on an undo and
+  /// revived on a redo — so a grade given, taken back and then abandoned stops
+  /// being counted on the activity chart.
+  final LeetCodeReviewLog log;
 
   final List<LeetCodeProblem> queueBefore;
   final List<LeetCodeProblem> queueAfter;
@@ -169,7 +175,8 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
 
     final current = queue.first;
     flushScratch();
-    final graded = await gradeAndSaveLeetCodeProblem(ref, current, grade);
+    final result = await gradeAndSaveLeetCodeProblem(ref, current, grade);
+    final graded = result.problem;
     if (!mounted) return;
 
     setState(() {
@@ -182,6 +189,7 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
         _GradeStep(
           before: current,
           after: graded,
+          log: result.log,
           queueBefore: queue,
           queueAfter: next,
         ),
@@ -198,7 +206,9 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
   bool get _canRedo => _undone.isNotEmpty && !_grading;
 
   /// Steps back to the problem graded last, putting its schedule back exactly
-  /// as it stood before the grade.
+  /// as it stood before the grade — and taking back the [LeetCodeReviewLog]
+  /// row that grade wrote, so the activity chart and the schedule agree even
+  /// for a grade that is undone and then abandoned by leaving the session.
   Future<void> _undo() => _replay(_graded, _undone, forward: false);
 
   /// Steps forward again into a grade that was taken back, restoring the very
@@ -228,6 +238,7 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
     );
     await ref.read(leetCodeRepositoryProvider).upsertProblem(restored);
     ref.read(remoteSyncServiceProvider).pushLeetCodeProblem(restored);
+    await replayLeetCodeReviewLog(ref, step.log, forward: forward);
     if (!mounted) return;
 
     setState(() {

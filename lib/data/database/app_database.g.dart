@@ -31674,6 +31674,425 @@ class LeetCodeProblemsTableCompanion
   }
 }
 
+class $LeetCodeReviewLogTableTable extends LeetCodeReviewLogTable
+    with TableInfo<$LeetCodeReviewLogTableTable, LeetCodeReviewLogTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LeetCodeReviewLogTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _problemIdMeta = const VerificationMeta(
+    'problemId',
+  );
+  @override
+  late final GeneratedColumn<String> problemId = GeneratedColumn<String>(
+    'problem_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _gradeMeta = const VerificationMeta('grade');
+  @override
+  late final GeneratedColumn<String> grade = GeneratedColumn<String>(
+    'grade',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reviewedAtMeta = const VerificationMeta(
+    'reviewedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> reviewedAt = GeneratedColumn<DateTime>(
+    'reviewed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    problemId,
+    grade,
+    reviewedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'leet_code_review_log_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LeetCodeReviewLogTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('problem_id')) {
+      context.handle(
+        _problemIdMeta,
+        problemId.isAcceptableOrUnknown(data['problem_id']!, _problemIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_problemIdMeta);
+    }
+    if (data.containsKey('grade')) {
+      context.handle(
+        _gradeMeta,
+        grade.isAcceptableOrUnknown(data['grade']!, _gradeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_gradeMeta);
+    }
+    if (data.containsKey('reviewed_at')) {
+      context.handle(
+        _reviewedAtMeta,
+        reviewedAt.isAcceptableOrUnknown(data['reviewed_at']!, _reviewedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_reviewedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LeetCodeReviewLogTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LeetCodeReviewLogTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      problemId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}problem_id'],
+      )!,
+      grade: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}grade'],
+      )!,
+      reviewedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}reviewed_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $LeetCodeReviewLogTableTable createAlias(String alias) {
+    return $LeetCodeReviewLogTableTable(attachedDatabase, alias);
+  }
+}
+
+class LeetCodeReviewLogTableData extends DataClass
+    implements Insertable<LeetCodeReviewLogTableData> {
+  final String id;
+  final String problemId;
+  final String grade;
+  final DateTime reviewedAt;
+
+  /// Bumped only by a delete or a restore — the other columns never change
+  /// once the row is written. See [LeetCodeReviewLog].
+  final int version;
+  final DateTime? deletedAt;
+  const LeetCodeReviewLogTableData({
+    required this.id,
+    required this.problemId,
+    required this.grade,
+    required this.reviewedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['problem_id'] = Variable<String>(problemId);
+    map['grade'] = Variable<String>(grade);
+    map['reviewed_at'] = Variable<DateTime>(reviewedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  LeetCodeReviewLogTableCompanion toCompanion(bool nullToAbsent) {
+    return LeetCodeReviewLogTableCompanion(
+      id: Value(id),
+      problemId: Value(problemId),
+      grade: Value(grade),
+      reviewedAt: Value(reviewedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory LeetCodeReviewLogTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LeetCodeReviewLogTableData(
+      id: serializer.fromJson<String>(json['id']),
+      problemId: serializer.fromJson<String>(json['problemId']),
+      grade: serializer.fromJson<String>(json['grade']),
+      reviewedAt: serializer.fromJson<DateTime>(json['reviewedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'problemId': serializer.toJson<String>(problemId),
+      'grade': serializer.toJson<String>(grade),
+      'reviewedAt': serializer.toJson<DateTime>(reviewedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  LeetCodeReviewLogTableData copyWith({
+    String? id,
+    String? problemId,
+    String? grade,
+    DateTime? reviewedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => LeetCodeReviewLogTableData(
+    id: id ?? this.id,
+    problemId: problemId ?? this.problemId,
+    grade: grade ?? this.grade,
+    reviewedAt: reviewedAt ?? this.reviewedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  LeetCodeReviewLogTableData copyWithCompanion(
+    LeetCodeReviewLogTableCompanion data,
+  ) {
+    return LeetCodeReviewLogTableData(
+      id: data.id.present ? data.id.value : this.id,
+      problemId: data.problemId.present ? data.problemId.value : this.problemId,
+      grade: data.grade.present ? data.grade.value : this.grade,
+      reviewedAt: data.reviewedAt.present
+          ? data.reviewedAt.value
+          : this.reviewedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LeetCodeReviewLogTableData(')
+          ..write('id: $id, ')
+          ..write('problemId: $problemId, ')
+          ..write('grade: $grade, ')
+          ..write('reviewedAt: $reviewedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, problemId, grade, reviewedAt, version, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LeetCodeReviewLogTableData &&
+          other.id == this.id &&
+          other.problemId == this.problemId &&
+          other.grade == this.grade &&
+          other.reviewedAt == this.reviewedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class LeetCodeReviewLogTableCompanion
+    extends UpdateCompanion<LeetCodeReviewLogTableData> {
+  final Value<String> id;
+  final Value<String> problemId;
+  final Value<String> grade;
+  final Value<DateTime> reviewedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const LeetCodeReviewLogTableCompanion({
+    this.id = const Value.absent(),
+    this.problemId = const Value.absent(),
+    this.grade = const Value.absent(),
+    this.reviewedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LeetCodeReviewLogTableCompanion.insert({
+    required String id,
+    required String problemId,
+    required String grade,
+    required DateTime reviewedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       problemId = Value(problemId),
+       grade = Value(grade),
+       reviewedAt = Value(reviewedAt);
+  static Insertable<LeetCodeReviewLogTableData> custom({
+    Expression<String>? id,
+    Expression<String>? problemId,
+    Expression<String>? grade,
+    Expression<DateTime>? reviewedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (problemId != null) 'problem_id': problemId,
+      if (grade != null) 'grade': grade,
+      if (reviewedAt != null) 'reviewed_at': reviewedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LeetCodeReviewLogTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? problemId,
+    Value<String>? grade,
+    Value<DateTime>? reviewedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return LeetCodeReviewLogTableCompanion(
+      id: id ?? this.id,
+      problemId: problemId ?? this.problemId,
+      grade: grade ?? this.grade,
+      reviewedAt: reviewedAt ?? this.reviewedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (problemId.present) {
+      map['problem_id'] = Variable<String>(problemId.value);
+    }
+    if (grade.present) {
+      map['grade'] = Variable<String>(grade.value);
+    }
+    if (reviewedAt.present) {
+      map['reviewed_at'] = Variable<DateTime>(reviewedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LeetCodeReviewLogTableCompanion(')
+          ..write('id: $id, ')
+          ..write('problemId: $problemId, ')
+          ..write('grade: $grade, ')
+          ..write('reviewedAt: $reviewedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $StudyFoldersTableTable extends StudyFoldersTable
     with TableInfo<$StudyFoldersTableTable, StudyFoldersTableData> {
   @override
@@ -45783,6 +46202,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $BucketListItemsTableTable(this);
   late final $LeetCodeProblemsTableTable leetCodeProblemsTable =
       $LeetCodeProblemsTableTable(this);
+  late final $LeetCodeReviewLogTableTable leetCodeReviewLogTable =
+      $LeetCodeReviewLogTableTable(this);
   late final $StudyFoldersTableTable studyFoldersTable =
       $StudyFoldersTableTable(this);
   late final $StudyDecksTableTable studyDecksTable = $StudyDecksTableTable(
@@ -45901,6 +46322,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     jobExperienceSnippetsTable,
     bucketListItemsTable,
     leetCodeProblemsTable,
+    leetCodeReviewLogTable,
     studyFoldersTable,
     studyDecksTable,
     studyCardsTable,
@@ -60645,6 +61067,246 @@ typedef $$LeetCodeProblemsTableTableProcessedTableManager =
       LeetCodeProblemsTableData,
       PrefetchHooks Function()
     >;
+typedef $$LeetCodeReviewLogTableTableCreateCompanionBuilder =
+    LeetCodeReviewLogTableCompanion Function({
+      required String id,
+      required String problemId,
+      required String grade,
+      required DateTime reviewedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$LeetCodeReviewLogTableTableUpdateCompanionBuilder =
+    LeetCodeReviewLogTableCompanion Function({
+      Value<String> id,
+      Value<String> problemId,
+      Value<String> grade,
+      Value<DateTime> reviewedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$LeetCodeReviewLogTableTableFilterComposer
+    extends Composer<_$AppDatabase, $LeetCodeReviewLogTableTable> {
+  $$LeetCodeReviewLogTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get problemId => $composableBuilder(
+    column: $table.problemId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get grade => $composableBuilder(
+    column: $table.grade,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get reviewedAt => $composableBuilder(
+    column: $table.reviewedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LeetCodeReviewLogTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $LeetCodeReviewLogTableTable> {
+  $$LeetCodeReviewLogTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get problemId => $composableBuilder(
+    column: $table.problemId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get grade => $composableBuilder(
+    column: $table.grade,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get reviewedAt => $composableBuilder(
+    column: $table.reviewedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LeetCodeReviewLogTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LeetCodeReviewLogTableTable> {
+  $$LeetCodeReviewLogTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get problemId =>
+      $composableBuilder(column: $table.problemId, builder: (column) => column);
+
+  GeneratedColumn<String> get grade =>
+      $composableBuilder(column: $table.grade, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get reviewedAt => $composableBuilder(
+    column: $table.reviewedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$LeetCodeReviewLogTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LeetCodeReviewLogTableTable,
+          LeetCodeReviewLogTableData,
+          $$LeetCodeReviewLogTableTableFilterComposer,
+          $$LeetCodeReviewLogTableTableOrderingComposer,
+          $$LeetCodeReviewLogTableTableAnnotationComposer,
+          $$LeetCodeReviewLogTableTableCreateCompanionBuilder,
+          $$LeetCodeReviewLogTableTableUpdateCompanionBuilder,
+          (
+            LeetCodeReviewLogTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $LeetCodeReviewLogTableTable,
+              LeetCodeReviewLogTableData
+            >,
+          ),
+          LeetCodeReviewLogTableData,
+          PrefetchHooks Function()
+        > {
+  $$LeetCodeReviewLogTableTableTableManager(
+    _$AppDatabase db,
+    $LeetCodeReviewLogTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LeetCodeReviewLogTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$LeetCodeReviewLogTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$LeetCodeReviewLogTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> problemId = const Value.absent(),
+                Value<String> grade = const Value.absent(),
+                Value<DateTime> reviewedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LeetCodeReviewLogTableCompanion(
+                id: id,
+                problemId: problemId,
+                grade: grade,
+                reviewedAt: reviewedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String problemId,
+                required String grade,
+                required DateTime reviewedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LeetCodeReviewLogTableCompanion.insert(
+                id: id,
+                problemId: problemId,
+                grade: grade,
+                reviewedAt: reviewedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LeetCodeReviewLogTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LeetCodeReviewLogTableTable,
+      LeetCodeReviewLogTableData,
+      $$LeetCodeReviewLogTableTableFilterComposer,
+      $$LeetCodeReviewLogTableTableOrderingComposer,
+      $$LeetCodeReviewLogTableTableAnnotationComposer,
+      $$LeetCodeReviewLogTableTableCreateCompanionBuilder,
+      $$LeetCodeReviewLogTableTableUpdateCompanionBuilder,
+      (
+        LeetCodeReviewLogTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $LeetCodeReviewLogTableTable,
+          LeetCodeReviewLogTableData
+        >,
+      ),
+      LeetCodeReviewLogTableData,
+      PrefetchHooks Function()
+    >;
 typedef $$StudyFoldersTableTableCreateCompanionBuilder =
     StudyFoldersTableCompanion Function({
       required String id,
@@ -67740,6 +68402,11 @@ class $AppDatabaseManager {
       $$BucketListItemsTableTableTableManager(_db, _db.bucketListItemsTable);
   $$LeetCodeProblemsTableTableTableManager get leetCodeProblemsTable =>
       $$LeetCodeProblemsTableTableTableManager(_db, _db.leetCodeProblemsTable);
+  $$LeetCodeReviewLogTableTableTableManager get leetCodeReviewLogTable =>
+      $$LeetCodeReviewLogTableTableTableManager(
+        _db,
+        _db.leetCodeReviewLogTable,
+      );
   $$StudyFoldersTableTableTableManager get studyFoldersTable =>
       $$StudyFoldersTableTableTableManager(_db, _db.studyFoldersTable);
   $$StudyDecksTableTableTableManager get studyDecksTable =>

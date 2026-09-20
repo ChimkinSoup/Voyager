@@ -366,6 +366,37 @@ LeetCodeProblem mergeLeetCodeProblemFromRemote(
   );
 }
 
+Map<String, dynamic> leetCodeReviewLogToFirestore(LeetCodeReviewLog log) => {
+  'id': log.id,
+  'problemId': log.problemId,
+  'grade': log.grade.name,
+  'reviewedAt': _dateToFirestoreRequired(log.reviewedAt),
+  'version': log.version,
+  'deletedAt': _dateToFirestore(log.deletedAt),
+};
+
+/// Version-first with no `updatedAt` tie-break, exactly as
+/// [mergeStudyReviewLogFromRemote] resolves its rows: every field but the
+/// tombstone is fixed at insert, so the higher version is the later revision
+/// and a row at the same version is the same row.
+LeetCodeReviewLog mergeLeetCodeReviewLogFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  LeetCodeReviewLog? local,
+}) {
+  final remoteVersion = parseVersion(data);
+  if (local != null && remoteVersion <= local.version) return local;
+  return LeetCodeReviewLog(
+    id: id,
+    problemId: data['problemId'] as String? ?? local?.problemId ?? '',
+    grade: StudyGrade.values.byName(data['grade'] as String? ?? 'good'),
+    reviewedAt:
+        parseFirestoreDate(data['reviewedAt']) ?? local?.reviewedAt ?? utcNow(),
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
 Map<String, dynamic> customQuoteToFirestore(CustomQuote quote) => {
   'id': quote.id,
   'text': quote.text,

@@ -75,6 +75,7 @@ import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
+import 'package:voyager/features/settings/services/color_replacement_service.dart';
 import 'package:voyager/features/settings/services/data_export_service.dart';
 import 'package:voyager/features/settings/services/data_import_service.dart';
 import 'package:voyager/domain/repositories/media_storage.dart';
@@ -346,6 +347,20 @@ final backupCollectionsProvider = Provider<List<BackupCollection>>((ref) {
     jobRepository: ref.watch(jobRepositoryProvider),
     rankingRepository: ref.watch(rankingRepositoryProvider),
     mediaRepository: ref.watch(mediaRepositoryProvider),
+  );
+});
+
+final colorReplacementServiceProvider = Provider<ColorReplacementService>((
+  ref,
+) {
+  return ColorReplacementService(
+    db: ref.watch(databaseProvider),
+    collections: ref.watch(backupCollectionsProvider),
+    // Read lazily, as the import service does: the sweep uploads only after
+    // its transaction commits, and building the sync service before then
+    // would be work done for nothing on a color nothing turns out to use.
+    pushRecords: (collection, records) =>
+        ref.read(remoteSyncServiceProvider).pushRecords(collection, records),
   );
 });
 
@@ -1105,6 +1120,13 @@ final leetcodeProblemsProvider = FutureProvider<List<LeetCodeProblem>>((ref) {
   return ref.watch(leetCodeRepositoryProvider).listProblems();
 });
 
+/// Every review the user has graded in a Review Deck session, live rows only.
+/// Bucketed into days by the activity chart and calendar.
+final leetcodeReviewLogProvider = FutureProvider<List<LeetCodeReviewLog>>((ref) {
+  ref.keepAlive();
+  return ref.watch(leetCodeRepositoryProvider).listReviewLogs();
+});
+
 final leetCodeApiClientProvider = Provider<LeetCodeApiClient>((ref) {
   final client = LeetCodeApiClient();
   ref.onDispose(client.close);
@@ -1616,6 +1638,7 @@ final _primaryDataProviders = <ProviderOrFamily>[
   todoListStatsProvider,
   syncConflictsProvider,
   leetcodeProblemsProvider,
+  leetcodeReviewLogProvider,
   studyFolderByIdProvider,
   studyFoldersProvider,
   studyDeckByIdProvider,

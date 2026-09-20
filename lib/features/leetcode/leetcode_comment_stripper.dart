@@ -1,8 +1,10 @@
-/// Removes a language's line comments from a block of pasted code.
+/// Removes a language's comments from a block of pasted code.
 ///
-/// Only line comments are touched — `#` in Python, `//` everywhere else.
-/// Block comments (`/* ... */`) and Python docstrings are left exactly as they
-/// are, and a comment marker that falls inside a string literal is not a
+/// [stripLeetCodeLineComments] touches line comments only — `#` in Python,
+/// `//` everywhere else — and leaves block comments (`/* ... */`) and Python
+/// docstrings exactly as they are; block comments come out through
+/// [stripLeetCodeBlockComments], which only the starter extractor runs. In
+/// either, a comment marker that falls inside a string literal is not a
 /// comment: `"http://x"` and `print('# 1')` survive intact.
 ///
 /// A line that held nothing but a comment is dropped entirely; a line with code
@@ -144,6 +146,95 @@ String stripLeetCodeLineComments(String code, String language) {
     // A line that was only a comment goes with it; one with code keeps the
     // code.
     if (kept.isNotEmpty) out.add(kept);
+  }
+
+  return stripped ? out.join('\n') : code;
+}
+
+/// Strips [language]'s block comments (`/* ... */`) out of [code]. Returns
+/// [code] unchanged when it holds none, and for a language that has no block
+/// comment run at all.
+///
+/// Only the starter extractor runs this. LeetCode hands out `ListNode` and
+/// friends as a `/** Definition for singly-linked list. */` header whose body
+/// is written as code, and a line-oriented reader takes ` * public class
+/// ListNode {` for a declaration and emits it. The Strip button leaves block
+/// comments where they are — those are the user's own notes.
+///
+/// A line the comment consumed entirely goes with it; a line with code beside
+/// the comment keeps the code, trailing whitespace trimmed.
+String stripLeetCodeBlockComments(String code, String language) {
+  final syntax = _syntaxFor(language);
+  if (code.isEmpty || !syntax.blockComments) return code;
+  final lines = code.split('\n');
+  final out = <String>[];
+  var state = _State.code;
+  var closer = '';
+  var stringSpansLines = false;
+  var stripped = false;
+
+  for (final line in lines) {
+    // A line that opens inside a comment belongs to it even when it is empty.
+    var touched = state == _State.blockComment;
+    final kept = StringBuffer();
+    var i = 0;
+    while (i < line.length) {
+      switch (state) {
+        case _State.string:
+          if (line.startsWith(r'\', i)) {
+            kept.write(
+              line.substring(i, i + 2 < line.length ? i + 2 : line.length),
+            );
+            i += 2;
+          } else if (line.startsWith(closer, i)) {
+            kept.write(closer);
+            i += closer.length;
+            state = _State.code;
+          } else {
+            kept.write(line[i]);
+            i++;
+          }
+        case _State.blockComment:
+          if (line.startsWith('*/', i)) {
+            i += 2;
+            state = _State.code;
+          } else {
+            i++;
+          }
+        case _State.code:
+          if (line.startsWith(syntax.lineComment, i)) {
+            // A line comment hides the rest of the line, a `/*` included.
+            kept.write(line.substring(i));
+            i = line.length;
+          } else if (line.startsWith('/*', i)) {
+            touched = true;
+            stripped = true;
+            i += 2;
+            state = _State.blockComment;
+          } else {
+            final opened = _openString(line, i, syntax);
+            if (opened == null) {
+              kept.write(line[i]);
+              i++;
+            } else {
+              closer = opened.closer;
+              stringSpansLines = opened.spansLines;
+              kept.write(opened.opener);
+              i += opened.opener.length;
+              state = _State.string;
+            }
+          }
+      }
+    }
+    // An unterminated one-line string is a typo, not a multi-line string.
+    if (state == _State.string && !stringSpansLines) state = _State.code;
+
+    if (!touched) {
+      out.add(line);
+      continue;
+    }
+    final remains = kept.toString().trimRight();
+    if (remains.isNotEmpty) out.add(remains);
   }
 
   return stripped ? out.join('\n') : code;

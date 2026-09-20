@@ -168,7 +168,7 @@ Primary action is whatever the main affirmative button already does. Enter behav
 - Login
 - Study move / link deck pickers
 - Manage sheets that only Close / open nested creates
-- Code editors (LeetCode code field, scratch pad) as standalone submit targets — covered only via parent track modal Ctrl+Enter → Save
+- Code editors (LeetCode code field, scratch pad) as standalone submit targets — covered only via parent track modal Ctrl+Enter → Save. *(The scratch pad has since bound the chord to its own non-submit action — copy + open on LeetCode; see `LEETCODE_SCRATCH_PAD.md`.)*
 - Shell / study session grading shortcuts
 
 ---

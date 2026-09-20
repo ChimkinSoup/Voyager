@@ -237,6 +237,7 @@ Compare is available regardless of **Hide solution code** on the card — it is 
 | Key | Context | Action |
 | --- | --- | --- |
 | `C` | Session shortcuts enabled, scratch pad **not** focused | Focus scratch pad (collapsed: focus editor; if already focused, no-op or expand — pick: **focus + expand**) |
+| `Ctrl+Enter` (`Cmd+Enter` on macOS) | Scratch focused, collapsed **or** expanded | Copy the pad **and** open the problem on LeetCode, in that order; toast says which happened. No `leetcodeUrl` → still copies, toast says there is no link |
 | `Space` | Scratch focused | Types space in editor |
 | `Space` | Scratch not focused | Flip card (unchanged) |
 | Grading / cram arrows | Scratch focused | **Disabled** |
@@ -263,6 +264,7 @@ Best-effort derivation from the **first solution's code** on the problem (first 
    - **Python:** keep `class Solution:` and top-level `def` lines; replace bodies with `pass` (or single `...`).
    - **Java / C# / C++:** keep `class` + method signatures; replace bodies with `{}` or `;` as appropriate.
    - **JavaScript / TypeScript / Go / Rust:** keep exported/type declarations and function signatures; empty bodies.
+   - Helper callables are filtered out, keeping only the entry shape — see [Entry methods vs helpers](LEETCODE_SCRATCH_STARTER_HELPERS.md).
 4. If extraction yields nothing usable → language default:
 
    ```python
@@ -282,7 +284,7 @@ Best-effort derivation from the **first solution's code** on the problem (first 
 
 5. Set `templateInitialized` so clearing pad can reset to the same starter.
 
-**Limitation (document in UI copy if needed):** custom or heavily refactored saved solutions may produce imperfect stubs; user can edit freely.
+**Limitation (document in UI copy if needed):** custom or heavily refactored saved solutions may produce imperfect stubs; user can edit freely. A helper the user marked `public` (or, in Python, one that happens to carry the problem's name) is indistinguishable from the entry method and stays in the starter.
 
 ---
 
@@ -395,3 +397,10 @@ contradictory or open — the spec text is kept as-is so the two can be compared
   typing.
 - **Clear pad confirm:** v1 single-tap clear, as specced; add a confirm if user
   testing shows accidental clears.
+- **Ctrl+Enter is the handoff, not a submit.** `CTRL_ENTER_SUBMIT_HLD.md` §6.6
+  keeps code editors out as *submit* targets, and that still holds — the pad has
+  nothing to save. The chord instead runs Copy and Open together, because going
+  to run an attempt always means both, and the collapsed pad has no toolbar to
+  click either of them in. It reuses `CtrlEnterToSubmitScope` so the chord is
+  claimed (an unhandled Enter would type a newline into the code being copied)
+  and so macOS gets `Cmd+Enter` for free.

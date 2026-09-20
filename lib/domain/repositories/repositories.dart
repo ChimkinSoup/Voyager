@@ -71,6 +71,27 @@ abstract class LeetCodeRepository {
   Future<void> hardDeleteProblem(String id);
   Future<void> purgeExpiredDeleted(DateTime now);
   Future<List<LeetCodeProblem>> getAllProblems({bool includeDeleted = true});
+
+  /// Appends one graded pass over a problem, or rewrites an existing row when
+  /// a remote revision of it arrives. See [LeetCodeReviewLog].
+  Future<void> logReview(
+    LeetCodeReviewLog log, {
+    bool recordLocalActivity = true,
+  });
+  Future<LeetCodeReviewLog?> getReviewLog(String id);
+
+  /// Tombstones a logged review — undoing a grade mid-session. Version-bumped
+  /// so the tombstone beats the live row it replaces when the two meet on
+  /// another device.
+  Future<void> softDeleteReviewLog(String id);
+
+  /// Every logged review, tombstones included — the backup registry wants the
+  /// tombstones, the activity chart filters them out.
+  Future<List<LeetCodeReviewLog>> getAllReviewLogs();
+
+  /// Live reviews only, oldest first. What the activity chart and calendar
+  /// count.
+  Future<List<LeetCodeReviewLog>> listReviewLogs();
 }
 
 abstract class TodoRepository {

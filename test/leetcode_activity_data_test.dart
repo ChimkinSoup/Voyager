@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_data.dart';
 
 LeetCodeProblem _problem(LeetCodeDifficulty difficulty, DateTime solvedAt) {
@@ -12,6 +13,15 @@ LeetCodeProblem _problem(LeetCodeDifficulty difficulty, DateTime solvedAt) {
     title: 'Two Sum',
     difficulty: difficulty,
     solvedAt: solvedAt,
+  );
+}
+
+LeetCodeReviewLog _review(DateTime reviewedAt, {String problemId = 'p'}) {
+  return LeetCodeReviewLog(
+    id: 'review-${reviewedAt.toIso8601String()}-$problemId',
+    problemId: problemId,
+    grade: StudyGrade.good,
+    reviewedAt: reviewedAt,
   );
 }
 
@@ -48,6 +58,62 @@ void main() {
         counts.solvesFor(LeetCodeDifficulty.easy).map((s) => s.solvedAt),
         [day, day.add(const Duration(hours: 1))],
       );
+    });
+  });
+
+  group('leetCodeReviewsByDay', () {
+    test('buckets by the local date of reviewedAt, not the UTC one', () {
+      final instant = DateTime.utc(2026, 8, 14, 23, 30);
+      final local = instant.toLocal();
+
+      final byDay = leetCodeReviewsByDay([_review(instant)]);
+
+      expect(byDay.keys, [DateTime(local.year, local.month, local.day)]);
+    });
+
+    test('counts events rather than problems', () {
+      // The same problem twice in a day is two reviews: the line answers how
+      // much reviewing happened, not how much of the deck was covered.
+      final day = DateTime(2026, 8, 10, 9).toUtc();
+      final byDay = leetCodeReviewsByDay([
+        _review(day),
+        _review(day.add(const Duration(hours: 2))),
+        _review(day.add(const Duration(hours: 3)), problemId: 'q'),
+      ]);
+
+      expect(byDay[DateTime(2026, 8, 10)], 3);
+    });
+  });
+
+  group('leetCodeActivityByDay', () {
+    test('folds reviews onto the day that already holds solves', () {
+      final day = DateTime(2026, 8, 10, 9).toUtc();
+      final byDay = leetCodeActivityByDay(
+        problems: [_problem(LeetCodeDifficulty.hard, day)],
+        logs: [_review(day), _review(day.add(const Duration(hours: 1)))],
+      );
+
+      final counts = byDay[DateTime(2026, 8, 10)]!;
+      expect(counts.hard, 1);
+      expect(counts.reviews, 2);
+      // Reviews stay out of the solve total, which is what tints the
+      // unfiltered calendar.
+      expect(counts.total, 1);
+      expect(counts.countForSeries(LeetCodeActivitySeries.reviewed), 2);
+      expect(counts.countForSeries(LeetCodeActivitySeries.hard), 1);
+    });
+
+    test('keeps a day that was nothing but review work', () {
+      final solved = DateTime(2026, 8, 10, 9).toUtc();
+      final reviewed = DateTime(2026, 8, 12, 9).toUtc();
+      final byDay = leetCodeActivityByDay(
+        problems: [_problem(LeetCodeDifficulty.easy, solved)],
+        logs: [_review(reviewed)],
+      );
+
+      final counts = byDay[DateTime(2026, 8, 12)]!;
+      expect(counts.total, 0);
+      expect(counts.reviews, 1);
     });
   });
 
@@ -95,6 +161,25 @@ void main() {
       expect(leetCodeBusiestDayInYear(byDay, 2026), 3);
       expect(leetCodeBusiestDayInYear(byDay, 2025), 9);
       expect(leetCodeBusiestDayInYear(byDay, 2024), 0);
+    });
+
+    test('rebases on the reviewed series when that is the selection', () {
+      // A year dominated by solving: without rebasing, a two-review day would
+      // be a barely-tinted square against a top of scale of nine.
+      final byDay = {
+        DateTime(2026, 3, 2): const LeetCodeDayCounts(easy: 9, reviews: 1),
+        DateTime(2026, 3, 3): const LeetCodeDayCounts(reviews: 2),
+      };
+
+      expect(leetCodeBusiestDayInYear(byDay, 2026), 9);
+      expect(
+        leetCodeBusiestDayInYear(
+          byDay,
+          2026,
+          series: LeetCodeActivitySeries.reviewed,
+        ),
+        2,
+      );
     });
   });
 }

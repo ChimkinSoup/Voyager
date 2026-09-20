@@ -1,10 +1,8 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
-import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/analytics/stat_number_format.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_bubble.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_data.dart';
@@ -18,19 +16,20 @@ const int _kGridLines = 4;
 /// 30-day window gets five labels instead of a solid run of them.
 const int _kBottomTitleInterval = 7;
 
-/// The three difficulty curves over the same 30 days, drawn on shared axes so
-/// they overlap and can be read against each other.
+/// The three difficulty curves and the reviewed curve over the same 30 days,
+/// drawn on shared axes so they overlap and can be read against each other.
 ///
-/// Each series is a plain per-day count: a day with nothing solved reads 0
-/// rather than being interpolated across, which is what keeps the three curves
+/// Each series is a plain per-day count: a day with nothing on it reads 0
+/// rather than being interpolated across, which is what keeps the curves
 /// telling the truth about *when* the work happened.
 ///
 /// [compact] is the dashboard card — line work only, no axes and no hover.
 /// Full size adds the axes, gridlines and the hover breakdown bubble.
 ///
-/// [selected] narrows the plot to a single tier, driven by the legend. The Y
+/// [selected] narrows the plot to a single series, driven by the legend. The Y
 /// axis rescales with it: a Hard-only view of a month that ran on mediums would
-/// otherwise be a flat line pinned to the baseline.
+/// otherwise be a flat line pinned to the baseline, and a review streak can
+/// outrun the solve counts by enough to flatten all three tiers.
 class LeetCodeActivityChart extends StatefulWidget {
   const LeetCodeActivityChart({
     super.key,
@@ -41,7 +40,7 @@ class LeetCodeActivityChart extends StatefulWidget {
 
   final List<({DateTime date, LeetCodeDayCounts counts})> window;
   final bool compact;
-  final LeetCodeDifficulty? selected;
+  final LeetCodeActivitySeries? selected;
 
   @override
   State<LeetCodeActivityChart> createState() => _LeetCodeActivityChartState();
@@ -72,8 +71,8 @@ class _LeetCodeActivityChartState extends State<LeetCodeActivityChart> {
       _clearHover();
       return;
     }
-    // Every difficulty has a spot on every day, so all three curves report the
-    // same index — the first hit is as good as any of them.
+    // Every series has a spot on every day, so all the curves report the same
+    // index — the first hit is as good as any of them.
     final index = hits.first.spotIndex;
     if (index < 0 || index >= widget.window.length) {
       _clearHover();
@@ -86,11 +85,11 @@ class _LeetCodeActivityChartState extends State<LeetCodeActivityChart> {
     });
   }
 
-  List<FlSpot> _spotsFor(LeetCodeDifficulty difficulty) => [
+  List<FlSpot> _spotsFor(LeetCodeActivitySeries series) => [
     for (var i = 0; i < widget.window.length; i++)
       FlSpot(
         i.toDouble(),
-        widget.window[i].counts.countFor(difficulty).toDouble(),
+        widget.window[i].counts.countForSeries(series).toDouble(),
       ),
   ];
 
@@ -101,12 +100,12 @@ class _LeetCodeActivityChartState extends State<LeetCodeActivityChart> {
     if (window.isEmpty) return const SizedBox.shrink();
 
     final shown = widget.selected == null
-        ? LeetCodeDifficulty.values
+        ? LeetCodeActivitySeries.values
         : [widget.selected!];
 
     final dataMax = window.fold<double>(0, (max, day) {
       final busiest = [
-        for (final d in shown) day.counts.countFor(d),
+        for (final s in shown) day.counts.countForSeries(s),
       ].reduce((a, b) => a > b ? a : b).toDouble();
       return busiest > max ? busiest : max;
     });
@@ -119,7 +118,7 @@ class _LeetCodeActivityChartState extends State<LeetCodeActivityChart> {
         ? (dataMax <= 0 ? 1.0 : dataMax * 1.25)
         : yStep * (_kGridLines - 1);
 
-    final bars = [for (final difficulty in shown) _barFor(difficulty, theme)];
+    final bars = [for (final series in shown) _barFor(context, series)];
 
     // Compact normally skips hover so the card's tap-to-expand isn't stolen by
     // the plot.
@@ -141,8 +140,8 @@ class _LeetCodeActivityChartState extends State<LeetCodeActivityChart> {
             for (final _ in spotIndexes)
               TouchedSpotIndicatorData(
                 // The vertical line is drawn once via [ExtraLinesData] below —
-                // three curves each drawing their own would stack up into a
-                // thick band.
+                // every curve drawing its own would stack up into a thick
+                // band.
                 const FlLine(color: Colors.transparent),
                 FlDotData(
                   getDotPainter: (spot, percent, bar, index) =>
@@ -282,10 +281,10 @@ class _LeetCodeActivityChartState extends State<LeetCodeActivityChart> {
     );
   }
 
-  LineChartBarData _barFor(LeetCodeDifficulty difficulty, ThemeData theme) {
-    final color = colorForLeetCodeDifficulty(difficulty);
+  LineChartBarData _barFor(BuildContext context, LeetCodeActivitySeries series) {
+    final color = colorForLeetCodeActivitySeries(context, series);
     return LineChartBarData(
-      spots: _spotsFor(difficulty),
+      spots: _spotsFor(series),
       // Straight segments, unlike the analytics sparklines. Those plot a value
       // interpolated across every day, where a curve is telling the truth;
       // these are counts of a single day, and splining them turned a day with
@@ -295,9 +294,9 @@ class _LeetCodeActivityChartState extends State<LeetCodeActivityChart> {
       color: color.withValues(alpha: 0.9),
       barWidth: widget.compact ? 1.5 : 2,
       dotData: const FlDotData(show: false),
-      // Much fainter than the analytics sparkline's 30% wash: three of these
-      // overlap here, and at that strength the overlaps read as a fourth
-      // colour rather than as two series crossing.
+      // Much fainter than the analytics sparkline's 30% wash: four of these
+      // overlap here, and at that strength the overlaps read as a colour of
+      // their own rather than as two series crossing.
       belowBarData: BarAreaData(
         show: true,
         gradient: LinearGradient(
@@ -311,15 +310,15 @@ class _LeetCodeActivityChartState extends State<LeetCodeActivityChart> {
   }
 }
 
-/// The difficulty key, with each tier's total across the window beside it.
+/// The series key, with each line's total across the window beside it.
 ///
-/// Three overlapping curves in three colours need naming somewhere, and the
+/// Four overlapping curves in four colours need naming somewhere, and the
 /// totals are the reading the curves can't give — a month's worth of "how many
 /// mediums, in the end".
 ///
-/// Given [onSelect] it stops being a key and becomes the filter: each tier is a
-/// capsule that fills with its own colour when it is the one being shown, and
-/// tapping the filled one clears back to all three.
+/// Given [onSelect] it stops being a key and becomes the filter: each series is
+/// a capsule that fills with its own colour when it is the one being shown, and
+/// tapping the filled one clears back to all four.
 class LeetCodeActivityLegend extends StatelessWidget {
   const LeetCodeActivityLegend({
     super.key,
@@ -331,8 +330,8 @@ class LeetCodeActivityLegend extends StatelessWidget {
 
   final List<({DateTime date, LeetCodeDayCounts counts})> window;
   final bool compact;
-  final LeetCodeDifficulty? selected;
-  final ValueChanged<LeetCodeDifficulty>? onSelect;
+  final LeetCodeActivitySeries? selected;
+  final ValueChanged<LeetCodeActivitySeries>? onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -342,14 +341,14 @@ class LeetCodeActivityLegend extends StatelessWidget {
       spacing: compact ? 10 : 8,
       runSpacing: 4,
       children: [
-        for (final difficulty in LeetCodeDifficulty.values)
+        for (final series in LeetCodeActivitySeries.values)
           if (onSelect != null)
             _LegendCapsule(
-              difficulty: difficulty,
-              total: _totalFor(difficulty),
-              active: selected == difficulty,
-              dimmed: selected != null && selected != difficulty,
-              onTap: () => onSelect(difficulty),
+              series: series,
+              total: _totalFor(series),
+              active: selected == series,
+              dimmed: selected != null && selected != series,
+              onTap: () => onSelect(series),
             )
           else
             Row(
@@ -359,16 +358,16 @@ class LeetCodeActivityLegend extends StatelessWidget {
                   width: 6,
                   height: 6,
                   decoration: BoxDecoration(
-                    color: colorForLeetCodeDifficulty(difficulty),
+                    color: colorForLeetCodeActivitySeries(context, series),
                     shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 5),
                 Text(
                   compact
-                      ? '${_totalFor(difficulty)}'
-                      : '${labelForLeetCodeDifficulty(difficulty)} '
-                            '${_totalFor(difficulty)}',
+                      ? '${_totalFor(series)}'
+                      : '${labelForLeetCodeActivitySeries(series)} '
+                            '${_totalFor(series)}',
                   style: theme.textTheme.labelSmall?.copyWith(
                     fontSize: 11,
                     color: theme.colorScheme.onSurfaceVariant,
@@ -380,22 +379,22 @@ class LeetCodeActivityLegend extends StatelessWidget {
     );
   }
 
-  int _totalFor(LeetCodeDifficulty difficulty) =>
-      window.fold(0, (sum, day) => sum + day.counts.countFor(difficulty));
+  int _totalFor(LeetCodeActivitySeries series) =>
+      window.fold(0, (sum, day) => sum + day.counts.countForSeries(series));
 }
 
-/// One tier's filter capsule: a tinted pill at rest, solid in the tier's colour
-/// once it is the selection, faded while a *different* tier holds it.
+/// One series' filter capsule: a tinted pill at rest, solid in the series'
+/// colour once it is the selection, faded while a *different* one holds it.
 class _LegendCapsule extends StatelessWidget {
   const _LegendCapsule({
-    required this.difficulty,
+    required this.series,
     required this.total,
     required this.active,
     required this.dimmed,
     required this.onTap,
   });
 
-  final LeetCodeDifficulty difficulty;
+  final LeetCodeActivitySeries series;
   final int total;
   final bool active;
   final bool dimmed;
@@ -404,7 +403,7 @@ class _LegendCapsule extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = colorForLeetCodeDifficulty(difficulty);
+    final color = colorForLeetCodeActivitySeries(context, series);
     final duration = VoyagerMotion.reduced(context)
         ? Duration.zero
         : const Duration(milliseconds: 180);
@@ -456,7 +455,7 @@ class _LegendCapsule extends StatelessWidget {
                     ),
                     const SizedBox(width: 5),
                     Text(
-                      '${labelForLeetCodeDifficulty(difficulty)} $total',
+                      '${labelForLeetCodeActivitySeries(series)} $total',
                       style: theme.textTheme.labelSmall?.copyWith(
                         fontSize: 11,
                         color: onFill,

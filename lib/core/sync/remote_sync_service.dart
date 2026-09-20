@@ -1338,6 +1338,7 @@ class RemoteSyncService {
     await pullTodoLists();
     await pullTodoTasks();
     await pullLeetCodeProblems();
+    await pullLeetCodeReviewLog();
     await pullStudyFolders();
     await pullStudyDecks();
     await pullStudyCards();
@@ -1416,6 +1417,11 @@ class RemoteSyncService {
         );
       case FirestoreCollections.studyCards:
         return pullStudyCards(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.leetcodeReviewLog:
+        return pullLeetCodeReviewLog(
           documentIds: documentIds,
           documentData: documentData,
         );
@@ -1704,6 +1710,26 @@ class RemoteSyncService {
           merged,
           recordLocalActivity: false,
         );
+      },
+    );
+  }
+
+  Future<bool> pullLeetCodeReviewLog({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.leetcodeReviewLog,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        // Resolved against the local row: a log row can be taken back by an
+        // undo, and without the local copy a stale remote revision would
+        // un-delete a grade the user undid here.
+        final local = await _leetCodeRepository.getReviewLog(id);
+        final merged = mergeLeetCodeReviewLogFromRemote(data, id, local: local);
+        await _leetCodeRepository.logReview(merged, recordLocalActivity: false);
       },
     );
   }
@@ -2813,6 +2839,17 @@ class RemoteSyncService {
     );
   }
 
+  void pushLeetCodeReviewLog(LeetCodeReviewLog log) {
+    cancelDocument(FirestoreCollections.leetcodeReviewLog, log.id);
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.leetcodeReviewLog,
+        log.id,
+        () => _uploadLeetCodeReviewLogNow(log),
+      ),
+    );
+  }
+
   void pushCustomQuote(CustomQuote quote) {
     cancelDocument(FirestoreCollections.customQuotes, quote.id);
     unawaited(
@@ -3849,6 +3886,14 @@ class RemoteSyncService {
     );
   }
 
+  Future<void> _uploadLeetCodeReviewLogNow(LeetCodeReviewLog log) {
+    return _uploadRecordNow(
+      collection: FirestoreCollections.leetcodeReviewLog,
+      localId: log.id,
+      payload: leetCodeReviewLogToFirestore(log),
+    );
+  }
+
   Future<void> _uploadCustomQuoteNow(CustomQuote quote) {
     return _uploadRecordNow(
       collection: FirestoreCollections.customQuotes,
@@ -4289,6 +4334,9 @@ class RemoteSyncService {
       case FirestoreCollections.leetcodeProblems:
         if (record is! LeetCodeProblem) return null;
         return (id: record.id, payload: leetCodeProblemToFirestore(record));
+      case FirestoreCollections.leetcodeReviewLog:
+        if (record is! LeetCodeReviewLog) return null;
+        return (id: record.id, payload: leetCodeReviewLogToFirestore(record));
       case FirestoreCollections.studyFolders:
         if (record is! StudyFolder) return null;
         return (id: record.id, payload: studyFolderToFirestore(record));
@@ -5389,6 +5437,7 @@ class LiveSyncController {
     FirestoreCollections.todoLists,
     FirestoreCollections.todoTasks,
     FirestoreCollections.leetcodeProblems,
+    FirestoreCollections.leetcodeReviewLog,
     FirestoreCollections.studyFolders,
     FirestoreCollections.studyDecks,
     FirestoreCollections.studyCards,

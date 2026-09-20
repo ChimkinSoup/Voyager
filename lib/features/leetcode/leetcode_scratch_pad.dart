@@ -8,6 +8,7 @@ import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -33,6 +34,41 @@ const double kLeetCodeScratchStackBreakpoint = 720;
 /// which is the only way back other than the close button (Escape belongs to
 /// Vim).
 const double _kExpandedInset = 0.04;
+
+/// What Ctrl+Enter does from either pad: the code onto the clipboard and the
+/// problem into the browser, in that order.
+///
+/// The two toolbar buttons it stands in for are never wanted apart — going to
+/// run an attempt means both — and the chord is the only way to do it from the
+/// collapsed pad, which has no toolbar at all.
+///
+/// Copies whatever is in the buffer, empty included, exactly as the Copy button
+/// does. A problem with no `leetcodeUrl` still copies; the toast says why
+/// nothing opened rather than leaving the press looking dead.
+Future<void> _copyAndOpenLeetCode(
+  BuildContext context, {
+  required LeetCodeProblem problem,
+  required LeetCodeCodeController controller,
+}) async {
+  final url = problem.leetcodeUrl;
+  await Clipboard.setData(ClipboardData(text: controller.fullText));
+  if (context.mounted) {
+    showVoyagerToast(
+      context,
+      message: url == null
+          ? 'Code copied — this problem has no LeetCode link'
+          : 'Code copied — opening LeetCode',
+      icon: url == null
+          ? PhosphorIconsRegular.warning
+          : PhosphorIconsRegular.check,
+      // Same dwell the Copy button's toast takes, and for the same reason —
+      // this one carries no actions, so nothing else would dismiss it.
+      dwell: const Duration(milliseconds: 1400),
+    );
+  }
+  if (url == null) return;
+  await launchUrl(Uri.parse(url), webOnlyWindowName: '_blank');
+}
 
 /// The scratch code pad beside a Study or Cram card: somewhere to type an
 /// attempt before going and running it on LeetCode.
@@ -139,12 +175,21 @@ class LeetCodeScratchPad extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: _ScratchEditor(
-              controller: controller,
-              focusNode: focusNode,
-              onCodeChanged: onCodeChanged,
-              // The notepad above already draws the paper and the border.
-              framed: false,
+            // Ctrl+Enter reaches this from the editor's own focus, so the pad
+            // can be handed off to the browser without expanding it first.
+            child: CtrlEnterToSubmitScope(
+              onSubmit: () => _copyAndOpenLeetCode(
+                context,
+                problem: problem,
+                controller: controller,
+              ),
+              child: _ScratchEditor(
+                controller: controller,
+                focusNode: focusNode,
+                onCodeChanged: onCodeChanged,
+                // The notepad above already draws the paper and the border.
+                framed: false,
+              ),
             ),
           ),
         ],
@@ -341,6 +386,12 @@ class _ScratchOverlayState extends State<_ScratchOverlay>
     await launchUrl(Uri.parse(url), webOnlyWindowName: '_blank');
   }
 
+  Future<void> _copyAndOpen() => _copyAndOpenLeetCode(
+    context,
+    problem: widget.problem,
+    controller: widget.controller,
+  );
+
   /// Same two passes the Track modal's Strip runs, and for the same reason the
   /// rewrite goes through [CodeController.fullText] — an assigned value is
   /// re-diffed from its length and a multi-line deletion reads as a backspace.
@@ -442,20 +493,26 @@ class _ScratchOverlayState extends State<_ScratchOverlay>
               ],
             );
           },
-          child: _ExpandedCard(
-            problem: widget.problem,
-            controller: widget.controller,
-            editorFocus: _editorFocus,
-            language: _language,
-            comparing: _comparing,
-            onClose: _close,
-            onCopy: _copy,
-            onOpenOnLeetCode: _openOnLeetCode,
-            onClear: widget.onClear,
-            onStrip: _stripComments,
-            onToggleCompare: () => setState(() => _comparing = !_comparing),
-            onLanguageChanged: _setLanguage,
-            onCodeChanged: widget.onCodeChanged,
+          // Wraps the card rather than the editor inside it, so the chord is
+          // claimed wherever the focus sits in here — the toolbar buttons
+          // included.
+          child: CtrlEnterToSubmitScope(
+            onSubmit: _copyAndOpen,
+            child: _ExpandedCard(
+              problem: widget.problem,
+              controller: widget.controller,
+              editorFocus: _editorFocus,
+              language: _language,
+              comparing: _comparing,
+              onClose: _close,
+              onCopy: _copy,
+              onOpenOnLeetCode: _openOnLeetCode,
+              onClear: widget.onClear,
+              onStrip: _stripComments,
+              onToggleCompare: () => setState(() => _comparing = !_comparing),
+              onLanguageChanged: _setLanguage,
+              onCodeChanged: widget.onCodeChanged,
+            ),
           ),
         ),
       ),

@@ -46,6 +46,34 @@ class _StubLeetCodeRepository implements LeetCodeRepository {
     ];
   }
 
+  /// Review rows by id, tombstones included — grading writes one, and this
+  /// file's tests only care that the write goes somewhere.
+  final reviewLogs = <String, LeetCodeReviewLog>{};
+
+  @override
+  Future<void> logReview(
+    LeetCodeReviewLog log, {
+    bool recordLocalActivity = true,
+  }) async {
+    reviewLogs[log.id] = log;
+  }
+
+  @override
+  Future<LeetCodeReviewLog?> getReviewLog(String id) async => reviewLogs[id];
+
+  @override
+  Future<void> softDeleteReviewLog(String id) async {
+    final current = reviewLogs[id];
+    if (current == null || current.isDeleted) return;
+    reviewLogs[id] = current.deleted();
+  }
+
+  @override
+  Future<List<LeetCodeReviewLog>> listReviewLogs() async => [
+    for (final log in reviewLogs.values)
+      if (!log.isDeleted) log,
+  ];
+
   @override
   noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

@@ -2,7 +2,7 @@
 
 Filter the scratch-pad starter so it keeps the LeetCode **entry shape** and drops user-defined **helper methods**, without breaking design problems that expose several public API methods.
 
-Status: **design** (not implemented). Companion to [LEETCODE_SCRATCH_PAD.md](LEETCODE_SCRATCH_PAD.md) § Starter template. Implementation lives in `lib/features/leetcode/leetcode_scratch_starter.dart`.
+Status: **implemented**. Companion to [LEETCODE_SCRATCH_PAD.md](LEETCODE_SCRATCH_PAD.md) § Starter template. Implementation lives in `lib/features/leetcode/leetcode_scratch_starter.dart`, with the block-comment pass in `lib/features/leetcode/leetcode_comment_stripper.dart`.
 
 ---
 
@@ -49,6 +49,8 @@ opens the pad with stubs for both `helper` and `twoSum`. The pad cannot tell a h
 | Python dunders | Keep **only** `__init__` |
 | Top-level Python `def`s (no class) | **Keep all**, same as today |
 | Existing / recovered pads | Filter **only** when deriving a **new** starter |
+| Class-level fields | **Dropped** — state the solution chose, not shape the problem gave |
+| Block comments | Stripped on the derive path only; the **Strip** button still leaves them |
 
 ---
 
@@ -65,9 +67,13 @@ When a callable would otherwise be kept, apply a language-aware **entry-shaped?*
 
 **C++ access sections:** track the current `public:` / `protected:` / `private:` specifier while walking the outer class. Methods inherit the active section.
 
-**Default before any specifier:** `class` members are private until a section says otherwise; `struct` members are public. (LeetCode `class Solution` almost always opens with `public:`, so this rarely bites.)
+**Default before any specifier:** `class` members are private until a section says otherwise; `struct` members are public. (LeetCode `class Solution` almost always opens with `public:`, so this rarely bites.) This is a **C++ section rule only** — Java / C# mark each member, so there is no "before the first specifier" there and a member with no modifier at all (package-private) is **kept**: an unmarked `int[] twoSum(…)` is still the entry shape, and dropping it would leave the pad with nothing.
 
 Keep every public method — never reduce to a single signature. A `public` helper next to `twoSum` stays; that is an accepted edge case.
+
+**Fields.** A declaration whose first `(` is preceded by an `=` is a field with an initialiser, not a signature — drop it. `HashMap<String, ArrayList<Data>> hashMap = new HashMap<>();` otherwise reads as a callable (the parens in `new HashMap<>()`) and hands the user the data structure the saved solution chose, while the `int count;` beside it is already dropped for having no parens at all. LeetCode never seeds a field in the default template — `ListNode` and friends arrive inside a comment, and design problems give a constructor and methods — so there is nothing to preserve.
+
+Two accepted misses: a C++ member declared with direct init (`vector<int> buf(10);`) is grammatically identical to a bodiless method declaration (`int read4(char[] buf4);`) and stays, and `bool operator==(...)` has an `=` before its paren and goes.
 
 ### Python
 
@@ -82,7 +88,11 @@ Thread the problem (or a precomputed name set) into the derive path; today `deri
 
 ### JavaScript / TypeScript
 
-Usually a single free function or one class method. Leave current behavior unless multi-method class stubs show up in practice.
+Usually a single free function or one class method. Leave current behavior unless multi-method class stubs show up in practice. The field rule stays off here: `var twoSum = function(nums, target) {` is the LeetCode shape itself, `=` and all.
+
+### Comments
+
+The derive path strips block comments (`stripLeetCodeBlockComments`) before reading lines. LeetCode ships `ListNode` / `TreeNode` as a `/** Definition for ... */` header whose body is written as code, and a line-oriented reader takes ` * public class ListNode {` for a declaration and emits it. The **Strip** button in the pad and the Track modal is unchanged — it still only removes line comments, because a block comment there is the user's own note.
 
 ### Go / Rust
 
@@ -113,6 +123,22 @@ class Solution {
 // starter
 class Solution {
     public int[] twoSum(int[] nums, int target) {
+    }
+}
+```
+
+**Field dropped, method kept**
+
+```java
+// saved
+class Solution {
+    HashMap<String, ArrayList<String>> groups = new HashMap<>();
+    public List<List<String>> groupAnagrams(String[] strs) { ... }
+}
+
+// starter
+class Solution {
+    public List<List<String>> groupAnagrams(String[] strs) {
     }
 }
 ```

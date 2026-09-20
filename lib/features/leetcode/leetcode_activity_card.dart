@@ -5,7 +5,6 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
-import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_calendar.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_chart.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_data.dart';
@@ -27,11 +26,12 @@ const double _kCardFadeInFraction = 0.3;
 /// bubble, which is laid out inside the chart's own box and is ~80 tall.
 const double _kExpandedSparklineHeight = 160;
 
-/// The dashboard's activity card: the last 30 days of solving, one curve per
-/// difficulty, sitting in the space to the right of the progress rings.
+/// The dashboard's activity card: the last 30 days of work, one curve per
+/// difficulty plus one for reviews, sitting in the space to the right of the
+/// progress rings.
 ///
 /// Deliberately small and label-free — it is a shape to glance at, and tapping
-/// it grows the same three curves into a full-screen view with axes, a hover
+/// it grows the same curves into a full-screen view with axes, a hover
 /// breakdown and a year calendar.
 class LeetCodeActivityCard extends ConsumerStatefulWidget {
   const LeetCodeActivityCard({super.key});
@@ -59,8 +59,9 @@ class _LeetCodeActivityCardState extends ConsumerState<LeetCodeActivityCard> {
     final theme = Theme.of(context);
     final problems =
         ref.watch(leetcodeProblemsProvider).valueOrNull ?? const [];
+    final logs = ref.watch(leetcodeReviewLogProvider).valueOrNull ?? const [];
     final window = leetCodeActivityWindow(
-      byDay: leetCodeCountsByDay(problems),
+      byDay: leetCodeActivityByDay(problems: problems, logs: logs),
       today: DateTime.now(),
     );
 
@@ -290,12 +291,12 @@ class _ActivityDetailCard extends ConsumerStatefulWidget {
 }
 
 class _ActivityDetailCardState extends ConsumerState<_ActivityDetailCard> {
-  /// The tier the legend is holding, or null for all three. It filters the
+  /// The series the legend is holding, or null for all of them. It filters the
   /// sparkline and the calendar together — one click re-reads the whole page.
-  LeetCodeDifficulty? _selected;
+  LeetCodeActivitySeries? _selected;
 
-  void _toggle(LeetCodeDifficulty difficulty) => setState(() {
-    _selected = _selected == difficulty ? null : difficulty;
+  void _toggle(LeetCodeActivitySeries series) => setState(() {
+    _selected = _selected == series ? null : series;
   });
 
   @override
@@ -303,7 +304,8 @@ class _ActivityDetailCardState extends ConsumerState<_ActivityDetailCard> {
     final theme = Theme.of(context);
     final problems =
         ref.watch(leetcodeProblemsProvider).valueOrNull ?? const [];
-    final byDay = leetCodeCountsByDay(problems);
+    final logs = ref.watch(leetcodeReviewLogProvider).valueOrNull ?? const [];
+    final byDay = leetCodeActivityByDay(problems: problems, logs: logs);
     final window = leetCodeActivityWindow(byDay: byDay, today: DateTime.now());
 
     return Material(
@@ -321,7 +323,7 @@ class _ActivityDetailCardState extends ConsumerState<_ActivityDetailCard> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Problems solved per day',
+                      'Problems solved and reviewed per day',
                       style: theme.textTheme.labelLarge,
                     ),
                   ),
@@ -334,7 +336,7 @@ class _ActivityDetailCardState extends ConsumerState<_ActivityDetailCard> {
                 ],
               ),
               const SizedBox(height: 4),
-              // Its own row rather than pinned to the title's right: three
+              // Its own row rather than pinned to the title's right: four
               // full capsules and a title don't both fit across a phone-width
               // overlay, and these are controls now, not a footnote.
               Align(
@@ -362,7 +364,7 @@ class _ActivityDetailCardState extends ConsumerState<_ActivityDetailCard> {
               Expanded(
                 child: LeetCodeActivityCalendar(
                   byDay: byDay,
-                  difficulty: _selected,
+                  series: _selected,
                 ),
               ),
             ],

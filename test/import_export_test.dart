@@ -275,6 +275,14 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       updatedAt: now,
     ),
   );
+  await leetCodeRepo.logReview(
+    LeetCodeReviewLog(
+      id: 'lc-review-1',
+      problemId: 'lc-1',
+      grade: StudyGrade.good,
+      reviewedAt: now,
+    ),
+  );
   await studyRepo.upsertFolder(
     StudyFolder(id: 'folder-1', name: 'Biology', createdAt: now, updatedAt: now),
   );
@@ -1032,6 +1040,7 @@ void main() {
         'todo_lists_table',
         'todo_tasks_table',
         'leet_code_problems_table',
+        'leet_code_review_log_table',
         'study_folders_table',
         'study_decks_table',
         'study_cards_table',

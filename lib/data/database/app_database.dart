@@ -131,6 +131,24 @@ class LeetCodeProblemsTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// One graded pass over a problem in a Review Deck session — the per-day
+/// history [LeetCodeProblemsTable.reviewCount] only ever held the total of.
+/// See [LeetCodeReviewLog], and [StudyReviewLogTable], which this mirrors.
+class LeetCodeReviewLogTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get problemId => text()();
+  TextColumn get grade => text()();
+  DateTimeColumn get reviewedAt => dateTime()();
+
+  /// Bumped only by a delete or a restore — the other columns never change
+  /// once the row is written. See [LeetCodeReviewLog].
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 class TodoListsTable extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
@@ -1717,6 +1735,7 @@ class RankingChildrenTable extends Table {
     JobExperienceSnippetsTable,
     BucketListItemsTable,
     LeetCodeProblemsTable,
+    LeetCodeReviewLogTable,
     StudyFoldersTable,
     StudyDecksTable,
     StudyCardsTable,
@@ -1744,7 +1763,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 119;
+  int get schemaVersion => 120;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3101,6 +3120,11 @@ class AppDatabase extends _$AppDatabase {
           'CREATE INDEX IF NOT EXISTS idx_reminder_delivery_logs_state_id '
           'ON reminder_delivery_logs_table (delivery_state_id)',
         );
+      }
+      if (from < 120) {
+        // Nothing to backfill: a problem's past reviews were only ever counted,
+        // never dated, so the activity chart's reviewed line starts here.
+        await migrator.createTable(leetCodeReviewLogTable);
       }
     },
   );

@@ -107,16 +107,69 @@ Future<void> startLeetCodeTrackFlow(BuildContext context, WidgetRef ref) async {
   );
 }
 
-/// Persists a Study-session grade. Returns the graded problem so the session
-/// can decide whether it needs re-queueing this round.
-Future<LeetCodeProblem> gradeAndSaveLeetCodeProblem(
+/// Persists a Study-session grade, and the [LeetCodeReviewLog] row that says
+/// when it happened. Returns both: the session needs the problem to decide
+/// whether it goes round again, and the log row to take the grade back with.
+///
+/// The log is what the activity chart's reviewed line counts —
+/// [LeetCodeProblem.reviewCount] is only ever a total.
+Future<({LeetCodeProblem problem, LeetCodeReviewLog log})>
+gradeAndSaveLeetCodeProblem(
   WidgetRef ref,
   LeetCodeProblem problem,
   StudyGrade grade,
 ) async {
   final graded = gradeLeetCodeProblem(problem, grade);
   await _save(ref, graded);
-  return graded;
+  final log = LeetCodeReviewLog(
+    id: newId(),
+    problemId: graded.id,
+    grade: grade,
+    reviewedAt: DateTime.now().toUtc(),
+  );
+  await _saveReviewLog(ref, log);
+  return (problem: graded, log: log);
+}
+
+/// Writes a review row through the repository and out to sync, then refreshes
+/// the activity chart's source.
+Future<void> _saveReviewLog(WidgetRef ref, LeetCodeReviewLog log) async {
+  await ref.read(leetCodeRepositoryProvider).logReview(log);
+  ref.read(remoteSyncServiceProvider).pushLeetCodeReviewLog(log);
+  ref.invalidate(leetcodeReviewLogProvider);
+}
+
+/// Takes [log] back on an undo and revives that same row on a redo.
+///
+/// Never a second row: the redo re-writes the id the grade originally wrote,
+/// at a version resolved against what is on disk now — a pull can have landed
+/// a newer revision of it while the session sat on the undo.
+Future<void> replayLeetCodeReviewLog(
+  WidgetRef ref,
+  LeetCodeReviewLog log, {
+  required bool forward,
+}) async {
+  final repo = ref.read(leetCodeRepositoryProvider);
+  if (!forward) {
+    await repo.softDeleteReviewLog(log.id);
+    final tombstone = await repo.getReviewLog(log.id);
+    if (tombstone != null) {
+      ref.read(remoteSyncServiceProvider).pushLeetCodeReviewLog(tombstone);
+    }
+    ref.invalidate(leetcodeReviewLogProvider);
+    return;
+  }
+  final current = await repo.getReviewLog(log.id);
+  if (current != null && current.deletedAt == null) return;
+  await _saveReviewLog(
+    ref,
+    log.restored(
+      version: restoreVersionFrom(
+        preDeleteVersion: log.version,
+        currentVersion: current?.version,
+      ),
+    ),
+  );
 }
 
 /// Forgets how well the user knows [problem] — its content is untouched.

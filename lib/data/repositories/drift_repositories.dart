@@ -593,10 +593,21 @@ class DriftLeetCodeRepository implements LeetCodeRepository {
 
   @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
+    final cutoff = _policy.purgeCutoff(now);
     await (_db.delete(_db.leetCodeProblemsTable)
           ..where(
-            (t) => t.deletedAt.isSmallerOrEqualValue(_policy.purgeCutoff(now)) &
+            (t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
                 _notOwedUpload(_db, FirestoreCollections.leetcodeProblems, t.id),
+          ))
+        .go();
+    await (_db.delete(_db.leetCodeReviewLogTable)
+          ..where(
+            (t) => t.deletedAt.isSmallerOrEqualValue(cutoff) &
+                _notOwedUpload(
+                  _db,
+                  FirestoreCollections.leetcodeReviewLog,
+                  t.id,
+                ),
           ))
         .go();
   }
@@ -635,6 +646,68 @@ class DriftLeetCodeRepository implements LeetCodeRepository {
     version: row.version,
     deletedAt: row.deletedAt,
   );
+
+  @override
+  Future<void> logReview(
+    LeetCodeReviewLog log, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.leetCodeReviewLogTable)
+        .insertOnConflictUpdate(
+          LeetCodeReviewLogTableCompanion(
+            id: Value(log.id),
+            problemId: Value(log.problemId),
+            grade: Value(log.grade.name),
+            reviewedAt: Value(log.reviewedAt),
+            version: Value(log.version),
+            deletedAt: Value(log.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.leetcodeReviewLog);
+    }
+  }
+
+  @override
+  Future<LeetCodeReviewLog?> getReviewLog(String id) async {
+    final row = await (_db.select(
+      _db.leetCodeReviewLogTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapReviewLog(row);
+  }
+
+  @override
+  Future<void> softDeleteReviewLog(String id) async {
+    final current = await getReviewLog(id);
+    if (current == null || current.deletedAt != null) return;
+    await logReview(current.deleted());
+  }
+
+  @override
+  Future<List<LeetCodeReviewLog>> getAllReviewLogs() async {
+    final rows = await _db.select(_db.leetCodeReviewLogTable).get();
+    return rows.map(_mapReviewLog).toList();
+  }
+
+  @override
+  Future<List<LeetCodeReviewLog>> listReviewLogs() async {
+    final query = _db.select(_db.leetCodeReviewLogTable)
+      ..where((t) => t.deletedAt.isNull())
+      ..orderBy([(t) => OrderingTerm.asc(t.reviewedAt)]);
+    final rows = await query.get();
+    return rows.map(_mapReviewLog).toList();
+  }
+
+  LeetCodeReviewLog _mapReviewLog(LeetCodeReviewLogTableData row) =>
+      LeetCodeReviewLog(
+        id: row.id,
+        problemId: row.problemId,
+        grade: StudyGrade.values.byName(row.grade),
+        reviewedAt: row.reviewedAt,
+        version: row.version,
+        deletedAt: row.deletedAt,
+      );
 }
 
 class DriftTodoRepository implements TodoRepository {

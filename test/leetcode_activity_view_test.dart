@@ -17,6 +17,8 @@ import 'package:voyager/features/leetcode/leetcode_activity_bubble.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_calendar.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_card.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_chart.dart';
+import 'package:voyager/features/leetcode/leetcode_activity_data.dart';
+import 'package:voyager/domain/models/study_models.dart';
 
 class _FixedSettings extends SettingsNotifier {
   @override
@@ -43,6 +45,17 @@ LeetCodeProblem _problem(
   );
 }
 
+LeetCodeReviewLog _review(String id, String problemId, int daysAgo) {
+  final now = DateTime.now();
+  final reviewed = DateTime(now.year, now.month, now.day - daysAgo, 12).toUtc();
+  return LeetCodeReviewLog(
+    id: id,
+    problemId: problemId,
+    grade: StudyGrade.good,
+    reviewedAt: reviewed,
+  );
+}
+
 Future<void> _pumpCard(WidgetTester tester) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -52,6 +65,15 @@ Future<void> _pumpCard(WidgetTester tester) async {
             _problem('a', LeetCodeDifficulty.easy, 1),
             _problem('b', LeetCodeDifficulty.medium, 3),
             _problem('c', LeetCodeDifficulty.hard, 3),
+          ],
+        ),
+        // Two on one day and one on another, so the reviewed line has a shape
+        // and its legend total (3) can't be confused with any tier's (1).
+        leetcodeReviewLogProvider.overrideWith(
+          (ref) async => [
+            _review('r1', 'a', 2),
+            _review('r2', 'b', 2),
+            _review('r3', 'c', 5),
           ],
         ),
         settingsProvider.overrideWith(_FixedSettings.new),
@@ -87,14 +109,14 @@ void main() {
 
     await _pumpCard(tester);
     expect(find.text('Last 30 days'), findsOneWidget);
-    expect(find.text('Problems solved per day'), findsNothing);
+    expect(find.text('Problems solved and reviewed per day'), findsNothing);
 
     // Dead centre, which is all chart.
     await tester.tap(find.byType(LeetCodeActivityCard));
     await _settleExpand(tester);
 
     // Both surfaces, one page: sparkline on top, year calendar under it.
-    expect(find.text('Problems solved per day'), findsOneWidget);
+    expect(find.text('Problems solved and reviewed per day'), findsOneWidget);
     expect(find.byType(LeetCodeActivityCalendar), findsOneWidget);
     expect(find.text('${DateTime.now().year}'), findsOneWidget);
     expect(find.text('January'), findsOneWidget);
@@ -141,35 +163,42 @@ void main() {
     await tester.tap(find.byType(LeetCodeActivityCard));
     await _settleExpand(tester);
 
-    LeetCodeDifficulty? chartSelection() => tester
+    LeetCodeActivitySeries? chartSelection() => tester
         .widget<LeetCodeActivityChart>(
           find.byWidgetPredicate(
             (w) => w is LeetCodeActivityChart && !w.compact,
           ),
         )
         .selected;
-    LeetCodeDifficulty? calendarSelection() => tester
+    LeetCodeActivitySeries? calendarSelection() => tester
         .widget<LeetCodeActivityCalendar>(
           find.byType(LeetCodeActivityCalendar),
         )
-        .difficulty;
+        .series;
 
     expect(chartSelection(), isNull);
     expect(calendarSelection(), isNull);
 
     await tester.tap(find.text('Medium 1'));
     await tester.pump();
-    expect(chartSelection(), LeetCodeDifficulty.medium);
-    expect(calendarSelection(), LeetCodeDifficulty.medium);
+    expect(chartSelection(), LeetCodeActivitySeries.medium);
+    expect(calendarSelection(), LeetCodeActivitySeries.medium);
 
     // A different tier takes the selection over rather than clearing it.
     await tester.tap(find.text('Hard 1'));
     await tester.pump();
-    expect(chartSelection(), LeetCodeDifficulty.hard);
-    expect(calendarSelection(), LeetCodeDifficulty.hard);
+    expect(chartSelection(), LeetCodeActivitySeries.hard);
+    expect(calendarSelection(), LeetCodeActivitySeries.hard);
+
+    // Reviewed is a series like the rest — it takes the selection over and
+    // filters both surfaces the same way a tier does.
+    await tester.tap(find.text('Reviewed 3'));
+    await tester.pump();
+    expect(chartSelection(), LeetCodeActivitySeries.reviewed);
+    expect(calendarSelection(), LeetCodeActivitySeries.reviewed);
 
     // The one that holds it clears it.
-    await tester.tap(find.text('Hard 1'));
+    await tester.tap(find.text('Reviewed 3'));
     await tester.pump();
     expect(chartSelection(), isNull);
     expect(calendarSelection(), isNull);
@@ -216,9 +245,9 @@ void main() {
     expect(find.byType(LeetCodeActivityBubble), findsNothing);
   });
 
-  // With a tier selected the grid counts only that tier, so the bubble it
-  // raises has to stop reciting the other two.
-  testWidgets('a filtered hover bubble lists only the selected difficulty', (
+  // With a series selected the grid counts only that series, so the bubble it
+  // raises has to stop reciting the others.
+  testWidgets('a filtered hover bubble lists only the selected series', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(1000, 800);
@@ -246,5 +275,52 @@ void main() {
     expect(find.text('Medium'), findsOneWidget);
     expect(find.text('Easy'), findsNothing);
     expect(find.text('Hard'), findsNothing);
+    expect(find.text('Reviewed'), findsNothing);
+  });
+
+  // The calendar's hover bubble is where a day's reviews are read off, beside
+  // the three difficulties.
+  testWidgets('an unfiltered hover bubble counts reviews beside the tiers', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Stack(
+            children: [
+              LeetCodeActivityBubble(
+                date: DateTime(2026, 8, 10),
+                counts: const LeetCodeDayCounts(medium: 1, reviews: 4),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final row = (String label) => find.ancestor(
+      of: find.text(label),
+      matching: find.byType(Row),
+    );
+
+    expect(find.text('Reviewed'), findsOneWidget);
+    expect(
+      find.descendant(of: row('Reviewed').first, matching: find.text('4')),
+      findsOneWidget,
+    );
+    // Every series keeps a row, zeros included, so the bubble holds its size
+    // as the pointer sweeps across days.
+    expect(
+      find.descendant(of: row('Easy').first, matching: find.text('0')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: row('Medium').first, matching: find.text('1')),
+      findsOneWidget,
+    );
   });
 }

@@ -13,6 +13,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/leetcode/leetcode_cram_page.dart';
 import 'package:voyager/features/leetcode/leetcode_session_page.dart';
@@ -29,6 +30,16 @@ class _RecordingLeetCodeRepository implements LeetCodeRepository {
   /// empty.
   final saved = <LeetCodeProblem>[];
 
+  /// Review rows by id, tombstones included, exactly as the table holds them.
+  final reviewLogs = <String, LeetCodeReviewLog>{};
+
+  /// The reviews that still count: what the activity chart's reviewed line
+  /// would read off this repository.
+  List<LeetCodeReviewLog> get liveReviewLogs => [
+    for (final log in reviewLogs.values)
+      if (!log.isDeleted) log,
+  ];
+
   @override
   Future<List<LeetCodeProblem>> listProblems({
     bool includeDeleted = false,
@@ -44,6 +55,27 @@ class _RecordingLeetCodeRepository implements LeetCodeRepository {
       for (final p in problems) if (p.id == problem.id) problem else p,
     ];
   }
+
+  @override
+  Future<void> logReview(
+    LeetCodeReviewLog log, {
+    bool recordLocalActivity = true,
+  }) async {
+    reviewLogs[log.id] = log;
+  }
+
+  @override
+  Future<LeetCodeReviewLog?> getReviewLog(String id) async => reviewLogs[id];
+
+  @override
+  Future<void> softDeleteReviewLog(String id) async {
+    final current = reviewLogs[id];
+    if (current == null || current.isDeleted) return;
+    reviewLogs[id] = current.deleted();
+  }
+
+  @override
+  Future<List<LeetCodeReviewLog>> listReviewLogs() async => liveReviewLogs;
 
   @override
   noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -139,6 +171,12 @@ void main() {
       expect(graded.reviewCount, 1);
       expect(graded.dueAt, isNotNull);
       expect(graded.isDue(now: DateTime.now().toUtc()), isFalse);
+
+      // The grade is also dated, which is the only record of *when* a review
+      // happened — reviewCount is a running total.
+      expect(repo.liveReviewLogs, hasLength(1));
+      expect(repo.liveReviewLogs.single.problemId, '1');
+      expect(repo.liveReviewLogs.single.grade, StudyGrade.good);
 
       // Nothing left that is due, so the session is over.
       expect(find.text('Session complete'), findsOneWidget);
@@ -256,12 +294,25 @@ void main() {
         reason: 'a never-reviewed problem carries no due date, and undoing '
             'its first grade has to put that back',
       );
+      expect(
+        repo.liveReviewLogs,
+        isEmpty,
+        reason: 'a grade taken back stops counting on the activity chart, '
+            'even if the session is then abandoned',
+      );
 
       // Redo returns the rating that was given rather than asking again.
       await _stepHistory(tester, LogicalKeyboardKey.arrowRight);
 
       expect(repo.saved.last.reviewCount, 1);
       expect(repo.saved.last.interval, 1);
+      expect(
+        repo.reviewLogs,
+        hasLength(1),
+        reason: 'the redo revives the row the grade wrote rather than '
+            'appending a second one',
+      );
+      expect(repo.liveReviewLogs, hasLength(1));
       expect(find.text('Session complete'), findsOneWidget);
     });
 

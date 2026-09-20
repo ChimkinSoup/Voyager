@@ -210,6 +210,20 @@ List<BackupCollection> buildBackupCollections({
         return problem;
       },
     ),
+    // After the problems, so a restored review never points at a problem not
+    // written yet.
+    BackupCollection(
+      name: FirestoreCollections.leetcodeReviewLog,
+      read: () async => [
+        for (final log in await leetCodeRepository.getAllReviewLogs())
+          BackupRecord(id: log.id, data: leetCodeReviewLogToFirestore(log)),
+      ],
+      restore: (id, data) async {
+        final log = mergeLeetCodeReviewLogFromRemote(data, id);
+        await leetCodeRepository.logReview(log);
+        return log;
+      },
+    ),
     BackupCollection(
       name: FirestoreCollections.studyFolders,
       read: () async => [

@@ -399,6 +399,11 @@ class OutboxSyncWorker {
           DriftLeetCodeRepository(_db).getProblem,
           leetCodeProblemToFirestore,
         );
+      case FirestoreCollections.leetcodeReviewLog:
+        return byId(
+          DriftLeetCodeRepository(_db).getReviewLog,
+          leetCodeReviewLogToFirestore,
+        );
       case FirestoreCollections.studyFolders:
         return byId(DriftStudyRepository(_db).getFolder, studyFolderToFirestore);
       case FirestoreCollections.studyDecks:

@@ -92,6 +92,63 @@ class Solution {
     });
   });
 
+  group('stripLeetCodeBlockComments', () {
+    test('drops a header comment whose body is written as code', () {
+      const code = '''
+/**
+ * """efinition for singly-linked list.
+ * public class ListNode {
+ *     int val;
+ * }
+ */
+class Solution {
+}''';
+      expect(stripLeetCodeBlockComments(code, 'java'), '''
+class Solution {
+}''');
+    });
+
+    test('keeps the code beside a comment', () {
+      const code = '''
+int a = 1; /* seed */
+int b = 2;''';
+      expect(stripLeetCodeBlockComments(code, 'java'), '''
+int a = 1;
+int b = 2;''');
+    });
+
+    test('a marker inside a line comment does not open a block', () {
+      const code = '''
+int a = 1; // see /* elsewhere
+int b = 2;''';
+      expect(identical(stripLeetCodeBlockComments(code, 'java'), code), isTrue);
+    });
+
+    test('a marker inside a string literal is not a comment', () {
+      const code = 'String s = "/* not a comment */";';
+      expect(identical(stripLeetCodeBlockComments(code, 'java'), code), isTrue);
+    });
+
+    test('leaves Python alone, docstrings included', () {
+      const code = '''
+def f():
+    """/* not a comment */"""
+    return 1''';
+      expect(
+        identical(stripLeetCodeBlockComments(code, 'python'), code),
+        isTrue,
+      );
+    });
+
+    test('returns the same string when there is nothing to strip', () {
+      const code = '''
+int a = 1;
+int b = 2;''';
+      expect(identical(stripLeetCodeBlockComments(code, 'java'), code), isTrue);
+      expect(stripLeetCodeBlockComments('', 'java'), '');
+    });
+  });
+
   group('stripLeetCodeTrailingBlankLine', () {
     test('drops the empty line pasted code arrives with', () {
       expect(stripLeetCodeTrailingBlankLine('int a = 1;\n'), 'int a = 1;');

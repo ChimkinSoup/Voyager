@@ -172,11 +172,24 @@ Future<Set<String>> _overflowsFor(
       }
       for (final label in _dialogTaps[destination.path] ?? const <String>[]) {
         // Lists build lazily, so scroll the page until the control exists.
-        await tester.scrollUntilVisible(
-          find.text(label),
-          200,
-          scrollable: find.byType(Scrollable).first,
-        );
+        //
+        // Driven through the scroll position rather than `scrollUntilVisible`:
+        // that drags from the centre of the list, which lands on whatever
+        // happens to be laid out there, and a text field under that point
+        // swallows the whole gesture and scrolls nothing. Which control sits
+        // at the centre shifts with any copy change on the page, so the drag
+        // is left out of it entirely.
+        final position = tester
+            .state<ScrollableState>(find.byType(Scrollable).first)
+            .position;
+        while (find.text(label).evaluate().isEmpty &&
+            position.pixels < position.maxScrollExtent) {
+          position.jumpTo(
+            (position.pixels + 200).clamp(0.0, position.maxScrollExtent),
+          );
+          await settle(tester);
+        }
+        await tester.ensureVisible(find.text(label).first);
         await settle(tester);
         final control = find.text(label).first;
         await tester.tap(control);
