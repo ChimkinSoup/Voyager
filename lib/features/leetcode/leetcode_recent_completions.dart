@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/tag_chip.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
@@ -123,7 +124,7 @@ class _CompletionRowState extends ConsumerState<_CompletionRow> {
                               color: colorForLeetCodeDifficulty(
                                 problem.difficulty,
                               ).withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
                             ),
                             child: Text(
                               labelForLeetCodeDifficulty(problem.difficulty),

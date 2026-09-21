@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 
 /// A visually dense cluster of tag pills sized by how often each tag appears
 /// across tracked problems — client-side aggregation, no dedicated query.
@@ -71,7 +72,7 @@ class _WeightedTagPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: accent.withValues(alpha: 0.08 + weight * 0.18),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
       ),
       child: Text(
         '#$tag ($count)',

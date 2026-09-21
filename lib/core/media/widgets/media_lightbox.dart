@@ -9,6 +9,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/media/widgets/media_image.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/domain/models/media_models.dart';
 
@@ -521,7 +522,7 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
                       ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
                       ),
                       child: Text(
                         '${_index + 1} / ${assets.length}',

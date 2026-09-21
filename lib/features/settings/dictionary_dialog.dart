@@ -396,7 +396,6 @@ class _DictionaryDialogState extends ConsumerState<_DictionaryDialog> {
                       controller: _controller,
                       focusNode: _focusNode,
                       dense: true,
-                      borderRadius: 12,
                       // Typing a word that isn't in the dictionary yet is the
                       // whole point of this field, so it must not be a fight
                       // with squiggles or an expanding snippet. (Single-line
@@ -832,7 +831,6 @@ class _WordEditorState extends State<_WordEditor> {
                     controller: _controller,
                     focusNode: _focusNode,
                     dense: true,
-                    borderRadius: 12,
                     snippetsAllowed: false,
                     autocorrectAllowed: false,
                     contentPadding: const EdgeInsets.symmetric(

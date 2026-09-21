@@ -56,6 +56,7 @@ import 'package:voyager/features/search/search_entry_save_helper.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 class SearchPage extends ConsumerStatefulWidget {
@@ -861,7 +862,7 @@ class _DreamScopeChip extends StatelessWidget {
       padding: const EdgeInsets.only(left: 10, right: 4),
       decoration: BoxDecoration(
         color: accentColor.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
         border: Border.all(color: accentColor.withValues(alpha: 0.5)),
       ),
       child: Row(

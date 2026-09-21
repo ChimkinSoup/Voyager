@@ -18,6 +18,7 @@ import 'package:voyager/core/widgets/selection_highlight_layer.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
 import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
 import 'package:voyager/core/widgets/tag_suggestion_overlay.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 
 /// Text field with accent-colored caret, an animated focus border, and a
 /// Material-style floating/notched label — all drawn by [NotchedFieldBorder].
@@ -230,7 +231,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
                   .resolve(Directionality.maybeOf(context) ?? TextDirection.ltr)
                   .topLeft
                   .x
-            : 18.0);
+            : VoyagerTheme.fieldRadius);
 
     final hasLabel = (decoration.labelText ?? '').isNotEmpty;
     // Non-outline InputDecoration.border makes InputDecorator reserve an

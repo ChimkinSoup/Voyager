@@ -1125,7 +1125,7 @@ class _DeckTileState extends ConsumerState<_DeckTile> {
                       ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
                       ),
                       child: Text(
                         '${due ?? 0}',

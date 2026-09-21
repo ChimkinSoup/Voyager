@@ -15,6 +15,7 @@ import 'package:highlight/languages/typescript.dart' as lang_typescript;
 import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/text/typing_rewrites.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
@@ -328,7 +329,7 @@ class LeetCodeCodeSurface extends StatelessWidget {
         return Container(
           decoration: BoxDecoration(
             color: palette.background,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
             border: Border.all(
               color: theme.colorScheme.outline.withValues(alpha: 0.3),
             ),

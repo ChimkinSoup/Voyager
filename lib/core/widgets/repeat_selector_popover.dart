@@ -211,10 +211,14 @@ class _RepeatSelectorPopoverState extends State<RepeatSelectorPopover> {
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(vertical: 8),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(
+                      VoyagerTheme.fieldRadius,
+                    ),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(
+                      VoyagerTheme.fieldRadius,
+                    ),
                     borderSide: BorderSide(color: _accent, width: 1.6),
                   ),
                 ),

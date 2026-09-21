@@ -6,6 +6,7 @@ import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/features/jobs/jobs_providers.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 
 /// Relative widths of the flat table's columns (§3.2). Color is a fixed-width
 /// swatch gutter; the rest share the remaining space by flex.
@@ -314,7 +315,7 @@ class JobsTableRow extends StatelessWidget {
             child: Builder(
               builder: (pillContext) => InkWell(
                 onTap: () => onStatusTap(pillContext),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
@@ -322,7 +323,7 @@ class JobsTableRow extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
                     border: Border.all(
                       color: statusColor.withValues(alpha: 0.45),
                     ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'voyager_time_picker_spinner.dart';
 
@@ -283,7 +284,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
       duration: const Duration(milliseconds: 150),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
         border: Border.all(
           color: isActive
               ? accent
@@ -710,7 +711,7 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
       duration: const Duration(milliseconds: 150),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
         border: Border.all(
           color: accent,
           width: 2,

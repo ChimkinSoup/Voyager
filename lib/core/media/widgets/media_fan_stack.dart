@@ -239,7 +239,7 @@ class _FanCount extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: accent,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
       ),
       child: Text(
         '+$count',

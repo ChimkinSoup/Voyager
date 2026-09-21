@@ -254,7 +254,7 @@ class _PlannerToolbar extends ConsumerWidget {
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
             color: theme.colorScheme.surface.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(15),
+            borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
             border: Border.all(color: colors.hairline),
           ),
           child: Row(
@@ -377,7 +377,7 @@ class _CycleLengthControl extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
         border: Border.all(color: colors.hairline),
       ),
       child: Row(

@@ -6,6 +6,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/domain/services/weather_forecast_chart.dart';
@@ -437,7 +438,7 @@ class _LegendChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onPickColor,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
         child: Row(

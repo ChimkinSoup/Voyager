@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/field_hint_style.dart';
 import 'package:voyager/core/widgets/notched_field_border.dart';
@@ -271,7 +272,6 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
           focusNode: _focusNode,
           accentColor: accent,
           enabled: widget.enabled,
-          borderRadius: 12,
           contentPadding: _contentPadding,
           child: Padding(padding: _contentPadding, child: field),
         ),
@@ -370,12 +370,12 @@ class _EditableTagChip extends StatelessWidget {
       type: MaterialType.transparency,
       child: InkWell(
         onTap: onRemove,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
             color: accent.withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
           ),
           // A tag has no length limit, so one wider than the panel is cut
           // short, and only a cut one says the rest on hover — a tooltip

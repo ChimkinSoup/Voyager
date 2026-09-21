@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/search_highlight_text.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
@@ -146,7 +147,7 @@ class _SearchPopoverContentState extends ConsumerState<_SearchPopoverContent> {
             decoration: BoxDecoration(
               color: colorForLeetCodeDifficulty(q.difficulty)
                   .withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
             ),
             child: Text(
               labelForLeetCodeDifficulty(q.difficulty),

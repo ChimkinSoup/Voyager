@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/text/prose_editing_controller.dart';
 import 'package:voyager/core/text/prose_text_span.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
@@ -557,7 +558,7 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
       alignLabelToTop:
           widget.alignLabelToTop ??
           (widget.expands || (widget.maxLines ?? 1) > 1),
-      borderRadius: widget.borderRadius ?? (widget.dense ? 12 : 18),
+      borderRadius: widget.borderRadius ?? VoyagerTheme.fieldRadius,
       child: field,
     );
   }

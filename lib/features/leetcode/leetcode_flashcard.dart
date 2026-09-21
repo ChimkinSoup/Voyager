@@ -282,7 +282,7 @@ class _CardFront extends ConsumerWidget {
                   color: colorForLeetCodeDifficulty(
                     problem.difficulty,
                   ).withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
                 ),
                 child: Text(
                   labelForLeetCodeDifficulty(problem.difficulty),

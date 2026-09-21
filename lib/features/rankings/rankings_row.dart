@@ -5,6 +5,7 @@ import 'package:voyager/core/media/widgets/media_fan_stack.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/rankings/ranking_queries.dart';
@@ -339,12 +340,12 @@ class _RowTagChip extends StatelessWidget {
         // The row underneath opens the panel; a chip is a filter. Nothing is
         // returned to the row's [InkWell] because this one consumes the tap.
         onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
           decoration: BoxDecoration(
             color: accent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
           ),
           child: Text(
             tag,
@@ -403,7 +404,7 @@ class _StatusChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
       ),
       child: Text(
         inProgress ? 'In progress' : 'Queued',

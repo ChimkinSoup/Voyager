@@ -273,7 +273,7 @@ class ExerciseChip extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
         border: Border.all(color: colors.hairline),
       ),
       child: Row(

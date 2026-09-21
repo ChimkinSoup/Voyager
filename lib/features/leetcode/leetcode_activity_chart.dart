@@ -437,7 +437,7 @@ class _LegendCapsule extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: Color.lerp(color.withValues(alpha: 0.10), color, t),
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
                   border: Border.all(
                     color: Color.lerp(color.withValues(alpha: 0.30), color, t)!,
                   ),

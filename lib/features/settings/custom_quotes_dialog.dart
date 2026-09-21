@@ -192,7 +192,6 @@ class _CustomQuotesDialogState extends ConsumerState<_CustomQuotesDialog> {
                       controller: _controller,
                       focusNode: _focusNode,
                       dense: true,
-                      borderRadius: 12,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 15,
                         vertical: 8,
@@ -396,7 +395,6 @@ class _QuoteEditorState extends State<_QuoteEditor> {
                     controller: _controller,
                     focusNode: _focusNode,
                     dense: true,
-                    borderRadius: 12,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 15,
                       vertical: 8,

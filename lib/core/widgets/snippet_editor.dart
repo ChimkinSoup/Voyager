@@ -135,7 +135,6 @@ class _SnippetEditorState extends State<SnippetEditor> {
                     controller: _trigger,
                     focusNode: _triggerFocus,
                     dense: true,
-                    borderRadius: 12,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 12,
@@ -154,7 +153,6 @@ class _SnippetEditorState extends State<SnippetEditor> {
                     controller: _replacement,
                     focusNode: _replacementFocus,
                     dense: true,
-                    borderRadius: 12,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 12,

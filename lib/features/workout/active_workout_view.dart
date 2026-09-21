@@ -519,7 +519,7 @@ class _ExerciseStrip extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(right: VoyagerSpacing.sm),
               child: InkWell(
-                borderRadius: BorderRadius.circular(999),
+                borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
                 onTap: () {
                   // Land on the first set of that exercise still to be done,
                   // falling back to its first set once it's all logged.
@@ -542,7 +542,7 @@ class _ExerciseStrip extends StatelessWidget {
                     color: exercise.id == currentExerciseId
                         ? theme.colorScheme.primary.withValues(alpha: 0.14)
                         : Colors.transparent,
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
                     border: Border.all(
                       color: exercise.id == currentExerciseId
                           ? theme.colorScheme.primary.withValues(alpha: 0.6)

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/theme/palette_color.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/notification_urgency_dot.dart';
@@ -42,7 +43,7 @@ class TrackerEntryRow extends ConsumerStatefulWidget {
 
 class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
   static const _editorHeight = 32.0;
-  static const _editorBorderRadius = 10.0;
+  static const _editorBorderRadius = VoyagerTheme.fieldRadius;
   // Fixed so the trailing badge/checkmark/empty states never change the
   // row's width — only what's centered inside this slot changes.
   static const _trailingSlotWidth = 18.0;

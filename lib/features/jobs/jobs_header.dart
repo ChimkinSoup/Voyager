@@ -9,6 +9,7 @@ import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/job_experience_snippet.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/features/jobs/jobs_charts.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 
 /// The always-visible compact header (§3.1): lifetime total, per-status counts
 /// and a 30-day sparkline, in one row.
@@ -303,7 +304,7 @@ class _StatusChip extends StatelessWidget {
         type: MaterialType.transparency,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
@@ -312,7 +313,7 @@ class _StatusChip extends StatelessWidget {
                   : theme.colorScheme.surfaceContainerHighest.withValues(
                       alpha: 0.4,
                     ),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
               border: Border.all(
                 color: selected ? color : color.withValues(alpha: 0.35),
                 width: selected ? 1.4 : 1,
@@ -652,7 +653,7 @@ class _ExperienceChip extends StatelessWidget {
         child: InkWell(
           onTap: () =>
               _copyExperience(Overlay.of(context, rootOverlay: true), snippet),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
           child: Container(
             padding: const EdgeInsets.symmetric(
               horizontal: _horizontalPadding,
@@ -662,7 +663,7 @@ class _ExperienceChip extends StatelessWidget {
               color: theme.colorScheme.surfaceContainerHighest.withValues(
                 alpha: 0.4,
               ),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
               border: Border.all(
                 color: theme.colorScheme.outlineVariant,
                 width: _border,

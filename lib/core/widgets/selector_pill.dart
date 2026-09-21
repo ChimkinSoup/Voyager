@@ -50,7 +50,7 @@ class SelectorPill extends StatelessWidget {
     return Material(
       color: backgroundColor,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
         side: isActive && !filled
             ? BorderSide(color: accent, width: 1)
             : BorderSide.none,

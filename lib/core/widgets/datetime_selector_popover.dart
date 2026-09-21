@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'package:voyager/core/widgets/voyager_time_picker_spinner.dart';
@@ -366,7 +367,7 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
       duration: const Duration(milliseconds: 150),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
         border: Border.all(
           color: focusNode.hasFocus ? accent : theme.colorScheme.onSurface.withValues(alpha: 0.2),
           width: focusNode.hasFocus ? 2 : 1,

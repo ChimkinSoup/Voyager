@@ -2970,7 +2970,6 @@ class _BrowseQuotesDialogState extends ConsumerState<_BrowseQuotesDialog> {
               controller: _searchController,
               autofocus: true,
               dense: true,
-              borderRadius: 12,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 15,
                 vertical: 8,

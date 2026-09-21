@@ -167,6 +167,10 @@ class VoyagerPalette {
 }
 
 class VoyagerTheme {
+  /// Corner radius shared by every input and every pill/chip, so text boxes,
+  /// dropdowns, selectors and capsules all read as one family.
+  static const double fieldRadius = 4;
+
   static ThemeData dark({Color accent = const Color(0xFF7C9EFF)}) =>
       _build(VoyagerPalette.dark, accent);
 
@@ -330,15 +334,15 @@ class VoyagerTheme {
         labelStyle: textTheme.labelLarge,
         floatingLabelStyle: textTheme.labelLarge?.copyWith(color: accent),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(fieldRadius),
           borderSide: BorderSide(color: outlineColor),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(fieldRadius),
           borderSide: BorderSide(color: outlineColor),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(fieldRadius),
           borderSide: BorderSide(
             color: accent.withValues(alpha: 0.95),
             width: 1.8,
@@ -364,7 +368,13 @@ class VoyagerTheme {
         ),
       ),
       segmentedButtonTheme: SegmentedButtonThemeData(
-        style: outlinedButtonStyle,
+        style: outlinedButtonStyle.copyWith(
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(fieldRadius),
+            ),
+          ),
+        ),
       ),
       popupMenuTheme: VoyagerMenuTheme.popupMenuTheme(
         textTheme: textTheme,
@@ -413,7 +423,12 @@ class VoyagerTheme {
         unselectedLabelTextStyle: textTheme.labelSmall,
       ),
       checkboxTheme: CheckboxThemeData(side: BorderSide(color: outlineColor)),
-      chipTheme: ChipThemeData(labelStyle: textTheme.labelLarge),
+      chipTheme: ChipThemeData(
+        labelStyle: textTheme.labelLarge,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(fieldRadius),
+        ),
+      ),
       // M3 Switch paints the selected thumb as primaryContainer on hover/focus/
       // press. Our ColorScheme leaves primaryContainer unset, so it falls back
       // to primary — the same color as the track — and the thumb vanishes into

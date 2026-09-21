@@ -6,6 +6,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/caps_lock/caps_lock_caret_indicator.dart';
 import 'package:voyager/core/theme/palette_color.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
@@ -380,7 +381,7 @@ class _StatusChip extends StatelessWidget {
         type: MaterialType.transparency,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
@@ -389,7 +390,7 @@ class _StatusChip extends StatelessWidget {
                   : theme.colorScheme.surfaceContainerHighest.withValues(
                       alpha: 0.4,
                     ),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
               border: Border.all(
                 color: selected ? color : color.withValues(alpha: 0.35),
                 width: selected ? 1.4 : 1,
@@ -492,7 +493,9 @@ class RankingsToolbar extends StatelessWidget {
                     prefixIconConstraints: const BoxConstraints(minWidth: 32),
                     border: const OutlineInputBorder(),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(
+                        VoyagerTheme.fieldRadius,
+                      ),
                       borderSide: BorderSide(
                         color: accent.withValues(alpha: 0.95),
                         width: 1.8,

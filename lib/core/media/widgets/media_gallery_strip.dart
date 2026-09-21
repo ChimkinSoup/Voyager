@@ -10,6 +10,7 @@ import 'package:voyager/core/media/widgets/media_attach.dart';
 import 'package:voyager/core/media/widgets/media_image.dart';
 import 'package:voyager/core/media/widgets/media_lightbox.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/core/widgets/scroll_offset_isolate.dart';
@@ -236,7 +237,7 @@ class _MediaGalleryStripState extends ConsumerState<MediaGalleryStrip> {
               duration: const Duration(milliseconds: 140),
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
                 border: Border.all(
                   color: _dropActive
                       ? accent
@@ -295,7 +296,7 @@ class _EmptyStrip extends StatelessWidget {
     final theme = Theme.of(context);
     return InkWell(
       onTap: busy ? null : onPick,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         child: Row(
@@ -507,17 +508,17 @@ class _AddButton extends StatelessWidget {
       message: 'Add images',
       child: Material(
         type: MaterialType.transparency,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
         clipBehavior: Clip.antiAlias,
         child: Ink(
           width: 44,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
             border: Border.all(color: accent.withValues(alpha: 0.5)),
           ),
           child: InkWell(
             onTap: busy ? null : () => onPick(),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
             child: busy
                 ? Center(
                     child: SizedBox(

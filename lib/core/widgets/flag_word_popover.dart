@@ -275,7 +275,6 @@ class _FlagWordPanelState extends ConsumerState<_FlagWordPanel> {
         controller: _controller,
         focusNode: _focusNode,
         dense: true,
-        borderRadius: 12,
         // This box exists to hold a word the checker may not like the look of
         // next to the one being flagged.
         snippetsAllowed: false,

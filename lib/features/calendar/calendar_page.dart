@@ -4045,7 +4045,7 @@ class _ViewModeSegmentedControl extends StatelessWidget {
         buttonStyle.minimumSize?.resolve(const {}) ?? const Size(48, 40);
     final textStyle =
         buttonStyle.textStyle?.resolve(const {}) ?? theme.textTheme.labelLarge;
-    const outerRadius = Radius.circular(18);
+    const outerRadius = Radius.circular(VoyagerTheme.fieldRadius);
 
     final selectedBackground = accentColor ?? colorScheme.primary;
     const unselectedBackground = Colors.transparent;

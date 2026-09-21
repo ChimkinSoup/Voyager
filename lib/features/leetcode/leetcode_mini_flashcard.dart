@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/theme/srs_mastery_color.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/search_highlight_text.dart';
 import 'package:voyager/core/widgets/tag_chip.dart';
@@ -193,7 +194,7 @@ class _LeetCodeMiniFlashcardState extends ConsumerState<LeetCodeMiniFlashcard> {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(
                   color: difficultyColor.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(5),
+                  borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
                 ),
                 child: Text(
                   labelForLeetCodeDifficulty(problem.difficulty),

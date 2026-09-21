@@ -430,7 +430,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
         floatingLabelStyle:
             baseTheme.textTheme.labelLarge?.copyWith(color: accent),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
           borderSide: BorderSide(
             color: accent.withValues(alpha: 0.95),
             width: 1.8,
@@ -470,7 +470,6 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                           textInputAction: TextInputAction.done,
                           accentColor: accent,
                           dense: true,
-                          borderRadius: 12,
                           contentPadding: const EdgeInsets.fromLTRB(
                             15,
                             15,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 
 /// How long to keep [VoyagerDropdownButtonFormField.onMenuStateChanged] held at
@@ -45,7 +46,7 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
                    .labelLarge
                    ?.copyWith(color: accent),
                focusedBorder: OutlineInputBorder(
-                 borderRadius: BorderRadius.circular(14),
+                 borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
                  borderSide: BorderSide(
                    color: accent.withValues(alpha: 0.95),
                    width: 1.8,

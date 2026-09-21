@@ -870,21 +870,27 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
                     alpha: 0.05,
                   ),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(
+                      VoyagerTheme.fieldRadius,
+                    ),
                     borderSide: BorderSide(
                       color: theme.colorScheme.primary.withValues(alpha: 0.6),
                       width: 1.2,
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(
+                      VoyagerTheme.fieldRadius,
+                    ),
                     borderSide: BorderSide(
                       color: theme.colorScheme.primary.withValues(alpha: 0.3),
                       width: 1.2,
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(
+                      VoyagerTheme.fieldRadius,
+                    ),
                     borderSide: BorderSide(
                       color: theme.colorScheme.primary.withValues(alpha: 0.6),
                       width: 1.2,

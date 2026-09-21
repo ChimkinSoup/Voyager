@@ -779,7 +779,6 @@ class _TargetField extends StatelessWidget {
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             textInputAction: TextInputAction.next,
             inputFormatters: formatters,
-            borderRadius: 10,
             style: theme.textTheme.titleMedium?.copyWith(
               fontFeatures: const [FontFeature.tabularFigures()],
             ),

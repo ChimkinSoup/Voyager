@@ -7,6 +7,7 @@ import 'package:voyager/core/layout/window_size_class.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/reminders/reminder_engine.dart';
 import 'package:voyager/core/reminders/reminder_labels.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
@@ -92,7 +93,7 @@ class _MoreBadge extends StatelessWidget {
     return Material(
       color: theme.colorScheme.surfaceContainerHighest,
       elevation: 2,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         child: Text(

@@ -9,6 +9,7 @@ import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/text/prose_text_span.dart';
 import 'package:voyager/core/text/styled_runs.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -1116,7 +1117,7 @@ class _LedgerFilterChip extends StatelessWidget {
     return Material(
       type: MaterialType.transparency,
       child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
         onTap: onClear,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

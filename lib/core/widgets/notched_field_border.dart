@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 
 /// A self-contained "chrome" wrapper that draws a rounded border, a fill,
 /// and (optionally) a Material-style floating label that rises onto the
@@ -26,7 +27,7 @@ class NotchedFieldBorder extends StatefulWidget {
     this.hasContent = false,
     this.enabled = true,
     this.accentColor,
-    this.borderRadius = 18,
+    this.borderRadius = VoyagerTheme.fieldRadius,
     this.borderWidth = 1.8,
     this.contentPadding = const EdgeInsets.symmetric(
       horizontal: 16,
