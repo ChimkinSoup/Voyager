@@ -2,13 +2,13 @@
 
 Incomplete Study and Cram sessions (LeetCode **and** Study flashcards) survive any exit — app kill, Back to deck, navigation away — until the user finishes the queue or explicitly discards via a resume toast. On the next Study / Cram entry for that scope, Voyager offers to restore the prior run with full draft state (queue position, undo/redo history, and for LeetCode scratch code when enabled).
 
-North star: leaving mid-session never throws away work. Resume is opt-in via toast; Start over is always one tap away and rebuilds from live SRS / current deck membership.
+North star: leaving mid-session never throws away work. Resume is opt-in via toast; Start over is one tap away **on that toast** and rebuilds from live SRS / current deck membership.
 
 This document locks product decisions from the 2026-09-20 design review. It is a high-level design, not an implementation checklist.
 
 Related: `LEETCODE_SCRATCH_PAD.md` (current session-scoped scratch + crash recovery — **superseded for lifecycle** by this HLD; scratch payload shape is reused), `lib/features/study/study_session_page.dart`, `lib/features/study/study_cram_page.dart`, `lib/features/leetcode/leetcode_session_page.dart`, `lib/features/leetcode/leetcode_cram_page.dart`, `lib/features/leetcode/leetcode_scratch_session.dart`, Jobs / Track draft stores (device-local JSON pattern).
 
-Status: **design.** Not implemented.
+Status: **implemented** 2026-09-20.
 
 ---
 
@@ -43,7 +43,7 @@ Status: **design.** Not implemented.
 | **Surfaces** | LeetCode Study + Cram; Study Session + Cram. |
 | **Incomplete exit** | Any leave that is not “session finished”: Back to deck / ✕ / route pop / app kill / process death. |
 | **Finished** | Queue empty with nothing left to undo into (Study complete screen → done), or Cram all-in-bucket-2 complete → done. Clears checkpoint. |
-| **Resume UX** | Toast on Study / Cram open when a checkpoint exists for that scope. Copy makes clear this is the previous session. Primary continue is implicit (hydrate and proceed). Explicit **Start over** button on the toast. |
+| **Resume UX** | Toast on Study / Cram open when a checkpoint exists for that scope. Copy makes clear this is the previous session. Primary continue is implicit (hydrate and proceed). Explicit **Start over** button on the toast — and nowhere else; see §7. |
 | **Start over** | Delete checkpoint; build a brand-new session from the **current** eligible set (due / filtered visible / deck roster), shuffled — same as today’s fresh open, including new cards. Does **not** reverse grades already committed this session. |
 | **Card face** | Always front on resume (and after Start over). |
 | **Scratch** | LeetCode only, when `leetCodeEnableScratchCode`. Same per-problem entries as today’s scratch session. Study flashcards: no scratch fields. |
@@ -133,7 +133,9 @@ Open Study/Cram for scope
 
 ### Persist triggers
 
-Debounced write on: grade / cram decide, undo, redo, queue mutation, scratch edit (existing 400 ms), problem advance, and **flush on every incomplete dispose** (Back, ✕, route pop, app pause).
+Debounced write on: grade / cram decide, undo, redo, queue mutation, scratch edit (existing 400 ms), problem advance, and **flush on every incomplete dispose** (Back, ✕, route pop).
+
+App pause is not a dispose — the page stays alive and the process can be killed from there without ever waking up. The checkpoint controller registers with `PendingFlushRegistry`, the same hook the Track and journal drafts use, so a pause flushes whatever the debounce is still holding.
 
 ### Clear triggers
 
@@ -178,6 +180,7 @@ Eligible set for newcomers / Start over:
 - Copy (directional): *Resuming your previous session* (optional: card count left).  
 - Action: **Start over** — discards checkpoint and rebuilds a fresh shuffled session from the live eligible set (includes new cards).  
 - Continuing is the default path: hydrate already applied before or as the toast shows so the user sees the restored card immediately.  
+- **The toast is the only way to discard.** It dwells ~10 s; once it goes, the round is the one the user is in, and the ways out are finishing it or re-entering to catch the toast again. This is deliberate — discarding a session is a destructive act aimed at the moment of *"this isn't the round I wanted"*, not a control to leave sitting in the session chrome where a mis-tap costs a round's progress. A resumed round is also never a trap: it is always finishable, and Start over is one re-entry away. No persistent Start over / Discard affordance in the session UI, the Review Deck, or the Hub.  
 - Follow existing Voyager toast patterns (`showVoyagerToast` / soft-delete style action chip). Do not block the session behind a modal.  
 - Escape / session keybinds unchanged; toast is non-modal.
 
@@ -191,6 +194,7 @@ Eligible set for newcomers / Start over:
 |-------|------|
 | `session_checkpoint.dart` | DTOs + versioning |
 | `session_checkpoint_store.dart` | File read/write/clear per kind+scope; memory fake for tests |
+| `session_checkpoint_controller.dart` | Debounce, envelope, discard; owns the `PendingFlushRegistry` registration so all four surfaces get the pause flush from one place |
 | Session pages (4) | Serialize on mutation / dispose; hydrate on init when Continue |
 | Entry points (Review Deck, Hub, Deck Workbench) | Unchanged navigation; pages own detect + toast |
 | Scratch host / session | Checkpoint embeds scratch; retire orphan-only recovery toast in favor of §7 |

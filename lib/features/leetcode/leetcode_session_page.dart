@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/session_resume/session_checkpoint.dart';
+import 'package:voyager/core/session_resume/session_checkpoint_controller.dart';
+import 'package:voyager/core/session_resume/session_checkpoint_store.dart';
+import 'package:voyager/core/session_resume/session_resume_toast.dart';
 import 'package:voyager/core/utils/live_snapshot.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -13,6 +17,7 @@ import 'package:voyager/features/leetcode/leetcode_detail_view.dart';
 import 'package:voyager/features/leetcode/leetcode_flashcard.dart';
 import 'package:voyager/features/leetcode/leetcode_cheat_entry.dart';
 import 'package:voyager/features/leetcode/leetcode_cheat_providers.dart';
+import 'package:voyager/features/leetcode/leetcode_scratch_draft.dart';
 import 'package:voyager/features/leetcode/leetcode_scratch_host.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 import 'package:voyager/features/study/study_grading_row.dart';
@@ -95,13 +100,204 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
   final _graded = <_GradeStep>[];
   final _undone = <_GradeStep>[];
 
+  late final SessionCheckpointController _checkpoint;
+
+  @override
+  SessionCheckpointController get sessionCheckpoint => _checkpoint;
+
+  /// The problems in scope the last time the round was built. What is due now
+  /// and missing from here came due while the session was away, and joins the
+  /// tail of the round rather than its middle.
+  final _sourceIds = <String>{};
+
+  /// The unfinished run the slot was holding when the page opened, kept until
+  /// the problems arrive and it can be hydrated.
+  SessionCheckpoint? _restored;
+
+  /// Whether the slot has been read. The queue waits for it: building a fresh
+  /// round first and replacing it a frame later would put a card up in front
+  /// of the user and then take it away again.
+  bool _checkpointRead = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkpoint = SessionCheckpointController(
+      store: ref.read(sessionCheckpointStoreProvider),
+      kind: SessionCheckpointKind.leetcodeStudy,
+      // One slot for Study, whatever the Review Deck was filtered to: the
+      // filter decides what is eligible, not which session this is.
+      scopeKey: '',
+      build: _buildCheckpoint,
+    );
+    _checkpoint.load().then((restored) {
+      if (!mounted) return;
+      setState(() {
+        _restored = restored;
+        _checkpointRead = true;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    // Disposal is every incomplete exit there is: the X button, Back to deck,
+    // a route pop, the app being closed. Fired rather than awaited — the
+    // store chains its writes, so this lands even though the page is gone.
+    _checkpoint.flush();
+    _checkpoint.dispose();
+    super.dispose();
+  }
+
+  /// The session as it stands, or null when there is nothing to come back to.
+  ///
+  /// An empty queue is the completion screen, and a session that reached it is
+  /// finished: the slot is cleared rather than written, which is what takes
+  /// the scratch pads with it. Undoing back off that screen re-queues a
+  /// problem, so the very next write puts the checkpoint back.
+  SessionCheckpoint? _buildCheckpoint() {
+    final queue = _queue;
+    if (queue == null || queue.isEmpty) return null;
+    return _checkpoint.envelope(
+      sourceIds: _sourceIds,
+      remainingQueue: [for (final problem in queue) problem.id],
+      graded: [for (final step in _graded) _dtoFor(step)],
+      undone: [for (final step in _undone) _dtoFor(step)],
+      scratch: scratchSnapshot?.toJson(),
+    );
+  }
+
+  GradeStepDto _dtoFor(_GradeStep step) => GradeStepDto(
+    before: step.before.toJson(),
+    after: step.after.toJson(),
+    log: step.log.toJson(),
+    // Ids, not rows: the arrangement a step steps back into is resolved
+    // against live problems on the way in, so an edit made while the session
+    // was away shows up there too.
+    queueBefore: [for (final problem in step.queueBefore) problem.id],
+    queueAfter: [for (final problem in step.queueAfter) problem.id],
+  );
+
+  /// Opens on everything due within the deck's filter, shuffled — what a
+  /// session with no checkpoint behind it does, and what Start over goes back
+  /// to.
+  void _startFresh(List<LeetCodeProblem> all) {
+    final queue = dueLeetCodeProblems(
+      all.where((p) => widget.problemIds.contains(p.id)),
+      random: ref.read(sessionShuffleRandomProvider),
+    );
+    _sourceIds
+      ..clear()
+      ..addAll([for (final problem in queue) problem.id]);
+    _queue = queue;
+  }
+
+  /// Rebuilds the round the user left, against the problems as they now
+  /// stand. False when nothing usable is left in it, which opens a fresh
+  /// session instead.
+  bool _hydrate(SessionCheckpoint checkpoint, List<LeetCodeProblem> all) {
+    // Scoped to the deck's current filter: a problem it is no longer
+    // showing is not part of the round it comes back to, whatever the file
+    // says. With no overlap at all the round comes back empty, which opens a
+    // fresh session instead.
+    final byId = {
+      for (final problem in all)
+        if (widget.problemIds.contains(problem.id)) problem.id: problem,
+    };
+    final remaining = [for (final id in checkpoint.remainingQueue) ?byId[id]];
+    // Every problem the session had left has gone. The grades it made are
+    // already on disk, so there is no run here to come back to — only a file.
+    if (remaining.isEmpty) {
+      _checkpoint.discard();
+      return false;
+    }
+
+    final known = {...checkpoint.sourceIds, ...checkpoint.remainingQueue};
+    final due = dueLeetCodeProblems(
+      all.where((p) => widget.problemIds.contains(p.id)),
+      random: ref.read(sessionShuffleRandomProvider),
+    );
+    final newcomers = [
+      for (final problem in due)
+        if (!known.contains(problem.id)) problem,
+    ];
+
+    List<LeetCodeProblem> resolve(List<String> ids) => [
+      for (final id in ids) ?byId[id],
+      // Problems that came due while the session was away belong to the tail
+      // of every arrangement it can step back into, not only the current one:
+      // a snapshot without them would drop them again on the first undo.
+      ...newcomers,
+    ];
+
+    List<_GradeStep> steps(List<GradeStepDto> dtos) => [
+      for (final dto in dtos)
+        // A step whose problem has been deleted has nothing left to put a
+        // rating back on, so it is not a step this session can take.
+        if (byId.containsKey(dto.id))
+          _GradeStep(
+            before: LeetCodeProblem.fromJson(dto.before),
+            after: LeetCodeProblem.fromJson(dto.after),
+            log: LeetCodeReviewLog.fromJson(dto.log),
+            queueBefore: resolve(dto.queueBefore),
+            queueAfter: resolve(dto.queueAfter),
+          ),
+    ];
+
+    _queue = [...remaining, ...newcomers];
+    _graded
+      ..clear()
+      ..addAll(steps(checkpoint.graded));
+    _undone
+      ..clear()
+      ..addAll(steps(checkpoint.undone));
+    _sourceIds
+      ..clear()
+      ..addAll(checkpoint.sourceIds)
+      ..addAll([for (final problem in due) problem.id])
+      ..addAll([for (final problem in _queue!) problem.id]);
+    if (checkpoint.scratch case final scratch?) {
+      primeScratch(LeetCodeScratchSession.fromJson(scratch));
+    }
+    // The reconciled round, written back before the user touches it.
+    _checkpoint.flush();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showSessionResumeToast(
+        context,
+        remaining: _queue?.length ?? 0,
+        onStartOver: _startOver,
+      );
+    });
+    return true;
+  }
+
+  /// Throws the restored run away and opens the session the user would have
+  /// had without it: everything due under live SRS, newcomers included,
+  /// freshly shuffled, with empty pads. Grades already committed stay
+  /// committed.
+  Future<void> _startOver() async {
+    await _checkpoint.discard();
+    if (!mounted) return;
+    resetScratch();
+    setState(() {
+      _clearHistory();
+      _startFresh(ref.read(leetcodeProblemsProvider).valueOrNull ?? const []);
+      _showingBack = false;
+    });
+    _flipController.showFront();
+    _checkpoint.persist();
+  }
+
   void _syncQueue(List<LeetCodeProblem> all) {
     final queue = _queue;
     if (queue == null) {
-      _queue = dueLeetCodeProblems(
-        all.where((p) => widget.problemIds.contains(p.id)),
-        random: ref.read(sessionShuffleRandomProvider),
-      );
+      if (!_checkpointRead) return;
+      final restored = _restored;
+      _restored = null;
+      if (restored != null && _hydrate(restored, all)) return;
+      _startFresh(all);
       return;
     }
     // The queue is a snapshot taken when the session opened. An edit made
@@ -142,6 +338,7 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
       _clearHistory();
     });
     _flipController.showFront();
+    _checkpoint.persist();
   }
 
   /// Forgetting a problem's schedule, or removing it outright, rearranges the
@@ -168,6 +365,7 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
       _clearHistory();
     });
     _flipController.showFront();
+    _checkpoint.persist();
   }
 
   Future<void> _grade(StudyGrade grade) async {
@@ -202,6 +400,7 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
       _undone.clear();
     });
     _flipController.showFront();
+    _checkpoint.persist();
   }
 
   bool get _canUndo => _graded.isNotEmpty && !_grading;
@@ -250,6 +449,7 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
       _grading = false;
     });
     _flipController.showFront();
+    _checkpoint.persist();
 
     ref.invalidate(leetcodeProblemsProvider);
   }

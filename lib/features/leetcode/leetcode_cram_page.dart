@@ -4,6 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/session_resume/session_checkpoint.dart';
+import 'package:voyager/core/session_resume/session_checkpoint_controller.dart';
+import 'package:voyager/core/session_resume/session_checkpoint_store.dart';
+import 'package:voyager/core/session_resume/session_resume_toast.dart';
 import 'package:voyager/core/utils/keyboard_focus_utils.dart';
 import 'package:voyager/core/utils/live_snapshot.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
@@ -15,6 +19,7 @@ import 'package:voyager/features/leetcode/leetcode_detail_view.dart';
 import 'package:voyager/features/leetcode/leetcode_flashcard.dart';
 import 'package:voyager/features/leetcode/leetcode_cheat_entry.dart';
 import 'package:voyager/features/leetcode/leetcode_cheat_providers.dart';
+import 'package:voyager/features/leetcode/leetcode_scratch_draft.dart';
 import 'package:voyager/features/leetcode/leetcode_scratch_host.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 import 'package:voyager/features/study/study_history_controls.dart';
@@ -102,17 +107,192 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
   );
   bool _exiting = false;
 
+  late final SessionCheckpointController _checkpoint;
+
+  @override
+  SessionCheckpointController get sessionCheckpoint => _checkpoint;
+
+  /// The problems in scope when the buckets were last built. One that arrived
+  /// while the run was away is missing from here, and joins bucket 0 rather
+  /// than the bucket its neighbours are in.
+  final _sourceIds = <String>{};
+
+  /// The unfinished run the slot was holding when the page opened, kept until
+  /// the problems arrive and it can be hydrated.
+  SessionCheckpoint? _restored;
+
+  /// Whether the slot has been read. The buckets wait for it rather than
+  /// being filled and then replaced a frame later.
+  bool _checkpointRead = false;
+
   @override
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_handleArrowKey);
+    _checkpoint = SessionCheckpointController(
+      store: ref.read(sessionCheckpointStoreProvider),
+      kind: SessionCheckpointKind.leetcodeCram,
+      // One slot for Cram, whatever the Review Deck was filtered to — and
+      // never the one Study left behind.
+      scopeKey: '',
+      build: _buildCheckpoint,
+    );
+    _checkpoint.load().then((restored) {
+      if (!mounted) return;
+      setState(() {
+        _restored = restored;
+        _checkpointRead = true;
+      });
+    });
   }
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleArrowKey);
     _cardX.dispose();
+    // Disposal is every incomplete exit there is. Fired rather than awaited —
+    // the store chains its writes, so this lands even though the page is gone.
+    _checkpoint.flush();
+    _checkpoint.dispose();
     super.dispose();
+  }
+
+  /// The run as it stands, or null when there is nothing to come back to: a
+  /// deck emptied out from under it, or every problem mastered. Clearing the
+  /// slot is what takes the scratch pads with it.
+  SessionCheckpoint? _buildCheckpoint() {
+    final held = _problemsById;
+    if (held == null || held.isEmpty || _complete) return null;
+    return _checkpoint.envelope(
+      sourceIds: _sourceIds,
+      buckets: _bucketsNow(),
+      decided: [for (final step in _decided) _dtoFor(step)],
+      undoneCram: [for (final step in _undone) _dtoFor(step)],
+      scratch: scratchSnapshot?.toJson(),
+    );
+  }
+
+  CramBucketsDto _bucketsNow() => CramBucketsDto(
+    bucket0: [..._bucket0],
+    bucket1: [..._bucket1],
+    bucket2: [..._bucket2],
+  );
+
+  CramBucketsDto _dtoFor(_CramStep step) => CramBucketsDto(
+    bucket0: [...step.bucket0],
+    bucket1: [...step.bucket1],
+    bucket2: [...step.bucket2],
+  );
+
+  /// This run's share of the deck, as the Review Deck had it filtered.
+  List<LeetCodeProblem> _pool(List<LeetCodeProblem> problems) => [
+    for (final p in problems)
+      if (widget.problemIds.contains(p.id)) p,
+  ];
+
+  /// Every problem in bucket 0, shuffled — what a run with no checkpoint
+  /// behind it does, and what Start over goes back to.
+  void _startFresh(List<LeetCodeProblem> problems) {
+    final included = orderLeetCodeCramQueue(
+      _pool(problems),
+      random: ref.read(sessionShuffleRandomProvider),
+    );
+    _problemsById = {for (final p in included) p.id: p};
+    _bucket0 = [for (final p in included) p.id];
+    _bucket1.clear();
+    _bucket2.clear();
+    _sourceIds
+      ..clear()
+      ..addAll(_bucket0);
+  }
+
+  /// Puts the buckets back as the user left them, against the problems as
+  /// they now stand. False when there is nothing usable left, which opens a
+  /// fresh run instead.
+  bool _hydrate(SessionCheckpoint checkpoint, List<LeetCodeProblem> problems) {
+    final byId = {for (final p in _pool(problems)) p.id: p};
+    final buckets = checkpoint.buckets;
+    List<String> surviving(List<String> ids) => [
+      for (final id in ids)
+        if (byId.containsKey(id)) id,
+    ];
+
+    final held0 = surviving(buckets?.bucket0 ?? const []);
+    final held1 = surviving(buckets?.bucket1 ?? const []);
+    final held2 = surviving(buckets?.bucket2 ?? const []);
+    final known = {...checkpoint.sourceIds, ...held0, ...held1, ...held2};
+    final newcomers = [
+      for (final id in byId.keys)
+        if (!known.contains(id)) id,
+    ]..shuffle(ref.read(sessionShuffleRandomProvider));
+
+    // Nothing left to decide: the run either finished or lost its deck, and
+    // either way there is no round here to come back to.
+    if (held0.isEmpty && held1.isEmpty && newcomers.isEmpty) {
+      _checkpoint.discard();
+      return false;
+    }
+
+    // A problem that arrived while the run was away is unseen, which is what
+    // bucket 0 means — including in the arrangements an undo steps back into,
+    // which would otherwise drop it again.
+    _bucket0 = [...held0, ...newcomers];
+    _bucket1
+      ..clear()
+      ..addAll(held1);
+    _bucket2
+      ..clear()
+      ..addAll(held2);
+    _problemsById = {
+      for (final id in [..._bucket0, ..._bucket1, ..._bucket2]) id: byId[id]!,
+    };
+
+    _CramStep restore(CramBucketsDto step) => _CramStep(
+      [...surviving(step.bucket0), ...newcomers],
+      surviving(step.bucket1),
+      surviving(step.bucket2),
+    );
+
+    _decided
+      ..clear()
+      ..addAll([for (final step in checkpoint.decided) restore(step)]);
+    _undone
+      ..clear()
+      ..addAll([for (final step in checkpoint.undoneCram) restore(step)]);
+    _sourceIds
+      ..clear()
+      ..addAll(_problemsById!.keys);
+    if (checkpoint.scratch case final scratch?) {
+      primeScratch(LeetCodeScratchSession.fromJson(scratch));
+    }
+    // The reconciled round, written back before the user touches it.
+    _checkpoint.flush();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showSessionResumeToast(
+        context,
+        remaining: _bucket0.length + _bucket1.length,
+        onStartOver: _startOver,
+      );
+    });
+    return true;
+  }
+
+  /// Throws the restored run away and drills the deck as it stands now, every
+  /// problem back in bucket 0 and the pads empty.
+  Future<void> _startOver() async {
+    await _checkpoint.discard();
+    if (!mounted) return;
+    resetScratch();
+    setState(() {
+      _decided.clear();
+      _undone.clear();
+      _startFresh(ref.read(leetcodeProblemsProvider).valueOrNull ?? const []);
+      _showingBack = false;
+    });
+    _flipController.showFront();
+    _checkpoint.persist();
   }
 
   /// Far enough that the card is fully clear of the window, whatever its size.
@@ -127,12 +307,11 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
   void _syncProblems(List<LeetCodeProblem> problems) {
     final held = _problemsById;
     if (held == null) {
-      final included = orderLeetCodeCramQueue([
-        for (final p in problems)
-          if (widget.problemIds.contains(p.id)) p,
-      ], random: ref.read(sessionShuffleRandomProvider));
-      _problemsById = {for (final p in included) p.id: p};
-      _bucket0 = [for (final p in included) p.id];
+      if (!_checkpointRead) return;
+      final restored = _restored;
+      _restored = null;
+      if (restored != null && _hydrate(restored, problems)) return;
+      _startFresh(problems);
       return;
     }
     // Same reason a review session re-reads its queue: these problems are a
@@ -221,6 +400,7 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
         _showingBack = false;
       });
       _flipController.showFront();
+      _checkpoint.persist();
     });
   }
 
@@ -257,6 +437,7 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
       _showingBack = false;
     });
     _flipController.showFront();
+    _checkpoint.persist();
   }
 
   void _handleFlip() => _flipController.flip();
@@ -295,6 +476,7 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
       _showingBack = false;
     });
     _flipController.showFront();
+    _checkpoint.persist();
   }
 
   @override

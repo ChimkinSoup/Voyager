@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/session_resume/session_checkpoint_store.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
@@ -20,6 +21,7 @@ import 'package:voyager/features/leetcode/leetcode_session_page.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 
 import 'fakes/input_order_random.dart';
+import 'fakes/memory_session_checkpoints.dart';
 
 class _RecordingLeetCodeRepository implements LeetCodeRepository {
   _RecordingLeetCodeRepository(this.problems);
@@ -52,7 +54,8 @@ class _RecordingLeetCodeRepository implements LeetCodeRepository {
   }) async {
     saved.add(problem);
     problems = [
-      for (final p in problems) if (p.id == problem.id) problem else p,
+      for (final p in problems)
+        if (p.id == problem.id) problem else p,
     ];
   }
 
@@ -103,8 +106,12 @@ LeetCodeProblem _problem({required String id, required String title}) {
 Future<_RecordingLeetCodeRepository> _pump(
   WidgetTester tester,
   List<LeetCodeProblem> problems,
-  Widget page,
-) async {
+  Widget page, {
+
+  /// Shared between two opens by the resume tests, so the second sees what
+  /// the first one left behind.
+  MemorySessionCheckpointStore? checkpoints,
+}) async {
   tester.view.physicalSize = const Size(1200, 1000);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
@@ -116,6 +123,7 @@ Future<_RecordingLeetCodeRepository> _pump(
       overrides: [
         leetCodeRepositoryProvider.overrideWithValue(repo),
         remoteSyncServiceProvider.overrideWithValue(_NoopRemoteSync()),
+        memorySessionCheckpoints(checkpoints),
         noSessionShuffle,
       ],
       child: MaterialApp(home: page),
@@ -153,11 +161,9 @@ Future<void> _stepHistory(WidgetTester tester, LogicalKeyboardKey key) async {
 void main() {
   group('study session', () {
     testWidgets('a Good grade writes the new schedule back', (tester) async {
-      final repo = await _pump(
-        tester,
-        [_problem(id: '1', title: 'Two Sum')],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      final repo = await _pump(tester, [
+        _problem(id: '1', title: 'Two Sum'),
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
 
       expect(find.text('New 1'), findsOneWidget);
 
@@ -185,11 +191,9 @@ void main() {
     testWidgets('a failed problem comes back before the session ends', (
       tester,
     ) async {
-      final repo = await _pump(
-        tester,
-        [_problem(id: '1', title: 'Two Sum')],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      final repo = await _pump(tester, [
+        _problem(id: '1', title: 'Two Sum'),
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
 
       await _reveal(tester);
       await _grade(tester, 'Fail');
@@ -208,18 +212,18 @@ void main() {
     testWidgets('an edit saved mid-session replaces the card on screen', (
       tester,
     ) async {
-      final repo = await _pump(
-        tester,
-        [_problem(id: '1', title: 'Two Sum')],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      final repo = await _pump(tester, [
+        _problem(id: '1', title: 'Two Sum'),
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
 
       expect(find.text('1 Two Sum'), findsOneWidget);
 
       // What saving the detail view's editor does: write the problem, then
       // invalidate the list the session reads. The session used to keep
       // showing the copy it queued when it opened.
-      await repo.upsertProblem(repo.problems.single.copyWith(title: 'Two Sum II'));
+      await repo.upsertProblem(
+        repo.problems.single.copyWith(title: 'Two Sum II'),
+      );
       ProviderScope.containerOf(
         tester.element(find.byType(LeetCodeSessionPage)),
       ).invalidate(leetcodeProblemsProvider);
@@ -239,11 +243,9 @@ void main() {
         reviewCount: 3,
         dueAt: DateTime.utc(2026, 8, 10),
       );
-      final repo = await _pump(
-        tester,
-        [reviewed],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      final repo = await _pump(tester, [
+        reviewed,
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
 
       expect(find.text('Review 1'), findsOneWidget);
 
@@ -269,11 +271,9 @@ void main() {
     testWidgets('undo takes the last grade back, redo gives the same one', (
       tester,
     ) async {
-      final repo = await _pump(
-        tester,
-        [_problem(id: '1', title: 'Two Sum')],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      final repo = await _pump(tester, [
+        _problem(id: '1', title: 'Two Sum'),
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
 
       await _reveal(tester);
       await _grade(tester, 'Good');
@@ -291,13 +291,15 @@ void main() {
       expect(
         restored.dueAt,
         isNull,
-        reason: 'a never-reviewed problem carries no due date, and undoing '
+        reason:
+            'a never-reviewed problem carries no due date, and undoing '
             'its first grade has to put that back',
       );
       expect(
         repo.liveReviewLogs,
         isEmpty,
-        reason: 'a grade taken back stops counting on the activity chart, '
+        reason:
+            'a grade taken back stops counting on the activity chart, '
             'even if the session is then abandoned',
       );
 
@@ -309,7 +311,8 @@ void main() {
       expect(
         repo.reviewLogs,
         hasLength(1),
-        reason: 'the redo revives the row the grade wrote rather than '
+        reason:
+            'the redo revives the row the grade wrote rather than '
             'appending a second one',
       );
       expect(repo.liveReviewLogs, hasLength(1));
@@ -319,14 +322,10 @@ void main() {
     testWidgets('undoing a Fail takes its re-queued copy back out', (
       tester,
     ) async {
-      await _pump(
-        tester,
-        [
-          _problem(id: '1', title: 'Two Sum'),
-          _problem(id: '2', title: 'Merge Intervals'),
-        ],
-        const LeetCodeSessionPage(problemIds: {'1', '2'}),
-      );
+      await _pump(tester, [
+        _problem(id: '1', title: 'Two Sum'),
+        _problem(id: '2', title: 'Merge Intervals'),
+      ], const LeetCodeSessionPage(problemIds: {'1', '2'}));
 
       await _reveal(tester);
       await _grade(tester, 'Fail');
@@ -342,7 +341,8 @@ void main() {
       expect(
         find.text('New 2'),
         findsOneWidget,
-        reason: 'the round holds the same two problems it started with — the '
+        reason:
+            'the round holds the same two problems it started with — the '
             're-queued copy left with the grade that made it',
       );
     });
@@ -350,14 +350,10 @@ void main() {
     testWidgets('redo cannot run past the furthest problem reached', (
       tester,
     ) async {
-      final repo = await _pump(
-        tester,
-        [
-          _problem(id: '1', title: 'Two Sum'),
-          _problem(id: '2', title: 'Merge Intervals'),
-        ],
-        const LeetCodeSessionPage(problemIds: {'1', '2'}),
-      );
+      final repo = await _pump(tester, [
+        _problem(id: '1', title: 'Two Sum'),
+        _problem(id: '2', title: 'Merge Intervals'),
+      ], const LeetCodeSessionPage(problemIds: {'1', '2'}));
 
       await _stepHistory(tester, LogicalKeyboardKey.arrowRight);
 
@@ -370,11 +366,9 @@ void main() {
     testWidgets('a grade given after an undo replaces the one taken back', (
       tester,
     ) async {
-      final repo = await _pump(
-        tester,
-        [_problem(id: '1', title: 'Two Sum')],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      final repo = await _pump(tester, [
+        _problem(id: '1', title: 'Two Sum'),
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
 
       await _reveal(tester);
       await _grade(tester, 'Easy');
@@ -393,14 +387,10 @@ void main() {
     testWidgets('the session only asks the problems it was handed', (
       tester,
     ) async {
-      await _pump(
-        tester,
-        [
-          _problem(id: '1', title: 'Two Sum'),
-          _problem(id: '2', title: 'Merge Intervals'),
-        ],
-        const LeetCodeSessionPage(problemIds: {'2'}),
-      );
+      await _pump(tester, [
+        _problem(id: '1', title: 'Two Sum'),
+        _problem(id: '2', title: 'Merge Intervals'),
+      ], const LeetCodeSessionPage(problemIds: {'2'}));
 
       expect(find.text('New 1'), findsOneWidget);
       expect(find.text('2 Merge Intervals'), findsOneWidget);
@@ -408,15 +398,154 @@ void main() {
     });
   });
 
+  group('resuming', () {
+    /// Every exit that is not a finish: the route goes, the page disposes,
+    /// and what it was holding is flushed.
+    Future<void> leave(WidgetTester tester) async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    }
+
+    testWidgets('a session left mid-round comes back where it was', (
+      tester,
+    ) async {
+      final checkpoints = MemorySessionCheckpointStore();
+      final problems = [
+        _problem(id: '1', title: 'Two Sum'),
+        _problem(id: '2', title: 'Add Two Numbers'),
+      ];
+      const page = LeetCodeSessionPage(problemIds: {'1', '2'});
+
+      final repo = await _pump(
+        tester,
+        problems,
+        page,
+        checkpoints: checkpoints,
+      );
+      await _reveal(tester);
+      await _grade(tester, 'Good');
+      expect(find.text('2 Add Two Numbers'), findsOneWidget);
+      await leave(tester);
+
+      final resumed = await _pump(
+        tester,
+        repo.problems,
+        page,
+        checkpoints: checkpoints,
+      );
+      await tester.pump();
+
+      expect(find.textContaining('Resuming'), findsOneWidget);
+      expect(find.text('2 Add Two Numbers'), findsOneWidget);
+      expect(resumed.problems.firstWhere((p) => p.id == '1').reviewCount, 1);
+
+      // The grade it was left with is still one it can take back.
+      await _stepHistory(tester, LogicalKeyboardKey.keyU);
+      expect(find.text('1 Two Sum'), findsOneWidget);
+      expect(resumed.problems.firstWhere((p) => p.id == '1').reviewCount, 0);
+    });
+
+    testWidgets('a round the deck is no longer showing is not offered back', (
+      tester,
+    ) async {
+      final checkpoints = MemorySessionCheckpointStore();
+      final problems = [
+        _problem(id: '1', title: 'Two Sum'),
+        _problem(id: '2', title: 'Add Two Numbers'),
+        _problem(id: '3', title: 'Merge Intervals'),
+      ];
+
+      final repo = await _pump(
+        tester,
+        problems,
+        const LeetCodeSessionPage(problemIds: {'1', '2'}),
+        checkpoints: checkpoints,
+      );
+      await _reveal(tester);
+      await _grade(tester, 'Good');
+      await leave(tester);
+
+      // The deck is filtered somewhere else entirely now: nothing the old
+      // round held is eligible, so the filter wins and the session is fresh.
+      await _pump(
+        tester,
+        repo.problems,
+        const LeetCodeSessionPage(problemIds: {'3'}),
+        checkpoints: checkpoints,
+      );
+      await tester.pump();
+
+      expect(find.textContaining('Resuming'), findsNothing);
+      expect(find.text('3 Merge Intervals'), findsOneWidget);
+    });
+
+    testWidgets('Study and Cram never offer each other their rounds', (
+      tester,
+    ) async {
+      final checkpoints = MemorySessionCheckpointStore();
+      final problems = [
+        _problem(id: '1', title: 'Two Sum'),
+        _problem(id: '2', title: 'Add Two Numbers'),
+      ];
+
+      final repo = await _pump(
+        tester,
+        problems,
+        const LeetCodeSessionPage(problemIds: {'1', '2'}),
+        checkpoints: checkpoints,
+      );
+      await _reveal(tester);
+      await _grade(tester, 'Good');
+      await leave(tester);
+
+      await _pump(
+        tester,
+        repo.problems,
+        const LeetCodeCramPage(problemIds: {'1', '2'}),
+        checkpoints: checkpoints,
+      );
+      await tester.pump();
+
+      expect(find.textContaining('Resuming'), findsNothing);
+      expect(checkpoints.checkpoints['leetcodeStudy__'], isNotNull);
+    });
+
+    testWidgets('a cram run comes back with its buckets', (tester) async {
+      final checkpoints = MemorySessionCheckpointStore();
+      final problems = [
+        _problem(id: '1', title: 'Two Sum'),
+        _problem(id: '2', title: 'Add Two Numbers'),
+      ];
+      const page = LeetCodeCramPage(problemIds: {'1', '2'});
+
+      await _pump(tester, problems, page, checkpoints: checkpoints);
+      // Right is a pass: the first problem moves up to bucket 1.
+      await tester.tap(find.byIcon(PhosphorIconsRegular.arrowRight));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('2 Add Two Numbers'), findsOneWidget);
+      await leave(tester);
+
+      await _pump(tester, problems, page, checkpoints: checkpoints);
+      await tester.pump();
+
+      expect(find.text('2 Add Two Numbers'), findsOneWidget);
+      final saved = checkpoints.checkpoints['leetcodeCram__']!;
+      expect(saved.buckets!.bucket0, ['2']);
+      expect(saved.buckets!.bucket1, ['1']);
+
+      await _stepHistory(tester, LogicalKeyboardKey.keyU);
+      expect(find.text('1 Two Sum'), findsOneWidget);
+    });
+  });
+
   group('cram session', () {
     testWidgets('two passes graduate a problem and never touch its SRS state', (
       tester,
     ) async {
-      final repo = await _pump(
-        tester,
-        [_problem(id: '1', title: 'Two Sum')],
-        const LeetCodeCramPage(problemIds: {'1'}),
-      );
+      final repo = await _pump(tester, [
+        _problem(id: '1', title: 'Two Sum'),
+      ], const LeetCodeCramPage(problemIds: {'1'}));
 
       expect(find.text('Cram mode'), findsOneWidget);
 
@@ -434,14 +563,10 @@ void main() {
     testWidgets('U steps back a card and R steps forward again', (
       tester,
     ) async {
-      final repo = await _pump(
-        tester,
-        [
-          _problem(id: '1', title: 'Two Sum'),
-          _problem(id: '2', title: 'Merge Intervals'),
-        ],
-        const LeetCodeCramPage(problemIds: {'1', '2'}),
-      );
+      final repo = await _pump(tester, [
+        _problem(id: '1', title: 'Two Sum'),
+        _problem(id: '2', title: 'Merge Intervals'),
+      ], const LeetCodeCramPage(problemIds: {'1', '2'}));
 
       await tester.tap(find.byIcon(PhosphorIconsRegular.arrowRight));
       await tester.pump();

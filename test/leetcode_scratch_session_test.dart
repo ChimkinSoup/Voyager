@@ -1,14 +1,16 @@
 // The scratch pad is a surface added to a running Study or Cram session, so
 // what matters is how it behaves *against* the session: one pad per problem
 // that survives an advance and an undo, a card that cannot be graded while the
-// user is typing into it, and a session that leaves nothing behind on the way
-// out.
+// user is typing into it, and pads that go into the session's checkpoint
+// rather than into a file of their own.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/session_resume/session_checkpoint.dart';
+import 'package:voyager/core/session_resume/session_checkpoint_store.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
@@ -18,7 +20,6 @@ import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/leetcode/leetcode_code_field.dart';
 import 'package:voyager/features/leetcode/leetcode_cram_page.dart';
 import 'package:voyager/features/leetcode/leetcode_scratch_draft.dart';
-import 'package:voyager/features/leetcode/leetcode_scratch_draft_store.dart';
 import 'package:voyager/features/leetcode/leetcode_scratch_pad.dart';
 import 'package:voyager/features/leetcode/leetcode_session_page.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
@@ -42,7 +43,8 @@ class _StubLeetCodeRepository implements LeetCodeRepository {
     bool recordLocalActivity = true,
   }) async {
     problems = [
-      for (final p in problems) if (p.id == problem.id) problem else p,
+      for (final p in problems)
+        if (p.id == problem.id) problem else p,
     ];
   }
 
@@ -113,12 +115,12 @@ class _FixedSettings extends SettingsNotifier {
   Future<AppSettings> build() async => settings;
 }
 
-Future<MemoryLeetCodeScratchDraftStore> _pumpSession(
+Future<MemorySessionCheckpointStore> _pumpSession(
   WidgetTester tester,
   List<LeetCodeProblem> problems,
   Widget page, {
   bool scratchEnabled = true,
-  MemoryLeetCodeScratchDraftStore? store,
+  MemorySessionCheckpointStore? store,
 }) async {
   // Wide enough to stay in the side-by-side layout rather than the narrow
   // stack, and tall enough that nothing the session shows is off screen.
@@ -127,7 +129,7 @@ Future<MemoryLeetCodeScratchDraftStore> _pumpSession(
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
-  final scratchStore = store ?? MemoryLeetCodeScratchDraftStore();
+  final checkpoints = store ?? MemorySessionCheckpointStore();
 
   await tester.pumpWidget(
     ProviderScope(
@@ -136,7 +138,7 @@ Future<MemoryLeetCodeScratchDraftStore> _pumpSession(
           _StubLeetCodeRepository(problems),
         ),
         remoteSyncServiceProvider.overrideWithValue(_NoopRemoteSync()),
-        leetCodeScratchDraftStoreProvider.overrideWithValue(scratchStore),
+        sessionCheckpointStoreProvider.overrideWithValue(checkpoints),
         settingsProvider.overrideWith(
           () => _FixedSettings(
             AppSettings(leetCodeEnableScratchCode: scratchEnabled),
@@ -147,12 +149,40 @@ Future<MemoryLeetCodeScratchDraftStore> _pumpSession(
       child: MaterialApp(home: page),
     ),
   );
-  // Settings and problems both arrive asynchronously, and the pad is only
-  // created once settings resolve.
+  // Settings, problems and the checkpoint slot all arrive asynchronously,
+  // and the pad is only created once settings resolve.
   await tester.pump();
   await tester.pump();
-  return scratchStore;
+  return checkpoints;
 }
+
+/// The pads the checkpoint is holding for a LeetCode Study session.
+Map<String, LeetCodeScratchEntry> _savedScratch(
+  MemorySessionCheckpointStore store,
+) {
+  final scratch = store.checkpoints[_studySlot]?.scratch;
+  return scratch == null
+      ? const {}
+      : LeetCodeScratchSession.fromJson(scratch).scratches;
+}
+
+const _studySlot = 'leetcodeStudy__';
+
+/// A checkpoint for a LeetCode Study session left mid-run over [problemIds],
+/// with [scratches] typed into it.
+SessionCheckpoint _leftBehind({
+  List<String> problemIds = const ['1'],
+  Map<String, LeetCodeScratchEntry> scratches = const {},
+}) => SessionCheckpoint(
+  kind: SessionCheckpointKind.leetcodeStudy,
+  scopeKey: '',
+  sessionId: 'previous',
+  startedAt: DateTime.utc(2026, 8, 30),
+  updatedAt: DateTime.utc(2026, 8, 30),
+  sourceIds: problemIds.toSet(),
+  remainingQueue: problemIds,
+  scratch: LeetCodeScratchSession(scratches: scratches).toJson(),
+);
 
 Finder get _pad => find.byType(LeetCodeScratchPad);
 
@@ -182,7 +212,8 @@ void main() {
     title: 'Two Sum',
     solutions: const [
       LeetCodeSolution(
-        code: 'class Solution:\n    def twoSum(self, nums, target):\n'
+        code:
+            'class Solution:\n    def twoSum(self, nums, target):\n'
             '        return []',
         codeLanguage: 'python',
       ),
@@ -202,35 +233,32 @@ void main() {
     });
 
     testWidgets('on puts a pad beside the card in Study', (tester) async {
-      await _pumpSession(
-        tester,
-        [twoSum],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      await _pumpSession(tester, [
+        twoSum,
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
       expect(_pad, findsOneWidget);
     });
 
     testWidgets('on puts a pad beside the card in Cram', (tester) async {
-      await _pumpSession(
-        tester,
-        [twoSum],
-        const LeetCodeCramPage(problemIds: {'1'}),
-      );
+      await _pumpSession(tester, [
+        twoSum,
+      ], const LeetCodeCramPage(problemIds: {'1'}));
       expect(_pad, findsOneWidget);
     });
   });
 
   group('starter template', () {
     testWidgets('opens on the signature of the saved solution', (tester) async {
-      await _pumpSession(
-        tester,
-        [twoSum],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      await _pumpSession(tester, [
+        twoSum,
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
 
       final pad = tester.widget<LeetCodeScratchPad>(_pad);
       expect(pad.entry.language, 'python');
-      expect(pad.controller.fullText, contains('def twoSum(self, nums, target)'));
+      expect(
+        pad.controller.fullText,
+        contains('def twoSum(self, nums, target)'),
+      );
       // The shape, never the answer.
       expect(pad.controller.fullText, contains('pass'));
       expect(pad.controller.fullText, isNot(contains('return []')));
@@ -239,11 +267,9 @@ void main() {
     testWidgets('a problem with no solution gets the language default', (
       tester,
     ) async {
-      await _pumpSession(
-        tester,
-        [addTwo],
-        const LeetCodeSessionPage(problemIds: {'2'}),
-      );
+      await _pumpSession(tester, [
+        addTwo,
+      ], const LeetCodeSessionPage(problemIds: {'2'}));
       final pad = tester.widget<LeetCodeScratchPad>(_pad);
       expect(pad.entry.language, 'python');
       expect(pad.controller.fullText, contains('class Solution:'));
@@ -255,11 +281,9 @@ void main() {
       // A CodeController with no grammar highlights nothing, which is what
       // the pad did while the Track modal's box — which sets one in its own
       // initState — highlighted normally.
-      await _pumpSession(
-        tester,
-        [twoSum],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      await _pumpSession(tester, [
+        twoSum,
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
       final pad = tester.widget<LeetCodeScratchPad>(_pad);
       expect(pad.controller.language, leetCodeHighlightMode('python'));
     });
@@ -268,11 +292,10 @@ void main() {
   group('one pad per problem', () {
     testWidgets('advancing brings up a different pad, and undo brings the '
         'first one back with what was typed in it', (tester) async {
-      await _pumpSession(
-        tester,
-        [twoSum, addTwo],
-        const LeetCodeSessionPage(problemIds: {'1', '2'}),
-      );
+      await _pumpSession(tester, [
+        twoSum,
+        addTwo,
+      ], const LeetCodeSessionPage(problemIds: {'1', '2'}));
 
       final first = tester.widget<LeetCodeScratchPad>(_pad);
       expect(first.problem.id, '1');
@@ -303,11 +326,9 @@ void main() {
 
   group('the pad and the session compete for the same keys', () {
     testWidgets('typing in the pad does not grade the card', (tester) async {
-      await _pumpSession(
-        tester,
-        [twoSum],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      await _pumpSession(tester, [
+        twoSum,
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
 
       await _reveal(tester);
       await _focusPad(tester);
@@ -318,20 +339,15 @@ void main() {
       await tester.pump();
 
       // Still the same card: nothing was graded out from under the typing.
-      expect(
-        tester.widget<LeetCodeScratchPad>(_pad).problem.id,
-        '1',
-      );
+      expect(tester.widget<LeetCodeScratchPad>(_pad).problem.id, '1');
     });
 
     testWidgets('the grading row dims while the pad has the caret', (
       tester,
     ) async {
-      await _pumpSession(
-        tester,
-        [twoSum],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      await _pumpSession(tester, [
+        twoSum,
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
 
       await _reveal(tester);
       expect(
@@ -348,42 +364,46 @@ void main() {
     });
   });
 
-  group('the recovery file', () {
-    testWidgets('a session that ends normally leaves nothing behind', (
-      tester,
-    ) async {
-      final store = await _pumpSession(
-        tester,
-        [twoSum],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+  group('pads ride with the session', () {
+    testWidgets('what is typed reaches the checkpoint', (tester) async {
+      final store = await _pumpSession(tester, [
+        twoSum,
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
 
       tester.widget<LeetCodeScratchPad>(_pad).controller.fullText = 'typed';
       await tester.pump(const Duration(milliseconds: 500));
-      expect(store.session, isNotNull);
-
-      // Leaving the session is what deletes it — the file only survives a run
-      // that never got to dispose.
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump();
-      expect(store.session, isNull);
+      expect(_savedScratch(store)['1']?.code, 'typed');
     });
 
-    testWidgets('an orphan is offered back, not silently loaded', (
+    testWidgets('leaving mid-session keeps them', (tester) async {
+      final store = await _pumpSession(tester, [
+        twoSum,
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
+
+      tester.widget<LeetCodeScratchPad>(_pad).controller.fullText = 'typed';
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Back to deck is an exit, not an ending: the run is still unfinished,
+      // so what was typed is still the user's.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(_savedScratch(store)['1']?.code, 'typed');
+    });
+
+    testWidgets('a resumed session opens on the pads it was left with', (
       tester,
     ) async {
-      final store = MemoryLeetCodeScratchDraftStore()
-        ..session = LeetCodeScratchSession(
-          sessionId: 'previous',
-          problemIds: const {'1'},
-          startedAt: DateTime.utc(2026, 8, 30),
+      final store = MemorySessionCheckpointStore();
+      await store.save(
+        _leftBehind(
           scratches: const {
             '1': LeetCodeScratchEntry(
-              code: 'work from the run that died',
+              code: 'work from the run that was left',
               language: 'python',
             ),
           },
-        );
+        ),
+      );
 
       await _pumpSession(
         tester,
@@ -393,30 +413,18 @@ void main() {
       );
       await tester.pump();
 
-      // The pad opens on its starter, not on the orphan.
       expect(
         tester.widget<LeetCodeScratchPad>(_pad).controller.fullText,
-        isNot('work from the run that died'),
-      );
-      expect(find.text('Restore'), findsOneWidget);
-
-      await tester.tap(find.text('Restore'));
-      await tester.pumpAndSettle();
-
-      expect(
-        tester.widget<LeetCodeScratchPad>(_pad).controller.fullText,
-        'work from the run that died',
+        'work from the run that was left',
       );
     });
 
-    testWidgets('a run that died mid-edit comes back with the editor open', (
+    testWidgets('a run left mid-edit comes back with the editor open', (
       tester,
     ) async {
-      final store = MemoryLeetCodeScratchDraftStore()
-        ..session = LeetCodeScratchSession(
-          sessionId: 'previous',
-          problemIds: const {'1'},
-          startedAt: DateTime.utc(2026, 8, 30),
+      final store = MemorySessionCheckpointStore();
+      await store.save(
+        _leftBehind(
           scratches: const {
             '1': LeetCodeScratchEntry(
               code: 'half-written',
@@ -424,7 +432,8 @@ void main() {
               expanded: true,
             ),
           },
-        );
+        ),
+      );
 
       await _pumpSession(
         tester,
@@ -432,26 +441,20 @@ void main() {
         const LeetCodeSessionPage(problemIds: {'1'}),
         store: store,
       );
-      await tester.pump();
-      await tester.tap(find.text('Restore'));
       await tester.pumpAndSettle();
 
       expect(find.text('Compare'), findsOneWidget);
     });
 
-    testWidgets('a clean previous session is never offered back', (
-      tester,
-    ) async {
-      final store = MemoryLeetCodeScratchDraftStore()
-        ..session = LeetCodeScratchSession(
-          sessionId: 'previous',
-          problemIds: const {'1'},
-          startedAt: DateTime.utc(2026, 8, 30),
-          endedNormally: true,
+    testWidgets('Start over throws the pads away with the run', (tester) async {
+      final store = MemorySessionCheckpointStore();
+      await store.save(
+        _leftBehind(
           scratches: const {
-            '1': LeetCodeScratchEntry(code: 'old', language: 'python'),
+            '1': LeetCodeScratchEntry(code: 'old work', language: 'python'),
           },
-        );
+        ),
+      );
 
       await _pumpSession(
         tester,
@@ -460,18 +463,49 @@ void main() {
         store: store,
       );
       await tester.pump();
+      await tester.tap(find.text('Start over'));
+      await tester.pumpAndSettle();
 
-      expect(find.text('Restore'), findsNothing);
+      expect(
+        tester.widget<LeetCodeScratchPad>(_pad).controller.fullText,
+        isNot('old work'),
+      );
+      expect(_savedScratch(store)['1']?.code, isNot('old work'));
+    });
+
+    testWidgets('with the pad off, pads left behind are kept untouched', (
+      tester,
+    ) async {
+      final store = MemorySessionCheckpointStore();
+      await store.save(
+        _leftBehind(
+          scratches: const {
+            '1': LeetCodeScratchEntry(code: 'old work', language: 'python'),
+          },
+        ),
+      );
+
+      await _pumpSession(
+        tester,
+        [twoSum],
+        const LeetCodeSessionPage(problemIds: {'1'}),
+        scratchEnabled: false,
+        store: store,
+      );
+      await tester.pump();
+
+      // No pad to put them in — but turning the setting back on later should
+      // still find them, so they go back into the checkpoint as they came.
+      expect(_pad, findsNothing);
+      expect(_savedScratch(store)['1']?.code, 'old work');
     });
   });
 
   group('the expanded editor', () {
     testWidgets('C opens it, and the scrim closes it again', (tester) async {
-      await _pumpSession(
-        tester,
-        [twoSum],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      await _pumpSession(tester, [
+        twoSum,
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
       expect(find.text('Compare'), findsNothing);
 
       await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
@@ -488,11 +522,9 @@ void main() {
     testWidgets('C does not fire while the caret is already in the pad', (
       tester,
     ) async {
-      await _pumpSession(
-        tester,
-        [twoSum],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      await _pumpSession(tester, [
+        twoSum,
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
       await _focusPad(tester);
 
       await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
@@ -503,11 +535,10 @@ void main() {
     });
 
     testWidgets('grading is blocked while it is open', (tester) async {
-      await _pumpSession(
-        tester,
-        [twoSum, addTwo],
-        const LeetCodeSessionPage(problemIds: {'1', '2'}),
-      );
+      await _pumpSession(tester, [
+        twoSum,
+        addTwo,
+      ], const LeetCodeSessionPage(problemIds: {'1', '2'}));
       await _reveal(tester);
       await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
       await tester.pumpAndSettle();
@@ -541,11 +572,9 @@ void main() {
         ),
       );
 
-      await _pumpSession(
-        tester,
-        [twoSum],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      await _pumpSession(tester, [
+        twoSum,
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
       tester.widget<LeetCodeScratchPad>(_pad).controller.fullText = 'my code';
 
       await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
@@ -557,11 +586,9 @@ void main() {
     });
 
     testWidgets('Clear puts the starter back', (tester) async {
-      await _pumpSession(
-        tester,
-        [twoSum],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      await _pumpSession(tester, [
+        twoSum,
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
       final controller = tester.widget<LeetCodeScratchPad>(_pad).controller;
       final starter = controller.fullText;
       controller.fullText = 'scrapped this';
@@ -579,11 +606,9 @@ void main() {
     testWidgets('lines the scratch up against the saved solution', (
       tester,
     ) async {
-      await _pumpSession(
-        tester,
-        [twoSum],
-        const LeetCodeSessionPage(problemIds: {'1'}),
-      );
+      await _pumpSession(tester, [
+        twoSum,
+      ], const LeetCodeSessionPage(problemIds: {'1'}));
       await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Compare'));
@@ -599,11 +624,9 @@ void main() {
     testWidgets('says so when the problem has no solution to compare with', (
       tester,
     ) async {
-      await _pumpSession(
-        tester,
-        [addTwo],
-        const LeetCodeSessionPage(problemIds: {'2'}),
-      );
+      await _pumpSession(tester, [
+        addTwo,
+      ], const LeetCodeSessionPage(problemIds: {'2'}));
       await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Compare'));

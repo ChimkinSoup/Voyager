@@ -2,7 +2,7 @@
 
 Practice code editor alongside the flashcard during Study and Cram sessions. Users type a solution attempt locally, copy it, open the real LeetCode problem to test, and optionally diff against the saved solution — without polluting the tracked problem record or sync pipeline.
 
-Status: **implemented** 2026-08-31.
+Status: **implemented** 2026-08-31. Lifecycle **superseded** 2026-09-20 by `SESSION_RESUME_HLD.md`: scratch now rides in the session checkpoint, so leaving mid-run keeps it and only a finish or a Start over wipes it. Everything below about the standalone `leetcode_scratch_session.json` file and its orphan-recovery toast describes the old behaviour — see [Storage](#storage).
 
 ---
 
@@ -120,6 +120,17 @@ On normal dispose / `Back to deck`: `scratchDraftStore.clearSession(sessionId)`.
 ---
 
 ## Storage
+
+> **Superseded (2026-09-20).** `SESSION_RESUME_HLD.md` took this over. There is
+> no `leetcode_scratch_session.json` and no orphan-recovery toast: the pads are
+> a field of the run's `SessionCheckpoint`, written by
+> `lib/core/session_resume/session_checkpoint_store.dart`. An incomplete exit —
+> Back to deck, the ✕, a process death — keeps them with the rest of the
+> session and the resume toast brings them back; finishing the round, or Start
+> over, clears the slot and takes them with it. The blob shape below
+> (`LeetCodeScratchEntry`, `lastLanguage`) is still what the checkpoint carries,
+> minus `sessionId` / `problemIds` / `startedAt` / `endedNormally`, which the
+> checkpoint envelope now owns. The rest of this section is kept for history.
 
 ### Model: session-scoped + crash recovery
 

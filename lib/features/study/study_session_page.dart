@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/session_resume/session_checkpoint.dart';
+import 'package:voyager/core/session_resume/session_checkpoint_controller.dart';
+import 'package:voyager/core/session_resume/session_checkpoint_store.dart';
+import 'package:voyager/core/session_resume/session_resume_toast.dart';
 import 'package:voyager/core/soft_delete/restore_contract.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
@@ -85,14 +89,199 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
   final _graded = <_GradeStep>[];
   final _undone = <_GradeStep>[];
 
+  late final SessionCheckpointController _checkpoint;
+
+  /// The cards in scope the last time the round was built. What is eligible
+  /// now and missing from here arrived while the session was away, and joins
+  /// the tail of the round rather than its middle.
+  final _sourceIds = <String>{};
+
+  /// The unfinished run the slot was holding when the page opened, kept until
+  /// the cards arrive and it can be hydrated.
+  SessionCheckpoint? _restored;
+
+  /// Whether the slot has been read. The queue waits for it: building a fresh
+  /// round first and replacing it a frame later would put a card up in front
+  /// of the user and then take it away again.
+  bool _checkpointRead = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkpoint = SessionCheckpointController(
+      store: ref.read(sessionCheckpointStoreProvider),
+      kind: SessionCheckpointKind.studySession,
+      // The Hub's library-wide run and a deck's own are different sessions,
+      // and neither may be offered back in place of the other.
+      scopeKey: widget.frameDeckId == null
+          ? 'hub'
+          : 'deck:${widget.frameDeckId}',
+      build: _buildCheckpoint,
+    );
+    _checkpoint.load().then((restored) {
+      if (!mounted) return;
+      setState(() {
+        _restored = restored;
+        _checkpointRead = true;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    // Disposal is every incomplete exit there is: the X button, Back to deck,
+    // a route pop, the app being closed. Fired rather than awaited — the
+    // store chains its writes, so this lands even though the page is gone.
+    _checkpoint.flush();
+    _checkpoint.dispose();
+    super.dispose();
+  }
+
+  /// The session as it stands, or null when there is nothing to come back to.
+  ///
+  /// An empty queue is the completion screen, and a session that reached it is
+  /// finished: the slot is cleared rather than written. Undoing back off that
+  /// screen re-queues a card, so the very next write puts the checkpoint back.
+  SessionCheckpoint? _buildCheckpoint() {
+    final queue = _queue;
+    if (queue == null || queue.isEmpty) return null;
+    return _checkpoint.envelope(
+      sourceIds: _sourceIds,
+      remainingQueue: [for (final card in queue) card.id],
+      graded: [for (final step in _graded) _dtoFor(step)],
+      undone: [for (final step in _undone) _dtoFor(step)],
+    );
+  }
+
+  GradeStepDto _dtoFor(_GradeStep step) => GradeStepDto(
+    before: step.before.toJson(),
+    after: step.after.toJson(),
+    log: step.log.toJson(),
+    // Ids, not rows: the arrangement a step steps back into is resolved
+    // against live cards on the way in, so an edit made while the session was
+    // away shows up there too.
+    queueBefore: [for (final card in step.queueBefore) card.id],
+    queueAfter: [for (final card in step.queueAfter) card.id],
+  );
+
+  /// The cards this session would open on right now: in scope, and due.
+  List<StudyCard> _eligible(List<StudyCard> allCards) {
+    final now = DateTime.now().toUtc();
+    return [
+      for (final c in allCards)
+        if (widget.cardIds.contains(c.id) && !c.dueAt.isAfter(now)) c,
+    ];
+  }
+
+  /// Opens on everything eligible, shuffled — what a session with no
+  /// checkpoint behind it does, and what Start over goes back to.
+  void _startFresh(List<StudyCard> allCards) {
+    final eligible = _eligible(allCards);
+    _sourceIds
+      ..clear()
+      ..addAll([for (final card in eligible) card.id]);
+    _queue = orderStudyReviewQueue(
+      eligible,
+      random: ref.read(sessionShuffleRandomProvider),
+    );
+  }
+
+  /// Rebuilds the round the user left, against the cards as they now stand.
+  /// False when nothing usable is left in it, which opens a fresh session
+  /// instead.
+  bool _hydrate(SessionCheckpoint checkpoint, List<StudyCard> allCards) {
+    // Scoped to what the entry point handed over: a card the deck no longer
+    // holds — or that this run was never about — is not part of the round it
+    // comes back to, whatever the file says.
+    final byId = {
+      for (final card in allCards)
+        if (widget.cardIds.contains(card.id)) card.id: card,
+    };
+    final remaining = [for (final id in checkpoint.remainingQueue) ?byId[id]];
+    // Every card the session had left has gone. The grades it made are
+    // already on disk, so there is no run here to come back to — only a file.
+    if (remaining.isEmpty) {
+      _checkpoint.discard();
+      return false;
+    }
+
+    final known = {...checkpoint.sourceIds, ...checkpoint.remainingQueue};
+    final newcomers = [
+      for (final card in _eligible(allCards))
+        if (!known.contains(card.id)) card,
+    ]..shuffle(ref.read(sessionShuffleRandomProvider));
+
+    List<StudyCard> resolve(List<String> ids) => [
+      for (final id in ids) ?byId[id],
+      // Cards that came due while the session was away belong to the tail of
+      // every arrangement it can step back into, not only the current one: a
+      // snapshot without them would drop them again on the first undo.
+      ...newcomers,
+    ];
+
+    List<_GradeStep> steps(List<GradeStepDto> dtos) => [
+      for (final dto in dtos)
+        // A step whose card has been deleted has nothing left to put a rating
+        // back on, so it is not a step this session can take.
+        if (byId.containsKey(dto.id))
+          _GradeStep(
+            before: StudyCard.fromJson(dto.before),
+            after: StudyCard.fromJson(dto.after),
+            log: StudyReviewLog.fromJson(dto.log),
+            queueBefore: resolve(dto.queueBefore),
+            queueAfter: resolve(dto.queueAfter),
+          ),
+    ];
+
+    _queue = [...remaining, ...newcomers];
+    _graded
+      ..clear()
+      ..addAll(steps(checkpoint.graded));
+    _undone
+      ..clear()
+      ..addAll(steps(checkpoint.undone));
+    _sourceIds
+      ..clear()
+      ..addAll(checkpoint.sourceIds)
+      ..addAll([for (final card in _eligible(allCards)) card.id])
+      ..addAll([for (final card in _queue!) card.id]);
+    // The reconciled round, written back before the user touches it.
+    _checkpoint.flush();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showSessionResumeToast(
+        context,
+        remaining: _queue?.length ?? 0,
+        onStartOver: _startOver,
+      );
+    });
+    return true;
+  }
+
+  /// Throws the restored run away and opens the session the user would have
+  /// had without it: everything eligible under live SRS, newcomers included,
+  /// freshly shuffled. Grades already committed stay committed.
+  Future<void> _startOver() async {
+    await _checkpoint.discard();
+    if (!mounted) return;
+    setState(() {
+      _clearHistory();
+      _startFresh(ref.read(studyAllCardsProvider).valueOrNull ?? const []);
+      _showingBack = false;
+    });
+    _flipController.showFront();
+    _checkpoint.persist();
+  }
+
   void _syncQueue(List<StudyCard> allCards) {
     final queue = _queue;
     if (queue == null) {
-      final now = DateTime.now().toUtc();
-      _queue = orderStudyReviewQueue([
-        for (final c in allCards)
-          if (widget.cardIds.contains(c.id) && !c.dueAt.isAfter(now)) c,
-      ], random: ref.read(sessionShuffleRandomProvider));
+      if (!_checkpointRead) return;
+      final restored = _restored;
+      _restored = null;
+      if (restored != null && _hydrate(restored, allCards)) return;
+      _startFresh(allCards);
       return;
     }
     // The queue is a snapshot taken when the session opened. An edit, reverse
@@ -175,6 +364,7 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
       _clearHistory();
     });
     _flipController.showFront();
+    _checkpoint.persist();
   }
 
   /// Forgetting a card's schedule, or removing it outright, rearranges the
@@ -204,6 +394,7 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
       _clearHistory();
     });
     _showFront();
+    _checkpoint.persist();
   }
 
   /// Puts a card the toast's Undo brought back at the head of the queue, so
@@ -226,6 +417,7 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
       _clearHistory();
     });
     _showFront();
+    _checkpoint.persist();
   }
 
   Future<void> _grade(StudyGrade grade) async {
@@ -252,6 +444,7 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
         _clearHistory();
       });
       _flipController.showFront();
+      _checkpoint.persist();
       return;
     }
 
@@ -293,6 +486,7 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
       _undone.clear();
     });
     _flipController.showFront();
+    _checkpoint.persist();
 
     _invalidateFor(graded);
   }
@@ -354,6 +548,7 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
       _grading = false;
     });
     _flipController.showFront();
+    _checkpoint.persist();
 
     _invalidateFor(restored);
   }
@@ -397,7 +592,9 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
     // downloading mid-session appears on the card it belongs to.
     final images = ref.watch(studyCardImagesProvider).valueOrNull ?? const {};
     final decksById = {
-      for (final deck in ref.watch(studyAllDecksProvider).valueOrNull ?? const <StudyDeck>[])
+      for (final deck
+          in ref.watch(studyAllDecksProvider).valueOrNull ??
+              const <StudyDeck>[])
         deck.id: deck,
     };
     final source = queue == null || queue.isEmpty

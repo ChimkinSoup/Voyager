@@ -2250,8 +2250,8 @@
     "semantic_hash": "a341dc55e56c335aece7e304e4ed7151"
   },
   "lib/features/leetcode/leetcode_code_field.dart": {
-    "mtime": 1789858405.1021645,
-    "ast_hash": "675be2c4a74d465f7efc49d267d0fdfa",
+    "mtime": 1789945328.9883323,
+    "ast_hash": "da2f2877314bc991a8baa21b748d01a7",
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_dashboard.dart": {
@@ -2650,8 +2650,8 @@
     "semantic_hash": "d0cbb589d2d23536aacb5eb9bea8d073"
   },
   "lib/core/vim/vim_session.dart": {
-    "mtime": 1789935679.2711391,
-    "ast_hash": "53fdc815548d08876c799e4991677c6e",
+    "mtime": 1789945437.9020412,
+    "ast_hash": "142468f9482fe7e85e1f216951c15ef5",
     "semantic_hash": ""
   },
   "lib/core/vim/vim_text_ops.dart": {
@@ -2925,8 +2925,8 @@
     "semantic_hash": "e9e01722bea277df400ea51f9b949af5"
   },
   "test/leetcode_code_field_vim_test.dart": {
-    "mtime": 1789935929.158842,
-    "ast_hash": "23e0cd4efe5dd73fd541d7cc0c78638c",
+    "mtime": 1789945459.1088862,
+    "ast_hash": "cb2a77f7aef70ef88b4a3a30ae7d509c",
     "semantic_hash": ""
   },
   "test/char_ops_encoder_isolate_test.dart": {
@@ -3200,8 +3200,8 @@
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_code_controller.dart": {
-    "mtime": 1789935977.8442578,
-    "ast_hash": "9d36deeb6165a445aafe052139a1b6fb",
+    "mtime": 1789944644.5311298,
+    "ast_hash": "0f418bc6dde49c8163eec3bcb166020e",
     "semantic_hash": ""
   },
   "test/leetcode_code_editing_test.dart": {
@@ -5345,13 +5345,13 @@
     "semantic_hash": ""
   },
   "lib/core/reminders/reminder_engine.dart": {
-    "mtime": 1789666204.550846,
-    "ast_hash": "006531854fb217ce5b0ffef7ed56c865",
+    "mtime": 1789941505.3721623,
+    "ast_hash": "eeec635f35f755f076855aedd159c1dc",
     "semantic_hash": ""
   },
   "lib/core/reminders/reminder_labels.dart": {
-    "mtime": 1789666407.5439043,
-    "ast_hash": "7142f967ada2fe855b50bf882221eb99",
+    "mtime": 1789940543.7373059,
+    "ast_hash": "d4eeb7bf8dd2cfa5dd43cf3e0c55d8f1",
     "semantic_hash": ""
   },
   "lib/core/reminders/reminder_os_notifier.dart": {
@@ -5435,13 +5435,13 @@
     "semantic_hash": ""
   },
   "lib/features/notifications/reminder_sticky_stack.dart": {
-    "mtime": 1789666204.5216632,
-    "ast_hash": "01a4d2e3723cb17b523ec6f8e9d6fcf7",
+    "mtime": 1789940566.9732487,
+    "ast_hash": "e799fc14261f93920fa8505352efd47c",
     "semantic_hash": ""
   },
   "lib/features/notifications/scheduled_reminders_section.dart": {
-    "mtime": 1789886829.1058342,
-    "ast_hash": "343224f3450a66a4a4be0b2274bbe285",
+    "mtime": 1789943921.8090606,
+    "ast_hash": "444548cc006e7bc313fafb12a18a1f23",
     "semantic_hash": ""
   },
   "lib/features/settings/devices_section.dart": {
@@ -5650,8 +5650,8 @@
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_cheat_sheet.dart": {
-    "mtime": 1789938144.1490824,
-    "ast_hash": "82a6d0dcb2cf868ceb2f035d2fc002b5",
+    "mtime": 1789944137.746255,
+    "ast_hash": "aa2483fc966b9ff7806066e51614e2dd",
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_cheat_text.dart": {
@@ -5682,6 +5682,16 @@
   "LEETCODE_CHEAT_SHEET_HLD.md": {
     "mtime": 1789929859.3818543,
     "ast_hash": "75ceede9129b771440bcefe91843f9ac",
+    "semantic_hash": ""
+  },
+  "lib/core/text/typing_rewrites.dart": {
+    "mtime": 1789945308.938299,
+    "ast_hash": "ab3bbf034dd4caafc73fd13067cf141f",
+    "semantic_hash": ""
+  },
+  "SESSION_RESUME_HLD.md": {
+    "mtime": 1789946409.6133034,
+    "ast_hash": "fd8eb28bb468d8e34c492c7ac382035d",
     "semantic_hash": ""
   }
 }

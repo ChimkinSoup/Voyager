@@ -1,17 +1,8 @@
-import 'dart:async';
-
-import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/features/leetcode/leetcode_code_controller.dart';
 import 'package:voyager/features/leetcode/leetcode_code_field.dart';
 import 'package:voyager/features/leetcode/leetcode_scratch_draft.dart';
-import 'package:voyager/features/leetcode/leetcode_scratch_draft_store.dart';
 import 'package:voyager/features/leetcode/leetcode_scratch_starter.dart';
-
-/// Debounce before scratch reaches disk. The same 400 ms the Track draft uses —
-/// long enough that ordinary typing writes once per pause, short enough that a
-/// crash costs at most the last few characters.
-const kLeetCodeScratchDebounce = Duration(milliseconds: 400);
 
 /// Every scratch pad typed during one Study or Cram run.
 ///
@@ -20,24 +11,14 @@ const kLeetCodeScratchDebounce = Duration(milliseconds: 400);
 /// here is a repository write — the problems it is keyed by never learn that a
 /// pad existed.
 ///
-/// The disk file is only ever a crash net. [start] takes the slot over the
-/// moment a session opens and [end] deletes it, so a file still sitting there
-/// when the next session opens means the last one died mid-run.
+/// Reaching disk is the session checkpoint's job. Every change calls
+/// [onChanged], and what to write is read back off [snapshot]: an unfinished
+/// run keeps its pads, and only a finish or a Start over throws them away.
 class LeetCodeScratchSessionController {
-  LeetCodeScratchSessionController({
-    required this.store,
-    required this.problemIds,
-  }) : sessionId = newId(),
-       startedAt = DateTime.now().toUtc();
+  LeetCodeScratchSessionController({required this.onChanged});
 
-  final LeetCodeScratchDraftStore store;
-
-  /// The problems this run opened over — carried into the file so a recovery
-  /// offer can say which session it is about.
-  final Set<String> problemIds;
-
-  final String sessionId;
-  final DateTime startedAt;
+  /// Told that there is something new to write down.
+  final void Function() onChanged;
 
   final _scratches = <String, LeetCodeScratchEntry>{};
 
@@ -53,60 +34,48 @@ class LeetCodeScratchSessionController {
   /// from the problem's own solution instead.
   String? get lastLanguage => _lastLanguage;
 
-  LeetCodeScratchSession? _recoverable;
-
-  /// Scratch from a run that never ended cleanly, held in memory until the
-  /// user answers the recovery offer. Never left on disk: this session claimed
-  /// the file at [start], so the orphan's only copy is this one.
-  LeetCodeScratchSession? get recoverable => _recoverable;
-
   /// Bumped whenever the buffers are replaced wholesale rather than typed
-  /// into — today only a recovery restore. The pad keys off it so the editor
-  /// remounts on the restored text instead of going on showing the starter it
-  /// was built with.
+  /// into — a resumed session, or a Start over. The pad keys off it so the
+  /// editor remounts on the new text instead of going on showing the starter
+  /// it was built with.
   int get generation => _generation;
   int _generation = 0;
 
-  Timer? _debounce;
-  bool _ended = false;
+  /// What the checkpoint writes down.
+  LeetCodeScratchSession snapshot() => LeetCodeScratchSession(
+    lastLanguage: _lastLanguage,
+    scratches: Map.of(_scratches),
+  );
 
-  /// Reads what the last run left behind, then takes the file over.
-  ///
-  /// Claiming it up front is deliberate: from here on the live session is what
-  /// is protected against a crash, and the orphan is safe in memory either
-  /// way. It also means a recovery offer the user ignores resolves to
-  /// "discard", which is the right default — a fresh session never silently
-  /// inherits yesterday's work.
-  Future<LeetCodeScratchSession?> start() async {
-    final previous = await store.load();
-    if (_ended) return null;
-    _recoverable = previous != null && previous.isOrphan ? previous : null;
-    await _flush();
-    return _recoverable;
-  }
-
-  /// Copies the orphan's pads into this session. Queue position is not
-  /// replayed — only what was typed carries over.
-  void restoreRecoverable() {
-    final orphan = _recoverable;
-    if (orphan == null) return;
-    _scratches.addAll(orphan.scratches);
-    _lastLanguage ??= orphan.lastLanguage;
-    for (final entry in orphan.scratches.entries) {
+  /// Takes the pads of the run being resumed. Queue position is the
+  /// checkpoint's to restore; this is only what was typed.
+  void restore(LeetCodeScratchSession blob) {
+    _scratches.addAll(blob.scratches);
+    _lastLanguage ??= blob.lastLanguage;
+    for (final entry in blob.scratches.entries) {
       _controllerFor(entry.key, entry.value).fullText = entry.value.code;
     }
-    _recoverable = null;
     _generation++;
-    _scheduleFlush();
   }
 
-  void discardRecoverable() => _recoverable = null;
+  /// Drops everything typed, for a Start over: the run it belonged to is not
+  /// one the user is coming back to.
+  void reset() {
+    _scratches.clear();
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    _controllers.clear();
+    _lastLanguage = null;
+    _generation++;
+    onChanged();
+  }
 
   /// This problem's pad, created on its first visit in the session.
   ///
   /// Called from build: an entry that already exists — a revisit, an undo, a
-  /// restored orphan — comes back untouched, so the starter is only ever
-  /// derived once and can never overwrite what the user typed.
+  /// resumed run — comes back untouched, so the starter is only ever derived
+  /// once and can never overwrite what the user typed.
   LeetCodeScratchEntry entryFor(LeetCodeProblem problem) {
     final held = _scratches[problem.id];
     if (held != null) return held;
@@ -119,7 +88,7 @@ class LeetCodeScratchSessionController {
     );
     _scratches[problem.id] = entry;
     _controllerFor(problem.id, entry);
-    _scheduleFlush();
+    onChanged();
     return entry;
   }
 
@@ -167,7 +136,7 @@ class LeetCodeScratchSessionController {
       // changes.
       _controllers[problemId]?.language = leetCodeHighlightMode(language);
     }
-    _scheduleFlush();
+    onChanged();
   }
 
   /// Resets the pad to the starter it opened on. Deterministic, so there is no
@@ -182,7 +151,7 @@ class LeetCodeScratchSessionController {
   }
 
   /// Drops a problem that has been deleted out from under the session, so its
-  /// pad stops being written to the recovery file.
+  /// pad stops being written to the checkpoint.
   void retainOnly(Set<String> liveIds) {
     final gone = _scratches.keys.where((id) => !liveIds.contains(id)).toList();
     if (gone.isEmpty) return;
@@ -190,51 +159,13 @@ class LeetCodeScratchSessionController {
       _scratches.remove(id);
       _controllers.remove(id)?.dispose();
     }
-    _scheduleFlush();
-  }
-
-  /// The session ended the way it was meant to, so there is nothing to
-  /// recover — the file goes. Chained behind any pending write, so a debounce
-  /// that already fired cannot land after the delete and resurrect it.
-  Future<void> end() async {
-    if (_ended) return;
-    _ended = true;
-    _debounce?.cancel();
-    _debounce = null;
-    await store.clear();
+    onChanged();
   }
 
   void dispose() {
-    _debounce?.cancel();
-    _debounce = null;
     for (final controller in _controllers.values) {
       controller.dispose();
     }
     _controllers.clear();
   }
-
-  void _scheduleFlush() {
-    _debounce?.cancel();
-    _debounce = Timer(kLeetCodeScratchDebounce, _flush);
-  }
-
-  Future<void> _flush() {
-    _debounce?.cancel();
-    _debounce = null;
-    if (_ended) return Future<void>.value();
-    return store.save(
-      LeetCodeScratchSession(
-        sessionId: sessionId,
-        problemIds: problemIds,
-        startedAt: startedAt,
-        lastLanguage: _lastLanguage,
-        scratches: Map.of(_scratches),
-      ),
-    );
-  }
-
-  /// Writes whatever is pending right now, ahead of the debounce. Used at the
-  /// moments the user has visibly finished with a pad — closing the expanded
-  /// editor, moving to the next problem.
-  Future<void> flushNow() => _ended ? Future<void>.value() : _flush();
 }

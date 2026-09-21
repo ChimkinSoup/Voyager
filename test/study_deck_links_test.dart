@@ -29,6 +29,7 @@ import 'package:voyager/features/study/study_linked_deck.dart';
 import 'package:voyager/features/study/study_session_page.dart';
 
 import 'fakes/fake_weather_api_client.dart';
+import 'fakes/memory_session_checkpoints.dart';
 
 const _hub = 'hub';
 const _aws = 'aws';
@@ -92,6 +93,7 @@ ProviderContainer _container(AppDatabase db) {
       databaseProvider.overrideWithValue(db),
       syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
       weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+      memorySessionCheckpoints(),
     ],
   );
   addTearDown(container.dispose);

@@ -17,6 +17,7 @@ import 'package:voyager/features/leetcode/leetcode_cram_page.dart';
 import 'package:voyager/features/leetcode/leetcode_mini_flashcard.dart';
 import 'package:voyager/features/leetcode/leetcode_review_deck.dart';
 import 'package:voyager/features/leetcode/leetcode_session_page.dart';
+import 'fakes/memory_session_checkpoints.dart';
 
 class _FakeLeetCodeRepository implements LeetCodeRepository {
   _FakeLeetCodeRepository(this.problems);
@@ -101,6 +102,7 @@ Future<void> _pumpDeck(
           _FakeLeetCodeRepository(problems),
         ),
         remoteSyncServiceProvider.overrideWithValue(_NoopRemoteSync()),
+        memorySessionCheckpoints(),
       ],
       child: const MaterialApp(
         home: Scaffold(body: SafeArea(child: LeetCodeReviewDeck())),

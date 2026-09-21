@@ -610,7 +610,7 @@ class _ScheduledReminderEditorState
     final now = DateTime.now();
     _title = TextEditingController(text: rule?.title ?? '');
     _body = TextEditingController(text: rule?.body ?? '');
-    _kind = rule?.scheduleKind ?? ReminderScheduleKind.daily;
+    _kind = rule?.scheduleKind ?? ReminderScheduleKind.once;
     // A new reminder starts on the next whole hour.
     _minutes = rule?.localTimeMinutes ?? ((now.hour + 1) % 24) * 60;
     _weekdays = {...?rule?.weeklyWeekdays};
@@ -816,16 +816,16 @@ class _ScheduledReminderEditorState
               SegmentedButton<ReminderScheduleKind>(
                 segments: const [
                   ButtonSegment(
+                    value: ReminderScheduleKind.once,
+                    label: Text('Once'),
+                  ),
+                  ButtonSegment(
                     value: ReminderScheduleKind.daily,
                     label: Text('Daily'),
                   ),
                   ButtonSegment(
                     value: ReminderScheduleKind.weekly,
                     label: Text('Weekly'),
-                  ),
-                  ButtonSegment(
-                    value: ReminderScheduleKind.once,
-                    label: Text('Once'),
                   ),
                 ],
                 selected: {_kind},

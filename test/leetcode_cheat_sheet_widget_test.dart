@@ -190,6 +190,39 @@ Future<void> _tapScrim(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Drags [handle] by [dy], in the steps a reorderable list needs to see the
+/// pointer cross its neighbours.
+Future<void> _dragBy(WidgetTester tester, Finder handle, double dy) async {
+  final step = dy.isNegative ? -20.0 : 20.0;
+  final gesture = await tester.startGesture(tester.getCenter(handle));
+  await tester.pump(const Duration(milliseconds: 20));
+  for (var moved = 0.0; moved.abs() < dy.abs(); moved += step) {
+    await gesture.moveBy(Offset(0, step));
+    await tester.pump(const Duration(milliseconds: 16));
+  }
+  await gesture.up();
+  await tester.pumpAndSettle();
+}
+
+List<String> _sectionNames(ProviderContainer container) => [
+  for (final section
+      in container
+          .read(leetCodeCheatSheetProvider)
+          .requireValue
+          .sectionsOf('tab-1'))
+    section.name,
+];
+
+/// The commands of the only seeded multi-entry section, in order.
+List<String> _entryCommands(ProviderContainer container) => [
+  for (final entry
+      in container
+          .read(leetCodeCheatSheetProvider)
+          .requireValue
+          .entriesOf('extra-section-1'))
+    entry.command,
+];
+
 void main() {
   setUpAll(() => driftRuntimeOptions.dontWarnAboutMultipleDatabases = true);
 
@@ -555,6 +588,97 @@ void main() {
     }
   });
 
+  group('reorder handles', () {
+    // Desktop only: that is where the framework draws its default handle as
+    // an icon. On the test's default platform it wraps the whole item in a
+    // long-press listener instead, and the stray icon would never appear.
+    final windows = TargetPlatformVariant.only(TargetPlatform.windows);
+
+    // Editing used the framework's desktop default, which floats a handle over
+    // the centre-right of each item. On a section four entries tall that lands
+    // in the middle of somebody's description, and on an entry it lands on top
+    // of the delete button. Both lists build their own instead.
+    testWidgets('no handle floats loose over the rows', (tester) async {
+      await _pumpSheetHost(tester, sections: 2);
+      await _openSheet(tester);
+      await tester.tap(find.widgetWithText(Tooltip, 'Edit').first);
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.drag_handle), findsNothing);
+      expect(find.byTooltip('Drag to reorder this entry'), findsWidgets);
+
+      await tester.tap(find.byTooltip('Close the cheat sheet'));
+      await tester.pumpAndSettle();
+    }, variant: windows);
+
+    // Sections move from the rail, not the body: a section's drag proxy is
+    // every entry under it, which is taller than the sheet.
+    testWidgets('the rail offers grips only while Editing', (tester) async {
+      await _pumpSheetHost(tester, sections: 2);
+      await _openSheet(tester);
+      expect(find.byTooltip('Drag to reorder this section'), findsNothing);
+
+      await tester.tap(find.widgetWithText(Tooltip, 'Edit').first);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Drag to reorder this section'), findsNWidgets(3));
+
+      await tester.tap(find.byTooltip('Close the cheat sheet'));
+      await tester.pumpAndSettle();
+    }, variant: windows);
+
+    testWidgets('a rail grip moves the section', (tester) async {
+      final container = await _pumpSheetHost(tester, sections: 2);
+      await _openSheet(tester);
+      await tester.tap(find.widgetWithText(Tooltip, 'Edit').first);
+      await tester.pumpAndSettle();
+
+      expect(_sectionNames(container), ['ArrayList', 'Section 1', 'Section 2']);
+
+      final grips = find.byTooltip('Drag to reorder this section');
+      final span =
+          tester.getCenter(grips.at(1)).dy - tester.getCenter(grips.first).dy;
+      await _dragBy(tester, grips.first, span);
+
+      expect(_sectionNames(container), ['Section 1', 'ArrayList', 'Section 2']);
+
+      await tester.tap(find.byTooltip('Close the cheat sheet'));
+      await tester.pumpAndSettle();
+    }, variant: windows);
+
+    testWidgets('an entry grip moves the entry inside its section', (
+      tester,
+    ) async {
+      final container = await _pumpSheetHost(tester, sections: 1);
+      await _openSheet(tester);
+      await tester.tap(find.widgetWithText(Tooltip, 'Edit').first);
+      await tester.pumpAndSettle();
+
+      expect(_entryCommands(container), [
+        '.method10()',
+        '.method11()',
+        '.method12()',
+        '.method13()',
+      ]);
+
+      // The one-entry seed section comes first, so its grip is index 0 and the
+      // two being swapped are the next pair.
+      final grips = find.byTooltip('Drag to reorder this entry');
+      final span =
+          tester.getCenter(grips.at(2)).dy - tester.getCenter(grips.at(1)).dy;
+      await _dragBy(tester, grips.at(1), span);
+
+      expect(_entryCommands(container), [
+        '.method11()',
+        '.method10()',
+        '.method12()',
+        '.method13()',
+      ]);
+
+      await tester.tap(find.byTooltip('Close the cheat sheet'));
+      await tester.pumpAndSettle();
+    }, variant: windows);
+  });
+
   // [GlassButton] has no intrinsic-width guard, so an Align stretched this one
   // across the whole content column — a footer bar rather than the sibling of
   // "Add entry" it is meant to read as.
@@ -569,7 +693,7 @@ void main() {
     final button = tester.getSize(
       find.widgetWithText(GlassButton, 'Add section'),
     );
-    final column = tester.getSize(find.byType(ReorderableListView).first);
+    final column = tester.getSize(find.byType(ListView).first);
     expect(button.width, lessThan(column.width / 2));
 
     // Closed before the container goes, so the route's flush-on-dispose still

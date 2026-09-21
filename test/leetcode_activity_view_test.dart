@@ -323,4 +323,66 @@ void main() {
       findsOneWidget,
     );
   });
+
+  // Reviews are kept out of the tint on purpose, which left a day of nothing
+  // but review work looking identical to a day off. The corner ring is what
+  // tells those two apart.
+  testWidgets('a review-only day is ringed on the unfiltered heatmap', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final year = DateTime.now().year;
+    final byDay = {
+      // Reviewed, nothing solved: no tint to go on, so this is the day the
+      // ring exists for.
+      DateTime(year, 6, 10): const LeetCodeDayCounts(reviews: 2),
+      // Solved and reviewed: lit *and* ringed.
+      DateTime(year, 6, 11): const LeetCodeDayCounts(medium: 1, reviews: 1),
+      // Solved only: lit, no ring.
+      DateTime(year, 6, 12): const LeetCodeDayCounts(hard: 1),
+    };
+
+    Future<void> pump(LeetCodeActivitySeries? series) => tester.pumpWidget(
+      ProviderScope(
+        overrides: [settingsProvider.overrideWith(_FixedSettings.new)],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 1000,
+              height: 800,
+              child: LeetCodeActivityCalendar(byDay: byDay, series: series),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // Scoped to the month tiles so the year row's chevrons can't count.
+    final rings = find.descendant(
+      of: find.byType(Card),
+      matching: find.byWidgetPredicate(
+        (w) =>
+            w is Container &&
+            w.decoration is BoxDecoration &&
+            (w.decoration! as BoxDecoration).shape == BoxShape.circle,
+      ),
+    );
+
+    await pump(null);
+    await tester.pump();
+    expect(rings, findsNWidgets(2));
+
+    // Filtered, the tint is already counting one series — a second signal on
+    // top of it would be reading the grid two ways at once.
+    await pump(LeetCodeActivitySeries.reviewed);
+    await tester.pump();
+    expect(rings, findsNothing);
+
+    await pump(LeetCodeActivitySeries.medium);
+    await tester.pump();
+    expect(rings, findsNothing);
+  });
 }

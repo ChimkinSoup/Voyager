@@ -1,14 +1,16 @@
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/session_resume/session_checkpoint_controller.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
-import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/features/leetcode/leetcode_cheat_providers.dart';
-import 'package:voyager/features/leetcode/leetcode_scratch_draft_store.dart';
+import 'package:voyager/features/leetcode/leetcode_scratch_draft.dart';
 import 'package:voyager/features/leetcode/leetcode_scratch_pad.dart';
 import 'package:voyager/features/leetcode/leetcode_scratch_session.dart';
 
@@ -17,8 +19,7 @@ import 'package:voyager/features/leetcode/leetcode_scratch_session.dart';
 const double _kStackedPadHeight = 300;
 
 /// Everything a Study or Cram session needs to carry a scratch code pad:
-/// the session controller, the split layout, the fullscreen editor, and the
-/// crash-recovery offer.
+/// the session controller, the split layout, and the fullscreen editor.
 ///
 /// A mixin rather than a wrapper widget because the pad is not a decoration
 /// around the session — it changes how the card is laid out, what the keyboard
@@ -29,7 +30,18 @@ mixin LeetCodeScratchHost<T extends ConsumerStatefulWidget>
   /// The problems the session opened over.
   Set<String> get scratchProblemIds;
 
+  /// The page's checkpoint. Scratch has no file of its own: what is typed
+  /// belongs to the run, and the run is what is written down.
+  SessionCheckpointController get sessionCheckpoint;
+
   LeetCodeScratchSessionController? _scratch;
+
+  /// Pads from a resumed run, held until there is a controller to put them
+  /// in — the checkpoint is read before the setting has resolved.
+  ///
+  /// With the setting off they stay here untouched and go back into the
+  /// checkpoint as they came, so turning the pad on later still finds them.
+  LeetCodeScratchSession? _primed;
 
   /// Whether the setting said yes, latched the first time settings resolved.
   ///
@@ -44,6 +56,40 @@ mixin LeetCodeScratchHost<T extends ConsumerStatefulWidget>
   bool _expanding = false;
 
   bool get scratchEnabled => _scratch != null;
+
+  /// The pads as they stand, for the checkpoint to write down.
+  LeetCodeScratchSession? get scratchSnapshot =>
+      _scratch?.snapshot() ?? _primed;
+
+  /// Hands the session the pads it was typed with before it was left.
+  void primeScratch(LeetCodeScratchSession? blob) {
+    if (blob == null) return;
+    _primed = blob;
+    if (_scratch != null) _applyPrimed(_scratch!);
+  }
+
+  /// Throws the pads away, for a Start over: the run they belonged to is not
+  /// one the user is coming back to.
+  void resetScratch() {
+    _primed = null;
+    _scratch?.reset();
+  }
+
+  void _applyPrimed(LeetCodeScratchSessionController controller) {
+    final blob = _primed;
+    if (blob == null) return;
+    _primed = null;
+    controller.restore(blob);
+    // A run left with the editor open comes back with it open — the pad has
+    // to be laid out again first, since the overlay grows out of where it
+    // ends up.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final problem = scratchCurrentProblem;
+      if (problem == null || !controller.entryFor(problem).expanded) return;
+      _expandScratch();
+    });
+  }
 
   /// Whether something other than the card owns the session's input.
   ///
@@ -82,53 +128,12 @@ mixin LeetCodeScratchHost<T extends ConsumerStatefulWidget>
     _scratchSettingLatched = enabled;
     if (!enabled) return;
 
+    _discardLegacyScratchFile();
     final controller = LeetCodeScratchSessionController(
-      store: ref.read(leetCodeScratchDraftStoreProvider),
-      problemIds: scratchProblemIds,
+      onChanged: sessionCheckpoint.persist,
     );
     _scratch = controller;
-    // Reading the file and offering what it holds both have to wait for the
-    // frame this was created in to finish.
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final orphan = await controller.start();
-      if (!mounted || orphan == null) return;
-      _offerRecovery(controller);
-    });
-  }
-
-  void _offerRecovery(LeetCodeScratchSessionController controller) {
-    showVoyagerToast(
-      context,
-      message: 'Your last session left scratch code behind.',
-      icon: PhosphorIconsRegular.clockCounterClockwise,
-      // Dismissing without answering means discard, which is safe: this
-      // session already owns the file, so the orphan is only in memory.
-      dwell: const Duration(seconds: 12),
-      actions: [
-        VoyagerToastAction(
-          label: 'Restore',
-          onPressed: () {
-            controller.restoreRecoverable();
-            if (!mounted) return;
-            setState(() {});
-            // A run that died with the editor open comes back with it open —
-            // the pad has to be laid out again first, since the overlay grows
-            // out of where it ends up.
-            final problem = scratchCurrentProblem;
-            if (problem == null || !controller.entryFor(problem).expanded) {
-              return;
-            }
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _expandScratch();
-            });
-          },
-        ),
-        VoyagerToastAction(
-          label: 'Discard',
-          onPressed: controller.discardRecoverable,
-        ),
-      ],
-    );
+    _applyPrimed(controller);
   }
 
   /// Drops pads for problems deleted out from under the session.
@@ -136,7 +141,7 @@ mixin LeetCodeScratchHost<T extends ConsumerStatefulWidget>
 
   /// Writes what is pending ahead of the debounce — called where the user has
   /// visibly finished with a pad, which is every problem advance.
-  void flushScratch() => _scratch?.flushNow();
+  void flushScratch() => sessionCheckpoint.flush();
 
   /// Focuses the pad, and opens it fullscreen — the locked behaviour for `C`,
   /// which is one key for "I want to write code now".
@@ -175,7 +180,7 @@ mixin LeetCodeScratchHost<T extends ConsumerStatefulWidget>
     controller.update(problem.id, expanded: false);
     // The pad is closed for good now, so this is one of the moments worth
     // beating the debounce to.
-    controller.flushNow();
+    flushScratch();
     setState(() => _expanding = false);
   }
 
@@ -272,12 +277,29 @@ mixin LeetCodeScratchHost<T extends ConsumerStatefulWidget>
   void dispose() {
     _padFocus.removeListener(_onPadFocusChanged);
     _padFocus.dispose();
-    // Disposal *is* the normal exit — the × button, Back to deck, and a system
-    // back all pop the route and land here, while a crash never does. So this
-    // is the one place that has to delete the recovery file, and the only
-    // reason a file is ever left behind for the next session to find.
-    _scratch?.end();
+    // Disposal is an exit, not an ending: the × button, Back to deck and a
+    // system back all leave a session that is not finished, and what was
+    // typed stays with it in the checkpoint until it is.
     _scratch?.dispose();
     super.dispose();
+  }
+}
+
+/// The file scratch used to live in, before it moved into the session
+/// checkpoint. One left over from a build before the move is a run nobody can
+/// resume any more, so it goes the first time a session opens.
+var _legacyScratchSwept = false;
+
+Future<void> _discardLegacyScratchFile() async {
+  if (_legacyScratchSwept) return;
+  _legacyScratchSwept = true;
+  try {
+    final dir = await getApplicationDocumentsDirectory();
+    final file = File(p.join(dir.path, 'leetcode_scratch_session.json'));
+    if (await file.exists()) await file.delete();
+  } catch (error) {
+    // Nothing here is worth interrupting a session for: at worst a stale
+    // file stays on disk, unread.
+    debugPrint('Legacy scratch file could not be cleared: $error');
   }
 }

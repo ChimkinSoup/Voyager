@@ -15,6 +15,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/session_resume/session_checkpoint_store.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -121,6 +122,9 @@ Future<_RecordingStudyRepository> _pump(
       overrides: [
         studyRepositoryProvider.overrideWithValue(repo),
         remoteSyncServiceProvider.overrideWithValue(_NoopRemoteSync()),
+        sessionCheckpointStoreProvider.overrideWithValue(
+          MemorySessionCheckpointStore(),
+        ),
         noSessionShuffle,
       ],
       child: MaterialApp(home: page),

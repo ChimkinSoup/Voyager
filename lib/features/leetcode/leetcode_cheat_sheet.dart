@@ -11,6 +11,7 @@ import 'package:voyager/core/sync/debouncer.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/rounded_drag_proxy.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
@@ -380,7 +381,13 @@ class _CheatSheetOverlayState extends ConsumerState<_CheatSheetOverlay>
               if (wide && !filtering && tab != null)
                 _OutlineRail(
                   sections: data.sectionsOf(tab.id),
+                  editing: _editing,
                   onJump: _jumpToSection,
+                  onReorder: (oldIndex, newIndex) => _actions.reorderSections(
+                    data.sectionsOf(tab.id),
+                    oldIndex,
+                    newIndex,
+                  ),
                 ),
               Expanded(
                 child: filtering
@@ -422,8 +429,6 @@ class _CheatSheetOverlayState extends ConsumerState<_CheatSheetOverlay>
             entryEditorFor: _entryEditorFor,
             sectionEditorFor: _sectionEditorFor,
             sectionKeyFor: _sectionKeyFor,
-            onReorderSections: (oldIndex, newIndex) =>
-                _actions.reorderSections(sections, oldIndex, newIndex),
             onReorderEntries: (sectionId, oldIndex, newIndex) => _actions
                 .reorderEntries(data.entriesOf(sectionId), oldIndex, newIndex),
             onAddSection: () =>
@@ -983,10 +988,22 @@ class _TabPill extends StatelessWidget {
 // --- Outline rail ------------------------------------------------------------
 
 class _OutlineRail extends StatelessWidget {
-  const _OutlineRail({required this.sections, required this.onJump});
+  const _OutlineRail({
+    required this.sections,
+    required this.editing,
+    required this.onJump,
+    required this.onReorder,
+  });
 
   final List<LeetCodeCheatSection> sections;
+
+  /// Whether the rail also *moves* sections, which it only does in Editing.
+  final bool editing;
+
   final ValueChanged<String> onJump;
+  final void Function(int oldIndex, int newIndex) onReorder;
+
+  static const _padding = EdgeInsets.symmetric(vertical: 12, horizontal: 8);
 
   @override
   Widget build(BuildContext context) {
@@ -996,33 +1013,62 @@ class _OutlineRail extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(right: BorderSide(color: theme.dividerColor, width: 1)),
       ),
-      child: VoyagerScrollView(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final section in sections)
-              TextButton(
-                style: TextButton.styleFrom(
-                  alignment: Alignment.centerLeft,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 6,
+      // The rail is where a section is moved, because the body cannot be: a
+      // section's drag proxy is its heading *and every entry under it*, which
+      // is routinely taller than the sheet — tall enough that the framework's
+      // auto-scroller asserts on it and then fights the drag. One line per
+      // section is a proxy that behaves.
+      child: editing
+          ? ReorderableListView(
+              padding: _padding,
+              buildDefaultDragHandles: false,
+              proxyDecorator: roundedDragProxy,
+              onReorderItem: onReorder,
+              children: [
+                for (var i = 0; i < sections.length; i++)
+                  Row(
+                    key: ValueKey(sections[i].id),
+                    children: [
+                      _DragGrip(
+                        index: i,
+                        tooltip: 'Drag to reorder this section',
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 6,
+                        ),
+                      ),
+                      Expanded(child: _railLabel(theme, sections[i])),
+                    ],
                   ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  foregroundColor: theme.colorScheme.onSurfaceVariant,
-                ),
-                onPressed: () => onJump(section.id),
-                child: Text(
-                  section.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall,
-                ),
+              ],
+            )
+          : VoyagerScrollView(
+              padding: _padding,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final section in sections) _railLabel(theme, section),
+                ],
               ),
-          ],
-        ),
+            ),
+    );
+  }
+
+  Widget _railLabel(ThemeData theme, LeetCodeCheatSection section) {
+    return TextButton(
+      style: TextButton.styleFrom(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        foregroundColor: theme.colorScheme.onSurfaceVariant,
+      ),
+      onPressed: () => onJump(section.id),
+      child: Text(
+        section.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.bodySmall,
       ),
     );
   }
@@ -1418,7 +1464,6 @@ class _EditingBody extends StatelessWidget {
     required this.entryEditorFor,
     required this.sectionEditorFor,
     required this.sectionKeyFor,
-    required this.onReorderSections,
     required this.onReorderEntries,
     required this.onAddSection,
     required this.onAddEntry,
@@ -1437,7 +1482,6 @@ class _EditingBody extends StatelessWidget {
   /// ever mounted, so the key is never in two places at once.
   final GlobalKey Function(String) sectionKeyFor;
 
-  final void Function(int oldIndex, int newIndex) onReorderSections;
   final void Function(String sectionId, int oldIndex, int newIndex)
   onReorderEntries;
   final VoidCallback onAddSection;
@@ -1451,23 +1495,24 @@ class _EditingBody extends StatelessWidget {
     return Column(
       children: [
         Expanded(
-          child: ReorderableListView(
-            scrollController: scrollController,
+          // A plain list: sections are moved from the outline rail, for the
+          // reason [_OutlineRail] gives.
+          child: ListView(
+            controller: scrollController,
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-            onReorderItem: onReorderSections,
             children: [
-              for (final section in sections)
+              for (var i = 0; i < sections.length; i++)
                 _EditingSection(
-                  key: sectionKeyFor(section.id),
-                  section: section,
+                  key: sectionKeyFor(sections[i].id),
+                  section: sections[i],
                   tab: tab,
-                  entries: data.entriesOf(section.id),
-                  nameEditor: sectionEditorFor(section),
+                  entries: data.entriesOf(sections[i].id),
+                  nameEditor: sectionEditorFor(sections[i]),
                   entryEditorFor: entryEditorFor,
                   onReorderEntries: (oldIndex, newIndex) =>
-                      onReorderEntries(section.id, oldIndex, newIndex),
-                  onAddEntry: () => onAddEntry(section.id),
-                  onDelete: () => onDeleteSection(section),
+                      onReorderEntries(sections[i].id, oldIndex, newIndex),
+                  onAddEntry: () => onAddEntry(sections[i].id),
+                  onDelete: () => onDeleteSection(sections[i]),
                   onDeleteEntry: onDeleteEntry,
                 ),
             ],
@@ -1564,15 +1609,18 @@ class _EditingSection extends StatelessWidget {
             shrinkWrap: true,
             // Nested inside the sections list, which owns the scrolling.
             physics: const NeverScrollableScrollPhysics(),
+            buildDefaultDragHandles: false,
+            proxyDecorator: roundedDragProxy,
             onReorderItem: onReorderEntries,
             children: [
-              for (final entry in entries)
+              for (var i = 0; i < entries.length; i++)
                 _EditingEntry(
-                  key: ValueKey(entry.id),
-                  entry: entry,
+                  key: ValueKey(entries[i].id),
+                  index: i,
+                  entry: entries[i],
                   tab: tab,
-                  editors: entryEditorFor(entry),
-                  onDelete: () => onDeleteEntry(entry),
+                  editors: entryEditorFor(entries[i]),
+                  onDelete: () => onDeleteEntry(entries[i]),
                 ),
             ],
           ),
@@ -1594,12 +1642,14 @@ class _EditingSection extends StatelessWidget {
 class _EditingEntry extends StatelessWidget {
   const _EditingEntry({
     super.key,
+    required this.index,
     required this.entry,
     required this.tab,
     required this.editors,
     required this.onDelete,
   });
 
+  final int index;
   final LeetCodeCheatEntry entry;
   final LeetCodeCheatTab tab;
   final _EntryEditors editors;
@@ -1649,6 +1699,7 @@ class _EditingEntry extends StatelessWidget {
                   ),
                 ),
               ),
+              _DragGrip(index: index, tooltip: 'Drag to reorder this entry'),
               IconButton(
                 icon: const Icon(PhosphorIconsRegular.trash, size: 14),
                 tooltip: 'Delete this entry',
@@ -1663,7 +1714,7 @@ class _EditingEntry extends StatelessWidget {
           // exactly as every other prose field in the app. Inset to match the
           // indent Viewing gives the same text.
           Padding(
-            padding: const EdgeInsets.only(left: 20, right: 28),
+            padding: const EdgeInsets.only(left: 20, right: 56),
             child: VoyagerTextField(
               controller: editors.description,
               focusNode: editors.descriptionFocus,
@@ -1683,6 +1734,45 @@ class _EditingEntry extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The grab target for a drag, standing in for the handle the framework
+/// would have drawn itself.
+///
+/// [padding] is what lines it up with whatever sits beside it: an entry's grip
+/// matches the 40pt box of the trash [IconButton] it shares a top-aligned row
+/// with, while the rail's rows are half that tall.
+class _DragGrip extends StatelessWidget {
+  const _DragGrip({
+    required this.index,
+    required this.tooltip,
+    this.padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+  });
+
+  final int index;
+  final String tooltip;
+  final EdgeInsets padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return ReorderableDragStartListener(
+      index: index,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: Tooltip(
+          message: tooltip,
+          child: Padding(
+            padding: padding,
+            child: Icon(
+              PhosphorIconsRegular.dotsSixVertical,
+              size: 16,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
       ),
     );
   }

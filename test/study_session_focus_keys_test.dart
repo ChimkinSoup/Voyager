@@ -19,7 +19,7 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/leetcode/leetcode_cram_page.dart';
-import 'package:voyager/features/leetcode/leetcode_scratch_draft_store.dart';
+import 'package:voyager/core/session_resume/session_checkpoint_store.dart';
 import 'package:voyager/features/leetcode/leetcode_scratch_pad.dart';
 import 'package:voyager/features/leetcode/leetcode_session_page.dart';
 import 'package:voyager/features/study/study_cram_page.dart';
@@ -132,6 +132,9 @@ List<LeetCodeProblem> _problems() {
 List<Override> _studyOverrides() => [
   studyRepositoryProvider.overrideWithValue(_RecordingStudyRepository(_cards(3))),
   remoteSyncServiceProvider.overrideWithValue(_NoopRemoteSync()),
+  sessionCheckpointStoreProvider.overrideWithValue(
+    MemorySessionCheckpointStore(),
+  ),
   noSessionShuffle,
 ];
 
@@ -140,8 +143,8 @@ List<Override> _leetCodeOverrides() => [
     _StubLeetCodeRepository(_problems()),
   ),
   remoteSyncServiceProvider.overrideWithValue(_NoopRemoteSync()),
-  leetCodeScratchDraftStoreProvider.overrideWithValue(
-    MemoryLeetCodeScratchDraftStore(),
+  sessionCheckpointStoreProvider.overrideWithValue(
+    MemorySessionCheckpointStore(),
   ),
   settingsProvider.overrideWith(_FixedSettings.new),
   noSessionShuffle,

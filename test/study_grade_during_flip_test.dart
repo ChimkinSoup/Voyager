@@ -15,6 +15,7 @@ import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 import 'package:voyager/features/study/study_keyboard_shortcuts.dart';
 import 'package:voyager/features/study/study_session_page.dart';
+import 'fakes/memory_session_checkpoints.dart';
 
 const _deckId = 'session-deck';
 
@@ -36,7 +37,10 @@ List<StudyCard> _dueCards() {
 Future<void> _pumpSession(WidgetTester tester) async {
   final cards = _dueCards();
   final container = ProviderContainer(
-    overrides: [studyAllCardsProvider.overrideWith((ref) async => cards)],
+    overrides: [
+      studyAllCardsProvider.overrideWith((ref) async => cards),
+      memorySessionCheckpoints(),
+    ],
   );
   addTearDown(container.dispose);
 

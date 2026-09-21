@@ -23,6 +23,7 @@ import 'package:voyager/features/study/study_session_page.dart';
 
 import 'fakes/fake_weather_api_client.dart';
 import 'fakes/input_order_random.dart';
+import 'fakes/memory_session_checkpoints.dart';
 
 const _deckId = 'study-delete-deck';
 
@@ -57,6 +58,7 @@ Future<void> _pump(WidgetTester tester, AppDatabase db, Widget page) async {
       databaseProvider.overrideWithValue(db),
       syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
       weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+      memorySessionCheckpoints(),
       noSessionShuffle,
     ],
   );

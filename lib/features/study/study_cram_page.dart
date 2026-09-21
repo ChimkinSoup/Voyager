@@ -4,6 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/media/widgets/media_lightbox.dart';
+import 'package:voyager/core/session_resume/session_checkpoint.dart';
+import 'package:voyager/core/session_resume/session_checkpoint_controller.dart';
+import 'package:voyager/core/session_resume/session_checkpoint_store.dart';
+import 'package:voyager/core/session_resume/session_resume_toast.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -95,17 +99,177 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
   );
   bool _exiting = false;
 
+  late final SessionCheckpointController _checkpoint;
+
+  /// The deck's roster as it stood when the buckets were last built. A card
+  /// added while the run was away is missing from here, and joins bucket 0
+  /// rather than the bucket its neighbours are in.
+  final _sourceIds = <String>{};
+
+  /// The unfinished run the slot was holding when the page opened, kept until
+  /// the cards arrive and it can be hydrated.
+  SessionCheckpoint? _restored;
+
+  /// Whether the slot has been read. The buckets wait for it rather than
+  /// being filled and then replaced a frame later.
+  bool _checkpointRead = false;
+
   @override
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_handleArrowKey);
+    _checkpoint = SessionCheckpointController(
+      store: ref.read(sessionCheckpointStoreProvider),
+      kind: SessionCheckpointKind.studyCram,
+      scopeKey: 'deck:${widget.deckId}',
+      build: _buildCheckpoint,
+    );
+    _checkpoint.load().then((restored) {
+      if (!mounted) return;
+      setState(() {
+        _restored = restored;
+        _checkpointRead = true;
+      });
+    });
   }
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleArrowKey);
     _cardX.dispose();
+    // Disposal is every incomplete exit there is. Fired rather than awaited —
+    // the store chains its writes, so this lands even though the page is gone.
+    _checkpoint.flush();
+    _checkpoint.dispose();
     super.dispose();
+  }
+
+  /// The run as it stands, or null when there is nothing to come back to: a
+  /// deck emptied out from under it, or every card mastered.
+  SessionCheckpoint? _buildCheckpoint() {
+    final held = _cardsById;
+    if (held == null || held.isEmpty || _complete) return null;
+    return _checkpoint.envelope(
+      sourceIds: _sourceIds,
+      buckets: _bucketsNow(),
+      decided: [for (final step in _decided) _dtoFor(step)],
+      undoneCram: [for (final step in _undone) _dtoFor(step)],
+    );
+  }
+
+  CramBucketsDto _bucketsNow() => CramBucketsDto(
+    bucket0: [..._bucket0],
+    bucket1: [..._bucket1],
+    bucket2: [..._bucket2],
+  );
+
+  CramBucketsDto _dtoFor(_CramStep step) => CramBucketsDto(
+    bucket0: [...step.bucket0],
+    bucket1: [...step.bucket1],
+    bucket2: [...step.bucket2],
+  );
+
+  /// Every card in bucket 0, shuffled — what a run with no checkpoint behind
+  /// it does, and what Start over goes back to.
+  void _startFresh(List<StudyCard> cards) {
+    final ordered = orderStudyCramQueue(
+      cards,
+      random: ref.read(sessionShuffleRandomProvider),
+    );
+    _cardsById = {for (final c in ordered) c.id: c};
+    _bucket0 = [for (final c in ordered) c.id];
+    _bucket1.clear();
+    _bucket2.clear();
+    _sourceIds
+      ..clear()
+      ..addAll(_bucket0);
+  }
+
+  /// Puts the buckets back as the user left them, against the deck as it now
+  /// stands. False when there is nothing usable left, which opens a fresh run
+  /// instead.
+  bool _hydrate(SessionCheckpoint checkpoint, List<StudyCard> cards) {
+    final byId = {for (final c in cards) c.id: c};
+    final buckets = checkpoint.buckets;
+    List<String> surviving(List<String> ids) => [
+      for (final id in ids)
+        if (byId.containsKey(id)) id,
+    ];
+
+    final held0 = surviving(buckets?.bucket0 ?? const []);
+    final held1 = surviving(buckets?.bucket1 ?? const []);
+    final held2 = surviving(buckets?.bucket2 ?? const []);
+    final known = {...checkpoint.sourceIds, ...held0, ...held1, ...held2};
+    final newcomers = [
+      for (final card in cards)
+        if (!known.contains(card.id)) card.id,
+    ]..shuffle(ref.read(sessionShuffleRandomProvider));
+
+    // Nothing left to decide: the run either finished or lost its deck, and
+    // either way there is no round here to come back to.
+    if (held0.isEmpty && held1.isEmpty && newcomers.isEmpty) {
+      _checkpoint.discard();
+      return false;
+    }
+
+    // A card that arrived while the run was away is unseen, which is what
+    // bucket 0 means — including in the arrangements an undo steps back into,
+    // which would otherwise drop it again.
+    _bucket0 = [...held0, ...newcomers];
+    _bucket1
+      ..clear()
+      ..addAll(held1);
+    _bucket2
+      ..clear()
+      ..addAll(held2);
+    _cardsById = {
+      for (final id in [..._bucket0, ..._bucket1, ..._bucket2]) id: byId[id]!,
+    };
+
+    _CramStep restore(CramBucketsDto step) => _CramStep(
+      [...surviving(step.bucket0), ...newcomers],
+      surviving(step.bucket1),
+      surviving(step.bucket2),
+    );
+
+    _decided
+      ..clear()
+      ..addAll([for (final step in checkpoint.decided) restore(step)]);
+    _undone
+      ..clear()
+      ..addAll([for (final step in checkpoint.undoneCram) restore(step)]);
+    _sourceIds
+      ..clear()
+      ..addAll(_cardsById!.keys);
+    // The reconciled round, written back before the user touches it.
+    _checkpoint.flush();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showSessionResumeToast(
+        context,
+        remaining: _bucket0.length + _bucket1.length,
+        onStartOver: _startOver,
+      );
+    });
+    return true;
+  }
+
+  /// Throws the restored run away and drills the deck as it stands now, every
+  /// card back in bucket 0.
+  Future<void> _startOver() async {
+    await _checkpoint.discard();
+    if (!mounted) return;
+    setState(() {
+      _decided.clear();
+      _undone.clear();
+      _startFresh(
+        _pool(ref.read(studyAllCardsProvider).valueOrNull ?? const []),
+      );
+      _showingBack = false;
+    });
+    _flipController.showFront();
+    _checkpoint.persist();
   }
 
   /// Far enough that the card is fully clear of the window, whatever its size.
@@ -130,12 +294,11 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
   void _syncCards(List<StudyCard> cards) {
     final held = _cardsById;
     if (held == null) {
-      final ordered = orderStudyCramQueue(
-        cards,
-        random: ref.read(sessionShuffleRandomProvider),
-      );
-      _cardsById = {for (final c in ordered) c.id: c};
-      _bucket0 = [for (final c in ordered) c.id];
+      if (!_checkpointRead) return;
+      final restored = _restored;
+      _restored = null;
+      if (restored != null && _hydrate(restored, cards)) return;
+      _startFresh(cards);
       return;
     }
     // Same reason a review session re-reads its queue: these cards are a
@@ -249,6 +412,7 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
         _showingBack = false;
       });
       _flipController.showFront();
+      _checkpoint.persist();
     });
   }
 
@@ -285,6 +449,7 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
       _showingBack = false;
     });
     _flipController.showFront();
+    _checkpoint.persist();
   }
 
   void _handleFlip() => _flipController.flip();
@@ -330,6 +495,7 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
       _showingBack = false;
     });
     _flipController.showFront();
+    _checkpoint.persist();
   }
 
   /// Puts a card the toast's Undo brought back at the front of bucket 0, so
@@ -355,6 +521,7 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
       _showingBack = false;
     });
     _flipController.showFront();
+    _checkpoint.persist();
   }
 
   @override
@@ -533,7 +700,9 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
       card,
       frameDeckId: widget.deckId,
       decksById: {
-        for (final deck in ref.watch(studyAllDecksProvider).valueOrNull ?? const <StudyDeck>[])
+        for (final deck
+            in ref.watch(studyAllDecksProvider).valueOrNull ??
+                const <StudyDeck>[])
           deck.id: deck,
       },
     );
@@ -702,7 +871,10 @@ class _CramEmpty extends StatelessWidget {
             color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
           ),
           const SizedBox(height: 16),
-          Text('This deck has no cards left', style: theme.textTheme.titleLarge),
+          Text(
+            'This deck has no cards left',
+            style: theme.textTheme.titleLarge,
+          ),
           const SizedBox(height: 20),
           GlassButton(onPressed: onDone, label: 'Back to deck'),
         ],

@@ -19,6 +19,10 @@ int _columnsFor(double width) {
   return 1;
 }
 
+/// Diameter of the review marker in the day cell's bottom-right corner. Small
+/// enough to clear the date label at the tightest cell size the grid reaches.
+const double _reviewRingSize = 5;
+
 const _monthNames = [
   '',
   'January',
@@ -365,6 +369,12 @@ class _DayCell extends StatelessWidget {
     final lit = inMonth && total > 0;
     final intensity = busiest <= 0 ? 0.0 : (total / busiest).clamp(0.0, 1.0);
     final fade = inMonth ? 1.0 : 0.4;
+    // Reviews stay out of the tint — the square's intensity is a count of
+    // solves, and mixing the two would stop the scale meaning one thing — so a
+    // day of nothing but review work would otherwise read as blank. A ring in
+    // the free corner says work happened without touching the scale. Only
+    // unfiltered: with a series selected the tint is already the answer.
+    final reviewed = series == null && inMonth && (counts?.reviews ?? 0) > 0;
 
     return MouseRegion(
       // Empty days are hoverable too — "nothing that day" is an answer, and a
@@ -387,20 +397,47 @@ class _DayCell extends StatelessWidget {
             MonthDayCellStyle.compact.borderRadius,
           ),
         ),
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: Text(
-            '${date.day}',
-            style: TextStyle(
-              fontSize: MonthDayCellStyle.compact.fontSize,
-              fontWeight: FontWeight.w500,
-              color: inMonth
-                  ? theme.colorScheme.onSurfaceVariant
-                  : theme.colorScheme.onSurfaceVariant.withValues(
-                      alpha: calendarAdjacentMonthTextOpacity,
-                    ),
+        child: Stack(
+          children: [
+            Align(
+              alignment: Alignment.topLeft,
+              child: Text(
+                '${date.day}',
+                style: TextStyle(
+                  fontSize: MonthDayCellStyle.compact.fontSize,
+                  fontWeight: FontWeight.w500,
+                  color: inMonth
+                      ? theme.colorScheme.onSurfaceVariant
+                      : theme.colorScheme.onSurfaceVariant.withValues(
+                          alpha: calendarAdjacentMonthTextOpacity,
+                        ),
+                ),
+              ),
             ),
-          ),
+            if (reviewed)
+              Align(
+                alignment: Alignment.bottomRight,
+                child: Container(
+                  width: _reviewRingSize,
+                  height: _reviewRingSize,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      // The accent is user-chosen and can land anywhere on the
+                      // luminance range, so neither ink works on both backings:
+                      // a heavily tinted square is essentially the accent, where
+                      // onPrimary is the one colour guaranteed to read, while a
+                      // pale or empty one is essentially the card, where the
+                      // theme's own ink is.
+                      color: intensity >= 0.5 && lit
+                          ? theme.colorScheme.onPrimary.withValues(alpha: 0.7)
+                          : theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                      width: 1,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

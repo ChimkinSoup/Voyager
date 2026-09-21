@@ -14,6 +14,7 @@ import 'package:voyager/features/study/study_cram_page.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 
 import 'fakes/input_order_random.dart';
+import 'fakes/memory_session_checkpoints.dart';
 
 const _deckId = 'cram-deck';
 
@@ -56,6 +57,7 @@ Future<void> _pumpCramPage(
     overrides: [
       studyAllCardsProvider.overrideWith((ref) async => _cards(cards)),
       studyAllDecksProvider.overrideWith((ref) async => const []),
+      memorySessionCheckpoints(),
       noSessionShuffle,
     ],
   );
