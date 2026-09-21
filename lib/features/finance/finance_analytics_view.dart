@@ -1067,7 +1067,7 @@ class _BreakdownCard extends ConsumerWidget {
   }
 
   Future<void> _showCategoryManager(BuildContext context, WidgetRef ref) async {
-    await showVoyagerSheet<void>(
+    await showVoyagerModal<void>(
       context: context,
       enableDrag: false,
       builder: (ctx) => ProviderScope(

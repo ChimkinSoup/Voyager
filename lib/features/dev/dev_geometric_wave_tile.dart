@@ -34,7 +34,9 @@ class DevGeometricWaveSection extends ConsumerWidget {
           const SizedBox(height: 8),
           SwitchListTile(
             title: const Text('Wave enabled'),
-            subtitle: const Text('Off by default — turn on to animate the background'),
+            subtitle: const Text(
+              'Off by default — turn on to animate the background',
+            ),
             value: params.enabled,
             onChanged: (v) => update(params.copyWith(enabled: v)),
           ),
@@ -49,7 +51,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
           if (params.scatterMode)
             _WaveSlider(
               label: 'Lit amount',
-              subtitle: 'What fraction of triangles are lit at any instant. Independent of Pop hold — stretching the hold slows each flash without lighting more of them.',
+              subtitle:
+                  'What fraction of triangles are lit at any instant. Independent of Pop hold — stretching the hold slows each flash without lighting more of them.',
               value: params.scatterLitAmount,
               min: 0.01,
               max: 0.25,
@@ -62,7 +65,10 @@ class DevGeometricWaveSection extends ConsumerWidget {
           if (!params.scatterMode) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Text('Shape', style: Theme.of(context).textTheme.titleSmall),
+              child: Text(
+                'Shape',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -84,7 +90,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
             ),
             _WaveSlider(
               label: 'Direction',
-              subtitle: 'Linear sweep travel direction, degrees (unused in radial mode)',
+              subtitle:
+                  'Linear sweep travel direction, degrees (unused in radial mode)',
               value: params.directionDegrees,
               min: 0,
               max: 360,
@@ -104,7 +111,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
             ),
             _WaveSlider(
               label: 'Band width',
-              subtitle: 'How thick the band of sparkles is — higher = more spread out',
+              subtitle:
+                  'How thick the band of sparkles is — higher = more spread out',
               value: params.width,
               min: 0.02,
               max: 0.6,
@@ -114,7 +122,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
             ),
             _WaveSlider(
               label: 'Wave spacing',
-              subtitle: 'Distance between simultaneous wavefronts — lower = more waves on screen at once',
+              subtitle:
+                  'Distance between simultaneous wavefronts — lower = more waves on screen at once',
               value: params.period,
               min: 0.3,
               max: 15.0,
@@ -125,7 +134,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
           ],
           _WaveSlider(
             label: 'Pop hold',
-            subtitle: 'How long each individual triangle stays lit as it flashes',
+            subtitle:
+                'How long each individual triangle stays lit as it flashes',
             value: params.popHoldSeconds,
             min: 0.1,
             max: 3.0,
@@ -158,7 +168,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
           if (!params.scatterMode) ...[
             _WaveSlider(
               label: 'Mask density',
-              subtitle: 'How many triangles are ever eligible to twinkle as the wave passes',
+              subtitle:
+                  'How many triangles are ever eligible to twinkle as the wave passes',
               value: params.maskDensity,
               min: 0.0,
               max: 1.0,
@@ -168,7 +179,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
             ),
             _WaveSlider(
               label: 'Twinkle sparsity',
-              subtitle: 'What fraction of eligible triangles actually fire on each pass — lower = sparser, more individual sparkles',
+              subtitle:
+                  'What fraction of eligible triangles actually fire on each pass — lower = sparser, more individual sparkles',
               value: params.twinkleSparsity,
               min: 0.0,
               max: 1.0,
@@ -179,7 +191,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
           ],
           _WaveSlider(
             label: 'Brightness variance',
-            subtitle: 'How much each flash\'s peak brightness varies, re-rolled every cycle — 0 = every flash identical',
+            subtitle:
+                'How much each flash\'s peak brightness varies, re-rolled every cycle — 0 = every flash identical',
             value: params.popBrightnessVariance,
             min: 0.0,
             max: 1.0,
@@ -189,7 +202,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
           ),
           _WaveSlider(
             label: 'Hinge tilt',
-            subtitle: 'How far a triangle pitches as it lifts — 0 rises flat like an elevator, 1 keeps the hinged edge on the grid',
+            subtitle:
+                'How far a triangle pitches as it lifts — 0 rises flat like an elevator, 1 keeps the hinged edge on the grid',
             value: params.tiltAmount,
             min: 0.0,
             max: 1.0,
@@ -199,7 +213,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
           ),
           _WaveSlider(
             label: 'Tilt shading',
-            subtitle: 'How much the pitch shows as brightness across the face — 0 leaves the tilt visible only via its shadow',
+            subtitle:
+                'How much the pitch shows as brightness across the face — 0 leaves the tilt visible only via its shadow',
             value: params.tiltShading,
             min: 0.0,
             max: 1.0,
@@ -209,7 +224,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
           ),
           _WaveSlider(
             label: 'Mass lag',
-            subtitle: 'How long the physical lift trails the light flash — 0 re-couples them into one flat effect',
+            subtitle:
+                'How long the physical lift trails the light flash — 0 re-couples them into one flat effect',
             value: params.massLagSeconds,
             min: 0.0,
             max: 0.5,
@@ -219,7 +235,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
           ),
           _WaveSlider(
             label: 'Mass spring',
-            subtitle: 'How much the lift overshoots and settles back — 0 glides to a stop with no bounce',
+            subtitle:
+                'How much the lift overshoots and settles back — 0 glides to a stop with no bounce',
             value: params.massSpring,
             min: 0.0,
             max: 1.0,
@@ -229,7 +246,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
           ),
           _WaveSlider(
             label: 'Light direction',
-            subtitle: 'Where the light shines from, degrees (225° = upper-left) — shadows fall the opposite way',
+            subtitle:
+                'Where the light shines from, degrees (225° = upper-left) — shadows fall the opposite way',
             value: params.shadowLightDegrees,
             min: 0,
             max: 360,
@@ -239,7 +257,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
           ),
           _WaveSlider(
             label: 'Shadow offset',
-            subtitle: 'How far a popped triangle throws its shadow — also how wide the visible crescent gets',
+            subtitle:
+                'How far a popped triangle throws its shadow — also how wide the visible crescent gets',
             value: params.shadowOffset,
             min: 0.0,
             max: 0.35,
@@ -249,7 +268,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
           ),
           _WaveSlider(
             label: 'Shadow softness',
-            subtitle: 'Falloff at the shadow\'s outer edge — keep below the offset or it never reaches full strength',
+            subtitle:
+                'Falloff at the shadow\'s outer edge — keep below the offset or it never reaches full strength',
             value: params.shadowSoftness,
             min: 0.01,
             max: 0.3,
@@ -270,7 +290,8 @@ class DevGeometricWaveSection extends ConsumerWidget {
           if (!params.scatterMode)
             _WaveSlider(
               label: 'Cluster scale',
-              subtitle: 'How dense/tight the popped-triangle clusters are — lower = bigger clusters',
+              subtitle:
+                  'How dense/tight the popped-triangle clusters are — lower = bigger clusters',
               value: params.maskClusterScale,
               min: 1.0,
               max: 20.0,

@@ -30,8 +30,8 @@ class FinanceGoalsView extends ConsumerWidget {
     // per goal (the total, the completed count, and each card).
     final allocatedByGoal = <String, int>{};
     for (final a in allocations) {
-      allocatedByGoal[a.goalId] = (allocatedByGoal[a.goalId] ?? 0) +
-          a.amountCents;
+      allocatedByGoal[a.goalId] =
+          (allocatedByGoal[a.goalId] ?? 0) + a.amountCents;
     }
 
     return LayoutBuilder(
@@ -42,12 +42,13 @@ class FinanceGoalsView extends ConsumerWidget {
         if (goals.isEmpty) {
           return ListView(
             padding: EdgeInsets.fromLTRB(horizontal, 4, horizontal, 96),
-            children: [_EmptyGoals(onCreate: () => showGoalModal(context, ref))],
+            children: [
+              _EmptyGoals(onCreate: () => showGoalModal(context, ref)),
+            ],
           );
         }
 
-        final totalTarget =
-            goals.fold<int>(0, (s, g) => s + g.targetCents);
+        final totalTarget = goals.fold<int>(0, (s, g) => s + g.targetCents);
         final totalSaved = goals.fold<int>(
           0,
           (s, g) => s + (allocatedByGoal[g.id] ?? 0),
@@ -63,8 +64,9 @@ class FinanceGoalsView extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.25),
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.25,
+                ),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: theme.colorScheme.outline.withValues(alpha: 0.12),
@@ -82,8 +84,9 @@ class FinanceGoalsView extends ConsumerWidget {
                     child: Text(
                       '$completed of ${goals.length} goal'
                       '${goals.length == 1 ? '' : 's'} reached',
-                      style: theme.textTheme.labelLarge
-                          ?.copyWith(fontWeight: FontWeight.w600),
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   Text(
@@ -141,8 +144,9 @@ class _GoalCard extends ConsumerWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color:
-              theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+          color: theme.colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.25,
+          ),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: complete
@@ -159,8 +163,9 @@ class _GoalCard extends ConsumerWidget {
                 Expanded(
                   child: Text(
                     goal.name,
-                    style: theme.textTheme.labelLarge
-                        ?.copyWith(fontWeight: FontWeight.w600),
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -170,8 +175,7 @@ class _GoalCard extends ConsumerWidget {
                   padding: EdgeInsets.zero,
                   constraints: kMinTouchTarget,
                   tooltip: 'Edit goal',
-                  onPressed: () =>
-                      showGoalModal(context, ref, existing: goal),
+                  onPressed: () => showGoalModal(context, ref, existing: goal),
                 ),
               ],
             ),
@@ -205,17 +209,18 @@ class _GoalCard extends ConsumerWidget {
             Text(
               '${formatCents(allocatedCents)} of ${formatCents(goal.targetCents)}',
               textAlign: TextAlign.center,
-              style: theme.textTheme.labelMedium
-                  ?.copyWith(fontWeight: FontWeight.w600),
+              style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
-              complete
-                  ? 'Goal reached'
-                  : '${formatCents(remaining)} to go',
+              complete ? 'Goal reached' : '${formatCents(remaining)} to go',
               textAlign: TextAlign.center,
               style: theme.textTheme.labelSmall?.copyWith(
-                color: complete ? kIncomeGreen : theme.colorScheme.onSurfaceVariant,
+                color: complete
+                    ? kIncomeGreen
+                    : theme.colorScheme.onSurfaceVariant,
               ),
             ),
             if (daysLeft != null) ...[
@@ -226,8 +231,9 @@ class _GoalCard extends ConsumerWidget {
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: !complete && daysLeft < 0
                       ? theme.colorScheme.error
-                      : theme.colorScheme.onSurfaceVariant
-                          .withValues(alpha: 0.7),
+                      : theme.colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.7,
+                        ),
                 ),
               ),
             ],
@@ -266,7 +272,9 @@ class _EmptyGoals extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.25,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: theme.colorScheme.outline.withValues(alpha: 0.12),
@@ -280,10 +288,7 @@ class _EmptyGoals extends StatelessWidget {
             color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
           ),
           const SizedBox(height: 12),
-          Text(
-            'No savings goals yet',
-            style: theme.textTheme.titleSmall,
-          ),
+          Text('No savings goals yet', style: theme.textTheme.titleSmall),
           const SizedBox(height: 4),
           Text(
             'Create a bucket like "Japan trip" or "Emergency fund", then '

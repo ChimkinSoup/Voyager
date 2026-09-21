@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
@@ -13,7 +14,7 @@ Future<String?> showStudyNameModal(
   String? initialValue,
   String hintText = 'Name',
 }) {
-  return showVoyagerSheet<String>(
+  return showVoyagerModal<String>(
     context: context,
     builder: (ctx) => _StudyNameModal(
       title: title,
@@ -68,17 +69,20 @@ class _StudyNameModalState extends State<_StudyNameModal> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
+            // A grab pill only where the modal is a sheet to drag: it floats
+            // on desktop (showVoyagerModal).
+            if (isAndroid)
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
-            ),
             Row(
               children: [
                 Text(widget.title, style: theme.textTheme.titleMedium),

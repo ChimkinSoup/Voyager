@@ -223,95 +223,95 @@ class _CustomQuotesDialogState extends ConsumerState<_CustomQuotesDialog> {
             // than pushing the dialog past its bottom edge.
             Flexible(
               child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 320),
-              child: quotesAsync.when(
-                loading: () => const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: CircularProgressIndicator(),
+                constraints: const BoxConstraints(maxHeight: 320),
+                child: quotesAsync.when(
+                  loading: () => const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: CircularProgressIndicator(),
+                    ),
                   ),
-                ),
-                error: (error, _) => Text('Could not load quotes: $error'),
-                data: (quotes) {
-                  if (quotes.isEmpty) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 24),
-                      child: Text(
-                        "You haven't added any quotes yet.",
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    );
-                  }
-                  return ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: quotes.length,
-                    itemBuilder: (context, index) {
-                      final quote = quotes[index];
-                      if (quote.id == _editingId) {
-                        return _QuoteEditor(
-                          // Keyed on the quote so opening a different row
-                          // builds a fresh controller seeded with its text,
-                          // rather than reusing the previous row's.
-                          key: ValueKey('edit-${quote.id}'),
-                          quote: quote,
-                          error: _editError,
-                          onSave: (text) => _saveEdit(quote, text),
-                          onCancel: () => setState(() {
-                            _editingId = null;
-                            _editError = null;
-                          }),
-                        );
-                      }
-                      return ListTile(
-                        dense: true,
-                        contentPadding: const EdgeInsets.only(left: 4),
-                        // The whole row opens the editor, so a quote with a
-                        // typo in it is one click from being fixed; the pencil
-                        // is there to say so.
-                        onTap: () => setState(() {
-                          _editingId = quote.id;
-                          _editError = null;
-                        }),
-                        title: Text(
-                          quote.text,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontStyle: FontStyle.italic,
+                  error: (error, _) => Text('Could not load quotes: $error'),
+                  data: (quotes) {
+                    if (quotes.isEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Text(
+                          "You haven't added any quotes yet.",
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: 'Edit quote',
-                              icon: const Icon(
-                                PhosphorIconsRegular.pencilSimple,
-                                size: 16,
-                              ),
-                              onPressed: () => setState(() {
-                                _editingId = quote.id;
-                                _editError = null;
-                              }),
-                            ),
-                            IconButton(
-                              tooltip: 'Remove quote',
-                              icon: Icon(
-                                PhosphorIconsRegular.trash,
-                                size: 18,
-                                color: theme.colorScheme.error,
-                              ),
-                              onPressed: () => _remove(quote),
-                            ),
-                          ],
-                        ),
                       );
-                    },
-                  );
-                },
+                    }
+                    return ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: quotes.length,
+                      itemBuilder: (context, index) {
+                        final quote = quotes[index];
+                        if (quote.id == _editingId) {
+                          return _QuoteEditor(
+                            // Keyed on the quote so opening a different row
+                            // builds a fresh controller seeded with its text,
+                            // rather than reusing the previous row's.
+                            key: ValueKey('edit-${quote.id}'),
+                            quote: quote,
+                            error: _editError,
+                            onSave: (text) => _saveEdit(quote, text),
+                            onCancel: () => setState(() {
+                              _editingId = null;
+                              _editError = null;
+                            }),
+                          );
+                        }
+                        return ListTile(
+                          dense: true,
+                          contentPadding: const EdgeInsets.only(left: 4),
+                          // The whole row opens the editor, so a quote with a
+                          // typo in it is one click from being fixed; the pencil
+                          // is there to say so.
+                          onTap: () => setState(() {
+                            _editingId = quote.id;
+                            _editError = null;
+                          }),
+                          title: Text(
+                            quote.text,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: 'Edit quote',
+                                icon: const Icon(
+                                  PhosphorIconsRegular.pencilSimple,
+                                  size: 16,
+                                ),
+                                onPressed: () => setState(() {
+                                  _editingId = quote.id;
+                                  _editError = null;
+                                }),
+                              ),
+                              IconButton(
+                                tooltip: 'Remove quote',
+                                icon: Icon(
+                                  PhosphorIconsRegular.trash,
+                                  size: 18,
+                                  color: theme.colorScheme.error,
+                                ),
+                                onPressed: () => _remove(quote),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
               ),
-            ),
             ),
           ],
         ),

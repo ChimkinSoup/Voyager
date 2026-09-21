@@ -183,7 +183,9 @@ Future<void> restoreTaskWithSubtasks(
       );
     }
   } finally {
-    invalidateTodoTaskProvidersIn(container, {for (final row in rows) row.listId});
+    invalidateTodoTaskProvidersIn(container, {
+      for (final row in rows) row.listId,
+    });
   }
 }
 
@@ -350,9 +352,7 @@ Future<void> _moveTasksToDefaultList(
   final live = tasks.where((task) => task.deletedAt == null).toList();
   if (live.isEmpty) return;
 
-  var destActive = activeTopLevelTasks(
-    await repo.listTasks(legacyTodoListId),
-  );
+  var destActive = activeTopLevelTasks(await repo.listTasks(legacyTodoListId));
   final writes = <String, TodoTask>{};
 
   // Subtasks and completed tasks carry no placement of their own; they just
@@ -386,10 +386,7 @@ Future<TodoListModel?> createTodoList(
 ) async {
   final allLists = ref.read(todoListsProvider).valueOrNull ?? [];
   final palette = ref.read(colorPaletteProvider);
-  final assigner = paletteFromItems(
-    allLists.map((l) => l.colorValue),
-    palette,
-  );
+  final assigner = paletteFromItems(allLists.map((l) => l.colorValue), palette);
   final result = await showCreateNameColorDialog(
     context,
     title: 'New list',

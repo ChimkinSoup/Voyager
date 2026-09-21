@@ -12,9 +12,9 @@ import 'package:voyager/core/text/typing_rewrites.dart';
 /// deleted space — so `}` never appears and indent is eaten one keypress at a
 /// time. Smart close is applied in [LeetCodeCodeController] instead.
 List<CodeModifier> leetCodeCodeModifiers() => [
-      for (final modifier in CodeController.defaultCodeModifiers)
-        if (modifier is! CloseBlockModifier) modifier,
-    ];
+  for (final modifier in CodeController.defaultCodeModifiers)
+    if (modifier is! CloseBlockModifier) modifier,
+];
 
 /// One press of Tab, one level of indent.
 ///
@@ -34,9 +34,9 @@ class LeetCodeCodeController extends CodeController {
     super.language,
     super.params = kLeetCodeEditorParams,
   }) : super(
-          text: text == null ? null : normalizeNewlines(text),
-          modifiers: leetCodeCodeModifiers(),
-        );
+         text: text == null ? null : normalizeNewlines(text),
+         modifiers: leetCodeCodeModifiers(),
+       );
 
   @override
   set value(TextEditingValue newValue) {
@@ -360,9 +360,8 @@ TextEditingValue? _suppressAutoClose({
   final nextIsWord = at < text.length && _isWordChar(text[at]);
   // Only a quote — where the same character opens and closes — reads as an
   // apostrophe when it follows a word.
-  final apostrophe = closer == insert.char &&
-      at > 0 &&
-      _isWordChar(text[at - 1]);
+  final apostrophe =
+      closer == insert.char && at > 0 && _isWordChar(text[at - 1]);
   if (!nextIsWord && !apostrophe) return null;
 
   return incoming;

@@ -343,7 +343,9 @@ class LeetCodeCheatActions {
     }
     await _container
         .read(settingsProvider.notifier)
-        .saveSettings(settings.copyWith(leetCodeCheatCollapsedSections: pruned));
+        .saveSettings(
+          settings.copyWith(leetCodeCheatCollapsedSections: pruned),
+        );
   }
 }
 

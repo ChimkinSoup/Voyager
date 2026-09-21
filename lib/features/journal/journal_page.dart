@@ -2650,39 +2650,34 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                       }
                                       return KeyEventResult.ignored;
                                     },
-                                    // 16/16 falls under Material's 48px minimum
-                                    // at desktop density, and the decorator's
-                                    // own re-centring left the Vim overlay 2px
-                                    // above the text — see
-                                    // [LabeledTextField.allowShortHeight]. The
-                                    // 48 comes back from outside, where the
-                                    // field centres text and overlay together.
-                                    child: ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        minHeight: kMinInteractiveDimension,
+                                    // Same padding as the body box below, so the
+                                    // two read as one column: text starts 14px in
+                                    // from the left border and sits the same
+                                    // distance under the top one. That runs under
+                                    // Material's 48px minimum at desktop density,
+                                    // and the decorator's own re-centring left the
+                                    // Vim overlay 2px above the text — see
+                                    // [LabeledTextField.allowShortHeight].
+                                    child: LabeledTextField(
+                                      label: 'Title',
+                                      controller: _titleController,
+                                      focusNode: _titleFocusNode,
+                                      textInputAction: TextInputAction.next,
+                                      accentColor: accentColor,
+                                      allowShortHeight: true,
+                                      contentPadding: const EdgeInsets.fromLTRB(
+                                        14,
+                                        14,
+                                        40,
+                                        14,
                                       ),
-                                      child: LabeledTextField(
-                                        label: 'Title',
-                                        controller: _titleController,
-                                        focusNode: _titleFocusNode,
-                                        textInputAction: TextInputAction.next,
-                                        accentColor: accentColor,
-                                        allowShortHeight: true,
-                                        contentPadding:
-                                            const EdgeInsets.fromLTRB(
-                                              16,
-                                              16,
-                                              40,
-                                              16,
-                                            ),
-                                        onChanged: (value) {
-                                          _metadataDirty = true;
-                                          _listTitlePreview.value = value;
-                                          _scheduleMetadataSave();
-                                        },
-                                        onSubmitted: (_) =>
-                                            _submitTitleAndFocusBody(),
-                                      ),
+                                      onChanged: (value) {
+                                        _metadataDirty = true;
+                                        _listTitlePreview.value = value;
+                                        _scheduleMetadataSave();
+                                      },
+                                      onSubmitted: (_) =>
+                                          _submitTitleAndFocusBody(),
                                     ),
                                   ),
                                   if (_selectedEntry != null)

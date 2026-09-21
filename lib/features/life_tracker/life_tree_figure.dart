@@ -44,18 +44,66 @@ typedef _Bone = (Offset, Offset, Offset, double, double);
 const _bones = <_Bone>[
   // Far leg, hanging. Kept a touch narrower than the near one and swung
   // further back, so the two read as two legs rather than one wedge.
-  (Offset(0.462, 0.612), Offset(0.545, 0.712), Offset(0.578, 0.800), 0.108, 0.082),
-  (Offset(0.578, 0.800), Offset(0.612, 0.885), Offset(0.606, 0.962), 0.082, 0.054),
-  (Offset(0.606, 0.962), Offset(0.578, 0.995), Offset(0.518, 0.986), 0.054, 0.034),
+  (
+    Offset(0.462, 0.612),
+    Offset(0.545, 0.712),
+    Offset(0.578, 0.800),
+    0.108,
+    0.082,
+  ),
+  (
+    Offset(0.578, 0.800),
+    Offset(0.612, 0.885),
+    Offset(0.606, 0.962),
+    0.082,
+    0.054,
+  ),
+  (
+    Offset(0.606, 0.962),
+    Offset(0.578, 0.995),
+    Offset(0.518, 0.986),
+    0.054,
+    0.034,
+  ),
   // Torso, shoulders set back from the hips so it reads as leaning against
   // the trunk rather than sitting bolt upright.
-  (Offset(0.355, 0.310), Offset(0.398, 0.448), Offset(0.490, 0.590), 0.170, 0.150),
+  (
+    Offset(0.355, 0.310),
+    Offset(0.398, 0.448),
+    Offset(0.490, 0.590),
+    0.170,
+    0.150,
+  ),
   // Near leg, knee drawn up onto the trunk.
-  (Offset(0.490, 0.585), Offset(0.660, 0.540), Offset(0.760, 0.556), 0.118, 0.090),
-  (Offset(0.760, 0.556), Offset(0.790, 0.680), Offset(0.735, 0.782), 0.090, 0.060),
-  (Offset(0.735, 0.782), Offset(0.700, 0.818), Offset(0.632, 0.812), 0.060, 0.038),
+  (
+    Offset(0.490, 0.585),
+    Offset(0.660, 0.540),
+    Offset(0.760, 0.556),
+    0.118,
+    0.090,
+  ),
+  (
+    Offset(0.760, 0.556),
+    Offset(0.790, 0.680),
+    Offset(0.735, 0.782),
+    0.090,
+    0.060,
+  ),
+  (
+    Offset(0.735, 0.782),
+    Offset(0.700, 0.818),
+    Offset(0.632, 0.812),
+    0.060,
+    0.038,
+  ),
   // Arm, forearm coming to rest on the raised knee.
-  (Offset(0.400, 0.345), Offset(0.370, 0.470), Offset(0.520, 0.560), 0.070, 0.045),
+  (
+    Offset(0.400, 0.345),
+    Offset(0.370, 0.470),
+    Offset(0.520, 0.560),
+    0.070,
+    0.045,
+  ),
 ];
 
 /// The head, under the brim. Only its jaw shows, between the brim's underside
@@ -86,9 +134,9 @@ void paintTreeFigure(
   double lean,
 ) {
   Offset at(Offset unit) => Offset(
-        rect.left + unit.dx * rect.width,
-        rect.top + unit.dy * rect.height,
-      );
+    rect.left + unit.dx * rect.width,
+    rect.top + unit.dy * rect.height,
+  );
   double scale(double unit) => unit * rect.height;
 
   final pivot = at(_seat);
@@ -112,14 +160,13 @@ void paintTreeFigure(
     merge(_taperedRun(a, at(bone.$2), c, scale(bone.$4), scale(bone.$5)));
   }
   merge(
-    Path()
-      ..addOval(
-        Rect.fromCenter(
-          center: at(_headCenter),
-          width: scale(_headRadiusX * 2),
-          height: scale(_headRadiusY * 2),
-        ),
+    Path()..addOval(
+      Rect.fromCenter(
+        center: at(_headCenter),
+        width: scale(_headRadiusX * 2),
+        height: scale(_headRadiusY * 2),
       ),
+    ),
   );
 
   // A breath of bare paper around the silhouette. The figure is painted in the
@@ -156,7 +203,8 @@ void paintTreeFigure(
     final a = at(
       Offset(0.34 + rand.nextDouble() * 0.42, 0.26 + rand.nextDouble() * 0.68),
     );
-    final b = a +
+    final b =
+        a +
         Offset(
           (rand.nextDouble() - 0.5) * scale(0.04),
           scale(0.06 + rand.nextDouble() * 0.12),
@@ -236,7 +284,10 @@ void paintTreeFigure(
     straw.color = ink.withValues(alpha: i == 2 ? 0.42 : 0.20);
     canvas.drawLine(
       at(const Offset(0.418, 0.030)),
-      at(Offset.lerp(_hatBrimLeft, _hatBrimRight, i / 4)! + const Offset(0, 0.02)),
+      at(
+        Offset.lerp(_hatBrimLeft, _hatBrimRight, i / 4)! +
+            const Offset(0, 0.02),
+      ),
       straw,
     );
   }

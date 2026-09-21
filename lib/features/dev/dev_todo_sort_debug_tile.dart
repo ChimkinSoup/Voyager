@@ -37,7 +37,10 @@ class DevTodoSortDebugSection extends ConsumerWidget {
               return ListTile(
                 dense: true,
                 title: const Text('Log file'),
-                subtitle: Text(path, style: Theme.of(context).textTheme.bodySmall),
+                subtitle: Text(
+                  path,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               );
             },
           ),
@@ -51,7 +54,9 @@ class DevTodoSortDebugSection extends ConsumerWidget {
             title: const Text('Copy log to clipboard'),
             trailing: const Icon(PhosphorIconsRegular.copy),
             onTap: () async {
-              final text = await ref.read(todoSortDebugLoggerProvider).readLog();
+              final text = await ref
+                  .read(todoSortDebugLoggerProvider)
+                  .readLog();
               await Clipboard.setData(ClipboardData(text: text));
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(

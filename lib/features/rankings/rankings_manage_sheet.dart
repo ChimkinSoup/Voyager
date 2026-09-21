@@ -371,16 +371,18 @@ class _CategorySettings extends ConsumerWidget {
               label: 'Images on entries',
               value: category.imagesOnParent,
               accent: accent,
-              onChanged: (value) =>
-                  actions.saveCategory(category.copyWith(imagesOnParent: value)),
+              onChanged: (value) => actions.saveCategory(
+                category.copyWith(imagesOnParent: value),
+              ),
             ),
             if (category.childUnitsEnabled)
               _Toggle(
                 label: 'Images on ${category.childUnitLabel.toLowerCase()}s',
                 value: category.imagesOnChild,
                 accent: accent,
-                onChanged: (value) =>
-                    actions.saveCategory(category.copyWith(imagesOnChild: value)),
+                onChanged: (value) => actions.saveCategory(
+                  category.copyWith(imagesOnChild: value),
+                ),
               ),
             const Divider(height: 24),
             _ScaleRow(
@@ -910,9 +912,7 @@ Future<void> _rescaleOverall(
 }) async {
   final fromMax = isParent ? category.parentScoreMax : category.childScoreMax;
   if (fromMax == scoreMax) return;
-  final whose = isParent
-      ? 'entry'
-      : category.childUnitLabel.toLowerCase();
+  final whose = isParent ? 'entry' : category.childUnitLabel.toLowerCase();
   final confirmed = await showConfirmDialog(
     context,
     title: 'Rescale ${isParent ? 'entry' : category.childUnitLabel} scores?',

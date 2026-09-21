@@ -149,7 +149,10 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
   }
 
   void _handleNotesChanged(String value) {
-    applyListEditing(controller: _notesController, previousText: _lastNotesText);
+    applyListEditing(
+      controller: _notesController,
+      previousText: _lastNotesText,
+    );
     _lastNotesText = _notesController.text;
   }
 
@@ -164,15 +167,17 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
     }
     _closingAfterSave = true;
     final notes = _notesController.text.trim();
-    widget.onSave(widget.task.copyWith(
-      title: title,
-      notes: notes.isEmpty ? null : notes,
-      clearNotes: notes.isEmpty,
-      completed: _completed,
-      listId: _listId,
-      dueDate: _dueDate,
-      clearDueDate: _dueDate == null,
-    ));
+    widget.onSave(
+      widget.task.copyWith(
+        title: title,
+        notes: notes.isEmpty ? null : notes,
+        clearNotes: notes.isEmpty,
+        completed: _completed,
+        listId: _listId,
+        dueDate: _dueDate,
+        clearDueDate: _dueDate == null,
+      ),
+    );
     return true;
   }
 
@@ -210,7 +215,7 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
     final listColorValue = widget.listColors[_listId] ?? fallbackColor;
     final accent = Color(listColorValue);
     final baseTheme = Theme.of(context);
-    
+
     final eventTheme = baseTheme.copyWith(
       colorScheme: baseTheme.colorScheme.copyWith(
         primary: accent,
@@ -239,8 +244,9 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
         }),
       ),
       inputDecorationTheme: baseTheme.inputDecorationTheme.copyWith(
-        floatingLabelStyle:
-            baseTheme.textTheme.labelLarge?.copyWith(color: accent),
+        floatingLabelStyle: baseTheme.textTheme.labelLarge?.copyWith(
+          color: accent,
+        ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
           borderSide: BorderSide(
@@ -291,7 +297,9 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
                     offset: const Offset(2, 0),
                     child: IconButton(
                       onPressed: () => setState(() => _completed = !_completed),
-                      tooltip: _completed ? 'Mark incomplete' : 'Mark completed',
+                      tooltip: _completed
+                          ? 'Mark incomplete'
+                          : 'Mark completed',
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                       icon: Icon(
@@ -301,8 +309,9 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
                         size: 22,
                         color: _completed
                             ? accent
-                            : baseTheme.colorScheme.onSurface
-                                .withValues(alpha: 0.35),
+                            : baseTheme.colorScheme.onSurface.withValues(
+                                alpha: 0.35,
+                              ),
                       ),
                     ),
                   ),
@@ -325,129 +334,187 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Builder(builder: (context) {
-                      final localDue = _dueDate?.toLocal();
-                      final hasTime = localDue != null && (localDue.hour != 0 || localDue.minute != 0);
-                      final label = localDue == null 
-                          ? 'Set date & time'
-                          : DateFormat('EEE, MMM d').format(_dueDate!.toLocal()) + (hasTime ? ' at ${formatTime12Hour(_dueDate!.toLocal())}' : '');
-                      
-                      return SelectorPill(
-                        dense: true,
-                        ellipsize: false,
-                        isActive: _isDatePickerOpen,
-                        label: label,
-                        accentColor: accent,
-                        onTap: () async {
-                          setState(() => _isDatePickerOpen = true);
-                          
-                          final initialDt = _dueDate != null && hasTime
-                              ? _dueDate!.toLocal()
-                              : (_dueDate != null 
-                                  ? _dueDate!.toLocal().copyWith(hour: 12, minute: 0)
-                                  : DateTime.now().toLocal());
+                    Builder(
+                      builder: (context) {
+                        final localDue = _dueDate?.toLocal();
+                        final hasTime =
+                            localDue != null &&
+                            (localDue.hour != 0 || localDue.minute != 0);
+                        final label = localDue == null
+                            ? 'Set date & time'
+                            : DateFormat(
+                                    'EEE, MMM d',
+                                  ).format(_dueDate!.toLocal()) +
+                                  (hasTime
+                                      ? ' at ${formatTime12Hour(_dueDate!.toLocal())}'
+                                      : '');
 
-                          final pickedDt = await showContextualPopover<DateTime>(
-                            context: context,
-                            buttonContext: context,
-                            width: 500,
-                            height: 380,
-                            accentColor: accent,
-                            builder: (ctx) => DateTimeSelectorPopover(
-                              initialDateTime: initialDt,
-                              accentColor: accent,
-                              optionalTime: true,
-                              initialHasTime: hasTime,
-                            ),
-                          );
-                          
-                          if (mounted) setState(() => _isDatePickerOpen = false);
-                          
-                          if (pickedDt != null) {
-                            setState(() => _dueDate = pickedDt.toUtc());
-                          }
-                        },
-                      );
-                    }),
+                        return SelectorPill(
+                          dense: true,
+                          ellipsize: false,
+                          isActive: _isDatePickerOpen,
+                          label: label,
+                          accentColor: accent,
+                          onTap: () async {
+                            setState(() => _isDatePickerOpen = true);
+
+                            final initialDt = _dueDate != null && hasTime
+                                ? _dueDate!.toLocal()
+                                : (_dueDate != null
+                                      ? _dueDate!.toLocal().copyWith(
+                                          hour: 12,
+                                          minute: 0,
+                                        )
+                                      : DateTime.now().toLocal());
+
+                            final pickedDt =
+                                await showContextualPopover<DateTime>(
+                                  context: context,
+                                  buttonContext: context,
+                                  width: 500,
+                                  height: 380,
+                                  accentColor: accent,
+                                  builder: (ctx) => DateTimeSelectorPopover(
+                                    initialDateTime: initialDt,
+                                    accentColor: accent,
+                                    optionalTime: true,
+                                    initialHasTime: hasTime,
+                                  ),
+                                );
+
+                            if (mounted)
+                              setState(() => _isDatePickerOpen = false);
+
+                            if (pickedDt != null) {
+                              setState(() => _dueDate = pickedDt.toUtc());
+                            }
+                          },
+                        );
+                      },
+                    ),
                     if (_dueDate != null) ...[
                       const SizedBox(width: 6),
                       IconButton(
                         onPressed: () => setState(() => _dueDate = null),
                         icon: const Icon(PhosphorIconsRegular.x, size: 14),
                         visualDensity: VisualDensity.compact,
-                        constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+                        constraints: const BoxConstraints.tightFor(
+                          width: 24,
+                          height: 24,
+                        ),
                         padding: EdgeInsets.zero,
-                        color: baseTheme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color: baseTheme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                         tooltip: 'Clear due date',
                       ),
                     ],
                     const SizedBox(width: 6),
                     if (widget.lists.isNotEmpty)
-                      Builder(builder: (context) {
-                        final currentList = widget.lists.firstWhere((l) => l.id == _listId, orElse: () => widget.lists.first);
-                        return SelectorPill(
-                          dense: true,
-                          ellipsize: true,
-                          isActive: _isListPickerOpen,
-                          label: currentList.name,
-                          accentColor: accent,
-                          onTap: () async {
-                            setState(() => _isListPickerOpen = true);
-                            final picked = await showContextualPopover<String>(
-                              context: context,
-                              buttonContext: context,
-                              builder: (ctx) => Theme(
-                                data: baseTheme,
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(maxWidth: 240, maxHeight: 300),
-                                  child: Material(
-                                    color: Colors.transparent,
-                                    child: ListView(
-                                      padding: const EdgeInsets.symmetric(vertical: 4),
-                                      shrinkWrap: true,
-                                      children: widget.lists.asMap().entries.map((entry) {
-                                        final index = entry.key;
-                                        final list = entry.value;
-                                        return VoyagerPopupMenuItem<String>(
-                                          value: list.id,
-                                          position: VoyagerMenuTheme.positionFor(index, widget.lists.length),
-                                          height: 36,
-                                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                                          child: Row(
-                                            children: [
-                                              JournalBookmarkFlag(
-                                                colorValue: widget.listColors[list.id] ?? fallbackColor,
-                                                size: 14,
-                                              ),
-                                              const SizedBox(width: 10),
-                                              Expanded(
-                                                child: Text(
-                                                  list.name,
-                                                  style: baseTheme.textTheme.labelMedium?.copyWith(
-                                                    color: baseTheme.colorScheme.onSurface,
-                                                  ),
-                                                  overflow: TextOverflow.ellipsis,
+                      Builder(
+                        builder: (context) {
+                          final currentList = widget.lists.firstWhere(
+                            (l) => l.id == _listId,
+                            orElse: () => widget.lists.first,
+                          );
+                          return SelectorPill(
+                            dense: true,
+                            ellipsize: true,
+                            isActive: _isListPickerOpen,
+                            label: currentList.name,
+                            accentColor: accent,
+                            onTap: () async {
+                              setState(() => _isListPickerOpen = true);
+                              final picked = await showContextualPopover<String>(
+                                context: context,
+                                buttonContext: context,
+                                builder: (ctx) => Theme(
+                                  data: baseTheme,
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 240,
+                                      maxHeight: 300,
+                                    ),
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: ListView(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 4,
+                                        ),
+                                        shrinkWrap: true,
+                                        children: widget.lists
+                                            .asMap()
+                                            .entries
+                                            .map((entry) {
+                                              final index = entry.key;
+                                              final list = entry.value;
+                                              return VoyagerPopupMenuItem<
+                                                String
+                                              >(
+                                                value: list.id,
+                                                position:
+                                                    VoyagerMenuTheme.positionFor(
+                                                      index,
+                                                      widget.lists.length,
+                                                    ),
+                                                height: 36,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                    ),
+                                                child: Row(
+                                                  children: [
+                                                    JournalBookmarkFlag(
+                                                      colorValue:
+                                                          widget.listColors[list
+                                                              .id] ??
+                                                          fallbackColor,
+                                                      size: 14,
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Expanded(
+                                                      child: Text(
+                                                        list.name,
+                                                        style: baseTheme
+                                                            .textTheme
+                                                            .labelMedium
+                                                            ?.copyWith(
+                                                              color: baseTheme
+                                                                  .colorScheme
+                                                                  .onSurface,
+                                                            ),
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                    if (_listId == list.id)
+                                                      Icon(
+                                                        PhosphorIconsBold.check,
+                                                        size: 14,
+                                                        color: accent,
+                                                      ),
+                                                  ],
                                                 ),
-                                              ),
-                                              if (_listId == list.id)
-                                                Icon(PhosphorIconsBold.check, size: 14, color: accent),
-                                            ],
-                                          ),
-                                          onTap: () => Navigator.of(ctx).pop(list.id),
-                                        );
-                                      }).toList(),
+                                                onTap: () => Navigator.of(
+                                                  ctx,
+                                                ).pop(list.id),
+                                              );
+                                            })
+                                            .toList(),
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            );
-                            if (mounted) setState(() => _isListPickerOpen = false);
-                            if (picked != null) {
-                              setState(() => _listId = picked);
-                            }
-                          },
-                        );
-                      }),
+                              );
+                              if (mounted)
+                                setState(() => _isListPickerOpen = false);
+                              if (picked != null) {
+                                setState(() => _listId = picked);
+                              }
+                            },
+                          );
+                        },
+                      ),
                   ],
                 ),
               ),
@@ -473,11 +540,7 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
                     dense: true,
                   ),
                   const Spacer(),
-                  GlassButton(
-                    onPressed: _submit,
-                    label: 'Save',
-                    dense: true,
-                  ),
+                  GlassButton(onPressed: _submit, label: 'Save', dense: true),
                 ],
               ),
             ],

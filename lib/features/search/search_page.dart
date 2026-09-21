@@ -1103,40 +1103,44 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     );
     final entryId = _entry.id;
 
-    _saveChain = _saveChain.then((_) async {
-      // Re-read rather than closing over `_entry`: an earlier link in the
-      // chain may have replaced it with the row it published.
-      final updated = await helper.saveEntry(
-        baseline: _entry,
-        title: snapshot.title,
-        body: snapshot.body,
-        mood: snapshot.mood,
-        weatherIcon: snapshot.weatherIcon,
-        journalId: snapshot.journalId,
-        entryDate: snapshot.entryDate,
-      );
-      if (updated == null) {
-        // Nothing reached disk. Re-arm so a later close retries instead of
-        // dropping the edit on the floor — unless the user has typed since,
-        // in which case a newer snapshot already owns the baseline.
-        if (identical(_baseline, snapshot)) _baseline = previous;
-        return;
-      }
-      if (mounted) setState(() => _entry = updated);
-      widget.onSaved(updated);
-    }).catchError((Object error, StackTrace stackTrace) {
-      // Keeps the queue moving; SearchEntrySaveHelper already reports what it
-      // caught, so this only ever sees something it re-threw.
-      if (identical(_baseline, snapshot)) _baseline = previous;
-      FlutterError.reportError(
-        FlutterErrorDetails(
-          exception: error,
-          stack: stackTrace,
-          library: 'SearchPage',
-          context: ErrorDescription('while saving entry $entryId from Search'),
-        ),
-      );
-    });
+    _saveChain = _saveChain
+        .then((_) async {
+          // Re-read rather than closing over `_entry`: an earlier link in the
+          // chain may have replaced it with the row it published.
+          final updated = await helper.saveEntry(
+            baseline: _entry,
+            title: snapshot.title,
+            body: snapshot.body,
+            mood: snapshot.mood,
+            weatherIcon: snapshot.weatherIcon,
+            journalId: snapshot.journalId,
+            entryDate: snapshot.entryDate,
+          );
+          if (updated == null) {
+            // Nothing reached disk. Re-arm so a later close retries instead of
+            // dropping the edit on the floor — unless the user has typed since,
+            // in which case a newer snapshot already owns the baseline.
+            if (identical(_baseline, snapshot)) _baseline = previous;
+            return;
+          }
+          if (mounted) setState(() => _entry = updated);
+          widget.onSaved(updated);
+        })
+        .catchError((Object error, StackTrace stackTrace) {
+          // Keeps the queue moving; SearchEntrySaveHelper already reports what it
+          // caught, so this only ever sees something it re-threw.
+          if (identical(_baseline, snapshot)) _baseline = previous;
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: error,
+              stack: stackTrace,
+              library: 'SearchPage',
+              context: ErrorDescription(
+                'while saving entry $entryId from Search',
+              ),
+            ),
+          );
+        });
     return _saveChain;
   }
 
@@ -1202,10 +1206,8 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     if (journalId == _entry.journalId) return;
     if (mounted) {
       setState(
-        () => _entry = _entry.copyWith(
-          journalId: journalId,
-          bumpVersion: false,
-        ),
+        () =>
+            _entry = _entry.copyWith(journalId: journalId, bumpVersion: false),
       );
     }
     await _save();
@@ -1238,7 +1240,10 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
           ),
         },
         child: AlertDialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 24,
+          ),
           title: const Text('Journal entry'),
           content: SizedBox(
             width: dialogWidth,
@@ -1256,7 +1261,12 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                         focusNode: _titleFocusNode,
                         textInputAction: TextInputAction.done,
                         accentColor: _accentColor,
-                        contentPadding: const EdgeInsets.fromLTRB(16, 16, 40, 16),
+                        contentPadding: const EdgeInsets.fromLTRB(
+                          16,
+                          16,
+                          40,
+                          16,
+                        ),
                         onSubmitted: (_) => _saveAndClose(),
                       ),
                       Positioned(

@@ -61,9 +61,9 @@ Map<String, TextStyle> _themeFor(Brightness brightness) =>
 /// double-dark empty line this field was showing. The container already
 /// fills that colour; spans only need the foreground tokens.
 Map<String, TextStyle> _spanStyles(Map<String, TextStyle> theme) => {
-      for (final entry in theme.entries)
-        entry.key: entry.value.copyWith(backgroundColor: null),
-    };
+  for (final entry in theme.entries)
+    entry.key: entry.value.copyWith(backgroundColor: null),
+};
 
 /// Token colours for [brightness], keyed by highlight class name — the same
 /// Atom One palette the code block paints, so an inline `` `for` `` in the
@@ -95,8 +95,10 @@ Map<String, TextStyle> leetCodeSyntaxStyles(Brightness brightness) =>
 /// seeds its default from `titleMedium` — so their alignment would silently
 /// depend on those slots staying identical, which they are today only by
 /// coincidence of the Material 3 scale.
-final _codeTextStyle =
-    AppFonts.style(fontSize: 16).copyWith(fontFamily: AppFonts.monoFamily);
+final _codeTextStyle = AppFonts.style(
+  fontSize: 16,
+).copyWith(fontFamily: AppFonts.monoFamily);
+
 /// Width every language capsule takes, wide enough for the longest label
 /// ("javascript"/"typescript") so none of them has to ellipsize.
 const _kLanguagePillWidth = 84.0;
@@ -273,8 +275,7 @@ class LeetCodeCodeSurface extends StatelessWidget {
     // view entirely. The box is the part with a fixed height, so hanging the
     // badge off that keeps it in the corner it belongs in.
     return VimTextScope(
-      enabled:
-          VimEnabledScope.of(context) && vimSuitsField(readOnly: readOnly),
+      enabled: VimEnabledScope.of(context) && vimSuitsField(readOnly: readOnly),
       // Hard off, per SNIPPET.md §2.3. Tab here indents the code (see
       // [_codeEditorShortcuts]), and a prose trigger firing inside a code
       // block would corrupt the very text it is meant to be showing verbatim.
@@ -494,7 +495,11 @@ class _LeetCodeCodeInputState extends State<LeetCodeCodeInput> {
 
 /// Read-only syntax-highlighted code display, used in the Detail View.
 class LeetCodeCodeView extends StatefulWidget {
-  const LeetCodeCodeView({super.key, required this.code, required this.language});
+  const LeetCodeCodeView({
+    super.key,
+    required this.code,
+    required this.language,
+  });
 
   final String code;
   final String language;
@@ -518,7 +523,8 @@ class _LeetCodeCodeViewState extends State<LeetCodeCodeView> {
   @override
   void didUpdateWidget(covariant LeetCodeCodeView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.code != widget.code || oldWidget.language != widget.language) {
+    if (oldWidget.code != widget.code ||
+        oldWidget.language != widget.language) {
       _controller.dispose();
       _controller = LeetCodeCodeController(
         text: widget.code,
@@ -638,10 +644,7 @@ class _LeetCodeCodeEditorState extends State<_LeetCodeCodeEditor> {
     // the overlay has to take the same inset the other text overlays do —
     // otherwise the highlight sits a few pixels below the glyphs.
     final overlayPadding = withCaretMargin(
-      withDensityShift(
-        _codeContentPadding,
-        theme.visualDensity,
-      ),
+      withDensityShift(_codeContentPadding, theme.visualDensity),
       cursorWidth: vim.overlayCaretWidth,
     );
 

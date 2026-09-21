@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -164,7 +165,7 @@ Future<StudyLinkedDeckAction?> showStudyLinkedDeckSheet(
   BuildContext context, {
   required String deckId,
 }) {
-  return showVoyagerSheet<StudyLinkedDeckAction>(
+  return showVoyagerModal<StudyLinkedDeckAction>(
     context: context,
     // The opener's own container, not a child one: a scope that owned its
     // container would dispose it with the sheet, and a card deleted in here
@@ -232,19 +233,22 @@ class _StudyLinkedDeckSheetState extends ConsumerState<_StudyLinkedDeckSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.onSurfaceVariant.withValues(
-                        alpha: 0.3,
+                // A grab pill only where the modal is a sheet to drag: it floats
+                // on desktop (showVoyagerModal).
+                if (isAndroid)
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.3,
+                        ),
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                ),
                 Row(
                   children: [
                     Expanded(

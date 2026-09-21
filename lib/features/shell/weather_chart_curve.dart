@@ -27,11 +27,11 @@ class WeatherChartCurve {
 
   /// Plot area inside [size] after fl_chart title margins.
   Rect get plotRect => Rect.fromLTWH(
-        plotPadding.left,
-        plotPadding.top,
-        math.max(0, size.width - plotPadding.horizontal),
-        math.max(0, size.height - plotPadding.vertical),
-      );
+    plotPadding.left,
+    plotPadding.top,
+    math.max(0, size.width - plotPadding.horizontal),
+    math.max(0, size.height - plotPadding.vertical),
+  );
 
   double pixelX(double x) {
     final rect = plotRect;

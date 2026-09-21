@@ -184,8 +184,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             _error = null;
                             _success = null;
                           }),
-                    label:
-                        _isSignUp ? 'Have an account? Sign in' : 'Create account',
+                    label: _isSignUp
+                        ? 'Have an account? Sign in'
+                        : 'Create account',
                   ),
                 ],
               ),

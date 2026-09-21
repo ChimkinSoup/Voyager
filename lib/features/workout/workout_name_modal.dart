@@ -13,7 +13,7 @@ Future<String?> showWorkoutNameModal(
   String? initialValue,
   String hintText = 'Name',
 }) {
-  return showVoyagerSheet<String>(
+  return showVoyagerModal<String>(
     context: context,
     builder: (ctx) => _WorkoutNameModal(
       title: title,

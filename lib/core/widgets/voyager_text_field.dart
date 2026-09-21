@@ -222,7 +222,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
     final decoration = widget.decoration ?? const InputDecoration();
     final contentPadding =
         decoration.contentPadding ??
-        const EdgeInsets.symmetric(horizontal: 16, vertical: 18);
+        const EdgeInsets.symmetric(horizontal: 14, vertical: 16);
 
     final double radius =
         widget.borderRadius ??

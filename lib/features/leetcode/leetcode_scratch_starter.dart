@@ -65,10 +65,11 @@ String? deriveLeetCodeStarterFromCode(
   final lines = cleaned.split('\n');
   return switch (language) {
     'python' => _derivePython(lines, pythonEntryNames),
-    'java' || 'cpp' || 'csharp' || 'javascript' || 'typescript' => _deriveBraces(
-      lines,
-      language,
-    ),
+    'java' ||
+    'cpp' ||
+    'csharp' ||
+    'javascript' ||
+    'typescript' => _deriveBraces(lines, language),
     _ => null,
   };
 }

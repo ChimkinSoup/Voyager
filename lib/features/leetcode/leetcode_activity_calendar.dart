@@ -55,11 +55,7 @@ const _monthNames = [
 /// the whole page rather than half of it. The scale rebases with it — see
 /// [leetCodeBusiestDayInYear].
 class LeetCodeActivityCalendar extends ConsumerStatefulWidget {
-  const LeetCodeActivityCalendar({
-    super.key,
-    required this.byDay,
-    this.series,
-  });
+  const LeetCodeActivityCalendar({super.key, required this.byDay, this.series});
 
   final Map<DateTime, LeetCodeDayCounts> byDay;
   final LeetCodeActivitySeries? series;

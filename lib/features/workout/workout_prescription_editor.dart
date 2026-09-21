@@ -30,7 +30,7 @@ Future<ExercisePrescriptionResult?> showExercisePrescriptionEditor(
   required Exercise exercise,
   required WeightUnit unit,
 }) {
-  return showVoyagerSheet<ExercisePrescriptionResult>(
+  return showVoyagerModal<ExercisePrescriptionResult>(
     context: context,
     kind: VoyagerSheetKind.editor,
     builder: (ctx) =>

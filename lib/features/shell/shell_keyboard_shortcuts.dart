@@ -124,7 +124,8 @@ class _ShellKeyboardShortcutsState extends State<ShellKeyboardShortcuts> {
     if (currentVisualIndex == -1) return;
 
     final nextVisualIndex = (currentVisualIndex + delta + count) % count;
-    final nextOrigIndex = widget.orderedDestinations[nextVisualIndex].originalIndex;
+    final nextOrigIndex =
+        widget.orderedDestinations[nextVisualIndex].originalIndex;
 
     if (nextOrigIndex != currentOrigIndex) {
       widget.navigationShell.goBranch(nextOrigIndex);

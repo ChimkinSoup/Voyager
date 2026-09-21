@@ -8,7 +8,12 @@ import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
 /// and the wet brushwork is most of why they read as annotations on a study
 /// rather than as chrome bolted onto a picture.
 const _monoFamily = 'Consolas';
-const _monoFallback = <String>['Menlo', 'DejaVu Sans Mono', 'Courier New', 'monospace'];
+const _monoFallback = <String>[
+  'Menlo',
+  'DejaVu Sans Mono',
+  'Courier New',
+  'monospace',
+];
 
 /// One statistic, annotated in the margin: a bracketed name, its value under
 /// it, and a dashed leader running back to the point in the canopy it
@@ -67,8 +72,9 @@ class _StatLeaderLabelState extends State<StatLeaderLabel> {
         onTap: widget.onTap,
         behavior: HitTestBehavior.opaque,
         child: Column(
-          crossAxisAlignment:
-              widget.onLeft ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment: widget.onLeft
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(

@@ -26,7 +26,7 @@ Future<ExerciseTarget?> showExerciseTargetEditor(
   required Exercise exercise,
   required WeightUnit unit,
 }) {
-  return showVoyagerSheet<ExerciseTarget>(
+  return showVoyagerModal<ExerciseTarget>(
     context: context,
     kind: VoyagerSheetKind.editor,
     builder: (ctx) => _ExerciseTargetEditor(exercise: exercise, unit: unit),

@@ -67,7 +67,10 @@ class _DemoPageState extends State<DemoPage> {
                 border: Border.all(color: _inkColor.withValues(alpha: 0.15)),
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 child: Text(
                   'Demo — 1:1 Sumi-e Cherry Blossom Tree',
                   style: TextStyle(

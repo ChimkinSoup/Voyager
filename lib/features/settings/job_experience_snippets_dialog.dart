@@ -28,9 +28,7 @@ Future<void> showJobExperienceSnippetsDialog(BuildContext context) {
 /// The Settings tile's subtitle.
 String jobExperienceSnippetsSummary(AppSettings settings) {
   final count = settings.jobExperienceSnippets.length;
-  return count == 0
-      ? 'Not set — no copy chips on the Jobs page'
-      : '$count set';
+  return count == 0 ? 'Not set — no copy chips on the Jobs page' : '$count set';
 }
 
 class _ExperienceSnippetsDialog extends ConsumerWidget {
@@ -55,14 +53,17 @@ class _ExperienceSnippetsDialog extends ConsumerWidget {
   Future<void> _add(BuildContext context, WidgetRef ref) async {
     final draft = await showJobExperienceEditor(context);
     if (draft == null) return;
-    await _write(ref, (current) => [
-      ...current,
-      JobExperienceSnippet(
-        id: newId(),
-        name: draft.name,
-        description: draft.description,
-      ),
-    ]);
+    await _write(
+      ref,
+      (current) => [
+        ...current,
+        JobExperienceSnippet(
+          id: newId(),
+          name: draft.name,
+          description: draft.description,
+        ),
+      ],
+    );
   }
 
   Future<void> _edit(
@@ -72,12 +73,18 @@ class _ExperienceSnippetsDialog extends ConsumerWidget {
   ) async {
     final draft = await showJobExperienceEditor(context, original: original);
     if (draft == null) return;
-    await _write(ref, (current) => [
-      for (final snippet in current)
-        snippet.id == original.id
-            ? snippet.copyWith(name: draft.name, description: draft.description)
-            : snippet,
-    ]);
+    await _write(
+      ref,
+      (current) => [
+        for (final snippet in current)
+          snippet.id == original.id
+              ? snippet.copyWith(
+                  name: draft.name,
+                  description: draft.description,
+                )
+              : snippet,
+      ],
+    );
   }
 
   Future<void> _delete(
@@ -91,10 +98,13 @@ class _ExperienceSnippetsDialog extends ConsumerWidget {
       message: 'Delete “${snippet.name}”?',
     );
     if (!confirmed) return;
-    await _write(ref, (current) => [
-      for (final s in current)
-        if (s.id != snippet.id) s,
-    ]);
+    await _write(
+      ref,
+      (current) => [
+        for (final s in current)
+          if (s.id != snippet.id) s,
+      ],
+    );
   }
 
   /// [newIndex] is already the slot after [oldIndex] is taken out —
@@ -233,11 +243,7 @@ class _ExperienceRow extends StatelessWidget {
           ),
         ),
       ),
-      title: Text(
-        snippet.name,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+      title: Text(snippet.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
         snippet.description.isEmpty
             ? 'No description'

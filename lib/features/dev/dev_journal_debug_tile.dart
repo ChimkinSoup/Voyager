@@ -37,7 +37,10 @@ class DevJournalDebugSection extends ConsumerWidget {
               return ListTile(
                 dense: true,
                 title: const Text('Log file'),
-                subtitle: Text(path, style: Theme.of(context).textTheme.bodySmall),
+                subtitle: Text(
+                  path,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               );
             },
           ),

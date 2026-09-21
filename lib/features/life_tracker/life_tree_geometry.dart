@@ -287,12 +287,12 @@ Offset _shiftY(Offset o) => Offset(o.dx, o.dy + _treeYShift);
 Rect _shiftRect(Rect r) => r.shift(Offset(0, _treeYShift));
 
 TreeLimb _shiftLimb(TreeLimb limb) => TreeLimb(
-      start: _shiftY(limb.start),
-      control: _shiftY(limb.control),
-      end: _shiftY(limb.end),
-      startWidth: limb.startWidth,
-      endWidth: limb.endWidth,
-    );
+  start: _shiftY(limb.start),
+  control: _shiftY(limb.control),
+  end: _shiftY(limb.end),
+  startWidth: limb.startWidth,
+  endWidth: limb.endWidth,
+);
 
 const _leafDesigns = [
   LeafDesign.watercolorPetal,
@@ -344,14 +344,22 @@ const _tonesPerColor = 3;
 int _washTone(math.Random rand) {
   final base = rand.nextDouble() < 0.75 ? 0 : rand.nextInt(4);
   final r = rand.nextDouble();
-  final tone = r < 0.45 ? 0 : r < 0.88 ? 1 : 2;
+  final tone = r < 0.45
+      ? 0
+      : r < 0.88
+      ? 1
+      : 2;
   return base * _tonesPerColor + tone;
 }
 
 int _leafTone(math.Random rand) {
   final base = rand.nextDouble() < 0.80 ? 0 : rand.nextInt(4);
   final r = rand.nextDouble();
-  final tone = r < 0.65 ? 0 : r < 0.96 ? 1 : 2;
+  final tone = r < 0.65
+      ? 0
+      : r < 0.96
+      ? 1
+      : 2;
   return base * _tonesPerColor + tone;
 }
 
@@ -474,34 +482,130 @@ LifeTreeGeometry generateLifeTreeGeometry() {
     // per user request, tracing the direction of a line they drew over the
     // previous version. Tapers all the way down to a point at the tip
     // instead of the blunt cut the old version ended in.
-    TreeLimb(start: _trunkFork, control: Offset(0.300, 0.500), end: Offset(0.170, 0.477), startWidth: 0.034, endWidth: 0.002),
+    TreeLimb(
+      start: _trunkFork,
+      control: Offset(0.300, 0.500),
+      end: Offset(0.170, 0.477),
+      startWidth: 0.034,
+      endWidth: 0.002,
+    ),
 
     // Left Arm Upper Branching (splits off along the left arm's new curve,
     // at the same point along it as before, so it doesn't float free of the
     // branch beneath it).
-    TreeLimb(start: Offset(0.326, 0.511), control: Offset(0.280, 0.440), end: Offset(0.240, 0.360), startWidth: 0.018, endWidth: 0.008),
-    TreeLimb(start: Offset(0.240, 0.360), control: Offset(0.200, 0.280), end: Offset(0.170, 0.210), startWidth: 0.008, endWidth: 0.002),
-    TreeLimb(start: Offset(0.240, 0.360), control: Offset(0.270, 0.280), end: Offset(0.290, 0.210), startWidth: 0.007, endWidth: 0.002),
+    TreeLimb(
+      start: Offset(0.326, 0.511),
+      control: Offset(0.280, 0.440),
+      end: Offset(0.240, 0.360),
+      startWidth: 0.018,
+      endWidth: 0.008,
+    ),
+    TreeLimb(
+      start: Offset(0.240, 0.360),
+      control: Offset(0.200, 0.280),
+      end: Offset(0.170, 0.210),
+      startWidth: 0.008,
+      endWidth: 0.002,
+    ),
+    TreeLimb(
+      start: Offset(0.240, 0.360),
+      control: Offset(0.270, 0.280),
+      end: Offset(0.290, 0.210),
+      startWidth: 0.007,
+      endWidth: 0.002,
+    ),
 
     // 2. Main Center-Up Branch
-    TreeLimb(start: _trunkFork, control: Offset(0.410, 0.430), end: Offset(0.380, 0.340), startWidth: 0.026, endWidth: 0.012),
-    TreeLimb(start: Offset(0.380, 0.340), control: Offset(0.360, 0.240), end: Offset(0.350, 0.160), startWidth: 0.012, endWidth: 0.002),
-    TreeLimb(start: Offset(0.380, 0.340), control: Offset(0.405, 0.250), end: Offset(0.430, 0.170), startWidth: 0.009, endWidth: 0.002),
+    TreeLimb(
+      start: _trunkFork,
+      control: Offset(0.410, 0.430),
+      end: Offset(0.380, 0.340),
+      startWidth: 0.026,
+      endWidth: 0.012,
+    ),
+    TreeLimb(
+      start: Offset(0.380, 0.340),
+      control: Offset(0.360, 0.240),
+      end: Offset(0.350, 0.160),
+      startWidth: 0.012,
+      endWidth: 0.002,
+    ),
+    TreeLimb(
+      start: Offset(0.380, 0.340),
+      control: Offset(0.405, 0.250),
+      end: Offset(0.430, 0.170),
+      startWidth: 0.009,
+      endWidth: 0.002,
+    ),
 
     // Center-Right Upper Twigs — shifted further right and up from their
     // original spot per user request, to fill whitespace between the
     // center-up branch and the right sweeping arm.
-    TreeLimb(start: _trunkFork, control: Offset(0.480, 0.430), end: Offset(0.520, 0.350), startWidth: 0.020, endWidth: 0.009),
-    TreeLimb(start: Offset(0.520, 0.350), control: Offset(0.510, 0.260), end: Offset(0.545, 0.190), startWidth: 0.009, endWidth: 0.002),
-    TreeLimb(start: Offset(0.520, 0.350), control: Offset(0.575, 0.260), end: Offset(0.635, 0.175), startWidth: 0.008, endWidth: 0.002),
+    TreeLimb(
+      start: _trunkFork,
+      control: Offset(0.480, 0.430),
+      end: Offset(0.520, 0.350),
+      startWidth: 0.020,
+      endWidth: 0.009,
+    ),
+    TreeLimb(
+      start: Offset(0.520, 0.350),
+      control: Offset(0.510, 0.260),
+      end: Offset(0.545, 0.190),
+      startWidth: 0.009,
+      endWidth: 0.002,
+    ),
+    TreeLimb(
+      start: Offset(0.520, 0.350),
+      control: Offset(0.575, 0.260),
+      end: Offset(0.635, 0.175),
+      startWidth: 0.008,
+      endWidth: 0.002,
+    ),
 
     // 3. Main Right Sweeping Arm
-    TreeLimb(start: _trunkFork, control: Offset(0.570, 0.510), end: Offset(0.680, 0.490), startWidth: 0.032, endWidth: 0.018),
-    TreeLimb(start: Offset(0.680, 0.490), control: Offset(0.740, 0.430), end: Offset(0.790, 0.360), startWidth: 0.018, endWidth: 0.008),
-    TreeLimb(start: Offset(0.790, 0.360), control: Offset(0.820, 0.280), end: Offset(0.840, 0.210), startWidth: 0.008, endWidth: 0.002),
-    TreeLimb(start: Offset(0.790, 0.360), control: Offset(0.750, 0.280), end: Offset(0.720, 0.220), startWidth: 0.006, endWidth: 0.002),
-    TreeLimb(start: Offset(0.680, 0.490), control: Offset(0.780, 0.485), end: Offset(0.870, 0.475), startWidth: 0.014, endWidth: 0.003),
-    TreeLimb(start: Offset(0.870, 0.475), control: Offset(0.910, 0.475), end: Offset(0.940, 0.475), startWidth: 0.003, endWidth: 0.0015),
+    TreeLimb(
+      start: _trunkFork,
+      control: Offset(0.570, 0.510),
+      end: Offset(0.680, 0.490),
+      startWidth: 0.032,
+      endWidth: 0.018,
+    ),
+    TreeLimb(
+      start: Offset(0.680, 0.490),
+      control: Offset(0.740, 0.430),
+      end: Offset(0.790, 0.360),
+      startWidth: 0.018,
+      endWidth: 0.008,
+    ),
+    TreeLimb(
+      start: Offset(0.790, 0.360),
+      control: Offset(0.820, 0.280),
+      end: Offset(0.840, 0.210),
+      startWidth: 0.008,
+      endWidth: 0.002,
+    ),
+    TreeLimb(
+      start: Offset(0.790, 0.360),
+      control: Offset(0.750, 0.280),
+      end: Offset(0.720, 0.220),
+      startWidth: 0.006,
+      endWidth: 0.002,
+    ),
+    TreeLimb(
+      start: Offset(0.680, 0.490),
+      control: Offset(0.780, 0.485),
+      end: Offset(0.870, 0.475),
+      startWidth: 0.014,
+      endWidth: 0.003,
+    ),
+    TreeLimb(
+      start: Offset(0.870, 0.475),
+      control: Offset(0.910, 0.475),
+      end: Offset(0.940, 0.475),
+      startWidth: 0.003,
+      endWidth: 0.0015,
+    ),
   ];
   limbs.addAll(sumiELimbs);
 
@@ -526,7 +630,8 @@ LifeTreeGeometry generateLifeTreeGeometry() {
   // is the silhouette. Their shed order starts high, so the crown keeps its
   // shape long after the detail over it has thinned.
   for (var i = 0; i < _baseLobeCount; i++) {
-    final angle = (i / _baseLobeCount) * math.pi * 2 + decor.nextDouble() * 0.28;
+    final angle =
+        (i / _baseLobeCount) * math.pi * 2 + decor.nextDouble() * 0.28;
     final radial = i == 0 ? 0.0 : (0.30 + decor.nextDouble() * 0.52);
     final edge = envelopeAt(angle);
     final center = Offset(
@@ -538,7 +643,10 @@ LifeTreeGeometry generateLifeTreeGeometry() {
       WashCell(
         center: center,
         radiusX: rx,
-        radiusY: rx * (_crownRadiusY / _crownRadiusX) * (1.05 + decor.nextDouble() * 0.30),
+        radiusY:
+            rx *
+            (_crownRadiusY / _crownRadiusX) *
+            (1.05 + decor.nextDouble() * 0.30),
         rotation: decor.nextDouble() * math.pi * 2,
         colorIndex: _washTone(decor),
         wobblePhases: [
@@ -576,7 +684,10 @@ LifeTreeGeometry generateLifeTreeGeometry() {
       WashCell(
         center: center,
         radiusX: rx,
-        radiusY: rx * (_crownRadiusY / _crownRadiusX) * (0.90 + rand.nextDouble() * 0.45),
+        radiusY:
+            rx *
+            (_crownRadiusY / _crownRadiusX) *
+            (0.90 + rand.nextDouble() * 0.45),
         rotation: rand.nextDouble() * math.pi * 2,
         colorIndex: isAccent
             ? (rand.nextDouble() < 0.7 ? 2 : 5)
@@ -787,8 +898,12 @@ LifeTreeGeometry generateLifeTreeGeometry() {
 /// points up and to the right — which is the side of it you could sit on.
 Offset _figureSeat(TreeLimb trunk) {
   final on = quadPointAt(trunk.start, trunk.control, trunk.end, _figureTrunkT);
-  final tangent =
-      quadTangentAt(trunk.start, trunk.control, trunk.end, _figureTrunkT);
+  final tangent = quadTangentAt(
+    trunk.start,
+    trunk.control,
+    trunk.end,
+    _figureTrunkT,
+  );
   final length = tangent.distance;
   if (length == 0) return on;
   return on +

@@ -27,7 +27,7 @@ Future<void> showStudyImportTextModal(
   WidgetRef ref,
   String deckId,
 ) async {
-  final outcome = await showVoyagerSheet<_ImportOutcome>(
+  final outcome = await showVoyagerModal<_ImportOutcome>(
     context: context,
     kind: VoyagerSheetKind.editor,
     builder: (ctx) => ProviderScope(

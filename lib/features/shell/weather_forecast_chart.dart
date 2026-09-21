@@ -176,8 +176,9 @@ class _WeatherForecastChartState extends ConsumerState<WeatherForecastChart> {
               final hoveredBucket = showPlot && _hoveredHour != null
                   ? _bucketForHour(widget.series, _hoveredHour!)
                   : null;
-              final currentTimeHour =
-                  showPlot && widget.showCurrentTimeLine ? _currentTimeHour() : null;
+              final currentTimeHour = showPlot && widget.showCurrentTimeLine
+                  ? _currentTimeHour()
+                  : null;
 
               // On the sliding plot layers during day transitions; omitted from the
               // fixed axis frame so lines move with the graph instead of clipping.
@@ -217,8 +218,9 @@ class _WeatherForecastChartState extends ConsumerState<WeatherForecastChart> {
                           }
                           return Text(
                             '${value.round()}°',
-                            style: theme.textTheme.labelSmall
-                                ?.copyWith(color: tempColor),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: tempColor,
+                            ),
                           );
                         },
                       ),
@@ -247,9 +249,7 @@ class _WeatherForecastChartState extends ConsumerState<WeatherForecastChart> {
                   borderData: FlBorderData(
                     show: showFrame,
                     border: Border.all(
-                      color: colorScheme.outlineVariant.withValues(
-                        alpha: 0.4,
-                      ),
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.4),
                     ),
                   ),
                   lineTouchData: const LineTouchData(enabled: false),
@@ -300,8 +300,7 @@ class _WeatherForecastChartState extends ConsumerState<WeatherForecastChart> {
                         ),
                       ),
                     ),
-                  if (showFrame)
-                    Positioned.fill(child: lineChart),
+                  if (showFrame) Positioned.fill(child: lineChart),
                 ],
               );
 
@@ -474,14 +473,12 @@ class _WeatherBucket {
   final double rainPercent;
 }
 
-_WeatherBucket? _bucketForHour(
-  DayForecastChartSeries series,
-  double hour,
-) {
+_WeatherBucket? _bucketForHour(DayForecastChartSeries series, double hour) {
   for (final temp in series.tempPoints) {
     final range = chartBucketRangeCenteredOn(temp.hour);
     if (hour >= range.start && hour < range.end) {
-      final rainPercent = series.rainPoints
+      final rainPercent =
+          series.rainPoints
               .where((point) => point.hour == temp.hour)
               .map((point) => point.rainPercent)
               .firstOrNull ??
@@ -728,16 +725,16 @@ class _WeatherPlotPainter extends CustomPainter {
     }
 
     _paintWeatherPlot(
-        canvas: canvas,
-        series: series,
-        curve: curve,
-        spots: spots,
-        gradientStartHour: gradientStartHour,
-        tempFillColor: tempFillColor,
-        rainFillColor: rainFillColor,
-        tempLineColor: tempLineColor,
-        degreeGridColor: degreeGridColor,
-        showDegreeGrid: showDegreeGrid,
+      canvas: canvas,
+      series: series,
+      curve: curve,
+      spots: spots,
+      gradientStartHour: gradientStartHour,
+      tempFillColor: tempFillColor,
+      rainFillColor: rainFillColor,
+      tempLineColor: tempLineColor,
+      degreeGridColor: degreeGridColor,
+      showDegreeGrid: showDegreeGrid,
       currentTimeHour: currentTimeHour,
       hoveredBucket: hoveredBucket,
       allowVerticalOverflow: allowVerticalOverflow,
@@ -857,8 +854,7 @@ class _WeatherFilmStripPainter extends CustomPainter {
       currentTimeHour: currentTimeHour,
     )) {
       final spots = [
-        for (final point in series.tempPoints)
-          FlSpot(point.hour, point.tempC),
+        for (final point in series.tempPoints) FlSpot(point.hour, point.tempC),
       ];
       _paintWeatherPlot(
         canvas: canvas,
@@ -1031,7 +1027,8 @@ void _paintWeatherFill({
       (rain / 100) * rainWeight,
     )!;
 
-    final inHover = hoverStartPx != null &&
+    final inHover =
+        hoverStartPx != null &&
         hoverEndPx != null &&
         px >= hoverStartPx &&
         px < hoverEndPx;
@@ -1081,11 +1078,7 @@ void _paintDegreeGrid({
   for (var deg = firstDeg; deg <= lastDeg; deg++) {
     if (deg <= curve.minY || deg >= curve.maxY) continue;
     final y = curve.pixelY(deg.toDouble());
-    canvas.drawLine(
-      Offset(rect.left, y),
-      Offset(rect.right, y),
-      paint,
-    );
+    canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
   }
 
   canvas.restore();
@@ -1124,11 +1117,7 @@ void _paintCurrentTimeLine({
     final segment = drawing ? dashLength : gapLength;
     final next = math.min(travelled + segment, distance);
     if (drawing) {
-      canvas.drawLine(
-        start + unit * travelled,
-        start + unit * next,
-        paint,
-      );
+      canvas.drawLine(start + unit * travelled, start + unit * next, paint);
     }
     travelled = next;
     drawing = !drawing;

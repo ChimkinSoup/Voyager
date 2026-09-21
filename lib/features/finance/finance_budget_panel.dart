@@ -35,7 +35,9 @@ class BudgetPanel extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.25,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: theme.colorScheme.outline.withValues(alpha: 0.12),
@@ -55,8 +57,9 @@ class BudgetPanel extends ConsumerWidget {
               Expanded(
                 child: Text(
                   'Budgets & Pacing',
-                  style: theme.textTheme.labelLarge
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               GlassButton(
@@ -146,8 +149,9 @@ class _BudgetRow extends ConsumerWidget {
         ? Color(tagColorValue!)
         : theme.colorScheme.onSurfaceVariant;
     final remaining = budget.limitCents - spentCents;
-    final spentFraction =
-        budget.limitCents <= 0 ? 0.0 : spentCents / budget.limitCents;
+    final spentFraction = budget.limitCents <= 0
+        ? 0.0
+        : spentCents / budget.limitCents;
 
     return ContextMenuRegion(
       // Built on right-click rather than eagerly, like the ledger rows: the
@@ -181,11 +185,15 @@ class _BudgetRow extends ConsumerWidget {
               Row(
                 children: [
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: tagColor.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+                      borderRadius: BorderRadius.circular(
+                        VoyagerTheme.fieldRadius,
+                      ),
                     ),
                     child: Text(
                       '#${budget.tag}',

@@ -71,11 +71,18 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
   Offset _globalCenterFor(Offset normalizedPos, Size size) {
     final box = _stackKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return Offset.zero;
-    final local = Offset(normalizedPos.dx * size.width, normalizedPos.dy * size.height);
+    final local = Offset(
+      normalizedPos.dx * size.width,
+      normalizedPos.dy * size.height,
+    );
     return box.localToGlobal(local);
   }
 
-  Future<void> _openBlossomPopup(BlossomSpec blossom, Size size, Color accent) async {
+  Future<void> _openBlossomPopup(
+    BlossomSpec blossom,
+    Size size,
+    Color accent,
+  ) async {
     final anchor = _globalCenterFor(blossom.position, size);
     _canvasController.gustAt(blossom.position);
     await showTreePopover(
@@ -88,7 +95,11 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
     );
   }
 
-  Future<void> _openBucketList(Offset normalizedAnchor, Size size, Color accent) async {
+  Future<void> _openBucketList(
+    Offset normalizedAnchor,
+    Size size,
+    Color accent,
+  ) async {
     final anchor = _globalCenterFor(normalizedAnchor, size);
     _canvasController.gustAt(normalizedAnchor, radius: 0.3, strength: 0.4);
     await showTreePopover(
@@ -121,7 +132,10 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
     final stride = count == 0 ? 0.0 : orderedIndices.length / count;
     final chosen = <int>{
       for (var i = 0; i < count; i++)
-        orderedIndices[(i * stride).floor().clamp(0, orderedIndices.length - 1)],
+        orderedIndices[(i * stride).floor().clamp(
+          0,
+          orderedIndices.length - 1,
+        )],
     };
 
     _livedLeavesWeeks = weeks;
@@ -140,10 +154,13 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
     final geometry = ref.watch(lifeTreeGeometryProvider);
     final settings = ref.watch(settingsProvider).valueOrNull;
     final statsAsync = ref.watch(lifeTrackerStatsProvider);
-    final grounded = ref.watch(lifeTreeGroundedLeavesProvider) ??
+    final grounded =
+        ref.watch(lifeTreeGroundedLeavesProvider) ??
         _groundedLeavesFor(geometry, settings?.birthDate);
 
-    final minorColors = (settings?.minorPetalColors ?? const <int>[]).map(Color.new).toList();
+    final minorColors = (settings?.minorPetalColors ?? const <int>[])
+        .map(Color.new)
+        .toList();
     if (minorColors.isEmpty) {
       minorColors.addAll(const [
         Color(0xFFF3C5CE),
@@ -250,9 +267,8 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
                         accentColor: accent,
                         haloColor: paper,
                         onTap: () => _openBlossomPopup(blossom, size, accent),
-                        onHoverChanged: (hovered) => setState(
-                          () => _hoveredLabel = hovered ? i : -1,
-                        ),
+                        onHoverChanged: (hovered) =>
+                            setState(() => _hoveredLabel = hovered ? i : -1),
                       ),
                     ),
                   ),
@@ -339,10 +355,7 @@ class _TreeHoverRegion extends StatelessWidget {
         cursor: SystemMouseCursors.click,
         onEnter: (_) => onHoverChanged(true),
         onExit: (_) => onHoverChanged(false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-        ),
+        child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap),
       ),
     );
   }

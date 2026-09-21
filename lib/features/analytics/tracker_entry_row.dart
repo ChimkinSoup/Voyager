@@ -216,10 +216,7 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: _buildEditor(existing, theme, accent),
-              ),
+              Expanded(flex: 2, child: _buildEditor(existing, theme, accent)),
               const SizedBox(width: 6),
               // Trailing slot — urgency badge, saved checkmark, or empty.
               // Fixed width so switching between those states (e.g. on save)

@@ -281,7 +281,10 @@ class _LeetCodeActivityChartState extends State<LeetCodeActivityChart> {
     );
   }
 
-  LineChartBarData _barFor(BuildContext context, LeetCodeActivitySeries series) {
+  LineChartBarData _barFor(
+    BuildContext context,
+    LeetCodeActivitySeries series,
+  ) {
     final color = colorForLeetCodeActivitySeries(context, series);
     return LineChartBarData(
       spots: _spotsFor(series),

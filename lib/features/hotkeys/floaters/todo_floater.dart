@@ -45,8 +45,9 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
   @override
   void initState() {
     super.initState();
-    _title = TextEditingController(text: ref.read(todoCaptureDraftProvider).title)
-      ..addListener(_keepTitleInDraft);
+    _title = TextEditingController(
+      text: ref.read(todoCaptureDraftProvider).title,
+    )..addListener(_keepTitleInDraft);
     ref.read(settingsRepositoryProvider).getSettings().then((settings) {
       if (mounted) {
         setState(() => _lastTouchedId = settings.lastViewedTodoListId);
@@ -89,13 +90,11 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
   void _togglePanel(_Panel panel, int listCount) {
     final next = _panel == panel ? null : panel;
     setState(() => _panel = next);
-    ref
-        .read(floaterControllerProvider)
-        .setExtraHeight(switch (next) {
-          null => 0,
-          _Panel.due => _datePanelHeight,
-          _Panel.list => (listCount * _listRowHeight + 16).clamp(0, 320),
-        });
+    ref.read(floaterControllerProvider).setExtraHeight(switch (next) {
+      null => 0,
+      _Panel.due => _datePanelHeight,
+      _Panel.list => (listCount * _listRowHeight + 16).clamp(0, 320),
+    });
     if (next == null) _titleFocus.requestFocus();
   }
 

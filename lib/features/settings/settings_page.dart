@@ -178,9 +178,8 @@ class SettingsPage extends ConsumerWidget {
             // stored weekly value on each flip, which meant a per-device
             // setting repartitioned synced data — and rewrote each row's
             // periodStart while leaving its id derived from the old anchor.
-            onChanged: (v) => _save(ref, settings.copyWith(
-              weekStartsOnMonday: v,
-            )),
+            onChanged: (v) =>
+                _save(ref, settings.copyWith(weekStartsOnMonday: v)),
             value: settings.weekStartsOnMonday,
           ),
           ListTile(
@@ -1010,7 +1009,9 @@ class _MediaStorageTile extends ConsumerWidget {
                 if (diskLow) 'Less than 5% of this disk is free',
               ].join(' · '),
         style: diskLow
-            ? theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)
+            ? theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              )
             : null,
       ),
       trailing: Icon(
@@ -1461,7 +1462,7 @@ class _LeetCodeUsernameDialogState extends State<_LeetCodeUsernameDialog> {
           const hintText = 'e.g. johndoe123';
           return VimOverlayHost(
             session: vim.session,
-              snippetSession: vim.snippetSession,
+            snippetSession: vim.snippetSession,
             overlayPaintsSelection: vim.overlayPaintsSelection,
             controller: _controller,
             focusNode: _focusNode,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/widgets/voyager_dialog.dart';
 
 /// How much a [GlassSurface] separates itself from what's behind it.
 ///
@@ -230,6 +231,60 @@ Future<T?> showVoyagerSheet<T>({
       // sheet's content, so ink (ListTile rows, InkWells) would paint under
       // it. A Material of its own above the fill brings the ink back on top.
       child: Material(type: MaterialType.transparency, child: builder(ctx)),
+    ),
+  );
+}
+
+/// Opens [builder] as the app's standard modal, shaped for the platform.
+///
+/// On desktop it floats: the same frosted [GlassWeight.heavy] material as
+/// [showVoyagerSheet], centred over the darkened app and rounded on every
+/// corner. Sized to its content within [constraints] — 640px wide by default,
+/// the width the bottom sheets had — and closed by the backdrop or Esc.
+///
+/// On Android it stays a bottom sheet, where a downward flick is the expected
+/// cancel gesture; [kind] and [enableDrag] only decide that sheet's drag
+/// (VOYAGER_SHEET_DISMISS_HLD.md §4).
+Future<T?> showVoyagerModal<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  BoxConstraints? constraints,
+  VoyagerSheetKind kind = VoyagerSheetKind.sheet,
+  bool? enableDrag,
+}) {
+  if (isAndroid) {
+    return showVoyagerSheet<T>(
+      context: context,
+      builder: builder,
+      kind: kind,
+      enableDrag: enableDrag,
+      constraints: constraints,
+    );
+  }
+  const borderRadius = BorderRadius.all(Radius.circular(20));
+  return showVoyagerDialog<T>(
+    context: context,
+    builder: (ctx) => SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: ConstrainedBox(
+            constraints: constraints ?? const BoxConstraints(maxWidth: 640),
+            child: GlassSurface(
+              weight: GlassWeight.heavy,
+              borderRadius: borderRadius,
+              // Same reason as the sheet: ink paints above the frosted fill
+              // only with a Material of its own on top of it.
+              child: Material(
+                type: MaterialType.transparency,
+                borderRadius: borderRadius,
+                clipBehavior: Clip.antiAlias,
+                child: builder(ctx),
+              ),
+            ),
+          ),
+        ),
+      ),
     ),
   );
 }

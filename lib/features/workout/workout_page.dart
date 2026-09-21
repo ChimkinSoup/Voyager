@@ -117,10 +117,12 @@ class _PlannerState extends ConsumerState<_Planner> {
     final plans = widget.plans;
     final exercises = widget.exercises;
     final mode = ref.watch(workoutPlannerModeProvider);
-    final weeklyPlan =
-        plans.where((p) => p.mode == WorkoutPlanMode.weekly).firstOrNull;
-    final cyclePlan =
-        plans.where((p) => p.mode == WorkoutPlanMode.cycle).firstOrNull;
+    final weeklyPlan = plans
+        .where((p) => p.mode == WorkoutPlanMode.weekly)
+        .firstOrNull;
+    final cyclePlan = plans
+        .where((p) => p.mode == WorkoutPlanMode.cycle)
+        .firstOrNull;
     final plan = mode == WorkoutPlanMode.weekly ? weeklyPlan : cyclePlan;
     if (plan == null || weeklyPlan == null || cyclePlan == null) {
       // Only reachable in the frame between seeding and the plan list
@@ -136,10 +138,10 @@ class _PlannerState extends ConsumerState<_Planner> {
     final weekStartsOnMonday = settings?.weekStartsOnMonday ?? true;
     final weeklyEntries =
         ref.watch(workoutPlanEntriesProvider(weeklyPlan.id)).valueOrNull ??
-            const <WorkoutPlanEntry>[];
+        const <WorkoutPlanEntry>[];
     final cycleEntries =
         ref.watch(workoutPlanEntriesProvider(cyclePlan.id)).valueOrNull ??
-            const <WorkoutPlanEntry>[];
+        const <WorkoutPlanEntry>[];
     final exercisesById = {for (final e in exercises) e.id: e};
     final compact = context.isCompactWidth;
 
@@ -178,9 +180,7 @@ class _PlannerState extends ConsumerState<_Planner> {
         ),
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: VoyagerSpacing.lg,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: VoyagerSpacing.lg),
             child: compact
                 ? Column(
                     children: [
@@ -268,9 +268,9 @@ class _PlannerToolbar extends ConsumerWidget {
                   isActive: mode == option,
                   fillWhenActive: true,
                   dense: true,
-                  onTap: () => ref
-                      .read(workoutPlannerModeProvider.notifier)
-                      .state = option,
+                  onTap: () =>
+                      ref.read(workoutPlannerModeProvider.notifier).state =
+                          option,
                 ),
               ],
             ],
@@ -322,8 +322,9 @@ class _ActivePlanButton extends ConsumerWidget {
                 'analytics stat'
           : 'Use this plan for today\'s workout, the calendar and the '
                 'analytics stat',
-      onPressed:
-          active ? null : () => WorkoutActions(ref).setActivePlan(plan.id),
+      onPressed: active
+          ? null
+          : () => WorkoutActions(ref).setActivePlan(plan.id),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -394,9 +395,7 @@ class _CycleLengthControl extends ConsumerWidget {
           Padding(
             // The count sat flush against both steppers, so the three read as
             // one undifferentiated blob and it was easy to press the wrong end.
-            padding: const EdgeInsets.symmetric(
-              horizontal: VoyagerSpacing.sm,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: VoyagerSpacing.sm),
             child: Text(
               '${plan.cycleLength}-day',
               style: theme.textTheme.labelMedium,
@@ -519,9 +518,7 @@ Future<void> startWorkoutForDay(
       .startFromPlan(plan: plan, dayIndex: dayIndex, date: date);
   if (started) return;
   messenger?.showSnackBar(
-    const SnackBar(
-      content: Text('Nothing is planned for that day yet'),
-    ),
+    const SnackBar(content: Text('Nothing is planned for that day yet')),
   );
 }
 
@@ -601,8 +598,9 @@ class _DayBoard extends ConsumerWidget {
   /// Stored day indices are 0 = Sunday. The visual order is the only thing
   /// `weekStartsOnMonday` changes, so flipping the setting never re-points an
   /// entry at a different weekday.
-  List<int> get _weekOrder =>
-      weekStartsOnMonday ? const [1, 2, 3, 4, 5, 6, 0] : const [0, 1, 2, 3, 4, 5, 6];
+  List<int> get _weekOrder => weekStartsOnMonday
+      ? const [1, 2, 3, 4, 5, 6, 0]
+      : const [0, 1, 2, 3, 4, 5, 6];
 
   static const _weekdayNames = [
     'Sun',

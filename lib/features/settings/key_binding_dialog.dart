@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:voyager/core/utils/key_binding.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
+
 Future<String?> showKeyBindingDialog(
   BuildContext context, {
   required String title,
@@ -65,7 +66,7 @@ class _KeyBindingDialogState extends State<_KeyBindingDialog> {
         preview == null
             ? 'Press a letter key to assign this shortcut.\nEsc to cancel.'
             : 'Current: ${formatKeyBinding(preview)}\n\n'
-                'Press a new letter key, or Esc to cancel.',
+                  'Press a new letter key, or Esc to cancel.',
       ),
       actions: [
         GlassButton(

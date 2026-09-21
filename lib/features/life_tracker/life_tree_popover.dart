@@ -173,8 +173,14 @@ class _CenterOnAnchorDelegate extends SingleChildLayoutDelegate {
     var x = anchor.dx - childSize.width / 2;
     var y = anchor.dy - childSize.height / 2;
     const margin = _margin;
-    x = x.clamp(margin, (size.width - childSize.width - margin).clamp(margin, double.infinity));
-    y = y.clamp(margin, (size.height - childSize.height - margin).clamp(margin, double.infinity));
+    x = x.clamp(
+      margin,
+      (size.width - childSize.width - margin).clamp(margin, double.infinity),
+    );
+    y = y.clamp(
+      margin,
+      (size.height - childSize.height - margin).clamp(margin, double.infinity),
+    );
     return Offset(x, y);
   }
 

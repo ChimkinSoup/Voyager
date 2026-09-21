@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/core/widgets/voyager_number_wheel.dart';
@@ -38,7 +37,9 @@ class WorkoutWheelPair extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
-    final selectedColor = deviatesFromPlan ? accent : theme.colorScheme.onSurface;
+    final selectedColor = deviatesFromPlan
+        ? accent
+        : theme.colorScheme.onSurface;
     final selectedStyle = theme.textTheme.headlineSmall?.copyWith(
       color: selectedColor,
       fontWeight: FontWeight.w600,

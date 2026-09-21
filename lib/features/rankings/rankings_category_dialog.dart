@@ -87,51 +87,51 @@ class _CategoryDialogState extends State<_CategoryDialog> {
           // Scrolls in a window too short for the palette and the icons.
           child: VoyagerScrollView(
             child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              LabeledTextField(
-                label: 'Name',
-                controller: _nameController,
-                autofocus: true,
-                accentColor: Color(_color),
-                // The scope above only sees Enter while no field is focused.
-                onSubmitted: (_) => _submit(),
-              ),
-              const SizedBox(height: 16),
-              Text('Color', style: theme.textTheme.labelMedium),
-              const SizedBox(height: 8),
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: paletteViewportHeight(28, visibleRows: 2),
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LabeledTextField(
+                  label: 'Name',
+                  controller: _nameController,
+                  autofocus: true,
+                  accentColor: Color(_color),
+                  // The scope above only sees Enter while no field is focused.
+                  onSubmitted: (_) => _submit(),
                 ),
-                child: ColorPaletteGrid(
-                  palette: defaultColorPalette,
-                  selected: _color,
-                  onSelected: (color) => setState(() => _color = color),
-                  swatchRadius: 28,
-                  maxWidth: 380,
-                  maxHeight: paletteViewportHeight(28, visibleRows: 2),
-                  tightLayout: true,
+                const SizedBox(height: 16),
+                Text('Color', style: theme.textTheme.labelMedium),
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: paletteViewportHeight(28, visibleRows: 2),
+                  ),
+                  child: ColorPaletteGrid(
+                    palette: defaultColorPalette,
+                    selected: _color,
+                    onSelected: (color) => setState(() => _color = color),
+                    swatchRadius: 28,
+                    maxWidth: 380,
+                    maxHeight: paletteViewportHeight(28, visibleRows: 2),
+                    tightLayout: true,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Text('Icon', style: theme.textTheme.labelMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                children: [
-                  for (final entry in rankingCategoryIcons.entries)
-                    _IconChoice(
-                      icon: entry.value,
-                      selected: entry.key == _iconKey,
-                      accent: Color(_color),
-                      onTap: () => setState(() => _iconKey = entry.key),
-                    ),
-                ],
-              ),
-            ],
+                const SizedBox(height: 16),
+                Text('Icon', style: theme.textTheme.labelMedium),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    for (final entry in rankingCategoryIcons.entries)
+                      _IconChoice(
+                        icon: entry.value,
+                        selected: entry.key == _iconKey,
+                        accent: Color(_color),
+                        onTap: () => setState(() => _iconKey = entry.key),
+                      ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),

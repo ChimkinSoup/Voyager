@@ -18,7 +18,6 @@ import 'package:voyager/features/study/study_name_modal.dart';
 import 'package:voyager/features/study/study_providers.dart';
 import 'package:voyager/features/study/study_session_page.dart';
 
-
 /// Global Study Hub: a centered dashboard of review stats above a library
 /// grid of folders/decks, plus the crossfade into the Deck Workbench.
 class StudyPage extends ConsumerStatefulWidget {
@@ -160,8 +159,10 @@ class _StudyPageState extends ConsumerState<StudyPage>
 
   void _jumpToFolderIndex(int index) {
     final stack = ref.read(studyBreadcrumbStackProvider);
-    ref.read(studyBreadcrumbStackProvider.notifier).state =
-        stack.sublist(0, index + 1);
+    ref.read(studyBreadcrumbStackProvider.notifier).state = stack.sublist(
+      0,
+      index + 1,
+    );
     if (_openDeckId != null) _closeDeck();
   }
 
@@ -460,7 +461,9 @@ class _HubContentState extends ConsumerState<_HubContent> {
                       ? child
                       : FadeTransition(opacity: animation, child: child);
                   if (reducedMotion) return result;
-                  final offset = incoming ? _direction * 0.06 : -_direction * 0.06;
+                  final offset = incoming
+                      ? _direction * 0.06
+                      : -_direction * 0.06;
                   return SlideTransition(
                     position: Tween<Offset>(
                       begin: Offset(offset, 0),
@@ -474,7 +477,9 @@ class _HubContentState extends ConsumerState<_HubContent> {
                   // new grid with its own scroll position instead of silently
                   // inheriting where the previous level was scrolled to.
                   key: ValueKey(parentId),
-                  storageKey: PageStorageKey('study-grid-${parentId ?? 'root'}'),
+                  storageKey: PageStorageKey(
+                    'study-grid-${parentId ?? 'root'}',
+                  ),
                   folders: foldersAsync.valueOrNull ?? const [],
                   decks: decksAsync.valueOrNull ?? const [],
                   loading: foldersAsync.isLoading || decksAsync.isLoading,
@@ -502,9 +507,7 @@ class _HubContentState extends ConsumerState<_HubContent> {
     context,
     ref,
     isFolder: isFolder,
-    parentFolderId: widget.folderStack.isEmpty
-        ? null
-        : widget.folderStack.last,
+    parentFolderId: widget.folderStack.isEmpty ? null : widget.folderStack.last,
   );
 }
 
@@ -1125,7 +1128,9 @@ class _DeckTileState extends ConsumerState<_DeckTile> {
                       ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+                        borderRadius: BorderRadius.circular(
+                          VoyagerTheme.fieldRadius,
+                        ),
                       ),
                       child: Text(
                         '${due ?? 0}',

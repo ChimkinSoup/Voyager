@@ -494,9 +494,8 @@ Future<void> deleteStudyDeck(
 }
 
 /// Recursively collects every descendant folder/deck of [folderId] (depth-first).
-Future<
-    ({List<StudyFolder> folders, List<StudyDeck> decks})>
-    _collectFolderContents(StudyRepository repo, String folderId) async {
+Future<({List<StudyFolder> folders, List<StudyDeck> decks})>
+_collectFolderContents(StudyRepository repo, String folderId) async {
   final folders = <StudyFolder>[];
   final decks = <StudyDeck>[];
   final childFolders = await repo.listFolders(parentFolderId: folderId);

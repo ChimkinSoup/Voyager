@@ -197,43 +197,37 @@ class _StudyFlipCardState extends State<StudyFlipCard>
       child: _pressScaled(
         reduced,
         AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          final v = _controller.value;
-          if (reduced) {
-            // No 3D rotation under reduced-motion — a plain crossfade instead.
-            return Stack(
+          animation: _controller,
+          builder: (context, child) {
+            final v = _controller.value;
+            if (reduced) {
+              // No 3D rotation under reduced-motion — a plain crossfade instead.
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  Opacity(opacity: 1 - v, child: widget.front),
+                  Opacity(opacity: v, child: widget.back),
+                ],
+              );
+            }
+            final t = VoyagerSpring.moveCurve.transform(v);
+            final angle = t * math.pi;
+            final showBack = t >= 0.5;
+            final transform = Matrix4.identity()
+              ..setEntry(3, 2, 0.001)
+              ..rotateY(angle);
+            return Transform(
               alignment: Alignment.center,
-              children: [
-                Opacity(
-                  opacity: 1 - v,
-                  child: widget.front,
-                ),
-                Opacity(
-                  opacity: v,
-                  child: widget.back,
-                ),
-              ],
+              transform: transform,
+              child: showBack
+                  ? Transform(
+                      alignment: Alignment.center,
+                      transform: Matrix4.identity()..rotateY(math.pi),
+                      child: widget.back,
+                    )
+                  : widget.front,
             );
-          }
-          final t = VoyagerSpring.moveCurve.transform(v);
-          final angle = t * math.pi;
-          final showBack = t >= 0.5;
-          final transform = Matrix4.identity()
-            ..setEntry(3, 2, 0.001)
-            ..rotateY(angle);
-          return Transform(
-            alignment: Alignment.center,
-            transform: transform,
-            child: showBack
-                ? Transform(
-                    alignment: Alignment.center,
-                    transform: Matrix4.identity()..rotateY(math.pi),
-                    child: widget.back,
-                  )
-                : widget.front,
-          );
-        },
+          },
         ),
       ),
     );

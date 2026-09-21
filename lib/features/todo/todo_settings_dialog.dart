@@ -38,7 +38,10 @@ class _TodoListSettingsDialog extends ConsumerWidget {
   /// Setting a default clears whichever list held it before, because
   /// [AppSettings.defaultTodoListId] is a single field — the exclusivity is
   /// structural rather than something the UI has to police.
-  Future<void> _saveDefaultList(WidgetRef ref, {required bool isDefault}) async {
+  Future<void> _saveDefaultList(
+    WidgetRef ref, {
+    required bool isDefault,
+  }) async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
     final settingsNotifier = ref.read(settingsProvider.notifier);
     final settings = await settingsRepo.getSettings();

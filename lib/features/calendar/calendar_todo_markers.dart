@@ -140,7 +140,10 @@ double calendarWeekAllDayShelfHeightFor({
   required List<CalendarEvent> events,
   required List<DateTime> weekDays,
 }) {
-  final packed = calendarPackWeekAllDayShelf(events: events, weekDays: weekDays);
+  final packed = calendarPackWeekAllDayShelf(
+    events: events,
+    weekDays: weekDays,
+  );
   final maxRows = calendarWeekAllDayShelfRowCount(packed);
   if (maxRows == 0) return calendarWeekAllDayShelfHeight;
   return maxRows * calendarWeekAllDayEventRowHeight;
@@ -215,9 +218,7 @@ List<CalendarTodoMarker> calendarTodoMarkersForDay(
   Iterable<CalendarTodoMarker> markers,
   DateTime day,
 ) {
-  return markers
-      .where((marker) => calendarTodoOnDay(marker, day))
-      .toList()
+  return markers.where((marker) => calendarTodoOnDay(marker, day)).toList()
     ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
 }
 
@@ -304,16 +305,11 @@ class CalendarDayTodoBar extends StatelessWidget {
           }
 
           final showText = width >= iconSize + (compact ? 4 : 8);
-          final showMeta =
-              !compact && width >= iconSize + 48;
+          final showMeta = !compact && width >= iconSize + 48;
 
           return Row(
             children: [
-              Icon(
-                PhosphorIconsFill.checkFat,
-                size: iconSize,
-                color: color,
-              ),
+              Icon(PhosphorIconsFill.checkFat, size: iconSize, color: color),
               if (showText) ...[
                 SizedBox(width: compact ? 2 : 4),
                 Expanded(
@@ -324,8 +320,9 @@ class CalendarDayTodoBar extends StatelessWidget {
                     style: AppFonts.style(
                       fontSize: fontSize,
                       height: 1,
-                      decoration:
-                          marker.completed ? TextDecoration.lineThrough : null,
+                      decoration: marker.completed
+                          ? TextDecoration.lineThrough
+                          : null,
                     ),
                   ),
                 ),
@@ -361,11 +358,7 @@ class CalendarDayTodoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CalendarDayTodoBar(
-      marker: marker,
-      fontSize: 12,
-      compact: true,
-    );
+    return CalendarDayTodoBar(marker: marker, fontSize: 12, compact: true);
   }
 }
 
@@ -444,11 +437,7 @@ class CalendarWeekTaskBar extends StatelessWidget {
                   ],
                   if (showMeta && marker.hasNotes) ...[
                     const SizedBox(width: 4),
-                    Icon(
-                      PhosphorIconsFill.note,
-                      size: 11,
-                      color: contentColor,
-                    ),
+                    Icon(PhosphorIconsFill.note, size: 11, color: contentColor),
                   ],
                   if (showMeta && marker.totalSubtaskCount > 0) ...[
                     const SizedBox(width: 4),
@@ -553,10 +542,10 @@ class CalendarWeekEventBlock extends StatelessWidget {
           alignment: bridgeLeft && bridgeRight
               ? Alignment.center
               : bridgeLeft
-                  ? Alignment.centerRight
-                  : bridgeRight
-                      ? Alignment.centerLeft
-                      : Alignment.center,
+              ? Alignment.centerRight
+              : bridgeRight
+              ? Alignment.centerLeft
+              : Alignment.center,
           child: CalendarInteractiveEventTap(
             eventColor: color,
             borderRadius: borderRadius,

@@ -544,7 +544,8 @@ class _RenderTagFlow extends RenderBox
     var lineWidth = 0.0;
     for (final chip in children) {
       chip.layout(BoxConstraints(maxWidth: width), parentUsesSize: true);
-      if (lines.last.isNotEmpty && lineWidth + _spacing + chip.size.width > width) {
+      if (lines.last.isNotEmpty &&
+          lineWidth + _spacing + chip.size.width > width) {
         lines.add(<RenderBox>[]);
         lineWidth = 0;
       }

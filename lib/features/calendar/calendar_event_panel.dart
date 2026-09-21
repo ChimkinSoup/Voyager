@@ -186,7 +186,8 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       return KeyEventResult.ignored;
     };
     _isFullDay = e?.isFullDay ?? widget.initialIsFullDay;
-    _start = e?.start ??
+    _start =
+        e?.start ??
         DateTime(
           widget.initialDate.year,
           widget.initialDate.month,
@@ -228,7 +229,8 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       _notesController.text = e?.notes ?? '';
       _lastNotesText = _notesController.text;
       _isFullDay = e?.isFullDay ?? widget.initialIsFullDay;
-      _start = e?.start ??
+      _start =
+          e?.start ??
           DateTime(
             widget.initialDate.year,
             widget.initialDate.month,
@@ -258,21 +260,24 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
   }
 
   void _handleNotesChanged(String value) {
-    applyListEditing(controller: _notesController, previousText: _lastNotesText);
+    applyListEditing(
+      controller: _notesController,
+      previousText: _lastNotesText,
+    );
     _lastNotesText = _notesController.text;
   }
 
   Map<String, dynamic> _buildPayload(String title) => {
-        'title': title,
-        'notes': _notesController.text.trim(),
-        'isFullDay': _isFullDay,
-        'start': _start,
-        'end': _end,
-        'colorValue': _colorValue,
-        'recurrence': _recurrence,
-        'calendarId': _calendarId,
-        'id': _eventId,
-      };
+    'title': title,
+    'notes': _notesController.text.trim(),
+    'isFullDay': _isFullDay,
+    'start': _start,
+    'end': _end,
+    'colorValue': _colorValue,
+    'recurrence': _recurrence,
+    'calendarId': _calendarId,
+    'id': _eventId,
+  };
 
   /// Returns true when the form is valid and [onSave] was called.
   bool _trySave({bool showValidationErrors = true}) {
@@ -427,8 +432,9 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
         }),
       ),
       inputDecorationTheme: baseTheme.inputDecorationTheme.copyWith(
-        floatingLabelStyle:
-            baseTheme.textTheme.labelLarge?.copyWith(color: accent),
+        floatingLabelStyle: baseTheme.textTheme.labelLarge?.copyWith(
+          color: accent,
+        ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
           borderSide: BorderSide(
@@ -488,7 +494,8 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                             top: 0,
                             right: 10,
                             child: JournalTitleCornerFlag(
-                              colorValue: widget.calendars
+                              colorValue:
+                                  widget.calendars
                                       .cast<Calendar?>()
                                       .firstWhere(
                                         (c) => c?.id == _calendarId,
@@ -500,9 +507,11 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                                   setState(() => _calendarId = v),
                               tooltip: 'Move to calendar',
                               menuEntries: (_) => [
-                                for (var i = 0;
-                                    i < widget.calendars.length;
-                                    i++)
+                                for (
+                                  var i = 0;
+                                  i < widget.calendars.length;
+                                  i++
+                                )
                                   VoyagerPopupMenuItem<String>(
                                     value: widget.calendars[i].id,
                                     position: VoyagerMenuTheme.positionFor(
@@ -519,18 +528,18 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                                         ),
                                         const SizedBox(width: 8),
                                         Expanded(
-                                          child: Text(
-                                            widget.calendars[i].name,
-                                          ),
+                                          child: Text(widget.calendars[i].name),
                                         ),
                                         if (widget.calendars[i].id ==
                                             _calendarId)
                                           Icon(
                                             PhosphorIconsRegular.check,
                                             size: 18,
-                                            color: Color(_calendarFlagColor(
-                                              widget.calendars[i],
-                                            )),
+                                            color: Color(
+                                              _calendarFlagColor(
+                                                widget.calendars[i],
+                                              ),
+                                            ),
                                           ),
                                       ],
                                     ),
@@ -546,8 +555,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                     offset: const Offset(2, 0),
                     child: IconButton(
                       focusNode: _allDayFocusNode,
-                      onPressed: () =>
-                          setState(() => _isFullDay = !_isFullDay),
+                      onPressed: () => setState(() => _isFullDay = !_isFullDay),
                       tooltip: _isFullDay ? 'All day (on)' : 'All day (off)',
                       padding: EdgeInsets.zero,
                       constraints: kMinTouchTarget,
@@ -556,8 +564,9 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                         size: 18,
                         color: _isFullDay
                             ? accent
-                            : baseTheme.colorScheme.onSurface
-                                .withValues(alpha: 0.35),
+                            : baseTheme.colorScheme.onSurface.withValues(
+                                alpha: 0.35,
+                              ),
                       ),
                     ),
                   ),
@@ -592,7 +601,8 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                         children: [
                           Builder(
                             builder: (buttonContext) {
-                              final isMultiDay = _start.year != _end.year ||
+                              final isMultiDay =
+                                  _start.year != _end.year ||
                                   _start.month != _end.month ||
                                   _start.day != _end.day;
                               final dateFormat = isMultiDay
@@ -610,18 +620,20 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                                 onTap: () async {
                                   setState(() => _isDatePopoverOpen = true);
                                   final dateRange =
-                                      await showContextualPopover<DateTimeRange>(
-                                    context: context,
-                                    buttonContext: buttonContext,
-                                    width: 320,
-                                    height: 380,
-                                    accentColor: accent,
-                                    builder: (ctx) => DateSelectorPopover(
-                                      initialStartDate: _start,
-                                      initialEndDate: _end,
-                                      accentColor: accent,
-                                    ),
-                                  );
+                                      await showContextualPopover<
+                                        DateTimeRange
+                                      >(
+                                        context: context,
+                                        buttonContext: buttonContext,
+                                        width: 320,
+                                        height: 380,
+                                        accentColor: accent,
+                                        builder: (ctx) => DateSelectorPopover(
+                                          initialStartDate: _start,
+                                          initialEndDate: _end,
+                                          accentColor: accent,
+                                        ),
+                                      );
                                   if (!mounted) return;
                                   setState(() => _isDatePopoverOpen = false);
                                   if (dateRange != null) {
@@ -675,20 +687,23 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(
-                                      TimeOfDay.fromDateTime(_start).format(context),
+                                      TimeOfDay.fromDateTime(
+                                        _start,
+                                      ).format(context),
                                       style: Theme.of(context)
                                           .textTheme
                                           .labelMedium
                                           ?.copyWith(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurface,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurface,
                                             fontWeight: FontWeight.w500,
                                           ),
                                     ),
                                     Padding(
-                                      padding:
-                                          const EdgeInsets.symmetric(horizontal: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 2,
+                                      ),
                                       child: Icon(
                                         Icons.arrow_forward,
                                         size: 10,
@@ -699,14 +714,16 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                                       ),
                                     ),
                                     Text(
-                                      TimeOfDay.fromDateTime(_end).format(context),
+                                      TimeOfDay.fromDateTime(
+                                        _end,
+                                      ).format(context),
                                       style: Theme.of(context)
                                           .textTheme
                                           .labelMedium
                                           ?.copyWith(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurface,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurface,
                                             fontWeight: FontWeight.w500,
                                           ),
                                     ),
@@ -745,53 +762,49 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                 ],
               ),
               const SizedBox(height: 10),
-                // ── Row 3: notes ─────────────────────────────────────────
-                LabeledTextField(
-                  label: 'Notes',
-                  controller: _notesController,
-                  focusNode: _notesFocusNode,
-                  maxLines: 3,
-                  keyboardType: TextInputType.multiline,
-                  textInputAction: TextInputAction.newline,
-                  accentColor: accent,
-                  onChanged: _handleNotesChanged,
+              // ── Row 3: notes ─────────────────────────────────────────
+              LabeledTextField(
+                label: 'Notes',
+                controller: _notesController,
+                focusNode: _notesFocusNode,
+                maxLines: 3,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
+                accentColor: accent,
+                onChanged: _handleNotesChanged,
+              ),
+              // ── Row 4: color swatches (no label) ─────────────────────
+              ColorPickerField(
+                label: '',
+                value: _colorValue,
+                swatchRadius: 14,
+                maxHeight: paletteViewportHeight(
+                  14,
+                  visibleRows: 2,
+                  clipPartialNextRow: true,
                 ),
-                // ── Row 4: color swatches (no label) ─────────────────────
-                ColorPickerField(
-                  label: '',
-                  value: _colorValue,
-                  swatchRadius: 14,
-                  maxHeight: paletteViewportHeight(
-                    14,
-                    visibleRows: 2,
-                    clipPartialNextRow: true,
+                onChanged: (value) {
+                  setState(() => _colorValue = value);
+                  ContextualPopoverAccent.update(context, Color(value));
+                },
+              ),
+              const SizedBox(height: 10),
+              // ── Row 5: cancel / save ──────────────────────────────────
+              Row(
+                children: [
+                  GlassButton(
+                    onPressed: _discard,
+                    label: 'Cancel',
+                    dense: true,
                   ),
-                  onChanged: (value) {
-                    setState(() => _colorValue = value);
-                    ContextualPopoverAccent.update(context, Color(value));
-                  },
-                ),
-                const SizedBox(height: 10),
-                // ── Row 5: cancel / save ──────────────────────────────────
-                Row(
-                  children: [
-                    GlassButton(
-                      onPressed: _discard,
-                      label: 'Cancel',
-                      dense: true,
-                    ),
-                    const Spacer(),
-                    GlassButton(
-                      onPressed: _submit,
-                      label: 'Save',
-                      dense: true,
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  const Spacer(),
+                  GlassButton(onPressed: _submit, label: 'Save', dense: true),
+                ],
+              ),
+            ],
           ),
         ),
+      ),
     );
 
     final content = Stack(

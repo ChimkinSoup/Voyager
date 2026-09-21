@@ -136,7 +136,8 @@ class _ExpandingPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
+    final size = MediaQuery.sizeOf(context);
+    final width = size.width;
     // Capped so the panel doesn't stretch to the full width of a desktop
     // window, where a centred column of controls is easier to work through.
     final maxWidth = width < 560 ? width - VoyagerSpacing.lg * 2 : 520.0;
@@ -144,7 +145,13 @@ class _ExpandingPanel extends StatelessWidget {
     final panel = ConstrainedBox(
       constraints: BoxConstraints(
         maxWidth: maxWidth,
-        maxHeight: MediaQuery.sizeOf(context).height * 0.82,
+        // Everything below the island's top edge, less a margin: the panel
+        // doesn't scroll, so every pixel it is denied shrinks it.
+        maxHeight:
+            size.height -
+            MediaQuery.paddingOf(context).top -
+            VoyagerSpacing.sm -
+            VoyagerSpacing.xl,
       ),
       child: child,
     );

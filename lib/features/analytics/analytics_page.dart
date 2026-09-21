@@ -68,8 +68,9 @@ final _heatmapDraggingProvider = StateProvider<bool>((_) => false);
 /// past with nothing to explain it. Disposal also re-runs the initialiser on
 /// every open, so a session left running across New Year stops reporting the
 /// previous year as the current one.
-final _calendarViewYearProvider = StateProvider.autoDispose
-    .family<int, String>((ref, trackerId) => DateTime.now().year);
+final _calendarViewYearProvider = StateProvider.autoDispose.family<int, String>(
+  (ref, trackerId) => DateTime.now().year,
+);
 
 /// Older (top-row) year of the 2-year window shown by [_MonthGridCalendar].
 final _calendarViewMonthlyBaseYearProvider = StateProvider.autoDispose
@@ -174,7 +175,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               ? ref.watch(allDreamEntriesProvider)
               : null;
           final today = DateTime.now();
-          final dreamLoggedToday = dreamEntriesAsync?.valueOrNull?.any((e) {
+          final dreamLoggedToday =
+              dreamEntriesAsync?.valueOrNull?.any((e) {
                 final d = e.entryDate.toLocal();
                 return d.year == today.year &&
                     d.month == today.month &&
@@ -186,7 +188,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               ? ref.watch(workoutDaysProvider).valueOrNull
               : null;
           final workedOutToday =
-              workoutDays?.contains(DateTime(today.year, today.month, today.day)) ??
+              workoutDays?.contains(
+                DateTime(today.year, today.month, today.day),
+              ) ??
               false;
           return KeepAliveScrollView(
             storageKey: ShellPageStorageKeys.analyticsList,
@@ -649,10 +653,7 @@ class _StatTileState extends State<_StatTile> {
     // fires only where a drag/tap does — never over the sparkline or squares,
     // which claim the pointer above and so never reach here.
     if (widget.menuItems.isNotEmpty) {
-      tapTarget = ContextMenuRegion(
-        items: widget.menuItems,
-        child: tapTarget,
-      );
+      tapTarget = ContextMenuRegion(items: widget.menuItems, child: tapTarget);
     }
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -1028,11 +1029,8 @@ class _SparklineRow extends ConsumerWidget {
                     final anchorSpots = anchors.reversed.toList();
                     final ascendingPeriodStarts = periodStarts.reversed
                         .toList();
-                    DateTime periodStartOf(DateTime date) =>
-                        promptService.trackerPeriodStartFor(
-                          date,
-                          tracker.cadence,
-                        );
+                    DateTime periodStartOf(DateTime date) => promptService
+                        .trackerPeriodStartFor(date, tracker.cadence);
                     final dataMax = spots
                         .map((s) => s.y)
                         .fold<double>(1, (m, y) => y > m ? y : m);
@@ -1212,11 +1210,15 @@ class _SparklineRow extends ConsumerWidget {
                               show: true,
                               border: Border(
                                 bottom: BorderSide(
-                                  color: VoyagerColors.of(context).strongHairline,
+                                  color: VoyagerColors.of(
+                                    context,
+                                  ).strongHairline,
                                   width: 1,
                                 ),
                                 left: BorderSide(
-                                  color: VoyagerColors.of(context).strongHairline,
+                                  color: VoyagerColors.of(
+                                    context,
+                                  ).strongHairline,
                                   width: 1,
                                 ),
                               ),
@@ -1854,10 +1856,12 @@ class _HeatmapRow extends ConsumerWidget {
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                         onPressed: () async {
-                          final updated = await showVoyagerDialog<StatisticTracker>(
-                            context: context,
-                            builder: (_) => _TrackerDialog(tracker: tracker),
-                          );
+                          final updated =
+                              await showVoyagerDialog<StatisticTracker>(
+                                context: context,
+                                builder: (_) =>
+                                    _TrackerDialog(tracker: tracker),
+                              );
                           if (updated == null) return;
                           await ref
                               .read(trackerRepositoryProvider)
@@ -1900,8 +1904,7 @@ class _HeatmapRow extends ConsumerWidget {
                           Builder(
                             builder: (ctx) {
                               final period = shown[i];
-                              final showLabel =
-                                  (shown.length - 1 - i) % 5 == 0;
+                              final showLabel = (shown.length - 1 - i) % 5 == 0;
                               return Padding(
                                 padding: const EdgeInsets.only(right: gap),
                                 child: Column(
@@ -1932,24 +1935,28 @@ class _HeatmapRow extends ConsumerWidget {
                                         fit: OverflowBoxFit.deferToChild,
                                         child: IgnorePointer(
                                           child: showLabel
-                                          ? Text(
-                                              _shortDateLabel(
-                                                period,
-                                                tracker.cadence,
-                                              ),
-                                              style: theme.textTheme.labelSmall
-                                                  ?.copyWith(
-                                                    fontSize: 8,
-                                                    color: theme
-                                                        .colorScheme
-                                                        .onSurfaceVariant
-                                                        .withValues(alpha: 0.7),
+                                              ? Text(
+                                                  _shortDateLabel(
+                                                    period,
+                                                    tracker.cadence,
                                                   ),
-                                            )
-                                          : const Text(
-                                              '',
-                                              style: TextStyle(fontSize: 8),
-                                            ),
+                                                  style: theme
+                                                      .textTheme
+                                                      .labelSmall
+                                                      ?.copyWith(
+                                                        fontSize: 8,
+                                                        color: theme
+                                                            .colorScheme
+                                                            .onSurfaceVariant
+                                                            .withValues(
+                                                              alpha: 0.7,
+                                                            ),
+                                                      ),
+                                                )
+                                              : const Text(
+                                                  '',
+                                                  style: TextStyle(fontSize: 8),
+                                                ),
                                         ),
                                       ),
                                     ),
@@ -2068,6 +2075,7 @@ void _openSparklinePeriodEditor({
   required Color color,
   required ValueChanged<_SparklineTouch?> onTouchChanged,
   required VoidCallback onSaved,
+
   /// The whole drawn series, not just this touch's hits — the reading below is
   /// taken at the period's anchor spot, which is rarely the one under the
   /// pointer.
@@ -2095,7 +2103,8 @@ void _openSparklinePeriodEditor({
   // has none), so refusing here made a brand-new consecutive tracker
   // impossible to enter data into from the grid. The morph is decoration; the
   // editor is not.
-  final anchorRect = bubbleKeys.bubbleRect ?? _pointerAnchorRect(context, event);
+  final anchorRect =
+      bubbleKeys.bubbleRect ?? _pointerAnchorRect(context, event);
   if (anchorRect == null) return;
   final anchorDateRect = bubbleKeys.dateRect;
   // The data curve's hit, not `spots.first` — see [_sparklineDataBarSpot].
@@ -2964,9 +2973,7 @@ class _HoverEditPopoverState extends ConsumerState<_HoverEditPopover> {
                 decoration: BoxDecoration(
                   color: _tooltipBubbleColor(context),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: VoyagerColors.of(context).hairline,
-                  ),
+                  border: Border.all(color: VoyagerColors.of(context).hairline),
                 ),
                 child: _tooltipDateValueColumn(
                   periodLabel: widget.periodLabel,
@@ -3431,7 +3438,8 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
                     boxShadow: [
                       BoxShadow(
                         color: VoyagerColors.of(context).shadow.withValues(
-                          alpha: VoyagerColors.of(context).strongShadowAlpha * t,
+                          alpha:
+                              VoyagerColors.of(context).strongShadowAlpha * t,
                         ),
                         blurRadius:
                             10 * t * VoyagerColors.of(context).shadowBlurScale,
@@ -4190,7 +4198,6 @@ class _DetailStatisticsSection extends ConsumerWidget {
     if (values.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
 
-
     final rows = <Widget>[];
     ({int longest, int current}) streak;
 
@@ -4384,11 +4391,11 @@ class _TrackerStatisticsDialog extends ConsumerWidget {
     // copy seeding both counters at 1.
     final streakPeriods = tracker.type == TrackerType.boolean
         ? (values
-                  .where((v) => v.boolValue == true)
-                  .map((v) => dateOnly(v.periodStart))
-                  .toSet()
-                  .toList()
-              ..sort())
+              .where((v) => v.boolValue == true)
+              .map((v) => dateOnly(v.periodStart))
+              .toSet()
+              .toList()
+            ..sort())
         : periods;
     final streak = _streakStats(streakPeriods, tracker.cadence);
     final longestStreak = streak.longest;
@@ -4408,10 +4415,7 @@ class _TrackerStatisticsDialog extends ConsumerWidget {
 
     switch (tracker.type) {
       case TrackerType.integer:
-        final ints = values
-            .map((v) => v.intValue)
-            .whereType<int>()
-            .toList();
+        final ints = values.map((v) => v.intValue).whereType<int>().toList();
         if (ints.isNotEmpty) {
           final total = ints.reduce((a, b) => a + b);
           final highest = ints.reduce((a, b) => a > b ? a : b);
@@ -4423,10 +4427,10 @@ class _TrackerStatisticsDialog extends ConsumerWidget {
           ]);
         }
       case TrackerType.boolean:
-        final completed =
-            values.where((v) => v.boolValue == true).length;
-        rows.add(_row(context, 'Times completed',
-            compactNumberLabel(completed)));
+        final completed = values.where((v) => v.boolValue == true).length;
+        rows.add(
+          _row(context, 'Times completed', compactNumberLabel(completed)),
+        );
       case TrackerType.enumType:
         break;
     }
@@ -4565,10 +4569,12 @@ class _StatisticDetailPopup extends ConsumerWidget {
                         padding: EdgeInsets.zero,
                         constraints: kMinTouchTarget,
                         onPressed: () async {
-                          final updated = await showVoyagerDialog<StatisticTracker>(
-                            context: context,
-                            builder: (_) => _TrackerDialog(tracker: tracker),
-                          );
+                          final updated =
+                              await showVoyagerDialog<StatisticTracker>(
+                                context: context,
+                                builder: (_) =>
+                                    _TrackerDialog(tracker: tracker),
+                              );
                           if (updated == null) return;
                           await ref
                               .read(trackerRepositoryProvider)
@@ -4806,8 +4812,7 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
                             onTouchChanged: onTouchChanged,
                             series: spots,
                             snapX: snapX,
-                            onSaved: () =>
-                                invalidateTrackerCache(tracker.id),
+                            onSaved: () => invalidateTrackerCache(tracker.id),
                           );
                         },
                   ),
@@ -5568,9 +5573,7 @@ class _YearGridCalendar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
     final theme = Theme.of(context);
-    final baseYear = ref.watch(
-      _calendarViewYearlyBaseYearProvider(tracker.id),
-    );
+    final baseYear = ref.watch(_calendarViewYearlyBaseYearProvider(tracker.id));
 
     void previousWindow() {
       ref
@@ -6116,7 +6119,9 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                                   index: i,
                                   child: Icon(
                                     Icons.drag_handle,
-                                    color: Theme.of(context).colorScheme.onSurface
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurface
                                         .withValues(alpha: 0.5),
                                   ),
                                 ),

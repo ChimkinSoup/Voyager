@@ -31,7 +31,8 @@ class LeetCodeProgressRings extends ConsumerWidget {
       for (final d in LeetCodeDifficulty.values) d: 0,
     };
     for (final p in problems) {
-      solvedByDifficulty[p.difficulty] = (solvedByDifficulty[p.difficulty] ?? 0) + 1;
+      solvedByDifficulty[p.difficulty] =
+          (solvedByDifficulty[p.difficulty] ?? 0) + 1;
     }
     final totalSolved = problems.length;
     final neetSolved = countNeetCode150Matches(problems.map((p) => p.title));
@@ -92,11 +93,12 @@ class LeetCodeProgressRings extends ConsumerWidget {
     return solved / total;
   }
 
-  int _totalFor(LeetCodeDifficulty d, LeetCodeQuestionCounts counts) => switch (d) {
-    LeetCodeDifficulty.easy => counts.easy,
-    LeetCodeDifficulty.medium => counts.medium,
-    LeetCodeDifficulty.hard => counts.hard,
-  };
+  int _totalFor(LeetCodeDifficulty d, LeetCodeQuestionCounts counts) =>
+      switch (d) {
+        LeetCodeDifficulty.easy => counts.easy,
+        LeetCodeDifficulty.medium => counts.medium,
+        LeetCodeDifficulty.hard => counts.hard,
+      };
 }
 
 class _RingTile extends StatelessWidget {
@@ -132,12 +134,13 @@ class _RingTile extends StatelessWidget {
       child: Text(
         label,
         textAlign: TextAlign.center,
-        style: (size >= 120
-                ? theme.textTheme.titleMedium
-                : size >= 90
+        style:
+            (size >= 120
+                    ? theme.textTheme.titleMedium
+                    : size >= 90
                     ? theme.textTheme.titleSmall
                     : theme.textTheme.labelMedium)
-            ?.copyWith(fontWeight: FontWeight.w600),
+                ?.copyWith(fontWeight: FontWeight.w600),
       ),
     );
 

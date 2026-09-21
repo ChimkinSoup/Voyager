@@ -249,11 +249,7 @@ DateTime calendarWeekStart(DateTime date, bool weekStartsMonday) {
   // Field-based subtraction (not Duration), so this stays correct across
   // DST transitions — Duration(days:) is a fixed elapsed-time delta and can
   // land on the wrong calendar day for a local DateTime.
-  return DateTime(
-    date.year,
-    date.month,
-    date.day - (weekday - firstDay) % 7,
-  );
+  return DateTime(date.year, date.month, date.day - (weekday - firstDay) % 7);
 }
 
 /// True when any day of [weekStart]'s week falls in [month]'s calendar month.

@@ -19,7 +19,11 @@ const EdgeInsets _padding = EdgeInsets.fromLTRB(20, 18, 20, 20);
 /// Popup content for a single blossom: the stat's title, its current value,
 /// and (if there is one) a footnote explaining the assumption behind it.
 class BlossomStatPopup extends ConsumerWidget {
-  const BlossomStatPopup({super.key, required this.stat, required this.accentColor});
+  const BlossomStatPopup({
+    super.key,
+    required this.stat,
+    required this.accentColor,
+  });
 
   final LifeStat stat;
   final Color accentColor;
@@ -93,7 +97,9 @@ class BlossomStatPopup extends ConsumerWidget {
                   Text(
                     resolved.footnote!,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.55,
+                      ),
                     ),
                   ),
                 ],

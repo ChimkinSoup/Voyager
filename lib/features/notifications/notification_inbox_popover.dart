@@ -489,10 +489,7 @@ const double _kNoteBulletLift = 0.26;
 
 /// Where a line's elbow sits vertically, in the painter's own coordinates.
 double _noteMarkMiddle(ui.LineMetrics line) =>
-    _kPinnedNoteTextPadding.top +
-    line.baseline -
-    line.ascent +
-    line.height / 2;
+    _kPinnedNoteTextPadding.top + line.baseline - line.ascent + line.height / 2;
 
 /// Marks a note's first line with a bullet, and the lines [text] wrapped onto
 /// by itself with an elbow — so a soft wrap reads differently from a line the
@@ -822,7 +819,7 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
           return VimOverlayHost(
             session: vim.session,
             snippetSession: vim.snippetSession,
-              autocorrectSession: vim.autocorrectSession,
+            autocorrectSession: vim.autocorrectSession,
             overlayPaintsSelection: vim.overlayPaintsSelection,
             spanBuilder: _prose.overlaySpan,
             highlightFill: emphasisTheme.highlightColor,
@@ -1487,7 +1484,6 @@ class _FeedRowState extends ConsumerState<_FeedRow>
       child: Center(child: child),
     );
   }
-
 }
 
 /// A feed item's title over its due / date · time / amount · due line — the
@@ -1733,8 +1729,7 @@ class _HiddenSectionState extends ConsumerState<_HiddenSection>
     // Captured before the awaits: closing the popover mid-restore must not
     // skip the invalidate on a keepAlive dismissals cache.
     final container = ProviderScope.containerOf(context, listen: false);
-    final hidden =
-        await container.read(hiddenNotificationFeedProvider.future);
+    final hidden = await container.read(hiddenNotificationFeedProvider.future);
     if (hidden.isEmpty) return;
     final repo = container.read(notificationRepositoryProvider);
     for (final item in hidden) {
@@ -1924,11 +1919,7 @@ class _MiniCheckbox extends StatelessWidget {
         ),
       ),
       child: value
-          ? Icon(
-              PhosphorIconsBold.check,
-              size: 10,
-              color: onColorLabel(accent),
-            )
+          ? Icon(PhosphorIconsBold.check, size: 10, color: onColorLabel(accent))
           : null,
     );
   }
@@ -2079,51 +2070,50 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         child: trackersAsync.when(
-              data: (trackers) {
-                final daily = trackers
-                    .where(
-                      (t) =>
-                          t.cadence == TrackerCadence.daily &&
-                          t.deletedAt == null,
-                    )
-                    .toList();
-                if (daily.isEmpty) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Text(
-                      'No daily trackers yet.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+          data: (trackers) {
+            final daily = trackers
+                .where(
+                  (t) =>
+                      t.cadence == TrackerCadence.daily && t.deletedAt == null,
+                )
+                .toList();
+            if (daily.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                  'No daily trackers yet.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              );
+            }
+            return Column(
+              children: [
+                for (final tracker in daily)
+                  TrackerEntryRow(
+                    key: _keyFor(tracker.id),
+                    tracker: tracker,
+                    date: _selectedDate,
+                    onDirtyChanged: (dirty) =>
+                        _onDirtyChanged(tracker.id, dirty),
+                  ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: GlassButton(
+                    onPressed: _dirtyTrackerIds.isEmpty ? null : _saveAll,
+                    icon: const Icon(
+                      PhosphorIconsRegular.checkCircle,
+                      size: 14,
                     ),
-                  );
-                }
-                return Column(
-                  children: [
-                    for (final tracker in daily)
-                      TrackerEntryRow(
-                        key: _keyFor(tracker.id),
-                        tracker: tracker,
-                        date: _selectedDate,
-                        onDirtyChanged: (dirty) =>
-                            _onDirtyChanged(tracker.id, dirty),
-                      ),
-                    const SizedBox(height: 4),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: GlassButton(
-                        onPressed: _dirtyTrackerIds.isEmpty ? null : _saveAll,
-                        icon: const Icon(
-                          PhosphorIconsRegular.checkCircle,
-                          size: 14,
-                        ),
-                        label: 'Save',
-                        dense: true,
-                      ),
-                    ),
-                  ],
-                );
-              },
+                    label: 'Save',
+                    dense: true,
+                  ),
+                ),
+              ],
+            );
+          },
           loading: () => const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
             child: LinearProgressIndicator(),

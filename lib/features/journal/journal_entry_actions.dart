@@ -26,15 +26,15 @@ void showJournalEntryStatisticsDialog(
   final sentences = entry.body.trim().isEmpty
       ? 0
       : entry.body
-          .split(RegExp(r'[.!?]+(?:\s+|$)'))
-          .where((s) => s.trim().isNotEmpty)
-          .length;
+            .split(RegExp(r'[.!?]+(?:\s+|$)'))
+            .where((s) => s.trim().isNotEmpty)
+            .length;
   final paragraphs = entry.body.trim().isEmpty
       ? 0
       : entry.body
-          .split(RegExp(r'\n\s*\n'))
-          .where((p) => p.trim().isNotEmpty)
-          .length;
+            .split(RegExp(r'\n\s*\n'))
+            .where((p) => p.trim().isNotEmpty)
+            .length;
 
   final formattedDate = DateFormat.yMMMMd().format(entry.entryDate.toLocal());
   final formattedTime = formatTime12Hour(entry.entryDate.toLocal());
@@ -60,8 +60,9 @@ void showJournalEntryStatisticsDialog(
           children: [
             Text(
               entry.title.isEmpty ? 'Untitled Entry' : entry.title,
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 4),
             Text(

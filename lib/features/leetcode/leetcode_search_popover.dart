@@ -33,7 +33,8 @@ class _SearchPopoverContent extends ConsumerStatefulWidget {
   const _SearchPopoverContent();
 
   @override
-  ConsumerState<_SearchPopoverContent> createState() => _SearchPopoverContentState();
+  ConsumerState<_SearchPopoverContent> createState() =>
+      _SearchPopoverContentState();
 }
 
 class _SearchPopoverContentState extends ConsumerState<_SearchPopoverContent> {
@@ -145,8 +146,9 @@ class _SearchPopoverContentState extends ConsumerState<_SearchPopoverContent> {
           trailing: Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: colorForLeetCodeDifficulty(q.difficulty)
-                  .withValues(alpha: 0.14),
+              color: colorForLeetCodeDifficulty(
+                q.difficulty,
+              ).withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
             ),
             child: Text(

@@ -9,13 +9,17 @@ import 'package:voyager/core/theme/voyager_spacing.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
-import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/features/workout/exercise_detail_view.dart';
 import 'package:voyager/features/workout/workout_session_controller.dart';
 import 'package:voyager/features/workout/workout_units.dart';
 import 'package:voyager/features/workout/workout_wheel_pair.dart';
+
+/// Height below which the panel's body switches the wheels from five visible
+/// rows to three — the body's natural height with five-row wheels and a
+/// single-segment set, measured in the real fonts.
+const double _roomyWheelsMinHeight = 722;
 
 /// The expanded live workout: two wheels, the set list for the current
 /// movement, and the controls to log it.
@@ -49,73 +53,105 @@ class ActiveWorkoutView extends ConsumerWidget {
                 child: Text('Every set is done — finish when you are ready.'),
               )
             else
+              // Never scrolls: the whole set has to be in view mid-lift. When
+              // the window is too short, the wheels drop to three rows first,
+              // and whatever still doesn't fit is scaled down to the space.
               Flexible(
-                child: VoyagerScrollView(
-                  padding: const EdgeInsets.fromLTRB(
-                    VoyagerSpacing.xl,
-                    0,
-                    VoyagerSpacing.xl,
-                    VoyagerSpacing.xl,
-                  ),
-                  child: Column(
-                    children: [
-                      _CurrentExerciseTitle(exercise: exercise, state: state),
-                      const SizedBox(height: VoyagerSpacing.md),
-                      WorkoutWheelPair(
-                        key: ValueKey('${set.id}-${state.segmentIndex}'),
-                        weightKg: state.currentSegment?.weightKg ?? set.weightKg,
-                        reps: state.currentSegment?.reps ?? set.reps,
-                        unit: unit,
-                        deviatesFromPlan: set.deviatesFromPlan,
-                        onInteraction: controller.cancelRest,
-                        onWeightChanged: (kg) =>
-                            controller.updateCurrentSet(weightKg: kg),
-                        onRepsChanged: (reps) =>
-                            controller.updateCurrentSet(reps: reps),
-                      ),
-                      if (set.deviatesFromPlan)
-                        Padding(
-                          padding: const EdgeInsets.only(
-                            top: VoyagerSpacing.xs,
-                          ),
-                          child: Text(
-                            'Planned '
-                            '${unit.formatKilogramsWithUnit(set.plannedWeightKg)}'
-                            ' × ${set.plannedReps}'
-                            '${set.plannedDropSegments.isEmpty ? '' : ' + drops'}'
-                            ' — just for today',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) => FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      width: constraints.maxWidth,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          VoyagerSpacing.xl,
+                          0,
+                          VoyagerSpacing.xl,
+                          VoyagerSpacing.xl,
                         ),
-                      const SizedBox(height: VoyagerSpacing.md),
-                      _DropSegmentsPanel(
-                        set: set,
-                        unit: unit,
-                        segmentIndex: state.segmentIndex,
-                        controller: controller,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _CurrentExerciseTitle(
+                              exercise: exercise,
+                              state: state,
+                            ),
+                            const SizedBox(height: VoyagerSpacing.md),
+                            WorkoutWheelPair(
+                              key: ValueKey('${set.id}-${state.segmentIndex}'),
+                              weightKg:
+                                  state.currentSegment?.weightKg ??
+                                  set.weightKg,
+                              reps: state.currentSegment?.reps ?? set.reps,
+                              unit: unit,
+                              visibleItems:
+                                  constraints.maxHeight < _roomyWheelsMinHeight
+                                  ? 3
+                                  : 5,
+                              deviatesFromPlan: set.deviatesFromPlan,
+                              onInteraction: controller.cancelRest,
+                              onWeightChanged: (kg) =>
+                                  controller.updateCurrentSet(weightKg: kg),
+                              onRepsChanged: (reps) =>
+                                  controller.updateCurrentSet(reps: reps),
+                            ),
+                            if (set.deviatesFromPlan)
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  top: VoyagerSpacing.xs,
+                                ),
+                                child: Text(
+                                  'Planned '
+                                  '${unit.formatKilogramsWithUnit(set.plannedWeightKg)}'
+                                  ' × ${set.plannedReps}'
+                                  '${set.plannedDropSegments.isEmpty ? '' : ' + drops'}'
+                                  ' — just for today',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(height: VoyagerSpacing.md),
+                            _DropSegmentsPanel(
+                              set: set,
+                              unit: unit,
+                              segmentIndex: state.segmentIndex,
+                              controller: controller,
+                            ),
+                            const SizedBox(height: VoyagerSpacing.lg),
+                            _SetCountField(
+                              key: ValueKey(set.exerciseId),
+                              count: state.currentExerciseSets.length,
+                              onChanged: controller.setCurrentExerciseSetCount,
+                            ),
+                            const SizedBox(height: VoyagerSpacing.lg),
+                            _SetRow(
+                              state: state,
+                              unit: unit,
+                              controller: controller,
+                            ),
+                            const SizedBox(height: VoyagerSpacing.lg),
+                            GlassButton(
+                              icon: const Icon(
+                                PhosphorIconsFill.check,
+                                size: 16,
+                              ),
+                              label: 'Complete set',
+                              color: theme.colorScheme.primary,
+                              onPressed: controller.completeCurrentSet,
+                            ),
+                            if (state.sessionExercises.length > 1) ...[
+                              const SizedBox(height: VoyagerSpacing.lg),
+                              _ExerciseStrip(
+                                state: state,
+                                controller: controller,
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: VoyagerSpacing.lg),
-                      _SetCountField(
-                        key: ValueKey(set.exerciseId),
-                        count: state.currentExerciseSets.length,
-                        onChanged: controller.setCurrentExerciseSetCount,
-                      ),
-                      const SizedBox(height: VoyagerSpacing.lg),
-                      _SetRow(state: state, unit: unit, controller: controller),
-                      const SizedBox(height: VoyagerSpacing.lg),
-                      GlassButton(
-                        icon: const Icon(PhosphorIconsFill.check, size: 16),
-                        label: 'Complete set',
-                        color: theme.colorScheme.primary,
-                        onPressed: controller.completeCurrentSet,
-                      ),
-                      if (state.sessionExercises.length > 1) ...[
-                        const SizedBox(height: VoyagerSpacing.lg),
-                        _ExerciseStrip(state: state, controller: controller),
-                      ],
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -222,11 +258,7 @@ class _CurrentExerciseTitle extends StatelessWidget {
     return Builder(
       builder: (titleContext) => InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => openExerciseDetailView(
-          titleContext,
-          exercise,
-          anchorRectFor(titleContext),
-        ),
+        onTap: () => openExerciseDetailView(titleContext, exercise),
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: VoyagerSpacing.sm,
@@ -394,7 +426,7 @@ class _SetRow extends StatelessWidget {
                   Text(
                     set.completed
                         ? '${unit.formatKilograms(set.weightKg)} × ${set.reps}'
-                            '${set.hasDrops ? ' ↓' : ''}'
+                              '${set.hasDrops ? ' ↓' : ''}'
                         : 'Set ${index + 1}${set.hasDrops ? ' ↓' : ''}',
                     style: theme.textTheme.labelMedium?.copyWith(
                       color: set.deviatesFromPlan && set.completed
@@ -542,7 +574,9 @@ class _ExerciseStrip extends StatelessWidget {
                     color: exercise.id == currentExerciseId
                         ? theme.colorScheme.primary.withValues(alpha: 0.14)
                         : Colors.transparent,
-                    borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+                    borderRadius: BorderRadius.circular(
+                      VoyagerTheme.fieldRadius,
+                    ),
                     border: Border.all(
                       color: exercise.id == currentExerciseId
                           ? theme.colorScheme.primary.withValues(alpha: 0.6)

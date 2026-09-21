@@ -82,7 +82,8 @@ class ContributionRoomBar extends StatelessWidget {
     );
 
     return Semantics(
-      label: '${_barCents(used)} of ${_barCents(capacity)} used. '
+      label:
+          '${_barCents(used)} of ${_barCents(capacity)} used. '
           '$remainingLabel',
       excludeSemantics: true,
       child: Row(

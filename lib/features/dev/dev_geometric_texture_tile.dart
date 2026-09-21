@@ -50,7 +50,8 @@ class DevGeometricTextureSection extends ConsumerWidget {
           const SizedBox(height: 8),
           _GeometricTextureSlider(
             label: 'Scale',
-            subtitle: 'Triangle density — higher = smaller, more numerous triangles',
+            subtitle:
+                'Triangle density — higher = smaller, more numerous triangles',
             value: params.scale,
             min: 4,
             max: 24,
@@ -106,48 +107,57 @@ class DevGeometricTextureSection extends ConsumerWidget {
               children: [
                 _PresetButton(
                   label: 'Center',
-                  onTap: () =>
-                      update(params.copyWith(focalPointX: 0.5, focalPointY: 0.5)),
+                  onTap: () => update(
+                    params.copyWith(focalPointX: 0.5, focalPointY: 0.5),
+                  ),
                 ),
                 _PresetButton(
                   label: 'Left',
-                  onTap: () =>
-                      update(params.copyWith(focalPointX: 0.0, focalPointY: 0.5)),
+                  onTap: () => update(
+                    params.copyWith(focalPointX: 0.0, focalPointY: 0.5),
+                  ),
                 ),
                 _PresetButton(
                   label: 'Right',
-                  onTap: () =>
-                      update(params.copyWith(focalPointX: 1.0, focalPointY: 0.5)),
+                  onTap: () => update(
+                    params.copyWith(focalPointX: 1.0, focalPointY: 0.5),
+                  ),
                 ),
                 _PresetButton(
                   label: 'Top',
-                  onTap: () =>
-                      update(params.copyWith(focalPointX: 0.5, focalPointY: 0.0)),
+                  onTap: () => update(
+                    params.copyWith(focalPointX: 0.5, focalPointY: 0.0),
+                  ),
                 ),
                 _PresetButton(
                   label: 'Bottom',
-                  onTap: () =>
-                      update(params.copyWith(focalPointX: 0.5, focalPointY: 1.0)),
+                  onTap: () => update(
+                    params.copyWith(focalPointX: 0.5, focalPointY: 1.0),
+                  ),
                 ),
                 _PresetButton(
                   label: 'Top-left',
-                  onTap: () =>
-                      update(params.copyWith(focalPointX: 0.0, focalPointY: 0.0)),
+                  onTap: () => update(
+                    params.copyWith(focalPointX: 0.0, focalPointY: 0.0),
+                  ),
                 ),
                 _PresetButton(
                   label: 'Top-right',
-                  onTap: () =>
-                      update(params.copyWith(focalPointX: 1.0, focalPointY: 0.0)),
+                  onTap: () => update(
+                    params.copyWith(focalPointX: 1.0, focalPointY: 0.0),
+                  ),
                 ),
                 _PresetButton(
                   label: 'Bottom-left',
-                  onTap: () =>
-                      update(params.copyWith(focalPointX: 0.0, focalPointY: 1.0)),
+                  onTap: () => update(
+                    params.copyWith(focalPointX: 0.0, focalPointY: 1.0),
+                  ),
                 ),
                 _PresetButton(
                   label: 'Bottom-right',
-                  onTap: () =>
-                      update(params.copyWith(focalPointX: 1.0, focalPointY: 1.0)),
+                  onTap: () => update(
+                    params.copyWith(focalPointX: 1.0, focalPointY: 1.0),
+                  ),
                 ),
               ],
             ),
@@ -195,11 +205,7 @@ class _PresetButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassButton(
-      onPressed: onTap,
-      label: label,
-      dense: true,
-    );
+    return GlassButton(onPressed: onTap, label: label, dense: true);
   }
 }
 

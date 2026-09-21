@@ -64,10 +64,7 @@ Future<void> changeJournalListColor(
   await ref.read(journalsProvider.future);
 }
 
-Future<Journal?> createJournalList(
-  BuildContext context,
-  WidgetRef ref,
-) async {
+Future<Journal?> createJournalList(BuildContext context, WidgetRef ref) async {
   final allJournals = ref.read(journalsProvider).valueOrNull ?? [];
   final palette = ref.read(colorPaletteProvider);
   final defaultColor = Theme.of(context).colorScheme.primary.toARGB32();
@@ -206,7 +203,8 @@ Future<bool> deleteJournalList(
 
     if (choice == DeleteContainerChoice.deleteAll && entryCount > 0) {
       await repo.softDeleteEntriesInJournal(journal.id);
-    } else if (choice == DeleteContainerChoice.moveToDefault && entryCount > 0) {
+    } else if (choice == DeleteContainerChoice.moveToDefault &&
+        entryCount > 0) {
       final fallback = allJournals.firstWhere(
         (item) => item.id == legacyJournalId,
         orElse: () {

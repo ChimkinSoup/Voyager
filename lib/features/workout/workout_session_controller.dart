@@ -58,7 +58,10 @@ class ActiveWorkoutState {
   List<WorkoutSetLog> get currentExerciseSets {
     final set = currentSet;
     if (set == null) return const [];
-    return [for (final l in logs) if (l.exerciseId == set.exerciseId) l];
+    return [
+      for (final l in logs)
+        if (l.exerciseId == set.exerciseId) l,
+    ];
   }
 
   /// Distinct exercises in this session, in the order they were planned.
@@ -205,9 +208,11 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
       final entry = dayEntries[order];
       final exercise = exercisesById[entry.exerciseId]!;
       if (exercise.isCustomPrescription) {
-        for (var setIndex = 0;
-            setIndex < exercise.setPrescriptions.length;
-            setIndex++) {
+        for (
+          var setIndex = 0;
+          setIndex < exercise.setPrescriptions.length;
+          setIndex++
+        ) {
           final prescription = exercise.setPrescriptions[setIndex];
           final top = prescription.top;
           final drops = prescription.drops;
@@ -422,7 +427,10 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
       _pushSetLogs(added);
       _sortIntoLogs(added);
     } else {
-      final removable = sets.sublist(target).where((s) => !s.completed).toList();
+      final removable = sets
+          .sublist(target)
+          .where((s) => !s.completed)
+          .toList();
       for (final set in removable) {
         await _repo.softDeleteSetLog(set.id);
       }

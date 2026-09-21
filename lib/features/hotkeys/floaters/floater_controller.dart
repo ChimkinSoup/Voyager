@@ -12,7 +12,7 @@ import 'package:voyager/features/shell/shell_page_transition.dart';
 import 'package:voyager/routing/app_router.dart';
 import 'package:window_manager/window_manager.dart';
 
-/// The finance floater's window: the transaction form's own height (516) plus
+/// The finance floater's window: the transaction form's own height (506) plus
 /// the error line under the amount field (23).
 ///
 /// Sized to the form rather than roomily, so it doesn't open above a band of
@@ -23,7 +23,7 @@ import 'package:window_manager/window_manager.dart';
 /// which is rare and of no height that can be known in advance, does resize
 /// the window, through [FloaterController.setExtraHeight].
 /// `finance_floater_fits_form_test.dart` holds all of it to the real form.
-const kFinanceFloaterSize = Size(460, 539);
+const kFinanceFloaterSize = Size(460, 529);
 
 /// The reminder floater's window: the editor's own width (see
 /// [kReminderFormWidth]) and the height of its default form — a daily rule
@@ -35,7 +35,7 @@ const kFinanceFloaterSize = Size(460, 539);
 /// the buttons out of the window. Nothing resizes this window: what grows
 /// beyond that — more devices than fit a row — scrolls inside it.
 /// `reminder_floater_fits_form_test.dart` holds both figures to the real form.
-const kReminderFloaterSize = Size(kReminderFormWidth, 495);
+const kReminderFloaterSize = Size(kReminderFormWidth, 491);
 
 /// Routes global hotkeys and owns the floater lifecycle.
 ///

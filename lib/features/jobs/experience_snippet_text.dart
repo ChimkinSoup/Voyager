@@ -101,7 +101,8 @@ final RegExp _lineEdgeWhitespace = RegExp(r'^[ \t]|[ \t]\r?$', multiLine: true);
 /// Every category [text] trips, empty when it is clean. Never alters [text].
 Set<ExperienceTextIssue> experienceTextIssues(String text) {
   final issues = <ExperienceTextIssue>{};
-  if (_doubleSpaces.hasMatch(text)) issues.add(ExperienceTextIssue.doubleSpaces);
+  if (_doubleSpaces.hasMatch(text))
+    issues.add(ExperienceTextIssue.doubleSpaces);
   if (_lineEdgeWhitespace.hasMatch(text)) {
     issues.add(ExperienceTextIssue.lineEdgeWhitespace);
   }

@@ -219,12 +219,16 @@ class _StagesTabState extends ConsumerState<_StagesTab> {
                 final ids = [for (final stage in stages) stage.id];
                 ids.insert(newIndex, ids.removeAt(oldIndex));
                 setState(() {
-                  _order.write(ids, () async {
-                    await actions.reorderStages(ids);
-                    await ref.read(jobStagesProvider.future);
-                  }, () {
-                    if (mounted) setState(() {});
-                  });
+                  _order.write(
+                    ids,
+                    () async {
+                      await actions.reorderStages(ids);
+                      await ref.read(jobStagesProvider.future);
+                    },
+                    () {
+                      if (mounted) setState(() {});
+                    },
+                  );
                 });
               },
               itemBuilder: (context, index) {
@@ -885,12 +889,16 @@ class _SeasonsTabState extends ConsumerState<_SeasonsTab> {
                       ids.insert(newIndex, ids.removeAt(oldIndex));
                       // See [_PendingOrder].
                       setState(() {
-                        _order.write(ids, () async {
-                          await actions.reorderSeasons(ids);
-                          await ref.read(jobSeasonsProvider.future);
-                        }, () {
-                          if (mounted) setState(() {});
-                        });
+                        _order.write(
+                          ids,
+                          () async {
+                            await actions.reorderSeasons(ids);
+                            await ref.read(jobSeasonsProvider.future);
+                          },
+                          () {
+                            if (mounted) setState(() {});
+                          },
+                        );
                       });
                     },
                     itemBuilder: (context, index) {

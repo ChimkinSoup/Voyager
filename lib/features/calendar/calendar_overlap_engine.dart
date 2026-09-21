@@ -85,7 +85,11 @@ List<_OverlapItem> _overlapItemsForDay({
   var index = 0;
 
   for (final event in events) {
-    if (!calendarEventOnDay(event, day) || event.isFullDay || DateUtils.dateOnly(event.start.toLocal()) != DateUtils.dateOnly(event.end.toLocal())) continue;
+    if (!calendarEventOnDay(event, day) ||
+        event.isFullDay ||
+        DateUtils.dateOnly(event.start.toLocal()) !=
+            DateUtils.dateOnly(event.end.toLocal()))
+      continue;
     final start = event.start.toLocal();
     items.add(
       _OverlapItem(

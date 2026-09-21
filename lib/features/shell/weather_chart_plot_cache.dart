@@ -108,22 +108,22 @@ class WeatherChartPlotCacheKey {
 
   @override
   int get hashCode => Object.hash(
-        generation,
-        seriesHash,
-        width,
-        height,
-        plotPaddingLeft,
-        plotPaddingBottom,
-        minY,
-        maxY,
-        gradientStartHour,
-        tempFillArgb,
-        rainFillArgb,
-        tempLineArgb,
-        degreeGridArgb,
-        showDegreeGrid,
-        includeCurrentTimeLine,
-      );
+    generation,
+    seriesHash,
+    width,
+    height,
+    plotPaddingLeft,
+    plotPaddingBottom,
+    minY,
+    maxY,
+    gradientStartHour,
+    tempFillArgb,
+    rainFillArgb,
+    tempLineArgb,
+    degreeGridArgb,
+    showDegreeGrid,
+    includeCurrentTimeLine,
+  );
 }
 
 /// LRU cache of rasterised weather plot layers.

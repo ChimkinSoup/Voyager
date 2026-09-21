@@ -47,7 +47,8 @@ class RankingsActions {
 
   final ProviderContainer _container;
 
-  RankingRepository get _repository => _container.read(rankingRepositoryProvider);
+  RankingRepository get _repository =>
+      _container.read(rankingRepositoryProvider);
   RemoteSyncService get _sync => _container.read(remoteSyncServiceProvider);
 
   void _refresh() => invalidateRankingProvidersIn(_container);
@@ -563,13 +564,12 @@ class RankingsActions {
             : parent.copyWith(overallScore: score),
       );
 
-  Future<void> setStatus(String parentId, RankingStatus status) =>
-      _patchParent(
-        parentId,
-        (parent) => parent.isRanked || parent.status == status
-            ? parent
-            : parent.copyWith(status: status),
-      );
+  Future<void> setStatus(String parentId, RankingStatus status) => _patchParent(
+    parentId,
+    (parent) => parent.isRanked || parent.status == status
+        ? parent
+        : parent.copyWith(status: status),
+  );
 
   Future<void> toggleStar(String parentId) => _patchParent(
     parentId,
@@ -727,10 +727,9 @@ class RankingsActions {
   /// used to pass the *entity's* `deletedAt` instead, which is a different
   /// `utcNow()` a few hundred microseconds earlier: it matched no reference at
   /// all, and undoing a delete silently left every image detached.
-  Future<MediaDetachStamps> _detachMedia(List<String> documentIds) =>
-      _container
-          .read(mediaServiceProvider)
-          .removeReferencesForOwners(FirestoreCollections.rankings, documentIds);
+  Future<MediaDetachStamps> _detachMedia(List<String> documentIds) => _container
+      .read(mediaServiceProvider)
+      .removeReferencesForOwners(FirestoreCollections.rankings, documentIds);
 
   Future<void> _restoreMedia(MediaDetachStamps stamps) async {
     final media = _container.read(mediaServiceProvider);

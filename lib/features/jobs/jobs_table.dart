@@ -323,7 +323,9 @@ class JobsTableRow extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+                    borderRadius: BorderRadius.circular(
+                      VoyagerTheme.fieldRadius,
+                    ),
                     border: Border.all(
                       color: statusColor.withValues(alpha: 0.45),
                     ),

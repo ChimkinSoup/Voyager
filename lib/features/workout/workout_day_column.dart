@@ -307,11 +307,7 @@ class _PlanEntryCard extends ConsumerWidget {
           feedback: _EntryDragFeedback(label: resolved.name),
           childWhenDragging: Opacity(opacity: 0.3, child: card),
           child: GestureDetector(
-            onTap: () => openExerciseDetailView(
-              cardContext,
-              resolved,
-              anchorRectFor(cardContext),
-            ),
+            onTap: () => openExerciseDetailView(cardContext, resolved),
             onLongPress: () => _edit(cardContext, ref, resolved),
             child: card,
           ),

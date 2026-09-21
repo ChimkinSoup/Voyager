@@ -942,11 +942,23 @@ class _VimTextScopeState extends State<VimTextScope> {
 /// as filling the box — 16px of badge in a 36px field, sitting 4px below the
 /// centre line, is what looks crooked in the quick-reminder composer.
 ///
-/// The line is drawn from the app's own fields, measured under
-/// [VoyagerTheme]'s compact density: the dense family runs 36px (the
-/// quick-reminder box) to 46px (the bucket-list composer), with the bucket-list
-/// rows and todo's inline rename at 44, while an ordinary outlined field is 54.
-/// 50 splits that gap evenly.
+/// The line is drawn from the app's own fields, measured through the subtree
+/// [VimTextScope] keys — the box [_VimFieldOverlayState._measureField] reads,
+/// not the bare [TextField] inside it. Voyager leaves [ThemeData.visualDensity]
+/// unset, so every field is 8px shorter on desktop, whose platform default is
+/// `compact`, than on mobile; the desktop figure comes first below.
+///
+/// The dense family runs 18px (a `dense` [LabeledTextField]) to 40px (the jobs
+/// and todo panel fields), with the bucket-list row rename at 28, the
+/// quick-reminder box at 29, todo's inline rename at 36 and the bucket-list
+/// composer at 38 — 26 to 48 on mobile. Above them sit the journal title and a
+/// single-line [TagHighlightedTextField] at 42 (50), and an ordinary outlined
+/// field at 48 (54).
+///
+/// 50 separates those two groups in the mobile column only. On desktop nothing
+/// reaches it any more: an ordinary field measured 50 while the shared content
+/// padding was 16/18 and measures 48 at 14/16, so every field there now takes
+/// the compact badge.
 const kVimCompactBadgeField = 50.0;
 
 /// The mode badge and the `/` search bar, both hung off the field's

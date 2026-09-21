@@ -439,8 +439,8 @@ class FloaterWindow {
       GetCursorPos(point);
       final monitor = MonitorFromPoint(point.ref, MONITOR_DEFAULTTONEAREST);
       GetMonitorInfo(monitor, info);
-      final scale = GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, dpiX, dpiY) ==
-              S_OK
+      final scale =
+          GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, dpiX, dpiY) == S_OK
           ? dpiX.value / 96
           : 1.0;
       final work = info.ref.rcWork;

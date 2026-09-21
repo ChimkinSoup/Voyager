@@ -88,9 +88,9 @@ Future<JournalEntry>? _resolving;
 ///
 /// Serialized, so the notepad and the in-app hotkey can never both create one.
 Future<JournalEntry> resolveQuickJournalEntry(ProviderContainer container) {
-  return _resolving ??= _resolve(container).whenComplete(
-    () => _resolving = null,
-  );
+  return _resolving ??= _resolve(
+    container,
+  ).whenComplete(() => _resolving = null);
 }
 
 Future<JournalEntry> _resolve(ProviderContainer container) async {

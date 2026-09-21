@@ -338,8 +338,8 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
                     const hintText = 'Add something to your bucket list…';
                     return VimOverlayHost(
                       session: vim.session,
-              snippetSession: vim.snippetSession,
-              autocorrectSession: vim.autocorrectSession,
+                      snippetSession: vim.snippetSession,
+                      autocorrectSession: vim.autocorrectSession,
                       overlayPaintsSelection: vim.overlayPaintsSelection,
                       controller: _newItemController,
                       focusNode: _newItemFocusNode,
@@ -596,8 +596,8 @@ class _TitleEditor extends StatelessWidget {
                   .copyWith(decoration: TextDecoration.none);
           return VimOverlayHost(
             session: vim.session,
-              snippetSession: vim.snippetSession,
-              autocorrectSession: vim.autocorrectSession,
+            snippetSession: vim.snippetSession,
+            autocorrectSession: vim.autocorrectSession,
             overlayPaintsSelection: vim.overlayPaintsSelection,
             controller: controller,
             focusNode: focusNode,
@@ -677,10 +677,7 @@ class _BucketNoteDialogState extends State<_BucketNoteDialog> {
     super.initState();
     // Eagerly, not lazily: a lazy `late final` would first *construct* the
     // wrapper inside dispose on a dialog that never got to build.
-    _prose = ProseEditingController(
-      source: _controller,
-      focusNode: _focusNode,
-    );
+    _prose = ProseEditingController(source: _controller, focusNode: _focusNode);
   }
 
   @override
@@ -771,11 +768,7 @@ class _BucketNoteDialogState extends State<_BucketNoteDialog> {
           onPressed: () => Navigator.of(context).pop(),
           label: 'Skip',
         ),
-        GlassButton(
-          dense: true,
-          onPressed: _save,
-          label: 'Save',
-        ),
+        GlassButton(dense: true, onPressed: _save, label: 'Save'),
       ],
     );
     return CtrlEnterToSubmitScope(onSubmit: _save, child: dialog);

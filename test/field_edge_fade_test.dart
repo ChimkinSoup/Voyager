@@ -30,7 +30,7 @@ const _labelBand = (top: 0, bottom: 8);
 /// Scrolled text has to *reach* here, or the label is only legible because
 /// something upstream clipped the paragraph at the viewport again — which is
 /// the flush-to-the-border behaviour this fade exists to keep.
-const _restOfGutter = (top: 9, bottom: 13);
+const _restOfGutter = (top: 9, bottom: 11);
 
 /// Sampled clear of the label, which is drawn over the fade, not under it.
 const _sampleLeft = 200;

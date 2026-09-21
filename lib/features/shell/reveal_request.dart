@@ -10,13 +10,13 @@ enum RevealTargetType { task, event }
 /// [revealRequestProvider] back to null afterward.
 class RevealRequest {
   const RevealRequest.task(this.task)
-      : type = RevealTargetType.task,
-        event = null,
-        day = null;
+    : type = RevealTargetType.task,
+      event = null,
+      day = null;
 
   const RevealRequest.event(this.event, {this.day})
-      : type = RevealTargetType.event,
-        task = null;
+    : type = RevealTargetType.event,
+      task = null;
 
   final RevealTargetType type;
   final TodoTask? task;

@@ -28,7 +28,7 @@ Future<void> showAllocateModal(
   // dismissed — which can happen while a save is still in flight, when the
   // invalidate still has to land.
   final container = ProviderScope.containerOf(context, listen: false);
-  await showVoyagerSheet<void>(
+  await showVoyagerModal<void>(
     context: context,
     enableDrag: false,
     builder: (ctx) => ProviderScope(

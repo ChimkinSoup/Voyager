@@ -24,7 +24,7 @@ Future<void> showContributionRoomModal(
 }) async {
   // Captured out here, not inside the sheet: see showAssetModal.
   final container = ProviderScope.containerOf(context, listen: false);
-  await showVoyagerSheet<void>(
+  await showVoyagerModal<void>(
     context: context,
     enableDrag: false,
     builder: (ctx) => ProviderScope(

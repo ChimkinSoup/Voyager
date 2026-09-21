@@ -200,7 +200,8 @@ Future<bool> deleteLeetCodeProblem(
   final confirmed = await showConfirmDialog(
     context,
     title: 'Delete "${problem.title}"?',
-    message: 'This problem and everything tracked with it — code, notes, and '
+    message:
+        'This problem and everything tracked with it — code, notes, and '
         'review history — will be moved to trash.',
   );
   if (!confirmed) return false;

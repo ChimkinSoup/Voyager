@@ -265,46 +265,33 @@ class _JobsPageState extends ConsumerState<JobsPage>
                                     isDuplicate: duplicates.contains(
                                       application.id,
                                     ),
-                                    isSelected:
-                                        application.id == selectedId,
+                                    isSelected: application.id == selectedId,
                                     isArchived: jobIsArchived(
                                       application,
                                       archivedSeasonIds,
                                     ),
                                     seasonNames: namesFor(application),
-                                    onTap: () =>
-                                        _openPanel(application.id),
-                                    onStatusTap: (pillContext) =>
-                                        _editStatus(
-                                          pillContext,
-                                          application,
-                                          stages,
-                                        ),
-                                    menuItems: () =>
-                                        jobApplicationMenuItems(
-                                          application: application,
-                                          stages: stages,
-                                          seasons: jobSelectableSeasons(
-                                            seasons,
-                                          ),
-                                          onChangeStatus: (status) =>
-                                              _setStatus(
-                                                application,
-                                                status,
-                                              ),
-                                          onSetSeasons: (seasonIds) =>
-                                              _setSeasons(
-                                                application,
-                                                seasonIds,
-                                              ),
-                                          onOpenUrl: () => _openUrl(
-                                            application.applicationUrl!,
-                                          ),
-                                          onDuplicate: () =>
-                                              _duplicate(application),
-                                          onDelete: () =>
-                                              _confirmDelete(application),
-                                        ),
+                                    onTap: () => _openPanel(application.id),
+                                    onStatusTap: (pillContext) => _editStatus(
+                                      pillContext,
+                                      application,
+                                      stages,
+                                    ),
+                                    menuItems: () => jobApplicationMenuItems(
+                                      application: application,
+                                      stages: stages,
+                                      seasons: jobSelectableSeasons(seasons),
+                                      onChangeStatus: (status) =>
+                                          _setStatus(application, status),
+                                      onSetSeasons: (seasonIds) =>
+                                          _setSeasons(application, seasonIds),
+                                      onOpenUrl: () =>
+                                          _openUrl(application.applicationUrl!),
+                                      onDuplicate: () =>
+                                          _duplicate(application),
+                                      onDelete: () =>
+                                          _confirmDelete(application),
+                                    ),
                                   );
                                 },
                               ),
@@ -425,7 +412,8 @@ class _JobsPageState extends ConsumerState<JobsPage>
         '${application.title} at ${application.company}',
         fallback: 'application',
       ),
-      delete: () async => snapshot = await actions.deleteApplication(application),
+      delete: () async =>
+          snapshot = await actions.deleteApplication(application),
       // Reopened whether or not it was the application on screen when it went:
       // the undo is about that one row, and the editor is where it lives.
       restore: () async {
@@ -576,9 +564,7 @@ class _Toolbar extends StatelessWidget {
                         PhosphorIconsRegular.magnifyingGlass,
                         size: 14,
                       ),
-                      prefixIconConstraints: const BoxConstraints(
-                        minWidth: 32,
-                      ),
+                      prefixIconConstraints: const BoxConstraints(minWidth: 32),
                       border: const OutlineInputBorder(),
                       contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     ),

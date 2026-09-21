@@ -391,8 +391,7 @@ class _CategoryBody extends ConsumerWidget {
                 ? const _EmptyState(
                     icon: PhosphorIconsRegular.magnifyingGlass,
                     title: 'Nothing matches',
-                    message:
-                        'Try a different search, or clear the filters.',
+                    message: 'Try a different search, or clear the filters.',
                   )
                 : _Sections(
                     category: category,
@@ -809,11 +808,7 @@ class _SectionHeader extends StatelessWidget {
             turns: collapsed! ? -0.25 : 0,
             duration: const Duration(milliseconds: 150),
             curve: Curves.easeOut,
-            child: Icon(
-              PhosphorIconsRegular.caretDown,
-              size: 12,
-              color: muted,
-            ),
+            child: Icon(PhosphorIconsRegular.caretDown, size: 12, color: muted),
           ),
         ],
       ],

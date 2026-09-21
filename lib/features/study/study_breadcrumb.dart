@@ -45,10 +45,20 @@ class StudyBreadcrumbRow extends ConsumerWidget {
         ),
       );
       if (onTap == null) return child;
-      return InkWell(borderRadius: BorderRadius.circular(8), onTap: onTap, child: child);
+      return InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: child,
+      );
     }
 
-    final segments = <Widget>[pill('Root', onTap: onTapRoot, current: folderStack.isEmpty && trailingLabel == null)];
+    final segments = <Widget>[
+      pill(
+        'Root',
+        onTap: onTapRoot,
+        current: folderStack.isEmpty && trailingLabel == null,
+      ),
+    ];
     for (var i = 0; i < folderStack.length; i++) {
       segments.add(Icon(Icons.chevron_right, size: 16, color: vc.hairline));
       final folderAsync = ref.watch(studyFolderByIdProvider(folderStack[i]));

@@ -137,7 +137,9 @@ class WorkoutActions {
     final nextOrder = onDay.isEmpty
         ? 0
         : onDay.map((e) => e.sortOrder).reduce((a, b) => a > b ? a : b) + 1;
-    await savePlanEntry(entry.copyWith(dayIndex: dayIndex, sortOrder: nextOrder));
+    await savePlanEntry(
+      entry.copyWith(dayIndex: dayIndex, sortOrder: nextOrder),
+    );
   }
 
   Future<void> deletePlanEntry(String id) async {

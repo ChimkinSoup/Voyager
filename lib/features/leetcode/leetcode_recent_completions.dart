@@ -124,7 +124,9 @@ class _CompletionRowState extends ConsumerState<_CompletionRow> {
                               color: colorForLeetCodeDifficulty(
                                 problem.difficulty,
                               ).withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+                              borderRadius: BorderRadius.circular(
+                                VoyagerTheme.fieldRadius,
+                              ),
                             ),
                             child: Text(
                               labelForLeetCodeDifficulty(problem.difficulty),

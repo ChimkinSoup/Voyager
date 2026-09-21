@@ -78,7 +78,8 @@ class RoomEventHistory extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final now = DateTime.now();
-    final allEvents = ref.watch(assetRoomEventsProvider).valueOrNull ?? const [];
+    final allEvents =
+        ref.watch(assetRoomEventsProvider).valueOrNull ?? const [];
     final assets = ref.watch(assetsProvider).valueOrNull ?? const [];
     final events = [
       for (final e in allEvents)

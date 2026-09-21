@@ -22,7 +22,8 @@ class BillRadarPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final subscriptionsAsync = ref.watch(subscriptionsProvider);
-    final showAnnual = ref
+    final showAnnual =
+        ref
             .watch(settingsProvider)
             .valueOrNull
             ?.showAnnualizedSubscriptionCost ??
@@ -32,9 +33,9 @@ class BillRadarPanel extends ConsumerWidget {
     // time decays — on a long desktop session a bill that has just come due
     // stays sorted last while its own tile correctly reads "Due today".
     final now = DateTime.now();
-    final subscriptions =
-        [...(subscriptionsAsync.valueOrNull ?? const <Subscription>[])]
-          ..sort((a, b) => a.nextDue(now).compareTo(b.nextDue(now)));
+    final subscriptions = [
+      ...(subscriptionsAsync.valueOrNull ?? const <Subscription>[]),
+    ]..sort((a, b) => a.nextDue(now).compareTo(b.nextDue(now)));
 
     // Sum of monthly-equivalent cost across every subscription.
     final monthlyEquivalentCents = subscriptions.fold<int>(
@@ -45,7 +46,9 @@ class BillRadarPanel extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.25,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: theme.colorScheme.outline.withValues(alpha: 0.12),
@@ -65,8 +68,9 @@ class BillRadarPanel extends ConsumerWidget {
               Expanded(
                 child: Text(
                   'Subscription & Bill Radar',
-                  style: theme.textTheme.labelLarge
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               GlassButton(
@@ -277,8 +281,9 @@ class _SubscriptionTile extends ConsumerWidget {
                   children: [
                     Text(
                       subscription.name,
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.w500),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -302,22 +307,25 @@ class _SubscriptionTile extends ConsumerWidget {
                 children: [
                   Text(
                     formatCents(subscription.amountCents),
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(fontWeight: FontWeight.w600),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   Text(
                     billingPeriodLabel(subscription.period).toLowerCase(),
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant
-                          .withValues(alpha: 0.7),
+                      color: theme.colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.7,
+                      ),
                     ),
                   ),
                   if (showAnnual)
                     Text(
                       '${formatCents(subscription.annualCents)}/yr',
                       style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant
-                            .withValues(alpha: 0.45),
+                        color: theme.colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.45,
+                        ),
                       ),
                     ),
                 ],

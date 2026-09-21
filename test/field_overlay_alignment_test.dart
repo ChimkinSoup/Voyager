@@ -48,27 +48,23 @@ Finder get _editable => find.descendant(
 
 void main() {
   testWidgets(
-    'the journal title keeps its 48px and its Vim caret on the text',
+    'the journal title keeps its Vim caret on the text',
     (tester) async {
       final controller = TextEditingController(text: 'Hello');
       final focusNode = FocusNode();
       addTearDown(controller.dispose);
       addTearDown(focusNode.dispose);
 
-      // As journal_page.dart builds it.
+      // As journal_page.dart builds it: the body box's own padding, and
+      // nothing outside putting the 48px back.
       await tester.pumpWidget(
         _harness(
-          ConstrainedBox(
-            constraints: const BoxConstraints(
-              minHeight: kMinInteractiveDimension,
-            ),
-            child: LabeledTextField(
-              label: 'Title',
-              controller: controller,
-              focusNode: focusNode,
-              allowShortHeight: true,
-              contentPadding: const EdgeInsets.fromLTRB(16, 16, 40, 16),
-            ),
+          LabeledTextField(
+            label: 'Title',
+            controller: controller,
+            focusNode: focusNode,
+            allowShortHeight: true,
+            contentPadding: const EdgeInsets.fromLTRB(14, 14, 40, 14),
           ),
         ),
       );
@@ -77,9 +73,12 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
 
+      // Under Material's minimum, which is the case [allowShortHeight]
+      // exists for: left to stretch the box, the decorator re-centres the
+      // text off the padding the overlay below is positioned from.
       expect(
         tester.getSize(find.byType(LabeledTextField)).height,
-        kMinInteractiveDimension,
+        lessThan(kMinInteractiveDimension),
       );
       final overlay = find.descendant(
         of: find.byType(VimTextOverlay),

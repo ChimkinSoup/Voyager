@@ -237,7 +237,9 @@ class _DetailCard extends StatelessWidget {
                         color: colorForLeetCodeDifficulty(
                           problem.difficulty,
                         ).withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+                        borderRadius: BorderRadius.circular(
+                          VoyagerTheme.fieldRadius,
+                        ),
                       ),
                       child: Text(
                         labelForLeetCodeDifficulty(problem.difficulty),

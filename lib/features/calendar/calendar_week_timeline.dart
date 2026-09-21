@@ -29,7 +29,10 @@ TextStyle _weekDayDateLabelTextStyle(TextStyle weekdayStyle) {
 /// Diameter for today's date pill — sized from the widest typical label.
 double calendarWeekDayDateLabelTodayDiameter(TextStyle weekdayStyle) {
   final painter = TextPainter(
-    text: TextSpan(text: 'Sep 30', style: _weekDayDateLabelTextStyle(weekdayStyle)),
+    text: TextSpan(
+      text: 'Sep 30',
+      style: _weekDayDateLabelTextStyle(weekdayStyle),
+    ),
     textDirection: TextDirection.ltr,
     maxLines: 1,
   )..layout();
@@ -41,7 +44,10 @@ double calendarWeekDayDateLabelTodayDiameter(TextStyle weekdayStyle) {
 
 double _weekDayDateLabelPlainHeight(TextStyle weekdayStyle) {
   final painter = TextPainter(
-    text: TextSpan(text: 'Sep 30', style: _weekDayDateLabelTextStyle(weekdayStyle)),
+    text: TextSpan(
+      text: 'Sep 30',
+      style: _weekDayDateLabelTextStyle(weekdayStyle),
+    ),
     textDirection: TextDirection.ltr,
     maxLines: 1,
   )..layout();
@@ -58,7 +64,8 @@ double calendarWeekDayDateLabelRowHeight(TextStyle weekdayStyle) {
 
 /// Space reserved below bordered day columns for the date label row.
 double calendarWeekDayDateLabelReservedHeight(TextStyle weekdayStyle) =>
-    calendarWeekDayDateLabelGap + calendarWeekDayDateLabelRowHeight(weekdayStyle);
+    calendarWeekDayDateLabelGap +
+    calendarWeekDayDateLabelRowHeight(weekdayStyle);
 
 /// Weekday header block height above the day area — matches [CalendarWeekTimeline].
 double calendarWeekTimelineHeaderBlockHeight(TextStyle weekdayStyle) =>
@@ -233,12 +240,14 @@ class CalendarWeekLayoutMetrics {
   }) {
     final shelfHeight = allDayShelfHeight ?? calendarWeekAllDayShelfHeight;
     final weekdayHeaderHeight = WeekdayHeaderRow.labelHeight(weekdayStyle);
-    final dayAreaTop = calendarWeekHeaderTopPadding +
+    final dayAreaTop =
+        calendarWeekHeaderTopPadding +
         weekdayHeaderHeight +
         calendarWeekHeaderGap +
         calendarWeekDayColumnTopInset;
-    final dateLabelReserved =
-        calendarWeekDayDateLabelReservedHeight(weekdayStyle);
+    final dateLabelReserved = calendarWeekDayDateLabelReservedHeight(
+      weekdayStyle,
+    );
     final dayColumnBottom =
         areaSize.height - calendarWeekDayColumnBottomInset - dateLabelReserved;
     final allDayAreaTop = dayAreaTop;
@@ -368,8 +377,9 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
       _ownsScrollController = false;
     } else {
       final maxContent = calendarWeekTimelineScrollContentHeight();
-      final offset = (widget.initialScrollOffset ?? calendarWeekDefaultScrollOffset())
-          .clamp(0.0, maxContent);
+      final offset =
+          (widget.initialScrollOffset ?? calendarWeekDefaultScrollOffset())
+              .clamp(0.0, maxContent);
       _scrollController = ScrollController(initialScrollOffset: offset);
       _ownsScrollController = true;
     }
@@ -413,7 +423,7 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
 
     final minutes = (timelineY / calendarWeekPxPerHour * 60).floor();
     final clampedMinutes = minutes.clamp(0, 24 * 60 - 1);
-    
+
     int roundedMinutes = ((clampedMinutes + 15) ~/ 30) * 30;
     if (roundedMinutes >= 24 * 60) {
       roundedMinutes = 24 * 60 - 30;
@@ -438,7 +448,8 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
   Widget build(BuildContext context) {
     final divider = Theme.of(context).dividerColor;
     final onSurfaceVariant = Theme.of(context).colorScheme.onSurfaceVariant;
-    final accentColor = widget.weekdayAccentColor ?? Theme.of(context).colorScheme.primary;
+    final accentColor =
+        widget.weekdayAccentColor ?? Theme.of(context).colorScheme.primary;
     final scrollContentHeight = calendarWeekTimelineScrollContentHeight();
 
     return LayoutBuilder(
@@ -461,8 +472,10 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
           ),
         );
         final today = DateTime.now();
-        final todayIndex = weekDays.indexWhere((d) => calendarSameDay(d, today));
-        
+        final todayIndex = weekDays.indexWhere(
+          (d) => calendarSameDay(d, today),
+        );
+
         final allDayShelfHeight = calendarWeekAllDayShelfHeightFor(
           events: widget.events,
           weekDays: weekDays,
@@ -471,8 +484,9 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
           events: widget.events,
           weekDays: weekDays,
         );
-        final allDayShelfRowCount =
-            calendarWeekAllDayShelfRowCount(packedAllDayShelf);
+        final allDayShelfRowCount = calendarWeekAllDayShelfRowCount(
+          packedAllDayShelf,
+        );
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -506,7 +520,9 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
             ),
             Expanded(
               child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: metrics.horizontalPadding),
+                padding: EdgeInsets.symmetric(
+                  horizontal: metrics.horizontalPadding,
+                ),
                 child: LayoutBuilder(
                   builder: (context, dayAreaConstraints) {
                     final dayAreaSize = Size(
@@ -516,7 +532,8 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                     final cellW = dayAreaSize.width / 7;
                     final margin = weekViewDayCellStyle.cellMargin.left;
                     final borderRadius = weekViewDayCellStyle.borderRadius;
-                    final allDayAreaTop = margin + calendarWeekDayColumnTopInset;
+                    final allDayAreaTop =
+                        margin + calendarWeekDayColumnTopInset;
                     final timedAreaTop = allDayAreaTop + allDayShelfHeight;
                     final dateLabelRowHeight =
                         calendarWeekDayDateLabelRowHeight(weekdayStyle);
@@ -636,12 +653,13 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                                         children: [
                                           Positioned.fill(
                                             child: GestureDetector(
-                                              behavior: HitTestBehavior.translucent,
+                                              behavior:
+                                                  HitTestBehavior.translucent,
                                               onTapDown: widget.interactive
                                                   ? (d) => _handleBackgroundTap(
-                                                        d.localPosition,
-                                                        timelineColumnRects,
-                                                      )
+                                                      d.localPosition,
+                                                      timelineColumnRects,
+                                                    )
                                                   : null,
                                               child: const SizedBox.expand(),
                                             ),
@@ -649,7 +667,8 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                                           for (var i = 0; i < 7; i++)
                                             _DayTimedColumn(
                                               day: weekDays[i],
-                                              columnRect: timelineColumnRects[i],
+                                              columnRect:
+                                                  timelineColumnRects[i],
                                               events: widget.events,
                                               todoMarkers: widget.todoMarkers,
                                               onEventTap: widget.onEventTap,
@@ -657,7 +676,8 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                                               entryMenuBuilder:
                                                   widget.entryMenuBuilder,
                                               interactive: widget.interactive,
-                                              editingEventId: widget.editingEventId,
+                                              editingEventId:
+                                                  widget.editingEventId,
                                             ),
                                         ],
                                       ),
@@ -682,9 +702,7 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                                   date: weekDays[i],
                                   accentColor: widget.weekdayAccentColor,
                                   hasWorkout: widget.workoutDays.contains(
-                                    DateUtils.dateOnly(
-                                      weekDays[i].toLocal(),
-                                    ),
+                                    DateUtils.dateOnly(weekDays[i].toLocal()),
                                   ),
                                 ),
                               ),
@@ -702,11 +720,13 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                               builder: (context, _) {
                                 return CustomPaint(
                                   painter: CalendarWeekTimeGridPainter(
-                                    scrollOffset: calendarWeekEffectiveScrollOffset(
-                                      _scrollController,
-                                      widget.initialScrollOffset ??
-                                          _scrollController.initialScrollOffset,
-                                    ),
+                                    scrollOffset:
+                                        calendarWeekEffectiveScrollOffset(
+                                          _scrollController,
+                                          widget.initialScrollOffset ??
+                                              _scrollController
+                                                  .initialScrollOffset,
+                                        ),
                                     allDayShelfHeight: 0,
                                     borderedClipRects: timedViewportColumnRects,
                                     borderRadius: borderRadius,
@@ -721,7 +741,6 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                             ),
                           ),
                         ),
-
                       ],
                     );
                   },
@@ -812,6 +831,7 @@ class _DayTimedColumn extends StatelessWidget {
   });
 
   final DateTime day;
+
   /// x-bounds of this column within the timed scroll content.
   final Rect columnRect;
   final List<CalendarEvent> events;
@@ -928,12 +948,18 @@ class CalendarWeekDayColumnBorderPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
-    if (todayIndex != null && todayFillColor != null && todayIndex! >= 0 && todayIndex! < borderedRects.length) {
+    if (todayIndex != null &&
+        todayFillColor != null &&
+        todayIndex! >= 0 &&
+        todayIndex! < borderedRects.length) {
       final fillPaint = Paint()
         ..color = todayFillColor!
         ..style = PaintingStyle.fill;
       canvas.drawRRect(
-        RRect.fromRectAndRadius(borderedRects[todayIndex!], Radius.circular(borderRadius)),
+        RRect.fromRectAndRadius(
+          borderedRects[todayIndex!],
+          Radius.circular(borderRadius),
+        ),
         fillPaint,
       );
     }
@@ -995,12 +1021,11 @@ List<Rect> calendarWeekMorphBorderedDayColumnRects({
   });
 }
 
-double calendarWeekMorphBorderRadius(double t) =>
-    lerpDouble(
-      MonthDayCellStyle.full.borderRadius,
-      weekViewDayCellStyle.borderRadius,
-      t,
-    )!;
+double calendarWeekMorphBorderRadius(double t) => lerpDouble(
+  MonthDayCellStyle.full.borderRadius,
+  weekViewDayCellStyle.borderRadius,
+  t,
+)!;
 
 /// Formats an hour (0-24) as "12 AM", "1 AM", "12 PM", etc.
 String calendarWeekHourLabel(int hour) {
@@ -1019,9 +1044,7 @@ Path calendarWeekHourLineClipPath({
 
   final path = Path();
   for (final rect in borderedDayRects) {
-    path.addRRect(
-      RRect.fromRectAndRadius(rect, Radius.circular(borderRadius)),
-    );
+    path.addRRect(RRect.fromRectAndRadius(rect, Radius.circular(borderRadius)));
   }
   return path;
 }
@@ -1076,7 +1099,8 @@ class CalendarWeekTimeGridPainter extends CustomPainter {
     const labelLeft = leftLineWidth + labelGap;
 
     for (var hour = 0; hour <= 24; hour++) {
-      final y = allDayShelfHeight +
+      final y =
+          allDayShelfHeight +
           timelineScrollPadding +
           hour * calendarWeekPxPerHour -
           scrollOffset;

@@ -177,7 +177,8 @@ LifeStatValue resolveLifeStat({
         title: title,
         shortLabel: shortLabel,
         value: '${_integerFormat.format(remaining)} weeks',
-        secondaryValue: '${(remaining / weeksPerYear).toStringAsFixed(2)} years',
+        secondaryValue:
+            '${(remaining / weeksPerYear).toStringAsFixed(2)} years',
         footnote: 'Assuming an 80-year lifespan (4,160 weeks).',
       );
 

@@ -4,20 +4,22 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/workout_constants.dart';
-import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
+import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/widgets/chart_hover_bubble.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
-import 'package:voyager/features/workout/workout_prescription_editor.dart';
 import 'package:voyager/features/workout/workout_units.dart';
 
 /// How many performed days the volume heatmap shows. Days the exercise wasn't
@@ -25,156 +27,42 @@ import 'package:voyager/features/workout/workout_units.dart';
 /// of calendar time — which is the point.
 const int kVolumeHeatmapDays = 30;
 
-/// The on-screen rect of [context]'s render box, for the zoom to grow from.
-///
-/// Falls back to a zero-size rect at the origin if the box has gone away
-/// between the tap and this call, which degrades the animation to a plain
-/// grow-from-corner rather than throwing.
-Rect anchorRectFor(BuildContext context) {
-  final box = context.findRenderObject() as RenderBox?;
-  if (box == null || !box.hasSize) return Rect.zero;
-  return box.localToGlobal(Offset.zero) & box.size;
-}
+/// Width of the set rows — label, weight, reps and both row buttons — which is
+/// what the sets column is held to when the charts sit beside it.
+const double _setsColumnWidth = 400;
 
-/// Opens a movement's analytics page with a camera-zoom growing out of
-/// [anchorRect] — the same gesture the LeetCode detail view uses, so
-/// "tapping a thing expands that thing" reads the same everywhere in the app.
-Future<void> openExerciseDetailView(
-  BuildContext context,
-  Exercise exercise,
-  Rect anchorRect,
-) {
-  return Navigator.of(context, rootNavigator: true).push(
-    PageRouteBuilder<void>(
-      opaque: false,
-      barrierColor: Colors.transparent,
-      barrierDismissible: false,
-      transitionDuration: Duration.zero,
-      reverseTransitionDuration: Duration.zero,
-      pageBuilder: (context, animation, secondaryAnimation) =>
-          _ExerciseDetailOverlay(exercise: exercise, anchorRect: anchorRect),
+/// Narrowest the charts column may get before it moves below the sets instead.
+const double _minChartsWidth = 360;
+
+/// Widest the modal gets — room for the sets and charts side by side, and no
+/// more, so it reads as a popup over the planner rather than a page.
+const double _sheetMaxWidth = 960;
+
+/// Opens a movement's analytics in a floating modal over a darkened
+/// backdrop — the same chrome as tracking a LeetCode problem, sized to its
+/// content instead of the window.
+Future<void> openExerciseDetailView(BuildContext context, Exercise exercise) {
+  final screenSize = MediaQuery.sizeOf(context);
+  return showVoyagerModal<void>(
+    context: context,
+    kind: VoyagerSheetKind.editor,
+    constraints: BoxConstraints(
+      maxWidth: math.min(_sheetMaxWidth, screenSize.width * 0.96),
+      maxHeight: screenSize.height * 0.9,
+    ),
+    // Closing is what saves here — every field on the card flushes on
+    // dispose — so the chord closes the modal the same way the × does. The
+    // scope holds focus itself: nothing on the card autofocuses, and with
+    // nothing focused below it the chord would never reach the scope.
+    builder: (sheetContext) => CtrlEnterToSubmitScope(
+      onSubmit: () => Navigator.of(sheetContext).pop(),
+      autofocus: true,
+      child: _ExerciseDetailCard(
+        exercise: exercise,
+        onClose: () => Navigator.of(sheetContext).pop(),
+      ),
     ),
   );
-}
-
-class _ExerciseDetailOverlay extends StatefulWidget {
-  const _ExerciseDetailOverlay({
-    required this.exercise,
-    required this.anchorRect,
-  });
-
-  final Exercise exercise;
-  final Rect anchorRect;
-
-  @override
-  State<_ExerciseDetailOverlay> createState() => _ExerciseDetailOverlayState();
-}
-
-class _ExerciseDetailOverlayState extends State<_ExerciseDetailOverlay>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _controller.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _close() async {
-    await _controller.reverse();
-    if (mounted) Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final fullScreenRect = Offset.zero & size;
-    final reduced = VoyagerMotion.reduced(context);
-
-    final overlay = Material(
-      color: Colors.black.withValues(alpha: 0.001),
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          final t = reduced
-              ? _controller.value
-              : VoyagerSpring.moveCurve.transform(_controller.value);
-          final scrim = Positioned.fill(
-            child: IgnorePointer(
-              child: ColoredBox(
-                color: Color.lerp(
-                  Colors.transparent,
-                  VoyagerColors.of(context).scrim,
-                  t,
-                )!,
-              ),
-            ),
-          );
-
-          // Reduced motion drops the zoom entirely: the card arrives at full
-          // size and only fades.
-          if (reduced) {
-            return Stack(
-              children: [
-                scrim,
-                Positioned.fill(child: Opacity(opacity: t, child: child)),
-              ],
-            );
-          }
-
-          final rect = Rect.lerp(widget.anchorRect, fullScreenRect, t)!;
-          return Stack(
-            children: [
-              scrim,
-              // Laid out at full size and scaled by Transform rather than
-              // resized: reflowing the sparkline and heatmap into the anchor's
-              // starting width would overflow on the first frames.
-              Positioned.fill(
-                child: Transform(
-                  alignment: Alignment.topLeft,
-                  transform: Matrix4.identity()
-                    ..translateByDouble(rect.left, rect.top, 0, 1)
-                    ..scaleByDouble(
-                      rect.width / fullScreenRect.width,
-                      rect.height / fullScreenRect.height,
-                      1,
-                      1,
-                    ),
-                  child: Opacity(opacity: t, child: child),
-                ),
-              ),
-            ],
-          );
-        },
-        child: _ExerciseDetailCard(
-          exercise: widget.exercise,
-          onClose: _close,
-        ),
-      ),
-    );
-
-    // Closing is what saves here — every field on the card flushes on
-    // dispose — so the chord runs the same callback the × does. The scope
-    // holds focus itself: nothing on the card autofocuses, and with nothing
-    // focused below it the chord would never reach the scope.
-    return CtrlEnterToSubmitScope(
-      onSubmit: _close,
-      autofocus: true,
-      child: overlay,
-    );
-  }
 }
 
 class _ExerciseDetailCard extends ConsumerStatefulWidget {
@@ -254,40 +142,34 @@ class _ExerciseDetailCardState extends ConsumerState<_ExerciseDetailCard> {
     await _save(_exercise.copyWith(formCues: text));
   }
 
-  /// Dials in the sets/reps/weight this movement is planned at — everywhere it
-  /// is planned, since the target lives on the movement rather than on the day
-  /// it was dropped on.
+  /// Writes the movement's planned sets — everywhere it is planned, since
+  /// they live on the movement rather than on the day it was dropped on.
   ///
-  /// Deliberately does no `setState`: the fields hold their own text while they
-  /// are being typed in, and rebuilding the section under the caret would fight
-  /// the user for the cursor.
-  Future<void> _saveTarget({
-    required int sets,
-    required int reps,
-    required double weightKg,
-  }) {
+  /// Identical sets with no drops store as the plain uniform target, anything
+  /// else as a custom recipe. The user only ever sees the list; which shape it
+  /// is kept in follows from what is in it, so the planner card keeps reading
+  /// "3 × 8" for a plain movement.
+  ///
+  /// Deliberately does no `setState`: the fields hold their own text while
+  /// they are being typed in, and rebuilding the section under the caret would
+  /// fight the user for the cursor.
+  Future<void> _saveSets(List<SetPrescription> sets) {
+    final first = sets.first.top;
+    final uniform = sets.every((set) => !set.hasDrops && set.top == first);
     return _save(
-      _exercise.copyWith(
-        targetSets: sets,
-        targetReps: reps,
-        targetWeightKg: weightKg,
-      ),
+      uniform
+          ? _exercise.copyWith(
+              prescriptionMode: WorkoutPrescriptionMode.inherit,
+              setPrescriptions: const [],
+              targetSets: sets.length,
+              targetReps: first.reps,
+              targetWeightKg: first.weightKg,
+            )
+          : _exercise.copyWith(
+              prescriptionMode: WorkoutPrescriptionMode.custom,
+              setPrescriptions: sets,
+            ),
     );
-  }
-
-  /// Opens the set-recipe editor and repaints with whatever it wrote.
-  ///
-  /// This one *does* `setState`, unlike [_save] below: the recipe is rendered
-  /// read-only above, so the card has to redraw to show the edit, and there is
-  /// no caret anywhere near it to fight over.
-  Future<void> _editPrescription() async {
-    final unit =
-        ref.read(settingsProvider).valueOrNull?.weightUnit ?? WeightUnit.lb;
-    await editExercisePrescription(context, ref, _exercise, unit);
-    if (!mounted) return;
-    final refreshed = await _repository.getExercise(_exercise.id);
-    if (!mounted || refreshed == null) return;
-    setState(() => _exercise = refreshed);
   }
 
   /// Persists and pushes an edited copy of the movement. Deliberately does no
@@ -320,196 +202,106 @@ class _ExerciseDetailCardState extends ConsumerState<_ExerciseDetailCard> {
       });
     }();
 
-    return Material(
-      color: theme.colorScheme.surface,
-      elevation: 8,
-      borderRadius: BorderRadius.circular(20),
-      clipBehavior: Clip.antiAlias,
-      child: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(VoyagerSpacing.xl),
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _exercise.name,
-                    style: theme.textTheme.headlineSmall,
-                  ),
-                ),
-                IconButton(
-                  onPressed: widget.onClose,
-                  icon: const Icon(PhosphorIconsRegular.x, size: 20),
-                  tooltip: 'Close',
-                ),
-              ],
-            ),
-            const SizedBox(height: VoyagerSpacing.xs),
-            _SummaryLine(history: history, unit: unit),
-            const SizedBox(height: VoyagerSpacing.xl),
-            Text('Target', style: theme.textTheme.labelLarge),
-            // The target lives on the movement, so editing it here rewrites
-            // every day it is planned on. That used to be a tooltip on an Edit
-            // button; with the fields editable in place there is no button to
-            // hang it on, and a global edit that looks local is exactly the
-            // kind of thing you only notice after it has rewritten your week.
-            Text(
-              _exercise.isCustomPrescription
-                  ? 'Not in use — the custom sets below are what gets planned'
-                  : 'Applies to every day this movement is planned on',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-              ),
-            ),
-            const SizedBox(height: VoyagerSpacing.sm),
-            _TargetSection(
-              exercise: _exercise,
-              unit: unit,
-              onChanged: _saveTarget,
-            ),
-            const SizedBox(height: VoyagerSpacing.xl),
-            Text('Sets', style: theme.textTheme.labelLarge),
-            const SizedBox(height: VoyagerSpacing.sm),
-            _PrescriptionSection(
-              exercise: _exercise,
-              unit: unit,
-              onEdit: _editPrescription,
-            ),
-            const SizedBox(height: VoyagerSpacing.xl),
-            Text('Weight per set', style: theme.textTheme.labelLarge),
-            const SizedBox(height: VoyagerSpacing.sm),
-            _WeightSparkline(history: history, unit: unit),
-            const SizedBox(height: VoyagerSpacing.xl),
-            Text(
-              'Volume · last $kVolumeHeatmapDays sessions',
-              style: theme.textTheme.labelLarge,
-            ),
-            const SizedBox(height: VoyagerSpacing.sm),
-            _VolumeHeatmap(history: history, unit: unit),
-            const SizedBox(height: VoyagerSpacing.xl),
-            Text('Form cues', style: theme.textTheme.labelLarge),
-            const SizedBox(height: VoyagerSpacing.sm),
-            VoyagerTextField(
-              controller: _cuesController,
-              maxLines: 6,
-              minLines: 3,
-              onChanged: _onCuesChanged,
-              decoration: const InputDecoration(
-                hintText: 'Elbows tucked, pause on the chest…',
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// The movement's set recipe, read-only, with the one button that edits it.
-///
-/// Read-only on purpose: the sets are dialled on wheels in a sheet, and the
-/// point of showing them here is that opening a movement tells you what it is
-/// actually planned at — drops included, which the uniform [_TargetSection]
-/// above cannot express.
-class _PrescriptionSection extends StatelessWidget {
-  const _PrescriptionSection({
-    required this.exercise,
-    required this.unit,
-    required this.onEdit,
-  });
-
-  final Exercise exercise;
-  final WeightUnit unit;
-  final VoidCallback onEdit;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = VoyagerColors.of(context);
-    final custom = exercise.isCustomPrescription;
-
-    return Container(
-      padding: const EdgeInsets.all(VoyagerSpacing.md),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: colors.hairline),
-      ),
+    // Sized to its content: the modal hugs a short card and only scrolls once
+    // the sets outgrow the height it is allowed.
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(VoyagerSpacing.xl),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (!custom)
-            Text(
-              'Every set the same: ${exercise.targetSets} × '
-              '${exercise.targetReps}'
-              '${exercise.targetWeightKg > 0 ? ' · ${unit.formatKilogramsWithUnit(exercise.targetWeightKg)}' : ''}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _exercise.name,
+                  style: theme.textTheme.headlineSmall,
+                ),
               ),
-            )
-          else
-            for (var i = 0; i < exercise.setPrescriptions.length; i++)
-              _PrescriptionRow(
-                index: i,
-                prescription: exercise.setPrescriptions[i],
-                unit: unit,
+              IconButton(
+                onPressed: widget.onClose,
+                icon: const Icon(PhosphorIconsRegular.x, size: 20),
+                tooltip: 'Close',
               ),
+            ],
+          ),
+          const SizedBox(height: VoyagerSpacing.xs),
+          _SummaryLine(history: history, unit: unit),
+          const SizedBox(height: VoyagerSpacing.xl),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final sets = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Sets', style: theme.textTheme.labelLarge),
+                  // The sets live on the movement, so editing them here
+                  // rewrites every day it is planned on — a global edit that
+                  // looks local is exactly the kind of thing you only notice
+                  // after it has rewritten your week.
+                  Text(
+                    'Applies to every day this movement is planned on',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.55,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: VoyagerSpacing.sm),
+                  _SetsSection(
+                    exercise: _exercise,
+                    unit: unit,
+                    onChanged: _saveSets,
+                  ),
+                ],
+              );
+              final charts = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Weight per set', style: theme.textTheme.labelLarge),
+                  const SizedBox(height: VoyagerSpacing.sm),
+                  _WeightSparkline(history: history, unit: unit),
+                  const SizedBox(height: VoyagerSpacing.xl),
+                  Text(
+                    'Volume · last $kVolumeHeatmapDays sessions',
+                    style: theme.textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: VoyagerSpacing.sm),
+                  _VolumeHeatmap(history: history, unit: unit),
+                ],
+              );
+              // The set rows are a fixed width, so on a wide card they sit
+              // beside the charts rather than above a strip of empty space.
+              if (constraints.maxWidth <
+                  _setsColumnWidth + VoyagerSpacing.xl + _minChartsWidth) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    sets,
+                    const SizedBox(height: VoyagerSpacing.xl),
+                    charts,
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: _setsColumnWidth, child: sets),
+                  const SizedBox(width: VoyagerSpacing.xl),
+                  Expanded(child: charts),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: VoyagerSpacing.xl),
+          Text('Form cues', style: theme.textTheme.labelLarge),
           const SizedBox(height: VoyagerSpacing.sm),
-          GlassButton(
-            dense: true,
-            icon: const Icon(PhosphorIconsRegular.listNumbers, size: 14),
-            label: custom ? 'Edit sets' : 'Custom sets',
-            tooltip:
-                'Vary the sets, or add drop sets — on every day this '
-                'movement is planned',
-            onPressed: onEdit,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PrescriptionRow extends StatelessWidget {
-  const _PrescriptionRow({
-    required this.index,
-    required this.prescription,
-    required this.unit,
-  });
-
-  final int index;
-  final SetPrescription prescription;
-  final WeightUnit unit;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final segments = [
-      for (final segment in prescription.segments)
-        '${unit.formatKilogramsWithUnit(segment.weightKg)} × ${segment.reps}',
-    ];
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 52,
-            child: Text(
-              'Set ${index + 1}',
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              // An arrow chain rather than a list: a drop set is one
-              // continuous effort, and the chain says so at a glance.
-              segments.join(' → '),
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
+          VoyagerTextField(
+            controller: _cuesController,
+            maxLines: 6,
+            minLines: 3,
+            onChanged: _onCuesChanged,
+            decoration: const InputDecoration(
+              hintText: 'Elbows tucked, pause on the chest…',
             ),
           ),
         ],
@@ -518,18 +310,19 @@ class _PrescriptionRow extends StatelessWidget {
   }
 }
 
-/// The movement's planned numbers, editable where they are shown.
+/// The movement's sets, edited where they are shown: one row per set, its
+/// drops indented beneath it.
 ///
-/// Editing here is the deliberate, sat-down path — as opposed to the wheels
-/// mid-workout, which only ever bend a single session. Saving moves the
-/// baseline itself, on every day the movement appears.
+/// This replaces a uniform "target" row stacked over a read-only recipe that
+/// opened a wheel sheet to edit. The two said the same thing twice, and the
+/// one that could express drops was the one you couldn't touch. The planned
+/// sets are now one list; whether they store as a uniform target or as a
+/// custom recipe is the parent's concern, not something the user picks.
 ///
-/// The numbers are live fields rather than a display that opens an editor:
-/// there is nothing to confirm and nothing to dismiss, so changing a target is
-/// the same gesture as reading one. Writes are debounced the same way the form
-/// cues below are, so the whole card saves on one rhythm.
-class _TargetSection extends StatefulWidget {
-  const _TargetSection({
+/// Writes are debounced the same way the form cues are, so the whole card
+/// saves on one rhythm; adding or removing a row saves at once.
+class _SetsSection extends StatefulWidget {
+  const _SetsSection({
     required this.exercise,
     required this.unit,
     required this.onChanged,
@@ -537,64 +330,40 @@ class _TargetSection extends StatefulWidget {
 
   final Exercise exercise;
   final WeightUnit unit;
-  final Future<void> Function({
-    required int sets,
-    required int reps,
-    required double weightKg,
-  })
-  onChanged;
+  final Future<void> Function(List<SetPrescription> sets) onChanged;
 
   @override
-  State<_TargetSection> createState() => _TargetSectionState();
+  State<_SetsSection> createState() => _SetsSectionState();
 }
 
-class _TargetSectionState extends State<_TargetSection> {
-  /// Matched to the form-cues field above so the card has one save rhythm.
+class _SetsSectionState extends State<_SetsSection> {
+  /// Matched to the form-cues field below so the card has one save rhythm.
   static const _saveDebounce = Duration(milliseconds: 600);
 
-  late final _setsController = TextEditingController(
-    text: '${widget.exercise.targetSets}',
-  );
-  late final _repsController = TextEditingController(
-    text: '${widget.exercise.targetReps}',
-  );
-  late final _weightController = TextEditingController(
-    text: widget.exercise.targetWeightKg > 0
-        ? widget.unit.formatKilograms(widget.exercise.targetWeightKg)
-        : '',
-  );
+  late final List<List<_SegmentFields>> _sets = [
+    for (final set
+        in widget.exercise.isCustomPrescription
+            ? widget.exercise.setPrescriptions
+            : seedPrescriptionsFromExercise(widget.exercise))
+      [for (final segment in set.segments) _newFields(segment)],
+  ];
 
-  final _setsFocus = FocusNode();
-  final _repsFocus = FocusNode();
-  final _weightFocus = FocusNode();
-
-  // What is actually on the row right now. Compared against on every flush so
-  // a debounce that fires with nothing changed doesn't write, and so the
-  // comparison doesn't drift against the stale `widget.exercise` the parent
-  // deliberately never rebuilds us with.
-  late int _savedSets = widget.exercise.targetSets;
-  late int _savedReps = widget.exercise.targetReps;
-  late double _savedWeightKg = widget.exercise.targetWeightKg;
+  /// What was last written, so a debounce that fires with nothing changed
+  /// doesn't write.
+  late List<SetPrescription> _saved;
 
   Timer? _saveTimer;
 
-  /// Same reason as the form-cues field above: `dispose` never runs when the
-  /// window is closed, so a debounced target edit had nowhere to land.
+  /// `dispose` never runs when the window is closed, so a debounced edit
+  /// would otherwise have nowhere to land.
   late final Future<void> Function() _lifecycleFlushCallback;
 
   @override
   void initState() {
     super.initState();
+    _saved = _current;
     _lifecycleFlushCallback = _lifecycleFlush;
     PendingFlushRegistry.instance.register(_lifecycleFlushCallback);
-    for (final node in [_setsFocus, _repsFocus, _weightFocus]) {
-      node.addListener(() {
-        // Leaving a field commits it immediately rather than waiting out the
-        // debounce, and rewrites it to what was stored — a typed 999 sets
-        // lands as $kMaxSets, and the field should say so.
-        if (!node.hasFocus) _flush(normalize: true);
-      });
-    }
   }
 
   Future<void> _lifecycleFlush() async {
@@ -607,72 +376,246 @@ class _TargetSectionState extends State<_TargetSection> {
     PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
     _saveTimer?.cancel();
     _flush();
-    _setsController.dispose();
-    _repsController.dispose();
-    _weightController.dispose();
-    _setsFocus.dispose();
-    _repsFocus.dispose();
-    _weightFocus.dispose();
+    for (final set in _sets) {
+      for (final fields in set) {
+        fields.dispose();
+      }
+    }
     super.dispose();
   }
 
-  int get _parsedSets =>
-      (int.tryParse(_setsController.text.trim()) ?? _savedSets)
-          .clamp(1, kMaxSets);
+  _SegmentFields _newFields(SetSegment segment) {
+    final fields = _SegmentFields(segment, widget.unit);
+    // Leaving a field rewrites it to what is stored — a typed 99 reps lands as
+    // $kMaxReps, and the field should say so.
+    void onBlur() {
+      if (fields.weightFocus.hasFocus || fields.repsFocus.hasFocus) return;
+      fields.normalize(widget.unit);
+      _flush();
+    }
 
-  int get _parsedReps =>
-      (int.tryParse(_repsController.text.trim()) ?? _savedReps)
-          .clamp(1, kMaxReps);
-
-  /// Empty means "no planned load" (bodyweight), which is a real answer and
-  /// stores as zero — not a parse failure to fall back from.
-  double get _parsedWeightKg {
-    final text = _weightController.text.trim();
-    if (text.isEmpty) return 0;
-    final display = double.tryParse(text);
-    if (display == null) return _savedWeightKg;
-    return widget.unit.toKilograms(display.clamp(0, widget.unit.max));
+    fields.weightFocus.addListener(onBlur);
+    fields.repsFocus.addListener(onBlur);
+    return fields;
   }
 
-  void _onEdited(String _) {
+  List<SetPrescription> get _current => [
+    for (final set in _sets)
+      SetPrescription(segments: [for (final fields in set) fields.segment]),
+  ];
+
+  void _onEdited(_SegmentFields fields) {
+    fields.parse(widget.unit);
     _saveTimer?.cancel();
     _saveTimer = Timer(_saveDebounce, _flush);
   }
 
   /// Returns the write it started, or null when nothing changed, so a
   /// window-close flush can wait for it.
-  Future<void>? _flush({bool normalize = false}) {
+  Future<void>? _flush() {
     _saveTimer?.cancel();
-    final sets = _parsedSets;
-    final reps = _parsedReps;
-    // Storage is kilograms but the field shows the user's unit rounded to a
-    // tenth, so parsing that text back lands a hair off the kilograms it was
-    // formatted from — 60 kg displays as 132.3 lb and returns as 60.01. Left
-    // alone, simply opening and closing the card would drift the target. If
-    // the text still reads the same, the stored number is kept exactly.
-    final parsedWeightKg = _parsedWeightKg;
-    final weightKg =
-        widget.unit.formatKilograms(parsedWeightKg) ==
-            widget.unit.formatKilograms(_savedWeightKg)
-        ? _savedWeightKg
-        : parsedWeightKg;
+    final current = _current;
+    if (_samePrescriptions(current, _saved)) return null;
+    _saved = current;
+    return widget.onChanged(current);
+  }
 
-    if (normalize) {
-      _setText(_setsController, '$sets');
-      _setText(_repsController, '$reps');
-      _setText(
-        _weightController,
-        weightKg > 0 ? widget.unit.formatKilograms(weightKg) : '',
-      );
+  static bool _samePrescriptions(
+    List<SetPrescription> a,
+    List<SetPrescription> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      final x = a[i].segments;
+      final y = b[i].segments;
+      if (x.length != y.length) return false;
+      for (var j = 0; j < x.length; j++) {
+        if (x[j] != y[j]) return false;
+      }
     }
+    return true;
+  }
 
-    if (sets == _savedSets && reps == _savedReps && weightKg == _savedWeightKg) {
-      return null;
+  void _addSet() {
+    if (_sets.length >= kMaxSets) return;
+    setState(() => _sets.add([_newFields(_sets.last.first.segment)]));
+    _flush();
+  }
+
+  void _removeSet(int index) {
+    if (_sets.length <= 1) return;
+    final removed = _sets[index];
+    setState(() => _sets.removeAt(index));
+    _disposeAfterFrame(removed);
+    _flush();
+  }
+
+  void _addDrop(int index) {
+    final set = _sets[index];
+    if (set.length - 1 >= kMaxDropsPerSet) return;
+    setState(
+      () => set.add(_newFields(nextDropSegment(set.last.segment, widget.unit))),
+    );
+    _flush();
+  }
+
+  void _removeDrop(int index, int segment) {
+    final removed = _sets[index][segment];
+    setState(() => _sets[index].removeAt(segment));
+    _disposeAfterFrame([removed]);
+    _flush();
+  }
+
+  /// The removed row's fields are still mounted until the rebuild lands, so
+  /// their controllers and focus nodes outlive it by a frame.
+  void _disposeAfterFrame(List<_SegmentFields> removed) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final fields in removed) {
+        fields.dispose();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.labelMedium?.copyWith(
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < _sets.length; i++)
+          for (var seg = 0; seg < _sets[i].length; seg++)
+            Padding(
+              key: ObjectKey(_sets[i][seg]),
+              padding: const EdgeInsets.only(bottom: VoyagerSpacing.xs),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 72,
+                    child: Text(
+                      seg == 0 ? 'Set ${i + 1}' : '  ↳ Drop $seg',
+                      style: muted,
+                    ),
+                  ),
+                  _SegmentNumberField(
+                    controller: _sets[i][seg].weight,
+                    focusNode: _sets[i][seg].weightFocus,
+                    onChanged: (_) => _onEdited(_sets[i][seg]),
+                    width: 104,
+                    hintText: '—',
+                    suffixText: widget.unit.label,
+                    formatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: VoyagerSpacing.sm,
+                    ),
+                    child: Text('×', style: muted),
+                  ),
+                  _SegmentNumberField(
+                    controller: _sets[i][seg].reps,
+                    focusNode: _sets[i][seg].repsFocus,
+                    onChanged: (_) => _onEdited(_sets[i][seg]),
+                    width: 80,
+                    suffixText: 'reps',
+                    formatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                  const SizedBox(width: VoyagerSpacing.sm),
+                  if (seg == 0) ...[
+                    IconButton(
+                      onPressed: _sets[i].length - 1 >= kMaxDropsPerSet
+                          ? null
+                          : () => _addDrop(i),
+                      icon: const Icon(
+                        PhosphorIconsRegular.caretDown,
+                        size: 14,
+                      ),
+                      tooltip: 'Add drop',
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    if (_sets.length > 1)
+                      IconButton(
+                        onPressed: () => _removeSet(i),
+                        icon: const Icon(PhosphorIconsRegular.trash, size: 14),
+                        tooltip: 'Remove set',
+                        visualDensity: VisualDensity.compact,
+                      ),
+                  ] else
+                    IconButton(
+                      onPressed: () => _removeDrop(i, seg),
+                      icon: const Icon(PhosphorIconsRegular.x, size: 14),
+                      tooltip: 'Remove drop',
+                      visualDensity: VisualDensity.compact,
+                    ),
+                ],
+              ),
+            ),
+        const SizedBox(height: VoyagerSpacing.xs),
+        GlassButton(
+          dense: true,
+          icon: const Icon(PhosphorIconsRegular.plus, size: 14),
+          label: 'Add set',
+          onPressed: _sets.length >= kMaxSets ? null : _addSet,
+        ),
+      ],
+    );
+  }
+}
+
+/// One weight × reps slice's fields and the numbers they stand for.
+class _SegmentFields {
+  _SegmentFields(SetSegment segment, WeightUnit unit)
+    : weightKg = segment.weightKg,
+      repsValue = segment.reps,
+      weight = TextEditingController(
+        text: segment.weightKg > 0
+            ? unit.formatKilograms(segment.weightKg)
+            : '',
+      ),
+      reps = TextEditingController(text: '${segment.reps}');
+
+  double weightKg;
+  int repsValue;
+  final TextEditingController weight;
+  final TextEditingController reps;
+  final weightFocus = FocusNode();
+  final repsFocus = FocusNode();
+
+  SetSegment get segment => SetSegment(weightKg: weightKg, reps: repsValue);
+
+  /// Reads the fields into the numbers. Empty weight means "no planned load"
+  /// (bodyweight), which is a real answer and stores as zero; unparseable text
+  /// keeps the last good number.
+  ///
+  /// Storage is kilograms but the field shows the user's unit rounded to a
+  /// tenth, so parsing that text back lands a hair off the kilograms it was
+  /// formatted from — 60 kg displays as 132.3 lb and returns as 60.01. If the
+  /// text still reads the same, the stored number is kept exactly, or simply
+  /// tabbing through the card would drift it.
+  void parse(WeightUnit unit) {
+    repsValue = (int.tryParse(reps.text.trim()) ?? repsValue).clamp(
+      1,
+      kMaxReps,
+    );
+    final text = weight.text.trim();
+    final display = text.isEmpty ? 0.0 : double.tryParse(text);
+    if (display == null) return;
+    final parsed = unit.toKilograms(display.clamp(0, unit.max).toDouble());
+    if (unit.formatKilograms(parsed) != unit.formatKilograms(weightKg)) {
+      weightKg = parsed;
     }
-    _savedSets = sets;
-    _savedReps = reps;
-    _savedWeightKg = weightKg;
-    return widget.onChanged(sets: sets, reps: reps, weightKg: weightKg);
+  }
+
+  /// Rewrites both fields to the numbers they stand for.
+  void normalize(WeightUnit unit) {
+    parse(unit);
+    _setText(weight, weightKg > 0 ? unit.formatKilograms(weightKg) : '');
+    _setText(reps, '$repsValue');
   }
 
   static void _setText(TextEditingController controller, String text) {
@@ -683,117 +626,61 @@ class _TargetSectionState extends State<_TargetSection> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = VoyagerColors.of(context);
-
-    return Container(
-      padding: const EdgeInsets.all(VoyagerSpacing.md),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: colors.hairline),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _TargetField(
-            label: 'Sets',
-            controller: _setsController,
-            focusNode: _setsFocus,
-            onChanged: _onEdited,
-            formatters: [FilteringTextInputFormatter.digitsOnly],
-          ),
-          const SizedBox(width: VoyagerSpacing.sm),
-          _TargetField(
-            label: 'Reps',
-            controller: _repsController,
-            focusNode: _repsFocus,
-            onChanged: _onEdited,
-            formatters: [FilteringTextInputFormatter.digitsOnly],
-          ),
-          const SizedBox(width: VoyagerSpacing.sm),
-          _TargetField(
-            label: 'Weight',
-            controller: _weightController,
-            focusNode: _weightFocus,
-            onChanged: _onEdited,
-            flex: 3,
-            hintText: '—',
-            suffixText: widget.unit.label,
-            formatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-            ],
-          ),
-        ],
-      ),
-    );
+  void dispose() {
+    weight.dispose();
+    reps.dispose();
+    weightFocus.dispose();
+    repsFocus.dispose();
   }
 }
 
-/// One labelled number in the target row. Keeps the label/value stacking the
-/// read-only version had, so the row reads the same whether or not the caret
-/// is in it.
-class _TargetField extends StatelessWidget {
-  const _TargetField({
-    required this.label,
+class _SegmentNumberField extends StatelessWidget {
+  const _SegmentNumberField({
     required this.controller,
     required this.focusNode,
     required this.onChanged,
     required this.formatters,
+    required this.width,
     this.suffixText,
     this.hintText,
-    this.flex = 2,
   });
 
-  final String label;
   final TextEditingController controller;
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
   final List<TextInputFormatter> formatters;
+  final double width;
   final String? suffixText;
   final String? hintText;
-  final int flex;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = theme.textTheme.labelSmall?.copyWith(
-      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-    );
-
-    return Expanded(
-      flex: flex,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label, style: muted),
-          const SizedBox(height: 2),
-          VoyagerTextField(
-            controller: controller,
-            focusNode: focusNode,
-            onChanged: onChanged,
-            onSubmitted: (_) => focusNode.unfocus(),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            textInputAction: TextInputAction.next,
-            inputFormatters: formatters,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: hintText,
-              suffixText: suffixText,
-              suffixStyle: muted,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 10,
-              ),
-            ),
+    return SizedBox(
+      width: width,
+      child: VoyagerTextField(
+        controller: controller,
+        focusNode: focusNode,
+        onChanged: onChanged,
+        onSubmitted: (_) => focusNode.unfocus(),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        textInputAction: TextInputAction.next,
+        inputFormatters: formatters,
+        style: theme.textTheme.bodyMedium?.copyWith(
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: hintText,
+          suffixText: suffixText,
+          suffixStyle: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
           ),
-        ],
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 10,
+            vertical: 8,
+          ),
+        ),
       ),
     );
   }
@@ -831,16 +718,41 @@ class _SummaryLine extends StatelessWidget {
 /// One point per set rather than a per-session average, so a session where the
 /// last set dropped 20 lb reads as the drop it was instead of being averaged
 /// into a mild dip.
-class _WeightSparkline extends StatelessWidget {
+///
+/// Hovering reads out the set under the pointer in the app's chart bubble —
+/// the nearest point by x, so the whole plot height is a target rather than a
+/// two-pixel line.
+class _WeightSparkline extends StatefulWidget {
   const _WeightSparkline({required this.history, required this.unit});
 
   final List<ExerciseDaySummary> history;
   final WeightUnit unit;
 
   @override
+  State<_WeightSparkline> createState() => _WeightSparklineState();
+}
+
+class _WeightSparklineState extends State<_WeightSparkline> {
+  int? _hoverIndex;
+
+  void _setHover(int? index) {
+    if (index == _hoverIndex) return;
+    setState(() => _hoverIndex = index);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final points = [for (final day in history) ...day.setWeightsKg];
+    final points = [
+      for (final day in widget.history)
+        for (var i = 0; i < day.setWeightsKg.length; i++)
+          (
+            date: day.date,
+            set: i + 1,
+            weightKg: day.setWeightsKg[i],
+            reps: day.setReps[i],
+          ),
+    ];
     if (points.length < 2) {
       return _ChartPlaceholder(
         height: 120,
@@ -849,15 +761,64 @@ class _WeightSparkline extends StatelessWidget {
             : 'One set so far — two are needed for a trend',
       );
     }
+    final values = [for (final p in points) p.weightKg];
+    final hover = _hoverIndex != null && _hoverIndex! < points.length
+        ? _hoverIndex
+        : null;
+
     return SizedBox(
       height: 120,
-      child: CustomPaint(
-        painter: _SparklinePainter(
-          values: points,
-          lineColor: theme.colorScheme.primary,
-          gridColor: VoyagerColors.of(context).chartGrid,
-        ),
-        child: const SizedBox.expand(),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final size = constraints.biggest;
+          int indexAt(Offset position) =>
+              (position.dx / (size.width / (points.length - 1))).round().clamp(
+                0,
+                points.length - 1,
+              );
+
+          return MouseRegion(
+            onHover: (event) => _setHover(indexAt(event.localPosition)),
+            onExit: (_) => _setHover(null),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _SparklinePainter(
+                      values: values,
+                      hoverIndex: hover,
+                      lineColor: theme.colorScheme.primary,
+                      gridColor: VoyagerColors.of(context).chartGrid,
+                    ),
+                  ),
+                ),
+                if (hover != null)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomSingleChildLayout(
+                        delegate: _HoverBubbleLayout(
+                          anchor: _SparklinePainter.pointAt(
+                            values,
+                            hover,
+                            size,
+                          ),
+                        ),
+                        child: ChartHoverBubble(
+                          periodLabel:
+                              '${DateFormat('MMM d, yyyy').format(points[hover].date)}'
+                              ' · set ${points[hover].set}',
+                          valueLabel:
+                              '${widget.unit.formatKilogramsWithUnit(points[hover].weightKg)}'
+                              ' × ${points[hover].reps}',
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -866,22 +827,31 @@ class _WeightSparkline extends StatelessWidget {
 class _SparklinePainter extends CustomPainter {
   _SparklinePainter({
     required this.values,
+    required this.hoverIndex,
     required this.lineColor,
     required this.gridColor,
   });
 
   final List<double> values;
+  final int? hoverIndex;
   final Color lineColor;
   final Color gridColor;
 
-  @override
-  void paint(Canvas canvas, Size size) {
+  /// Where point [i] of [values] lands in a plot of [size]. Shared with the
+  /// hover bubble so it anchors to exactly the point that is drawn.
+  static Offset pointAt(List<double> values, int i, Size size) {
     final min = values.reduce(math.min);
     final max = values.reduce(math.max);
     // A perfectly flat series has zero range; pad it so the line lands
     // mid-height instead of dividing by zero.
     final range = (max - min).abs() < 0.001 ? 1.0 : max - min;
+    final dx = size.width / (values.length - 1);
+    final t = (values[i] - min) / range;
+    return Offset(i * dx, size.height - (t * (size.height - 12)) - 6);
+  }
 
+  @override
+  void paint(Canvas canvas, Size size) {
     canvas.drawLine(
       Offset(0, size.height - 0.5),
       Offset(size.width, size.height - 0.5),
@@ -890,11 +860,9 @@ class _SparklinePainter extends CustomPainter {
         ..strokeWidth = 1,
     );
 
-    final dx = size.width / (values.length - 1);
     final path = Path();
     for (var i = 0; i < values.length; i++) {
-      final t = (values[i] - min) / range;
-      final point = Offset(i * dx, size.height - (t * (size.height - 12)) - 6);
+      final point = pointAt(values, i, size);
       if (i == 0) {
         path.moveTo(point.dx, point.dy);
       } else {
@@ -928,12 +896,26 @@ class _SparklinePainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round
         ..style = PaintingStyle.stroke,
     );
+
+    final hover = hoverIndex;
+    if (hover != null) {
+      final point = pointAt(values, hover, size);
+      canvas.drawLine(
+        Offset(point.dx, 0),
+        Offset(point.dx, size.height),
+        Paint()
+          ..color = gridColor
+          ..strokeWidth = 1,
+      );
+      canvas.drawCircle(point, 4, Paint()..color = lineColor);
+    }
   }
 
   @override
   bool shouldRepaint(covariant _SparklinePainter old) =>
       old.lineColor != lineColor ||
       old.gridColor != gridColor ||
+      old.hoverIndex != hoverIndex ||
       !listEquals(old.values, values);
 
   static bool listEquals(List<double> a, List<double> b) {
@@ -945,63 +927,139 @@ class _SparklinePainter extends CustomPainter {
   }
 }
 
+/// Centres a hover bubble horizontally on [anchor] and sits it just above.
+/// Unclamped, like the analytics sparkline's: near an end it overhangs the
+/// plot rather than sliding off the point it describes.
+class _HoverBubbleLayout extends SingleChildLayoutDelegate {
+  const _HoverBubbleLayout({required this.anchor});
+
+  final Offset anchor;
+
+  static const double _gap = 8;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      const BoxConstraints();
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) => Offset(
+    anchor.dx - childSize.width / 2,
+    anchor.dy - _gap - childSize.height,
+  );
+
+  @override
+  bool shouldRelayout(_HoverBubbleLayout oldDelegate) =>
+      oldDelegate.anchor != anchor;
+}
+
 /// A row of rounded squares, one per day the exercise was performed, with
-/// brightness tracking that day's total volume (Σ weight × reps).
-class _VolumeHeatmap extends StatelessWidget {
+/// brightness tracking that day's total volume (Σ weight × reps). Hovering a
+/// square reads out its day in the app's chart bubble.
+class _VolumeHeatmap extends StatefulWidget {
   const _VolumeHeatmap({required this.history, required this.unit});
 
   final List<ExerciseDaySummary> history;
   final WeightUnit unit;
 
   @override
+  State<_VolumeHeatmap> createState() => _VolumeHeatmapState();
+}
+
+class _VolumeHeatmapState extends State<_VolumeHeatmap> {
+  final _stackKey = GlobalKey();
+
+  /// The hovered day, and the top-centre of its square in the stack.
+  ({ExerciseDaySummary day, Offset anchor})? _hover;
+
+  void _enter(ExerciseDaySummary day, BuildContext squareContext) {
+    final square = squareContext.findRenderObject() as RenderBox?;
+    final stack = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (square == null || stack == null) return;
+    final anchor = stack.globalToLocal(
+      square.localToGlobal(Offset(square.size.width / 2, 0)),
+    );
+    setState(() => _hover = (day: day, anchor: anchor));
+  }
+
+  /// Only the square still hovered may clear the bubble — the pointer enters
+  /// the next square before it leaves the last.
+  void _exit(ExerciseDaySummary day) {
+    if (_hover?.day != day) return;
+    setState(() => _hover = null);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = VoyagerColors.of(context);
     final accent = theme.colorScheme.primary;
+    final history = widget.history;
+    final unit = widget.unit;
 
     final recent = history.length <= kVolumeHeatmapDays
         ? history
         : history.sublist(history.length - kVolumeHeatmapDays);
     if (recent.isEmpty) {
-      return _ChartPlaceholder(
-        height: 30,
-        message: 'No volume logged yet',
-      );
+      return _ChartPlaceholder(height: 30, message: 'No volume logged yet');
     }
-    final maxVolume = recent
-        .map((d) => d.volumeKg)
-        .fold<double>(0, math.max);
+    final maxVolume = recent.map((d) => d.volumeKg).fold<double>(0, math.max);
+    final hover = _hover;
+    final sets = hover?.day.setWeightsKg.length ?? 0;
 
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
+    return Stack(
+      key: _stackKey,
+      clipBehavior: Clip.none,
       children: [
-        for (final day in recent)
-          Tooltip(
-            message:
-                '${day.date.year}-${_two(day.date.month)}-${_two(day.date.day)}'
-                ' · ${unit.formatKilograms(day.volumeKg)} ${unit.label} volume',
-            child: Container(
-              width: 26,
-              height: 26,
-              decoration: BoxDecoration(
-                // Floor of 0.18 so a light day still reads as a day trained
-                // rather than dissolving into the background.
-                color: accent.withValues(
-                  alpha: maxVolume <= 0
-                      ? 0.18
-                      : 0.18 + 0.82 * (day.volumeKg / maxVolume),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final day in recent)
+              Builder(
+                builder: (squareContext) => MouseRegion(
+                  onEnter: (_) => _enter(day, squareContext),
+                  onExit: (_) => _exit(day),
+                  child: Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      // Floor of 0.18 so a light day still reads as a day
+                      // trained rather than dissolving into the background.
+                      color: accent.withValues(
+                        alpha: maxVolume <= 0
+                            ? 0.18
+                            : 0.18 + 0.82 * (day.volumeKg / maxVolume),
+                      ),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(
+                        color: hover?.day == day
+                            ? VoyagerListItemSurface.focusBorderColor(context)
+                            : colors.hairline,
+                      ),
+                    ),
+                  ),
                 ),
-                borderRadius: BorderRadius.circular(7),
-                border: Border.all(color: colors.hairline),
+              ),
+          ],
+        ),
+        if (hover != null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomSingleChildLayout(
+                delegate: _HoverBubbleLayout(anchor: hover.anchor),
+                child: ChartHoverBubble(
+                  periodLabel: DateFormat('MMM d, yyyy').format(hover.day.date),
+                  valueLabel:
+                      '${NumberFormat.decimalPattern().format(unit.fromKilograms(hover.day.volumeKg).round())}'
+                      ' ${unit.label} volume',
+                  detailLabel: '$sets set${sets == 1 ? '' : 's'}',
+                ),
               ),
             ),
           ),
       ],
     );
   }
-
-  static String _two(int value) => value.toString().padLeft(2, '0');
 }
 
 class _ChartPlaceholder extends StatelessWidget {

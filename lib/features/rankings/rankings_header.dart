@@ -402,7 +402,10 @@ class _StatusChip extends StatelessWidget {
                 Container(
                   width: 6,
                   height: 6,
-                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
                 ),
                 const SizedBox(width: 6),
                 Text(label, style: theme.textTheme.labelSmall),
@@ -538,10 +541,8 @@ class RankingsToolbar extends StatelessWidget {
                 buttonContext: buttonContext,
                 accentColor: accent,
                 width: 260,
-                builder: (context) => _FilterMenu(
-                  tags: tags,
-                  onChanged: onFiltersChanged,
-                ),
+                builder: (context) =>
+                    _FilterMenu(tags: tags, onChanged: onFiltersChanged),
               ),
             ),
           ),

@@ -69,9 +69,8 @@ class FinancePage extends ConsumerWidget {
         data: (transactions) =>
             _FinanceView(transactions: transactions, tagColors: tagColors),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => _LedgerError(
-          onRetry: () => ref.invalidate(transactionsProvider),
-        ),
+        error: (e, _) =>
+            _LedgerError(onRetry: () => ref.invalidate(transactionsProvider)),
       ),
     );
   }
@@ -134,10 +133,7 @@ class _LedgerEmptyDay {
 /// The flattened ledger plus the position of every transaction in it, built
 /// once per build by `_FinanceViewState._ledgerModel`.
 class _LedgerModel {
-  const _LedgerModel({
-    this.entries = const [],
-    this.indexById = const {},
-  });
+  const _LedgerModel({this.entries = const [], this.indexById = const {}});
 
   final List<Object> entries;
   final Map<String, int> indexById;
@@ -543,9 +539,11 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
                   alignment: Alignment.centerLeft,
                   child: _LedgerFilterChip(
                     tag: tagFilter,
-                    onClear: () => ref
-                        .read(financeLedgerTagFilterProvider.notifier)
-                        .state = null,
+                    onClear: () =>
+                        ref
+                                .read(financeLedgerTagFilterProvider.notifier)
+                                .state =
+                            null,
                   ),
                 ),
               ],
@@ -1057,10 +1055,7 @@ class LedgerTitleText extends StatelessWidget {
     );
     if (ranges.isEmpty) return text;
     // `==highlight==` comes back marked, not filled — see [kProseHighlightMark].
-    return ProseHighlightUnderlay(
-      color: emphasis.highlightColor!,
-      child: text,
-    );
+    return ProseHighlightUnderlay(color: emphasis.highlightColor!, child: text);
   }
 }
 

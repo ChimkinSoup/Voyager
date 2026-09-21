@@ -34,8 +34,9 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
     try {
       await _flushPendingEdits();
       if (!mounted) return;
-      final report =
-          await ref.read(remoteSyncCompareServiceProvider).compareAllJournalEntries();
+      final report = await ref
+          .read(remoteSyncCompareServiceProvider)
+          .compareAllJournalEntries();
       if (!mounted) return;
       await _showJournalResultDialog(context, report);
     } finally {
@@ -49,8 +50,9 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
     try {
       await _flushPendingEdits();
       if (!mounted) return;
-      final report =
-          await ref.read(remoteSyncCompareServiceProvider).compareAllTodoLists();
+      final report = await ref
+          .read(remoteSyncCompareServiceProvider)
+          .compareAllTodoLists();
       if (!mounted) return;
       await _showTodoListsResultDialog(context, report);
     } finally {
@@ -65,8 +67,9 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
     try {
       await _flushPendingEdits();
       if (!mounted) return;
-      final result =
-          await ref.read(remoteSyncCompareServiceProvider).compareTodoList(listId);
+      final result = await ref
+          .read(remoteSyncCompareServiceProvider)
+          .compareTodoList(listId);
       if (!mounted) return;
       await _showTodoResultDialog(context, result);
     } finally {
@@ -147,10 +150,7 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
                   ),
                   items: [
                     for (final list in lists)
-                      DropdownMenuItem(
-                        value: list.id,
-                        child: Text(list.name),
-                      ),
+                      DropdownMenuItem(value: list.id, child: Text(list.name)),
                   ],
                   onChanged: _comparing
                       ? null
@@ -164,7 +164,9 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
                     'Reports task mismatch if any task differs',
                   ),
                   trailing: const Icon(PhosphorIconsRegular.listChecks),
-                  onTap: _comparing ? null : () => unawaited(_compareTodoList()),
+                  onTap: _comparing
+                      ? null
+                      : () => unawaited(_compareTodoList()),
                 ),
               ],
             );
@@ -188,7 +190,10 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
               dense: true,
               contentPadding: EdgeInsets.zero,
               title: const Text('Compare log file'),
-              subtitle: Text(path, style: Theme.of(context).textTheme.bodySmall),
+              subtitle: Text(
+                path,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             );
           },
         ),
@@ -304,8 +309,9 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
     BuildContext context,
     JournalCompareReport report,
   ) async {
-    final mismatches =
-        report.results.where((result) => !result.matched).toList();
+    final mismatches = report.results
+        .where((result) => !result.matched)
+        .toList();
 
     await showDialog<void>(
       context: context,
@@ -376,16 +382,15 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
     BuildContext context,
     TodoListsCompareReport report,
   ) async {
-    final mismatches =
-        report.results.where((result) => !result.matched).toList();
+    final mismatches = report.results
+        .where((result) => !result.matched)
+        .toList();
 
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(
-          report.allMatched
-              ? 'Todo lists in sync'
-              : 'Todo list mismatches',
+          report.allMatched ? 'Todo lists in sync' : 'Todo list mismatches',
         ),
         content: SizedBox(
           width: 720,
@@ -458,11 +463,7 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(
-          result.matched
-              ? 'Todo list in sync'
-              : 'Task mismatch',
-        ),
+        title: Text(result.matched ? 'Todo list in sync' : 'Task mismatch'),
         content: SizedBox(
           width: 720,
           child: VoyagerScrollView(

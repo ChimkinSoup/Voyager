@@ -103,13 +103,10 @@ class _WeatherChartTransitionWarmupState
       return;
     }
     // Delay so CalendarMorphWarmup gets its four warmup frames uncontested.
-    _startTimer = Timer(
-      WeatherChartTransitionWarmup._startDelay,
-      () {
-        if (!mounted || DevFlags.disableCache) return;
-        WidgetsBinding.instance.addPostFrameCallback(_advance);
-      },
-    );
+    _startTimer = Timer(WeatherChartTransitionWarmup._startDelay, () {
+      if (!mounted || DevFlags.disableCache) return;
+      WidgetsBinding.instance.addPostFrameCallback(_advance);
+    });
   }
 
   @override
@@ -154,10 +151,9 @@ class _WeatherChartTransitionWarmupState
     if (!mounted || DevFlags.disableCache) return;
 
     final colors = weatherChartColors(ref);
-    final degreeGridColor = Theme.of(context)
-        .colorScheme
-        .outlineVariant
-        .withValues(alpha: 0.15);
+    final degreeGridColor = Theme.of(
+      context,
+    ).colorScheme.outlineVariant.withValues(alpha: 0.15);
 
     final forecast = ref.read(weatherForecastProvider).valueOrNull;
     if (forecast != null) {
@@ -206,10 +202,9 @@ class _WeatherChartTransitionWarmupState
     if (_done) return const SizedBox.shrink();
 
     final colors = weatherChartColors(ref);
-    final degreeGridColor = Theme.of(context)
-        .colorScheme
-        .outlineVariant
-        .withValues(alpha: 0.15);
+    final degreeGridColor = Theme.of(
+      context,
+    ).colorScheme.outlineVariant.withValues(alpha: 0.15);
     final earlier = weatherChartWarmupSeries(baseTemp: 14);
     final later = weatherChartWarmupSeries(baseTemp: 18);
 

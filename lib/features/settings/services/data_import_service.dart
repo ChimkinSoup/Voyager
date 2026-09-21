@@ -128,7 +128,8 @@ class DataImportService {
         collection.prepare?.call(records);
         for (final record in records) {
           final localData = local[record.id];
-          if (localData != null && backupContentEquals(localData, record.data)) {
+          if (localData != null &&
+              backupContentEquals(localData, record.data)) {
             skipped++;
             continue;
           }
@@ -202,10 +203,7 @@ class DataImportService {
     // are edited again or the backup is imported a second time.
     for (final entry in restored.entries) {
       // Follow-ups last: one that rewrote a restored record uploads over it.
-      await _pushRecords(entry.key, [
-        ...entry.value,
-        ...?followUps[entry.key],
-      ]);
+      await _pushRecords(entry.key, [...entry.value, ...?followUps[entry.key]]);
     }
     final settings = restoredSettings;
     if (settings != null) await _pushSettings(settings);
@@ -280,7 +278,8 @@ class DataImportService {
     final localVersion = (local?['version'] as num?)?.toInt() ?? 0;
     return {
       ...backup,
-      'version': (localVersion > backupVersion ? localVersion : backupVersion) + 1,
+      'version':
+          (localVersion > backupVersion ? localVersion : backupVersion) + 1,
     };
   }
 

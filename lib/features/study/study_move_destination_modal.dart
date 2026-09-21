@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/features/study/study_breadcrumb.dart';
@@ -20,7 +21,7 @@ Future<void> showStudyMoveDestinationModal(
   Set<String> excludeFolderIds = const {},
   required Future<void> Function(String? destinationFolderId) onSelect,
 }) {
-  return showVoyagerSheet<void>(
+  return showVoyagerModal<void>(
     context: context,
     builder: (ctx) => ProviderScope(
       parent: ProviderScope.containerOf(context),
@@ -100,17 +101,20 @@ class _StudyMoveDestinationModalState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(2),
+                // A grab pill only where the modal is a sheet to drag: it floats
+                // on desktop (showVoyagerModal).
+                if (isAndroid)
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
-                ),
                 Row(
                   children: [
                     Text(widget.title, style: theme.textTheme.titleMedium),

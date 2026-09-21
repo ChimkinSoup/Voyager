@@ -118,9 +118,9 @@ class _DevOutOfSyncPurgeSectionState
           const SizedBox(height: 12),
           SelectableText(
             _lastResults!.join('\n'),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontFamily: 'monospace',
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
           ),
         ],
       ],

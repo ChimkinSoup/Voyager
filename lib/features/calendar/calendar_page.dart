@@ -529,7 +529,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     final occurrenceDay = event == null
         ? DateUtils.dateOnly(date)
         : (calendarOccurrenceStartOn(event, date) ??
-            DateUtils.dateOnly(event.start.toLocal()));
+              DateUtils.dateOnly(event.start.toLocal()));
     _sidebarOccurrenceDay = occurrenceDay;
     final settings =
         ref.read(settingsProvider).valueOrNull ?? const AppSettings();
@@ -1397,7 +1397,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   /// Follows the same week target as [_weekFocusAfterMonthToWeek] so the
   /// animation and the post-morph focus stay aligned.
   DateTime _weekMorphAnchorDate(DateTime visibleMonth, bool weekStartsMonday) {
-    final weekStart = _weekFocusAfterMonthToWeek(visibleMonth, weekStartsMonday);
+    final weekStart = _weekFocusAfterMonthToWeek(
+      visibleMonth,
+      weekStartsMonday,
+    );
     final dates = monthGridDates(
       visibleMonth,
       weekStartsMonday: weekStartsMonday,
@@ -3838,39 +3841,87 @@ class _MorphCell extends StatelessWidget {
             styleT,
           )!,
           child: LayoutBuilder(
-          builder: (context, constraints) {
-            final dayLayoutSize = _dayLayoutDiameter(
-              dayFontSize,
-            ).clamp(0.0, constraints.maxHeight);
-            final chained = progress.chainedYearWeekTransition;
-            final dotsOpacity = chained ? progress.yearEventDotsOpacity : 1.0;
-            final showEvents = events.isNotEmpty && inMonth;
-            final actualEventCount = events.where((e) => e != null).length;
-            final yearDotsSettled = MorphDayEventStack.yearDotsSettled(
-              morphReverse: progress.morphReverse,
-              eventCount: actualEventCount,
-              styleT: styleT,
-            );
-            final layoutDayLayoutSize = _dayLayoutDiameter(
-              _fullFontSize,
-            ).clamp(0.0, constraints.maxHeight);
-            final compactDaySize = _dayLayoutDiameter(
-              MonthDayCellStyle.compact.fontSize,
-            ).clamp(0.0, constraints.maxHeight);
+            builder: (context, constraints) {
+              final dayLayoutSize = _dayLayoutDiameter(
+                dayFontSize,
+              ).clamp(0.0, constraints.maxHeight);
+              final chained = progress.chainedYearWeekTransition;
+              final dotsOpacity = chained ? progress.yearEventDotsOpacity : 1.0;
+              final showEvents = events.isNotEmpty && inMonth;
+              final actualEventCount = events.where((e) => e != null).length;
+              final yearDotsSettled = MorphDayEventStack.yearDotsSettled(
+                morphReverse: progress.morphReverse,
+                eventCount: actualEventCount,
+                styleT: styleT,
+              );
+              final layoutDayLayoutSize = _dayLayoutDiameter(
+                _fullFontSize,
+              ).clamp(0.0, constraints.maxHeight);
+              final compactDaySize = _dayLayoutDiameter(
+                MonthDayCellStyle.compact.fontSize,
+              ).clamp(0.0, constraints.maxHeight);
 
-            final yearAlignment = _yearDayAlignment(
-              cellHeight: constraints.maxHeight,
-              daySize: yearDotsSettled ? compactDaySize : dayLayoutSize,
-              hasEvents: showEvents,
-            );
+              final yearAlignment = _yearDayAlignment(
+                cellHeight: constraints.maxHeight,
+                daySize: yearDotsSettled ? compactDaySize : dayLayoutSize,
+                hasEvents: showEvents,
+              );
 
-            final cellAlignment = Alignment.lerp(
-              yearAlignment,
-              Alignment.topCenter,
-              styleT,
-            )!;
+              final cellAlignment = Alignment.lerp(
+                yearAlignment,
+                Alignment.topCenter,
+                styleT,
+              )!;
 
-            if (yearDotsSettled) {
+              if (yearDotsSettled) {
+                final todoOverlay = chained
+                    ? null
+                    : _morphTodoOverlay(
+                        progress: progress,
+                        styleT: styleT,
+                        inMonth: inMonth,
+                      );
+                return Stack(
+                  clipBehavior: Clip.hardEdge,
+                  children: [
+                    Align(
+                      alignment: yearAlignment,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: CalendarDayNumber(
+                              date: date,
+                              month: month,
+                              fontSize: MonthDayCellStyle.compact.fontSize,
+                              mutedWhenAdjacent: !inMonth,
+                              accentColor: progress.accentColor,
+                            ),
+                          ),
+                          if (inMonth && events.isNotEmpty) ...[
+                            const SizedBox(height: 1),
+                            Opacity(
+                              opacity: dotsOpacity.clamp(0.0, 1.0),
+                              child: CalendarDayEventDots(
+                                events: events
+                                    .where((e) => e != null)
+                                    .cast<CalendarEvent>()
+                                    .toList(),
+                                dotSize: MonthDayCellStyle.compact.eventDotSize,
+                                maxDots:
+                                    MonthDayCellStyle.compact.maxEventLines,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    ?todoOverlay,
+                  ],
+                );
+              }
+
               final todoOverlay = chained
                   ? null
                   : _morphTodoOverlay(
@@ -3878,118 +3929,71 @@ class _MorphCell extends StatelessWidget {
                       styleT: styleT,
                       inMonth: inMonth,
                     );
+
               return Stack(
-                clipBehavior: Clip.hardEdge,
+                clipBehavior: Clip.none,
                 children: [
                   Align(
-                    alignment: yearAlignment,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: CalendarDayNumber(
-                            date: date,
-                            month: month,
-                            fontSize: MonthDayCellStyle.compact.fontSize,
-                            mutedWhenAdjacent: !inMonth,
-                            accentColor: progress.accentColor,
-                          ),
-                        ),
-                        if (inMonth && events.isNotEmpty) ...[
-                          const SizedBox(height: 1),
-                          Opacity(
-                            opacity: dotsOpacity.clamp(0.0, 1.0),
-                            child: CalendarDayEventDots(
-                              events: events
-                                  .where((e) => e != null)
-                                  .cast<CalendarEvent>()
-                                  .toList(),
-                              dotSize: MonthDayCellStyle.compact.eventDotSize,
-                              maxDots: MonthDayCellStyle.compact.maxEventLines,
-                            ),
-                          ),
-                        ],
-                      ],
+                    alignment: cellAlignment,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: CalendarDayNumber(
+                        date: date,
+                        month: month,
+                        fontSize: dayFontSize,
+                        mutedWhenAdjacent: !inMonth,
+                        accentColor: progress.accentColor,
+                        // Year tiles have no marker: grow its width and opacity
+                        // with styleT so the number slides aside instead of
+                        // jumping when the month grid takes over.
+                        leading: hasWorkout && styleT > 0
+                            ? Align(
+                                widthFactor: styleT,
+                                heightFactor: 1,
+                                child: Opacity(
+                                  opacity: styleT.clamp(0.0, 1.0),
+                                  child: CalendarWorkoutIcon(
+                                    fontSize: dayFontSize,
+                                    color: progress.accentColor,
+                                  ),
+                                ),
+                              )
+                            : null,
+                      ),
                     ),
                   ),
+                  if (showEvents)
+                    Positioned.fill(
+                      child: MorphDayEventStack(
+                        events: events,
+                        date: date,
+                        // During a chained week↔year transition styleT rises
+                        // from 0→1, which would grow year dots into bars while
+                        // they fade out. Clamping to 0 keeps them as settled
+                        // year dots; opacity (dotsOpacity) handles the fade.
+                        styleT: chained ? 0.0 : styleT,
+                        inMonth: inMonth,
+                        maxWidth: constraints.maxWidth,
+                        cellHeight: constraints.maxHeight,
+                        dayLayoutSize: dayLayoutSize,
+                        layoutDayLayoutSize: layoutDayLayoutSize,
+                        morphReverse: progress.morphReverse,
+                        opacity: dotsOpacity,
+                        frozenMetrics:
+                            progress.monthMorphEventMetrics[events.length.clamp(
+                              0,
+                              MorphDayEventStack.maxMonthEvents,
+                            )],
+                      ),
+                    ),
                   ?todoOverlay,
                 ],
               );
-            }
-
-            final todoOverlay = chained
-                ? null
-                : _morphTodoOverlay(
-                    progress: progress,
-                    styleT: styleT,
-                    inMonth: inMonth,
-                  );
-
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Align(
-                  alignment: cellAlignment,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: CalendarDayNumber(
-                      date: date,
-                      month: month,
-                      fontSize: dayFontSize,
-                      mutedWhenAdjacent: !inMonth,
-                      accentColor: progress.accentColor,
-                      // Year tiles have no marker: grow its width and opacity
-                      // with styleT so the number slides aside instead of
-                      // jumping when the month grid takes over.
-                      leading: hasWorkout && styleT > 0
-                          ? Align(
-                              widthFactor: styleT,
-                              heightFactor: 1,
-                              child: Opacity(
-                                opacity: styleT.clamp(0.0, 1.0),
-                                child: CalendarWorkoutIcon(
-                                  fontSize: dayFontSize,
-                                  color: progress.accentColor,
-                                ),
-                              ),
-                            )
-                          : null,
-                    ),
-                  ),
-                ),
-                if (showEvents)
-                  Positioned.fill(
-                    child: MorphDayEventStack(
-                      events: events,
-                      date: date,
-                      // During a chained week↔year transition styleT rises
-                      // from 0→1, which would grow year dots into bars while
-                      // they fade out. Clamping to 0 keeps them as settled
-                      // year dots; opacity (dotsOpacity) handles the fade.
-                      styleT: chained ? 0.0 : styleT,
-                      inMonth: inMonth,
-                      maxWidth: constraints.maxWidth,
-                      cellHeight: constraints.maxHeight,
-                      dayLayoutSize: dayLayoutSize,
-                      layoutDayLayoutSize: layoutDayLayoutSize,
-                      morphReverse: progress.morphReverse,
-                      opacity: dotsOpacity,
-                      frozenMetrics:
-                          progress.monthMorphEventMetrics[events.length.clamp(
-                            0,
-                            MorphDayEventStack.maxMonthEvents,
-                          )],
-                    ),
-                  ),
-                ?todoOverlay,
-              ],
-            );
-          },
+            },
+          ),
         ),
       ),
-    ),
-  );
+    );
   }
 }
 
@@ -4355,7 +4359,9 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
                         color: Colors.transparent,
                         shadowColor: Colors.transparent,
                         elevation: 0,
-                        shape: const RoundedRectangleBorder(side: BorderSide.none),
+                        shape: const RoundedRectangleBorder(
+                          side: BorderSide.none,
+                        ),
                         child: const SizedBox.expand(),
                       ),
                     ),

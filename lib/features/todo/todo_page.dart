@@ -288,6 +288,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
   Timer? _coalescedRefreshTimer;
   bool _taskRefreshPending = false;
   static const _scrollIdleGrace = Duration(milliseconds: 200);
+
   /// Forced order for the single-list view, held until the write it belongs to
   /// comes back. The "All tasks" view never uses one — its order is derived
   /// from task fields, and [_taskOverrides] already carries those optimistically
@@ -2694,7 +2695,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
     // drops the row's image icon without anything else having to invalidate.
     _tasksWithImages =
         ref
-            .watch(mediaOwnersWithImagesProvider(FirestoreCollections.todoTasks))
+            .watch(
+              mediaOwnersWithImagesProvider(FirestoreCollections.todoTasks),
+            )
             .valueOrNull ??
         const <String>{};
     ref.listen<AsyncValue<Map<String, ({int active, int completed})>>>(
@@ -2986,8 +2989,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
                             statsFor: _statsForList,
                             onSelectList: _selectListFromSwitcher,
                             onSelectAllTasks: _selectAllTasksFromSwitcher,
-                            onManage: () =>
-                                unawaited(_openListManageSheet()),
+                            onManage: () => unawaited(_openListManageSheet()),
                           ),
                           const SizedBox(height: 8),
                           Expanded(
@@ -3016,385 +3018,382 @@ class _TodoPageState extends ConsumerState<TodoPage>
                                   // ~3x cheaper per relayout than 2000.
                                   cacheExtent: 600.0,
                                   slivers: [
-                                        // Reserved only while a filter is
-                                        // actually applied, so the bar merely
-                                        // appearing never shifts the list — but
-                                        // the first match, which the filter
-                                        // scrolls to, is never left under the
-                                        // floating bar either.
-                                        if (searching)
-                                          const SliverToBoxAdapter(
-                                            child: SizedBox(
-                                              height: todoListSearchBarHeight + 8,
-                                            ),
-                                          ),
-                                        if (activeForDisplay.isNotEmpty)
-                                          // Deliberately a plain SliverList: "All
-                                          // tasks" is not reorderable. Its order is
-                                          // derived from the tasks themselves (see
-                                          // resolveGlobalTaskOrder), so there is no
-                                          // manual order for a drag to write to —
-                                          // one would either be discarded on the
-                                          // next rebuild or have to invent a
-                                          // cross-list ordering key that every
-                                          // per-list drag then had to keep in sync.
-                                          // "Send to bottom" is dropped from the
-                                          // row context menu here for the same
-                                          // reason (see _rowFor).
-                                          // Filtering takes this branch too:
-                                          // there is no manual order to drag
-                                          // rows into while most of them are
-                                          // hidden, so reorder is off (HLD
-                                          // decision 9) and a plain list is what
-                                          // is left.
-                                          if (_showAllTasks || searching)
-                                            SliverList(
-                                              // A list delegate here (instead of a
-                                              // builder) would construct a
-                                              // _TaskRow for every active task on
-                                              // every rebuild regardless of what's
-                                              // on screen — the deferred rebuild a
-                                              // completion write triggers (see
-                                              // _flushPendingCompletionSaves) then
-                                              // pays for the entire dataset instead
-                                              // of just the visible rows.
-                                              delegate: SliverChildBuilderDelegate(
-                                                (context, index) {
-                                                  final task =
-                                                      activeForDisplay[index];
-                                                  return _searchAnchoredRow(
-                                                    task,
-                                                    isSelected:
-                                                        task.id == _selectedTaskId,
-                                                    listColor: _listColorFor(
-                                                      task.listId,
-                                                      lists,
-                                                    ),
-                                                    lists: lists,
-                                                  );
-                                                },
-                                                childCount: activeForDisplay.length,
-                                                // Without this, a completion
-                                                // that removes a task from the
-                                                // middle of this list shifts
-                                                // every task below it down one
-                                                // index — and since this
-                                                // delegate has no way to match a
-                                                // shifted key back to its old
-                                                // Element, the framework treats
-                                                // every shifted slot as a brand
-                                                // new child (destroy + recreate,
-                                                // forcing a real build() on each
-                                                // one) even though `_rowFor`
-                                                // returns the exact same cached
-                                                // widget instance for it. This
-                                                // callback lets the framework
-                                                // find and reuse the existing
-                                                // Element by key instead.
-                                                findChildIndexCallback: (key) =>
-                                                    activeIndexById[(key
-                                                            as ValueKey<String>)
-                                                        .value],
-                                              ),
-                                            )
-                                          else
-                                            SliverReorderableList(
-                                              key: _taskListKey,
-                                              proxyDecorator:
-                                                  (child, index, animation) {
-                                                    return ClampToTargetBounds(
-                                                      targetKey: _taskListKey,
-                                                      child: Material(
-                                                        type: MaterialType
-                                                            .transparency,
-                                                        child: child,
-                                                      ),
-                                                    );
-                                                  },
-                                              onReorderItem: (oldIndex, newIndex) {
-                                                _reorderActiveTasks(
-                                                  active,
-                                                  oldIndex,
-                                                  newIndex,
-                                                );
-                                              },
-                                              itemCount: reorderableActive.length,
-                                              itemBuilder: (context, i) {
-                                                final task = reorderableActive[i];
-                                                return ReorderableDragStartListener(
-                                                  key: ValueKey(task.id),
-                                                  index: i,
-                                                  child: _rowFor(
-                                                    task,
-                                                    isSelected:
-                                                        task.id == _selectedTaskId,
-                                                    listColor:
-                                                        currentList?.colorValue,
-                                                    lists: lists,
-                                                    forceCollapsed:
-                                                        _lingeringActiveIds
-                                                            .contains(task.id),
-                                                  ),
-                                                );
-                                              },
-                                              // KNOWN LIMITATION — unlike the plain
-                                              // SliverList's findChildIndexCallback
-                                              // above, this one CANNOT stop
-                                              // SliverReorderableList from
-                                              // destroying and recreating a row's
-                                              // Element (and therefore its
-                                              // _TaskRowState — fresh
-                                              // AnimationControllers, fresh
-                                              // FutureBuilder subscriptions, etc.)
-                                              // whenever that row's index shifts —
-                                              // which completing or uncompleting
-                                              // any task but the last one in this
-                                              // list does, for every row below the
-                                              // shift point, all in the same
-                                              // frame.
-                                              //
-                                              // Root cause (see
-                                              // package:flutter's
-                                              // src/widgets/reorderable_list.dart,
-                                              // `_SliverReorderableListState._itemBuilder`):
-                                              // every item is internally rewrapped
-                                              // as
-                                              // `_ReorderableItemGlobalKey(child.key!, index, this)`,
-                                              // whose `==`/`hashCode` include
-                                              // `index`. So the *effective* key
-                                              // Flutter sees for a row changes
-                                              // value the moment its index moves,
-                                              // even though the ValueKey(task.id)
-                                              // we gave ReorderableDragStartListener
-                                              // below didn't change. Element reuse
-                                              // (`Widget.canUpdate`) requires key
-                                              // equality, so a changed index always
-                                              // fails that check — old Element
-                                              // destroyed, brand new one built at
-                                              // the new index. findChildIndexCallback
-                                              // only tells the delegate which old
-                                              // slot a key used to occupy; it has
-                                              // no way to override the key-equality
-                                              // check that actually gates whether
-                                              // the framework can reuse that slot's
-                                              // Element, so it's structurally
-                                              // unable to prevent this — kept here
-                                              // anyway because it's harmless and
-                                              // this callback still unwraps
-                                              // correctly (see below).
-                                              //
-                                              // Debugging hook: `_TaskRowState`
-                                              // logs `[jank] _TaskRow builds this
-                                              // frame: N` and `[jank] _TaskRow
-                                              // initState (fresh State) task=...`
-                                              // under DevFlags.verboseSync — a
-                                              // spike in N matching most of the
-                                              // active list's size, right when a
-                                              // completion/uncompletion commits, is
-                                              // this. If it's ever a measurable
-                                              // bottleneck (vs. today, where it's
-                                              // absorbed within one frame budget on
-                                              // typical list sizes), the real fix
-                                              // is dropping this widget's built-in
-                                              // drag-reorder for a hand-rolled one
-                                              // over a plain SliverList — proven
-                                              // elsewhere in this file (the
-                                              // "show all tasks" list above, and
-                                              // the completed list below) to
-                                              // reconcile shifted ValueKeys
-                                              // correctly via
-                                              // findChildIndexCallback, since
-                                              // neither wraps keys with the index
-                                              // baked in.
-                                              //
-                                              // Separately: SliverReorderableList
-                                              // doesn't hand this callback the
-                                              // ValueKey we gave
-                                              // ReorderableDragStartListener
-                                              // directly — it hands us the
-                                              // GlobalObjectKey wrapper described
-                                              // above, so the key this callback
-                                              // receives has to be unwrapped one
-                                              // layer first.
-                                              findChildIndexCallback: (key) {
-                                                final wrapped =
-                                                    key as GlobalObjectKey;
-                                                final id =
-                                                    (wrapped.value
-                                                            as ValueKey<String>)
-                                                        .value;
-                                                return reorderableIndexById[id];
-                                              },
-                                            ),
-                                        if (!effectiveHideCompleted)
-                                          SliverToBoxAdapter(
-                                            // Animated so the header + divider
-                                            // collapsing away (last completed
-                                            // task removed) or appearing (first
-                                            // one added) doesn't snap in a single
-                                            // frame.
-                                            child: AnimatedSize(
-                                              key: _completedSectionKey,
-                                              duration: _TaskRowState._exitDuration,
-                                              curve: Curves.easeInCubic,
-                                              alignment: Alignment.topCenter,
-                                              child: completedForDisplay.isEmpty
-                                                  ? const SizedBox(
-                                                      width: double.infinity,
-                                                    )
-                                                  : Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .stretch,
-                                                      children: [
-                                                        const Divider(height: 32),
-                                                        InkWell(
-                                                          onTap: () {
-                                                            final next =
-                                                                !completedExpanded;
-                                                            setState(
-                                                              () =>
-                                                                  _completedExpandedOverride =
-                                                                      next,
-                                                            );
-                                                            unawaited(
-                                                              _persistCompletedExpanded(
-                                                                next,
-                                                              ),
-                                                            );
-                                                          },
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                                14,
-                                                              ),
-                                                          child: Padding(
-                                                            padding:
-                                                                const EdgeInsets.fromLTRB(
-                                                                  12,
-                                                                  8,
-                                                                  8,
-                                                                  8,
-                                                                ),
-                                                            child: Row(
-                                                              children: [
-                                                                Expanded(
-                                                                  child: Text(
-                                                                    'Completed (${completedForDisplay.length})',
-                                                                    style: Theme.of(
-                                                                      context,
-                                                                    ).textTheme.titleSmall,
-                                                                  ),
-                                                                ),
-                                                                Icon(
-                                                                  completedExpanded
-                                                                      ? PhosphorIconsRegular
-                                                                            .caretUp
-                                                                      : PhosphorIconsRegular
-                                                                            .caretDown,
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                            ),
-                                          ),
-                                        if (!effectiveHideCompleted &&
-                                            completedForDisplay.isNotEmpty &&
-                                            completedExpanded)
-                                          SliverList(
-                                            // Same lazy-builder rationale as the
-                                            // "all tasks" active section above —
-                                            // this section can hold every
-                                            // completed task ever created, and a
-                                            // list delegate would eagerly build a
-                                            // _TaskRow for all of them on every
-                                            // rebuild.
-                                            delegate: SliverChildBuilderDelegate(
-                                              (context, index) {
-                                                final task =
-                                                    completedForDisplay[index];
-                                                return _searchAnchoredRow(
-                                                  task,
-                                                  isSelected:
-                                                      task.id == _selectedTaskId,
-                                                  listColor: _listColorFor(
-                                                    task.listId,
-                                                    lists,
-                                                  ),
-                                                  lists: lists,
-                                                );
-                                              },
-                                              childCount:
-                                                  completedForDisplay.length,
-                                              // See the matching comment on the
-                                              // active-list delegate above — an
-                                              // uncompletion (or a newly-completed
-                                              // task entering here) shifts every
-                                              // row below it to a new index, and
-                                              // without this callback the
-                                              // framework can't match a shifted
-                                              // key back to its old Element, so it
-                                              // destroys and recreates every one
-                                              // of them instead of reusing
-                                              // `_rowFor`'s cached widget.
-                                              findChildIndexCallback: (key) =>
-                                                  completedIndexById[(key
-                                                          as ValueKey<String>)
-                                                      .value],
-                                            ),
-                                          ),
-                                        if (searching &&
-                                            activeForDisplay.isEmpty &&
-                                            completedForDisplay.isEmpty)
-                                          SliverFillRemaining(
-                                            hasScrollBody: false,
-                                            child: Padding(
-                                              padding: const EdgeInsets.only(
-                                                top: 24,
-                                              ),
-                                              child: Align(
-                                                alignment: Alignment.topCenter,
-                                                child: Text(
-                                                  'No tasks match',
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodyMedium
-                                                      ?.copyWith(
-                                                        color: Theme.of(context)
-                                                            .colorScheme
-                                                            .onSurface
-                                                            .withValues(
-                                                              alpha: 0.6,
-                                                            ),
-                                                      ),
+                                    // Reserved only while a filter is
+                                    // actually applied, so the bar merely
+                                    // appearing never shifts the list — but
+                                    // the first match, which the filter
+                                    // scrolls to, is never left under the
+                                    // floating bar either.
+                                    if (searching)
+                                      const SliverToBoxAdapter(
+                                        child: SizedBox(
+                                          height: todoListSearchBarHeight + 8,
+                                        ),
+                                      ),
+                                    if (activeForDisplay.isNotEmpty)
+                                      // Deliberately a plain SliverList: "All
+                                      // tasks" is not reorderable. Its order is
+                                      // derived from the tasks themselves (see
+                                      // resolveGlobalTaskOrder), so there is no
+                                      // manual order for a drag to write to —
+                                      // one would either be discarded on the
+                                      // next rebuild or have to invent a
+                                      // cross-list ordering key that every
+                                      // per-list drag then had to keep in sync.
+                                      // "Send to bottom" is dropped from the
+                                      // row context menu here for the same
+                                      // reason (see _rowFor).
+                                      // Filtering takes this branch too:
+                                      // there is no manual order to drag
+                                      // rows into while most of them are
+                                      // hidden, so reorder is off (HLD
+                                      // decision 9) and a plain list is what
+                                      // is left.
+                                      if (_showAllTasks || searching)
+                                        SliverList(
+                                          // A list delegate here (instead of a
+                                          // builder) would construct a
+                                          // _TaskRow for every active task on
+                                          // every rebuild regardless of what's
+                                          // on screen — the deferred rebuild a
+                                          // completion write triggers (see
+                                          // _flushPendingCompletionSaves) then
+                                          // pays for the entire dataset instead
+                                          // of just the visible rows.
+                                          delegate: SliverChildBuilderDelegate(
+                                            (context, index) {
+                                              final task =
+                                                  activeForDisplay[index];
+                                              return _searchAnchoredRow(
+                                                task,
+                                                isSelected:
+                                                    task.id == _selectedTaskId,
+                                                listColor: _listColorFor(
+                                                  task.listId,
+                                                  lists,
                                                 ),
+                                                lists: lists,
+                                              );
+                                            },
+                                            childCount: activeForDisplay.length,
+                                            // Without this, a completion
+                                            // that removes a task from the
+                                            // middle of this list shifts
+                                            // every task below it down one
+                                            // index — and since this
+                                            // delegate has no way to match a
+                                            // shifted key back to its old
+                                            // Element, the framework treats
+                                            // every shifted slot as a brand
+                                            // new child (destroy + recreate,
+                                            // forcing a real build() on each
+                                            // one) even though `_rowFor`
+                                            // returns the exact same cached
+                                            // widget instance for it. This
+                                            // callback lets the framework
+                                            // find and reuse the existing
+                                            // Element by key instead.
+                                            findChildIndexCallback: (key) =>
+                                                activeIndexById[(key
+                                                        as ValueKey<String>)
+                                                    .value],
+                                          ),
+                                        )
+                                      else
+                                        SliverReorderableList(
+                                          key: _taskListKey,
+                                          proxyDecorator:
+                                              (child, index, animation) {
+                                                return ClampToTargetBounds(
+                                                  targetKey: _taskListKey,
+                                                  child: Material(
+                                                    type: MaterialType
+                                                        .transparency,
+                                                    child: child,
+                                                  ),
+                                                );
+                                              },
+                                          onReorderItem: (oldIndex, newIndex) {
+                                            _reorderActiveTasks(
+                                              active,
+                                              oldIndex,
+                                              newIndex,
+                                            );
+                                          },
+                                          itemCount: reorderableActive.length,
+                                          itemBuilder: (context, i) {
+                                            final task = reorderableActive[i];
+                                            return ReorderableDragStartListener(
+                                              key: ValueKey(task.id),
+                                              index: i,
+                                              child: _rowFor(
+                                                task,
+                                                isSelected:
+                                                    task.id == _selectedTaskId,
+                                                listColor:
+                                                    currentList?.colorValue,
+                                                lists: lists,
+                                                forceCollapsed:
+                                                    _lingeringActiveIds
+                                                        .contains(task.id),
                                               ),
+                                            );
+                                          },
+                                          // KNOWN LIMITATION — unlike the plain
+                                          // SliverList's findChildIndexCallback
+                                          // above, this one CANNOT stop
+                                          // SliverReorderableList from
+                                          // destroying and recreating a row's
+                                          // Element (and therefore its
+                                          // _TaskRowState — fresh
+                                          // AnimationControllers, fresh
+                                          // FutureBuilder subscriptions, etc.)
+                                          // whenever that row's index shifts —
+                                          // which completing or uncompleting
+                                          // any task but the last one in this
+                                          // list does, for every row below the
+                                          // shift point, all in the same
+                                          // frame.
+                                          //
+                                          // Root cause (see
+                                          // package:flutter's
+                                          // src/widgets/reorderable_list.dart,
+                                          // `_SliverReorderableListState._itemBuilder`):
+                                          // every item is internally rewrapped
+                                          // as
+                                          // `_ReorderableItemGlobalKey(child.key!, index, this)`,
+                                          // whose `==`/`hashCode` include
+                                          // `index`. So the *effective* key
+                                          // Flutter sees for a row changes
+                                          // value the moment its index moves,
+                                          // even though the ValueKey(task.id)
+                                          // we gave ReorderableDragStartListener
+                                          // below didn't change. Element reuse
+                                          // (`Widget.canUpdate`) requires key
+                                          // equality, so a changed index always
+                                          // fails that check — old Element
+                                          // destroyed, brand new one built at
+                                          // the new index. findChildIndexCallback
+                                          // only tells the delegate which old
+                                          // slot a key used to occupy; it has
+                                          // no way to override the key-equality
+                                          // check that actually gates whether
+                                          // the framework can reuse that slot's
+                                          // Element, so it's structurally
+                                          // unable to prevent this — kept here
+                                          // anyway because it's harmless and
+                                          // this callback still unwraps
+                                          // correctly (see below).
+                                          //
+                                          // Debugging hook: `_TaskRowState`
+                                          // logs `[jank] _TaskRow builds this
+                                          // frame: N` and `[jank] _TaskRow
+                                          // initState (fresh State) task=...`
+                                          // under DevFlags.verboseSync — a
+                                          // spike in N matching most of the
+                                          // active list's size, right when a
+                                          // completion/uncompletion commits, is
+                                          // this. If it's ever a measurable
+                                          // bottleneck (vs. today, where it's
+                                          // absorbed within one frame budget on
+                                          // typical list sizes), the real fix
+                                          // is dropping this widget's built-in
+                                          // drag-reorder for a hand-rolled one
+                                          // over a plain SliverList — proven
+                                          // elsewhere in this file (the
+                                          // "show all tasks" list above, and
+                                          // the completed list below) to
+                                          // reconcile shifted ValueKeys
+                                          // correctly via
+                                          // findChildIndexCallback, since
+                                          // neither wraps keys with the index
+                                          // baked in.
+                                          //
+                                          // Separately: SliverReorderableList
+                                          // doesn't hand this callback the
+                                          // ValueKey we gave
+                                          // ReorderableDragStartListener
+                                          // directly — it hands us the
+                                          // GlobalObjectKey wrapper described
+                                          // above, so the key this callback
+                                          // receives has to be unwrapped one
+                                          // layer first.
+                                          findChildIndexCallback: (key) {
+                                            final wrapped =
+                                                key as GlobalObjectKey;
+                                            final id =
+                                                (wrapped.value
+                                                        as ValueKey<String>)
+                                                    .value;
+                                            return reorderableIndexById[id];
+                                          },
+                                        ),
+                                    if (!effectiveHideCompleted)
+                                      SliverToBoxAdapter(
+                                        // Animated so the header + divider
+                                        // collapsing away (last completed
+                                        // task removed) or appearing (first
+                                        // one added) doesn't snap in a single
+                                        // frame.
+                                        child: AnimatedSize(
+                                          key: _completedSectionKey,
+                                          duration: _TaskRowState._exitDuration,
+                                          curve: Curves.easeInCubic,
+                                          alignment: Alignment.topCenter,
+                                          child: completedForDisplay.isEmpty
+                                              ? const SizedBox(
+                                                  width: double.infinity,
+                                                )
+                                              : Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment
+                                                          .stretch,
+                                                  children: [
+                                                    const Divider(height: 32),
+                                                    InkWell(
+                                                      onTap: () {
+                                                        final next =
+                                                            !completedExpanded;
+                                                        setState(
+                                                          () =>
+                                                              _completedExpandedOverride =
+                                                                  next,
+                                                        );
+                                                        unawaited(
+                                                          _persistCompletedExpanded(
+                                                            next,
+                                                          ),
+                                                        );
+                                                      },
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            14,
+                                                          ),
+                                                      child: Padding(
+                                                        padding:
+                                                            const EdgeInsets.fromLTRB(
+                                                              12,
+                                                              8,
+                                                              8,
+                                                              8,
+                                                            ),
+                                                        child: Row(
+                                                          children: [
+                                                            Expanded(
+                                                              child: Text(
+                                                                'Completed (${completedForDisplay.length})',
+                                                                style: Theme.of(
+                                                                  context,
+                                                                ).textTheme.titleSmall,
+                                                              ),
+                                                            ),
+                                                            Icon(
+                                                              completedExpanded
+                                                                  ? PhosphorIconsRegular
+                                                                        .caretUp
+                                                                  : PhosphorIconsRegular
+                                                                        .caretDown,
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                        ),
+                                      ),
+                                    if (!effectiveHideCompleted &&
+                                        completedForDisplay.isNotEmpty &&
+                                        completedExpanded)
+                                      SliverList(
+                                        // Same lazy-builder rationale as the
+                                        // "all tasks" active section above —
+                                        // this section can hold every
+                                        // completed task ever created, and a
+                                        // list delegate would eagerly build a
+                                        // _TaskRow for all of them on every
+                                        // rebuild.
+                                        delegate: SliverChildBuilderDelegate(
+                                          (context, index) {
+                                            final task =
+                                                completedForDisplay[index];
+                                            return _searchAnchoredRow(
+                                              task,
+                                              isSelected:
+                                                  task.id == _selectedTaskId,
+                                              listColor: _listColorFor(
+                                                task.listId,
+                                                lists,
+                                              ),
+                                              lists: lists,
+                                            );
+                                          },
+                                          childCount:
+                                              completedForDisplay.length,
+                                          // See the matching comment on the
+                                          // active-list delegate above — an
+                                          // uncompletion (or a newly-completed
+                                          // task entering here) shifts every
+                                          // row below it to a new index, and
+                                          // without this callback the
+                                          // framework can't match a shifted
+                                          // key back to its old Element, so it
+                                          // destroys and recreates every one
+                                          // of them instead of reusing
+                                          // `_rowFor`'s cached widget.
+                                          findChildIndexCallback: (key) =>
+                                              completedIndexById[(key
+                                                      as ValueKey<String>)
+                                                  .value],
+                                        ),
+                                      ),
+                                    if (searching &&
+                                        activeForDisplay.isEmpty &&
+                                        completedForDisplay.isEmpty)
+                                      SliverFillRemaining(
+                                        hasScrollBody: false,
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 24,
+                                          ),
+                                          child: Align(
+                                            alignment: Alignment.topCenter,
+                                            child: Text(
+                                              'No tasks match',
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodyMedium
+                                                  ?.copyWith(
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurface
+                                                        .withValues(alpha: 0.6),
+                                                  ),
                                             ),
                                           ),
-                                      ],
-                                    ),
-                                    if (_listSearchBarOpen)
-                                      Positioned(
-                                        left: 0,
-                                        right: 0,
-                                        top: 0,
-                                        child: _listSearchBar(
-                                          accent: taskBarColor,
-                                          matchCount:
-                                              _listSearchMatches.length,
-                                          showMatchCount: searching,
                                         ),
                                       ),
                                   ],
                                 ),
-                              ),
-                              const SizedBox(height: 12),
-                              _composerBar(composerColor, composerHint),
-                            ],
+                                if (_listSearchBarOpen)
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    top: 0,
+                                    child: _listSearchBar(
+                                      accent: taskBarColor,
+                                      matchCount: _listSearchMatches.length,
+                                      showMatchCount: searching,
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 12),
+                          _composerBar(composerColor, composerHint),
+                        ],
+                      ),
+                    ),
                     panel: panelTask == null
                         ? null
                         : _editPanel(panelTask, lists),

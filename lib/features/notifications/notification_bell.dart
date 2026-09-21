@@ -82,7 +82,11 @@ class _NotificationBellState extends ConsumerState<NotificationBell> {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                Icon(PhosphorIconsRegular.tray, size: 24, color: colorScheme.onSurface),
+                Icon(
+                  PhosphorIconsRegular.tray,
+                  size: 24,
+                  color: colorScheme.onSurface,
+                ),
                 if (urgency != null)
                   Positioned(
                     top: -1,
@@ -115,9 +119,7 @@ class _GlowDot extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(color: accent, blurRadius: 12, spreadRadius: 3),
-        ],
+        boxShadow: [BoxShadow(color: accent, blurRadius: 12, spreadRadius: 3)],
       ),
       child: NotificationUrgencyDot(
         important: important,

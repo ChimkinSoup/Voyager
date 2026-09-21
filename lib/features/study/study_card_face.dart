@@ -178,7 +178,9 @@ class _StudyCardImageCarouselState extends State<StudyCardImageCarousel> {
   }
 
   void _step(int delta) {
-    setState(() => _index = (_index + delta).clamp(0, widget.images.length - 1));
+    setState(
+      () => _index = (_index + delta).clamp(0, widget.images.length - 1),
+    );
   }
 
   @override

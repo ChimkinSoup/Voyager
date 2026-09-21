@@ -19,7 +19,7 @@ Observed:
 | Surface | Widget | Current vertical padding | What you see |
 |---|---|---|---|
 | Journal page body | `_PlainJournalEditor` → `TagHighlightedTextField` | `EdgeInsets.fromLTRB(16, 16, 16, 6)` | Permanent gap at the **top** when scrolled; bottom already nearly flush (which is why the caret can kiss/overrun the border) |
-| Search → open journal entry dialog body | `TagHighlightedTextField` (default padding) | `EdgeInsets.all(16)` from `TagHighlightedTextField` | Permanent gap at **both** top and bottom when scrolled |
+| Search → open journal entry dialog body | `TagHighlightedTextField` (default padding) | `EdgeInsets.all(14)` from `TagHighlightedTextField` | Permanent gap at **both** top and bottom when scrolled |
 
 The journal body comment in `journal_page.dart` already documents this framing behavior and the intentional top/bottom asymmetry. That tradeoff is no longer acceptable: scrolled text should read flush to the border.
 
@@ -37,7 +37,7 @@ Horizontal padding is out of scope for this issue unless a fix accidentally chan
 ## Relevant code (starting points)
 
 - Journal body padding / prior rationale: `lib/features/journal/journal_page.dart` (`contentPadding: EdgeInsets.fromLTRB(16, 16, 16, 6)` and the comment above it).
-- Search entry body (defaults to `EdgeInsets.all(16)`): `lib/features/search/search_page.dart` (dialog `TagHighlightedTextField`).
+- Search entry body (defaults to `EdgeInsets.all(14)`): `lib/features/search/search_page.dart` (dialog `TagHighlightedTextField`).
 - Shared field widgets: `lib/core/widgets/tag_highlighted_text_field.dart`, `labeled_text_field.dart`, `voyager_text_field.dart`.
 - Caret scroll inset (already zeroed app-wide to avoid caret-driven overscroll): `lib/core/widgets/field_scroll_padding.dart` (`kVoyagerFieldScrollPadding`).
 - Overlay geometry that mirrors padding / caret strip: `withCaretMargin` / density shift in `lib/core/widgets/spell_check_field_support.dart` (overlays must stay aligned if padding model changes).

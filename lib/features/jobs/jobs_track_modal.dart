@@ -603,176 +603,174 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
         children: [
           VoyagerScrollView(
             child: Padding(
-                // Top inset clears the overlaid close on first paint; once the
-                // user scrolls, content runs under it to the top edge.
-                padding: const EdgeInsets.fromLTRB(20, 40, 20, 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Track an application',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+              // Top inset clears the overlaid close on first paint; once the
+              // user scrolls, content runs under it to the top edge.
+              padding: const EdgeInsets.fromLTRB(20, 40, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Track an application',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
-                    if (_resumedDraft) ...[
-                      const SizedBox(height: 10),
-                      _DraftBanner(onDiscard: () => unawaited(_discardDraft())),
-                    ],
-                    if (_filledFromClipboard) ...[
-                      const SizedBox(height: 10),
-                      _ClipboardBanner(onClear: _clearClipboardFill),
-                    ],
-                    const SizedBox(height: 16),
-                    JobsCompanyField(
-                      controller: _companyController,
-                      focusNode: _companyFocusNode,
-                      companies: companies,
-                      recentKeys: ref.watch(jobRecentCompanyKeysProvider),
+                  ),
+                  if (_resumedDraft) ...[
+                    const SizedBox(height: 10),
+                    _DraftBanner(onDiscard: () => unawaited(_discardDraft())),
+                  ],
+                  if (_filledFromClipboard) ...[
+                    const SizedBox(height: 10),
+                    _ClipboardBanner(onClear: _clearClipboardFill),
+                  ],
+                  const SizedBox(height: 16),
+                  JobsCompanyField(
+                    controller: _companyController,
+                    focusNode: _companyFocusNode,
+                    companies: companies,
+                    recentKeys: ref.watch(jobRecentCompanyKeysProvider),
+                    accentColor: accent,
+                    contentPadding: jobsFieldContentPadding,
+                    autofocus: true,
+                    // The form is filled top to bottom, so Enter walks it:
+                    // company to role title, role title to the URL box. The
+                    // pills in between are picked, not typed, and stopping
+                    // on one would break the run of keystrokes.
+                    onSubmitted: (_) => _titleFocusNode.requestFocus(),
+                    onChanged: (_) {
+                      if (_companyError != null) {
+                        setState(() => _companyError = null);
+                      }
+                    },
+                  ),
+                  if (_companyError case final error?) _FieldError(error),
+                  const SizedBox(height: 12),
+                  _SmartPasteScope(
+                    onPaste: (editable) =>
+                        unawaited(_smartPaste(editable, _PasteTarget.title)),
+                    child: LabeledTextField(
+                      label: 'Role title',
+                      controller: _titleController,
+                      focusNode: _titleFocusNode,
                       accentColor: accent,
+                      dense: true,
                       contentPadding: jobsFieldContentPadding,
-                      autofocus: true,
-                      // The form is filled top to bottom, so Enter walks it:
-                      // company to role title, role title to the URL box. The
-                      // pills in between are picked, not typed, and stopping
-                      // on one would break the run of keystrokes.
-                      onSubmitted: (_) => _titleFocusNode.requestFocus(),
+                      onSubmitted: (_) => _urlFocusNode.requestFocus(),
                       onChanged: (_) {
-                        if (_companyError != null) {
-                          setState(() => _companyError = null);
+                        if (_titleError != null) {
+                          setState(() => _titleError = null);
                         }
                       },
                     ),
-                    if (_companyError case final error?) _FieldError(error),
-                    const SizedBox(height: 12),
-                    _SmartPasteScope(
-                      onPaste: (editable) => unawaited(
-                        _smartPaste(editable, _PasteTarget.title),
-                      ),
-                      child: LabeledTextField(
-                        label: 'Role title',
-                        controller: _titleController,
-                        focusNode: _titleFocusNode,
-                        accentColor: accent,
-                        dense: true,
-                        contentPadding: jobsFieldContentPadding,
-                        onSubmitted: (_) => _urlFocusNode.requestFocus(),
-                        onChanged: (_) {
-                          if (_titleError != null) {
-                            setState(() => _titleError = null);
-                          }
-                        },
-                      ),
-                    ),
-                    if (_titleError case final error?) _FieldError(error),
-                    const SizedBox(height: 12),
-                    // The same pair the editor leads with: what this
-                    // application *is* — where it stands and which run of
-                    // applications it belongs to — half the row each. The date
-                    // it was sent is a fact about its history and sits at the
-                    // foot of the form.
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Builder(
-                            builder: (pillContext) => SelectorPill(
-                              label: effectiveStatus.isEmpty
-                                  ? 'No status'
-                                  : effectiveStatus,
-                              icon: PhosphorIconsRegular.flowArrow,
-                              dense: true,
-                              accentColor: accent,
-                              isActive: true,
-                              onTap: () => _pickStatus(
-                                pillContext,
-                                stages,
-                                effectiveStatus,
-                              ),
+                  ),
+                  if (_titleError case final error?) _FieldError(error),
+                  const SizedBox(height: 12),
+                  // The same pair the editor leads with: what this
+                  // application *is* — where it stands and which run of
+                  // applications it belongs to — half the row each. The date
+                  // it was sent is a fact about its history and sits at the
+                  // foot of the form.
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Builder(
+                          builder: (pillContext) => SelectorPill(
+                            label: effectiveStatus.isEmpty
+                                ? 'No status'
+                                : effectiveStatus,
+                            icon: PhosphorIconsRegular.flowArrow,
+                            dense: true,
+                            accentColor: accent,
+                            isActive: true,
+                            onTap: () => _pickStatus(
+                              pillContext,
+                              stages,
+                              effectiveStatus,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Builder(
-                            builder: (pillContext) => SelectorPill(
-                              label: _seasonLabel(selectableSeasons),
-                              icon: PhosphorIconsRegular.calendarCheck,
-                              dense: true,
-                              accentColor: accent,
-                              isActive: _seasonIds.isNotEmpty,
-                              onTap: selectableSeasons.isEmpty
-                                  ? () {}
-                                  : () => _pickSeasons(
-                                      pillContext,
-                                      selectableSeasons,
-                                    ),
-                            ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Builder(
+                          builder: (pillContext) => SelectorPill(
+                            label: _seasonLabel(selectableSeasons),
+                            icon: PhosphorIconsRegular.calendarCheck,
+                            dense: true,
+                            accentColor: accent,
+                            isActive: _seasonIds.isNotEmpty,
+                            onTap: selectableSeasons.isEmpty
+                                ? () {}
+                                : () => _pickSeasons(
+                                    pillContext,
+                                    selectableSeasons,
+                                  ),
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _SmartPasteScope(
-                      onPaste: (editable) => unawaited(
-                        _smartPaste(editable, _PasteTarget.url),
                       ),
-                      child: LabeledTextField(
-                        label: 'Application URL',
-                        controller: _urlController,
-                        focusNode: _urlFocusNode,
-                        accentColor: accent,
-                        dense: true,
-                        contentPadding: jobsFieldContentPadding,
-                        keyboardType: TextInputType.url,
-                      ),
-                    ),
-                    _DuplicateUrlHint(
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _SmartPasteScope(
+                    onPaste: (editable) =>
+                        unawaited(_smartPaste(editable, _PasteTarget.url)),
+                    child: LabeledTextField(
+                      label: 'Application URL',
                       controller: _urlController,
-                      applications: applications,
+                      focusNode: _urlFocusNode,
+                      accentColor: accent,
+                      dense: true,
+                      contentPadding: jobsFieldContentPadding,
+                      keyboardType: TextInputType.url,
                     ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      height: 180,
-                      child: TagHighlightedTextField(
-                        controller: _notesController,
-                        focusNode: _notesFocusNode,
-                        label: 'Notes',
-                        accentColor: accent,
-                        expands: true,
-                        maxLines: null,
-                      ),
+                  ),
+                  _DuplicateUrlHint(
+                    controller: _urlController,
+                    applications: applications,
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 180,
+                    child: TagHighlightedTextField(
+                      controller: _notesController,
+                      focusNode: _notesFocusNode,
+                      label: 'Notes',
+                      accentColor: accent,
+                      expands: true,
+                      maxLines: null,
                     ),
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Builder(
-                        builder: (pillContext) => SelectorPill(
-                          label: DateFormat.yMMMd().format(
-                            jobDayKey(_dateApplied ?? DateTime.now()),
-                          ),
-                          icon: PhosphorIconsRegular.calendarBlank,
-                          dense: true,
-                          // The edit panel's twin of this capsule is drawn in
-                          // the company's category colour, which is the grey
-                          // outline for an uncategorised company — the case
-                          // this form is always in. It takes that grey rather
-                          // than the app accent, so the two read alike.
-                          accentColor: theme.colorScheme.outline,
-                          isActive: true,
-                          onTap: () => _pickDate(pillContext),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Builder(
+                      builder: (pillContext) => SelectorPill(
+                        label: DateFormat.yMMMd().format(
+                          jobDayKey(_dateApplied ?? DateTime.now()),
                         ),
+                        icon: PhosphorIconsRegular.calendarBlank,
+                        dense: true,
+                        // The edit panel's twin of this capsule is drawn in
+                        // the company's category colour, which is the grey
+                        // outline for an uncategorised company — the case
+                        // this form is always in. It takes that grey rather
+                        // than the app accent, so the two read alike.
+                        accentColor: theme.colorScheme.outline,
+                        isActive: true,
+                        onTap: () => _pickDate(pillContext),
                       ),
                     ),
-                    const SizedBox(height: 24),
-                    GlassButton(
-                      onPressed: _saving ? null : () => _save(stages),
-                      label: 'Save',
-                      color: accent,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 24),
+                  GlassButton(
+                    onPressed: _saving ? null : () => _save(stages),
+                    label: 'Save',
+                    color: accent,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ],
+              ),
             ),
           ),
           Positioned(

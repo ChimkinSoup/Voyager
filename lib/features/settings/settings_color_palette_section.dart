@@ -284,11 +284,7 @@ class _SettingsColorPaletteSectionState
               ),
             ),
             const SizedBox(width: 8),
-            GlassButton(
-              onPressed: _addColor,
-              label: 'Add',
-              dense: true,
-            ),
+            GlassButton(onPressed: _addColor, label: 'Add', dense: true),
           ],
         ),
         if (_hexError != null) ...[

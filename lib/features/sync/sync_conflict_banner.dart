@@ -163,9 +163,9 @@ class _SyncConflictResolutionDialogState
         // reach one, so an offline purge now fails instead of reporting the
         // cache's "no sync_operations found" as a completed delete.
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Remote purge failed: $error')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Remote purge failed: $error')));
         return;
       }
       if (!mounted) return;
@@ -184,8 +184,9 @@ class _SyncConflictResolutionDialogState
   @override
   Widget build(BuildContext context) {
     final conflictsAsync = ref.watch(syncConflictsProvider);
-    final showDocumentIds =
-        ref.watch(devSettingsProvider).showConflictDocumentIds;
+    final showDocumentIds = ref
+        .watch(devSettingsProvider)
+        .showConflictDocumentIds;
 
     return conflictsAsync.when(
       data: (conflicts) {
@@ -240,10 +241,10 @@ class _SyncConflictResolutionDialogState
                             onPressed: _resolving
                                 ? null
                                 : () => _resolveAllConflicts(
-                                      () => ref
-                                          .read(remoteSyncServiceProvider)
-                                          .resolveAllConflictsKeepLocal(),
-                                    ),
+                                    () => ref
+                                        .read(remoteSyncServiceProvider)
+                                        .resolveAllConflictsKeepLocal(),
+                                  ),
                             label: 'Keep local for all',
                           ),
                         ),
@@ -253,10 +254,10 @@ class _SyncConflictResolutionDialogState
                             onPressed: _resolving
                                 ? null
                                 : () => _resolveAllConflicts(
-                                      () => ref
-                                          .read(remoteSyncServiceProvider)
-                                          .resolveAllConflictsKeepRemote(),
-                                    ),
+                                    () => ref
+                                        .read(remoteSyncServiceProvider)
+                                        .resolveAllConflictsKeepRemote(),
+                                  ),
                             label: 'Keep remote for all',
                           ),
                         ),
@@ -336,10 +337,10 @@ class _SyncConflictResolutionDialogState
               onPressed: _resolving
                   ? null
                   : () => _resolveConflict(
-                        () => ref
-                            .read(remoteSyncServiceProvider)
-                            .resolveConflictKeepLocal(conflict),
-                      ),
+                      () => ref
+                          .read(remoteSyncServiceProvider)
+                          .resolveConflictKeepLocal(conflict),
+                    ),
               label: 'Keep Local',
               dense: true,
             ),
@@ -347,10 +348,10 @@ class _SyncConflictResolutionDialogState
               onPressed: _resolving
                   ? null
                   : () => _resolveConflict(
-                        () => ref
-                            .read(remoteSyncServiceProvider)
-                            .resolveConflictKeepRemote(conflict),
-                      ),
+                      () => ref
+                          .read(remoteSyncServiceProvider)
+                          .resolveConflictKeepRemote(conflict),
+                    ),
               label: 'Keep Remote',
               dense: true,
             ),
@@ -358,13 +359,13 @@ class _SyncConflictResolutionDialogState
               onPressed: _resolving
                   ? null
                   : () => _resolveConflict(
-                        () => ref
-                            .read(remoteSyncServiceProvider)
-                            .resolveConflictManualMerge(
-                              conflict,
-                              mergedText: mergeController.text,
-                            ),
-                      ),
+                      () => ref
+                          .read(remoteSyncServiceProvider)
+                          .resolveConflictManualMerge(
+                            conflict,
+                            mergedText: mergeController.text,
+                          ),
+                    ),
               dense: true,
               child: _resolving
                   ? const SizedBox(
@@ -438,10 +439,7 @@ class _ConflictDocumentIds extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SelectableText(
-          'Entry ID: $entryId',
-          style: style,
-        ),
+        SelectableText('Entry ID: $entryId', style: style),
         SelectableText(
           'Document path: ${conflict.collection}/$firestoreCollectionId',
           style: style,
@@ -511,8 +509,10 @@ class _DiffColumn extends StatelessWidget {
               child: Text(
                 '$key: $value',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
-                    ),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withValues(alpha: 0.8),
+                ),
               ),
             ),
           );
@@ -532,10 +532,7 @@ class _DiffColumn extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              heading,
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
+            Text(heading, style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
             Text('Title: $title'),
             if (metadataList.isNotEmpty) ...[

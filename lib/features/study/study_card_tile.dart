@@ -177,8 +177,7 @@ class StudyCardTile extends StatelessWidget {
     int? daysUntilDue,
   }) {
     final theme = Theme.of(context);
-    final imageOnly =
-        images.isNotEmpty && !StudyCardFace.hasVisibleText(text);
+    final imageOnly = images.isNotEmpty && !StudyCardFace.hasVisibleText(text);
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,

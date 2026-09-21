@@ -97,9 +97,7 @@ List<LeetCodeDiffRow> leetCodeDiffLines(String scratch, String solution) {
     // so the two runs can be zipped rather than stacked.
     final removed = <int>[];
     final added = <int>[];
-    while (i < left.length &&
-        j < right.length &&
-        left[i] != right[j]) {
+    while (i < left.length && j < right.length && left[i] != right[j]) {
       if (table[i + 1][j] >= table[i][j + 1]) {
         removed.add(i++);
       } else {

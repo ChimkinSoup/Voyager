@@ -223,8 +223,9 @@ Future<List<String>> _orphanedOverrideIds(
     for (final candidate in all)
       if (candidate.recurrenceParentId == master.id &&
           (scope == RecurrenceEditScope.allEvents ||
-              !(candidate.recurrenceDate ?? candidate.start)
-                  .isBefore(occurrence)))
+              !(candidate.recurrenceDate ?? candidate.start).isBefore(
+                occurrence,
+              )))
         candidate.id,
   ];
 }

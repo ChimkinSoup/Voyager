@@ -180,62 +180,63 @@ class _SnippetsDialogState extends ConsumerState<_SnippetsDialog> {
             // than pushing the dialog past its bottom edge.
             Flexible(
               child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 340),
-              child: settings.snippets.isEmpty && _editingId != _newRowId
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 24),
-                      child: Text(
-                        "You haven't written any snippets yet.",
-                        textAlign: TextAlign.center,
-                        style: muted,
+                constraints: const BoxConstraints(maxHeight: 340),
+                child: settings.snippets.isEmpty && _editingId != _newRowId
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Text(
+                          "You haven't written any snippets yet.",
+                          textAlign: TextAlign.center,
+                          style: muted,
+                        ),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount:
+                            settings.snippets.length +
+                            (_editingId == _newRowId ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == settings.snippets.length) {
+                            return SnippetEditor(
+                              key: const ValueKey('snippet-new'),
+                              original: null,
+                              error: _editError,
+                              onSave: (draft) =>
+                                  _saveRow(settings, null, draft),
+                              onCancel: () => setState(() {
+                                _editingId = null;
+                                _editError = null;
+                              }),
+                            );
+                          }
+                          final snippet = settings.snippets[index];
+                          if (snippet.id == _editingId) {
+                            return SnippetEditor(
+                              // Keyed on the record so opening a different row
+                              // seeds fresh controllers from its text rather
+                              // than reusing the previous row's.
+                              key: ValueKey('snippet-${snippet.id}'),
+                              original: snippet,
+                              error: _editError,
+                              onSave: (draft) =>
+                                  _saveRow(settings, snippet, draft),
+                              onCancel: () => setState(() {
+                                _editingId = null;
+                                _editError = null;
+                              }),
+                            );
+                          }
+                          return _SnippetRow(
+                            snippet: snippet,
+                            onEdit: () => setState(() {
+                              _editingId = snippet.id;
+                              _editError = null;
+                            }),
+                            onRemove: () => _remove(settings, snippet),
+                          );
+                        },
                       ),
-                    )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      itemCount:
-                          settings.snippets.length +
-                          (_editingId == _newRowId ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index == settings.snippets.length) {
-                          return SnippetEditor(
-                            key: const ValueKey('snippet-new'),
-                            original: null,
-                            error: _editError,
-                            onSave: (draft) => _saveRow(settings, null, draft),
-                            onCancel: () => setState(() {
-                              _editingId = null;
-                              _editError = null;
-                            }),
-                          );
-                        }
-                        final snippet = settings.snippets[index];
-                        if (snippet.id == _editingId) {
-                          return SnippetEditor(
-                            // Keyed on the record so opening a different row
-                            // seeds fresh controllers from its text rather
-                            // than reusing the previous row's.
-                            key: ValueKey('snippet-${snippet.id}'),
-                            original: snippet,
-                            error: _editError,
-                            onSave: (draft) =>
-                                _saveRow(settings, snippet, draft),
-                            onCancel: () => setState(() {
-                              _editingId = null;
-                              _editError = null;
-                            }),
-                          );
-                        }
-                        return _SnippetRow(
-                          snippet: snippet,
-                          onEdit: () => setState(() {
-                            _editingId = snippet.id;
-                            _editError = null;
-                          }),
-                          onRemove: () => _remove(settings, snippet),
-                        );
-                      },
-                    ),
-            ),
+              ),
             ),
             const SizedBox(height: 8),
             Align(

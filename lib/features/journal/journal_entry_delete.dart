@@ -8,7 +8,10 @@ import 'package:voyager/domain/models/journal_models.dart';
 /// A journal entry as it stood the instant before a delete, plus the instant
 /// its images were detached at — everything [restoreJournalEntry] needs.
 class JournalEntryDeletion {
-  const JournalEntryDeletion({required this.entry, required this.mediaDeletedAt});
+  const JournalEntryDeletion({
+    required this.entry,
+    required this.mediaDeletedAt,
+  });
 
   final JournalEntry entry;
 
@@ -76,10 +79,7 @@ Future<JournalEntryDeletion?> softDeleteJournalEntry(
     entryId,
   );
 
-  return JournalEntryDeletion(
-    entry: snapshot,
-    mediaDeletedAt: mediaDeletedAt,
-  );
+  return JournalEntryDeletion(entry: snapshot, mediaDeletedAt: mediaDeletedAt);
 }
 
 /// Undoes [softDeleteJournalEntry] from the snapshot it returned.

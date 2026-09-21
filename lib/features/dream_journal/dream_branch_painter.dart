@@ -72,7 +72,11 @@ class _DreamBranchPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
     final twigEnd1 = Offset(size.width - 150, size.height * 0.03);
-    canvas.drawLine(Offset(size.width - 90, size.height * 0.15), twigEnd1, twigPaint);
+    canvas.drawLine(
+      Offset(size.width - 90, size.height * 0.15),
+      twigEnd1,
+      twigPaint,
+    );
     final twigEnd2 = Offset(size.width - 240, size.height * 0.34);
     canvas.drawLine(p2, twigEnd2, twigPaint);
 

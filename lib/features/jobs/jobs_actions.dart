@@ -216,7 +216,8 @@ class JobsActions {
     JobApplication application,
   ) async {
     final snapshot = JobApplicationSnapshot(
-      application: await _repository.getApplication(application.id) ?? application,
+      application:
+          await _repository.getApplication(application.id) ?? application,
       events: await _repository.listStatusEvents(application.id),
     );
     final result = await _repository.deleteApplication(application.id);
@@ -522,7 +523,10 @@ class JobsActions {
 /// An application and its status timeline as they stood the instant before a
 /// delete — everything [JobsActions.restoreApplication] needs to put both back.
 class JobApplicationSnapshot {
-  const JobApplicationSnapshot({required this.application, required this.events});
+  const JobApplicationSnapshot({
+    required this.application,
+    required this.events,
+  });
 
   final JobApplication application;
   final List<JobStatusEvent> events;

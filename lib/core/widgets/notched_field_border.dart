@@ -30,8 +30,8 @@ class NotchedFieldBorder extends StatefulWidget {
     this.borderRadius = VoyagerTheme.fieldRadius,
     this.borderWidth = 1.8,
     this.contentPadding = const EdgeInsets.symmetric(
-      horizontal: 16,
-      vertical: 18,
+      horizontal: 14,
+      vertical: 16,
     ),
     this.labelStyle,
     this.showFill = true,

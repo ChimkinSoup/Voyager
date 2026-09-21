@@ -110,10 +110,9 @@ class _WeatherForecastChartTransitionState
     required Size plotSize,
   }) {
     final colors = weatherChartColors(ref);
-    final degreeGridColor = Theme.of(context)
-        .colorScheme
-        .outlineVariant
-        .withValues(alpha: 0.15);
+    final degreeGridColor = Theme.of(
+      context,
+    ).colorScheme.outlineVariant.withValues(alpha: 0.15);
     final tempFill = colors.temp.withValues(alpha: 0.4);
     final rainFill = colors.rain.withValues(alpha: 0.4);
 
@@ -222,10 +221,9 @@ class _WeatherForecastChartTransitionState
         final stripOffset = forward ? -t : -(1 - t);
 
         final colors = weatherChartColors(ref);
-        final degreeGridColor = Theme.of(context)
-            .colorScheme
-            .outlineVariant
-            .withValues(alpha: 0.15);
+        final degreeGridColor = Theme.of(
+          context,
+        ).colorScheme.outlineVariant.withValues(alpha: 0.15);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -236,8 +234,7 @@ class _WeatherForecastChartTransitionState
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final plotWidth =
-                      constraints.maxWidth -
-                      WeatherForecastChart.leftAxisWidth;
+                      constraints.maxWidth - WeatherForecastChart.leftAxisWidth;
                   final plotHeight =
                       constraints.maxHeight -
                       WeatherForecastChart.bottomAxisHeight;
@@ -287,8 +284,9 @@ class _WeatherForecastChartTransitionState
                             earlierCurrentTimeHour: earlierShowNow
                                 ? _currentTimeHour(earlierSeries)
                                 : null,
-                            laterCurrentTimeHour:
-                                laterShowNow ? _currentTimeHour(laterSeries) : null,
+                            laterCurrentTimeHour: laterShowNow
+                                ? _currentTimeHour(laterSeries)
+                                : null,
                           ),
                         ),
                       ),

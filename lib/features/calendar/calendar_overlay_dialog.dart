@@ -66,10 +66,8 @@ class _CalendarOverlayDialogState extends State<_CalendarOverlayDialog> {
                 children: [
                   for (final calendar in _others)
                     InkWell(
-                      onTap: () => _toggle(
-                        calendar.id,
-                        !_checked.contains(calendar.id),
-                      ),
+                      onTap: () =>
+                          _toggle(calendar.id, !_checked.contains(calendar.id)),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 6),
                         child: Row(

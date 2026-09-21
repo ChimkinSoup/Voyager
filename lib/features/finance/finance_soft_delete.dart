@@ -79,11 +79,10 @@ Future<bool> deleteBudgetWithUndo({
       final current = await repo
           .listBudgets(includeDeleted: true)
           .then(
-            (all) =>
-                all.cast<Budget?>().firstWhere(
-                  (b) => b!.id == budget.id,
-                  orElse: () => null,
-                ),
+            (all) => all.cast<Budget?>().firstWhere(
+              (b) => b!.id == budget.id,
+              orElse: () => null,
+            ),
           );
       abortIfAlreadyRestored(
         found: current != null,

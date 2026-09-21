@@ -33,7 +33,8 @@ class DevSyncBacklogSection extends ConsumerWidget {
       children: [
         ListenableBuilder(
           listenable: repository.writeGate,
-          builder: (context, _) => _WriteGateSummary(gate: repository.writeGate),
+          builder: (context, _) =>
+              _WriteGateSummary(gate: repository.writeGate),
         ),
         const SizedBox(height: 8),
         _OutboxSummary(db: ref.watch(databaseProvider)),
@@ -66,11 +67,7 @@ class _WriteGateSummary extends StatelessWidget {
         Colors.orangeAccent,
         'Writes from an earlier session are still unsent',
       ),
-      _ => (
-        PhosphorIconsRegular.checkCircle,
-        Colors.greenAccent,
-        'Keeping up',
-      ),
+      _ => (PhosphorIconsRegular.checkCircle, Colors.greenAccent, 'Keeping up'),
     };
 
     return ListTile(
@@ -95,10 +92,9 @@ class _OutboxSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<PendingUploadData>>(
-      stream:
-          (db.select(db.pendingUploadsTable)
-                ..orderBy([(t) => OrderingTerm.asc(t.addedAt)]))
-              .watch(),
+      stream: (db.select(
+        db.pendingUploadsTable,
+      )..orderBy([(t) => OrderingTerm.asc(t.addedAt)])).watch(),
       builder: (context, snapshot) {
         final rows = snapshot.data ?? const <PendingUploadData>[];
         final parked = rows.where((r) => r.failureReason != null).length;

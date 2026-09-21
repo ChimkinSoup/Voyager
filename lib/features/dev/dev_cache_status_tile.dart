@@ -79,10 +79,7 @@ class CacheStatusOverlay extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  'Cache status',
-                  style: theme.textTheme.labelLarge,
-                ),
+                Text('Cache status', style: theme.textTheme.labelLarge),
                 const SizedBox(height: 8),
                 _CacheStatusSummary(snapshot: snapshot, compact: true),
                 if (snapshot.loading > 0) ...[
@@ -104,10 +101,7 @@ class CacheStatusOverlay extends ConsumerWidget {
 }
 
 class _CacheStatusSummary extends StatelessWidget {
-  const _CacheStatusSummary({
-    required this.snapshot,
-    this.compact = false,
-  });
+  const _CacheStatusSummary({required this.snapshot, this.compact = false});
 
   final CacheStatusSnapshot snapshot;
   final bool compact;
@@ -134,10 +128,7 @@ class _CacheStatusSummary extends StatelessWidget {
           ),
           const SizedBox(height: 8),
         ] else
-          Text(
-            loadedLabel,
-            style: theme.textTheme.bodySmall,
-          ),
+          Text(loadedLabel, style: theme.textTheme.bodySmall),
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: LinearProgressIndicator(
@@ -178,10 +169,8 @@ class _CacheStatusItemList extends StatelessWidget {
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         itemCount: snapshot.items.length,
-        separatorBuilder: (context, index) => Divider(
-          height: 1,
-          color: theme.dividerColor,
-        ),
+        separatorBuilder: (context, index) =>
+            Divider(height: 1, color: theme.dividerColor),
         itemBuilder: (context, index) {
           final item = snapshot.items[index];
           final color = cacheStateColor(item.state, theme.colorScheme);

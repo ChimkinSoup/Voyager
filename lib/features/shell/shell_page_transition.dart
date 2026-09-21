@@ -117,7 +117,9 @@ class _ShellBranchContainerState extends State<ShellBranchContainer>
 
   @override
   Widget build(BuildContext context) {
-    final recede = VoyagerMotion.reduced(context) ? 0.0 : kVoyagerCrossfadeRecede;
+    final recede = VoyagerMotion.reduced(context)
+        ? 0.0
+        : kVoyagerCrossfadeRecede;
     final last = widget.children.length - 1;
     return AnimatedBuilder(
       animation: _progress,

@@ -68,9 +68,9 @@ class _DevRemotePurgeSectionState extends ConsumerState<DevRemotePurgeSection> {
       // reach one, so an offline purge now fails instead of reporting the
       // cache's "no sync_operations found" as a completed delete.
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Remote purge failed: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Remote purge failed: $error')));
     } finally {
       if (mounted) setState(() => _purging = false);
     }
@@ -83,10 +83,7 @@ class _DevRemotePurgeSectionState extends ConsumerState<DevRemotePurgeSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'Remote purge',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
+        Text('Remote purge', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 4),
         Text(
           'Hard-delete a journal entry from Firestore without the 30-day recycle bin.',
@@ -100,9 +97,9 @@ class _DevRemotePurgeSectionState extends ConsumerState<DevRemotePurgeSection> {
             title: const Text('Firebase Auth UID'),
             subtitle: SelectableText(
               authUid,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontFamily: 'monospace',
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
             ),
             trailing: IconButton(
               tooltip: 'Copy Auth UID',

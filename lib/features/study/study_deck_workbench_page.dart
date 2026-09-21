@@ -85,7 +85,8 @@ class _StudyDeckWorkbenchPageState
     final multiSelect = ref.watch(studyMultiSelectEnabledProvider);
     final selected = ref.watch(studySelectedCardIdsProvider);
     final query = ref.watch(studySearchQueryProvider);
-    final cardImages = ref.watch(studyCardImagesProvider).valueOrNull ?? const {};
+    final cardImages =
+        ref.watch(studyCardImagesProvider).valueOrNull ?? const {};
 
     final graph =
         ref.watch(studyDeckGraphProvider).valueOrNull ?? StudyDeckGraph.empty;
@@ -114,7 +115,11 @@ class _StudyDeckWorkbenchPageState
     final shownLinks = [
       for (final link in links)
         if (needle.isEmpty ||
-            (graph.deck(link.childDeckId)?.name.toLowerCase().contains(needle) ??
+            (graph
+                    .deck(link.childDeckId)
+                    ?.name
+                    .toLowerCase()
+                    .contains(needle) ??
                 false))
           link,
     ];
@@ -151,7 +156,10 @@ class _StudyDeckWorkbenchPageState
                   ),
                   if (parents.isNotEmpty) ...[
                     const SizedBox(height: 2),
-                    _IncludedIn(parents: parents, onOpenDeck: widget.onOpenDeck),
+                    _IncludedIn(
+                      parents: parents,
+                      onOpenDeck: widget.onOpenDeck,
+                    ),
                   ],
                   const SizedBox(height: 16),
                   Row(
@@ -189,7 +197,10 @@ class _StudyDeckWorkbenchPageState
                       Expanded(
                         child: VoyagerTextField(
                           onChanged: (v) =>
-                              ref.read(studySearchQueryProvider.notifier).state = v,
+                              ref
+                                      .read(studySearchQueryProvider.notifier)
+                                      .state =
+                                  v,
                           decoration: const InputDecoration(
                             hintText: 'Search cards',
                             prefixIcon: Icon(
@@ -205,19 +216,30 @@ class _StudyDeckWorkbenchPageState
                         dense: true,
                         tooltip: 'Import cards',
                         icon: const Icon(PhosphorIconsRegular.uploadSimple),
-                        onPressed: () => showStudyImportTextModal(context, ref, deckId),
+                        onPressed: () =>
+                            showStudyImportTextModal(context, ref, deckId),
                       ),
                       const SizedBox(width: 8),
                       GlassButton(
                         dense: true,
-                        tooltip: multiSelect ? 'Exit selection' : 'Select cards',
+                        tooltip: multiSelect
+                            ? 'Exit selection'
+                            : 'Select cards',
                         icon: const Icon(PhosphorIconsRegular.checkSquare),
                         color: multiSelect ? theme.colorScheme.primary : null,
                         onPressed: () {
                           final next = !multiSelect;
-                          ref.read(studyMultiSelectEnabledProvider.notifier).state = next;
+                          ref
+                                  .read(
+                                    studyMultiSelectEnabledProvider.notifier,
+                                  )
+                                  .state =
+                              next;
                           if (!next) {
-                            ref.read(studySelectedCardIdsProvider.notifier).state = {};
+                            ref
+                                    .read(studySelectedCardIdsProvider.notifier)
+                                    .state =
+                                {};
                           }
                         },
                       ),
@@ -226,15 +248,21 @@ class _StudyDeckWorkbenchPageState
                         dense: true,
                         tooltip: 'Link deck…',
                         icon: const Icon(PhosphorIconsRegular.link),
-                        onPressed: () =>
-                            showStudyLinkDeckModal(context, parentDeckId: deckId),
+                        onPressed: () => showStudyLinkDeckModal(
+                          context,
+                          parentDeckId: deckId,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       GlassButton(
                         dense: true,
                         label: 'Add card',
                         icon: const Icon(PhosphorIconsRegular.plus),
-                        onPressed: () => showStudyCardEditorModal(context, ref, deckId: deckId),
+                        onPressed: () => showStudyCardEditorModal(
+                          context,
+                          ref,
+                          deckId: deckId,
+                        ),
                       ),
                     ],
                   ),
@@ -247,7 +275,9 @@ class _StudyDeckWorkbenchPageState
                                   ? 'No cards yet — tap "Add card" to create one.'
                                   : 'No cards match "$query".',
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                                color: theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.5,
+                                ),
                               ),
                             ),
                           )
@@ -262,7 +292,11 @@ class _StudyDeckWorkbenchPageState
                             itemCount: shownLinks.length + ordered.length,
                             itemBuilder: (context, index) {
                               if (index < shownLinks.length) {
-                                return _linkTile(shownLinks[index], graph, deckName);
+                                return _linkTile(
+                                  shownLinks[index],
+                                  graph,
+                                  deckName,
+                                );
                               }
                               final card = ordered[index - shownLinks.length];
                               // A back-only search hit turns its tile around,
@@ -270,7 +304,10 @@ class _StudyDeckWorkbenchPageState
                               // baseline rather than the face itself —
                               // otherwise flipping such a tile to the front
                               // would immediately snap it back.
-                              final backOnly = studyCardMatchesBackOnly(card, keywords);
+                              final backOnly = studyCardMatchesBackOnly(
+                                card,
+                                keywords,
+                              );
                               return StudyCardTile(
                                 key: ValueKey(card.id),
                                 card: card,
@@ -279,7 +316,8 @@ class _StudyDeckWorkbenchPageState
                                 backImages:
                                     cardImages[card.id]?.back ?? const [],
                                 keywords: keywords,
-                                showBack: backOnly != _flipped.contains(card.id),
+                                showBack:
+                                    backOnly != _flipped.contains(card.id),
                                 onFlipped: (showingBack) => setState(() {
                                   if (showingBack == backOnly) {
                                     _flipped.remove(card.id);
@@ -289,9 +327,15 @@ class _StudyDeckWorkbenchPageState
                                 }),
                                 multiSelectEnabled: multiSelect,
                                 selected: selected.contains(card.id),
-                                onToggleSelected: (v) => _toggleSelected(card.id, v),
+                                onToggleSelected: (v) =>
+                                    _toggleSelected(card.id, v),
                                 onLongPress: () {
-                                  ref.read(studyMultiSelectEnabledProvider.notifier).state =
+                                  ref
+                                          .read(
+                                            studyMultiSelectEnabledProvider
+                                                .notifier,
+                                          )
+                                          .state =
                                       true;
                                   _toggleSelected(card.id, true);
                                 },
@@ -363,7 +407,10 @@ class _StudyDeckWorkbenchPageState
       link: link,
       deckName: child.name,
       onOpen: () async {
-        final action = await showStudyLinkedDeckSheet(context, deckId: child.id);
+        final action = await showStudyLinkedDeckSheet(
+          context,
+          deckId: child.id,
+        );
         if (!mounted || action == null) return;
         // The linked deck's own cards, framed as that deck — the set the
         // sheet counted, so the session holds what its button said (§5.3).
@@ -495,7 +542,9 @@ class _StudySelectionBar extends ConsumerWidget {
           exception: error,
           stack: stackTrace,
           library: 'study workbench',
-          context: ErrorDescription('while duplicating ${selected.length} cards'),
+          context: ErrorDescription(
+            'while duplicating ${selected.length} cards',
+          ),
         ),
       );
       if (context.mounted) {
@@ -586,7 +635,8 @@ class _StudySelectionBar extends ConsumerWidget {
               dense: true,
               label: 'Move',
               icon: const Icon(PhosphorIconsRegular.arrowsOutSimple),
-              onPressed: () => showStudyMoveModal(context, ref, cardIds: selected.toList()),
+              onPressed: () =>
+                  showStudyMoveModal(context, ref, cardIds: selected.toList()),
             ),
             const SizedBox(width: 8),
             GlassButton(

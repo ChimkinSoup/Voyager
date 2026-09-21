@@ -685,7 +685,9 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
               alignment: Alignment.centerLeft,
               child: Builder(
                 builder: (pillContext) => SelectorPill(
-                  label: DateFormat.yMMMd().format(_current.createdAt.toLocal()),
+                  label: DateFormat.yMMMd().format(
+                    _current.createdAt.toLocal(),
+                  ),
                   dense: true,
                   accentColor: accent,
                   onTap: widget.readOnly

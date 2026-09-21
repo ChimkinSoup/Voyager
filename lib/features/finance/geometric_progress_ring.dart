@@ -101,8 +101,9 @@ class _RingPainter extends CustomPainter {
       final segmentColor = gradient == null
           ? color
           : _sampleGradient(gradient, i / segments);
-      paint.color =
-          fill <= 0 ? trackColor : Color.lerp(trackColor, segmentColor, fill)!;
+      paint.color = fill <= 0
+          ? trackColor
+          : Color.lerp(trackColor, segmentColor, fill)!;
       canvas.drawArc(
         rect,
         start + i * segmentAngle + gap / 2,

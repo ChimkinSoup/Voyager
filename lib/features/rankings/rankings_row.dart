@@ -102,82 +102,82 @@ class _RankingsRowState extends ConsumerState<RankingsRow> {
         builder: (context, constraints) {
           final roomy = constraints.maxWidth >= _roomyRowWidth;
           return Row(
-        children: [
-          if (widget.showRankSlot)
-            SizedBox(
-              width: _rankSlotWidth,
-              child: Text(
-                widget.rank == null ? '' : '#${widget.rank}',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          _StarButton(
-            starred: parent.starred,
-            accent: accent,
-            onPressed: widget.readOnly ? null : widget.onToggleStar,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  parent.title.isEmpty ? 'Untitled' : parent.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: parent.title.isEmpty
-                        ? theme.colorScheme.onSurfaceVariant
-                        : null,
+            children: [
+              if (widget.showRankSlot)
+                SizedBox(
+                  width: _rankSlotWidth,
+                  child: Text(
+                    widget.rank == null ? '' : '#${widget.rank}',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 2),
-                _Subtitle(
-                  parent: parent,
-                  category: category,
-                  accent: accent,
-                  progress: progress,
-                  onTagTapped: widget.onTagTapped,
+              _StarButton(
+                starred: parent.starred,
+                accent: accent,
+                onPressed: widget.readOnly ? null : widget.onToggleStar,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      parent.title.isEmpty ? 'Untitled' : parent.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: parent.title.isEmpty
+                            ? theme.colorScheme.onSurfaceVariant
+                            : null,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    _Subtitle(
+                      parent: parent,
+                      category: category,
+                      accent: accent,
+                      progress: progress,
+                      onTagTapped: widget.onTagTapped,
+                    ),
+                  ],
+                ),
+              ),
+              if (roomy && category.imagesOnParent) ...[
+                const SizedBox(width: 12),
+                MediaFanStack(
+                  collection: FirestoreCollections.rankings,
+                  documentId: parent.id,
+                  accentColor: accent,
+                  thumbnailSize: 34,
+                  maxVisible: rankingsFanCap,
+                  onTap: () => showRankingsMediaGrid(
+                    context,
+                    ref,
+                    documentId: parent.id,
+                    title: parent.title.isEmpty ? 'Images' : parent.title,
+                  ),
                 ),
               ],
-            ),
-          ),
-          if (roomy && category.imagesOnParent) ...[
-            const SizedBox(width: 12),
-            MediaFanStack(
-              collection: FirestoreCollections.rankings,
-              documentId: parent.id,
-              accentColor: accent,
-              thumbnailSize: 34,
-              maxVisible: rankingsFanCap,
-              onTap: () => showRankingsMediaGrid(
-                context,
-                ref,
-                documentId: parent.id,
-                title: parent.title.isEmpty ? 'Images' : parent.title,
+              const SizedBox(width: 12),
+              // The number is on both sides of the split: a queued entry shows a
+              // dash next to its chip, so it can be scored without being opened.
+              RankingQuickRate(
+                value: parent.overallScore,
+                scoreMax: category.parentScoreMax,
+                precision: category.parentScorePrecision,
+                label: parent.title.isEmpty ? 'Entry' : parent.title,
+                accentColor: accent,
+                onChanged: widget.readOnly ? null : widget.onScoreChanged,
               ),
-            ),
-          ],
-          const SizedBox(width: 12),
-          // The number is on both sides of the split: a queued entry shows a
-          // dash next to its chip, so it can be scored without being opened.
-          RankingQuickRate(
-            value: parent.overallScore,
-            scoreMax: category.parentScoreMax,
-            precision: category.parentScorePrecision,
-            label: parent.title.isEmpty ? 'Entry' : parent.title,
-            accentColor: accent,
-            onChanged: widget.readOnly ? null : widget.onScoreChanged,
-          ),
-          if (roomy && !parent.isRanked) ...[
-            const SizedBox(width: 8),
-            _StatusChip(status: parent.status, accent: accent),
-          ],
-        ],
+              if (roomy && !parent.isRanked) ...[
+                const SizedBox(width: 8),
+                _StatusChip(status: parent.status, accent: accent),
+              ],
+            ],
           );
         },
       ),

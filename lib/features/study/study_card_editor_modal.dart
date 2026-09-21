@@ -38,7 +38,7 @@ Future<void> showStudyCardEditorModal(
   required String deckId,
   StudyCard? existing,
 }) {
-  return showVoyagerSheet<void>(
+  return showVoyagerModal<void>(
     context: context,
     kind: VoyagerSheetKind.editor,
     // The opener's own container, not a child one: a scope that owned its

@@ -398,10 +398,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   ///
   /// [entry] is passed by callers that have already moved `_selectedEntryId`
   /// on to the incoming dream — the flush still belongs to the outgoing one.
-  Future<void> _flushActiveEdits({
-    bool refreshList = true,
-    DreamEntry? entry,
-  }) {
+  Future<void> _flushActiveEdits({bool refreshList = true, DreamEntry? entry}) {
     return _queueWrite(
       () => _flushActiveEditsImpl(refreshList: refreshList, entry: entry),
     );
@@ -489,6 +486,15 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
         // Route through the same handler typing uses so the edit gets
         // saved and _lastNotesText stays in sync for the next keystroke.
         _handleNotesChanged(_notesController.text);
+        return KeyEventResult.handled;
+      }
+      // Nothing to indent, so Tab moves on to the body — the note is a side
+      // panel over the editor, and traversal left to itself walked out of it
+      // in reading order (the "New dream" button, then the entry list) rather
+      // than into the dream the note belongs to. The note stays open: only its
+      // close button collapses it.
+      if (!outdent) {
+        _bodyFocusNode.requestFocus();
         return KeyEventResult.handled;
       }
     }
@@ -1727,6 +1733,11 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
         _handleChanged(_controller.text);
         return KeyEventResult.handled;
       }
+      // Nothing to indent, but the key still stops here: the journal body
+      // swallows Tab too (its `MediaPasteScope` wraps it in a `FocusScope`
+      // holding nothing else, so traversal finds no target), and losing the
+      // caret mid-dream is not what Tab should do in a writing surface.
+      return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.backspace) {
       if (handleListBackspace(controller: _controller)) {

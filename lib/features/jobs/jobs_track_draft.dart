@@ -101,7 +101,8 @@ class JobsTrackDraft {
           if (id is String) id,
       ],
       dateApplied: DateTime.tryParse(json['dateApplied'] as String? ?? ''),
-      savedAt: DateTime.tryParse(json['savedAt'] as String? ?? '') ??
+      savedAt:
+          DateTime.tryParse(json['savedAt'] as String? ?? '') ??
           DateTime.now().toUtc(),
     );
   }

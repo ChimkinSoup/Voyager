@@ -157,7 +157,9 @@ class _LeetCodeReviewDeckState extends ConsumerState<LeetCodeReviewDeck> {
                       ref.read(leetCodeDeckSearchQueryProvider.notifier).state =
                           '';
                       ref
-                              .read(leetCodeDeckDifficultyFilterProvider.notifier)
+                              .read(
+                                leetCodeDeckDifficultyFilterProvider.notifier,
+                              )
                               .state =
                           {};
                       ref.read(leetCodeDeckTagFilterProvider.notifier).state =

@@ -208,7 +208,9 @@ class _PlaceholderSlot extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             '$number',
-            style: theme.textTheme.labelSmall?.copyWith(color: theme.disabledColor),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.disabledColor,
+            ),
           ),
         ],
       ),

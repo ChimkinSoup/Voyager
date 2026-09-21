@@ -57,7 +57,7 @@ class _LeetCodeFlashcardState extends State<LeetCodeFlashcard> {
     // serves. When both are mounted the front is the one the card grew from.
     final box =
         (_frontTitleKey.currentContext ?? _backTitleKey.currentContext)
-            ?.findRenderObject()
+                ?.findRenderObject()
             as RenderBox?;
     final rect = box == null
         ? Offset.zero & MediaQuery.sizeOf(context)

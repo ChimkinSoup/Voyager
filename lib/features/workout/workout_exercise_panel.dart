@@ -202,11 +202,7 @@ class _DraggableExerciseCard extends ConsumerWidget {
           feedback: _DragFeedback(label: exercise.name),
           childWhenDragging: Opacity(opacity: 0.35, child: card),
           child: GestureDetector(
-            onTap: () => openExerciseDetailView(
-              cardContext,
-              exercise,
-              anchorRectFor(cardContext),
-            ),
+            onTap: () => openExerciseDetailView(cardContext, exercise),
             child: card,
           ),
         ),

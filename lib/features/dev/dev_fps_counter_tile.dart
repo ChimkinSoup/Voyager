@@ -222,10 +222,7 @@ class _FpsGraphPainter extends CustomPainter {
     }
     closeSegment(xFor(history.length - 1));
 
-    canvas.drawPath(
-      fill,
-      Paint()..color = accent.withValues(alpha: 0.16),
-    );
+    canvas.drawPath(fill, Paint()..color = accent.withValues(alpha: 0.16));
     canvas.drawPath(
       line,
       Paint()

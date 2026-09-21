@@ -401,7 +401,7 @@ class _DictionaryDialogState extends ConsumerState<_DictionaryDialog> {
                       // with squiggles or an expanding snippet. (Single-line
                       // fields are already exempt from spellcheck.)
                       snippetsAllowed: false,
-                    autocorrectAllowed: false,
+                      autocorrectAllowed: false,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 15,
                         vertical: 8,
@@ -777,10 +777,7 @@ class _WordEditor extends StatefulWidget {
 class _WordEditorState extends State<_WordEditor> {
   late final TextEditingController _controller = TextEditingController(
     text: widget.word,
-  )..selection = TextSelection(
-    baseOffset: 0,
-    extentOffset: widget.word.length,
-  );
+  )..selection = TextSelection(baseOffset: 0, extentOffset: widget.word.length);
   final _focusNode = FocusNode();
 
   @override

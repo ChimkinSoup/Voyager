@@ -277,8 +277,8 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
                   );
                   return VimOverlayHost(
                     session: vim.session,
-              snippetSession: vim.snippetSession,
-              autocorrectSession: vim.autocorrectSession,
+                    snippetSession: vim.snippetSession,
+                    autocorrectSession: vim.autocorrectSession,
                     overlayPaintsSelection: vim.overlayPaintsSelection,
                     spanBuilder: _prose.overlaySpan,
                     highlightFill: emphasisTheme.highlightColor,

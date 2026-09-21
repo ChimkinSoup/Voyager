@@ -214,9 +214,11 @@ class WorkoutPlan extends SoftDeletable {
     // boundary anywhere between anchor and today makes the local span 23 or
     // 25 hours, which truncates to the wrong whole-day count and slides the
     // entire cycle by a day.
-    final elapsed = DateTime.utc(day.year, day.month, day.day)
-        .difference(DateTime.utc(anchor.year, anchor.month, anchor.day))
-        .inDays;
+    final elapsed = DateTime.utc(
+      day.year,
+      day.month,
+      day.day,
+    ).difference(DateTime.utc(anchor.year, anchor.month, anchor.day)).inDays;
     if (elapsed < 0) return null;
     final length = cycleLength < 1 ? 1 : cycleLength;
     return elapsed % length;
@@ -285,10 +287,8 @@ class SetSegment {
   final double weightKg;
   final int reps;
 
-  SetSegment copyWith({double? weightKg, int? reps}) => SetSegment(
-    weightKg: weightKg ?? this.weightKg,
-    reps: reps ?? this.reps,
-  );
+  SetSegment copyWith({double? weightKg, int? reps}) =>
+      SetSegment(weightKg: weightKg ?? this.weightKg, reps: reps ?? this.reps);
 
   Map<String, dynamic> toJson() => {'weightKg': weightKg, 'reps': reps};
 
@@ -339,9 +339,7 @@ class SetPrescription {
         if (item is Map<String, dynamic>) {
           segments.add(SetSegment.fromJson(item));
         } else if (item is Map) {
-          segments.add(
-            SetSegment.fromJson(Map<String, dynamic>.from(item)),
-          );
+          segments.add(SetSegment.fromJson(Map<String, dynamic>.from(item)));
         }
       }
     }
@@ -359,8 +357,10 @@ double defaultDropDecrementKg(WeightUnit unit) => unit == WeightUnit.lb
 
 /// Next drop after [previous]: same reps, weight reduced by the unit default.
 SetSegment nextDropSegment(SetSegment previous, WeightUnit unit) {
-  final next =
-      (previous.weightKg - defaultDropDecrementKg(unit)).clamp(0.0, double.infinity);
+  final next = (previous.weightKg - defaultDropDecrementKg(unit)).clamp(
+    0.0,
+    double.infinity,
+  );
   return SetSegment(weightKg: next.toDouble(), reps: previous.reps);
 }
 
@@ -372,7 +372,9 @@ List<SetPrescription> seedPrescriptionsFromExercise(Exercise exercise) {
     reps: exercise.targetReps,
   );
   final count = exercise.targetSets < 1 ? 1 : exercise.targetSets;
-  return [for (var i = 0; i < count; i++) SetPrescription(segments: [top])];
+  return [
+    for (var i = 0; i < count; i++) SetPrescription(segments: [top]),
+  ];
 }
 
 /// Decodes a `setPrescriptions` array out of an already-parsed JSON payload
@@ -763,6 +765,7 @@ class ExerciseDaySummary {
   const ExerciseDaySummary({
     required this.date,
     required this.setWeightsKg,
+    required this.setReps,
     required this.volumeKg,
   });
 
@@ -772,6 +775,10 @@ class ExerciseDaySummary {
   /// sparkline plots these points directly rather than a daily average, since
   /// the spec asks for per-set weight.
   final List<double> setWeightsKg;
+
+  /// Reps of the same sets, index for index with [setWeightsKg], so a point on
+  /// the sparkline can say what was lifted rather than only how heavy.
+  final List<int> setReps;
 
   /// Σ weight × reps across the day's completed sets.
   final double volumeKg;
@@ -810,6 +817,7 @@ List<ExerciseDaySummary> buildExerciseHistory(
         return ExerciseDaySummary(
           date: day,
           setWeightsKg: [for (final s in sets) s.weightKg],
+          setReps: [for (final s in sets) s.reps],
           volumeKg: sets.fold<double>(0, (sum, s) => sum + s.volumeKg),
         );
       }(),

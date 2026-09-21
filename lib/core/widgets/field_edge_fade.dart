@@ -75,15 +75,15 @@ class FieldEdgeFade extends StatelessWidget {
 /// Deliberately not a straight ramp. The floated label's ink reaches about 8px
 /// past the top border (12px of 1.35 leading, halved by [NotchedFieldBorder]'s
 /// `-floatedHeight / 2`, less the descender room under its baseline) — better
-/// than half of a ~14px gutter, so a linear fade would still print glyphs at
-/// half strength right through the label. Weighted like this they are under 4%
-/// of their opacity everywhere the label's own ink lands, and the dissolve
-/// still runs over ~6px rather than stopping dead.
+/// two thirds of a ~12px gutter, so a linear fade would still print glyphs at
+/// better than half strength right through the label. Weighted like this they
+/// are under 4% of their opacity everywhere the label's own ink lands, and the
+/// dissolve still runs over ~4px rather than stopping dead.
 const List<(double, double)> _fadeProfile = [
   (0.0, 0.0),
-  (0.45, 0.01),
-  (0.62, 0.05),
-  (0.78, 0.18),
-  (0.9, 0.5),
+  (0.55, 0.01),
+  (0.7, 0.05),
+  (0.82, 0.18),
+  (0.92, 0.5),
   (1.0, 1.0),
 ];

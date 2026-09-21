@@ -11,7 +11,11 @@ import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
 /// A localized shudder applied to nearby foliage — the "gust" a stat popup
 /// kicks up when it opens.
 class _LeafShudder {
-  _LeafShudder({required this.center, required this.radius, required this.strength});
+  _LeafShudder({
+    required this.center,
+    required this.radius,
+    required this.strength,
+  });
 
   final Offset center;
   final double radius;
@@ -59,8 +63,10 @@ const _groundPileStdDev = 0.22;
 Offset groundPositionFor(int leafIndex, LifeTreeGeometry geometry) {
   final r = math.Random(leafIndex * 7919 + 13);
 
-  final x = (geometry.trunkBase.dx + _gaussian(r) * _groundPileStdDev)
-      .clamp(0.04, 0.96);
+  final x = (geometry.trunkBase.dx + _gaussian(r) * _groundPileStdDev).clamp(
+    0.04,
+    0.96,
+  );
 
   // A gentle per-position undulation keeps the pile from reading as a dead
   // flat line, echoing the grass's own irregular baseline without needing to
@@ -95,10 +101,18 @@ class LifeTreeCanvasController extends ChangeNotifier {
 
   /// Shudders the foliage near [normalizedPosition] — called when a popup
   /// opens, so the tree visibly reacts.
-  void gustAt(Offset normalizedPosition, {double radius = 0.22, double strength = 0.55}) {
+  void gustAt(
+    Offset normalizedPosition, {
+    double radius = 0.22,
+    double strength = 0.55,
+  }) {
     if (_pendingGusts.length >= _maxPendingGusts) _pendingGusts.removeAt(0);
     _pendingGusts.add(
-      _LeafShudder(center: normalizedPosition, radius: radius, strength: strength),
+      _LeafShudder(
+        center: normalizedPosition,
+        radius: radius,
+        strength: strength,
+      ),
     );
     notifyListeners();
   }
@@ -297,21 +311,26 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
   // rebuilding 4160 transform objects sixty times a second. Split into an
   // on-tree pair and a grounded pair, one leaf ever going into only one of the
   // two on a given frame.
-  late final Float32List _rstBuffer =
-      Float32List(widget.geometry.leaves.length * 4);
-  late final Float32List _landedRstBuffer =
-      Float32List(widget.geometry.leaves.length * 4);
-  late final Float32List _landedRectBuffer =
-      Float32List(widget.geometry.leaves.length * 4);
-  late final Float32List _rectBuffer =
-      Float32List(widget.geometry.leaves.length * 4);
+  late final Float32List _rstBuffer = Float32List(
+    widget.geometry.leaves.length * 4,
+  );
+  late final Float32List _landedRstBuffer = Float32List(
+    widget.geometry.leaves.length * 4,
+  );
+  late final Float32List _landedRectBuffer = Float32List(
+    widget.geometry.leaves.length * 4,
+  );
+  late final Float32List _rectBuffer = Float32List(
+    widget.geometry.leaves.length * 4,
+  );
 
   // cos/sin/roll per wash cell, refilled in place once a frame. Resolving
   // these into objects instead allocated one per cell plus one Offset per
   // leaf carried through it — some three thousand short-lived objects every
   // frame, for values that are three doubles.
-  late final Float32List _cellSwayBuffer =
-      Float32List(widget.geometry.cells.length * 3);
+  late final Float32List _cellSwayBuffer = Float32List(
+    widget.geometry.cells.length * 3,
+  );
 
   // Resting places, resolved once. These are derived from the leaf index
   // alone, but deriving them seeds a Random per leaf — and every grounded leaf
@@ -321,10 +340,12 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
       groundPositionFor(i, widget.geometry),
   ];
   late final Float32List _restRotations = Float32List.fromList([
-    for (var i = 0; i < widget.geometry.leaves.length; i++) groundRotationFor(i),
+    for (var i = 0; i < widget.geometry.leaves.length; i++)
+      groundRotationFor(i),
   ]);
   late final Float32List _fallenDiameters = Float32List.fromList([
-    for (var i = 0; i < widget.geometry.leaves.length; i++) fallenLeafDiameterFor(i),
+    for (var i = 0; i < widget.geometry.leaves.length; i++)
+      fallenLeafDiameterFor(i),
   ]);
 
   // The woody skeleton and the grass never change with the shed level (only
@@ -459,7 +480,9 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
 
   void _ensureAtlas(List<Color> colors) {
     final alpha = _stippleAlpha;
-    if (_atlas != null && _atlasAlpha == alpha && listEquals(_atlasColors, colors)) {
+    if (_atlas != null &&
+        _atlasAlpha == alpha &&
+        listEquals(_atlasColors, colors)) {
       return;
     }
     _atlas?.dispose();
@@ -514,7 +537,12 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
           Rect.fromLTWH(0, 0, _spriteExtent, _spriteExtent),
           Paint()..color = Color.fromARGB(alpha, 255, 255, 255),
         );
-        _paintBloom(canvas, designs[d], Rect.fromLTWH(0, 0, _spriteExtent, _spriteExtent), colors[c]);
+        _paintBloom(
+          canvas,
+          designs[d],
+          Rect.fromLTWH(0, 0, _spriteExtent, _spriteExtent),
+          colors[c],
+        );
         canvas.restore();
         canvas.restore();
       }
@@ -538,8 +566,11 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
     // pixels wide it is mostly rim. A 30% step toward black is what keeps the
     // stipple from glaring on cream; on the night stock the same step is most
     // of why a lit blossom renders as a grey fleck.
-    final borderColor =
-        Color.lerp(color, const Color(0xFF000000), _night ? 0.14 : 0.30)!;
+    final borderColor = Color.lerp(
+      color,
+      const Color(0xFF000000),
+      _night ? 0.14 : 0.30,
+    )!;
     canvas.drawPath(path, Paint()..color = color.withValues(alpha: 0.50));
     canvas.drawPath(
       path,
@@ -624,8 +655,13 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
     return recorder.endRecording();
   }
 
-  ui.Picture _recordBackground(Size size, List<Color> palette, double scale,
-      double shed, ui.Image staticLayer) {
+  ui.Picture _recordBackground(
+    Size size,
+    List<Color> palette,
+    double scale,
+    double shed,
+    ui.Image staticLayer,
+  ) {
     final pixelSize = Size(size.width * scale, size.height * scale);
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, Offset.zero & pixelSize);
@@ -655,7 +691,8 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
   void _ensureScene(Size size, List<Color> palette, double dpr) {
     final scale = math.min(dpr, _maxBackgroundScale);
     final shed = _shedLevel();
-    final propsValid = _background != null &&
+    final propsValid =
+        _background != null &&
         _staticLayer != null &&
         _sceneDpr == scale &&
         listEquals(_sceneColors, palette) &&
@@ -701,7 +738,11 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
     _disposeScene();
     _bakeGeneration++;
 
-    final staticLayer = _rasterize(_recordStaticLayer(size, scale), size, scale);
+    final staticLayer = _rasterize(
+      _recordStaticLayer(size, scale),
+      size,
+      scale,
+    );
     _staticLayer = staticLayer;
 
     _background = _rasterize(
@@ -744,7 +785,13 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
       } finally {
         staticPicture.dispose();
       }
-      final picture = _recordBackground(size, palette, scale, shed, staticLayer);
+      final picture = _recordBackground(
+        size,
+        palette,
+        scale,
+        shed,
+        staticLayer,
+      );
       try {
         background = await picture.toImage(width, height);
       } finally {
@@ -785,8 +832,13 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
     setState(() {});
   }
 
-  Future<void> _rebakeAsync(Size size, List<Color> palette, double scale,
-      double shed, ui.Image staticLayer) async {
+  Future<void> _rebakeAsync(
+    Size size,
+    List<Color> palette,
+    double scale,
+    double shed,
+    ui.Image staticLayer,
+  ) async {
     final generation = ++_bakeGeneration;
     final picture = _recordBackground(size, palette, scale, shed, staticLayer);
     final ui.Image image;
@@ -841,12 +893,7 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
   /// and a darker rim where the water dried. No blur anywhere — a blurred
   /// blossom reads as airbrush, and the crisp cauliflower edge is the entire
   /// difference between this and a gradient.
-  void _paintCrown(
-    Canvas canvas,
-    Size size,
-    List<Color> palette,
-    double shed,
-  ) {
+  void _paintCrown(Canvas canvas, Size size, List<Color> palette, double shed) {
     final fade = 1.0 - 0.40 * shed;
     if (fade <= 0) return;
 
@@ -884,11 +931,14 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
       canvas.drawPath(
         path,
         Paint()
-          ..color = palette[((cell.colorIndex ~/ 3) * 3 + rimToneOffset)
-                  .clamp(0, palette.length - 1)]
-              .withValues(
-                alpha: (cell.alpha * fade * rimBoost).clamp(0.0, rimCap),
-              )
+          ..color =
+              palette[((cell.colorIndex ~/ 3) * 3 + rimToneOffset).clamp(
+                    0,
+                    palette.length - 1,
+                  )]
+                  .withValues(
+                    alpha: (cell.alpha * fade * rimBoost).clamp(0.0, rimCap),
+                  )
           ..style = PaintingStyle.stroke
           ..strokeWidth = rimWidth,
       );
@@ -913,7 +963,10 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
       ),
       Paint()
         ..color = widget.grassColor.withValues(alpha: 0.20)
-        ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, size.height * 0.025),
+        ..maskFilter = ui.MaskFilter.blur(
+          ui.BlurStyle.normal,
+          size.height * 0.025,
+        ),
     );
 
     for (final tuft in widget.geometry.grass) {
@@ -949,7 +1002,8 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
         final lean = spread * 0.75 + (rand.nextDouble() - 0.5) * w * 0.4;
         paint
           ..color = color.withValues(alpha: 0.18 + rand.nextDouble() * 0.30)
-          ..strokeWidth = size.shortestSide * (0.0006 + rand.nextDouble() * 0.0012);
+          ..strokeWidth =
+              size.shortestSide * (0.0006 + rand.nextDouble() * 0.0012);
         canvas.drawPath(
           Path()
             ..moveTo(baseX + spread * 0.35, baseY)
@@ -1042,7 +1096,10 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
       ..strokeCap = StrokeCap.round;
     for (final limb in widget.geometry.limbs) {
       final a = Offset(limb.start.dx * size.width, limb.start.dy * size.height);
-      final b = Offset(limb.control.dx * size.width, limb.control.dy * size.height);
+      final b = Offset(
+        limb.control.dx * size.width,
+        limb.control.dy * size.height,
+      );
       final c = Offset(limb.end.dx * size.width, limb.end.dy * size.height);
       final half = limb.startWidth * size.shortestSide / 2;
       final count = (limb.startWidth * 700).round().clamp(2, 11);
@@ -1067,7 +1124,9 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
           }
         }
         streak
-          ..color = widget.paperColor.withValues(alpha: 0.08 + rand.nextDouble() * 0.22)
+          ..color = widget.paperColor.withValues(
+            alpha: 0.08 + rand.nextDouble() * 0.22,
+          )
           ..strokeWidth = half * (0.05 + rand.nextDouble() * 0.15);
         canvas.drawPath(path, streak);
       }
@@ -1075,7 +1134,9 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
 
     // Pigment settling along stroke edges
     canvas.drawPath(
-      wood.shift(Offset(size.shortestSide * 0.0025, size.shortestSide * 0.0010)),
+      wood.shift(
+        Offset(size.shortestSide * 0.0025, size.shortestSide * 0.0010),
+      ),
       Paint()
         ..color = ink.withValues(alpha: settleAlpha)
         ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, blur * 0.8),
@@ -1158,10 +1219,8 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
           fontWeight: FontWeight.bold,
         ),
       );
-      final tp = TextPainter(
-        text: textSpan,
-        textDirection: TextDirection.ltr,
-      )..layout();
+      final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr)
+        ..layout();
 
       final badgeRect = RRect.fromRectAndRadius(
         Rect.fromLTWH(
@@ -1172,9 +1231,21 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
         ),
         const Radius.circular(4),
       );
-      canvas.drawRRect(badgeRect, Paint()..color = Colors.black.withValues(alpha: 0.82));
-      canvas.drawRRect(badgeRect, Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 1.5);
-      tp.paint(canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
+      canvas.drawRRect(
+        badgeRect,
+        Paint()..color = Colors.black.withValues(alpha: 0.82),
+      );
+      canvas.drawRRect(
+        badgeRect,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
+      );
+      tp.paint(
+        canvas,
+        Offset(center.dx - tp.width / 2, center.dy - tp.height / 2),
+      );
     }
 
     Offset toPixels(Offset n) => Offset(n.dx * size.width, n.dy * size.height);
@@ -1249,7 +1320,8 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
     final points = <Offset>[];
     for (var i = 0; i < steps; i++) {
       final a = i / steps * math.pi * 2;
-      final k = 1 +
+      final k =
+          1 +
           cell.wobbleAmount *
               (0.52 * math.sin(3 * a + cell.wobblePhases[0]) +
                   0.30 * math.sin(7 * a + cell.wobblePhases[1]) +
@@ -1260,7 +1332,8 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
       );
     }
 
-    Offset mid(Offset a, Offset b) => Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
+    Offset mid(Offset a, Offset b) =>
+        Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
 
     final start = mid(points.last, points.first);
     final path = Path()..moveTo(start.dx, start.dy);
@@ -1282,8 +1355,9 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
         // actually catching the moonlight, so they keep the lit ramp. Same
         // list in light, where the wash is the lit thing.
         final palette = buildTonePalette(widget.leafColors, night: _night);
-        final stipplePalette =
-            _night ? buildTonePalette(widget.leafColors) : palette;
+        final stipplePalette = _night
+            ? buildTonePalette(widget.leafColors)
+            : palette;
         _ensureAtlas(stipplePalette);
         _ensureLandedAtlas(stipplePalette);
         // Baked into the background rather than laid over it per frame, so it
@@ -1426,7 +1500,8 @@ Path _limbRibbon(
     right.add(p - normal * half);
   }
 
-  Offset mid(Offset p1, Offset p2) => Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
+  Offset mid(Offset p1, Offset p2) =>
+      Offset((p1.dx + p2.dx) / 2, (p1.dy + p2.dy) / 2);
 
   final path = Path()..moveTo(left.first.dx, left.first.dy);
   for (var i = 0; i < left.length - 1; i++) {
@@ -1456,7 +1531,12 @@ Path _limbRibbon(
     final baseCapControl = tangent0Length == 0
         ? p0
         : p0 - tangent0 / tangent0Length * startHalf;
-    path.quadraticBezierTo(baseCapControl.dx, baseCapControl.dy, left.first.dx, left.first.dy);
+    path.quadraticBezierTo(
+      baseCapControl.dx,
+      baseCapControl.dy,
+      left.first.dx,
+      left.first.dy,
+    );
   } else {
     path.lineTo(left.first.dx, left.first.dy);
   }
@@ -1478,8 +1558,9 @@ Path _limbRibbon(
   final p = quadPointAt(a, b, c, t);
   final tangent = quadTangentAt(a, b, c, t);
   final length = tangent.distance;
-  final normal =
-      length == 0 ? const Offset(0, 1) : Offset(-tangent.dy / length, tangent.dx / length);
+  final normal = length == 0
+      ? const Offset(0, 1)
+      : Offset(-tangent.dy / length, tangent.dx / length);
   final half = _plainTaperHalf(t, startHalf, endHalf);
   return (p + normal * half, p - normal * half);
 }
@@ -1536,6 +1617,7 @@ Path _limbJointPatches(List<TreeLimb> limbs, Size size, Offset trunkBase) {
   void note(Offset point, TreeLimb limb, bool isStart) {
     refs.putIfAbsent(point, () => []).add((limb, isStart));
   }
+
   for (final limb in limbs) {
     note(limb.start, limb, true);
     note(limb.end, limb, false);
@@ -1552,7 +1634,9 @@ Path _limbJointPatches(List<TreeLimb> limbs, Size size, Offset trunkBase) {
     var maxHalf = 0.0;
     for (final (limb, isStart) in ends) {
       final (left, right) = _limbShoulders(limb, isStart, size);
-      corners..add(left)..add(right);
+      corners
+        ..add(left)
+        ..add(right);
       final half = (isStart ? limb.startWidth : limb.endWidth) / 2;
       if (half > maxHalf) maxHalf = half;
     }
@@ -1586,7 +1670,10 @@ Path _limbJointPatches(List<TreeLimb> limbs, Size size, Offset trunkBase) {
         if (_limbRibbon(other, size).contains(pixel)) {
           final half = (isStart ? limb.startWidth : limb.endWidth) / 2;
           patches.addOval(
-            Rect.fromCircle(center: pixel, radius: half * size.shortestSide * 1.05),
+            Rect.fromCircle(
+              center: pixel,
+              radius: half * size.shortestSide * 1.05,
+            ),
           );
           break;
         }
@@ -1608,7 +1695,9 @@ Path _limbJointPatches(List<TreeLimb> limbs, Size size, Offset trunkBase) {
 /// distances from the same point.
 List<Offset> _convexHull(List<Offset> points) {
   final pts = points.toSet().toList()
-    ..sort((a, b) => a.dx != b.dx ? a.dx.compareTo(b.dx) : a.dy.compareTo(b.dy));
+    ..sort(
+      (a, b) => a.dx != b.dx ? a.dx.compareTo(b.dx) : a.dy.compareTo(b.dy),
+    );
   if (pts.length < 3) return pts;
 
   double cross(Offset o, Offset a, Offset b) =>
@@ -1660,9 +1749,9 @@ class _LifeTreePainter extends CustomPainter {
     required this.groundedLeafIndices,
     required this.glowPathFor,
     required this.glowColor,
-  })  : _gustCount = animation.gusts.length,
-        _groundedCount = groundedLeafIndices.length,
-        super(repaint: animation);
+  }) : _gustCount = animation.gusts.length,
+       _groundedCount = groundedLeafIndices.length,
+       super(repaint: animation);
 
   static const _spriteExtent = 96.0;
 
@@ -1794,7 +1883,8 @@ class _LifeTreePainter extends CustomPainter {
       for (final gust in gusts) {
         shiver += gust.extraAt(cell.center);
       }
-      final roll = math.sin(time * 0.34 + cell.swayPhase) * 0.006 +
+      final roll =
+          math.sin(time * 0.34 + cell.swayPhase) * 0.006 +
           math.sin(time * 7.5 + cell.swayPhase) * 0.02 * shiver;
       final at = i * 3;
       cellSwayBuffer[at] = math.cos(roll);
@@ -1806,12 +1896,7 @@ class _LifeTreePainter extends CustomPainter {
   /// Every one of the 4160 weeks, as one speck of blossom over the wash.
   /// Attached specks ride their pool's sway; grounded ones sit still where
   /// they rest.
-  void _paintStipple(
-    Canvas canvas,
-    Size size,
-    Offset pivot,
-    double breathe,
-  ) {
+  void _paintStipple(Canvas canvas, Size size, Offset pivot, double breathe) {
     final leaves = geometry.leaves;
     const anchor = _spriteExtent / 2;
 
@@ -1856,7 +1941,8 @@ class _LifeTreePainter extends CustomPainter {
       final ssin = math.sin(angle) * scale;
 
       final cellIndex =
-          leaf.designIndex * colorCount + leaf.colorIndex.clamp(0, colorCount - 1);
+          leaf.designIndex * colorCount +
+          leaf.colorIndex.clamp(0, colorCount - 1);
       final cell = leafCellRects[cellIndex.clamp(0, leafCellRects.length - 1)];
 
       final rst = settled ? landedRstBuffer : rstBuffer;

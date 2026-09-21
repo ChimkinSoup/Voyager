@@ -186,7 +186,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       // _dueDate so the pill updates instantly instead of only after the user
       // reselects the task.
       _dueDate = widget.task.dueDate;
-    _recurrence = widget.task.recurrence;
+      _recurrence = widget.task.recurrence;
     }
   }
 
@@ -510,7 +510,8 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     await _applyPendingNotesMerge();
     // The merge above may have rewritten the notes field; prefer its result
     // when this State is still alive to read it.
-    final notesText = notes ?? (mounted ? _notesController.text.trim() : rawNotes);
+    final notesText =
+        notes ?? (mounted ? _notesController.text.trim() : rawNotes);
     var titleText = rawTitle;
     if (titleText.isEmpty) {
       titleText = _lastNonEmptyTitle;
@@ -680,7 +681,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     required String title,
     required String notes,
   }) async {
-    final latest = await _container.read(todoRepositoryProvider).getTask(taskId);
+    final latest = await _container
+        .read(todoRepositoryProvider)
+        .getTask(taskId);
     if (latest == null) return;
     final updated = latest.copyWith(
       title: title.isEmpty ? _lastNonEmptyTitle : title,
@@ -737,7 +740,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     // branch deliberately skips setState when nothing sort-relevant changed —
     // so widget.task can hold pre-edit notes indefinitely, and writing it back
     // reverted notes the user had typed moments earlier.
-    final latest = await ref.read(todoRepositoryProvider).getTask(widget.task.id);
+    final latest = await ref
+        .read(todoRepositoryProvider)
+        .getTask(widget.task.id);
     if (latest == null) return;
     await ref
         .read(remoteSyncServiceProvider)
@@ -797,9 +802,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       if (rule != null) _recurrence = rule;
     });
     if (rule != null) {
-      widget.onTaskOptimistic?.call(
-        widget.task.copyWith(recurrence: rule),
-      );
+      widget.onTaskOptimistic?.call(widget.task.copyWith(recurrence: rule));
       unawaited(_save(recurrence: rule));
     }
   }
@@ -980,7 +983,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       recurrenceAnchor: subtask.recurrenceAnchor,
     );
     await repo.upsertTask(restored);
-    container.read(remoteSyncServiceProvider).pushTodoTaskInBackground(restored);
+    container
+        .read(remoteSyncServiceProvider)
+        .pushTodoTaskInBackground(restored);
     // Unconditional, and through the container: the panel is closed by the
     // user in the ordinary course of things, and closing it is the likeliest
     // thing to happen during an eight-second undo window. These providers are
@@ -1219,7 +1224,8 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                       right: 10,
                       child: JournalTitleCornerFlag(
                         colorValue:
-                            widget.listColor ?? theme.colorScheme.primary.toARGB32(),
+                            widget.listColor ??
+                            theme.colorScheme.primary.toARGB32(),
                         onSelected: _moveToList,
                         menuEntries: (_) => [
                           for (var i = 0; i < widget.lists.length; i++)
@@ -1741,7 +1747,7 @@ class _SubtaskRowState extends State<_SubtaskRow>
                           const contentPadding = _kSubtaskContentPadding;
                           return VimOverlayHost(
                             session: vim.session,
-              snippetSession: vim.snippetSession,
+                            snippetSession: vim.snippetSession,
                             overlayPaintsSelection: vim.overlayPaintsSelection,
                             controller: _editController,
                             focusNode: _editFocusNode,
@@ -1816,11 +1822,14 @@ class _SubtaskRowState extends State<_SubtaskRow>
                                           text: widget.subtask.title,
                                           style: textStyle ?? const TextStyle(),
                                           strutStyle: strutStyle,
-                                          progress: _strikeProgress.value
-                                              .clamp(0.0, 1.0),
+                                          progress: _strikeProgress.value.clamp(
+                                            0.0,
+                                            1.0,
+                                          ),
                                           color: strikeColor,
-                                          textDirection:
-                                              Directionality.of(context),
+                                          textDirection: Directionality.of(
+                                            context,
+                                          ),
                                         )
                                       : null,
                                   child: child,

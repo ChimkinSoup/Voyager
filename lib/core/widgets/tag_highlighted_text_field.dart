@@ -32,7 +32,7 @@ class TagHighlightedTextField extends StatefulWidget {
     this.label,
     this.accentColor,
     this.style,
-    this.contentPadding = const EdgeInsets.all(16),
+    this.contentPadding = const EdgeInsets.all(14),
     this.expands = false,
     this.maxLines = 1,
     this.minLines,

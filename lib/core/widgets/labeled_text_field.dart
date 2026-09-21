@@ -242,8 +242,8 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     final contentPadding =
         widget.contentPadding ??
         (widget.dense
-            ? const EdgeInsets.symmetric(horizontal: 14, vertical: 8)
-            : const EdgeInsets.symmetric(horizontal: 16, vertical: 18));
+            ? const EdgeInsets.symmetric(horizontal: 12, vertical: 6)
+            : const EdgeInsets.symmetric(horizontal: 14, vertical: 16));
     // When a real floating label is showing, its resting (unfocused, empty)
     // position sits exactly where a hint would print — so only reveal a hint
     // once the label has floated out of the way (focused or has content),

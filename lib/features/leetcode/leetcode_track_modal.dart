@@ -65,12 +65,10 @@ Future<bool> showLeetCodeTrackModal(
   LeetCodeTrackDraft? draft,
   LeetCodeTrackDraftOutcome draftOutcome = LeetCodeTrackDraftOutcome.none,
 }) async {
-  // Modal bottom sheets cap out at 640px wide by default (Material 3's
-  // BottomSheetThemeData default), which reads as a narrow drawer on a
-  // desktop-sized window. This form has a lot of fields plus a code editor,
-  // so it gets almost the full screen instead.
+  // This form has a lot of fields plus a code editor, so it floats at almost
+  // the full screen.
   final screenSize = MediaQuery.sizeOf(context);
-  final saved = await showVoyagerSheet<bool>(
+  final saved = await showVoyagerModal<bool>(
     context: context,
     kind: VoyagerSheetKind.editor,
     constraints: BoxConstraints(
@@ -1191,7 +1189,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // The sheet stacks above this bottom sheet rather than
+                    // The sheet stacks above this modal rather than
                     // replacing it: the track draft is untouched, so closing
                     // the cheat sheet returns to the form exactly as it was.
                     const LeetCodeCheatSheetIconButton(size: 18),

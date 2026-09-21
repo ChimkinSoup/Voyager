@@ -131,9 +131,7 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
                       ),
                     ),
                     title: Text(journal.name),
-                    subtitle: Text(
-                      count == 1 ? '1 entry' : '$count entries',
-                    ),
+                    subtitle: Text(count == 1 ? '1 entry' : '$count entries'),
                     trailing: PopupMenuButton<VoyagerMenuCatalogEntry>(
                       onSelected: (action) async {
                         switch (action) {

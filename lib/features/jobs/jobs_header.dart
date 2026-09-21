@@ -520,10 +520,7 @@ const double _kExperienceOverflowWidth = 28;
       (sum, width) => sum + math.min(width, minChipWidth),
     );
     if (floor > space) continue;
-    return (
-      visible: k,
-      maxChipWidth: _waterLevel(widths, space, maxChipWidth),
-    );
+    return (visible: k, maxChipWidth: _waterLevel(widths, space, maxChipWidth));
   }
   return (visible: 0, maxChipWidth: maxChipWidth);
 }

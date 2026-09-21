@@ -310,9 +310,8 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                             fillWhenActive: true,
                             onTap: widget.readOnly
                                 ? () {}
-                                : () => _save(
-                                    _current.copyWith(status: status),
-                                  ),
+                                : () =>
+                                      _save(_current.copyWith(status: status)),
                           ),
                           const SizedBox(width: 6),
                         ],

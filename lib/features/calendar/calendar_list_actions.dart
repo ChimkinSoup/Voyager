@@ -178,7 +178,8 @@ Future<bool> deleteCalendarList(
   try {
     if (choice == DeleteContainerChoice.deleteAll && eventCount > 0) {
       await repo.softDeleteEventsInCalendar(calendar.id);
-    } else if (choice == DeleteContainerChoice.moveToDefault && eventCount > 0) {
+    } else if (choice == DeleteContainerChoice.moveToDefault &&
+        eventCount > 0) {
       final fallback = allCalendars.firstWhere(
         (item) => item.id == legacyCalendarId,
         orElse: () {

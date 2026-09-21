@@ -103,7 +103,8 @@ Color calendarPanelBackgroundColor(BuildContext context) {
   // The palette's field tone — the lightest/most-forward surface tier
   // (lighter than both the app bar and card tones), so the panel fill
   // reads as clearly lifted rather than a faint tint.
-  final base = theme.inputDecorationTheme.fillColor ??
+  final base =
+      theme.inputDecorationTheme.fillColor ??
       theme.cardTheme.color ??
       theme.colorScheme.surface;
   return base.withValues(alpha: calendarPanelBackgroundOpacity);
@@ -268,11 +269,24 @@ class DayHourGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dayEvents =
-        events.where((e) => calendarEventOnDay(e, day)).toList()
-          ..sort((a, b) => a.start.compareTo(b.start));
-    final fullDayEvents = dayEvents.where((e) => e.isFullDay || DateUtils.dateOnly(e.start.toLocal()) != DateUtils.dateOnly(e.end.toLocal())).toList();
-    final timedEvents = dayEvents.where((e) => !e.isFullDay && DateUtils.dateOnly(e.start.toLocal()) == DateUtils.dateOnly(e.end.toLocal())).toList();
+    final dayEvents = events.where((e) => calendarEventOnDay(e, day)).toList()
+      ..sort((a, b) => a.start.compareTo(b.start));
+    final fullDayEvents = dayEvents
+        .where(
+          (e) =>
+              e.isFullDay ||
+              DateUtils.dateOnly(e.start.toLocal()) !=
+                  DateUtils.dateOnly(e.end.toLocal()),
+        )
+        .toList();
+    final timedEvents = dayEvents
+        .where(
+          (e) =>
+              !e.isFullDay &&
+              DateUtils.dateOnly(e.start.toLocal()) ==
+                  DateUtils.dateOnly(e.end.toLocal()),
+        )
+        .toList();
     final dayTodos = calendarTodoMarkersForDay(todoMarkers, day);
 
     return Column(
@@ -756,9 +770,7 @@ class _MonthGrid extends StatelessWidget {
                 MonthTitleHeader.resolveTitleStyle(context),
               ) +
               MonthTitleHeader.titleGap +
-              WeekdayHeaderRow.totalHeight(
-                calendarWeekdayLabelStyle(context),
-              );
+              WeekdayHeaderRow.totalHeight(calendarWeekdayLabelStyle(context));
 
     return Card(
       margin: EdgeInsets.zero,
@@ -861,19 +873,19 @@ class _WeekGrid extends StatelessWidget {
       elevation: 0,
       shape: const RoundedRectangleBorder(side: BorderSide.none),
       child: CalendarWeekTimeline(
-      weekStart: start,
-      events: events,
-      todoMarkers: todoMarkers,
-      weekStartsMonday: weekStartsMonday,
-      scrollController: scrollController,
-      onEventTap: onEventTap ?? (_) {},
-      onTodoTap: onTodoTap ?? (_) {},
-      onSlotTap: onSlotTap ?? (_, _) {},
-      entryMenuBuilder: entryMenuBuilder,
-      editingEventId: editingEventId,
-      entryFadeEnabled: entryFadeEnabled,
-      weekdayAccentColor: accentColor,
-      workoutDays: workoutDays,
+        weekStart: start,
+        events: events,
+        todoMarkers: todoMarkers,
+        weekStartsMonday: weekStartsMonday,
+        scrollController: scrollController,
+        onEventTap: onEventTap ?? (_) {},
+        onTodoTap: onTodoTap ?? (_) {},
+        onSlotTap: onSlotTap ?? (_, _) {},
+        entryMenuBuilder: entryMenuBuilder,
+        editingEventId: editingEventId,
+        entryFadeEnabled: entryFadeEnabled,
+        weekdayAccentColor: accentColor,
+        workoutDays: workoutDays,
       ),
     );
   }
@@ -989,7 +1001,8 @@ class _YearGrid extends StatelessWidget {
                     textAlign: TextAlign.center,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    textHeightBehavior: MonthTitleHeader.titleTextHeightBehavior,
+                    textHeightBehavior:
+                        MonthTitleHeader.titleTextHeightBehavior,
                   ),
                   const SizedBox(height: MonthTitleHeader.titleGap),
                   WeekdayHeaderRow(
