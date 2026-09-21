@@ -231,43 +231,44 @@ void main() {
     expect(_controlBar(tester).multiSelect, isFalse);
   });
 
-  testWidgets('visiting a deck swaps to it without passing through the library', (
-    tester,
-  ) async {
-    _useDesktopSurface(tester);
+  testWidgets(
+    'visiting a deck swaps to it without passing through the library',
+    (tester) async {
+      _useDesktopSurface(tester);
 
-    await _pumpHub(tester);
-    await _openDeck(tester);
-    await tester.enterText(find.byType(TextField).first, 'Mitochondria');
-    await tester.pump();
+      await _pumpHub(tester);
+      await _openDeck(tester);
+      await tester.enterText(find.byType(TextField).first, 'Mitochondria');
+      await tester.pump();
 
-    // What a linked deck's "Visit" and a name under "Included in" both call.
-    tester
-        .widget<StudyDeckWorkbenchPage>(find.byType(StudyDeckWorkbenchPage))
-        .onOpenDeck(_FakeStudyRepository._decks[1]);
+      // What a linked deck's "Visit" and a name under "Included in" both call.
+      tester
+          .widget<StudyDeckWorkbenchPage>(find.byType(StudyDeckWorkbenchPage))
+          .onOpenDeck(_FakeStudyRepository._decks[1]);
 
-    // Every frame of the hop keeps the Workbench fully covering the Hub —
-    // zooming back out would fade it towards the library first.
-    for (var frame = 0; frame < 40; frame++) {
-      await tester.pump(const Duration(milliseconds: 16));
-      final opacity = tester.widget<Opacity>(
-        find
-            .ancestor(
-              of: find.byType(StudyDeckWorkbenchPage),
-              matching: find.byType(Opacity),
-            )
-            .first,
-      );
-      expect(opacity.opacity, 1, reason: 'frame $frame');
-    }
+      // Every frame of the hop keeps the Workbench fully covering the Hub —
+      // zooming back out would fade it towards the library first.
+      for (var frame = 0; frame < 40; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        final opacity = tester.widget<Opacity>(
+          find
+              .ancestor(
+                of: find.byType(StudyDeckWorkbenchPage),
+                matching: find.byType(Opacity),
+              )
+              .first,
+        );
+        expect(opacity.opacity, 1, reason: 'frame $frame');
+      }
 
-    expect(find.text('Benzene'), findsOneWidget);
-    // Swapped in place, so the page is remounted rather than reused: the
-    // search typed into Biology does not carry over into Chemistry's field.
-    final field = tester.widget<TextField>(find.byType(TextField).first);
-    expect(field.controller?.text ?? '', '');
-    expect(_controlBar(tester).query, '');
-  });
+      expect(find.text('Benzene'), findsOneWidget);
+      // Swapped in place, so the page is remounted rather than reused: the
+      // search typed into Biology does not carry over into Chemistry's field.
+      final field = tester.widget<TextField>(find.byType(TextField).first);
+      expect(field.controller?.text ?? '', '');
+      expect(_controlBar(tester).query, '');
+    },
+  );
 
   testWidgets('a selection abandoned in one deck cannot delete from another', (
     tester,

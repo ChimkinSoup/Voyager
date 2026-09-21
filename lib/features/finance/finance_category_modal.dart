@@ -218,10 +218,7 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
                 onSubmitted: (_) => _save(),
               ),
               const SizedBox(height: 18),
-              Text(
-                'Tags in this category',
-                style: theme.textTheme.labelMedium,
-              ),
+              Text('Tags in this category', style: theme.textTheme.labelMedium),
               const SizedBox(height: 8),
               if (tags.isEmpty)
                 Text(
@@ -237,8 +234,10 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
                   children: [
                     for (final tag in tags)
                       FilterChip(
-                        label: Text('#$tag',
-                            style: const TextStyle(fontSize: 12)),
+                        label: Text(
+                          '#$tag',
+                          style: const TextStyle(fontSize: 12),
+                        ),
                         selected: _selectedTags.contains(tag),
                         visualDensity: VisualDensity.compact,
                         selectedColor: accent.withValues(alpha: 0.22),

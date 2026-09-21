@@ -70,7 +70,10 @@ Finder _gradeButton(String label) =>
 bool _gradingButtonsEnabled(WidgetTester tester) => !tester
     .widget<IgnorePointer>(
       find
-          .ancestor(of: _gradeButton('Fail'), matching: find.byType(IgnorePointer))
+          .ancestor(
+            of: _gradeButton('Fail'),
+            matching: find.byType(IgnorePointer),
+          )
           .first,
     )
     .ignoring;

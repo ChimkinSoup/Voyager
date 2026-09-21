@@ -41,9 +41,7 @@ void main() {
         await repo.hardDeleteEntry(target.id);
       }
       // ignore: avoid_print
-      print(
-        '${target.title} (${target.id}): localDeleted=${existing != null}',
-      );
+      print('${target.title} (${target.id}): localDeleted=${existing != null}');
     }
   });
 }

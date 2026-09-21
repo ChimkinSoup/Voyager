@@ -26,10 +26,7 @@ TodoTask _task({
   );
 }
 
-List<TodoTask> _sortedAfterBatch(
-  List<TodoTask> active,
-  TodoSortBatch batch,
-) {
+List<TodoTask> _sortedAfterBatch(List<TodoTask> active, TodoSortBatch batch) {
   final byId = {for (final task in active) task.id: task};
   for (final task in batch.tasks) {
     byId[task.id] = task;
@@ -75,28 +72,30 @@ void main() {
     expect(sorted.map((t) => t.id).toList(), ['a', 'c', 'b']);
   });
 
-  test('unstarring dated task inserts chronologically among unstarred dated',
-      () {
-    final dueEarly = DateTime.utc(2026, 6, 1, 9);
-    final dueLate = DateTime.utc(2026, 6, 3, 9);
-    final dueMiddle = DateTime.utc(2026, 6, 2, 9);
-    final active = [
-      _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: dueEarly),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase + 1, dueDate: dueLate),
-      _task(
-        id: 'c',
-        starred: true,
-        sortOrder: 0,
-        dueDate: dueMiddle,
-        dueDateSetAt: utcNow(),
-      ),
-    ];
+  test(
+    'unstarring dated task inserts chronologically among unstarred dated',
+    () {
+      final dueEarly = DateTime.utc(2026, 6, 1, 9);
+      final dueLate = DateTime.utc(2026, 6, 3, 9);
+      final dueMiddle = DateTime.utc(2026, 6, 2, 9);
+      final active = [
+        _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: dueEarly),
+        _task(id: 'b', sortOrder: unstarredSortOrderBase + 1, dueDate: dueLate),
+        _task(
+          id: 'c',
+          starred: true,
+          sortOrder: 0,
+          dueDate: dueMiddle,
+          dueDateSetAt: utcNow(),
+        ),
+      ];
 
-    final batch = applyStarToggle(active[2], active);
-    final sorted = _sortedAfterBatch(active, batch);
+      final batch = applyStarToggle(active[2], active);
+      final sorted = _sortedAfterBatch(active, batch);
 
-    expect(sorted.map((t) => t.id).toList(), ['a', 'c', 'b']);
-  });
+      expect(sorted.map((t) => t.id).toList(), ['a', 'c', 'b']);
+    },
+  );
 
   test('unstarring undated task moves to top of undated section', () {
     final due = DateTime.utc(2026, 6, 1, 9);
@@ -106,12 +105,7 @@ void main() {
       _task(id: 'c', sortOrder: unstarredSortOrderBase + 1),
     ];
 
-    final batch = applyStarToggle(
-      active[0].copyWith(
-        starred: true,
-      ),
-      active,
-    );
+    final batch = applyStarToggle(active[0].copyWith(starred: true), active);
     final sorted = _sortedAfterBatch(active, batch);
 
     final unstarred = sorted.where((t) => !t.starred).toList();
@@ -126,11 +120,7 @@ void main() {
     final active = [
       _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: due),
       _task(id: 'b', sortOrder: unstarredSortOrderBase + 5),
-      _task(
-        id: 'c',
-        starred: true,
-        sortOrder: 0,
-      ),
+      _task(id: 'c', starred: true, sortOrder: 0),
     ];
 
     final batch = applyStarToggle(active[2], active);
@@ -139,59 +129,61 @@ void main() {
     expect(sorted.map((t) => t.id).toList(), ['a', 'c', 'b']);
   });
 
-  test('dragging dated unstarred into starred snaps to top of unstarred group',
-      () {
-    final dueEarly = DateTime.utc(2026, 6, 1, 9);
-    final dueLate = DateTime.utc(2026, 6, 3, 9);
-    final active = [
-      _task(id: 'a', starred: true, sortOrder: 0),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase, dueDate: dueEarly),
-      _task(
-        id: 'c',
-        sortOrder: unstarredSortOrderBase + 1,
-        dueDate: dueLate,
-      ),
-    ];
+  test(
+    'dragging dated unstarred into starred snaps to top of unstarred group',
+    () {
+      final dueEarly = DateTime.utc(2026, 6, 1, 9);
+      final dueLate = DateTime.utc(2026, 6, 3, 9);
+      final active = [
+        _task(id: 'a', starred: true, sortOrder: 0),
+        _task(id: 'b', sortOrder: unstarredSortOrderBase, dueDate: dueEarly),
+        _task(id: 'c', sortOrder: unstarredSortOrderBase + 1, dueDate: dueLate),
+      ];
 
-    final batch = applyReorder(active, 2, 0);
-    expect(batch, isNotNull);
-    final sorted = _sortedAfterBatch(active, batch!);
-    expect(sorted.map((t) => t.id).toList(), ['a', 'c', 'b']);
-  });
+      final batch = applyReorder(active, 2, 0);
+      expect(batch, isNotNull);
+      final sorted = _sortedAfterBatch(active, batch!);
+      expect(sorted.map((t) => t.id).toList(), ['a', 'c', 'b']);
+    },
+  );
 
-  test('dragging undated unstarred into starred snaps below due-dated tasks',
-      () {
-    final due = DateTime.utc(2026, 6, 1, 9);
-    final active = [
-      _task(id: 'a', starred: true, sortOrder: 0),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase, dueDate: due),
-      _task(id: 'c', sortOrder: unstarredSortOrderBase + 2),
-    ];
+  test(
+    'dragging undated unstarred into starred snaps below due-dated tasks',
+    () {
+      final due = DateTime.utc(2026, 6, 1, 9);
+      final active = [
+        _task(id: 'a', starred: true, sortOrder: 0),
+        _task(id: 'b', sortOrder: unstarredSortOrderBase, dueDate: due),
+        _task(id: 'c', sortOrder: unstarredSortOrderBase + 2),
+      ];
 
-    final batch = applyReorder(active, 2, 0);
-    expect(batch, isNotNull);
-    final sorted = _sortedAfterBatch(active, batch!);
+      final batch = applyReorder(active, 2, 0);
+      expect(batch, isNotNull);
+      final sorted = _sortedAfterBatch(active, batch!);
 
-    final unstarred = sorted.where((t) => !t.starred).toList();
-    expect(unstarred.map((t) => t.id).toList(), ['b', 'c']);
-    expect(unstarred.last.dueDate, isNull);
-  });
+      final unstarred = sorted.where((t) => !t.starred).toList();
+      expect(unstarred.map((t) => t.id).toList(), ['b', 'c']);
+      expect(unstarred.last.dueDate, isNull);
+    },
+  );
 
-  test('dragging undated unstarred above dated snaps to top of undated section',
-      () {
-    final due = DateTime.utc(2026, 6, 1, 9);
-    final active = [
-      _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: due),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase + 1),
-      _task(id: 'c', sortOrder: unstarredSortOrderBase + 2),
-    ];
+  test(
+    'dragging undated unstarred above dated snaps to top of undated section',
+    () {
+      final due = DateTime.utc(2026, 6, 1, 9);
+      final active = [
+        _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: due),
+        _task(id: 'b', sortOrder: unstarredSortOrderBase + 1),
+        _task(id: 'c', sortOrder: unstarredSortOrderBase + 2),
+      ];
 
-    final batch = applyReorder(active, 2, 0);
-    expect(batch, isNotNull);
-    final sorted = _sortedAfterBatch(active, batch!);
+      final batch = applyReorder(active, 2, 0);
+      expect(batch, isNotNull);
+      final sorted = _sortedAfterBatch(active, batch!);
 
-    expect(sorted.map((t) => t.id).toList(), ['a', 'c', 'b']);
-  });
+      expect(sorted.map((t) => t.id).toList(), ['a', 'c', 'b']);
+    },
+  );
 
   test('reorder clamps starred task above unstarred section', () {
     final active = [
@@ -206,26 +198,29 @@ void main() {
     expect(sorted.map((t) => t.id).toList(), ['b', 'a', 'c']);
   });
 
-  test('setting due date inserts chronologically among unstarred dated tasks', () {
-    final dueEarly = DateTime.utc(2026, 6, 1, 9);
-    final dueLate = DateTime.utc(2026, 6, 3, 9);
-    final dueMiddle = DateTime.utc(2026, 6, 2, 9);
-    final active = [
-      _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: dueEarly),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase + 1, dueDate: dueLate),
-      _task(id: 'c', sortOrder: unstarredSortOrderBase + 2),
-    ];
+  test(
+    'setting due date inserts chronologically among unstarred dated tasks',
+    () {
+      final dueEarly = DateTime.utc(2026, 6, 1, 9);
+      final dueLate = DateTime.utc(2026, 6, 3, 9);
+      final dueMiddle = DateTime.utc(2026, 6, 2, 9);
+      final active = [
+        _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: dueEarly),
+        _task(id: 'b', sortOrder: unstarredSortOrderBase + 1, dueDate: dueLate),
+        _task(id: 'c', sortOrder: unstarredSortOrderBase + 2),
+      ];
 
-    final batch = applyDueDateChange(
-      active[2],
-      active,
-      dueDate: dueMiddle,
-      clearDueDate: false,
-    );
-    final sorted = _sortedAfterBatch(active, batch);
+      final batch = applyDueDateChange(
+        active[2],
+        active,
+        dueDate: dueMiddle,
+        clearDueDate: false,
+      );
+      final sorted = _sortedAfterBatch(active, batch);
 
-    expect(sorted.map((t) => t.id).toList(), ['a', 'c', 'b']);
-  });
+      expect(sorted.map((t) => t.id).toList(), ['a', 'c', 'b']);
+    },
+  );
 
   test('same due date orders by most recently dated first', () {
     final due = DateTime.utc(2026, 6, 1, 9);
@@ -298,11 +293,7 @@ void main() {
     final active = sortTodoTasks([
       _task(id: 'b', sortOrder: unstarredSortOrderBase),
       _task(id: 'c', sortOrder: unstarredSortOrderBase + 1),
-      _task(
-        id: 'a',
-        sortOrder: unstarredSortOrderBase + 2,
-        dueDate: due,
-      ),
+      _task(id: 'a', sortOrder: unstarredSortOrderBase + 2, dueDate: due),
     ]);
 
     final batch = applyReorder(active, 2, 0);
@@ -378,18 +369,21 @@ void main() {
     expect(sorted.map((t) => t.id).toList(), ['a', 'c', 'b']);
   });
 
-  test('moving undated task to another list goes to top of undated section', () {
-    final due = DateTime.utc(2026, 6, 1, 9);
-    final dest = [
-      _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: due),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase + 2),
-    ];
-    final moved = _task(id: 'c', sortOrder: 0);
+  test(
+    'moving undated task to another list goes to top of undated section',
+    () {
+      final due = DateTime.utc(2026, 6, 1, 9);
+      final dest = [
+        _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: due),
+        _task(id: 'b', sortOrder: unstarredSortOrderBase + 2),
+      ];
+      final moved = _task(id: 'c', sortOrder: 0);
 
-    final batch = applyTaskListMove(moved, dest);
-    final sorted = _sortedAfterBatch([...dest, moved], batch);
-    expect(sorted.map((t) => t.id).toList(), ['a', 'c', 'b']);
-  });
+      final batch = applyTaskListMove(moved, dest);
+      final sorted = _sortedAfterBatch([...dest, moved], batch);
+      expect(sorted.map((t) => t.id).toList(), ['a', 'c', 'b']);
+    },
+  );
 
   test('move to bottom sends unstarred undated task below its siblings', () {
     final due = DateTime.utc(2026, 6, 1, 9);
@@ -490,19 +484,26 @@ void main() {
       // base, so sorting the merged set on sortOrder ran dated → undated →
       // dated. Nothing may come between the two sections now.
       final tasks = [
-        fromList('a', id: 'a-dated-1',
-            sortOrder: unstarredSortOrderBase,
-            dueDate: DateTime.utc(2026, 6, 1)),
-        fromList('a', id: 'a-undated',
-            sortOrder: unstarredSortOrderBase + 1),
-        fromList('b', id: 'b-dated',
-            sortOrder: unstarredSortOrderBase,
-            dueDate: DateTime.utc(2026, 6, 2)),
-        fromList('b', id: 'b-undated',
-            sortOrder: unstarredSortOrderBase + 1),
-        fromList('a', id: 'a-dated-2',
-            sortOrder: unstarredSortOrderBase + 2,
-            dueDate: DateTime.utc(2026, 6, 3)),
+        fromList(
+          'a',
+          id: 'a-dated-1',
+          sortOrder: unstarredSortOrderBase,
+          dueDate: DateTime.utc(2026, 6, 1),
+        ),
+        fromList('a', id: 'a-undated', sortOrder: unstarredSortOrderBase + 1),
+        fromList(
+          'b',
+          id: 'b-dated',
+          sortOrder: unstarredSortOrderBase,
+          dueDate: DateTime.utc(2026, 6, 2),
+        ),
+        fromList('b', id: 'b-undated', sortOrder: unstarredSortOrderBase + 1),
+        fromList(
+          'a',
+          id: 'a-dated-2',
+          sortOrder: unstarredSortOrderBase + 2,
+          dueDate: DateTime.utc(2026, 6, 3),
+        ),
       ];
 
       final sorted = resolveGlobalTaskOrder(tasks);
@@ -521,10 +522,11 @@ void main() {
         fromList('a', id: 'early', dueDate: DateTime.utc(2026, 6, 1)),
         fromList('c', id: 'middle', dueDate: DateTime.utc(2026, 6, 4)),
       ];
-      expect(
-        resolveGlobalTaskOrder(tasks).map((t) => t.id).toList(),
-        ['early', 'middle', 'late'],
-      );
+      expect(resolveGlobalTaskOrder(tasks).map((t) => t.id).toList(), [
+        'early',
+        'middle',
+        'late',
+      ]);
     });
 
     test('starred tasks lead, and are themselves dated-then-undated', () {
@@ -532,13 +534,19 @@ void main() {
         fromList('a', id: 'plain-dated', dueDate: DateTime.utc(2026, 6, 1)),
         fromList('b', id: 'star-undated', starred: true),
         fromList('a', id: 'plain-undated'),
-        fromList('c', id: 'star-dated',
-            starred: true, dueDate: DateTime.utc(2026, 6, 5)),
+        fromList(
+          'c',
+          id: 'star-dated',
+          starred: true,
+          dueDate: DateTime.utc(2026, 6, 5),
+        ),
       ];
-      expect(
-        resolveGlobalTaskOrder(tasks).map((t) => t.id).toList(),
-        ['star-dated', 'star-undated', 'plain-dated', 'plain-undated'],
-      );
+      expect(resolveGlobalTaskOrder(tasks).map((t) => t.id).toList(), [
+        'star-dated',
+        'star-undated',
+        'plain-dated',
+        'plain-undated',
+      ]);
     });
 
     test('undated tasks run newest-created first', () {
@@ -547,23 +555,30 @@ void main() {
         fromList('b', id: 'newest', createdAt: DateTime.utc(2026, 3, 1)),
         fromList('a', id: 'middle', createdAt: DateTime.utc(2026, 2, 1)),
       ];
-      expect(
-        resolveGlobalTaskOrder(tasks).map((t) => t.id).toList(),
-        ['newest', 'middle', 'oldest'],
-      );
+      expect(resolveGlobalTaskOrder(tasks).map((t) => t.id).toList(), [
+        'newest',
+        'middle',
+        'oldest',
+      ]);
     });
 
     test('the order does not depend on the order it was handed', () {
       // The user saw the bug appear only when switching in from certain lists
       // — i.e. it depended on the incoming order. It must not.
       final tasks = [
-        fromList('a', id: 'd1',
-            dueDate: DateTime.utc(2026, 6, 1),
-            createdAt: DateTime.utc(2026, 1, 1)),
+        fromList(
+          'a',
+          id: 'd1',
+          dueDate: DateTime.utc(2026, 6, 1),
+          createdAt: DateTime.utc(2026, 1, 1),
+        ),
         fromList('b', id: 'u1', createdAt: DateTime.utc(2026, 1, 2)),
-        fromList('c', id: 'd2',
-            dueDate: DateTime.utc(2026, 6, 2),
-            createdAt: DateTime.utc(2026, 1, 3)),
+        fromList(
+          'c',
+          id: 'd2',
+          dueDate: DateTime.utc(2026, 6, 2),
+          createdAt: DateTime.utc(2026, 1, 3),
+        ),
         fromList('a', id: 'u2', createdAt: DateTime.utc(2026, 1, 4)),
       ];
       final expected = resolveGlobalTaskOrder(tasks).map((t) => t.id).toList();
@@ -585,17 +600,30 @@ void main() {
       // from here must not move anything here. sortOrder says a1 leads; the
       // derived order says a2 does, because it was created later.
       final tasks = [
-        fromList('a', id: 'a1', sortOrder: unstarredSortOrderBase,
-            createdAt: DateTime.utc(2026, 1, 5)),
-        fromList('a', id: 'a2', sortOrder: unstarredSortOrderBase + 1,
-            createdAt: DateTime.utc(2026, 1, 9)),
-        fromList('b', id: 'b1', sortOrder: unstarredSortOrderBase,
-            createdAt: DateTime.utc(2026, 1, 7)),
+        fromList(
+          'a',
+          id: 'a1',
+          sortOrder: unstarredSortOrderBase,
+          createdAt: DateTime.utc(2026, 1, 5),
+        ),
+        fromList(
+          'a',
+          id: 'a2',
+          sortOrder: unstarredSortOrderBase + 1,
+          createdAt: DateTime.utc(2026, 1, 9),
+        ),
+        fromList(
+          'b',
+          id: 'b1',
+          sortOrder: unstarredSortOrderBase,
+          createdAt: DateTime.utc(2026, 1, 7),
+        ),
       ];
-      expect(
-        resolveGlobalTaskOrder(tasks).map((t) => t.id).toList(),
-        ['a2', 'b1', 'a1'],
-      );
+      expect(resolveGlobalTaskOrder(tasks).map((t) => t.id).toList(), [
+        'a2',
+        'b1',
+        'a1',
+      ]);
     });
 
     test('a newly created task leads its section', () {
@@ -619,15 +647,14 @@ void main() {
         fromList('a', id: 'zzz', createdAt: at),
         fromList('b', id: 'aaa', createdAt: at),
       ];
-      expect(
-        resolveGlobalTaskOrder(tasks).map((t) => t.id).toList(),
-        ['aaa', 'zzz'],
-      );
-      expect(
-        resolveGlobalTaskOrder(tasks.reversed).map((t) => t.id).toList(),
-        ['aaa', 'zzz'],
-      );
+      expect(resolveGlobalTaskOrder(tasks).map((t) => t.id).toList(), [
+        'aaa',
+        'zzz',
+      ]);
+      expect(resolveGlobalTaskOrder(tasks.reversed).map((t) => t.id).toList(), [
+        'aaa',
+        'zzz',
+      ]);
     });
   });
-
 }

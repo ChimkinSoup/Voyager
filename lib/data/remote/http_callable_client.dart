@@ -20,9 +20,8 @@ class HttpCallableClient {
   final FirebaseAuth _auth;
   final http.Client _http;
 
-  Uri _uriFor(String name) => Uri.parse(
-    'https://$region-$projectId.cloudfunctions.net/$name',
-  );
+  Uri _uriFor(String name) =>
+      Uri.parse('https://$region-$projectId.cloudfunctions.net/$name');
 
   Future<Map<String, dynamic>> call(
     String name,

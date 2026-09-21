@@ -103,7 +103,10 @@ void main() {
         idOf: (s) => s.id,
         storedPositions:
             stored ??
-            {for (var i = 0; i < before.length; i++) before[i].id: i.toDouble()},
+            {
+              for (var i = 0; i < before.length; i++)
+                before[i].id: i.toDouble(),
+            },
       );
     }
 
@@ -145,37 +148,46 @@ void main() {
 
     tearDown(() => db.close());
 
-    test('an edit round-trips in order, and an emptied list stays empty',
-        () async {
-      await repo.applySnippetEdit(const [], const [_c, _a, _b]);
-      expect((await repo.getSettings()).snippets, const [_c, _a, _b]);
+    test(
+      'an edit round-trips in order, and an emptied list stays empty',
+      () async {
+        await repo.applySnippetEdit(const [], const [_c, _a, _b]);
+        expect((await repo.getSettings()).snippets, const [_c, _a, _b]);
 
-      await repo.applySnippetEdit(const [_c, _a, _b], const []);
-      expect((await repo.getSettings()).snippets, isEmpty);
-      expect(await repo.getSnippetRecords(includeDeleted: true), hasLength(3));
-    });
+        await repo.applySnippetEdit(const [_c, _a, _b], const []);
+        expect((await repo.getSettings()).snippets, isEmpty);
+        expect(
+          await repo.getSnippetRecords(includeDeleted: true),
+          hasLength(3),
+        );
+      },
+    );
 
-    test('saving settings read before a snippet arrived keeps that snippet',
-        () async {
-      final stale = await repo.getSettings();
-      await repo.applySnippetEdit(const [], const [_a]);
+    test(
+      'saving settings read before a snippet arrived keeps that snippet',
+      () async {
+        final stale = await repo.getSettings();
+        await repo.applySnippetEdit(const [], const [_a]);
 
-      await repo.saveSettings(stale.copyWith(journalEntryListWidth: 300));
+        await repo.saveSettings(stale.copyWith(journalEntryListWidth: 300));
 
-      expect((await repo.getSettings()).snippets, const [_a]);
-    });
+        expect((await repo.getSettings()).snippets, const [_a]);
+      },
+    );
 
-    test('an edit made from a stale list only applies what it changed',
-        () async {
-      await repo.applySnippetEdit(const [], const [_a]);
-      // Another device's snippet lands after this editor read the list.
-      await repo.applySnippetEdit(const [_a], const [_a, _b]);
+    test(
+      'an edit made from a stale list only applies what it changed',
+      () async {
+        await repo.applySnippetEdit(const [], const [_a]);
+        // Another device's snippet lands after this editor read the list.
+        await repo.applySnippetEdit(const [_a], const [_a, _b]);
 
-      final renamed = _a.copyWith(replacement: 'changed');
-      await repo.applySnippetEdit(const [_a], [renamed]);
+        final renamed = _a.copyWith(replacement: 'changed');
+        await repo.applySnippetEdit(const [_a], [renamed]);
 
-      expect((await repo.getSettings()).snippets, [renamed, _b]);
-    });
+        expect((await repo.getSettings()).snippets, [renamed, _b]);
+      },
+    );
   });
 
   group('two devices', () {
@@ -207,24 +219,28 @@ void main() {
       expect(await deviceB.snippets(), unorderedEquals(const [_a, _b]));
     });
 
-    test("changing a setting on a stale device keeps the other's snippet",
-        () async {
-      await deviceB.settings.applySnippetEdit(const [], const [_b]);
-      await deviceB.settle();
+    test(
+      "changing a setting on a stale device keeps the other's snippet",
+      () async {
+        await deviceB.settings.applySnippetEdit(const [], const [_b]);
+        await deviceB.settle();
 
-      final stale = await deviceA.settings.getSettings();
-      await deviceA.settings.saveSettings(
-        stale.copyWith(showDreamStatistics: !stale.showDreamStatistics),
-      );
-      await deviceA.service.pushSettings(await deviceA.settings.getSettings());
-      await deviceA.settle();
+        final stale = await deviceA.settings.getSettings();
+        await deviceA.settings.saveSettings(
+          stale.copyWith(showDreamStatistics: !stale.showDreamStatistics),
+        );
+        await deviceA.service.pushSettings(
+          await deviceA.settings.getSettings(),
+        );
+        await deviceA.settle();
 
-      await deviceB.service.pullSettings();
-      await deviceB.service.pullSnippets();
-      await deviceA.service.pullSnippets();
-      expect(await deviceB.snippets(), const [_b]);
-      expect(await deviceA.snippets(), const [_b]);
-    });
+        await deviceB.service.pullSettings();
+        await deviceB.service.pullSnippets();
+        await deviceA.service.pullSnippets();
+        expect(await deviceB.snippets(), const [_b]);
+        expect(await deviceA.snippets(), const [_b]);
+      },
+    );
 
     test('a deletion reaches the other device', () async {
       await deviceA.settings.applySnippetEdit(const [], const [_a, _b]);
@@ -254,27 +270,29 @@ void main() {
       );
     });
 
-    test('an adopted snippet defers to a record another device already has',
-        () async {
-      await deviceB.settings.applySnippetEdit(const [], const [_a]);
-      await deviceB.settings.applySnippetEdit(const [_a], const []);
-      await deviceB.settle();
-      // An older build still carries the deleted snippet in its list.
-      await syncRepo.upsertRemoteSettings({
-        'settingsUpdatedAt': DateTime.utc(2030).toIso8601String(),
-        'snippets': [_a.toJson()],
-      });
+    test(
+      'an adopted snippet defers to a record another device already has',
+      () async {
+        await deviceB.settings.applySnippetEdit(const [], const [_a]);
+        await deviceB.settings.applySnippetEdit(const [_a], const []);
+        await deviceB.settle();
+        // An older build still carries the deleted snippet in its list.
+        await syncRepo.upsertRemoteSettings({
+          'settingsUpdatedAt': DateTime.utc(2030).toIso8601String(),
+          'snippets': [_a.toJson()],
+        });
 
-      await deviceA.service.pullSettings();
-      await deviceA.settle();
+        await deviceA.service.pullSettings();
+        await deviceA.settle();
 
-      expect(await deviceA.snippets(), isEmpty);
-      final remote = await syncRepo.getDocument(
-        FirestoreCollections.snippets,
-        'a',
-      );
-      expect(remote?['deletedAt'], isNotNull);
-    });
+        expect(await deviceA.snippets(), isEmpty);
+        final remote = await syncRepo.getDocument(
+          FirestoreCollections.snippets,
+          'a',
+        );
+        expect(remote?['deletedAt'], isNotNull);
+      },
+    );
   });
 
   test('mapping a record round-trips, and an unusable one is skipped', () {
@@ -291,8 +309,10 @@ void main() {
     expect(merged.version, 3);
 
     expect(mergeSnippetFromRemote({'version': 4}, 'x'), isNull);
-    expect(settingsSyncPayload(const AppSettings()).containsKey('snippets'),
-        isFalse);
+    expect(
+      settingsSyncPayload(const AppSettings()).containsKey('snippets'),
+      isFalse,
+    );
   });
 
   test('the v115 migration moves both lists into their tables', () async {

@@ -78,10 +78,7 @@ class JournalBookmarkFlag extends StatelessWidget {
       child: ClipRect(
         child: Transform.translate(
           offset: const Offset(0, -4.5),
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: shaded,
-          ),
+          child: Align(alignment: Alignment.topCenter, child: shaded),
         ),
       ),
     );

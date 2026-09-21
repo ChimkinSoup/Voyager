@@ -185,13 +185,15 @@ void main() {
     expect(
       repo.liveLogs,
       isEmpty,
-      reason: 'the grade was taken back, so the review it logged stops '
+      reason:
+          'the grade was taken back, so the review it logged stops '
           'counting towards "reviewed today"',
     );
     expect(
       repo.logRows[logId]?.deletedAt,
       isNotNull,
-      reason: 'tombstoned rather than dropped, so the removal reaches the '
+      reason:
+          'tombstoned rather than dropped, so the removal reaches the '
           'other devices',
     );
 
@@ -203,7 +205,8 @@ void main() {
     expect(
       repo.logRows,
       hasLength(1),
-      reason: 'a redo revives the row the grade originally wrote rather than '
+      reason:
+          'a redo revives the row the grade originally wrote rather than '
           'writing a second one',
     );
     expect(repo.liveLogs.single.id, logId);

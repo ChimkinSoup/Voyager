@@ -11,9 +11,6 @@ void main() {
   });
 
   test('signIn requires configured client id', () async {
-    expect(
-      DesktopGoogleOAuth().signIn(),
-      throwsA(isA<StateError>()),
-    );
+    expect(DesktopGoogleOAuth().signIn(), throwsA(isA<StateError>()));
   });
 }

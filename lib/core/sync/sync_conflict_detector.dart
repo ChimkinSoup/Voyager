@@ -136,11 +136,15 @@ class SyncConflictDetector {
     }
   }
 
-  bool _isHardMetadataCollision(JournalEntry local, Map<String, dynamic> remote) {
+  bool _isHardMetadataCollision(
+    JournalEntry local,
+    Map<String, dynamic> remote,
+  ) {
     final remoteVersion = parseVersion(remote);
     final remoteUpdated = parseFirestoreDate(remote['updatedAt']);
     if (local.version != remoteVersion) return false;
-    if (remoteUpdated == null || !local.updatedAt.isAtSameMomentAs(remoteUpdated)) {
+    if (remoteUpdated == null ||
+        !local.updatedAt.isAtSameMomentAs(remoteUpdated)) {
       return false;
     }
     final remoteTitle = remote['title'] as String? ?? '';
@@ -153,22 +157,30 @@ class SyncConflictDetector {
         local.weatherIcon != remote['weatherIcon'];
   }
 
-  bool _isHardDreamMetadataCollision(DreamEntry local, Map<String, dynamic> remote) {
+  bool _isHardDreamMetadataCollision(
+    DreamEntry local,
+    Map<String, dynamic> remote,
+  ) {
     final remoteVersion = parseVersion(remote);
     final remoteUpdated = parseFirestoreDate(remote['updatedAt']);
     if (local.version != remoteVersion) return false;
-    if (remoteUpdated == null || !local.updatedAt.isAtSameMomentAs(remoteUpdated)) {
+    if (remoteUpdated == null ||
+        !local.updatedAt.isAtSameMomentAs(remoteUpdated)) {
       return false;
     }
     final remoteTitle = remote['title'] as String? ?? '';
     return local.title != remoteTitle;
   }
 
-  bool _isHardTodoMetadataCollision(TodoTask local, Map<String, dynamic> remote) {
+  bool _isHardTodoMetadataCollision(
+    TodoTask local,
+    Map<String, dynamic> remote,
+  ) {
     final remoteVersion = parseVersion(remote);
     final remoteUpdated = parseFirestoreDate(remote['updatedAt']);
     if (local.version != remoteVersion) return false;
-    if (remoteUpdated == null || !local.updatedAt.isAtSameMomentAs(remoteUpdated)) {
+    if (remoteUpdated == null ||
+        !local.updatedAt.isAtSameMomentAs(remoteUpdated)) {
       return false;
     }
     return local.title != (remote['title'] as String? ?? local.title) ||

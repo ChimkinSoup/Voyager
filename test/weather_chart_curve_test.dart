@@ -4,10 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/features/shell/weather_chart_curve.dart';
 
 void main() {
-  WeatherChartCurve curveFor({
-    double width = 240,
-    double height = 120,
-  }) {
+  WeatherChartCurve curveFor({double width = 240, double height = 120}) {
     return WeatherChartCurve(
       size: Size(width, height),
       plotPadding: EdgeInsets.zero,
@@ -47,9 +44,10 @@ void main() {
       );
     }
 
-    double pathLength(Path path) => path
-        .computeMetrics()
-        .fold<double>(0, (sum, metric) => sum + metric.length);
+    double pathLength(Path path) => path.computeMetrics().fold<double>(
+      0,
+      (sum, metric) => sum + metric.length,
+    );
 
     expect(pathLength(smooth), greaterThan(pathLength(chordPath)));
   });

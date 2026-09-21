@@ -92,7 +92,9 @@ Future<T?> showContextualPopover<T>({
       accentColor: accentColor,
       tapThroughRect: _overlayRectOf(tapThroughContext, overlay),
       capturedThemes: InheritedTheme.capture(
-          from: context, to: Navigator.of(context).context),
+        from: context,
+        to: Navigator.of(context).context,
+      ),
     ),
   );
 }
@@ -133,7 +135,9 @@ Future<T?> showContextualPopoverAt<T>({
       height: height,
       accentColor: accentColor,
       capturedThemes: InheritedTheme.capture(
-          from: context, to: Navigator.of(context).context),
+        from: context,
+        to: Navigator.of(context).context,
+      ),
     ),
   );
 }
@@ -159,7 +163,8 @@ class ContextualPopoverAccentHost extends StatefulWidget {
       _ContextualPopoverAccentHostState();
 }
 
-class _ContextualPopoverAccentHostState extends State<ContextualPopoverAccentHost> {
+class _ContextualPopoverAccentHostState
+    extends State<ContextualPopoverAccentHost> {
   late Color? _accentColor;
 
   @override
@@ -201,10 +206,7 @@ class _ContextualPopoverAccentHostState extends State<ContextualPopoverAccentHos
         child: popover,
       );
     }
-    return _ContextualPopoverAccentScope(
-      setAccent: setAccent,
-      child: popover,
-    );
+    return _ContextualPopoverAccentScope(setAccent: setAccent, child: popover);
   }
 }
 
@@ -318,8 +320,11 @@ class _ContextualPopoverRoute<T> extends PopupRoute<T>
   Duration get transitionDuration => const Duration(milliseconds: 260);
 
   @override
-  Widget buildPage(BuildContext context, Animation<double> animation,
-      Animation<double> secondaryAnimation) {
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
     // The entrance below fades and scales this subtree. Both are layer
     // effects, and without a boundary of its own the popover's whole content —
     // a form's worth of fields, the glass gradient, the specular border — is

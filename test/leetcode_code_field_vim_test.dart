@@ -83,8 +83,9 @@ void main() {
     await finish(tester);
   });
 
-  testWidgets('Vim stays off in the code box when the setting is disabled',
-      (tester) async {
+  testWidgets('Vim stays off in the code box when the setting is disabled', (
+    tester,
+  ) async {
     await pumpInput(tester, vimEnabled: false, text: 'abc');
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
@@ -120,9 +121,7 @@ void main() {
     // controller's own rule rather than the Vim layer.
     const line = '    if x:  # walk the array';
     await pumpInput(tester, vimEnabled: true, text: line);
-    controller.selection = const TextSelection.collapsed(
-      offset: line.length,
-    );
+    controller.selection = const TextSelection.collapsed(offset: line.length);
     await tester.pump();
     expect(find.text('NORMAL'), findsNothing);
 
@@ -201,7 +200,6 @@ void main() {
     );
     await finish(tester);
   });
-
 
   // `x` on the last character of a line cuts the character and then clamps the
   // caret back onto the line, which is the same text-and-caret pair a
@@ -285,18 +283,20 @@ void main() {
     await finish(tester);
   });
 
-  testWidgets('Visual mode uses VimTextOverlay instead of SelectionHighlightLayer',
-      (tester) async {
-    await pumpInput(tester, vimEnabled: true, text: 'abc');
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pump();
-    expect(find.byType(SelectionHighlightLayer), findsOneWidget);
-    expect(find.byType(VimTextOverlay), findsOneWidget);
+  testWidgets(
+    'Visual mode uses VimTextOverlay instead of SelectionHighlightLayer',
+    (tester) async {
+      await pumpInput(tester, vimEnabled: true, text: 'abc');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.byType(SelectionHighlightLayer), findsOneWidget);
+      expect(find.byType(VimTextOverlay), findsOneWidget);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
-    await tester.pump();
-    expect(find.text('VISUAL'), findsOneWidget);
-    expect(find.byType(VimTextOverlay), findsOneWidget);
-    expect(find.byType(SelectionHighlightLayer), findsNothing);
-  });
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+      await tester.pump();
+      expect(find.text('VISUAL'), findsOneWidget);
+      expect(find.byType(VimTextOverlay), findsOneWidget);
+      expect(find.byType(SelectionHighlightLayer), findsNothing);
+    },
+  );
 }

@@ -111,7 +111,9 @@ class _StudyMoveModalState extends ConsumerState<_StudyMoveModal> {
                       height: 4,
                       margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                        color: theme.colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.3,
+                        ),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -133,7 +135,8 @@ class _StudyMoveModalState extends ConsumerState<_StudyMoveModal> {
                 StudyBreadcrumbRow(
                   folderStack: _stack,
                   onTapRoot: () => setState(() => _stack = []),
-                  onTapFolder: (i) => setState(() => _stack = _stack.sublist(0, i + 1)),
+                  onTapFolder: (i) =>
+                      setState(() => _stack = _stack.sublist(0, i + 1)),
                 ),
               ],
             ),
@@ -144,10 +147,17 @@ class _StudyMoveModalState extends ConsumerState<_StudyMoveModal> {
               children: [
                 for (final folder in folders)
                   ListTile(
-                    leading: Icon(PhosphorIconsRegular.folder, color: theme.colorScheme.primary),
+                    leading: Icon(
+                      PhosphorIconsRegular.folder,
+                      color: theme.colorScheme.primary,
+                    ),
                     title: Text(folder.name),
-                    trailing: const Icon(PhosphorIconsRegular.caretRight, size: 16),
-                    onTap: () => setState(() => _stack = [..._stack, folder.id]),
+                    trailing: const Icon(
+                      PhosphorIconsRegular.caretRight,
+                      size: 16,
+                    ),
+                    onTap: () =>
+                        setState(() => _stack = [..._stack, folder.id]),
                   ),
                 for (final deck in decks)
                   ListTile(
@@ -165,7 +175,9 @@ class _StudyMoveModalState extends ConsumerState<_StudyMoveModal> {
                     child: Text(
                       'No folders or decks here.',
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                     ),
                   ),

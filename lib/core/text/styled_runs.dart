@@ -12,7 +12,11 @@ typedef StyledRange = ({int start, int end, TextStyle style});
 /// [ranges] must be sorted and non-overlapping — every caller derives them
 /// from a scan of the same string, so that is free to arrange and much
 /// cheaper than a general interval merge.
-TextSpan buildStyledRuns(String text, TextStyle base, List<StyledRange> ranges) {
+TextSpan buildStyledRuns(
+  String text,
+  TextStyle base,
+  List<StyledRange> ranges,
+) {
   if (ranges.isEmpty) return TextSpan(text: text, style: base);
   final children = <InlineSpan>[];
   var cursor = 0;

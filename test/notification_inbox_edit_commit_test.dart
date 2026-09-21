@@ -90,7 +90,8 @@ void main() {
     expect(
       find.text(_grown),
       findsOneWidget,
-      reason: 'the frame straight after the commit is the one that used to '
+      reason:
+          'the frame straight after the commit is the one that used to '
           'fall back to the stored — pre-edit — text',
     );
     expect(find.text(_note), findsNothing);

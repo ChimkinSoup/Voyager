@@ -265,13 +265,12 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     // Dense fields use bodyMedium so the resting floating label fits the
     // short box (snippet Trigger/Replacement). Pin height to 1.0 so every
     // dense field — single or multi-line — shares one compact size ladder.
-    var textStyle = (widget.dense
-            ? theme.textTheme.bodyMedium
-            : theme.textTheme.bodyLarge)
-        ?.copyWith(
-          color: theme.colorScheme.onSurface,
-          height: widget.dense ? 1.0 : null,
-        );
+    var textStyle =
+        (widget.dense ? theme.textTheme.bodyMedium : theme.textTheme.bodyLarge)
+            ?.copyWith(
+              color: theme.colorScheme.onSurface,
+              height: widget.dense ? 1.0 : null,
+            );
     // A dense multi-line field is also spellchecked, and 1.0 leaves its
     // squiggles nowhere to go but the next line — see [withSquiggleRoom].
     if (spellcheckOn && textStyle != null) {

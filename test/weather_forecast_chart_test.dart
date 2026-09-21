@@ -67,10 +67,10 @@ void main() {
       now: DateTime(2026, 6, 20, 14),
     );
     expect(series.isFullDay, isTrue);
-    expect(
-      series.tempPoints.map((p) => p.hour),
-      [...forecastDayChartHours, 24],
-    );
+    expect(series.tempPoints.map((p) => p.hour), [
+      ...forecastDayChartHours,
+      24,
+    ]);
   });
 
   test('buildDayForecastChartSeries bridges consecutive days at midnight', () {
@@ -80,14 +80,8 @@ void main() {
       _period(2026, 6, 21, 0, 14),
     ];
 
-    final dayOne = buildDayForecastChartSeries(
-      periods,
-      DateTime(2026, 6, 20),
-    );
-    final dayTwo = buildDayForecastChartSeries(
-      periods,
-      DateTime(2026, 6, 21),
-    );
+    final dayOne = buildDayForecastChartSeries(periods, DateTime(2026, 6, 20));
+    final dayTwo = buildDayForecastChartSeries(periods, DateTime(2026, 6, 21));
 
     expect(dayOne.tempPoints.last, (hour: 24.0, tempC: 14.0));
     expect(dayTwo.tempPoints.first, (hour: 0.0, tempC: 14.0));
@@ -189,11 +183,19 @@ void main() {
     ];
 
     expect(
-      resolveForecastDayIndex(days, DateTime(2026, 6, 21), now: DateTime(2026, 6, 20, 14)),
+      resolveForecastDayIndex(
+        days,
+        DateTime(2026, 6, 21),
+        now: DateTime(2026, 6, 20, 14),
+      ),
       2,
     );
     expect(
-      resolveForecastDayIndex(days, DateTime(2026, 6, 99), now: DateTime(2026, 6, 20, 14)),
+      resolveForecastDayIndex(
+        days,
+        DateTime(2026, 6, 99),
+        now: DateTime(2026, 6, 20, 14),
+      ),
       1,
     );
     expect(

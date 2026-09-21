@@ -90,27 +90,29 @@ void main() {
     await db.close();
   });
 
-  test('an autosave upload publishes the edit time, not the upload time',
-      () async {
-    // Restamping updatedAt made the remote copy unconditionally newer than the
-    // row it came from. Since the autosave path uploads at an unchanged
-    // version, remoteVersionWins falls through to the updatedAt tie-break —
-    // and every later pull then resolved in the remote's favour, reverting
-    // edits made locally after the upload.
-    final entry = _dream(id: newId(), stamp: DateTime.utc(2026, 3, 1, 9));
-    await dreamRepo.upsertEntry(entry);
+  test(
+    'an autosave upload publishes the edit time, not the upload time',
+    () async {
+      // Restamping updatedAt made the remote copy unconditionally newer than the
+      // row it came from. Since the autosave path uploads at an unchanged
+      // version, remoteVersionWins falls through to the updatedAt tie-break —
+      // and every later pull then resolved in the remote's favour, reverting
+      // edits made locally after the upload.
+      final entry = _dream(id: newId(), stamp: DateTime.utc(2026, 3, 1, 9));
+      await dreamRepo.upsertEntry(entry);
 
-    sync.pushDreamEntryNow(entry);
-    await pumpEventQueue();
+      sync.pushDreamEntryNow(entry);
+      await pumpEventQueue();
 
-    final document = await syncRepo.getDocument(
-      FirestoreCollections.dreamEntries,
-      entry.id,
-    );
-    expect(document, isNotNull);
-    expect(parseFirestoreDate(document!['updatedAt']), entry.updatedAt);
-    expect(document['version'], entry.version);
-  });
+      final document = await syncRepo.getDocument(
+        FirestoreCollections.dreamEntries,
+        entry.id,
+      );
+      expect(document, isNotNull);
+      expect(parseFirestoreDate(document!['updatedAt']), entry.updatedAt);
+      expect(document['version'], entry.version);
+    },
+  );
 
   test('soft deleting a dream bumps its version', () async {
     // A tombstone that does not outrank the remote copy is read as the loser

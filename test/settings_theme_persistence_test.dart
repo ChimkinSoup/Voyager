@@ -24,23 +24,26 @@ void main() {
     expect(settings.petalMaxCount, 60);
   });
 
-  test('persists the light theme and petal parameters across a reload', () async {
-    final saved = (await repo.getSettings()).copyWith(
-      themeMode: AppThemeMode.light,
-      petalColor: 0xFFAABBCC,
-      petalMaxCount: 120,
-      petalFallSpeed: 55.5,
-      petalWindFrequency: 0.3,
-      petalWindStrength: 90.0,
-    );
-    await repo.saveSettings(saved);
+  test(
+    'persists the light theme and petal parameters across a reload',
+    () async {
+      final saved = (await repo.getSettings()).copyWith(
+        themeMode: AppThemeMode.light,
+        petalColor: 0xFFAABBCC,
+        petalMaxCount: 120,
+        petalFallSpeed: 55.5,
+        petalWindFrequency: 0.3,
+        petalWindStrength: 90.0,
+      );
+      await repo.saveSettings(saved);
 
-    final loaded = await repo.getSettings();
-    expect(loaded.themeMode, AppThemeMode.light);
-    expect(loaded.petalColor, 0xFFAABBCC);
-    expect(loaded.petalMaxCount, 120);
-    expect(loaded.petalFallSpeed, closeTo(55.5, 1e-9));
-    expect(loaded.petalWindFrequency, closeTo(0.3, 1e-9));
-    expect(loaded.petalWindStrength, closeTo(90.0, 1e-9));
-  });
+      final loaded = await repo.getSettings();
+      expect(loaded.themeMode, AppThemeMode.light);
+      expect(loaded.petalColor, 0xFFAABBCC);
+      expect(loaded.petalMaxCount, 120);
+      expect(loaded.petalFallSpeed, closeTo(55.5, 1e-9));
+      expect(loaded.petalWindFrequency, closeTo(0.3, 1e-9));
+      expect(loaded.petalWindStrength, closeTo(90.0, 1e-9));
+    },
+  );
 }

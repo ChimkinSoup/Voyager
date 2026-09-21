@@ -177,7 +177,10 @@ void main() {
         build(source, theme: const ProseEmphasisTheme.metrics()),
       );
       expect(styles[source.indexOf('b')].fontWeight, FontWeight.bold);
-      expect(styles[source.indexOf('u')].decoration, isNot(TextDecoration.underline));
+      expect(
+        styles[source.indexOf('u')].decoration,
+        isNot(TextDecoration.underline),
+      );
       // The one mark a metrics-only theme still emits: it is transparent, so
       // it is no ink either, and it is how the layer beneath a field finds its
       // ranges in the paragraph it already builds.

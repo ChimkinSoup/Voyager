@@ -93,9 +93,9 @@ void main() {
     final db = AppDatabase(NativeDatabase(file));
     addTearDown(db.close);
     expect(
-      (await DriftRankingRepository(db).listParents(seeded.categoryId))
-          .single
-          .tags,
+      (await DriftRankingRepository(
+        db,
+      ).listParents(seeded.categoryId)).single.tags,
       ['scifi', 'slow'],
     );
   });

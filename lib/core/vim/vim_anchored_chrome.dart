@@ -446,10 +446,15 @@ class RenderVimAnchoredChrome extends RenderProxyBox {
 
   /// Where to paint the child relative to where the follower will put it, or
   /// nothing when none of the field is on screen.
-  VimChromePlacement _resolveClamp(RenderBox field, Rect fieldRect, Rect? clip) {
+  VimChromePlacement _resolveClamp(
+    RenderBox field,
+    Rect fieldRect,
+    Rect? clip,
+  ) {
     // The part of the field the user can actually see.
     final visible = clip == null ? fieldRect : fieldRect.intersect(clip);
-    if (visible.width <= 0 || visible.height <= 0) return VimChromePlacement.none;
+    if (visible.width <= 0 || visible.height <= 0)
+      return VimChromePlacement.none;
 
     final rect = _followerRect(fieldRect);
 

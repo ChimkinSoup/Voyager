@@ -162,6 +162,7 @@ class _PulseState extends State<_Pulse> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: _controller,
-    builder: (_, _) => Opacity(opacity: _controller.value, child: const Icon(Icons.circle)),
+    builder: (_, _) =>
+        Opacity(opacity: _controller.value, child: const Icon(Icons.circle)),
   );
 }

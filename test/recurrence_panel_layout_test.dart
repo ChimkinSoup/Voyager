@@ -136,9 +136,8 @@ void main() {
 
     final container = await _container(tester);
 
-    Color iconColour() => tester
-        .widget<Icon>(find.byIcon(PhosphorIconsRegular.repeat))
-        .color!;
+    Color iconColour() =>
+        tester.widget<Icon>(find.byIcon(PhosphorIconsRegular.repeat)).color!;
 
     await _pumpPanel(tester, container, event: worstCaseEvent());
     final on = iconColour();
@@ -157,5 +156,4 @@ void main() {
     // Subtle by default: the off state is the faint one.
     expect(off.a, lessThan(on.a));
   });
-
 }

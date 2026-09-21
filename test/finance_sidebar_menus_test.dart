@@ -146,8 +146,9 @@ void main() {
   setUpAll(() => driftRuntimeOptions.dontWarnAboutMultipleDatabases = true);
 
   group('budget menu', () {
-    testWidgets('View expenses filters the ledger all-time, and clears',
-        (tester) async {
+    testWidgets('View expenses filters the ledger all-time, and clears', (
+      tester,
+    ) async {
       await pumpDashboard(tester);
 
       expect(find.text('Rent'), findsOneWidget);
@@ -167,8 +168,9 @@ void main() {
       expect(find.text('Rent'), findsOneWidget);
     });
 
-    testWidgets('Delete offers an undo that puts the budget back',
-        (tester) async {
+    testWidgets('Delete offers an undo that puts the budget back', (
+      tester,
+    ) async {
       final harness = await pumpDashboard(tester);
 
       await openMenuOn(tester, budgetTile);
@@ -189,8 +191,9 @@ void main() {
   });
 
   group('bill menu', () {
-    testWidgets('Duplicate copies the bill and anchors it to today',
-        (tester) async {
+    testWidgets('Duplicate copies the bill and anchors it to today', (
+      tester,
+    ) async {
       final harness = await pumpDashboard(tester);
 
       await openMenuOn(tester, find.text('Netflix'));
@@ -214,19 +217,20 @@ void main() {
       );
     });
 
-    testWidgets('Delete offers an undo that puts the bill back',
-        (tester) async {
+    testWidgets('Delete offers an undo that puts the bill back', (
+      tester,
+    ) async {
       final harness = await pumpDashboard(tester);
       // Marked paid before the delete: the restore rebuilds the bill field by
       // field rather than copyWith'ing it (copyWith cannot clear a tombstone),
       // and a field left off that list comes back silently cleared.
-      final paid = (await harness.repo.getSubscription('sub-1'))!.nextDue(
-        DateTime.now(),
-      );
+      final paid = (await harness.repo.getSubscription(
+        'sub-1',
+      ))!.nextDue(DateTime.now());
       await harness.repo.upsertSubscription(
-        (await harness.repo.getSubscription('sub-1'))!.copyWith(
-          paidThroughDate: paid,
-        ),
+        (await harness.repo.getSubscription(
+          'sub-1',
+        ))!.copyWith(paidThroughDate: paid),
       );
       // The tile's own snapshot is what gets written back, so it has to have
       // seen the payment before the delete.
@@ -250,8 +254,9 @@ void main() {
       expect(restored.paidThroughDate, paid);
     });
 
-    testWidgets('Log payment cancelled leaves the due date alone',
-        (tester) async {
+    testWidgets('Log payment cancelled leaves the due date alone', (
+      tester,
+    ) async {
       final harness = await pumpDashboard(tester);
       final before = (await harness.repo.getSubscription('sub-1'))!;
 
@@ -267,8 +272,9 @@ void main() {
       expect(after.version, before.version);
     });
 
-    testWidgets('Log payment saved advances the due date by one period',
-        (tester) async {
+    testWidgets('Log payment saved advances the due date by one period', (
+      tester,
+    ) async {
       final harness = await pumpDashboard(tester);
       final before = (await harness.repo.getSubscription('sub-1'))!;
       final paidDue = before.nextDue(DateTime.now());

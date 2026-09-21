@@ -253,10 +253,7 @@ void main() {
       controller.selection = const TextSelection.collapsed(offset: 0);
       await tester.pump();
       expect(renderedStyles(tester)[17].fontSize, 0);
-      expect(
-        renderedStyles(tester)[19].decoration,
-        TextDecoration.underline,
-      );
+      expect(renderedStyles(tester)[19].decoration, TextDecoration.underline);
     });
 
     testWidgets('selection set on the caller drives the reveal', (
@@ -286,7 +283,10 @@ void main() {
       await tester.pump();
       expect(renderedStyles(tester)[2].fontSize, 0);
 
-      controller.selection = const TextSelection(baseOffset: 0, extentOffset: 9);
+      controller.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 9,
+      );
       await tester.pump();
       expect(renderedStyles(tester)[2].fontSize, isNot(0));
     });
@@ -300,9 +300,7 @@ void main() {
         'assets/Iosevka-Bold/Iosevka-Aile-Bold-01.ttf',
       ]) {
         loader.addFont(
-          Future.value(
-            ByteData.view(File(path).readAsBytesSync().buffer),
-          ),
+          Future.value(ByteData.view(File(path).readAsBytesSync().buffer)),
         );
       }
       await loader.load();
@@ -352,7 +350,12 @@ void main() {
                         expands: true,
                         useNotchedBorder: false,
                         keyboardType: TextInputType.multiline,
-                        contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+                        contentPadding: const EdgeInsets.fromLTRB(
+                          16,
+                          16,
+                          16,
+                          6,
+                        ),
                       ),
                     ),
                   ),

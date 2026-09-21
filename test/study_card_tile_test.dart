@@ -73,8 +73,9 @@ Future<void> _pumpTile(
 );
 
 /// Which face the tile was handed.
-bool _showingBack(WidgetTester tester) =>
-    tester.widget<StudyFlipCard>(find.byType(StudyFlipCard)).initiallyShowingBack;
+bool _showingBack(WidgetTester tester) => tester
+    .widget<StudyFlipCard>(find.byType(StudyFlipCard))
+    .initiallyShowingBack;
 
 /// Substrings drawn with the search emphasis anywhere in the tile.
 List<String> _highlighted(WidgetTester tester) {

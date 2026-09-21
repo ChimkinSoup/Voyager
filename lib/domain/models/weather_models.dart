@@ -184,7 +184,9 @@ class WeatherForecast {
       fetchedAt: WeatherSnapshot._parseDate(json['fetchedAt']),
       locationLabel: json['locationLabel'] as String?,
       periods: rawPeriods
-          .map((p) => ForecastPeriod.fromJson(Map<String, dynamic>.from(p as Map)))
+          .map(
+            (p) => ForecastPeriod.fromJson(Map<String, dynamic>.from(p as Map)),
+          )
           .toList(),
     );
   }
@@ -203,10 +205,7 @@ List<DailyForecastSummary> buildDailyForecastSummaries(
   }
 
   final days = byDay.keys.toList()..sort();
-  return [
-    for (final day in days)
-      _summaryForDay(day, byDay[day]!),
-  ];
+  return [for (final day in days) _summaryForDay(day, byDay[day]!)];
 }
 
 DailyForecastSummary _summaryForDay(

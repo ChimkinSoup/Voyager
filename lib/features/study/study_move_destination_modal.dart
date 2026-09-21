@@ -110,7 +110,9 @@ class _StudyMoveDestinationModalState
                       height: 4,
                       margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                        color: theme.colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.3,
+                        ),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -129,7 +131,8 @@ class _StudyMoveDestinationModalState
                 StudyBreadcrumbRow(
                   folderStack: _stack,
                   onTapRoot: () => setState(() => _stack = []),
-                  onTapFolder: (i) => setState(() => _stack = _stack.sublist(0, i + 1)),
+                  onTapFolder: (i) =>
+                      setState(() => _stack = _stack.sublist(0, i + 1)),
                 ),
                 const SizedBox(height: 12),
                 GlassButton(
@@ -149,10 +152,17 @@ class _StudyMoveDestinationModalState
                 for (final folder in folders)
                   ListTile(
                     enabled: !_moving,
-                    leading: Icon(PhosphorIconsRegular.folder, color: theme.colorScheme.primary),
+                    leading: Icon(
+                      PhosphorIconsRegular.folder,
+                      color: theme.colorScheme.primary,
+                    ),
                     title: Text(folder.name),
-                    trailing: const Icon(PhosphorIconsRegular.caretRight, size: 16),
-                    onTap: () => setState(() => _stack = [..._stack, folder.id]),
+                    trailing: const Icon(
+                      PhosphorIconsRegular.caretRight,
+                      size: 16,
+                    ),
+                    onTap: () =>
+                        setState(() => _stack = [..._stack, folder.id]),
                   ),
                 if (folders.isEmpty)
                   Padding(
@@ -160,7 +170,9 @@ class _StudyMoveDestinationModalState
                     child: Text(
                       'No subfolders here.',
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.5,
+                        ),
                       ),
                     ),
                   ),

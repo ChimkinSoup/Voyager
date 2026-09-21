@@ -40,7 +40,10 @@ import 'fakes/fake_weather_api_client.dart';
 
 const _entryId = 'entry-1';
 
-SyncOperation _charOpsSyncOperation(List<CharacterOperation> ops, int sequence) {
+SyncOperation _charOpsSyncOperation(
+  List<CharacterOperation> ops,
+  int sequence,
+) {
   return SyncOperation(
     id: 'device-a_${_entryId}_$sequence',
     documentId: _entryId,
@@ -130,34 +133,31 @@ void main() {
     expect(detection.isConflict, isFalse);
   });
 
-  test(
-    'diffing from a frozen snapshot collides (demonstrates the hazard)',
-    () {
-      final authoring = CharacterOpSession(clientId: 'device-a');
-      authoring.recordTextChange('', 'Hello');
-      final firstOps = authoring.takePendingOps();
-      authoring.recordTextChange('Hello', 'Hello!!');
-      final laterOps = authoring.takePendingOps();
+  test('diffing from a frozen snapshot collides (demonstrates the hazard)', () {
+    final authoring = CharacterOpSession(clientId: 'device-a');
+    authoring.recordTextChange('', 'Hello');
+    final firstOps = authoring.takePendingOps();
+    authoring.recordTextChange('Hello', 'Hello!!');
+    final laterOps = authoring.takePendingOps();
 
-      // What every resolveConflict* path used to do: seed from the operations
-      // frozen in the conflict row, then diff the chosen text onto them.
-      final stale = CharacterOpSession(
-        clientId: 'device-a',
-        initialOperations: firstOps,
-      );
-      stale.recordTextChange('Hello', 'Hello!!?');
+    // What every resolveConflict* path used to do: seed from the operations
+    // frozen in the conflict row, then diff the chosen text onto them.
+    final stale = CharacterOpSession(
+      clientId: 'device-a',
+      initialOperations: firstOps,
+    );
+    stale.recordTextChange('Hello', 'Hello!!?');
 
-      final positions = [
-        for (final op in [...firstOps, ...laterOps, ...stale.takePendingOps()])
-          op.position,
-      ];
-      expect(
-        positions.toSet(),
-        isNot(hasLength(positions.length)),
-        reason: 'the stale anchors should regenerate positions already in use',
-      );
-    },
-  );
+    final positions = [
+      for (final op in [...firstOps, ...laterOps, ...stale.takePendingOps()])
+        op.position,
+    ];
+    expect(
+      positions.toSet(),
+      isNot(hasLength(positions.length)),
+      reason: 'the stale anchors should regenerate positions already in use',
+    );
+  });
 
   group('conflict resolution', () {
     late AppDatabase db;
@@ -249,94 +249,98 @@ void main() {
 
       // And it survives the round trip through SQLite, not just the in-memory
       // object the quarantine built.
-      final reread = await DriftSyncConflictRepository(db).getConflict(
-        conflict.id,
-      );
+      final reread = await DriftSyncConflictRepository(
+        db,
+      ).getConflict(conflict.id);
       expect(reread?.reason, SyncConflictReason.corruptedOpChain);
     });
 
-    test('a reason from a newer build reads back as null, not a crash',
-        () async {
-      final now = DateTime.utc(2026, 8, 12);
-      final repo = DriftSyncConflictRepository(db);
-      await db
-          .into(db.syncConflictsTable)
-          .insert(
-            SyncConflictsTableCompanion.insert(
-              id: 'c1',
-              collection: FirestoreCollections.journalEntries,
-              documentId: _entryId,
-              localPayloadJson: '{}',
-              remotePayloadJson: '{}',
-              detectedAt: now,
-              reason: const Value('a_reason_invented_later'),
-            ),
-          );
+    test(
+      'a reason from a newer build reads back as null, not a crash',
+      () async {
+        final now = DateTime.utc(2026, 8, 12);
+        final repo = DriftSyncConflictRepository(db);
+        await db
+            .into(db.syncConflictsTable)
+            .insert(
+              SyncConflictsTableCompanion.insert(
+                id: 'c1',
+                collection: FirestoreCollections.journalEntries,
+                documentId: _entryId,
+                localPayloadJson: '{}',
+                remotePayloadJson: '{}',
+                detectedAt: now,
+                reason: const Value('a_reason_invented_later'),
+              ),
+            );
 
-      expect((await repo.getConflict('c1'))?.reason, isNull);
-    });
+        expect((await repo.getConflict('c1'))?.reason, isNull);
+      },
+    );
 
-    test('keeping local rebases on the live chain, not the frozen snapshot',
-        () async {
-      // The chain on the remote: "Hello" was authored, then "!!" appended.
-      final authoring = CharacterOpSession(clientId: 'device-a');
-      authoring.recordTextChange('', 'Hello');
-      final firstOps = authoring.takePendingOps();
-      authoring.recordTextChange('Hello', 'Hello!!');
-      final laterOps = authoring.takePendingOps();
-      await syncRepo.appendOperation(_charOpsSyncOperation(firstOps, 0));
-      await syncRepo.appendOperation(_charOpsSyncOperation(laterOps, 1));
+    test(
+      'keeping local rebases on the live chain, not the frozen snapshot',
+      () async {
+        // The chain on the remote: "Hello" was authored, then "!!" appended.
+        final authoring = CharacterOpSession(clientId: 'device-a');
+        authoring.recordTextChange('', 'Hello');
+        final firstOps = authoring.takePendingOps();
+        authoring.recordTextChange('Hello', 'Hello!!');
+        final laterOps = authoring.takePendingOps();
+        await syncRepo.appendOperation(_charOpsSyncOperation(firstOps, 0));
+        await syncRepo.appendOperation(_charOpsSyncOperation(laterOps, 1));
 
-      final now = DateTime.utc(2026, 8, 12);
-      final local = JournalEntry(
-        id: _entryId,
-        journalId: 'journal-1',
-        title: '',
-        body: 'Hello!!?',
-        entryDate: now,
-        createdAt: now,
-        updatedAt: now,
-      );
-      await journalRepo.upsertEntry(local, recordLocalActivity: false);
+        final now = DateTime.utc(2026, 8, 12);
+        final local = JournalEntry(
+          id: _entryId,
+          journalId: 'journal-1',
+          title: '',
+          body: 'Hello!!?',
+          entryDate: now,
+          createdAt: now,
+          updatedAt: now,
+        );
+        await journalRepo.upsertEntry(local, recordLocalActivity: false);
 
-      // The conflict was detected back when the chain still ended at "Hello",
-      // so that is what its payload froze — the anchors in it are two
-      // characters behind the log.
-      await DriftSyncConflictRepository(db).upsertConflict(
-        SyncConflict(
-          id: '${FirestoreCollections.journalEntries}_$_entryId',
-          collection: FirestoreCollections.journalEntries,
-          documentId: _entryId,
-          localPayloadJson: jsonEncode(journalEntryToFirestore(local)),
-          remotePayloadJson: jsonEncode({
-            'body': 'Hello',
-            '_remoteCharOps': [for (final op in firstOps) op.toJson()],
-          }),
-          remoteText: 'Hello',
-          localText: local.body,
-          detectedAt: now,
-        ),
-      );
+        // The conflict was detected back when the chain still ended at "Hello",
+        // so that is what its payload froze — the anchors in it are two
+        // characters behind the log.
+        await DriftSyncConflictRepository(db).upsertConflict(
+          SyncConflict(
+            id: '${FirestoreCollections.journalEntries}_$_entryId',
+            collection: FirestoreCollections.journalEntries,
+            documentId: _entryId,
+            localPayloadJson: jsonEncode(journalEntryToFirestore(local)),
+            remotePayloadJson: jsonEncode({
+              'body': 'Hello',
+              '_remoteCharOps': [for (final op in firstOps) op.toJson()],
+            }),
+            remoteText: 'Hello',
+            localText: local.body,
+            detectedAt: now,
+          ),
+        );
 
-      final conflict = (await remoteSync.listConflicts()).single;
-      await remoteSync.resolveConflictKeepLocal(conflict);
+        final conflict = (await remoteSync.listConflicts()).single;
+        await remoteSync.resolveConflictKeepLocal(conflict);
 
-      final merger = CharacterSequenceCrdtMerger();
-      final merged = merger.mergeOperations(
-        const [],
-        await syncRepo.listOperations(_entryId),
-      );
-      final live = merged.where((op) => !op.deleted).toList();
+        final merger = CharacterSequenceCrdtMerger();
+        final merged = merger.mergeOperations(
+          const [],
+          await syncRepo.listOperations(_entryId),
+        );
+        final live = merged.where((op) => !op.deleted).toList();
 
-      // Diffing from the stale snapshot's "Hello" would have re-inserted "!!"
-      // at the positions the log already holds for them.
-      expect(
-        live.map((op) => op.position).toSet(),
-        hasLength(live.length),
-        reason: 'resolution minted a position the live chain already used',
-      );
-      expect(merger.applyMergedText(merged), 'Hello!!?');
-      expect(await remoteSync.listConflicts(), isEmpty);
-    });
+        // Diffing from the stale snapshot's "Hello" would have re-inserted "!!"
+        // at the positions the log already holds for them.
+        expect(
+          live.map((op) => op.position).toSet(),
+          hasLength(live.length),
+          reason: 'resolution minted a position the live chain already used',
+        );
+        expect(merger.applyMergedText(merged), 'Hello!!?');
+        expect(await remoteSync.listConflicts(), isEmpty);
+      },
+    );
   });
 }

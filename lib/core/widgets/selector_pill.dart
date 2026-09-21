@@ -76,18 +76,20 @@ class SelectorPill extends StatelessWidget {
               ],
               if (ellipsize)
                 Flexible(
-                  child: child ??
+                  child:
+                      child ??
                       Text(
                         label ?? '',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: (dense
-                                ? theme.textTheme.labelMedium
-                                : theme.textTheme.labelLarge)
-                            ?.copyWith(
-                          color: foregroundColor,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style:
+                            (dense
+                                    ? theme.textTheme.labelMedium
+                                    : theme.textTheme.labelLarge)
+                                ?.copyWith(
+                                  color: foregroundColor,
+                                  fontWeight: FontWeight.w500,
+                                ),
                       ),
                 )
               else
@@ -95,13 +97,14 @@ class SelectorPill extends StatelessWidget {
                     Text(
                       label ?? '',
                       maxLines: 1,
-                      style: (dense
-                              ? theme.textTheme.labelMedium
-                              : theme.textTheme.labelLarge)
-                          ?.copyWith(
-                        color: foregroundColor,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style:
+                          (dense
+                                  ? theme.textTheme.labelMedium
+                                  : theme.textTheme.labelLarge)
+                              ?.copyWith(
+                                color: foregroundColor,
+                                fontWeight: FontWeight.w500,
+                              ),
                     ),
             ],
           ),

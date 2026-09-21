@@ -68,8 +68,11 @@ class _HoldThenRefuseSyncRepository extends InMemorySyncRepository {
   }
 }
 
-RemoteSyncService _buildService(AppDatabase db, SyncRepository syncRepo,
-    {SyncRetryPolicy retryPolicy = const SyncRetryPolicy()}) {
+RemoteSyncService _buildService(
+  AppDatabase db,
+  SyncRepository syncRepo, {
+  SyncRetryPolicy retryPolicy = const SyncRetryPolicy(),
+}) {
   final engine = SyncEngine(
     syncRepository: syncRepo,
     deviceId: 'device-a',

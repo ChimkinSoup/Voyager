@@ -363,7 +363,9 @@ void main() {
       final repo = DriftStudyRepository(db);
       final id = StudyDeckLink.idFor(_hub, _aws);
       // Parked, so the undo has a toggle state to get right.
-      await repo.upsertDeckLink((await repo.getDeckLink(id))!.copyWith(enabled: false));
+      await repo.upsertDeckLink(
+        (await repo.getDeckLink(id))!.copyWith(enabled: false),
+      );
       final original = (await repo.getDeckLink(id))!;
       final container = _container(db);
       await _pump(tester, container, _workbench());
@@ -552,37 +554,43 @@ void main() {
     await _outlastToast(tester);
   });
 
-  test('importing a backup breaks a loop it closes with the local links', () async {
-    // The backup holds AWS → hub; this device has since linked hub → AWS.
-    final source = await _seed(linked: false);
-    await _addLink(source, _aws, _hub, minute: 1);
-    final contents = await DataExportService(
-      collections: _collectionsFor(source),
-      settingsRepository: DriftSettingsRepository(source),
-    ).buildArchiveContents();
-    final zip = File('${Directory.systemTemp.path}/voyager_deck_link_loop.zip');
-    await zip.writeAsBytes(generateBackupZipIsolate(contents));
-    addTearDown(zip.delete);
+  test(
+    'importing a backup breaks a loop it closes with the local links',
+    () async {
+      // The backup holds AWS → hub; this device has since linked hub → AWS.
+      final source = await _seed(linked: false);
+      await _addLink(source, _aws, _hub, minute: 1);
+      final contents = await DataExportService(
+        collections: _collectionsFor(source),
+        settingsRepository: DriftSettingsRepository(source),
+      ).buildArchiveContents();
+      final zip = File(
+        '${Directory.systemTemp.path}/voyager_deck_link_loop.zip',
+      );
+      await zip.writeAsBytes(generateBackupZipIsolate(contents));
+      addTearDown(zip.delete);
 
-    final target = await _seed(linked: false);
-    await _addLink(target, _hub, _aws, minute: 2);
-    final uploads = <String, List<Object>>{};
-    await DataImportService(
-      db: target,
-      collections: _collectionsFor(target),
-      settingsRepository: DriftSettingsRepository(target),
-      pushRecords: (collection, records) async => uploads[collection] = records,
-      pushSettings: (_) async {},
-    ).importFromZip(zip);
+      final target = await _seed(linked: false);
+      await _addLink(target, _hub, _aws, minute: 2);
+      final uploads = <String, List<Object>>{};
+      await DataImportService(
+        db: target,
+        collections: _collectionsFor(target),
+        settingsRepository: DriftSettingsRepository(target),
+        pushRecords: (collection, records) async =>
+            uploads[collection] = records,
+        pushSettings: (_) async {},
+      ).importFromZip(zip);
 
-    // The newer edge goes, as it would on a sync pull.
-    final live = await DriftStudyRepository(target).listDeckLinks();
-    expect(live.map((l) => l.id), [StudyDeckLink.idFor(_aws, _hub)]);
-    final pushed = uploads[FirestoreCollections.studyDeckLinks]!;
-    final last = pushed.last as StudyDeckLink;
-    expect(last.id, StudyDeckLink.idFor(_hub, _aws));
-    expect(last.deletedAt, isNotNull);
-  });
+      // The newer edge goes, as it would on a sync pull.
+      final live = await DriftStudyRepository(target).listDeckLinks();
+      expect(live.map((l) => l.id), [StudyDeckLink.idFor(_aws, _hub)]);
+      final pushed = uploads[FirestoreCollections.studyDeckLinks]!;
+      final last = pushed.last as StudyDeckLink;
+      expect(last.id, StudyDeckLink.idFor(_hub, _aws));
+      expect(last.deletedAt, isNotNull);
+    },
+  );
 
   group('source label (§7)', () {
     Future<void> session(
@@ -598,7 +606,8 @@ void main() {
       );
     }
 
-    Finder label(String name) => find.widgetWithText(StudyCardSourceLabel, name);
+    Finder label(String name) =>
+        find.widgetWithText(StudyCardSourceLabel, name);
 
     testWidgets('a linked card names its home deck', (tester) async {
       await session(tester, {'aws-card'}, frame: _hub);

@@ -38,8 +38,9 @@ void main() {
     // local midnight on the anchor weekday, never 23:00 the day before.
     test('every day of a year lands on local midnight of its anchor day', () {
       for (final mondayAnchored in [true, false]) {
-        final expectedWeekday =
-            mondayAnchored ? DateTime.monday : DateTime.sunday;
+        final expectedWeekday = mondayAnchored
+            ? DateTime.monday
+            : DateTime.sunday;
         for (var day = 0; day < 366; day++) {
           final date = DateTime(2026, 1, 1 + day);
           final start = service.periodStartFor(

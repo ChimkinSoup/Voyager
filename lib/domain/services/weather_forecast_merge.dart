@@ -119,9 +119,7 @@ WeatherForecast? weatherForecastFromFirestoreArchive(
   final periods = <ForecastPeriod>[];
   for (final value in rawPeriods.values) {
     if (value is! Map) continue;
-    periods.add(
-      ForecastPeriod.fromJson(Map<String, dynamic>.from(value)),
-    );
+    periods.add(ForecastPeriod.fromJson(Map<String, dynamic>.from(value)));
   }
   periods.sort((a, b) => a.time.compareTo(b.time));
 
@@ -142,10 +140,7 @@ Map<String, dynamic> weatherForecastToFirestoreArchive({
   required List<ForecastPeriod> periods,
   required int timeZoneOffsetMinutes,
 }) {
-  final bucketMap = forecastPeriodsToBucketMap(
-    periods,
-    timeZoneOffsetMinutes,
-  );
+  final bucketMap = forecastPeriodsToBucketMap(periods, timeZoneOffsetMinutes);
   return {
     'lat': lat,
     'lon': lon,

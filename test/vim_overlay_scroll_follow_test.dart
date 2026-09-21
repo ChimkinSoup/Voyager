@@ -101,9 +101,7 @@ void main() {
         final rect = editable.getLocalRectForCaret(
           TextPosition(offset: controller.selection.baseOffset),
         );
-        return boundary
-            .globalToLocal(editable.localToGlobal(rect.topLeft))
-            .dy;
+        return boundary.globalToLocal(editable.localToGlobal(rect.topLeft)).dy;
       }
 
       /// First row of the painted block caret, read back from the last frame's
@@ -161,7 +159,8 @@ void main() {
           expect(
             (await paintedCaretTop()).toDouble(),
             moreOrLessEquals(fieldCaretTop(), epsilon: 3),
-            reason: 'block caret painted off its line on frame $frame of '
+            reason:
+                'block caret painted off its line on frame $frame of '
                 'delete $delete',
           );
         }

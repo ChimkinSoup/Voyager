@@ -35,6 +35,7 @@ String get googleOAuthClientId => _googleOAuthClientIdRaw.trim();
 
 /// Trimmed client secret.
 String get googleOAuthClientSecret => _googleOAuthClientSecretRaw.trim();
+
 /// Fixed loopback port for the desktop OAuth redirect handler.
 const googleOAuthRedirectPort = 4285;
 

@@ -104,7 +104,8 @@ class _EditSidePanelHostState extends State<EditSidePanelHost> {
   }
 
   void _onDragStart(double pageWidth) {
-    _dragStartWidth = _liveWidth ??
+    _dragStartWidth =
+        _liveWidth ??
         EditSidePanelMetrics.resolveWidth(widget.storedWidth, pageWidth);
     setState(() => _dragging = true);
   }
@@ -155,7 +156,8 @@ class _EditSidePanelHostState extends State<EditSidePanelHost> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final pageWidth = constraints.maxWidth;
-        final panelWidth = _liveWidth ??
+        final panelWidth =
+            _liveWidth ??
             EditSidePanelMetrics.resolveWidth(widget.storedWidth, pageWidth);
         final push = EditSidePanelMetrics.shouldPush(
           pageWidth: pageWidth,

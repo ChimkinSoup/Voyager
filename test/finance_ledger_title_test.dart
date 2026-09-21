@@ -75,9 +75,7 @@ FinancialTransaction _tx(
 
 /// The styled runs of the one title that reads [plain], flattened.
 List<(String, TextStyle?)> _runs(WidgetTester tester, String plain) {
-  final title = find.byWidgetPredicate(
-    (w) => w is LedgerTitleText,
-  );
+  final title = find.byWidgetPredicate((w) => w is LedgerTitleText);
   final paragraphs = tester
       .widgetList<RichText>(
         find.descendant(of: title, matching: find.byType(RichText)),

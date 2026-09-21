@@ -57,18 +57,55 @@ List<String> ids(Iterable<RankingParent> parents) => [
 void main() {
   group('Scoring', () {
     test('snaps to the step of the mode and clamps into the scale', () {
-      expect(roundRankingScore(3.3, scoreMax: 5, precision: RankingScorePrecision.half), 3.5);
-      expect(roundRankingScore(3.3, scoreMax: 5, precision: RankingScorePrecision.integers), 3);
-      expect(roundRankingScore(-2, scoreMax: 5, precision: RankingScorePrecision.half), 0);
-      expect(roundRankingScore(99, scoreMax: 10, precision: RankingScorePrecision.half), 10);
+      expect(
+        roundRankingScore(
+          3.3,
+          scoreMax: 5,
+          precision: RankingScorePrecision.half,
+        ),
+        3.5,
+      );
+      expect(
+        roundRankingScore(
+          3.3,
+          scoreMax: 5,
+          precision: RankingScorePrecision.integers,
+        ),
+        3,
+      );
+      expect(
+        roundRankingScore(
+          -2,
+          scoreMax: 5,
+          precision: RankingScorePrecision.half,
+        ),
+        0,
+      );
+      expect(
+        roundRankingScore(
+          99,
+          scoreMax: 10,
+          precision: RankingScorePrecision.half,
+        ),
+        10,
+      );
     });
 
     test('midpoint follows the scale and its steps', () {
-      expect(rankingFieldMidpoint(5, precision: RankingScorePrecision.half), 2.5);
+      expect(
+        rankingFieldMidpoint(5, precision: RankingScorePrecision.half),
+        2.5,
+      );
       // In integer mode 2.5 is not a value the scale can hold, so the
       // midpoint has to be one of the whole values either side of it.
-      expect(rankingFieldMidpoint(5, precision: RankingScorePrecision.integers), 3);
-      expect(rankingFieldMidpoint(10, precision: RankingScorePrecision.half), 5);
+      expect(
+        rankingFieldMidpoint(5, precision: RankingScorePrecision.integers),
+        3,
+      );
+      expect(
+        rankingFieldMidpoint(10, precision: RankingScorePrecision.half),
+        5,
+      );
     });
 
     test('average from children skips the unscored ones', () {
@@ -102,18 +139,41 @@ void main() {
     });
 
     test('rescale carries a score onto the other scale', () {
-      expect(rescaleRankingScore(8, fromMax: 10, toMax: 5, precision: RankingScorePrecision.half), 4);
       expect(
-        rescaleRankingScore(9, fromMax: 10, toMax: 5, precision: RankingScorePrecision.half),
+        rescaleRankingScore(
+          8,
+          fromMax: 10,
+          toMax: 5,
+          precision: RankingScorePrecision.half,
+        ),
+        4,
+      );
+      expect(
+        rescaleRankingScore(
+          9,
+          fromMax: 10,
+          toMax: 5,
+          precision: RankingScorePrecision.half,
+        ),
         4.5,
       );
       // Lossy going down in integer mode: 4.5 has nowhere to land.
       expect(
-        rescaleRankingScore(9, fromMax: 10, toMax: 5, precision: RankingScorePrecision.integers),
+        rescaleRankingScore(
+          9,
+          fromMax: 10,
+          toMax: 5,
+          precision: RankingScorePrecision.integers,
+        ),
         5,
       );
       expect(
-        rescaleRankingScore(3.5, fromMax: 5, toMax: 10, precision: RankingScorePrecision.half),
+        rescaleRankingScore(
+          3.5,
+          fromMax: 5,
+          toMax: 10,
+          precision: RankingScorePrecision.half,
+        ),
         7,
       );
     });
@@ -646,10 +706,10 @@ void main() {
     });
 
     test('a chip narrows to its own status', () {
-      final rows = filterUnrankedByStatus([
-        parent('queued'),
-        parent('running', status: RankingStatus.inProgress),
-      ], const {RankingStatus.inProgress});
+      final rows = filterUnrankedByStatus(
+        [parent('queued'), parent('running', status: RankingStatus.inProgress)],
+        const {RankingStatus.inProgress},
+      );
       expect(ids(rows), ['running']);
     });
   });

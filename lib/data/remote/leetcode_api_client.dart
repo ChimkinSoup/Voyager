@@ -233,7 +233,9 @@ class LeetCodeApiClient {
     }
     final data = decoded['data'] as Map<String, dynamic>?;
     if (data == null) {
-      throw Exception('Unexpected LeetCode API response shape (missing "data").');
+      throw Exception(
+        'Unexpected LeetCode API response shape (missing "data").',
+      );
     }
     return data;
   }

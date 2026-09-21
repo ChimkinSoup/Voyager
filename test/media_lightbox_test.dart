@@ -53,7 +53,10 @@ Future<void> mouseFlick(
   double dx, {
   bool release = true,
 }) async {
-  final gesture = await tester.startGesture(from, kind: PointerDeviceKind.mouse);
+  final gesture = await tester.startGesture(
+    from,
+    kind: PointerDeviceKind.mouse,
+  );
   var stamp = Duration.zero;
   for (var i = 0; i < 8; i++) {
     stamp += const Duration(milliseconds: 16);
@@ -183,8 +186,7 @@ void main() {
             body: Builder(
               builder: (context) => Center(
                 child: ElevatedButton(
-                  onPressed: () =>
-                      showMediaLightbox(context, assets: [asset]),
+                  onPressed: () => showMediaLightbox(context, assets: [asset]),
                   child: const Text('open'),
                 ),
               ),

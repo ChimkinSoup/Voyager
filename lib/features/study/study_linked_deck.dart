@@ -46,7 +46,9 @@ class StudyLinkedDeckTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final vc = VoyagerColors.of(context);
-    final stats = ref.watch(studyDeckStatsProvider(link.childDeckId)).valueOrNull;
+    final stats = ref
+        .watch(studyDeckStatsProvider(link.childDeckId))
+        .valueOrNull;
     final due = stats?.due ?? 0;
     final muted = theme.colorScheme.onSurface.withValues(alpha: 0.5);
 
@@ -212,11 +214,13 @@ class _StudyLinkedDeckSheetState extends ConsumerState<_StudyLinkedDeckSheet> {
         }
       }
     });
-    final name = ref.watch(studyDeckByIdProvider(deckId)).valueOrNull?.name ?? '';
+    final name =
+        ref.watch(studyDeckByIdProvider(deckId)).valueOrNull?.name ?? '';
     final cards = sortStudyCardsByMastery(
       ref.watch(studyCardsProvider(deckId)).valueOrNull ?? const <StudyCard>[],
     );
-    final cardImages = ref.watch(studyCardImagesProvider).valueOrNull ?? const {};
+    final cardImages =
+        ref.watch(studyCardImagesProvider).valueOrNull ?? const {};
     // The deck's own cards only — what the grid below lists, and what its
     // Study and Cram draw on. What it links in turn stays out of the sheet.
     final now = DateTime.now().toUtc();

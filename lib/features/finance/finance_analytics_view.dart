@@ -100,7 +100,12 @@ class FinanceAnalyticsView extends StatelessWidget {
         // card's month row — "September 2026" beside the Category/Tag/Store
         // switch — needs ~410px inside the card, which 880 did not leave.
         final wide = constraints.maxWidth >= 960;
-        final padding = EdgeInsets.fromLTRB(wide ? 20 : 16, 4, wide ? 20 : 16, 96);
+        final padding = EdgeInsets.fromLTRB(
+          wide ? 20 : 16,
+          4,
+          wide ? 20 : 16,
+          96,
+        );
 
         if (!wide) {
           return ListView(
@@ -165,7 +170,9 @@ class _AnalyticsCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.25,
+        ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: theme.colorScheme.outline.withValues(alpha: 0.12),
@@ -190,8 +197,9 @@ class _AnalyticsCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     title,
-                    style: theme.textTheme.labelLarge
-                        ?.copyWith(fontWeight: FontWeight.w600),
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -247,7 +255,8 @@ class _CashFlowCard extends ConsumerWidget {
     final totalExpense = series.fold<int>(0, (s, p) => s + p.expenseCents);
     final maxCents = series.fold<int>(
       0,
-      (m, p) => [m, p.incomeCents, p.expenseCents].reduce((a, b) => a > b ? a : b),
+      (m, p) =>
+          [m, p.incomeCents, p.expenseCents].reduce((a, b) => a > b ? a : b),
     );
     final maxY = maxCents == 0 ? 1.0 : (maxCents / 100) * 1.2;
 
@@ -297,16 +306,18 @@ class _CashFlowCard extends ConsumerWidget {
               const SizedBox(width: 6),
               Text(
                 formatCents(totalIncome),
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(width: 16),
               _LegendDot(color: accent, label: 'Out'),
               const SizedBox(width: 6),
               Text(
                 formatCents(totalExpense),
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
               const Spacer(),
               Text(
@@ -1157,8 +1168,9 @@ class _BreakdownLegendRow extends StatelessWidget {
           ),
           Text(
             formatCents(slice.amountCents),
-            style: theme.textTheme.labelMedium
-                ?.copyWith(fontWeight: FontWeight.w600),
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(width: 8),
           SizedBox(
@@ -1251,7 +1263,9 @@ class _BreakdownPieState extends State<_BreakdownPie> {
       widget.onSliceTap?.call(index);
     }
 
-    final resolved = onSlice && event.isInterestedForInteractions ? index : null;
+    final resolved = onSlice && event.isInterestedForInteractions
+        ? index
+        : null;
     if (resolved == _touchedIndex) return;
     setState(() => _touchedIndex = resolved);
   }
@@ -1269,8 +1283,7 @@ class _BreakdownPieState extends State<_BreakdownPie> {
       sweptRadians += 2 * math.pi * widget.slices[i].amountCents / total;
     }
     final mid =
-        sweptRadians +
-        math.pi * widget.slices[index].amountCents / total;
+        sweptRadians + math.pi * widget.slices[index].amountCents / total;
     const radius = _centerRadius + _sliceRadius / 2;
     return Offset(math.cos(mid) * radius, math.sin(mid) * radius);
   }
@@ -1413,8 +1426,7 @@ class _CategoryManager extends ConsumerWidget {
                   radius: 8,
                   backgroundColor: paletteColor(category.colorValue, context),
                 ),
-                title: Text(category.name,
-                    style: theme.textTheme.bodyMedium),
+                title: Text(category.name, style: theme.textTheme.bodyMedium),
                 subtitle: Text(
                   category.tags.isEmpty
                       ? 'No tags yet'
@@ -1429,8 +1441,8 @@ class _CategoryManager extends ConsumerWidget {
                   PhosphorIconsRegular.pencilSimple,
                   size: 14,
                 ),
-                onTap: () => showCategoryModal(context, ref,
-                    existing: category),
+                onTap: () =>
+                    showCategoryModal(context, ref, existing: category),
               ),
           const SizedBox(height: 12),
           GlassButton(
@@ -1472,12 +1484,7 @@ class _NetWorthCard extends ConsumerWidget {
         room.id: roomYearSummary(room, roomEvents, now: now),
     };
 
-    final series = netWorthSeries(
-      transactions,
-      assets,
-      valuations,
-      months: 12,
-    );
+    final series = netWorthSeries(transactions, assets, valuations, months: 12);
     final current = series.isEmpty ? null : series.last;
     final hasData = transactions.isNotEmpty || assets.isNotEmpty;
 
@@ -1578,7 +1585,8 @@ class _NetWorthChartState extends State<_NetWorthChart> {
 
   void _handleTouch(FlTouchEvent event, LineTouchResponse? response) {
     final hits = response?.lineBarSpots;
-    final next = !event.isInterestedForInteractions || hits == null || hits.isEmpty
+    final next =
+        !event.isInterestedForInteractions || hits == null || hits.isEmpty
         ? null
         : hits.first.spotIndex;
     if (next == _touchedIndex) return;
@@ -1589,8 +1597,7 @@ class _NetWorthChartState extends State<_NetWorthChart> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final series = widget.series;
-    final latestNegative =
-        series.isNotEmpty && series.last.totalCents < 0;
+    final latestNegative = series.isNotEmpty && series.last.totalCents < 0;
     final color = latestNegative ? widget.negativeColor : widget.color;
     final spots = [
       for (var i = 0; i < series.length; i++)
@@ -1621,12 +1628,13 @@ class _NetWorthChartState extends State<_NetWorthChart> {
     }
 
     final touched =
-        _touchedIndex != null && _touchedIndex! >= 0 && _touchedIndex! < series.length
+        _touchedIndex != null &&
+            _touchedIndex! >= 0 &&
+            _touchedIndex! < series.length
         ? _touchedIndex
         : null;
     final touchedPoint = touched == null ? null : series[touched];
-    final touchedNegative =
-        touchedPoint != null && touchedPoint.totalCents < 0;
+    final touchedNegative = touchedPoint != null && touchedPoint.totalCents < 0;
 
     final chart = LineChart(
       LineChartData(

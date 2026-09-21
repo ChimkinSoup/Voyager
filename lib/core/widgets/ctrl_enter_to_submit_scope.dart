@@ -10,7 +10,8 @@ import 'package:flutter/services.dart';
 bool isSubmitChord(KeyEvent event) {
   if (event is KeyUpEvent) return false;
   final key = event.logicalKey;
-  if (key != LogicalKeyboardKey.enter && key != LogicalKeyboardKey.numpadEnter) {
+  if (key != LogicalKeyboardKey.enter &&
+      key != LogicalKeyboardKey.numpadEnter) {
     return false;
   }
   final keyboard = HardwareKeyboard.instance;

@@ -43,7 +43,9 @@ void main() {
       tester,
       active: 3,
       done: 0,
-      extraOverrides: [withImagesOn({'task-00001'})],
+      extraOverrides: [
+        withImagesOn({'task-00001'}),
+      ],
     );
 
     expect(imageIcon(), findsOneWidget);
@@ -65,7 +67,9 @@ void main() {
       active: 2,
       done: 0,
       withNotes: {'task-00000'},
-      extraOverrides: [withImagesOn({'task-00000'})],
+      extraOverrides: [
+        withImagesOn({'task-00000'}),
+      ],
     );
 
     final noteIcon = find.byIcon(PhosphorIconsRegular.note);

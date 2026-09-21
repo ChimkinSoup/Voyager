@@ -832,8 +832,9 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
   }
 }
 
-final settingsProvider =
-    AsyncNotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);
+final settingsProvider = AsyncNotifierProvider<SettingsNotifier, AppSettings>(
+  SettingsNotifier.new,
+);
 
 final colorPaletteProvider = Provider<List<int>>((ref) {
   return ref.watch(settingsProvider).valueOrNull?.colorPalette ??
@@ -994,7 +995,9 @@ final historicalJournalEntriesProvider = FutureProvider.family((
 
 final allDreamEntriesProvider = FutureProvider((ref) {
   ref.keepAlive();
-  return ref.watch(dreamRepositoryProvider).getAllEntries(includeDeleted: false);
+  return ref
+      .watch(dreamRepositoryProvider)
+      .getAllEntries(includeDeleted: false);
 });
 
 final todoListsProvider = FutureProvider((ref) {
@@ -1124,7 +1127,9 @@ final leetcodeProblemsProvider = FutureProvider<List<LeetCodeProblem>>((ref) {
 
 /// Every review the user has graded in a Review Deck session, live rows only.
 /// Bucketed into days by the activity chart and calendar.
-final leetcodeReviewLogProvider = FutureProvider<List<LeetCodeReviewLog>>((ref) {
+final leetcodeReviewLogProvider = FutureProvider<List<LeetCodeReviewLog>>((
+  ref,
+) {
   ref.keepAlive();
   return ref.watch(leetCodeRepositoryProvider).listReviewLogs();
 });
@@ -1137,14 +1142,15 @@ final leetCodeApiClientProvider = Provider<LeetCodeApiClient>((ref) {
 
 /// Folders/decks directly under [parentFolderId] (null = root level), per
 /// the breadcrumb-stack navigation model in STUDY.md.
-final studyFoldersProvider = FutureProvider.family<List<StudyFolder>, String?>(
-  (ref, parentFolderId) {
-    ref.keepAlive();
-    return ref
-        .watch(studyRepositoryProvider)
-        .listFolders(parentFolderId: parentFolderId);
-  },
-);
+final studyFoldersProvider = FutureProvider.family<List<StudyFolder>, String?>((
+  ref,
+  parentFolderId,
+) {
+  ref.keepAlive();
+  return ref
+      .watch(studyRepositoryProvider)
+      .listFolders(parentFolderId: parentFolderId);
+});
 
 /// Single-folder lookup by id, used to render breadcrumb pill labels for the
 /// current navigation stack without loading a whole level's children.
@@ -1156,12 +1162,15 @@ final studyFolderByIdProvider = FutureProvider.family<StudyFolder?, String>((
   return ref.watch(studyRepositoryProvider).getFolder(id);
 });
 
-final studyDecksProvider = FutureProvider.family<List<StudyDeck>, String?>(
-  (ref, parentFolderId) {
-    ref.keepAlive();
-    return ref.watch(studyRepositoryProvider).listDecks(parentFolderId: parentFolderId);
-  },
-);
+final studyDecksProvider = FutureProvider.family<List<StudyDeck>, String?>((
+  ref,
+  parentFolderId,
+) {
+  ref.keepAlive();
+  return ref
+      .watch(studyRepositoryProvider)
+      .listDecks(parentFolderId: parentFolderId);
+});
 
 final studyDeckByIdProvider = FutureProvider.family<StudyDeck?, String>((
   ref,
@@ -1251,12 +1260,14 @@ final studyCardImagesProvider = FutureProvider<Map<String, StudyCardImages>>((
             : a.createdAt.compareTo(b.createdAt);
       });
     images[entry.key] = (
-      front: await service.assetsFor(
-        [for (final r in ordered) if (r.facet == MediaFacet.front) r],
-      ),
-      back: await service.assetsFor(
-        [for (final r in ordered) if (r.facet == MediaFacet.back) r],
-      ),
+      front: await service.assetsFor([
+        for (final r in ordered)
+          if (r.facet == MediaFacet.front) r,
+      ]),
+      back: await service.assetsFor([
+        for (final r in ordered)
+          if (r.facet == MediaFacet.back) r,
+      ]),
     );
   }
   return images;
@@ -1467,11 +1478,8 @@ final jobSeasonsProvider = FutureProvider<List<JobSeason>>((ref) async {
 /// One application's status timeline, for the editor panel. Auto-disposed:
 /// only the open panel shows one, and a cached entry for every application
 /// ever opened would also be re-queried on every sync tick.
-final jobStatusEventsProvider =
-    FutureProvider.autoDispose.family<List<JobStatusEvent>, String>((
-      ref,
-      id,
-    ) async {
+final jobStatusEventsProvider = FutureProvider.autoDispose
+    .family<List<JobStatusEvent>, String>((ref, id) async {
       return ref.watch(jobRepositoryProvider).listStatusEvents(id);
     });
 
@@ -1532,9 +1540,10 @@ final rankingChildrenByParentProvider =
 /// One grouped count rather than watching every category's entry list: those
 /// lists are kept alive, so opening the picker once used to hold every
 /// category's entries in memory for the rest of the session.
-final rankingParentCountsProvider = FutureProvider.autoDispose<Map<String, int>>(
-  (ref) => ref.watch(rankingRepositoryProvider).countParentsByCategory(),
-);
+final rankingParentCountsProvider =
+    FutureProvider.autoDispose<Map<String, int>>(
+      (ref) => ref.watch(rankingRepositoryProvider).countParentsByCategory(),
+    );
 
 final _rankingDataProviders = <ProviderOrFamily>[
   rankingCategoriesProvider,
@@ -1695,9 +1704,7 @@ final leetcodeQuestionCountsProvider =
       // rings' denominators off until the app was restarted.
       final link = ref.keepAlive();
       try {
-        return await ref
-            .watch(leetCodeApiClientProvider)
-            .fetchQuestionCounts();
+        return await ref.watch(leetCodeApiClientProvider).fetchQuestionCounts();
       } catch (_) {
         link.close();
         rethrow;
@@ -2338,17 +2345,16 @@ final syncCompareLoggerProvider = ChangeNotifierProvider<SyncCompareLogger>((
 final fpsMonitorProvider = ChangeNotifierProvider<FpsMonitorController>((ref) {
   final controller = FpsMonitorController();
   ref.onDispose(controller.dispose);
-  ref.listen<bool>(
-    devSettingsProvider.select((s) => s.showFpsCounter),
-    (previous, showFpsCounter) {
-      if (showFpsCounter) {
-        controller.start();
-      } else {
-        controller.stop();
-      }
-    },
-    fireImmediately: true,
-  );
+  ref.listen<bool>(devSettingsProvider.select((s) => s.showFpsCounter), (
+    previous,
+    showFpsCounter,
+  ) {
+    if (showFpsCounter) {
+      controller.start();
+    } else {
+      controller.stop();
+    }
+  }, fireImmediately: true);
   return controller;
 });
 

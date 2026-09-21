@@ -313,14 +313,18 @@ class MediaTransferWorker {
     final permanent = error is MediaStoragePermanentFailure;
     if (permanent || attempts >= maxAttempts) {
       _attempts.remove(asset.id);
-      debugPrint('[media] parking ${asset.id} after $attempts attempt(s): $error');
+      debugPrint(
+        '[media] parking ${asset.id} after $attempts attempt(s): $error',
+      );
       await _repository.upsertAsset(
         park(error.toString()),
         recordLocalActivity: false,
       );
       return;
     }
-    debugPrint('[media] transfer attempt $attempts failed for ${asset.id}: $error');
+    debugPrint(
+      '[media] transfer attempt $attempts failed for ${asset.id}: $error',
+    );
     await _repository.upsertAsset(requeue(), recordLocalActivity: false);
   }
 

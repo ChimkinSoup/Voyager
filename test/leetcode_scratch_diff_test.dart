@@ -6,11 +6,12 @@ import 'package:voyager/features/leetcode/leetcode_scratch_diff.dart';
 String _render(List<LeetCodeDiffRow> rows) => [
   for (final row in rows)
     '${switch (row.kind) {
-      LeetCodeDiffKind.same => '=',
-      LeetCodeDiffKind.changed => '~',
-      LeetCodeDiffKind.removed => '-',
-      LeetCodeDiffKind.added => '+',
-    }} ${row.left ?? ''} | ${row.right ?? ''}'.trimRight(),
+          LeetCodeDiffKind.same => '=',
+          LeetCodeDiffKind.changed => '~',
+          LeetCodeDiffKind.removed => '-',
+          LeetCodeDiffKind.added => '+',
+        }} ${row.left ?? ''} | ${row.right ?? ''}'
+        .trimRight(),
 ].join('\n');
 
 void main() {

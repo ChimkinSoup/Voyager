@@ -393,10 +393,7 @@ class _CardSide extends ConsumerWidget {
               autofocus: autofocus,
               maxLines: 4,
               minLines: 2,
-              decoration: InputDecoration(
-                labelText: label,
-                hintText: hintText,
-              ),
+              decoration: InputDecoration(labelText: label, hintText: hintText),
             ),
             if (images.isNotEmpty) ...[
               const SizedBox(height: 6),

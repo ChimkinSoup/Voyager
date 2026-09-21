@@ -172,15 +172,15 @@ void main() {
 
   group('ordering', () {
     JobApplication row(String id, DateTime dateApplied, DateTime createdAt) =>
-      JobApplication(
-        id: id,
-        company: id,
-        title: 'SWE',
-        status: 'Applied',
-        dateApplied: dateApplied,
-        createdAt: createdAt,
-        updatedAt: createdAt,
-      );
+        JobApplication(
+          id: id,
+          company: id,
+          title: 'SWE',
+          status: 'Applied',
+          dateApplied: dateApplied,
+          createdAt: createdAt,
+          updatedAt: createdAt,
+        );
 
     test('a later day comes first', () {
       final older = row('older', DateTime(2026, 8, 19), DateTime(2026, 8, 19));
@@ -195,21 +195,19 @@ void main() {
       // whatever the unstable sort produced — which is what read as
       // alphabetical-within-the-day.
       final day = DateTime(2026, 8, 20);
-      final rows =
-          [
-            row('zulu', day, DateTime(2026, 8, 20, 9)),
-            row('alpha', day, DateTime(2026, 8, 20, 11)),
-            row('mike', day, DateTime(2026, 8, 20, 10)),
-          ]..sort(compareJobApplications);
+      final rows = [
+        row('zulu', day, DateTime(2026, 8, 20, 9)),
+        row('alpha', day, DateTime(2026, 8, 20, 11)),
+        row('mike', day, DateTime(2026, 8, 20, 10)),
+      ]..sort(compareJobApplications);
       expect([for (final r in rows) r.id], ['alpha', 'mike', 'zulu']);
     });
 
     test('the tiebreak does not reorder across days', () {
-      final rows =
-          [
-            row('yesterday-late', DateTime(2026, 8, 19), DateTime(2026, 8, 25)),
-            row('today-early', DateTime(2026, 8, 20), DateTime(2026, 8, 20)),
-          ]..sort(compareJobApplications);
+      final rows = [
+        row('yesterday-late', DateTime(2026, 8, 19), DateTime(2026, 8, 25)),
+        row('today-early', DateTime(2026, 8, 20), DateTime(2026, 8, 20)),
+      ]..sort(compareJobApplications);
       expect([for (final r in rows) r.id], ['today-early', 'yesterday-late']);
     });
   });
@@ -253,17 +251,16 @@ void main() {
       // Archived only once every season it is filed under has been retired:
       // a row that also belongs to a running cycle is still in play.
       expect(
-        jobIsArchived(
-          app(seasonIds: const ['retired', 'live']),
-          const {'retired'},
-        ),
+        jobIsArchived(app(seasonIds: const ['retired', 'live']), const {
+          'retired',
+        }),
         isFalse,
       );
       expect(
-        jobIsArchived(
-          app(seasonIds: const ['retired', 'gone']),
-          const {'retired', 'gone'},
-        ),
+        jobIsArchived(app(seasonIds: const ['retired', 'gone']), const {
+          'retired',
+          'gone',
+        }),
         isTrue,
       );
     });
@@ -356,9 +353,11 @@ void main() {
       // The seeded catalogue is ~150 entries; offering it unprompted on focus
       // would bury the handful the user actually uses.
       expect(
-        filterJobCompanies(companies, '', recentKeys: const ['visa']).map(
-          (c) => c.name,
-        ),
+        filterJobCompanies(
+          companies,
+          '',
+          recentKeys: const ['visa'],
+        ).map((c) => c.name),
         ['Visa'],
       );
     });
@@ -371,8 +370,11 @@ void main() {
       // 'US Visa' would sort last on its own — prefix matches come first —
       // but having been applied to outranks that.
       expect(
-        filterJobCompanies(companies, 'visa', recentKeys: const ['us visa'])
-            .map((c) => c.name),
+        filterJobCompanies(
+          companies,
+          'visa',
+          recentKeys: const ['us visa'],
+        ).map((c) => c.name),
         ['US Visa', 'Visa'],
       );
     });

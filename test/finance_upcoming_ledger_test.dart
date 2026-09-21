@@ -100,9 +100,9 @@ void main() {
     final past = at(DateTime(2026, 9, 1));
     final tomorrow = at(DateTime(2026, 9, 13));
 
-    expect(
-      settledTransactions([tomorrow, lateToday, past], now),
-      [lateToday, past],
-    );
+    expect(settledTransactions([tomorrow, lateToday, past], now), [
+      lateToday,
+      past,
+    ]);
   });
 }

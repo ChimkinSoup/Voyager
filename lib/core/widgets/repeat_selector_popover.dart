@@ -69,7 +69,8 @@ class _RepeatSelectorPopoverState extends State<RepeatSelectorPopover> {
     super.dispose();
   }
 
-  Color get _accent => widget.accentColor ?? Theme.of(context).colorScheme.primary;
+  Color get _accent =>
+      widget.accentColor ?? Theme.of(context).colorScheme.primary;
 
   void _commit(RecurrenceRule rule) => Navigator.of(context).pop(rule);
 
@@ -240,8 +241,7 @@ class _RepeatSelectorPopoverState extends State<RepeatSelectorPopover> {
                 value: _customFrequency,
                 interval: _customInterval,
                 accent: _accent,
-                onChanged: (value) =>
-                    setState(() => _customFrequency = value),
+                onChanged: (value) => setState(() => _customFrequency = value),
               ),
             ),
           ],
@@ -439,9 +439,11 @@ class _WeekdayChips extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        for (var weekday = DateTime.monday;
-            weekday <= DateTime.sunday;
-            weekday++)
+        for (
+          var weekday = DateTime.monday;
+          weekday <= DateTime.sunday;
+          weekday++
+        )
           () {
             final isOn = selected.contains(weekday);
             return Tooltip(
@@ -449,8 +451,9 @@ class _WeekdayChips extends StatelessWidget {
               child: Material(
                 color: isOn
                     ? accent
-                    : theme.colorScheme.surfaceContainerHighest
-                        .withValues(alpha: 0.5),
+                    : theme.colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.5,
+                      ),
                 shape: const CircleBorder(),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
@@ -465,8 +468,9 @@ class _WeekdayChips extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                           color: isOn
                               ? onColorLabel(accent)
-                              : theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.7),
+                              : theme.colorScheme.onSurface.withValues(
+                                  alpha: 0.7,
+                                ),
                         ),
                       ),
                     ),

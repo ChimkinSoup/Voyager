@@ -63,12 +63,14 @@ void main() {
     expect((await store.load()).heroExpandRange, FinanceHeroRange.month);
   });
 
-  test('an unreadable file falls back to defaults rather than throwing',
-      () async {
-    await prefsFile().writeAsString('{not json');
+  test(
+    'an unreadable file falls back to defaults rather than throwing',
+    () async {
+      await prefsFile().writeAsString('{not json');
 
-    expect(await store.load(), FinanceUiPrefs.defaults);
-  });
+      expect(await store.load(), FinanceUiPrefs.defaults);
+    },
+  );
 
   test('an unknown enum value falls back for that field only', () async {
     await prefsFile().writeAsString(
@@ -97,37 +99,41 @@ void main() {
     expect((await store.load()).breakdownMode, FinanceBreakdownMode.category);
   });
 
-  test('the file holds only finance chrome, so nothing here can reach sync',
-      () async {
-    await store.save(const FinanceUiPrefs(viewMode: FinanceViewMode.goals));
+  test(
+    'the file holds only finance chrome, so nothing here can reach sync',
+    () async {
+      await store.save(const FinanceUiPrefs(viewMode: FinanceViewMode.goals));
 
-    final json =
-        jsonDecode(await prefsFile().readAsString()) as Map<String, dynamic>;
+      final json =
+          jsonDecode(await prefsFile().readAsString()) as Map<String, dynamic>;
 
-    expect(json.keys.toSet(), {
-      'financeViewMode',
-      'financeBreakdownMode',
-      'financeBreakdownChart',
-      'financeCashFlowGranularity',
-      'financeHeroExpandRange',
-    });
-  });
+      expect(json.keys.toSet(), {
+        'financeViewMode',
+        'financeBreakdownMode',
+        'financeBreakdownChart',
+        'financeCashFlowGranularity',
+        'financeHeroExpandRange',
+      });
+    },
+  );
 
-  test('the notifier keeps a choice made before the file has been read',
-      () async {
-    final slow = _SlowStore(
-      const FinanceUiPrefs(viewMode: FinanceViewMode.analytics),
-    );
-    final notifier = FinanceUiPrefsNotifier(slow);
+  test(
+    'the notifier keeps a choice made before the file has been read',
+    () async {
+      final slow = _SlowStore(
+        const FinanceUiPrefs(viewMode: FinanceViewMode.analytics),
+      );
+      final notifier = FinanceUiPrefsNotifier(slow);
 
-    // The user reaches the page and picks Goals while the read is in flight.
-    notifier.setViewMode(FinanceViewMode.goals);
-    slow.complete();
-    await Future<void>.delayed(Duration.zero);
+      // The user reaches the page and picks Goals while the read is in flight.
+      notifier.setViewMode(FinanceViewMode.goals);
+      slow.complete();
+      await Future<void>.delayed(Duration.zero);
 
-    expect(notifier.state.viewMode, FinanceViewMode.goals);
-    notifier.dispose();
-  });
+      expect(notifier.state.viewMode, FinanceViewMode.goals);
+      notifier.dispose();
+    },
+  );
 }
 
 /// A store whose load stays pending until [complete] is called.

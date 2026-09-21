@@ -111,11 +111,8 @@ void main() {
 
     final master = (await repo.getEvent(_eventId))!;
     expect(master.deletedAt, isNull, reason: 'the series itself survives');
-    expect(
-      master.exceptionDates.map(
-        (d) => DateTime(d.year, d.month, d.day),
-      ),
-      [DateTime(target.year, target.month, target.day)],
-    );
+    expect(master.exceptionDates.map((d) => DateTime(d.year, d.month, d.day)), [
+      DateTime(target.year, target.month, target.day),
+    ]);
   });
 }

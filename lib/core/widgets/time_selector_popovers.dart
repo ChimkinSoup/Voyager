@@ -4,7 +4,6 @@ import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
 import 'voyager_time_picker_spinner.dart';
 
-
 class TimeRangePopover extends StatefulWidget {
   final DateTime initialStart;
   final DateTime initialEnd;
@@ -28,7 +27,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
 
   late final TextEditingController _startController;
   late final TextEditingController _endController;
-  
+
   late final FocusNode _startFocus;
   late final FocusNode _endFocus;
 
@@ -62,7 +61,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
     _duration = _endDt.difference(_startDt);
     if (_duration.isNegative) _duration = const Duration(hours: 1);
     _selectedDuration = _matchingPresetDuration(_duration);
-    
+
     _startController = TextEditingController();
     _endController = TextEditingController();
 
@@ -147,30 +146,54 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
     if (minute > 59) return null;
 
     if (hour > 12 && isPM == null) {
-       if (hour > 23) return null;
-       return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, hour, minute);
+      if (hour > 23) return null;
+      return DateTime(
+        referenceTime.year,
+        referenceTime.month,
+        referenceTime.day,
+        hour,
+        minute,
+      );
     }
-    
+
     if (hour > 12) return null;
 
     if (isPM != null) {
-       int h24 = hour % 12;
-       if (isPM) h24 += 12;
-       return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, h24, minute);
+      int h24 = hour % 12;
+      if (isPM) h24 += 12;
+      return DateTime(
+        referenceTime.year,
+        referenceTime.month,
+        referenceTime.day,
+        h24,
+        minute,
+      );
     } else {
-       int h24 = hour % 12;
-       int t1 = h24; 
-       int t2 = h24 + 12; 
-       
-       double refH = referenceTime.hour + referenceTime.minute / 60.0;
-       double t1Diff = (t1 + (minute/60.0) - refH + 24) % 24;
-       double t2Diff = (t2 + (minute/60.0) - refH + 24) % 24;
-       
-       if (t1Diff < t2Diff) {
-         return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, t1, minute);
-       } else {
-         return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, t2, minute);
-       }
+      int h24 = hour % 12;
+      int t1 = h24;
+      int t2 = h24 + 12;
+
+      double refH = referenceTime.hour + referenceTime.minute / 60.0;
+      double t1Diff = (t1 + (minute / 60.0) - refH + 24) % 24;
+      double t2Diff = (t2 + (minute / 60.0) - refH + 24) % 24;
+
+      if (t1Diff < t2Diff) {
+        return DateTime(
+          referenceTime.year,
+          referenceTime.month,
+          referenceTime.day,
+          t1,
+          minute,
+        );
+      } else {
+        return DateTime(
+          referenceTime.year,
+          referenceTime.month,
+          referenceTime.day,
+          t2,
+          minute,
+        );
+      }
     }
   }
 
@@ -194,7 +217,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
     setState(() {
       _startDt = newStartDt;
       _endDt = _startDt.add(_duration);
-      
+
       if (updateText) {
         _startController.text = _formatTime(_startDt);
       }
@@ -209,14 +232,14 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
   void _applyEndDt(DateTime newEndDt, {bool updateText = true}) {
     setState(() {
       _endDt = newEndDt;
-      
+
       // Failsafe: if end is pushed to or before start, push start backwards to maintain a minimum 1-hour duration
       if (!_endDt.isAfter(_startDt)) {
-         _startDt = _endDt.subtract(const Duration(hours: 1));
+        _startDt = _endDt.subtract(const Duration(hours: 1));
       }
       _duration = _endDt.difference(_startDt);
       _selectedDuration = _matchingPresetDuration(_duration);
-      
+
       if (updateText) {
         _endController.text = _formatTime(_endDt);
       }
@@ -252,7 +275,8 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
     if (!mounted) return;
     setState(() => _canPop = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) Navigator.of(context).pop(DateTimeRange(start: _startDt, end: _endDt));
+      if (mounted)
+        Navigator.of(context).pop(DateTimeRange(start: _startDt, end: _endDt));
     });
   }
 
@@ -297,7 +321,8 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
         child: Material(
           type: MaterialType.transparency,
           child: TextField(
-            contextMenuBuilder: (context, editableTextState) => const SizedBox.shrink(),
+            contextMenuBuilder: (context, editableTextState) =>
+                const SizedBox.shrink(),
             textAlign: TextAlign.center,
             controller: controller,
             focusNode: focusNode,
@@ -344,7 +369,11 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
     ];
 
     final activeNormalTextStyle = theme.textTheme.titleLarge?.copyWith(
-      color: Color.lerp(theme.colorScheme.primary, theme.colorScheme.onSurface, 0.7)?.withValues(alpha: 0.4),
+      color: Color.lerp(
+        theme.colorScheme.primary,
+        theme.colorScheme.onSurface,
+        0.7,
+      )?.withValues(alpha: 0.4),
     );
     final activeHighlightTextStyle = theme.textTheme.titleLarge?.copyWith(
       color: theme.colorScheme.primary,
@@ -365,7 +394,10 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
         if (mounted) {
           setState(() => _canPop = true);
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) Navigator.of(context).pop(DateTimeRange(start: _startDt, end: _endDt));
+            if (mounted)
+              Navigator.of(
+                context,
+              ).pop(DateTimeRange(start: _startDt, end: _endDt));
           });
         }
       },
@@ -401,7 +433,11 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
                   ),
                 ),
                 const SizedBox(width: 4),
-                Icon(Icons.arrow_forward, size: 16, color: theme.colorScheme.primary),
+                Icon(
+                  Icons.arrow_forward,
+                  size: 16,
+                  color: theme.colorScheme.primary,
+                ),
                 const SizedBox(width: 4),
                 Expanded(
                   child: AnimatedOpacity(
@@ -442,8 +478,12 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
                     time: _startDt,
                     minutesInterval: 5,
                     isActive: _activeIsStart,
-                    normalTextStyle: _activeIsStart ? activeNormalTextStyle : inactiveNormalTextStyle,
-                    highlightedTextStyle: _activeIsStart ? activeHighlightTextStyle : inactiveHighlightTextStyle,
+                    normalTextStyle: _activeIsStart
+                        ? activeNormalTextStyle
+                        : inactiveNormalTextStyle,
+                    highlightedTextStyle: _activeIsStart
+                        ? activeHighlightTextStyle
+                        : inactiveHighlightTextStyle,
                     spacing: 4,
                     itemHeight: 40,
                     onInteraction: () {
@@ -456,7 +496,11 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                Icon(Icons.arrow_forward, size: 20, color: theme.colorScheme.primary),
+                Icon(
+                  Icons.arrow_forward,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
                 const SizedBox(width: 2),
                 AnimatedOpacity(
                   duration: const Duration(milliseconds: 150),
@@ -465,8 +509,12 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
                     time: _endDt,
                     minutesInterval: 5,
                     isActive: !_activeIsStart,
-                    normalTextStyle: !_activeIsStart ? activeNormalTextStyle : inactiveNormalTextStyle,
-                    highlightedTextStyle: !_activeIsStart ? activeHighlightTextStyle : inactiveHighlightTextStyle,
+                    normalTextStyle: !_activeIsStart
+                        ? activeNormalTextStyle
+                        : inactiveNormalTextStyle,
+                    highlightedTextStyle: !_activeIsStart
+                        ? activeHighlightTextStyle
+                        : inactiveHighlightTextStyle,
                     spacing: 4,
                     itemHeight: 40,
                     onInteraction: () {
@@ -501,14 +549,20 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
                           : theme.colorScheme.onSurface,
                     ),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 0,
+                  ),
                   visualDensity: VisualDensity.compact,
-                  backgroundColor:
-                      isSelected ? theme.colorScheme.primary : Colors.transparent,
+                  backgroundColor: isSelected
+                      ? theme.colorScheme.primary
+                      : Colors.transparent,
                   side: isSelected
                       ? BorderSide(color: theme.colorScheme.primary, width: 1)
                       : BorderSide(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.2),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.2,
+                          ),
                           width: 1,
                         ),
                   onPressed: () {
@@ -524,7 +578,13 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
             child: Container(
               height: 48,
               alignment: Alignment.center,
-              child: Text('Done', style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+              child: Text(
+                'Done',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
         ],
@@ -626,30 +686,54 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
     if (minute > 59) return null;
 
     if (hour > 12 && isPM == null) {
-       if (hour > 23) return null;
-       return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, hour, minute);
+      if (hour > 23) return null;
+      return DateTime(
+        referenceTime.year,
+        referenceTime.month,
+        referenceTime.day,
+        hour,
+        minute,
+      );
     }
-    
+
     if (hour > 12) return null;
 
     if (isPM != null) {
-       int h24 = hour % 12;
-       if (isPM) h24 += 12;
-       return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, h24, minute);
+      int h24 = hour % 12;
+      if (isPM) h24 += 12;
+      return DateTime(
+        referenceTime.year,
+        referenceTime.month,
+        referenceTime.day,
+        h24,
+        minute,
+      );
     } else {
-       int h24 = hour % 12;
-       int t1 = h24; 
-       int t2 = h24 + 12; 
-       
-       double refH = referenceTime.hour + referenceTime.minute / 60.0;
-       double t1Diff = (t1 + (minute/60.0) - refH + 24) % 24;
-       double t2Diff = (t2 + (minute/60.0) - refH + 24) % 24;
-       
-       if (t1Diff < t2Diff) {
-         return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, t1, minute);
-       } else {
-         return DateTime(referenceTime.year, referenceTime.month, referenceTime.day, t2, minute);
-       }
+      int h24 = hour % 12;
+      int t1 = h24;
+      int t2 = h24 + 12;
+
+      double refH = referenceTime.hour + referenceTime.minute / 60.0;
+      double t1Diff = (t1 + (minute / 60.0) - refH + 24) % 24;
+      double t2Diff = (t2 + (minute / 60.0) - refH + 24) % 24;
+
+      if (t1Diff < t2Diff) {
+        return DateTime(
+          referenceTime.year,
+          referenceTime.month,
+          referenceTime.day,
+          t1,
+          minute,
+        );
+      } else {
+        return DateTime(
+          referenceTime.year,
+          referenceTime.month,
+          referenceTime.day,
+          t2,
+          minute,
+        );
+      }
     }
   }
 
@@ -712,24 +796,20 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
-        border: Border.all(
-          color: accent,
-          width: 2,
-        ),
+        border: Border.all(color: accent, width: 2),
       ),
       child: Theme(
         data: fieldTheme,
         child: Material(
           type: MaterialType.transparency,
           child: TextField(
-            contextMenuBuilder: (context, editableTextState) => const SizedBox.shrink(),
+            contextMenuBuilder: (context, editableTextState) =>
+                const SizedBox.shrink(),
             textAlign: TextAlign.center,
             controller: controller,
             focusNode: focusNode,
             scrollPadding: kVoyagerFieldScrollPadding,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: accent,
-            ),
+            style: theme.textTheme.titleMedium?.copyWith(color: accent),
             decoration: InputDecoration(
               hintText: hintText,
               hintStyle: theme.textTheme.titleMedium?.copyWith(
@@ -758,9 +838,13 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     final activeNormalTextStyle = theme.textTheme.titleLarge?.copyWith(
-      color: Color.lerp(theme.colorScheme.primary, theme.colorScheme.onSurface, 0.7)?.withValues(alpha: 0.4),
+      color: Color.lerp(
+        theme.colorScheme.primary,
+        theme.colorScheme.onSurface,
+        0.7,
+      )?.withValues(alpha: 0.4),
     );
     final activeHighlightTextStyle = theme.textTheme.titleLarge?.copyWith(
       color: theme.colorScheme.primary,
@@ -831,7 +915,13 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
             child: Container(
               height: 48,
               alignment: Alignment.center,
-              child: Text('Done', style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+              child: Text(
+                'Done',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
         ],

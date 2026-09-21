@@ -12,7 +12,6 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 
-
 void main() {
   setUpAll(() => driftRuntimeOptions.dontWarnAboutMultipleDatabases = true);
 
@@ -65,8 +64,10 @@ void main() {
 
     final current = container.read(remoteSyncServiceProvider);
     expect(
-      current.charOpRegistry
-          .takePendingOps(FirestoreCollections.journalEntries, 'entry-1'),
+      current.charOpRegistry.takePendingOps(
+        FirestoreCollections.journalEntries,
+        'entry-1',
+      ),
       isNotEmpty,
     );
   });

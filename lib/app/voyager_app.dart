@@ -198,9 +198,10 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
         ? ref.read(remoteSyncServiceProvider)
         : _remoteSync;
     if (remoteSync != null) {
-      await remoteSync
-          .flushAllPending()
-          .timeout(_flushDeadline, onTimeout: () {});
+      await remoteSync.flushAllPending().timeout(
+        _flushDeadline,
+        onTimeout: () {},
+      );
     }
   }
 
@@ -249,9 +250,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
                   child: SnippetSettingsLauncher(
                     open: showSnippetsDialog,
                     child: DefaultTextStyle(
-                      style: AppFonts.style(
-                        color: theme.colorScheme.onSurface,
-                      ),
+                      style: AppFonts.style(color: theme.colorScheme.onSurface),
                       child: FloaterHost(
                         child: Stack(
                           children: [

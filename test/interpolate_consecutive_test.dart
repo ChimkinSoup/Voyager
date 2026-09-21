@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
@@ -23,12 +23,7 @@ void main() {
   // Catmull-Rom tangent at the top of the climb still points sharply upward
   // while the plateau's does not, so the segment between them bulges above
   // the cap.
-  final spiky = [
-    value(0, 0),
-    value(10, 0),
-    value(20, 10),
-    value(30, 10),
-  ];
+  final spiky = [value(0, 0), value(10, 0), value(20, 10), value(30, 10)];
 
   test('interpolated values stay within [0, cap] when a cap is set', () {
     final spots = analytics.interpolateConsecutive(

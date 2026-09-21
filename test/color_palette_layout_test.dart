@@ -86,27 +86,33 @@ void main() {
     expect(layout.width, layout.contentWidth);
   });
 
-  test('computeColorPaletteLayout keeps at least one column for a tight box', () {
-    // maxWidth smaller than a single cell must not floor down to zero columns.
-    final layout = computeColorPaletteLayout(
-      colorCount: 6,
-      maxWidth: 10,
-      maxHeight: 10,
-    );
-    expect(layout.columns, greaterThanOrEqualTo(1));
-    expect(layout.width, greaterThan(0));
-    expect(layout.height, greaterThan(0));
-  });
+  test(
+    'computeColorPaletteLayout keeps at least one column for a tight box',
+    () {
+      // maxWidth smaller than a single cell must not floor down to zero columns.
+      final layout = computeColorPaletteLayout(
+        colorCount: 6,
+        maxWidth: 10,
+        maxHeight: 10,
+      );
+      expect(layout.columns, greaterThanOrEqualTo(1));
+      expect(layout.width, greaterThan(0));
+      expect(layout.height, greaterThan(0));
+    },
+  );
 
-  test('computeColorPaletteLayout returns a placeholder for an empty palette', () {
-    final layout = computeColorPaletteLayout(
-      colorCount: 0,
-      maxWidth: 400,
-      maxHeight: 500,
-    );
-    expect(layout.columns, 1);
-    expect(layout.scrollable, isFalse);
-    expect(layout.width, greaterThan(0));
-    expect(layout.height, greaterThan(0));
-  });
+  test(
+    'computeColorPaletteLayout returns a placeholder for an empty palette',
+    () {
+      final layout = computeColorPaletteLayout(
+        colorCount: 0,
+        maxWidth: 400,
+        maxHeight: 500,
+      );
+      expect(layout.columns, 1);
+      expect(layout.scrollable, isFalse);
+      expect(layout.width, greaterThan(0));
+      expect(layout.height, greaterThan(0));
+    },
+  );
 }

@@ -59,11 +59,9 @@ class _ExerciseTargetEditorState extends State<_ExerciseTargetEditor> {
   void _submit() {
     final sets =
         int.tryParse(_setsController.text.trim()) ?? widget.exercise.targetSets;
-    Navigator.of(context).pop((
-      sets: sets.clamp(1, kMaxSets),
-      reps: _reps,
-      weightKg: _weightKg,
-    ));
+    Navigator.of(
+      context,
+    ).pop((sets: sets.clamp(1, kMaxSets), reps: _reps, weightKg: _weightKg));
   }
 
   @override

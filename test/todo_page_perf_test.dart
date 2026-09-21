@@ -125,9 +125,7 @@ Future<int> _scrollFrameCost(WidgetTester tester) async {
   for (var i = 0; i < 12; i++) {
     counts.add(
       await _countRebuilds(() async {
-        await tester.sendEventToBinding(
-          pointer.scroll(const Offset(0, 24)),
-        );
+        await tester.sendEventToBinding(pointer.scroll(const Offset(0, 24)));
         await tester.pump(const Duration(milliseconds: 16));
       }),
     );
@@ -275,7 +273,10 @@ Future<({int total, int paragraphs})> _panelFrameLayouts(
   // changing for a stretch near the end and those frames cost nothing — a
   // plain median over the whole window would report that tail, not the cost
   // of animating.
-  final moving = [for (final s in samples) if (s.total > 10) s];
+  final moving = [
+    for (final s in samples)
+      if (s.total > 10) s,
+  ];
   if (moving.isEmpty) return (total: 0, paragraphs: 0);
   moving.sort((a, b) => a.total.compareTo(b.total));
   return moving[moving.length ~/ 2];
@@ -323,19 +324,18 @@ void main() {
   // of it costs in layout, on a list big enough that the cacheExtent is
   // holding several screens of rows mounted.
   for (final size in const [(active: 20, done: 4), (active: 200, done: 300)]) {
-    testWidgets(
-      'panel reveal - active=${size.active} completed=${size.done}',
-      (tester) async {
-        tester.view.physicalSize = const Size(1600, 1000);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.reset);
-        await pumpTodoPage(tester, active: size.active, done: size.done);
-        final frame = await _panelFrameLayouts(tester);
-        debugPrint(
-          '[perf] panel reveal active=${size.active} completed=${size.done} '
-          'layouts/frame=${frame.total}  paragraphs/frame=${frame.paragraphs}',
-        );
-      },
-    );
+    testWidgets('panel reveal - active=${size.active} completed=${size.done}', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1600, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await pumpTodoPage(tester, active: size.active, done: size.done);
+      final frame = await _panelFrameLayouts(tester);
+      debugPrint(
+        '[perf] panel reveal active=${size.active} completed=${size.done} '
+        'layouts/frame=${frame.total}  paragraphs/frame=${frame.paragraphs}',
+      );
+    });
   }
 }

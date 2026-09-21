@@ -56,9 +56,7 @@ Future<void> _openModal(WidgetTester tester) async {
     ProviderScope(
       overrides: [
         databaseProvider.overrideWithValue(db),
-        leetCodeRepositoryProvider.overrideWithValue(
-          _NoopLeetCodeRepository(),
-        ),
+        leetCodeRepositoryProvider.overrideWithValue(_NoopLeetCodeRepository()),
         remoteSyncServiceProvider.overrideWithValue(_NoopRemoteSync()),
       ],
       child: MaterialApp(

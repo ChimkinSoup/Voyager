@@ -49,7 +49,11 @@ void main() {
             child: Scaffold(
               body: Column(
                 children: [
-                  LabeledTextField(label: 'A', controller: a, focusNode: focusA),
+                  LabeledTextField(
+                    label: 'A',
+                    controller: a,
+                    focusNode: focusA,
+                  ),
                   LabeledTextField(
                     label: 'B',
                     controller: b,
@@ -80,53 +84,57 @@ void main() {
     }
   }
 
-  testWidgets('leaving a field in Visual mode does not overwrite the next one',
-      (tester) async {
-    await pumpFields(tester);
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pump();
-    await typeCommand(tester, 'vl');
+  testWidgets(
+    'leaving a field in Visual mode does not overwrite the next one',
+    (tester) async {
+      await pumpFields(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      await typeCommand(tester, 'vl');
 
-    focusB.requestFocus();
-    await tester.pump();
+      focusB.requestFocus();
+      await tester.pump();
 
-    expect(b.text, 'BBBB');
-    expect(a.text, 'AAAA');
-    // The corruption used to be persisted, because it arrived through
-    // `userUpdateTextEditingValue` on the field it landed in.
-    expect(changesB, isEmpty);
-  });
+      expect(b.text, 'BBBB');
+      expect(a.text, 'AAAA');
+      // The corruption used to be persisted, because it arrived through
+      // `userUpdateTextEditingValue` on the field it landed in.
+      expect(changesB, isEmpty);
+    },
+  );
 
-  testWidgets('a clipboard read that resolves after a focus change is dropped',
-      (tester) async {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-          if (call.method == 'Clipboard.getData') {
-            await Future<void>.delayed(const Duration(milliseconds: 50));
-            return <String, dynamic>{'text': 'PASTED'};
-          }
-          return null;
-        });
-    addTearDown(
-      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, null),
-    );
+  testWidgets(
+    'a clipboard read that resolves after a focus change is dropped',
+    (tester) async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+            if (call.method == 'Clipboard.getData') {
+              await Future<void>.delayed(const Duration(milliseconds: 50));
+              return <String, dynamic>{'text': 'PASTED'};
+            }
+            return null;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
 
-    await pumpFields(tester);
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pump();
+      await pumpFields(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
 
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    focusB.requestFocus();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      focusB.requestFocus();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
 
-    expect(b.text, 'BBBB');
-    expect(changesB, isEmpty);
-    // Nor does it land late in the field it was typed in: by then that field
-    // is back in Insert and the user has moved on.
-    expect(a.text, 'AAAA');
-  });
+      expect(b.text, 'BBBB');
+      expect(changesB, isEmpty);
+      // Nor does it land late in the field it was typed in: by then that field
+      // is back in Insert and the user has moved on.
+      expect(a.text, 'AAAA');
+    },
+  );
 }

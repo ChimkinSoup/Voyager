@@ -69,10 +69,9 @@ void main() {
     await tester.tap(
       find
           .descendant(
-            of: find.ancestor(
-              of: find.text('Climb 0'),
-              matching: find.byType(Row),
-            ).last,
+            of: find
+                .ancestor(of: find.text('Climb 0'), matching: find.byType(Row))
+                .last,
             matching: find.byIcon(Icons.close),
           )
           .first,
@@ -93,7 +92,9 @@ void main() {
     await tester.tap(find.text('Undo'));
     await tester.pumpAndSettle();
 
-    final restored = (await repo.listItems()).where((i) => i.title == 'Climb 0');
+    final restored = (await repo.listItems()).where(
+      (i) => i.title == 'Climb 0',
+    );
     expect(restored, hasLength(1));
     expect(restored.single.deletedAt, isNull);
     expect(

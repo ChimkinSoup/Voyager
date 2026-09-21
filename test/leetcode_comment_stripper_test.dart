@@ -23,7 +23,10 @@ class Solution {
 
     test('keeps blank lines that were already blank', () {
       const code = 'int a = 1;\n\n// gone\nint b = 2;';
-      expect(stripLeetCodeLineComments(code, 'java'), 'int a = 1;\n\nint b = 2;');
+      expect(
+        stripLeetCodeLineComments(code, 'java'),
+        'int a = 1;\n\nint b = 2;',
+      );
     });
 
     test('uses # for Python and leaves // alone', () {
@@ -39,14 +42,17 @@ class Solution {
       );
     });
 
-    test('ignores a marker inside a Python docstring and keeps the docstring',
-        () {
-      const code = 'def f():\n    """Not # a comment."""\n    return 1  # yes';
-      expect(
-        stripLeetCodeLineComments(code, 'python'),
-        'def f():\n    """Not # a comment."""\n    return 1',
-      );
-    });
+    test(
+      'ignores a marker inside a Python docstring and keeps the docstring',
+      () {
+        const code =
+            'def f():\n    """Not # a comment."""\n    return 1  # yes';
+        expect(
+          stripLeetCodeLineComments(code, 'python'),
+          'def f():\n    """Not # a comment."""\n    return 1',
+        );
+      },
+    );
 
     test('leaves block comments untouched, including // inside one', () {
       const code = '/* keep\n   // inside\n*/\nint a = 1; // go';

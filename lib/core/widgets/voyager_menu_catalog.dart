@@ -106,13 +106,14 @@ extension VoyagerMenuCatalogEntryLabels on VoyagerMenuCatalogEntry {
     _ => null,
   };
 
-  static VoyagerMenuCatalogEntry? forWeatherIcon(String? icon) => switch (icon) {
-    'sunny' => VoyagerMenuCatalogEntry.weatherSunny,
-    'cloudy' => VoyagerMenuCatalogEntry.weatherCloudy,
-    'rain' => VoyagerMenuCatalogEntry.weatherRain,
-    'snow' => VoyagerMenuCatalogEntry.weatherSnow,
-    _ => null,
-  };
+  static VoyagerMenuCatalogEntry? forWeatherIcon(String? icon) =>
+      switch (icon) {
+        'sunny' => VoyagerMenuCatalogEntry.weatherSunny,
+        'cloudy' => VoyagerMenuCatalogEntry.weatherCloudy,
+        'rain' => VoyagerMenuCatalogEntry.weatherRain,
+        'snow' => VoyagerMenuCatalogEntry.weatherSnow,
+        _ => null,
+      };
 }
 
 /// Default row: optional leading icon + label.
@@ -148,7 +149,8 @@ List<PopupMenuEntry<VoyagerMenuCatalogEntry>> buildCatalogMenu(
     for (final entry in shown)
       (
         value: entry,
-        child: childOverrides?[entry]?.call(context, entry) ??
+        child:
+            childOverrides?[entry]?.call(context, entry) ??
             defaultCatalogMenuChild(entry),
       ),
   ]);

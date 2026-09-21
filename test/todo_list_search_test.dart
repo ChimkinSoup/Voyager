@@ -59,7 +59,10 @@ void main() {
       expect(todoTaskMatches(_task('Buy milk'), ['ilk']), isTrue);
       // The needles arrive folded from todoSearchTokens; the title is folded
       // here, so an uppercase title still matches.
-      expect(todoTaskMatches(_task('Buy MILK'), todoSearchTokens('Milk')), isTrue);
+      expect(
+        todoTaskMatches(_task('Buy MILK'), todoSearchTokens('Milk')),
+        isTrue,
+      );
       expect(todoTaskMatches(_task('Buy milk'), ['bread']), isFalse);
     });
 
@@ -105,10 +108,7 @@ void main() {
         _task('bread', id: 'b'),
         _task('milk second', id: 'c'),
       ];
-      expect(
-        filterTodoTasks(tasks, ['milk']).map((t) => t.id),
-        ['a', 'c'],
-      );
+      expect(filterTodoTasks(tasks, ['milk']).map((t) => t.id), ['a', 'c']);
     });
 
     test('resolves subtask titles per parent', () {

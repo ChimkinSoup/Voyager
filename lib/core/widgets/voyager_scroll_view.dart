@@ -40,11 +40,11 @@ class VoyagerScrollView extends StatelessWidget {
     this.primary,
     required this.child,
   }) : assert(
-          !(controller != null && (primary ?? false)),
-          'Primary ScrollViews obtain their ScrollController via inheritance '
-          'from a PrimaryScrollController widget. You cannot both set primary '
-          'to true and pass an explicit controller.',
-        );
+         !(controller != null && (primary ?? false)),
+         'Primary ScrollViews obtain their ScrollController via inheritance '
+         'from a PrimaryScrollController widget. You cannot both set primary '
+         'to true and pass an explicit controller.',
+       );
 
   final Axis scrollDirection;
   final EdgeInsetsGeometry? padding;
@@ -63,7 +63,8 @@ class VoyagerScrollView extends StatelessWidget {
         ? child
         : Padding(padding: padding!, child: child);
 
-    final effectivePrimary = primary ??
+    final effectivePrimary =
+        primary ??
         controller == null &&
             PrimaryScrollController.shouldInherit(context, scrollDirection);
     final scrollController = effectivePrimary
@@ -140,12 +141,12 @@ class _RenderSingleChildViewport extends RenderBox
   _RenderSingleChildViewport({
     required AxisDirection axisDirection,
     required ViewportOffset offset,
-  })  // Named parameters cannot be private, so these cannot be initializing
-      // formals; the framework's own version assigns them the same way.
-      // ignore: prefer_initializing_formals
-      : _axisDirection = axisDirection,
-        // ignore: prefer_initializing_formals
-        _offset = offset;
+  }) // Named parameters cannot be private, so these cannot be initializing
+    // formals; the framework's own version assigns them the same way.
+    // ignore: prefer_initializing_formals
+    : _axisDirection = axisDirection,
+       // ignore: prefer_initializing_formals
+       _offset = offset;
 
   AxisDirection get axisDirection => _axisDirection;
   AxisDirection _axisDirection;
@@ -277,17 +278,24 @@ class _RenderSingleChildViewport extends RenderBox
     // viewport itself has settled. Child layout doesn't depend on the offset,
     // so there is nothing to lay out again between tries.
     offset.applyViewportDimension(_viewportExtent);
-    while (!offset.applyContentDimensions(_minScrollExtent, _maxScrollExtent)) {}
+    while (!offset.applyContentDimensions(
+      _minScrollExtent,
+      _maxScrollExtent,
+    )) {}
   }
 
   Offset get _paintOffset => _paintOffsetForPosition(offset.pixels);
 
   Offset _paintOffsetForPosition(double position) {
     return switch (axisDirection) {
-      AxisDirection.up =>
-        Offset(0.0, position - child!.size.height + size.height),
-      AxisDirection.left =>
-        Offset(position - child!.size.width + size.width, 0.0),
+      AxisDirection.up => Offset(
+        0.0,
+        position - child!.size.height + size.height,
+      ),
+      AxisDirection.left => Offset(
+        position - child!.size.width + size.width,
+        0.0,
+      ),
       AxisDirection.right => Offset(-position, 0.0),
       AxisDirection.down => Offset(0.0, -position),
     };
@@ -388,20 +396,21 @@ class _RenderSingleChildViewport extends RenderBox
       double targetMainAxisExtent,
     ) = switch (axisDirection) {
       AxisDirection.up => (
-          size.height,
-          contentSize.height - bounds.bottom,
-          bounds.height,
-        ),
+        size.height,
+        contentSize.height - bounds.bottom,
+        bounds.height,
+      ),
       AxisDirection.left => (
-          size.width,
-          contentSize.width - bounds.right,
-          bounds.width,
-        ),
+        size.width,
+        contentSize.width - bounds.right,
+        bounds.width,
+      ),
       AxisDirection.right => (size.width, bounds.left, bounds.width),
       AxisDirection.down => (size.height, bounds.top, bounds.height),
     };
 
-    final targetOffset = leadingScrollOffset -
+    final targetOffset =
+        leadingScrollOffset -
         (mainAxisExtent - targetMainAxisExtent) * alignment;
     final targetRect = bounds.shift(_paintOffsetForPosition(targetOffset));
     return RevealedOffset(offset: targetOffset, rect: targetRect);

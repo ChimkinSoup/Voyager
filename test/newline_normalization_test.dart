@@ -55,10 +55,7 @@ void main() {
       expect(result.text, 'ab\ncd\nef');
       expect(result.selection.baseOffset, 1);
       expect(result.selection.extentOffset, 7);
-      expect(
-        result.text.substring(1, 7),
-        'b\ncd\ne',
-      );
+      expect(result.text.substring(1, 7), 'b\ncd\ne');
     });
 
     test('carries an invalid selection through', () {

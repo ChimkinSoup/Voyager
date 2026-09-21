@@ -3,8 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 
 void main() {
-  testWidgets('GlassButton renders label and icon and responds to taps',
-      (WidgetTester tester) async {
+  testWidgets('GlassButton renders label and icon and responds to taps', (
+    WidgetTester tester,
+  ) async {
     bool tapped = false;
 
     await tester.pumpWidget(
@@ -31,32 +32,35 @@ void main() {
     expect(tapped, isTrue);
   });
 
-  testWidgets('GlassButton supports custom color (recolorable) and size (resizeable)',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: GlassButton(
-              onPressed: () {},
-              label: 'Custom Glass',
-              color: Colors.purple,
-              width: 200,
-              height: 50,
+  testWidgets(
+    'GlassButton supports custom color (recolorable) and size (resizeable)',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: GlassButton(
+                onPressed: () {},
+                label: 'Custom Glass',
+                color: Colors.purple,
+                width: 200,
+                height: 50,
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text('Custom Glass'), findsOneWidget);
-    final Size buttonSize = tester.getSize(find.byType(GlassButton));
-    expect(buttonSize.width, equals(200.0));
-    expect(buttonSize.height, equals(50.0));
-  });
+      expect(find.text('Custom Glass'), findsOneWidget);
+      final Size buttonSize = tester.getSize(find.byType(GlassButton));
+      expect(buttonSize.width, equals(200.0));
+      expect(buttonSize.height, equals(50.0));
+    },
+  );
 
-  testWidgets('GlassButton handles disabled state correctly',
-      (WidgetTester tester) async {
+  testWidgets('GlassButton handles disabled state correctly', (
+    WidgetTester tester,
+  ) async {
     bool tapped = false;
 
     await tester.pumpWidget(
@@ -79,107 +83,110 @@ void main() {
     expect(tapped, isFalse);
   });
 
-  testWidgets('GlassButton renders in tight constraints without throwing layout assertion',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              width: 15,
-              height: 10,
-              child: GlassButton(
-                onPressed: () {},
-                label: 'Constrained',
-                dense: true,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    expect(tester.takeException(), isNull);
-    expect(find.byType(GlassButton), findsOneWidget);
-  });
-
-  testWidgets('GlassButton renders inside ListTile.trailing without consuming full tile width',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              width: 500,
-              child: ListTile(
-                title: const Text('Title'),
-                subtitle: const Text('Subtitle'),
-                trailing: GlassButton(
-                  icon: const Icon(Icons.copy),
-                  dense: true,
+  testWidgets(
+    'GlassButton renders in tight constraints without throwing layout assertion',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 15,
+                height: 10,
+                child: GlassButton(
                   onPressed: () {},
+                  label: 'Constrained',
+                  dense: true,
                 ),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    expect(tester.takeException(), isNull);
-    final Size buttonSize = tester.getSize(find.byType(GlassButton));
-    expect(buttonSize.width, lessThan(100.0));
-  });
+      expect(tester.takeException(), isNull);
+      expect(find.byType(GlassButton), findsOneWidget);
+    },
+  );
 
-  testWidgets('GlassButton renders label with normal font weight (not bolded)',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: GlassButton(
-              onPressed: () {},
-              label: 'Unbolded Text',
-            ),
-          ),
-        ),
-      ),
-    );
-
-    final Text textWidget = tester.widget(find.text('Unbolded Text'));
-    expect(textWidget.style?.fontWeight, equals(FontWeight.normal));
-  });
-
-  testWidgets('GlassButton centers text vertically inside constrained height container',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              height: 48,
-              child: GlassButton(
-                onPressed: () {},
-                label: 'Add',
+  testWidgets(
+    'GlassButton renders inside ListTile.trailing without consuming full tile width',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 500,
+                child: ListTile(
+                  title: const Text('Title'),
+                  subtitle: const Text('Subtitle'),
+                  trailing: GlassButton(
+                    icon: const Icon(Icons.copy),
+                    dense: true,
+                    onPressed: () {},
+                  ),
+                ),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    final Rect buttonRect = tester.getRect(find.byType(GlassButton));
-    final Rect textRect = tester.getRect(find.text('Add'));
+      expect(tester.takeException(), isNull);
+      final Size buttonSize = tester.getSize(find.byType(GlassButton));
+      expect(buttonSize.width, lessThan(100.0));
+    },
+  );
 
-    final double topSpace = textRect.top - buttonRect.top;
-    final double bottomSpace = buttonRect.bottom - textRect.bottom;
+  testWidgets(
+    'GlassButton renders label with normal font weight (not bolded)',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: GlassButton(onPressed: () {}, label: 'Unbolded Text'),
+            ),
+          ),
+        ),
+      );
 
-    // Verify top and bottom padding surrounding the text inside the button are balanced
-    expect((topSpace - bottomSpace).abs(), lessThan(1.0));
-  });
+      final Text textWidget = tester.widget(find.text('Unbolded Text'));
+      expect(textWidget.style?.fontWeight, equals(FontWeight.normal));
+    },
+  );
 
-  testWidgets('GlassButton labels a tinted wafer legibly, icon matching text',
-      (WidgetTester tester) async {
+  testWidgets(
+    'GlassButton centers text vertically inside constrained height container',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                height: 48,
+                child: GlassButton(onPressed: () {}, label: 'Add'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final Rect buttonRect = tester.getRect(find.byType(GlassButton));
+      final Rect textRect = tester.getRect(find.text('Add'));
+
+      final double topSpace = textRect.top - buttonRect.top;
+      final double bottomSpace = buttonRect.bottom - textRect.bottom;
+
+      // Verify top and bottom padding surrounding the text inside the button are balanced
+      expect((topSpace - bottomSpace).abs(), lessThan(1.0));
+    },
+  );
+
+  testWidgets('GlassButton labels a tinted wafer legibly, icon matching text', (
+    WidgetTester tester,
+  ) async {
     final ThemeData theme = ThemeData.dark();
     await tester.pumpWidget(
       MaterialApp(
@@ -201,9 +208,7 @@ void main() {
     // off the theme: the plate is near-solid [Colors.blue], and the theme's own
     // ink only reaches 2.7:1 on it.
     final Color plate = Color.alphaBlend(
-      Colors.blue.withValues(
-        alpha: GlassButton.defaultGlassOpacity(true),
-      ),
+      Colors.blue.withValues(alpha: GlassButton.defaultGlassOpacity(true)),
       theme.colorScheme.surface,
     );
 
@@ -211,10 +216,14 @@ void main() {
     final Color label = textWidget.style!.color!;
     expect(_contrast(label, plate), greaterThanOrEqualTo(4.5));
 
-    final IconTheme iconThemeWidget = tester.widget(find.ancestor(
-      of: find.byIcon(Icons.star),
-      matching: find.byType(IconTheme),
-    ).first);
+    final IconTheme iconThemeWidget = tester.widget(
+      find
+          .ancestor(
+            of: find.byIcon(Icons.star),
+            matching: find.byType(IconTheme),
+          )
+          .first,
+    );
     expect(iconThemeWidget.data.color, equals(label));
   });
 }

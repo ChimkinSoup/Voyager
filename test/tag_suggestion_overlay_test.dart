@@ -60,9 +60,7 @@ void main() {
         overrides: [
           tagPoolProvider(TagScope.journal).overrideWith((ref) => pool),
           tagColorsProvider.overrideWith((ref) => <String, int>{}),
-          voyagerSpellCheckServiceProvider.overrideWithValue(
-            spellCheckService,
-          ),
+          voyagerSpellCheckServiceProvider.overrideWithValue(spellCheckService),
         ],
         child: MaterialApp(
           home: VimEnabledScope(
@@ -156,8 +154,9 @@ void main() {
     expect(visibleSuggestions(tester), isEmpty);
   });
 
-  testWidgets('arrow keys move the highlight before Enter accepts',
-      (tester) async {
+  testWidgets('arrow keys move the highlight before Enter accepts', (
+    tester,
+  ) async {
     await pumpField(tester);
 
     await tester.enterText(find.byType(TextField), '#');
@@ -181,8 +180,9 @@ void main() {
     expect(controller.text, '#CC');
   });
 
-  testWidgets('accepting replaces the whole tag from mid-token',
-      (tester) async {
+  testWidgets('accepting replaces the whole tag from mid-token', (
+    tester,
+  ) async {
     await pumpField(tester, pool: const ['alpha']);
 
     await tester.enterText(find.byType(TextField), '#alx tail');
@@ -194,8 +194,9 @@ void main() {
     expect(controller.text, '#alpha tail');
   });
 
-  testWidgets('Escape closes the popup and leaves the text alone',
-      (tester) async {
+  testWidgets('Escape closes the popup and leaves the text alone', (
+    tester,
+  ) async {
     await pumpField(tester);
 
     await tester.enterText(find.byType(TextField), '#C');
@@ -207,8 +208,9 @@ void main() {
     expect(controller.text, '#C');
   });
 
-  testWidgets('Escape stays dismissed for the same tag but not the next one',
-      (tester) async {
+  testWidgets('Escape stays dismissed for the same tag but not the next one', (
+    tester,
+  ) async {
     await pumpField(tester);
 
     await tester.enterText(find.byType(TextField), '#C');
@@ -289,16 +291,20 @@ void main() {
       expect(horizontalDriftFromCaret(tester), closeTo(0, 2));
     });
 
-    testWidgets('flips above the line when it would run off the bottom',
-        (tester) async {
+    testWidgets('flips above the line when it would run off the bottom', (
+      tester,
+    ) async {
       await pumpField(tester, multiline: true);
 
       // Put the token on the last visible line of a tall field.
       await tester.enterText(find.byType(TextField), '${'\n' * 40}#');
       await tester.pumpAndSettle();
 
-      final popupBottom = tester.getBottomLeft(find.byType(ContextualPopover)).dy;
-      final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+      final popupBottom = tester
+          .getBottomLeft(find.byType(ContextualPopover))
+          .dy;
+      final screenHeight =
+          tester.view.physicalSize.height / tester.view.devicePixelRatio;
       expect(popupBottom, lessThanOrEqualTo(screenHeight));
     });
   });
@@ -313,8 +319,9 @@ void main() {
   });
 
   group('vim mode', () {
-    testWidgets('a Normal-mode motion onto a tag opens nothing',
-        (tester) async {
+    testWidgets('a Normal-mode motion onto a tag opens nothing', (
+      tester,
+    ) async {
       // Completion is Insert-mode only, as it is in Vim: `l` onto a tag is
       // navigation, not a request to complete it. The popup would also claim
       // Escape and Enter, which Normal mode needs for itself.
@@ -339,8 +346,9 @@ void main() {
       expect(visibleSuggestions(tester), isEmpty);
     });
 
-    testWidgets('the same caret position still opens it without vim',
-        (tester) async {
+    testWidgets('the same caret position still opens it without vim', (
+      tester,
+    ) async {
       // Control for the test above: proves the caret really does sit on a
       // completable token there, and that the mode is what suppresses it.
       await pumpField(tester);
@@ -351,8 +359,9 @@ void main() {
       expect(visibleSuggestions(tester), ['#CC']);
     });
 
-    testWidgets('one Escape dismisses the popup and leaves Insert',
-        (tester) async {
+    testWidgets('one Escape dismisses the popup and leaves Insert', (
+      tester,
+    ) async {
       // Vim gives both effects to a single <Esc>. The popup sees the key
       // first, so it has to close *and* pass the press up.
       await pumpField(tester, vim: true);

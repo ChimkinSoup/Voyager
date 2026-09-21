@@ -93,7 +93,9 @@ void main() {
     });
 
     test('an explicit null lifts a tombstone', () {
-      final deleted = _value(intValue: 3).copyWith(deletedAt: DateTime.utc(2026));
+      final deleted = _value(
+        intValue: 3,
+      ).copyWith(deletedAt: DateTime.utc(2026));
       expect(deleted.deletedAt, isNotNull);
 
       expect(deleted.copyWith(deletedAt: null).deletedAt, isNull);
@@ -133,8 +135,10 @@ void main() {
       expect(styled.trackingStyle, TrackerStyle.consecutive);
 
       expect(styled.copyWith(trackingStyle: null).trackingStyle, isNull);
-      expect(styled.copyWith(starred: true).trackingStyle,
-          TrackerStyle.consecutive);
+      expect(
+        styled.copyWith(starred: true).trackingStyle,
+        TrackerStyle.consecutive,
+      );
     });
   });
 

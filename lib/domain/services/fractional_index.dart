@@ -53,9 +53,7 @@ class FractionalIndex {
     final width = _widthOf(scale);
     final start = scale ~/ _base;
     final step = (scale ~/ 2 - start) ~/ (count + 1);
-    return [
-      for (var i = 1; i <= count; i++) _fromInt(start + i * step, width),
-    ];
+    return [for (var i = 1; i <= count; i++) _fromInt(start + i * step, width)];
   }
 
   static String _keyAfter(String key) {

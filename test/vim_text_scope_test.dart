@@ -320,7 +320,9 @@ void main() {
       controller.selection = const TextSelection.collapsed(offset: 0);
       await tester.pump(const Duration(milliseconds: 600));
 
-      final editable = tester.state<EditableTextState>(find.byType(EditableText));
+      final editable = tester.state<EditableTextState>(
+        find.byType(EditableText),
+      );
 
       // Commit "1. a\n5. b" without renumbering so the stack holds it.
       suppressRenumber = true;

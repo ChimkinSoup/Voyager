@@ -18,7 +18,8 @@ void main() {
             builder: (context) => TextButton(
               onPressed: () => showVoyagerSheet<void>(
                 context: context,
-                builder: (_) => ListTile(title: const Text('Deck'), onTap: () {}),
+                builder: (_) =>
+                    ListTile(title: const Text('Deck'), onTap: () {}),
               ),
               child: const Text('Open'),
             ),

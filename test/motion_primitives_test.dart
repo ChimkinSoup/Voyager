@@ -125,7 +125,11 @@ void main() {
         final peak = [
           for (var i = 0; i <= 100; i++) curve.transform(i / 100),
         ].reduce((a, b) => a > b ? a : b);
-        expect(peak, greaterThan(1.0), reason: 'bouncy preset should overshoot');
+        expect(
+          peak,
+          greaterThan(1.0),
+          reason: 'bouncy preset should overshoot',
+        );
         // ...but stays sane — an overshoot this small reads as life, not a glitch.
         expect(peak, lessThan(1.1));
       }
@@ -154,12 +158,15 @@ void main() {
       expect(rubberBand(-100, 1000), -rubberBand(100, 1000));
     });
 
-    test('resistance grows — doubling the drag less than doubles the follow', () {
-      final single = rubberBand(100, 1000);
-      final double_ = rubberBand(200, 1000);
-      expect(double_, greaterThan(single));
-      expect(double_, lessThan(single * 2));
-    });
+    test(
+      'resistance grows — doubling the drag less than doubles the follow',
+      () {
+        final single = rubberBand(100, 1000);
+        final double_ = rubberBand(200, 1000);
+        expect(double_, greaterThan(single));
+        expect(double_, lessThan(single * 2));
+      },
+    );
 
     test('is asymptotically bounded by the dimension', () {
       // No matter how far the drag goes, the pane cannot run away.

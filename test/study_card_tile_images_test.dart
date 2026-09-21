@@ -129,7 +129,10 @@ void main() {
   testWidgets('a card with no images shows neither picture nor badge', (
     tester,
   ) async {
-    await pumpTile(tester, card: _card(front: 'Front', back: 'Back'));
+    await pumpTile(
+      tester,
+      card: _card(front: 'Front', back: 'Back'),
+    );
 
     expect(find.byType(MediaImage), findsNothing);
     expect(find.byIcon(PhosphorIconsRegular.image), findsNothing);

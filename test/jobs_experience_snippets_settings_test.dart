@@ -32,34 +32,36 @@ void main() {
     expect(const AppSettings().jobExperienceSnippets, isEmpty);
   });
 
-  test('round-trip through the local database, order and text intact', () async {
-    final db = AppDatabase.inMemory();
-    addTearDown(db.close);
-    final repo = DriftSettingsRepository(db);
+  test(
+    'round-trip through the local database, order and text intact',
+    () async {
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+      final repo = DriftSettingsRepository(db);
 
-    await repo.applyJobExperienceSnippetEdit(const [], const [
-      _initech,
-      _acme,
-      _globex,
-    ]);
-    var stored = await repo.getSettings();
-    expect(stored.jobExperienceSnippets, const [_initech, _acme, _globex]);
+      await repo.applyJobExperienceSnippetEdit(const [], const [
+        _initech,
+        _acme,
+        _globex,
+      ]);
+      var stored = await repo.getSettings();
+      expect(stored.jobExperienceSnippets, const [_initech, _acme, _globex]);
 
-    await repo.applyJobExperienceSnippetEdit(const [
-      _initech,
-      _acme,
-      _globex,
-    ], const [_acme, _globex, _initech]);
-    stored = await repo.getSettings();
-    expect(stored.jobExperienceSnippets, const [_acme, _globex, _initech]);
+      await repo.applyJobExperienceSnippetEdit(
+        const [_initech, _acme, _globex],
+        const [_acme, _globex, _initech],
+      );
+      stored = await repo.getSettings();
+      expect(stored.jobExperienceSnippets, const [_acme, _globex, _initech]);
 
-    await repo.applyJobExperienceSnippetEdit(
-      stored.jobExperienceSnippets,
-      const [],
-    );
-    stored = await repo.getSettings();
-    expect(stored.jobExperienceSnippets, isEmpty);
-  });
+      await repo.applyJobExperienceSnippetEdit(
+        stored.jobExperienceSnippets,
+        const [],
+      );
+      stored = await repo.getSettings();
+      expect(stored.jobExperienceSnippets, isEmpty);
+    },
+  );
 
   group('sync and import/export', () {
     test('a record round-trips text and position byte-for-byte', () {
@@ -78,23 +80,25 @@ void main() {
       expect(merged.position, 2.5);
     });
 
-    test('a malformed legacy entry is dropped without losing the rest',
-        () async {
-      final db = AppDatabase.inMemory();
-      addTearDown(db.close);
-      final legacy = await DriftSettingsRepository(db).unknownLegacySnippets({
-        'jobExperienceSnippets': [
-          _acme.toJson(),
-          {'id': 'x', 'name': '   '},
-          'junk',
-          {'id': 'y', 'name': 'No body'},
-        ],
-      });
-      expect(legacy.jobExperienceSnippets.map((r) => r.item), const [
-        _acme,
-        JobExperienceSnippet(id: 'y', name: 'No body', description: ''),
-      ]);
-    });
+    test(
+      'a malformed legacy entry is dropped without losing the rest',
+      () async {
+        final db = AppDatabase.inMemory();
+        addTearDown(db.close);
+        final legacy = await DriftSettingsRepository(db).unknownLegacySnippets({
+          'jobExperienceSnippets': [
+            _acme.toJson(),
+            {'id': 'x', 'name': '   '},
+            'junk',
+            {'id': 'y', 'name': 'No body'},
+          ],
+        });
+        expect(legacy.jobExperienceSnippets.map((r) => r.item), const [
+          _acme,
+          JobExperienceSnippet(id: 'y', name: 'No body', description: ''),
+        ]);
+      },
+    );
 
     test('the settings document no longer carries the list', () {
       expect(

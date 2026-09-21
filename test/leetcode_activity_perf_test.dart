@@ -40,7 +40,11 @@ class _FixedSettings extends SettingsNotifier {
   Future<AppSettings> build() async => const AppSettings();
 }
 
-LeetCodeProblem _problem(String id, LeetCodeDifficulty difficulty, int daysAgo) {
+LeetCodeProblem _problem(
+  String id,
+  LeetCodeDifficulty difficulty,
+  int daysAgo,
+) {
   final solved = _now.subtract(Duration(days: daysAgo));
   return LeetCodeProblem(
     id: id,

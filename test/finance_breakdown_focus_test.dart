@@ -229,8 +229,9 @@ void _platformWidgets(
 void main() {
   setUpAll(() => driftRuntimeOptions.dontWarnAboutMultipleDatabases = true);
 
-  testWidgets('a category legend row drills into the tags inside it',
-      (tester) async {
+  testWidgets('a category legend row drills into the tags inside it', (
+    tester,
+  ) async {
     await pumpBreakdown(tester);
 
     // Unfocused, category mode: the two buckets and the month's total.
@@ -262,8 +263,9 @@ void main() {
     expect(find.text('Uncategorized'), findsOneWidget);
   });
 
-  testWidgets('focusing and clearing leave the pie where it was',
-      (tester) async {
+  testWidgets('focusing and clearing leave the pie where it was', (
+    tester,
+  ) async {
     await pumpBreakdown(tester);
     final top = tester.getTopLeft(find.byType(PieChart)).dy;
 
@@ -277,8 +279,9 @@ void main() {
     expect(tester.getTopLeft(find.byType(PieChart)).dy, top);
   });
 
-  testWidgets('clicking a tag under a category switches to Tag mode',
-      (tester) async {
+  testWidgets('clicking a tag under a category switches to Tag mode', (
+    tester,
+  ) async {
     await pumpBreakdown(tester);
 
     await tester.tap(find.text('Eating out'));
@@ -296,11 +299,9 @@ void main() {
     final grouping = tester.widget<SegmentedButton<FinanceBreakdownMode>>(
       find.byType(SegmentedButton<FinanceBreakdownMode>),
     );
-    expect(
-      grouping.selected,
-      {FinanceBreakdownMode.tag},
-      reason: 'the Tag segment is selected',
-    );
+    expect(grouping.selected, {
+      FinanceBreakdownMode.tag,
+    }, reason: 'the Tag segment is selected');
   });
 
   testWidgets('switching Category to Tag drops the focus', (tester) async {
@@ -436,8 +437,9 @@ void main() {
     expect(find.text('Spending Breakdown'), findsNothing);
   });
 
-  testWidgets('a tag drill-down splits the bucket without double-counting',
-      (tester) async {
+  testWidgets('a tag drill-down splits the bucket without double-counting', (
+    tester,
+  ) async {
     await pumpBreakdown(tester);
 
     await tester.tap(find.text('Tag'));
@@ -456,27 +458,33 @@ void main() {
   // The pie's touched index is kept in State, and a drill-down that leaves the
   // filter line on screen keeps that State: the child list lines up, so the
   // element is reused and the index outlives the slices it was taken against.
-  _platformWidgets('drilling deeper on the pie survives a smaller bucket',
-      TargetPlatform.windows, (tester) async {
-    await pumpDeepBreakdown(tester);
+  _platformWidgets(
+    'drilling deeper on the pie survives a smaller bucket',
+    TargetPlatform.windows,
+    (tester) async {
+      await pumpDeepBreakdown(tester);
 
-    expect(find.text('Filtering: a'), findsOneWidget);
-    // Slice 2 of three, whose own bucket holds a single slice.
-    await tapSlice(tester, const [30000, 20000, 10000], 2);
+      expect(find.text('Filtering: a'), findsOneWidget);
+      // Slice 2 of three, whose own bucket holds a single slice.
+      await tapSlice(tester, const [30000, 20000, 10000], 2);
 
-    expect(tester.takeException(), isNull);
-    expect(find.text('Filtering: b'), findsOneWidget);
-    expect(find.text(r'$10.00'), findsWidgets);
-  });
+      expect(tester.takeException(), isNull);
+      expect(find.text('Filtering: b'), findsOneWidget);
+      expect(find.text(r'$10.00'), findsWidgets);
+    },
+  );
 
   // fl_chart reports a tap-up as "uninteresting" everywhere but desktop and
   // web, so a click read out of the highlight state did nothing on a phone.
-  _platformWidgets('a pie slice is clickable off desktop too',
-      TargetPlatform.android, (tester) async {
-    await pumpDeepBreakdown(tester);
+  _platformWidgets(
+    'a pie slice is clickable off desktop too',
+    TargetPlatform.android,
+    (tester) async {
+      await pumpDeepBreakdown(tester);
 
-    await tapSlice(tester, const [30000, 20000, 10000], 0);
+      await tapSlice(tester, const [30000, 20000, 10000], 0);
 
-    expect(find.text('Filtering: d'), findsOneWidget);
-  });
+      expect(find.text('Filtering: d'), findsOneWidget);
+    },
+  );
 }

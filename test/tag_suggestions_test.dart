@@ -94,7 +94,13 @@ void main() {
 
     test('ignores empty tags and returns empty for no input', () {
       expect(rankTagsByUsage([]), isEmpty);
-      expect(rankTagsByUsage([<String>[], ['']]), isEmpty);
+      expect(
+        rankTagsByUsage([
+          <String>[],
+          [''],
+        ]),
+        isEmpty,
+      );
     });
   });
 

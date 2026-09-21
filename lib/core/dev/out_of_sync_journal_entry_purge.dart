@@ -53,13 +53,15 @@ abstract final class OutOfSyncJournalEntryPurge {
   }) async {
     final lines = <String>[];
     for (final target in targets) {
-      lines.add(await purgeOne(
-        target: target,
-        remoteSync: remoteSync,
-        journalRepository: journalRepository,
-        purgeRemote: purgeRemote,
-        purgeLocal: purgeLocal,
-      ));
+      lines.add(
+        await purgeOne(
+          target: target,
+          remoteSync: remoteSync,
+          journalRepository: journalRepository,
+          purgeRemote: purgeRemote,
+          purgeLocal: purgeLocal,
+        ),
+      );
     }
     return lines;
   }

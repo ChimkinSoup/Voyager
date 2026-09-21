@@ -67,7 +67,9 @@ Future<ProviderContainer> _pumpInbox(
   addTearDown(container.dispose);
 
   final now = utcNow();
-  await container.read(notificationRepositoryProvider).upsertPinnedNote(
+  await container
+      .read(notificationRepositoryProvider)
+      .upsertPinnedNote(
         PinnedNote(
           id: newId(),
           text: 'Water the plants',
@@ -77,7 +79,9 @@ Future<ProviderContainer> _pumpInbox(
       );
   if (tasks > 0) {
     // The feed walks the lists, so the tasks need one to hang off.
-    await container.read(todoRepositoryProvider).upsertList(
+    await container
+        .read(todoRepositoryProvider)
+        .upsertList(
           TodoListModel(
             id: 'list',
             createdAt: now,
@@ -90,7 +94,9 @@ Future<ProviderContainer> _pumpInbox(
     }
   }
   if (withTracker) {
-    await container.read(trackerRepositoryProvider).upsertTracker(
+    await container
+        .read(trackerRepositoryProvider)
+        .upsertTracker(
           StatisticTracker(
             id: newId(),
             name: 'Energy',
@@ -169,7 +175,9 @@ void main() {
     // The trigger's ink sits behind the label so the whole row highlights,
     // so tap that rather than the (pointer-ignoring) label itself.
     await tester.tap(
-      find.ancestor(of: find.text('Log stats'), matching: find.byType(Stack)).first,
+      find
+          .ancestor(of: find.text('Log stats'), matching: find.byType(Stack))
+          .first,
     );
     // The drawer opens over 220ms, and the row it reveals only paints once
     // its own values provider has resolved.

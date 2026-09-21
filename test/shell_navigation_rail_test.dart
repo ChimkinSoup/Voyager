@@ -46,51 +46,49 @@ class _FakeNavigationShellState extends State<StatefulNavigationShell> {
 }
 
 void main() {
-  testWidgets('AppShell navigation rail fits small window heights without overflowing',
-      (tester) async {
-    tester.view.physicalSize = const Size(1000, 500);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
+  testWidgets(
+    'AppShell navigation rail fits small window heights without overflowing',
+    (tester) async {
+      tester.view.physicalSize = const Size(1000, 500);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
 
-    final fakeShell = _FakeNavigationShell();
+      final fakeShell = _FakeNavigationShell();
 
-    // Isolate from the real on-disk voyager.sqlite and live Firebase
-    // services (see AppDatabase.create() via databaseProvider) — matching
-    // widget_test.dart's rationale: it both avoids leaking this test run
-    // into real app data/services and avoids picking up real persisted
-    // settings that may have the background wave/petal animation on, which
-    // would make the animation's Timer reschedule forever inside
-    // pumpAndSettle's fake-async loop (see also
-    // test/tool/geometric_texture_widget_test.dart).
-    final db = AppDatabase.inMemory();
-    addTearDown(db.close);
+      // Isolate from the real on-disk voyager.sqlite and live Firebase
+      // services (see AppDatabase.create() via databaseProvider) — matching
+      // widget_test.dart's rationale: it both avoids leaking this test run
+      // into real app data/services and avoids picking up real persisted
+      // settings that may have the background wave/petal animation on, which
+      // would make the animation's Timer reschedule forever inside
+      // pumpAndSettle's fake-async loop (see also
+      // test/tool/geometric_texture_widget_test.dart).
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          databaseProvider.overrideWithValue(db),
-          authRepositoryProvider.overrideWithValue(InMemoryAuthRepository()),
-          syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
-          weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
-          settingsProvider.overrideWith(_FixedSettings.new),
-        ],
-        child: MaterialApp(
-          home: AppShell(
-            child: fakeShell,
-          ),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            authRepositoryProvider.overrideWithValue(InMemoryAuthRepository()),
+            syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
+            weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+            settingsProvider.overrideWith(_FixedSettings.new),
+          ],
+          child: MaterialApp(home: AppShell(child: fakeShell)),
         ),
-      ),
-    );
+      );
 
-    // The background animation ticker runs continuously by design, so
-    // pumpAndSettle would hang — pump a bounded number of frames instead.
-    for (var i = 0; i < 5; i++) {
-      await tester.pump(const Duration(milliseconds: 16));
-    }
+      // The background animation ticker runs continuously by design, so
+      // pumpAndSettle would hang — pump a bounded number of frames instead.
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
 
-    // Verify no rendering overflow assertion was thrown
-    expect(tester.takeException(), isNull);
-  });
+      // Verify no rendering overflow assertion was thrown
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'rail carries an offline badge only once the backend stops answering',
@@ -148,7 +146,6 @@ void main() {
 /// the longest list the rail can be asked to lay out.
 class _FixedSettings extends SettingsNotifier {
   @override
-  Future<AppSettings> build() async => AppSettings(
-    navPageOrder: shellDestinations.map((d) => d.path).toList(),
-  );
+  Future<AppSettings> build() async =>
+      AppSettings(navPageOrder: shellDestinations.map((d) => d.path).toList());
 }

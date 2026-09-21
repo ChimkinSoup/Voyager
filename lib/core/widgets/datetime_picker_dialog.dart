@@ -58,88 +58,85 @@ class _DateTimePickerDialogState extends State<DateTimePickerDialog> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return EnterToSubmitScope(
-      onSubmit: () => Navigator.of(context).pop(
-        DateTime(
-          _date.year,
-          _date.month,
-          _date.day,
-          _hour,
-          _minute,
-        ),
-      ),
+      onSubmit: () => Navigator.of(
+        context,
+      ).pop(DateTime(_date.year, _date.month, _date.day, _hour, _minute)),
       child: Dialog(
-      child: SizedBox(
-        width: 680,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(
-              height: 420,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: CalendarDatePicker(
-                      initialDate: _date,
-                      firstDate: DateTime(1900),
-                      lastDate: DateTime(2100),
-                      onDateChanged: (d) => setState(() => _date = d),
-                    ),
-                  ),
-                  VerticalDivider(width: 1, color: colorScheme.outlineVariant),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
-                    child: _ClockTimePicker(
-                      hour: _hour,
-                      minute: _minute,
-                      onChanged: (time) => setState(() {
-                        _hour = time.hour;
-                        _minute = time.minute;
-                      }),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Divider(height: 1, color: colorScheme.outlineVariant),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-              child: Row(
-                children: [
-                  GlassButton(
-                    onPressed: () => Navigator.of(context).pop(
-                      DateTime(_date.year, _date.month, _date.day),
-                    ),
-                    label: 'Add date',
-                    dense: true,
-                  ),
-                  const Spacer(),
-                  GlassButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    label: 'Cancel',
-                    dense: true,
-                  ),
-                  const SizedBox(width: 8),
-                  GlassButton(
-                    onPressed: () => Navigator.of(context).pop(
-                      DateTime(
-                        _date.year,
-                        _date.month,
-                        _date.day,
-                        _hour,
-                        _minute,
+        child: SizedBox(
+          width: 680,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: 420,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: CalendarDatePicker(
+                        initialDate: _date,
+                        firstDate: DateTime(1900),
+                        lastDate: DateTime(2100),
+                        onDateChanged: (d) => setState(() => _date = d),
                       ),
                     ),
-                    label: 'OK',
-                    dense: true,
-                  ),
-                ],
+                    VerticalDivider(
+                      width: 1,
+                      color: colorScheme.outlineVariant,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
+                      child: _ClockTimePicker(
+                        hour: _hour,
+                        minute: _minute,
+                        onChanged: (time) => setState(() {
+                          _hour = time.hour;
+                          _minute = time.minute;
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              Divider(height: 1, color: colorScheme.outlineVariant),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+                child: Row(
+                  children: [
+                    GlassButton(
+                      onPressed: () => Navigator.of(
+                        context,
+                      ).pop(DateTime(_date.year, _date.month, _date.day)),
+                      label: 'Add date',
+                      dense: true,
+                    ),
+                    const Spacer(),
+                    GlassButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      label: 'Cancel',
+                      dense: true,
+                    ),
+                    const SizedBox(width: 8),
+                    GlassButton(
+                      onPressed: () => Navigator.of(context).pop(
+                        DateTime(
+                          _date.year,
+                          _date.month,
+                          _date.day,
+                          _hour,
+                          _minute,
+                        ),
+                      ),
+                      label: 'OK',
+                      dense: true,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -177,7 +174,7 @@ class _TimeRangePickerDialogState extends State<TimeRangePickerDialog> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final activeTime = _tab == _TimeRangeTab.start ? _start : _end;
-    
+
     return EnterToSubmitScope(
       onSubmit: () => Navigator.of(context).pop((start: _start, end: _end)),
       child: Dialog(
@@ -186,66 +183,69 @@ class _TimeRangePickerDialogState extends State<TimeRangePickerDialog> {
           // Scrolls in a window too short for the 380px clock.
           child: VoyagerScrollView(
             child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: SegmentedButton<_TimeRangeTab>(
-                  segments: const [
-                    ButtonSegment(
-                      value: _TimeRangeTab.start,
-                      label: Text('Start Time'),
-                    ),
-                    ButtonSegment(
-                      value: _TimeRangeTab.end,
-                      label: Text('End Time'),
-                    ),
-                  ],
-                  selected: {_tab},
-                  onSelectionChanged: (set) => setState(() => _tab = set.first),
-                ),
-              ),
-              SizedBox(
-                height: 380,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: _ClockTimePicker(
-                    hour: activeTime.hour,
-                    minute: activeTime.minute,
-                    onChanged: (time) {
-                      setState(() {
-                        if (_tab == _TimeRangeTab.start) {
-                          _start = time;
-                        } else {
-                          _end = time;
-                        }
-                      });
-                    },
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: SegmentedButton<_TimeRangeTab>(
+                    segments: const [
+                      ButtonSegment(
+                        value: _TimeRangeTab.start,
+                        label: Text('Start Time'),
+                      ),
+                      ButtonSegment(
+                        value: _TimeRangeTab.end,
+                        label: Text('End Time'),
+                      ),
+                    ],
+                    selected: {_tab},
+                    onSelectionChanged: (set) =>
+                        setState(() => _tab = set.first),
                   ),
                 ),
-              ),
-              Divider(height: 1, color: colorScheme.outlineVariant),
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    GlassButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      label: 'Cancel',
-                      dense: true,
+                SizedBox(
+                  height: 380,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    child: _ClockTimePicker(
+                      hour: activeTime.hour,
+                      minute: activeTime.minute,
+                      onChanged: (time) {
+                        setState(() {
+                          if (_tab == _TimeRangeTab.start) {
+                            _start = time;
+                          } else {
+                            _end = time;
+                          }
+                        });
+                      },
                     ),
-                    const SizedBox(width: 8),
-                    GlassButton(
-                      onPressed: () => Navigator.of(context).pop((start: _start, end: _end)),
-                      label: 'OK',
-                      dense: true,
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ],
+                Divider(height: 1, color: colorScheme.outlineVariant),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      GlassButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        label: 'Cancel',
+                        dense: true,
+                      ),
+                      const SizedBox(width: 8),
+                      GlassButton(
+                        onPressed: () => Navigator.of(
+                          context,
+                        ).pop((start: _start, end: _end)),
+                        label: 'OK',
+                        dense: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ),

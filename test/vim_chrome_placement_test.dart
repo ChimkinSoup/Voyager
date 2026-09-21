@@ -193,25 +193,28 @@ void main() {
   }
 
   Rect pillRect(WidgetTester tester) => tester.getRect(
-    find.ancestor(
-      of: find.text('NORMAL'),
-      matching: find.byType(DecoratedBox),
-    ).first,
+    find
+        .ancestor(of: find.text('NORMAL'), matching: find.byType(DecoratedBox))
+        .first,
   );
 
   /// The badge's own outline, which the compact form does without.
   BoxBorder? pillBorder(WidgetTester tester) {
     final box = tester.widget<DecoratedBox>(
-      find.ancestor(
-        of: find.text('NORMAL'),
-        matching: find.byType(DecoratedBox),
-      ).first,
+      find
+          .ancestor(
+            of: find.text('NORMAL'),
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
     );
     return (box.decoration as BoxDecoration).border;
   }
 
   Rect barRect(WidgetTester tester) => tester.getRect(
-    find.ancestor(of: find.text('/'), matching: find.byType(DecoratedBox)).first,
+    find
+        .ancestor(of: find.text('/'), matching: find.byType(DecoratedBox))
+        .first,
   );
 
   /// What each half of the overlay did on the last paint. The badge is built
@@ -239,7 +242,12 @@ void main() {
       final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
       final bytes = data!.buffer.asUint8List();
       final i = ((point.dy.round() * image.width) + point.dx.round()) * 4;
-      color = Color.fromARGB(bytes[i + 3], bytes[i], bytes[i + 1], bytes[i + 2]);
+      color = Color.fromARGB(
+        bytes[i + 3],
+        bytes[i],
+        bytes[i + 1],
+        bytes[i + 2],
+      );
       image.dispose();
     });
     return color;
@@ -296,7 +304,9 @@ void main() {
       );
     });
 
-    testWidgets('rides the field when the box under it scrolls', (tester) async {
+    testWidgets('rides the field when the box under it scrolls', (
+      tester,
+    ) async {
       // The LeetCode shape: a field taller than the box it scrolls in. The
       // badge belongs to the field's last line and goes where that line goes —
       // it does not climb back up the box to stay in sight.
@@ -341,13 +351,23 @@ void main() {
       );
       expect(badgeAt(tester).clip, isNotNull);
 
-      final inside = await pixelAt(tester, Offset(pill.center.dx, box.bottom - 3));
-      final past = await pixelAt(tester, Offset(pill.center.dx, box.bottom + 3));
+      final inside = await pixelAt(
+        tester,
+        Offset(pill.center.dx, box.bottom - 3),
+      );
+      final past = await pixelAt(
+        tester,
+        Offset(pill.center.dx, box.bottom + 3),
+      );
       final background = await pixelAt(
         tester,
         Offset(pill.center.dx - 100, box.bottom + 3),
       );
-      expect(inside, isNot(past), reason: 'the badge is painted inside the box');
+      expect(
+        inside,
+        isNot(past),
+        reason: 'the badge is painted inside the box',
+      );
       expect(past, background, reason: 'and nothing of it past the edge');
     });
 

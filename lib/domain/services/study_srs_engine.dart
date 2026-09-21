@@ -139,10 +139,7 @@ List<StudyCard> sortStudyCardsByMastery(List<StudyCard> cards) {
 /// calendar day are shuffled so a brand-new deck does not play back in
 /// creation order. Call once when the session opens; mid-session refreshes
 /// should keep positions.
-List<StudyCard> orderStudyReviewQueue(
-  List<StudyCard> cards, {
-  Random? random,
-}) {
+List<StudyCard> orderStudyReviewQueue(List<StudyCard> cards, {Random? random}) {
   final rng = random ?? Random();
   final byDay = <DateTime, List<StudyCard>>{};
   for (final card in cards) {

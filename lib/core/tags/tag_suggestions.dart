@@ -9,12 +9,7 @@ import 'package:voyager/core/utils/journal_tags.dart';
 /// tags arrive wholesale from the API (see `leetcode_track_modal.dart`, which
 /// dumps a problem's `topicTags` into the field), so a shared pool would bury
 /// hand-written tags under dozens of imported topic slugs.
-enum TagScope {
-  journal,
-  dream,
-  finance,
-  leetcode,
-}
+enum TagScope { journal, dream, finance, leetcode }
 
 /// The `#tag` token the caret currently sits in.
 ///
@@ -108,11 +103,7 @@ ActiveTagToken? activeTagToken(String text, int cursor) {
     }
   }
 
-  return (
-    start: hashIndex,
-    end: end,
-    query: text.substring(wordStart, cursor),
-  );
+  return (start: hashIndex, end: end, query: text.substring(wordStart, cursor));
 }
 
 /// Orders every tag in [tagLists] by how many records carry it, most-used
@@ -132,12 +123,11 @@ List<String> rankTagsByUsage(Iterable<Iterable<String>> tagLists) {
     }
   }
 
-  return counts.keys.toList()
-    ..sort((a, b) {
-      final byCount = counts[b]!.compareTo(counts[a]!);
-      if (byCount != 0) return byCount;
-      return a.toLowerCase().compareTo(b.toLowerCase());
-    });
+  return counts.keys.toList()..sort((a, b) {
+    final byCount = counts[b]!.compareTo(counts[a]!);
+    if (byCount != 0) return byCount;
+    return a.toLowerCase().compareTo(b.toLowerCase());
+  });
 }
 
 /// The suggestions to offer for [query], preserving [pool]'s usage order.
@@ -167,8 +157,10 @@ List<String> filterTagSuggestions(
 ///
 /// Kept alive because each pool is a fold over a list the page already has
 /// loaded, and the field rebuilds it on every keystroke.
-final tagPoolProvider =
-    FutureProvider.family<List<String>, TagScope>((ref, scope) async {
+final tagPoolProvider = FutureProvider.family<List<String>, TagScope>((
+  ref,
+  scope,
+) async {
   ref.keepAlive();
   switch (scope) {
     case TagScope.journal:

@@ -57,7 +57,9 @@ Future<AppDatabase> _pumpCalendar(
   );
   if (configureSettings != null) {
     final settings = DriftSettingsRepository(db);
-    await settings.saveSettings(configureSettings(await settings.getSettings()));
+    await settings.saveSettings(
+      configureSettings(await settings.getSettings()),
+    );
   }
 
   final container = ProviderContainer(

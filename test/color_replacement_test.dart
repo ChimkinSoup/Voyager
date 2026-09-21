@@ -182,21 +182,25 @@ void main() {
       expect((await journals.getJournal('journal-1'))!.colorValue, _new);
     });
 
-    test('leaves soft-deleted records out of the count and the sweep', () async {
-      await seedColoredRecords();
-      await journals.softDeleteJournal('journal-1');
+    test(
+      'leaves soft-deleted records out of the count and the sweep',
+      () async {
+        await seedColoredRecords();
+        await journals.softDeleteJournal('journal-1');
 
-      expect(
-        (await service.countUsage(_old)).byCollection,
-        isNot(contains(FirestoreCollections.journals)),
-      );
-      final replaced = await service.replace(from: _old, to: _new);
-      expect(replaced.byCollection, isNot(contains(
-        FirestoreCollections.journals,
-      )));
-      final tombstone = await journals.getJournal('journal-1');
-      expect(tombstone!.colorValue, _old);
-    });
+        expect(
+          (await service.countUsage(_old)).byCollection,
+          isNot(contains(FirestoreCollections.journals)),
+        );
+        final replaced = await service.replace(from: _old, to: _new);
+        expect(
+          replaced.byCollection,
+          isNot(contains(FirestoreCollections.journals)),
+        );
+        final tombstone = await journals.getJournal('journal-1');
+        expect(tombstone!.colorValue, _old);
+      },
+    );
 
     test('bumps the version so the rewrite beats the stored copy', () async {
       await seedColoredRecords();
@@ -212,13 +216,16 @@ void main() {
 
       await service.replace(from: _old, to: _new);
 
-      expect(uploader.records.keys, unorderedEquals([
-        FirestoreCollections.journals,
-        FirestoreCollections.todoLists,
-        FirestoreCollections.calendars,
-        FirestoreCollections.calendarEvents,
-        FirestoreCollections.tagColors,
-      ]));
+      expect(
+        uploader.records.keys,
+        unorderedEquals([
+          FirestoreCollections.journals,
+          FirestoreCollections.todoLists,
+          FirestoreCollections.calendars,
+          FirestoreCollections.calendarEvents,
+          FirestoreCollections.tagColors,
+        ]),
+      );
       expect(
         uploader.records[FirestoreCollections.journals]!.single,
         isA<Journal>().having((j) => j.colorValue, 'colorValue', _new),
@@ -476,9 +483,7 @@ void main() {
                       '${ref.watch(calendarEventsProvider(null)).valueOrNull?.single.colorValue}',
                     ),
                     SettingsColorPaletteSection(
-                      settings: const AppSettings(
-                        colorPalette: [_old, _other],
-                      ),
+                      settings: const AppSettings(colorPalette: [_old, _other]),
                       onSave: (_) async {},
                     ),
                   ],

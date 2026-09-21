@@ -176,10 +176,7 @@ class _SlowRankingRepository extends DriftRankingRepository {
     bool recordLocalActivity = true,
   }) async {
     await Future<void>.delayed(delay);
-    return super.upsertParent(
-      parent,
-      recordLocalActivity: recordLocalActivity,
-    );
+    return super.upsertParent(parent, recordLocalActivity: recordLocalActivity);
   }
 }
 
@@ -935,66 +932,69 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
-    final saved = await DriftRankingRepository(
-      harness.db,
-    ).listParents(harness.container.read(rankingCategoriesProvider).value!.first.id);
+    final saved = await DriftRankingRepository(harness.db).listParents(
+      harness.container.read(rankingCategoriesProvider).value!.first.id,
+    );
     expect(saved.single.tags, ['spy']);
     expect(saved.single.status, RankingStatus.queued);
   });
 
-  testWidgets('a tag save re-reads the entries alone, and rebuilds only its own row', (
-    tester,
-  ) async {
-    late _CountingRankingRepository repository;
-    await pumpRankingsPage(
-      tester,
-      repository: (db) => repository = _CountingRankingRepository(db),
-      seed: (repo) async {
-        final category = makeCategory();
-        await repo.upsertCategory(category);
-        for (final title in ['Andor', 'Severance', 'Dark']) {
-          final parent = makeParent(categoryId: category.id, title: title);
-          await repo.upsertParent(parent);
-          await repo.upsertChild(makeChild(parentId: parent.id, name: 'Pilot'));
-        }
-      },
-    );
+  testWidgets(
+    'a tag save re-reads the entries alone, and rebuilds only its own row',
+    (tester) async {
+      late _CountingRankingRepository repository;
+      await pumpRankingsPage(
+        tester,
+        repository: (db) => repository = _CountingRankingRepository(db),
+        seed: (repo) async {
+          final category = makeCategory();
+          await repo.upsertCategory(category);
+          for (final title in ['Andor', 'Severance', 'Dark']) {
+            final parent = makeParent(categoryId: category.id, title: title);
+            await repo.upsertParent(parent);
+            await repo.upsertChild(
+              makeChild(parentId: parent.id, name: 'Pilot'),
+            );
+          }
+        },
+      );
 
-    await tester.tap(find.text('Andor'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(RankingTagsField), 'spy');
-    await tester.pumpAndSettle();
-
-    repository.reads.clear();
-    final rowBuilds = <String>[];
-    var panelBuilds = 0;
-    debugOnRebuildDirtyWidget = (element, _) {
-      final widget = element.widget;
-      if (widget is RankingsRow) rowBuilds.add(widget.parent.title);
-      if (widget is RankingsEditPanel) panelBuilds++;
-    };
-    try {
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.tap(find.text('Andor'));
       await tester.pumpAndSettle();
-    } finally {
-      debugOnRebuildDirtyWidget = null;
-    }
+      await tester.enterText(find.byType(RankingTagsField), 'spy');
+      await tester.pumpAndSettle();
 
-    // A tag cannot change a category or a child, so neither is fetched again.
-    // The page takes the new list in one pass, redrawing the one row whose
-    // entry changed, and the panel is drawn once, by that pass — the tag field
-    // already showed the chip without it.
-    expect(repository.reads, ['parents']);
-    expect(rowBuilds, ['Andor']);
-    expect(panelBuilds, 1);
-    expect(
-      find.descendant(
-        of: find.byType(RankingsRow),
-        matching: find.text('spy'),
-      ),
-      findsOneWidget,
-    );
-  });
+      repository.reads.clear();
+      final rowBuilds = <String>[];
+      var panelBuilds = 0;
+      debugOnRebuildDirtyWidget = (element, _) {
+        final widget = element.widget;
+        if (widget is RankingsRow) rowBuilds.add(widget.parent.title);
+        if (widget is RankingsEditPanel) panelBuilds++;
+      };
+      try {
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+      } finally {
+        debugOnRebuildDirtyWidget = null;
+      }
+
+      // A tag cannot change a category or a child, so neither is fetched again.
+      // The page takes the new list in one pass, redrawing the one row whose
+      // entry changed, and the panel is drawn once, by that pass — the tag field
+      // already showed the chip without it.
+      expect(repository.reads, ['parents']);
+      expect(rowBuilds, ['Andor']);
+      expect(panelBuilds, 1);
+      expect(
+        find.descendant(
+          of: find.byType(RankingsRow),
+          matching: find.text('spy'),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('a reused row still takes a later edit to its own entry', (
     tester,
@@ -1132,7 +1132,10 @@ void main() {
     final field = find.byType(RankingTagsField);
     await tester.tap(find.descendant(of: field, matching: find.text('scifi')));
     await tester.pumpAndSettle();
-    expect(find.descendant(of: field, matching: find.text('scifi')), findsNothing);
+    expect(
+      find.descendant(of: field, matching: find.text('scifi')),
+      findsNothing,
+    );
 
     await tester.tap(find.text('Undo'));
     await tester.pumpAndSettle();
@@ -1241,10 +1244,7 @@ void main() {
     await tester.tap(find.text('scifi'));
     await tester.pumpAndSettle();
 
-    expect(
-      harness.container.read(rankingFiltersProvider).tag,
-      'scifi',
-    );
+    expect(harness.container.read(rankingFiltersProvider).tag, 'scifi');
     expect(find.text('Severance'), findsOneWidget);
     expect(find.text('The Bear'), findsNothing);
 
@@ -1600,11 +1600,7 @@ void main() {
         await repo.upsertCategory(short);
         for (var i = 0; i < 40; i++) {
           await repo.upsertParent(
-            makeParent(
-              categoryId: long.id,
-              title: 'Long entry $i',
-              score: 3,
-            ),
+            makeParent(categoryId: long.id, title: 'Long entry $i', score: 3),
           );
         }
         await repo.upsertParent(
@@ -1699,7 +1695,9 @@ void main() {
       await pumpShortOfDebounce(tester);
 
       expect(tester.takeException(), isNull);
-      final saved = await DriftRankingRepository(harness.db).getParent(parentId);
+      final saved = await DriftRankingRepository(
+        harness.db,
+      ).getParent(parentId);
       expect(saved!.notes, 'late thought');
       await tester.pumpAndSettle();
     });
@@ -1735,7 +1733,9 @@ void main() {
         'cold open',
       );
       await tester.pump();
-      await tester.tap(find.descendant(of: dialog, matching: find.text('Done')));
+      await tester.tap(
+        find.descendant(of: dialog, matching: find.text('Done')),
+      );
       await pumpShortOfDebounce(tester);
 
       expect(dialog, findsNothing);
@@ -1783,7 +1783,9 @@ void main() {
       await pumpShortOfDebounce(tester);
 
       expect(tester.takeException(), isNull);
-      final saved = await DriftRankingRepository(harness.db).getParent(parentId);
+      final saved = await DriftRankingRepository(
+        harness.db,
+      ).getParent(parentId);
       expect(saved!.fieldValues['plot']?.notes, 'tight');
       expect(saved.tags, ['spy']);
       await tester.pumpAndSettle();

@@ -55,8 +55,9 @@ class _VoyagerCheckboxState extends State<VoyagerCheckbox>
   void didChangeDependencies() {
     super.didChangeDependencies();
     final reduced = VoyagerMotion.reduced(context);
-    _controller.duration =
-        reduced ? VoyagerMotion.crossfade : const Duration(milliseconds: 200);
+    _controller.duration = reduced
+        ? VoyagerMotion.crossfade
+        : const Duration(milliseconds: 200);
     // Reduced motion drops the pop-overshoot entirely — the box still fills
     // in (via _controller.value driving color/opacity in _visual), it just
     // doesn't scale.

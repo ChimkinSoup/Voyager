@@ -19,6 +19,5 @@ class InputOrderRandom implements Random {
 
 /// Pins a study or LeetCode session to the order its cards were handed in, for
 /// tests that expect a particular card first.
-final Override noSessionShuffle = sessionShuffleRandomProvider.overrideWithValue(
-  InputOrderRandom(),
-);
+final Override noSessionShuffle = sessionShuffleRandomProvider
+    .overrideWithValue(InputOrderRandom());

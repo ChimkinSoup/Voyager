@@ -127,45 +127,52 @@ void main() {
       expect((await h.repo.getApplication(opened.id))!.deletedAt, isNotNull);
     });
 
-    test('a new application is dated at UTC midnight of the picked day', () async {
-      final h = await _harness();
-      final created = await JobsActions.detached(h.container).createApplication(
-        company: 'Datadog',
-        title: 'Software Engineer',
-        dateApplied: DateTime(2026, 8, 26),
-      );
-      final stored = (await h.repo.getApplication(created.id))!;
-      expect(stored.dateApplied, DateTime.utc(2026, 8, 26));
-      expect(stored.dateApplied.isUtc, isTrue);
-    });
+    test(
+      'a new application is dated at UTC midnight of the picked day',
+      () async {
+        final h = await _harness();
+        final created = await JobsActions.detached(h.container)
+            .createApplication(
+              company: 'Datadog',
+              title: 'Software Engineer',
+              dateApplied: DateTime(2026, 8, 26),
+            );
+        final stored = (await h.repo.getApplication(created.id))!;
+        expect(stored.dateApplied, DateTime.utc(2026, 8, 26));
+        expect(stored.dateApplied.isUtc, isTrue);
+      },
+    );
 
-    test('a failed timeline write leaves no half-created application', () async {
-      final db = AppDatabase.inMemory();
-      addTearDown(db.close);
-      final repo = _FailingEventsRepository(db);
-      final application = _application();
+    test(
+      'a failed timeline write leaves no half-created application',
+      () async {
+        final db = AppDatabase.inMemory();
+        addTearDown(db.close);
+        final repo = _FailingEventsRepository(db);
+        final application = _application();
 
-      await expectLater(
-        repo.writeApplication(
-          application,
-          events: [
-            JobStatusEvent(
-              id: newId(),
-              applicationId: application.id,
-              toStatus: application.status,
-              changedAt: _now,
-              createdAt: _now,
-              updatedAt: _now,
-            ),
-          ],
-          registerCompany: 'Datadog',
-        ),
-        throwsStateError,
-      );
+        await expectLater(
+          repo.writeApplication(
+            application,
+            events: [
+              JobStatusEvent(
+                id: newId(),
+                applicationId: application.id,
+                toStatus: application.status,
+                changedAt: _now,
+                createdAt: _now,
+                updatedAt: _now,
+              ),
+            ],
+            registerCompany: 'Datadog',
+          ),
+          throwsStateError,
+        );
 
-      expect(await repo.listApplications(includeDeleted: true), isEmpty);
-      expect(await repo.listCompanies(), isEmpty);
-    });
+        expect(await repo.listApplications(includeDeleted: true), isEmpty);
+        expect(await repo.listCompanies(), isEmpty);
+      },
+    );
   });
 
   group('stages, seasons and categories', () {
@@ -212,10 +219,11 @@ void main() {
 
       final orders = [for (final s in await h.repo.listSeasons()) s.sortOrder];
       expect(orders.toSet(), hasLength(orders.length));
-      expect(
-        (await h.repo.listSeasons()).map((s) => s.name),
-        ['Fall 2026', 'Winter 2027', 'Summer 2027'],
-      );
+      expect((await h.repo.listSeasons()).map((s) => s.name), [
+        'Fall 2026',
+        'Winter 2027',
+        'Summer 2027',
+      ]);
     });
   });
 
@@ -225,9 +233,7 @@ void main() {
       final stages = await h.repo.listStages();
       expect(stages.first.id, 'seed-stage-applied');
       expect(stages[1].id, 'seed-stage-online-assessment');
-      final ids = [
-        for (final name in jobSeedCompanies) jobSeedCompanyId(name),
-      ];
+      final ids = [for (final name in jobSeedCompanies) jobSeedCompanyId(name)];
       expect(ids.toSet(), hasLength(jobSeedCompanies.length));
     });
 
@@ -258,17 +264,22 @@ void main() {
       ]);
     });
 
-    test('a deleted seed survives the purge, so it is never re-seeded', () async {
-      final h = await _harness();
-      for (final stage in await h.repo.listStages()) {
-        await h.repo.softDeleteStage(stage.id);
-      }
+    test(
+      'a deleted seed survives the purge, so it is never re-seeded',
+      () async {
+        final h = await _harness();
+        for (final stage in await h.repo.listStages()) {
+          await h.repo.softDeleteStage(stage.id);
+        }
 
-      await h.repo.purgeExpiredDeleted(utcNow().add(const Duration(days: 60)));
-      await h.repo.ensureSeeded();
+        await h.repo.purgeExpiredDeleted(
+          utcNow().add(const Duration(days: 60)),
+        );
+        await h.repo.ensureSeeded();
 
-      expect(await h.repo.listStages(), isEmpty);
-    });
+        expect(await h.repo.listStages(), isEmpty);
+      },
+    );
   });
 
   group('queries', () {
@@ -340,7 +351,10 @@ void main() {
       fallback: Colors.blue,
       brightness: Brightness.light,
     );
-    expect(colors.of('Applied'), Color(resolvePaletteColor(dark, Brightness.light)));
+    expect(
+      colors.of('Applied'),
+      Color(resolvePaletteColor(dark, Brightness.light)),
+    );
     expect(colors.of('Applied'), isNot(Color(dark)));
   });
 
@@ -433,7 +447,11 @@ void main() {
       final instant = (await repo.getApplication('instant'))!;
       expect(wall.dateApplied, DateTime.utc(2026, 9, 9));
       expect(instant.dateApplied, DateTime.utc(2026, 8, 26));
-      expect(wall.version, 5, reason: 'or the next pull puts the old value back');
+      expect(
+        wall.version,
+        5,
+        reason: 'or the next pull puts the old value back',
+      );
     });
 
     test('untouched seeds move onto seed ids without doubling', () async {

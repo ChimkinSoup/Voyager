@@ -177,7 +177,10 @@ void main() {
     test('hiddenMessage quotes the title or names the type', () {
       expect(hiddenMessage('Pay rent', fallback: 'bill'), 'Hidden "Pay rent"');
       expect(hiddenMessage('  ', fallback: 'event'), 'Hidden event');
-      expect(hiddenMessage('x' * 60, fallback: 'task'), 'Hidden "${'x' * 48}…"');
+      expect(
+        hiddenMessage('x' * 60, fallback: 'task'),
+        'Hidden "${'x' * 48}…"',
+      );
     });
 
     testWidgets('a second hide joins the first and Undo returns both', (

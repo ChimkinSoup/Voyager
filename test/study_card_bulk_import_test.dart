@@ -43,9 +43,7 @@ void main() {
     });
 
     test('ignores blank lines between cards', () {
-      final result = parseStudyBulkImportText(
-        'a|b\n\n\n  \nc|d\n',
-      );
+      final result = parseStudyBulkImportText('a|b\n\n\n  \nc|d\n');
 
       expect(result.cards, hasLength(2));
       expect(result.skipped, isEmpty);

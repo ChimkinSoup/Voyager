@@ -64,6 +64,7 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
   final _noteFocusNode = FocusNode();
   late BillingPeriod _period;
   late DateTime _dueDate;
+
   /// The anchor and cadence this sheet opened on, to tell an edited series
   /// from an untouched one (see [_retainedPaidThrough]).
   late final DateTime _initialDueDate;
@@ -156,8 +157,11 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
     setState(() {
       _datePopoverOpen = false;
       if (range != null) {
-        _dueDate =
-            DateTime(range.start.year, range.start.month, range.start.day);
+        _dueDate = DateTime(
+          range.start.year,
+          range.start.month,
+          range.start.day,
+        );
       }
     });
   }
@@ -184,7 +188,8 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
           ? null
           : await repo.getSubscription(existing.id);
       final base = onDisk ?? existing;
-      final seriesUnchanged = existing != null &&
+      final seriesUnchanged =
+          existing != null &&
           _dueDate == _initialDueDate &&
           _period == _initialPeriod;
       final subscription = Subscription(

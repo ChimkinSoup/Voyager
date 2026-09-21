@@ -206,10 +206,9 @@ void main() {
         _link('b', 'c', minute: 1),
         _link('c', 'a', minute: 2),
       ];
-      expect(
-        studyDeckLinksClosingCycles(links).map((l) => l.id),
-        [StudyDeckLink.idFor('a', 'b')],
-      );
+      expect(studyDeckLinksClosingCycles(links).map((l) => l.id), [
+        StudyDeckLink.idFor('a', 'b'),
+      ]);
     });
 
     test('leaves an acyclic graph and tombstones alone', () {

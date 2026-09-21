@@ -10,6 +10,7 @@ Future<T?> showVoyagerDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   bool barrierDismissible = true,
+
   /// Defaults to the theme's [VoyagerColors.scrim].
   Color? barrierColor,
 }) {

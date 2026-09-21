@@ -262,10 +262,7 @@ class _ValueField extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             _MutedLine(
-              [
-                'Was ${formatNetCents(previousCents)}',
-                ?caption,
-              ].join(' · '),
+              ['Was ${formatNetCents(previousCents)}', ?caption].join(' · '),
             ),
           ],
         );

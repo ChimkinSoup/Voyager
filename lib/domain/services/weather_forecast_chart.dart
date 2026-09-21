@@ -5,10 +5,7 @@ import 'package:voyager/domain/models/weather_models.dart';
 /// Local 3-hour chart slot (0, 3, 6, …, 21) for a timestamp.
 int chartBucketHour(DateTime localTime) => (localTime.hour ~/ 3) * 3;
 
-List<ForecastPeriod> periodsForDay(
-  List<ForecastPeriod> periods,
-  DateTime day,
-) {
+List<ForecastPeriod> periodsForDay(List<ForecastPeriod> periods, DateTime day) {
   final dayStart = DateTime(day.year, day.month, day.day);
   final dayEnd = dayStart.add(const Duration(days: 1));
   final buckets = <int, ForecastPeriod>{};
@@ -52,7 +49,11 @@ List<DailyForecastSummary> visibleForecastDays(
   final today = DateTime(now.year, now.month, now.day);
   final visible = [
     for (final day in days)
-      if (!DateTime(day.date.year, day.date.month, day.date.day).isBefore(today))
+      if (!DateTime(
+        day.date.year,
+        day.date.month,
+        day.date.day,
+      ).isBefore(today))
         day,
   ];
   if (visible.length <= forecastVisibleDayCount) return visible;

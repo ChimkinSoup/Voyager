@@ -18,10 +18,7 @@ class CharacterOperation {
   final String character;
   final bool deleted;
 
-  CharacterOperation copyWith({
-    bool? deleted,
-    String? character,
-  }) {
+  CharacterOperation copyWith({bool? deleted, String? character}) {
     return CharacterOperation(
       id: id,
       clientId: clientId,

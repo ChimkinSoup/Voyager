@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-/// A widget that visually clamps its child's position during the paint phase 
+/// A widget that visually clamps its child's position during the paint phase
 /// so it does not render vertically outside the bounds of the given [targetKey].
 /// Useful for keeping ReorderableListView drag proxy decorators visually confined
 /// to the list bounds without hard clipping them.
@@ -21,7 +21,9 @@ class ClampToTargetBounds extends SingleChildRenderObjectWidget {
 
   @override
   void updateRenderObject(
-      BuildContext context, RenderClampToTargetBounds renderObject) {
+    BuildContext context,
+    RenderClampToTargetBounds renderObject,
+  ) {
     renderObject.targetKey = targetKey;
   }
 }
@@ -31,11 +33,9 @@ class RenderClampToTargetBounds extends RenderProxyBox {
   ScrollPosition? _scrollPosition;
   bool _hasAttemptedScrollLookup = false;
 
-  RenderClampToTargetBounds({
-    required GlobalKey targetKey,
-    RenderBox? child,
-  })  : _targetKey = targetKey,
-        super(child);
+  RenderClampToTargetBounds({required GlobalKey targetKey, RenderBox? child})
+    : _targetKey = targetKey,
+      super(child);
 
   GlobalKey get targetKey => _targetKey;
 
@@ -91,10 +91,13 @@ class RenderClampToTargetBounds extends RenderProxyBox {
     if (targetContext != null) {
       final RenderObject targetObj = targetContext.findRenderObject()!;
       final Matrix4 transform = targetObj.getTransformTo(null);
-      final Rect targetRect = MatrixUtils.transformRect(transform, targetObj.paintBounds);
-      
+      final Rect targetRect = MatrixUtils.transformRect(
+        transform,
+        targetObj.paintBounds,
+      );
+
       final Offset myGlobalPos = localToGlobal(Offset.zero);
-      
+
       double dy = 0;
       if (myGlobalPos.dy < targetRect.top) {
         dy = targetRect.top - myGlobalPos.dy;

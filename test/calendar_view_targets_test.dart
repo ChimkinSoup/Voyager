@@ -97,18 +97,21 @@ void main() {
       );
     });
 
-    test('keeps the last viewed month when a boundary week also touches it', () {
-      // Same week, browsed from August — it is August's last row too.
-      expect(
-        calendarMonthTargetForWeekReturn(
-          lastViewedMonth: DateTime(2026, 8, 1),
-          focusedWeekDate: DateTime(2026, 8, 31),
-          weekStartsMonday: weekStartsMonday,
-          now: today,
-        ),
-        DateTime(2026, 8, 1),
-      );
-    });
+    test(
+      'keeps the last viewed month when a boundary week also touches it',
+      () {
+        // Same week, browsed from August — it is August's last row too.
+        expect(
+          calendarMonthTargetForWeekReturn(
+            lastViewedMonth: DateTime(2026, 8, 1),
+            focusedWeekDate: DateTime(2026, 8, 31),
+            weekStartsMonday: weekStartsMonday,
+            now: today,
+          ),
+          DateTime(2026, 8, 1),
+        );
+      },
+    );
 
     test('follows the week once it has been browsed out of that month', () {
       // Browsed from October back to a week with no row in October's grid.

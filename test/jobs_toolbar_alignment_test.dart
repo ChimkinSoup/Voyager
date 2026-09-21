@@ -28,9 +28,7 @@ import 'fakes/fake_weather_api_client.dart';
 }
 
 void main() {
-  testWidgets('the search field matches the Clear button', (
-    tester,
-  ) async {
+  testWidgets('the search field matches the Clear button', (tester) async {
     tester.view.physicalSize = const Size(1600, 1200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);

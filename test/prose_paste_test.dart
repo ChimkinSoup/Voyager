@@ -24,14 +24,12 @@ void main() {
     focusNode = FocusNode();
     plainText = null;
     readClipboardHtml = () async => null;
-    TestDefaultBinaryMessengerBinding
-        .instance
-        .defaultBinaryMessenger
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
           if (call.method == 'Clipboard.getData') {
-            return plainText == null ? null : <String, dynamic>{
-              'text': plainText,
-            };
+            return plainText == null
+                ? null
+                : <String, dynamic>{'text': plainText};
           }
           return null;
         });
@@ -68,9 +66,7 @@ void main() {
         child: field,
       );
     }
-    await tester.pumpWidget(
-      ProviderScope(child: MaterialApp(home: field)),
-    );
+    await tester.pumpWidget(ProviderScope(child: MaterialApp(home: field)));
     focusNode.requestFocus();
     await tester.pump();
   }

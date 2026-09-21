@@ -33,18 +33,14 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
            final dropdown = field.widget as VoyagerDropdownButtonFormField<T>;
            final state = field as _VoyagerDropdownFormFieldState<T>;
            final accent = dropdown.accentColor;
-           var fieldDecoration = decoration.applyDefaults(
-             Theme.of(field.context).inputDecorationTheme,
-           ).copyWith(
-             enabled: dropdown.enabled,
-             errorText: field.errorText,
-           );
+           var fieldDecoration = decoration
+               .applyDefaults(Theme.of(field.context).inputDecorationTheme)
+               .copyWith(enabled: dropdown.enabled, errorText: field.errorText);
            if (accent != null) {
              fieldDecoration = fieldDecoration.copyWith(
-               floatingLabelStyle: Theme.of(field.context)
-                   .textTheme
-                   .labelLarge
-                   ?.copyWith(color: accent),
+               floatingLabelStyle: Theme.of(
+                 field.context,
+               ).textTheme.labelLarge?.copyWith(color: accent),
                focusedBorder: OutlineInputBorder(
                  borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
                  borderSide: BorderSide(

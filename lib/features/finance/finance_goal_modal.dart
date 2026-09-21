@@ -128,8 +128,11 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
     setState(() {
       _datePopoverOpen = false;
       if (range != null) {
-        _targetDate =
-            DateTime(range.start.year, range.start.month, range.start.day);
+        _targetDate = DateTime(
+          range.start.year,
+          range.start.month,
+          range.start.day,
+        );
       }
     });
   }
@@ -279,8 +282,9 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
                   focusNode: _targetFocusNode,
                   accentColor: accent,
                   cursorColor: accent,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                     // Bounded so a long paste can't reach the range where

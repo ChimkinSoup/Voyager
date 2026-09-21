@@ -126,7 +126,8 @@ void main() {
     expect(
       gaps.top,
       closeTo(gaps.bottom, 0.5),
-      reason: 'text sits ${gaps.top}px below the top border and '
+      reason:
+          'text sits ${gaps.top}px below the top border and '
           '${gaps.bottom}px above the bottom one',
     );
   });
@@ -169,7 +170,8 @@ void main() {
     expect(
       overlay.dy,
       closeTo(inNormal.dy, 0.5),
-      reason: 'the overlay repaints the character under the block caret, so a '
+      reason:
+          'the overlay repaints the character under the block caret, so a '
           'gap here reads as that character jumping up or down',
     );
     expect(overlay.dx, closeTo(inNormal.dx, 0.5));

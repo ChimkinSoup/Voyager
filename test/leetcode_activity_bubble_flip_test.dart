@@ -54,7 +54,9 @@ void main() {
     expect(rect.bottom, lessThan(500));
   });
 
-  testWidgets('flips below the pointer at the top of the stack', (tester) async {
+  testWidgets('flips below the pointer at the top of the stack', (
+    tester,
+  ) async {
     final rect = await _place(tester, anchor: const Offset(200, 20));
     expect(rect.top, greaterThan(20));
   });

@@ -79,10 +79,7 @@ void main() {
     final material = find
         .ancestor(of: row, matching: find.byType(Material))
         .first;
-    final viewport = find.ancestor(
-      of: row,
-      matching: find.byType(Scrollable),
-    );
+    final viewport = find.ancestor(of: row, matching: find.byType(Scrollable));
     expect(
       find.descendant(of: viewport, matching: material),
       findsWidgets,

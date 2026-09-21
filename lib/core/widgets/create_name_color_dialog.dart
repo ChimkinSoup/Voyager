@@ -79,70 +79,71 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
     final dialog = EnterToSubmitScope(
       onSubmit: _submit,
       child: AlertDialog(
-      title: Text(widget.title),
-      content: SizedBox(
-        width: 520,
-        // Scrolls in a window too short for the palette's three rows.
-        child: VoyagerScrollView(
-          child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            LabeledTextField(
-              label: 'Name',
-              controller: _nameController,
-              autofocus: true,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _submit(),
-              onChanged: (_) {
-                if (_showEmptyNameError) {
-                  setState(() => _showEmptyNameError = false);
-                }
-              },
-            ),
-            if (_showEmptyNameError) ...[
-              const SizedBox(height: 6),
-              Text(
-                'Title cannot be empty',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.error,
+        title: Text(widget.title),
+        content: SizedBox(
+          width: 520,
+          // Scrolls in a window too short for the palette's three rows.
+          child: VoyagerScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                LabeledTextField(
+                  label: 'Name',
+                  controller: _nameController,
+                  autofocus: true,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _submit(),
+                  onChanged: (_) {
+                    if (_showEmptyNameError) {
+                      setState(() => _showEmptyNameError = false);
+                    }
+                  },
                 ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            Text('Color', style: Theme.of(context).textTheme.labelLarge),
-            const SizedBox(height: 8),
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: paletteViewportHeight(32, visibleRows: 3),
-              ),
-              child: ColorPaletteGrid(
-                palette: widget.palette,
-                selected: _selectedColor,
-                usedColors: widget.usedColors,
-                onSelected: (color) => setState(() => _selectedColor = color),
-                swatchRadius: 32,
-                maxWidth: 520,
-                maxHeight: paletteViewportHeight(32, visibleRows: 3),
-                tightLayout: true,
-              ),
+                if (_showEmptyNameError) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Title cannot be empty',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Text('Color', style: Theme.of(context).textTheme.labelLarge),
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: paletteViewportHeight(32, visibleRows: 3),
+                  ),
+                  child: ColorPaletteGrid(
+                    palette: widget.palette,
+                    selected: _selectedColor,
+                    usedColors: widget.usedColors,
+                    onSelected: (color) =>
+                        setState(() => _selectedColor = color),
+                    swatchRadius: 32,
+                    maxWidth: 520,
+                    maxHeight: paletteViewportHeight(32, visibleRows: 3),
+                    tightLayout: true,
+                  ),
+                ),
+              ],
             ),
-          ],
           ),
         ),
-      ),
-      actions: [
-        GlassButton(
-          onPressed: () => Navigator.pop(context),
-          label: 'Cancel',
-          dense: true,
-        ),
-        GlassButton(
-          onPressed: _submit,
-          label: widget.submitLabel,
-          dense: true,
-        ),
-      ],
+        actions: [
+          GlassButton(
+            onPressed: () => Navigator.pop(context),
+            label: 'Cancel',
+            dense: true,
+          ),
+          GlassButton(
+            onPressed: _submit,
+            label: widget.submitLabel,
+            dense: true,
+          ),
+        ],
       ),
     );
     return CtrlEnterToSubmitScope(onSubmit: _submit, child: dialog);

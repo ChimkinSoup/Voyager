@@ -111,75 +111,80 @@ void main() {
   tearDown(() async => db.close());
 
   group('uploads', () {
-    test('an older batch still in flight is not overwritten out of order',
-        () async {
-      final syncRepo = _HoldFirstBatchSyncRepository();
-      final service = _buildService(db, syncRepo);
-      final at = DateTime.utc(2026, 9, 1);
-      final older = Calendar(
-        id: 'cal-1',
-        name: 'Old name',
-        createdAt: at,
-        updatedAt: at,
-        version: 1,
-      );
-      final newer = Calendar(
-        id: 'cal-1',
-        name: 'New name',
-        createdAt: at,
-        updatedAt: at.add(const Duration(minutes: 1)),
-        version: 2,
-      );
-
-      final first = service.pushRecords(FirestoreCollections.calendars, [older]);
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-      final second = service.pushRecords(FirestoreCollections.calendars, [
-        newer,
-      ]);
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-      syncRepo.release.complete();
-      await Future.wait([first, second]);
-
-      final remote = await syncRepo.getDocument(
-        FirestoreCollections.calendars,
-        'cal-1',
-      );
-      expect(remote?['name'], 'New name');
-    });
-
-    test('a debounced upload pending at dispose is owed on the outbox',
-        () async {
-      OutboxSyncWorker.initialize(
-        db,
-        FakeFirebaseFirestore(),
-        _StubAuthRepository(),
-        yieldDelay: Duration.zero,
-      );
-      final service = _buildService(
-        db,
-        InMemorySyncRepository(),
-        uploadDebounceDelay: const Duration(hours: 1),
-      );
-      final at = DateTime.utc(2026, 9, 1);
-      service.pushTodoTaskTitleDebounced(
-        TodoTask(
-          id: 'task-1',
-          listId: 'list-1',
-          title: 'Buy milk',
+    test(
+      'an older batch still in flight is not overwritten out of order',
+      () async {
+        final syncRepo = _HoldFirstBatchSyncRepository();
+        final service = _buildService(db, syncRepo);
+        final at = DateTime.utc(2026, 9, 1);
+        final older = Calendar(
+          id: 'cal-1',
+          name: 'Old name',
           createdAt: at,
           updatedAt: at,
-        ),
-      );
+          version: 1,
+        );
+        final newer = Calendar(
+          id: 'cal-1',
+          name: 'New name',
+          createdAt: at,
+          updatedAt: at.add(const Duration(minutes: 1)),
+          version: 2,
+        );
 
-      service.dispose();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+        final first = service.pushRecords(FirestoreCollections.calendars, [
+          older,
+        ]);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        final second = service.pushRecords(FirestoreCollections.calendars, [
+          newer,
+        ]);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        syncRepo.release.complete();
+        await Future.wait([first, second]);
 
-      final owed = await db.select(db.pendingUploadsTable).get();
-      expect(
-        owed.map((row) => '${row.collectionName}/${row.documentId}'),
-        ['${FirestoreCollections.todoTasks}/task-1'],
-      );
-    });
+        final remote = await syncRepo.getDocument(
+          FirestoreCollections.calendars,
+          'cal-1',
+        );
+        expect(remote?['name'], 'New name');
+      },
+    );
+
+    test(
+      'a debounced upload pending at dispose is owed on the outbox',
+      () async {
+        OutboxSyncWorker.initialize(
+          db,
+          FakeFirebaseFirestore(),
+          _StubAuthRepository(),
+          yieldDelay: Duration.zero,
+        );
+        final service = _buildService(
+          db,
+          InMemorySyncRepository(),
+          uploadDebounceDelay: const Duration(hours: 1),
+        );
+        final at = DateTime.utc(2026, 9, 1);
+        service.pushTodoTaskTitleDebounced(
+          TodoTask(
+            id: 'task-1',
+            listId: 'list-1',
+            title: 'Buy milk',
+            createdAt: at,
+            updatedAt: at,
+          ),
+        );
+
+        service.dispose();
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+
+        final owed = await db.select(db.pendingUploadsTable).get();
+        expect(owed.map((row) => '${row.collectionName}/${row.documentId}'), [
+          '${FirestoreCollections.todoTasks}/task-1',
+        ]);
+      },
+    );
 
     test('a to-do upload keeps the row\'s own updatedAt', () async {
       final syncRepo = InMemorySyncRepository();
@@ -207,8 +212,7 @@ void main() {
   });
 
   group('outbox', () {
-    test('a row queued again while its round was sending it is kept',
-        () async {
+    test('a row queued again while its round was sending it is kept', () async {
       late OutboxSyncWorker worker;
       var pushes = 0;
       worker = OutboxSyncWorker(
@@ -216,12 +220,16 @@ void main() {
         FakeFirebaseFirestore(),
         _StubAuthRepository(),
         yieldDelay: Duration.zero,
-        pushDocument: (collection, documentId, {forceCrdtOverwrite = false}) async {
-          // The first push is overtaken by a newer refused edit.
-          if (++pushes == 1) {
-            await worker.enqueue(collection: collection, documentId: documentId);
-          }
-        },
+        pushDocument:
+            (collection, documentId, {forceCrdtOverwrite = false}) async {
+              // The first push is overtaken by a newer refused edit.
+              if (++pushes == 1) {
+                await worker.enqueue(
+                  collection: collection,
+                  documentId: documentId,
+                );
+              }
+            },
       );
       await worker.enqueue(
         collection: FirestoreCollections.journalEntries,
@@ -303,7 +311,8 @@ void main() {
           waitForPendingWrites: () {
             calls++;
             // Rejected once — the user changed — then a queue still holding.
-            if (calls == 1) return Future<void>.error(StateError('user changed'));
+            if (calls == 1)
+              return Future<void>.error(StateError('user changed'));
             return Completer<void>().future;
           },
         );
@@ -355,7 +364,13 @@ void main() {
     final repo = DriftJournalRepository(db);
     final at = DateTime.utc(2026, 9, 1);
     await repo.upsertJournal(
-      Journal(id: 'journal-1', name: 'J', createdAt: at, updatedAt: at, version: 4),
+      Journal(
+        id: 'journal-1',
+        name: 'J',
+        createdAt: at,
+        updatedAt: at,
+        version: 4,
+      ),
       recordLocalActivity: false,
     );
 

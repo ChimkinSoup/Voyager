@@ -63,8 +63,10 @@ void main() {
       expect(rule.toStorage(), 'weekly;i=2;bd=1,4');
       expect(RecurrenceRule.parse(rule.toStorage()), rule);
 
-      const everyThreeDays =
-          RecurrenceRule(frequency: EventRecurrence.daily, interval: 3);
+      const everyThreeDays = RecurrenceRule(
+        frequency: EventRecurrence.daily,
+        interval: 3,
+      );
       expect(everyThreeDays.toStorage(), 'daily;i=3');
       expect(RecurrenceRule.parse('daily;i=3'), everyThreeDays);
     });
@@ -80,7 +82,10 @@ void main() {
 
   group('occurrence starts', () {
     test('every 3 days steps from the anchor', () {
-      const rule = RecurrenceRule(frequency: EventRecurrence.daily, interval: 3);
+      const rule = RecurrenceRule(
+        frequency: EventRecurrence.daily,
+        interval: 3,
+      );
       final anchor = d(2026, 3, 2);
       expect(recurrenceStartsOnDay(anchor, rule, d(2026, 3, 2)), isTrue);
       expect(recurrenceStartsOnDay(anchor, rule, d(2026, 3, 3)), isFalse);
@@ -138,7 +143,10 @@ void main() {
 
   group('nextOccurrenceAfter', () {
     test('advances a daily interval past the given day', () {
-      const rule = RecurrenceRule(frequency: EventRecurrence.daily, interval: 3);
+      const rule = RecurrenceRule(
+        frequency: EventRecurrence.daily,
+        interval: 3,
+      );
       final anchor = d(2026, 3, 2);
       expect(nextOccurrenceAfter(anchor, rule, d(2026, 3, 2)), d(2026, 3, 5));
       expect(nextOccurrenceAfter(anchor, rule, d(2026, 3, 4)), d(2026, 3, 5));
@@ -191,21 +199,20 @@ void main() {
       );
 
       // January: the anchor block runs Jan 30 → Feb 2.
-      expect(
-        coveredDays(e, d(2026, 1, 25), d(2026, 2, 5)),
-        [d(2026, 1, 30), d(2026, 1, 31), d(2026, 2, 1), d(2026, 2, 2)],
-      );
+      expect(coveredDays(e, d(2026, 1, 25), d(2026, 2, 5)), [
+        d(2026, 1, 30),
+        d(2026, 1, 31),
+        d(2026, 2, 1),
+        d(2026, 2, 2),
+      ]);
 
       // February clamps to the 28th and still carries the full 4-day span.
-      expect(
-        coveredDays(e, d(2026, 2, 20), d(2026, 3, 10)),
-        [
-          d(2026, 2, 28),
-          d(2026, 3, 1),
-          d(2026, 3, 2),
-          d(2026, 3, 3),
-        ],
-      );
+      expect(coveredDays(e, d(2026, 2, 20), d(2026, 3, 10)), [
+        d(2026, 2, 28),
+        d(2026, 3, 1),
+        d(2026, 3, 2),
+        d(2026, 3, 3),
+      ]);
 
       // Apr 1 and Apr 2 are covered, but as the tail of the block that began
       // on Mar 30 — not as a standalone "1st of every month" mark. The proof
@@ -228,14 +235,14 @@ void main() {
         end: d(2026, 1, 31),
         recurrence: const RecurrenceRule(frequency: EventRecurrence.monthly),
       );
-      expect(
-        coveredDays(e, d(2026, 2, 1), d(2026, 3, 5)),
-        [d(2026, 2, 28), d(2026, 3, 1)],
-      );
-      expect(
-        coveredDays(e, d(2026, 3, 25), d(2026, 4, 5)),
-        [d(2026, 3, 30), d(2026, 3, 31)],
-      );
+      expect(coveredDays(e, d(2026, 2, 1), d(2026, 3, 5)), [
+        d(2026, 2, 28),
+        d(2026, 3, 1),
+      ]);
+      expect(coveredDays(e, d(2026, 3, 25), d(2026, 4, 5)), [
+        d(2026, 3, 30),
+        d(2026, 3, 31),
+      ]);
     });
 
     test('a 3-day weekly event repeats the block, not its weekdays', () {
@@ -244,17 +251,14 @@ void main() {
         end: d(2026, 3, 4), // Wed
         recurrence: const RecurrenceRule(frequency: EventRecurrence.weekly),
       );
-      expect(
-        coveredDays(e, d(2026, 3, 2), d(2026, 3, 15)),
-        [
-          d(2026, 3, 2),
-          d(2026, 3, 3),
-          d(2026, 3, 4),
-          d(2026, 3, 9),
-          d(2026, 3, 10),
-          d(2026, 3, 11),
-        ],
-      );
+      expect(coveredDays(e, d(2026, 3, 2), d(2026, 3, 15)), [
+        d(2026, 3, 2),
+        d(2026, 3, 3),
+        d(2026, 3, 4),
+        d(2026, 3, 9),
+        d(2026, 3, 10),
+        d(2026, 3, 11),
+      ]);
     });
 
     test('bars bridge inside one occurrence and break between occurrences', () {
@@ -288,10 +292,12 @@ void main() {
 
     test('a non-repeating multi-day event covers exactly its span', () {
       final e = event(start: d(2026, 3, 2), end: d(2026, 3, 5));
-      expect(
-        coveredDays(e, d(2026, 2, 25), d(2026, 3, 10)),
-        [d(2026, 3, 2), d(2026, 3, 3), d(2026, 3, 4), d(2026, 3, 5)],
-      );
+      expect(coveredDays(e, d(2026, 2, 25), d(2026, 3, 10)), [
+        d(2026, 3, 2),
+        d(2026, 3, 3),
+        d(2026, 3, 4),
+        d(2026, 3, 5),
+      ]);
     });
   });
 
@@ -316,8 +322,10 @@ void main() {
       final e = event(
         start: d(2026, 3, 2),
         end: d(2026, 3, 6),
-        recurrence:
-            const RecurrenceRule(frequency: EventRecurrence.daily, interval: 3),
+        recurrence: const RecurrenceRule(
+          frequency: EventRecurrence.daily,
+          interval: 3,
+        ),
         exceptionDates: [d(2026, 3, 5)],
       );
       // Mar 5 is skipped as a start, but Mar 2's block still runs to Mar 6.

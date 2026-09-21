@@ -556,12 +556,14 @@ class _ContextMenuItemTile extends StatelessWidget {
         ? Colors.red.withValues(alpha: 0.12)
         : theme.colorScheme.onSurface.withValues(alpha: 0.08);
 
-    final Widget? leading = item.leading ??
+    final Widget? leading =
+        item.leading ??
         (item.icon != null
             ? Icon(item.icon, size: 16, color: iconColor)
             : null);
 
-    final Widget? trailing = item.trailing ??
+    final Widget? trailing =
+        item.trailing ??
         (item.hasChildren
             ? Icon(PhosphorIconsRegular.caretRight, size: 14, color: iconColor)
             : null);
@@ -597,10 +599,7 @@ class _ContextMenuItemTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (trailing != null) ...[
-                const SizedBox(width: 10),
-                trailing,
-              ],
+              if (trailing != null) ...[const SizedBox(width: 10), trailing],
             ],
           ),
         ),
@@ -614,10 +613,7 @@ class _ContextMenuItemTile extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _ContextMenuLayoutDelegate extends SingleChildLayoutDelegate {
-  _ContextMenuLayoutDelegate({
-    required this.anchor,
-    required this.minWidth,
-  });
+  _ContextMenuLayoutDelegate({required this.anchor, required this.minWidth});
 
   final Offset anchor;
   final double minWidth;

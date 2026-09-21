@@ -119,11 +119,8 @@ class RecurrenceRule {
   }
 
   @override
-  int get hashCode => Object.hash(
-        frequency,
-        interval,
-        Object.hashAllUnordered(weekdays),
-      );
+  int get hashCode =>
+      Object.hash(frequency, interval, Object.hashAllUnordered(weekdays));
 
   @override
   String toString() => 'RecurrenceRule(${toStorage()})';

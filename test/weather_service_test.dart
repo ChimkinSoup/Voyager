@@ -137,7 +137,9 @@ void main() {
   });
 
   test('fetchForecastIfNeeded uses cached forecast within interval', () async {
-    final fetchedAt = DateTime.now().toUtc().subtract(const Duration(minutes: 10));
+    final fetchedAt = DateTime.now().toUtc().subtract(
+      const Duration(minutes: 10),
+    );
     await settingsRepo.saveSettings(
       (await settingsRepo.getSettings()).copyWith(
         weatherForecastJson:

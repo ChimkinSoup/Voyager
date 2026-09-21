@@ -87,13 +87,17 @@ void main() {
 
   group('deletedMessage', () {
     test('quotes a name it was given', () {
-      expect(deletedMessage('Groceries', fallback: 'transaction'),
-          'Deleted "Groceries"');
+      expect(
+        deletedMessage('Groceries', fallback: 'transaction'),
+        'Deleted "Groceries"',
+      );
     });
 
     test('trims before quoting', () {
-      expect(deletedMessage('  Groceries \n', fallback: 'transaction'),
-          'Deleted "Groceries"');
+      expect(
+        deletedMessage('  Groceries \n', fallback: 'transaction'),
+        'Deleted "Groceries"',
+      );
     });
 
     test('falls back rather than showing empty quotes', () {

@@ -46,7 +46,8 @@ class AnalyticsService {
       case TrackerType.integer:
         if (maxInPeriod == 0) return 0;
         final cap = tracker.integerCap ?? maxInPeriod;
-        final singleValue = hasSingleIntValue ??
+        final singleValue =
+            hasSingleIntValue ??
             (allValues != null &&
                 allValues.where((v) => v.intValue != null).length == 1);
         if (singleValue) {
@@ -120,8 +121,9 @@ class AnalyticsService {
 
     // Sorted known spots
     final knownX = dayMap.keys.toList()..sort();
-    final knownSpots =
-        knownX.map((x) => (x: x.toDouble(), y: dayMap[x]!)).toList();
+    final knownSpots = knownX
+        .map((x) => (x: x.toDouble(), y: dayMap[x]!))
+        .toList();
 
     // Cardinal tangent helper (tension = 0 → Catmull-Rom)
     ({double dx, double dy}) tangentAt(int i) {

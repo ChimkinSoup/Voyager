@@ -67,45 +67,47 @@ Future<void> _pressSubmitChord(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('Ctrl+Enter in the collapsed pad copies it and opens the problem',
-      (tester) async {
-    final spy = _spyOnHandoff(tester);
+  testWidgets(
+    'Ctrl+Enter in the collapsed pad copies it and opens the problem',
+    (tester) async {
+      final spy = _spyOnHandoff(tester);
 
-    final controller = LeetCodeCodeController(text: 'print(1)');
-    addTearDown(controller.dispose);
-    final focusNode = FocusNode();
-    addTearDown(focusNode.dispose);
+      final controller = LeetCodeCodeController(text: 'print(1)');
+      addTearDown(controller.dispose);
+      final focusNode = FocusNode();
+      addTearDown(focusNode.dispose);
 
-    await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 400,
-              height: 300,
-              child: LeetCodeScratchPad(
-                problem: _problem,
-                entry: const LeetCodeScratchEntry(language: 'python'),
-                controller: controller,
-                focusNode: focusNode,
-                onCodeChanged: (_) {},
-                onExpand: () {},
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 400,
+                height: 300,
+                child: LeetCodeScratchPad(
+                  problem: _problem,
+                  entry: const LeetCodeScratchEntry(language: 'python'),
+                  controller: controller,
+                  focusNode: focusNode,
+                  onCodeChanged: (_) {},
+                  onExpand: () {},
+                ),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    focusNode.requestFocus();
-    await tester.pump();
-    await _pressSubmitChord(tester);
+      focusNode.requestFocus();
+      await tester.pump();
+      await _pressSubmitChord(tester);
 
-    expect(spy.copied, ['print(1)']);
-    expect(spy.launched, ['https://leetcode.com/problems/two-sum/']);
-    // The chord is not an edit — the buffer is exactly what was copied.
-    expect(controller.fullText, 'print(1)');
-  });
+      expect(spy.copied, ['print(1)']);
+      expect(spy.launched, ['https://leetcode.com/problems/two-sum/']);
+      // The chord is not an edit — the buffer is exactly what was copied.
+      expect(controller.fullText, 'print(1)');
+    },
+  );
 
   testWidgets('Ctrl+Enter works from the expanded editor too', (tester) async {
     final spy = _spyOnHandoff(tester);

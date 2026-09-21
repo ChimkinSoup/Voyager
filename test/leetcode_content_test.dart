@@ -101,14 +101,8 @@ Output: 3</pre>
 <p><strong>Constraints:</strong></p>
 <ul><li>1 &lt;= s.length</li></ul>
 ''';
-      expect(
-        leetCodeContentToExamples(html),
-        ['Input: s = "abc"\nOutput: 3'],
-      );
-      expect(
-        leetCodeContentToDescription(html),
-        'Given a string s.',
-      );
+      expect(leetCodeContentToExamples(html), ['Input: s = "abc"\nOutput: 3']);
+      expect(leetCodeContentToDescription(html), 'Given a string s.');
     });
 
     test('does not treat For example: prose as an example heading', () {

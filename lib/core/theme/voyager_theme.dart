@@ -470,8 +470,7 @@ abstract final class VoyagerShadows {
   /// Blur radius multiplier. Light shadows are spread much wider so that at
   /// 3–5% opacity they still separate the surface without forming a visible
   /// edge.
-  static double blurScale(VoyagerPalette palette) =>
-      palette.isDark ? 1.0 : 2.2;
+  static double blurScale(VoyagerPalette palette) => palette.isDark ? 1.0 : 2.2;
 }
 
 /// Semantic colors that widgets used to spell as `Colors.white`/`Colors.black`

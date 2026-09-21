@@ -95,15 +95,14 @@ void main() {
     await _rewindToSchema88(file);
 
     final upgraded = AppDatabase(NativeDatabase(file));
-    final remaining = await upgraded.customSelect(
-      'SELECT tracker_id FROM tracker_values_table',
-    ).get();
+    final remaining = await upgraded
+        .customSelect('SELECT tracker_id FROM tracker_values_table')
+        .get();
     await upgraded.close();
 
-    expect(
-      remaining.map((row) => row.read<String>('tracker_id')),
-      ['tracker-1'],
-    );
+    expect(remaining.map((row) => row.read<String>('tracker_id')), [
+      'tracker-1',
+    ]);
   });
 
   test('88→89 re-anchors Sunday-filed weekly values onto Monday', () async {

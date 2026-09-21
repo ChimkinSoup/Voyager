@@ -117,10 +117,7 @@ TodoSortBatch applyNewUndatedTask(TodoTask task, List<TodoTask> activeTasks) {
 }
 
 /// Places a task into a list using star/due-date group rules.
-TodoSortBatch applyTaskPlacement(
-  TodoTask task,
-  List<TodoTask> activeTasks,
-) {
+TodoSortBatch applyTaskPlacement(TodoTask task, List<TodoTask> activeTasks) {
   final others = activeTasks.where((t) => t.id != task.id).toList();
   final starred = others.where((t) => t.starred).toList()
     ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
@@ -138,9 +135,7 @@ TodoSortBatch applyTaskPlacement(
       _reindex(unstarred, starred: false, activeTasks: activeTasks),
     );
   } else {
-    updates.addAll(
-      _reindex(starred, starred: true, activeTasks: activeTasks),
-    );
+    updates.addAll(_reindex(starred, starred: true, activeTasks: activeTasks));
     final orderedUnstarred = task.dueDate != null
         ? buildUnstarredOrderForDueDate(unstarred, task)
         : buildUnstarredOrderSnapToTop(unstarred, task);
@@ -158,10 +153,7 @@ TodoSortBatch applyTaskUncomplete(TodoTask task, List<TodoTask> activeTasks) {
 }
 
 /// Places a task into a destination list after a list move.
-TodoSortBatch applyTaskListMove(
-  TodoTask task,
-  List<TodoTask> destActiveTasks,
-) {
+TodoSortBatch applyTaskListMove(TodoTask task, List<TodoTask> destActiveTasks) {
   return applyTaskPlacement(task, destActiveTasks);
 }
 
@@ -184,7 +176,8 @@ TodoSortBatch? applyNormalizeUnstarredIfNeeded(List<TodoTask> activeTasks) {
 }
 
 bool unstarredSectionNeedsNormalize(List<TodoTask> unstarred) {
-  final sorted = [...unstarred]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  final sorted = [...unstarred]
+    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
   var seenUndated = false;
   for (final task in sorted) {
     if (task.dueDate == null) {
@@ -218,7 +211,9 @@ TodoSortBatch applyMoveToBottomOfCategory(
   List<TodoTask> activeTasks,
 ) {
   final sameCategory =
-      activeTasks.where((t) => t.id != task.id && t.starred == task.starred).toList()
+      activeTasks
+          .where((t) => t.id != task.id && t.starred == task.starred)
+          .toList()
         ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
   final dated = sameCategory.where((t) => t.dueDate != null).toList();
   final undated = sameCategory.where((t) => t.dueDate == null).toList();
@@ -252,10 +247,7 @@ TodoSortBatch applyDueDateChange(
 
   final now = utcNow();
   if (clearDueDate) {
-    final cleared = task.copyWith(
-      clearDueDate: true,
-      clearDueDateSetAt: true,
-    );
+    final cleared = task.copyWith(clearDueDate: true, clearDueDateSetAt: true);
     if (task.starred) {
       return _batchFromOrder(
         activeTasks,
@@ -321,11 +313,7 @@ List<TodoTask> buildUnstarredOrderSnapToTop(
   return [task, ...others];
 }
 
-TodoSortBatch? applyReorder(
-  List<TodoTask> active,
-  int oldIndex,
-  int newIndex,
-) {
+TodoSortBatch? applyReorder(List<TodoTask> active, int oldIndex, int newIndex) {
   if (oldIndex == newIndex) return null;
 
   final moved = active[oldIndex];
@@ -352,7 +340,9 @@ TodoSortBatch? applyReorder(
   items.insert(newIndex, moved);
 
   final starred = items.take(starredCount).toList();
-  final unstarred = normalizeUnstarredSection(items.skip(starredCount).toList());
+  final unstarred = normalizeUnstarredSection(
+    items.skip(starredCount).toList(),
+  );
 
   final updates = <TodoTask>[];
   updates.addAll(_reindex(starred, starred: true, activeTasks: active));
@@ -360,10 +350,7 @@ TodoSortBatch? applyReorder(
   return updates.isEmpty ? null : TodoSortBatch(tasks: updates);
 }
 
-List<TodoTask> buildStarredOrder(
-  List<TodoTask> starred, {
-  TodoTask? insert,
-}) {
+List<TodoTask> buildStarredOrder(List<TodoTask> starred, {TodoTask? insert}) {
   final others = insert == null
       ? starred
       : starred.where((t) => t.id != insert.id).toList();
@@ -435,10 +422,9 @@ TodoSortBatch _applyStar(TodoTask task, List<TodoTask> activeTasks) {
 }
 
 TodoSortBatch _applyUnstar(TodoTask task, List<TodoTask> activeTasks) {
-  final remainingStarred = activeTasks
-      .where((t) => t.starred && t.id != task.id)
-      .toList()
-    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  final remainingStarred =
+      activeTasks.where((t) => t.starred && t.id != task.id).toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
   final unstarred = task.copyWith(starred: false);
 
@@ -448,19 +434,17 @@ TodoSortBatch _applyUnstar(TodoTask task, List<TodoTask> activeTasks) {
   );
 
   if (task.dueDate != null) {
-    final otherUnstarred =
-        activeTasks.where((t) => !t.starred && t.id != task.id).toList();
+    final otherUnstarred = activeTasks
+        .where((t) => !t.starred && t.id != task.id)
+        .toList();
     final ordered = buildUnstarredOrderForDueDate(otherUnstarred, unstarred);
-    updates.addAll(
-      _reindex(ordered, starred: false, activeTasks: activeTasks),
-    );
+    updates.addAll(_reindex(ordered, starred: false, activeTasks: activeTasks));
   } else {
-    final otherUnstarred =
-        activeTasks.where((t) => !t.starred && t.id != task.id).toList();
+    final otherUnstarred = activeTasks
+        .where((t) => !t.starred && t.id != task.id)
+        .toList();
     final ordered = buildUnstarredOrderSnapToTop(otherUnstarred, unstarred);
-    updates.addAll(
-      _reindex(ordered, starred: false, activeTasks: activeTasks),
-    );
+    updates.addAll(_reindex(ordered, starred: false, activeTasks: activeTasks));
   }
 
   return TodoSortBatch(tasks: _uniqueUpdates(updates));

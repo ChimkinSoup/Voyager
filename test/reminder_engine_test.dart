@@ -356,30 +356,33 @@ void main() {
     expect((await repository.getDevice(_deviceId))!.deletedAt, isNotNull);
   });
 
-  test('createOnly registers a missing device and never rewrites one', () async {
-    final first = DateTime.utc(2026, 9, 14, 8);
-    // A launch whose pull never runs still gets this device listed.
-    await registerThisDevice(
-      repository,
-      _deviceId,
-      now: first,
-      createOnly: true,
-    );
-    expect((await repository.getDevice(_deviceId))!.lastSeenAt, first);
+  test(
+    'createOnly registers a missing device and never rewrites one',
+    () async {
+      final first = DateTime.utc(2026, 9, 14, 8);
+      // A launch whose pull never runs still gets this device listed.
+      await registerThisDevice(
+        repository,
+        _deviceId,
+        now: first,
+        createOnly: true,
+      );
+      expect((await repository.getDevice(_deviceId))!.lastSeenAt, first);
 
-    // Refreshing last-seen is the pull's job, so an existing row is left
-    // alone however stale it is — a rename pulled from another device would
-    // otherwise be overwritten by this one's copy.
-    await registerThisDevice(
-      repository,
-      _deviceId,
-      now: first.add(const Duration(days: 3)),
-      createOnly: true,
-    );
-    final device = (await repository.getDevice(_deviceId))!;
-    expect(device.lastSeenAt, first);
-    expect(device.version, 0);
-  });
+      // Refreshing last-seen is the pull's job, so an existing row is left
+      // alone however stale it is — a rename pulled from another device would
+      // otherwise be overwritten by this one's copy.
+      await registerThisDevice(
+        repository,
+        _deviceId,
+        now: first.add(const Duration(days: 3)),
+        createOnly: true,
+      );
+      final device = (await repository.getDevice(_deviceId))!;
+      expect(device.lastSeenAt, first);
+      expect(device.version, 0);
+    },
+  );
 
   test('history is trimmed to the newest lines, as tombstones', () async {
     final stamp = DateTime.utc(2026, 9, 1);

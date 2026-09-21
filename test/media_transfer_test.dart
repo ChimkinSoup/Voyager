@@ -152,23 +152,26 @@ void main() {
       expect(storage.uploads, isEmpty);
     });
 
-    test('re-queues a transient failure and succeeds on a later drain', () async {
-      final asset = await attach();
-      storage.failuresRemaining = 1;
+    test(
+      're-queues a transient failure and succeeds on a later drain',
+      () async {
+        final asset = await attach();
+        storage.failuresRemaining = 1;
 
-      await worker.drainUploads();
-      expect(
-        (await repository.getAsset(asset.id))!.uploadState,
-        MediaUploadState.pending,
-        reason: 'a transient failure goes back on the queue',
-      );
+        await worker.drainUploads();
+        expect(
+          (await repository.getAsset(asset.id))!.uploadState,
+          MediaUploadState.pending,
+          reason: 'a transient failure goes back on the queue',
+        );
 
-      await worker.drainUploads();
-      expect(
-        (await repository.getAsset(asset.id))!.uploadState,
-        MediaUploadState.uploaded,
-      );
-    });
+        await worker.drainUploads();
+        expect(
+          (await repository.getAsset(asset.id))!.uploadState,
+          MediaUploadState.uploaded,
+        );
+      },
+    );
 
     test('parks a permanent failure immediately, with a reason', () async {
       final asset = await attach();
@@ -197,39 +200,41 @@ void main() {
       );
     });
 
-    test('requeueFailedUploads revives everything a rules refusal parked',
-        () async {
-      final first = await attach(r: 10);
-      final second = await attach(r: 20);
-      storage
-        ..failuresRemaining = 99
-        ..failPermanently = true;
-      await worker.drainUploads();
+    test(
+      'requeueFailedUploads revives everything a rules refusal parked',
+      () async {
+        final first = await attach(r: 10);
+        final second = await attach(r: 20);
+        storage
+          ..failuresRemaining = 99
+          ..failPermanently = true;
+        await worker.drainUploads();
 
-      expect(
-        (await repository.getAsset(first.id))!.uploadState,
-        MediaUploadState.failed,
-      );
-      expect(
-        (await repository.getAsset(second.id))!.uploadState,
-        MediaUploadState.failed,
-      );
-      expect(storage.uploads, isEmpty);
+        expect(
+          (await repository.getAsset(first.id))!.uploadState,
+          MediaUploadState.failed,
+        );
+        expect(
+          (await repository.getAsset(second.id))!.uploadState,
+          MediaUploadState.failed,
+        );
+        expect(storage.uploads, isEmpty);
 
-      // The rules deploy that fixes the refusal.
-      storage
-        ..failuresRemaining = 0
-        ..failPermanently = false;
+        // The rules deploy that fixes the refusal.
+        storage
+          ..failuresRemaining = 0
+          ..failPermanently = false;
 
-      expect(await worker.requeueFailedUploads(), 2);
+        expect(await worker.requeueFailedUploads(), 2);
 
-      for (final asset in [first, second]) {
-        final revived = (await repository.getAsset(asset.id))!;
-        expect(revived.uploadState, MediaUploadState.uploaded);
-        expect(revived.failureReason, isNull);
-      }
-      expect(storage.uploads, hasLength(2));
-    });
+        for (final asset in [first, second]) {
+          final revived = (await repository.getAsset(asset.id))!;
+          expect(revived.uploadState, MediaUploadState.uploaded);
+          expect(revived.failureReason, isNull);
+        }
+        expect(storage.uploads, hasLength(2));
+      },
+    );
 
     test('requeueFailedUploads leaves a still-broken blob parked', () async {
       final asset = await attach();
@@ -247,21 +252,23 @@ void main() {
       );
     });
 
-    test('requeueFailedUploads does nothing while uploads are disabled',
-        () async {
-      final asset = await attach();
-      storage
-        ..failuresRemaining = 99
-        ..failPermanently = true;
-      await worker.drainUploads();
+    test(
+      'requeueFailedUploads does nothing while uploads are disabled',
+      () async {
+        final asset = await attach();
+        storage
+          ..failuresRemaining = 99
+          ..failPermanently = true;
+        await worker.drainUploads();
 
-      settings = const AppSettings(mediaRemoteUploadsEnabled: false);
-      expect(await worker.requeueFailedUploads(), 0);
-      expect(
-        (await repository.getAsset(asset.id))!.uploadState,
-        MediaUploadState.failed,
-      );
-    });
+        settings = const AppSettings(mediaRemoteUploadsEnabled: false);
+        expect(await worker.requeueFailedUploads(), 0);
+        expect(
+          (await repository.getAsset(asset.id))!.uploadState,
+          MediaUploadState.failed,
+        );
+      },
+    );
 
     test('retry puts a parked asset back on the queue', () async {
       final asset = await attach();
@@ -340,33 +347,39 @@ void main() {
       expect(storage.downloads, hasLength(1));
     });
 
-    test('a missing remote object parks rather than retrying forever', () async {
-      final asset = await remoteOnlyAsset();
-      storage.objects.remove(asset.remotePath('user-1'));
+    test(
+      'a missing remote object parks rather than retrying forever',
+      () async {
+        final asset = await remoteOnlyAsset();
+        storage.objects.remove(asset.remotePath('user-1'));
 
-      await worker.prefetchMissing();
+        await worker.prefetchMissing();
 
-      expect(
-        (await repository.getAsset(asset.id))!.downloadState,
-        MediaDownloadState.failed,
-      );
-    });
+        expect(
+          (await repository.getAsset(asset.id))!.downloadState,
+          MediaDownloadState.failed,
+        );
+      },
+    );
 
-    test('an upload of an asset with no local bytes is not a failure', () async {
-      final asset = await remoteOnlyAsset();
-      await repository.upsertAsset(
-        asset.copyWith(uploadState: MediaUploadState.pending),
-      );
+    test(
+      'an upload of an asset with no local bytes is not a failure',
+      () async {
+        final asset = await remoteOnlyAsset();
+        await repository.upsertAsset(
+          asset.copyWith(uploadState: MediaUploadState.pending),
+        );
 
-      await worker.drainUploads();
+        await worker.drainUploads();
 
-      expect(storage.uploads, isEmpty);
-      expect(
-        (await repository.getAsset(asset.id))!.uploadState,
-        MediaUploadState.localOnly,
-        reason: 'the download queue owns this asset, not the upload queue',
-      );
-    });
+        expect(storage.uploads, isEmpty);
+        expect(
+          (await repository.getAsset(asset.id))!.uploadState,
+          MediaUploadState.localOnly,
+          reason: 'the download queue owns this asset, not the upload queue',
+        );
+      },
+    );
   });
 
   group('purge reaches cloud storage', () {

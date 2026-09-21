@@ -166,9 +166,13 @@ void main() {
       glyphs = _bands(rgba!, image.width, image.height, scale, _isGlyph);
       // A pill is most of a line tall; the sliver dropped here is the tinted
       // last row of the boundary itself.
-      pills = _bands(rgba, image.width, image.height, scale, _isPill)
-          .where((band) => band.bottom - band.top > 4)
-          .toList();
+      pills = _bands(
+        rgba,
+        image.width,
+        image.height,
+        scale,
+        _isPill,
+      ).where((band) => band.bottom - band.top > 4).toList();
       image.dispose();
     });
     debugDefaultTargetPlatformOverride = null;

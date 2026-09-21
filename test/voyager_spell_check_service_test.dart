@@ -47,7 +47,10 @@ void main() {
       final service = _serviceWith({'dog', 'the'});
       expect(service.checkTextSync("the dog's bowl"), hasLength(1));
       expect(
-        _flaggedWords("the dog's bowl", service.checkTextSync("the dog's bowl")),
+        _flaggedWords(
+          "the dog's bowl",
+          service.checkTextSync("the dog's bowl"),
+        ),
         ['bowl'],
       );
     });
@@ -106,7 +109,11 @@ void main() {
           allowDeferral: true,
         );
         text = newText;
-        expect(spans, isEmpty, reason: 'mid-word "$text" should not be flagged yet');
+        expect(
+          spans,
+          isEmpty,
+          reason: 'mid-word "$text" should not be flagged yet',
+        );
       }
 
       // Same call repeated with identical text (mirrors the two real call
@@ -148,16 +155,19 @@ void main() {
       expect(_flaggedWords(text, spans), ['xqz', 'xqz', 'xqz']);
     });
 
-    test('allowDeferral: false always returns the complete result, even mid-edit', () {
-      final service = _serviceWith({'hello'});
-      final forced = service.checkIncremental(
-        oldText: '',
-        oldSpans: const [],
-        newText: 'xq',
-        allowDeferral: false,
-      );
-      expect(_flaggedWords('xq', forced), ['xq']);
-    });
+    test(
+      'allowDeferral: false always returns the complete result, even mid-edit',
+      () {
+        final service = _serviceWith({'hello'});
+        final forced = service.checkIncremental(
+          oldText: '',
+          oldSpans: const [],
+          newText: 'xq',
+          allowDeferral: false,
+        );
+        expect(_flaggedWords('xq', forced), ['xq']);
+      },
+    );
 
     test('a bulk insertion (paste / Vim put) is not deferred', () {
       final service = _serviceWith({'hello'});
@@ -170,21 +180,24 @@ void main() {
       expect(_flaggedWords('hello xqzzy', result), ['xqzzy']);
     });
 
-    test('a pure deletion has nothing to defer and checks the result normally', () {
-      final service = _serviceWith({'hello'});
-      final oldText = 'helloo';
-      final oldSpans = service.checkTextSync(oldText);
-      expect(_flaggedWords(oldText, oldSpans), ['helloo']);
+    test(
+      'a pure deletion has nothing to defer and checks the result normally',
+      () {
+        final service = _serviceWith({'hello'});
+        final oldText = 'helloo';
+        final oldSpans = service.checkTextSync(oldText);
+        expect(_flaggedWords(oldText, oldSpans), ['helloo']);
 
-      // Backspace the extra 'o' -> "hello", a known word.
-      final newText = 'hello';
-      final result = service.checkIncremental(
-        oldText: oldText,
-        oldSpans: oldSpans,
-        newText: newText,
-      );
-      expect(result, isEmpty);
-    });
+        // Backspace the extra 'o' -> "hello", a known word.
+        final newText = 'hello';
+        final result = service.checkIncremental(
+          oldText: oldText,
+          oldSpans: oldSpans,
+          newText: newText,
+        );
+        expect(result, isEmpty);
+      },
+    );
   });
 
   group('checkIncremental — span reuse / shifting', () {
@@ -202,7 +215,9 @@ void main() {
         newText: newText,
         allowDeferral: false,
       );
-      final leading = result.firstWhere((s) => newText.substring(s.range.start, s.range.end) == 'zzz');
+      final leading = result.firstWhere(
+        (s) => newText.substring(s.range.start, s.range.end) == 'zzz',
+      );
       expect(leading.range, leadingSpanBefore);
     });
 
@@ -222,7 +237,9 @@ void main() {
         allowDeferral: false,
       );
       expect(_flaggedWords(newText, result), ['thethe', 'qqzz']);
-      final shifted = result.firstWhere((s) => newText.substring(s.range.start, s.range.end) == 'qqzz');
+      final shifted = result.firstWhere(
+        (s) => newText.substring(s.range.start, s.range.end) == 'qqzz',
+      );
       expect(shifted.range, const TextRange(start: 11, end: 15));
     });
 
@@ -246,17 +263,22 @@ void main() {
 
     test('a large/unrelated text swap falls back to a full recheck', () {
       final service = _serviceWith({'hello'});
-      const oldText = 'hello there this is entry one with plenty of words in it';
+      const oldText =
+          'hello there this is entry one with plenty of words in it';
       final oldSpans = service.checkTextSync(oldText);
 
-      const newText = 'a completely different entry with its own unrelated qqzzxx word';
+      const newText =
+          'a completely different entry with its own unrelated qqzzxx word';
       final result = service.checkIncremental(
         oldText: oldText,
         oldSpans: oldSpans,
         newText: newText,
         allowDeferral: false,
       );
-      expect(_flaggedWords(newText, result), containsAll(['qqzzxx', 'unrelated']));
+      expect(
+        _flaggedWords(newText, result),
+        containsAll(['qqzzxx', 'unrelated']),
+      );
     });
   });
 
@@ -320,11 +342,30 @@ void main() {
     // throughout so this isolates the splicing/shifting logic from the
     // (separately tested) deferral behavior. Suggestions stay empty on the
     // hot path; both sides must agree on that too.
-    const words = ['the', 'quick', 'brown', 'fox', 'jumps', 'over', 'lazy', 'dog'];
-    const misspellings = ['teh', 'qwik', 'brwon', 'foxx', 'jmups', 'ovr', 'lasy', 'dogg'];
+    const words = [
+      'the',
+      'quick',
+      'brown',
+      'fox',
+      'jumps',
+      'over',
+      'lazy',
+      'dog',
+    ];
+    const misspellings = [
+      'teh',
+      'qwik',
+      'brwon',
+      'foxx',
+      'jmups',
+      'ovr',
+      'lasy',
+      'dogg',
+    ];
 
-    String randomWord(Random rng) =>
-        rng.nextBool() ? words[rng.nextInt(words.length)] : misspellings[rng.nextInt(misspellings.length)];
+    String randomWord(Random rng) => rng.nextBool()
+        ? words[rng.nextInt(words.length)]
+        : misspellings[rng.nextInt(misspellings.length)];
 
     String applyRandomEdit(String text, Random rng) {
       final op = rng.nextInt(3);
@@ -354,32 +395,39 @@ void main() {
     }
 
     for (final seed in [1, 2, 3, 4, 5, 42, 1337, 99999]) {
-      test('random edit sequence (seed $seed) matches full recheck at every step', () {
-        final service = _serviceWith(words.toSet());
-        final rng = Random(seed);
-        var text = '';
-        var spans = <SuggestionSpan>[];
+      test(
+        'random edit sequence (seed $seed) matches full recheck at every step',
+        () {
+          final service = _serviceWith(words.toSet());
+          final rng = Random(seed);
+          var text = '';
+          var spans = <SuggestionSpan>[];
 
-        for (var i = 0; i < 60; i++) {
-          final newText = applyRandomEdit(text, rng);
-          final incremental = service.checkIncremental(
-            oldText: text,
-            oldSpans: spans,
-            newText: newText,
-            allowDeferral: false,
-          );
-          final full = service.checkTextSync(newText);
+          for (var i = 0; i < 60; i++) {
+            final newText = applyRandomEdit(text, rng);
+            final incremental = service.checkIncremental(
+              oldText: text,
+              oldSpans: spans,
+              newText: newText,
+              allowDeferral: false,
+            );
+            final full = service.checkTextSync(newText);
 
-          expect(
-            incremental.map((s) => (s.range.start, s.range.end, s.suggestions)).toList(),
-            full.map((s) => (s.range.start, s.range.end, s.suggestions)).toList(),
-            reason: 'step $i: "$text" -> "$newText"',
-          );
+            expect(
+              incremental
+                  .map((s) => (s.range.start, s.range.end, s.suggestions))
+                  .toList(),
+              full
+                  .map((s) => (s.range.start, s.range.end, s.suggestions))
+                  .toList(),
+              reason: 'step $i: "$text" -> "$newText"',
+            );
 
-          text = newText;
-          spans = incremental;
-        }
-      });
+            text = newText;
+            spans = incremental;
+          }
+        },
+      );
     }
   });
 }

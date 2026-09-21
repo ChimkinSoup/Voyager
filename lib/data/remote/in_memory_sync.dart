@@ -51,7 +51,10 @@ class InMemorySyncRepository implements SyncRepository {
   Future<void> ping() async {}
 
   @override
-  Future<Map<String, dynamic>?> getDocument(String collection, String id) async {
+  Future<Map<String, dynamic>?> getDocument(
+    String collection,
+    String id,
+  ) async {
     final data = _documents[_key(collection, id)];
     return data == null ? null : Map<String, dynamic>.from(data);
   }
@@ -79,9 +82,8 @@ class InMemorySyncRepository implements SyncRepository {
   }
 
   @override
-  Future<List<({String id, Map<String, dynamic> data})>> listCollectionDocuments(
-    String collection,
-  ) async {
+  Future<List<({String id, Map<String, dynamic> data})>>
+  listCollectionDocuments(String collection) async {
     final prefix = '$collection/';
     return _documents.entries
         .where((entry) => entry.key.startsWith(prefix))

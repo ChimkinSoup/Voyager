@@ -186,8 +186,7 @@ class MediaService extends ChangeNotifier {
     int? displayWidthPx,
   }) async {
     final resolvedSortOrder =
-        sortOrder ??
-        await _nextSortOrder(collection, documentId, facet);
+        sortOrder ?? await _nextSortOrder(collection, documentId, facet);
     final now = utcNow();
     final reference = MediaReference(
       id: newId(),
@@ -645,7 +644,10 @@ class MediaService extends ChangeNotifier {
     final live = await _repository.listReferencesForAsset(mediaId);
 
     if (live.isEmpty && asset.unreferencedAt == null) {
-      final marked = asset.copyWith(unreferencedAt: utcNow(), bumpVersion: true);
+      final marked = asset.copyWith(
+        unreferencedAt: utcNow(),
+        bumpVersion: true,
+      );
       await _repository.upsertAsset(marked);
       _publisher?.publishAsset(marked);
       return;
@@ -689,9 +691,7 @@ class MediaService extends ChangeNotifier {
       final codec = await ui.instantiateImageCodec(bytes);
       final frame = await codec.getNextFrame();
       image = frame.image;
-      final data = await image.toByteData(
-        format: ui.ImageByteFormat.rawRgba,
-      );
+      final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (data == null) throw const MediaIngestException('HEIC decode failed.');
       return MediaIngestRequest.rgba(
         rgba: data.buffer.asUint8List(),

@@ -24,7 +24,10 @@ class RestoreSuperseded implements Exception {
 /// Not called by restores that put back rows which were *edited* rather than
 /// tombstoned — a "this event only" calendar delete rewrites its master and
 /// leaves it live, so an absent tombstone there means nothing.
-void abortIfAlreadyRestored({required bool found, required DateTime? deletedAt}) {
+void abortIfAlreadyRestored({
+  required bool found,
+  required DateTime? deletedAt,
+}) {
   if (found && deletedAt == null) throw const RestoreSuperseded();
 }
 

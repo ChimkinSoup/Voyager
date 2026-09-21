@@ -9,12 +9,6 @@ String formatTime12Hour(DateTime dateTime) {
 /// Formats a [TimeOfDay] as 12-hour local time.
 String formatTimeOfDay12Hour(BuildContext context, TimeOfDay time) {
   final now = DateTime.now();
-  final local = DateTime(
-    now.year,
-    now.month,
-    now.day,
-    time.hour,
-    time.minute,
-  );
+  final local = DateTime(now.year, now.month, now.day, time.hour, time.minute);
   return formatTime12Hour(local);
 }

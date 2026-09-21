@@ -42,27 +42,37 @@ Future<List<RenderEditable>> _pumpCodeView(WidgetTester tester) async {
       .stateList<EditableTextState>(find.byType(EditableText))
       .map((state) => state.renderEditable)
       .toList();
-  expect(renderers, hasLength(2), reason: 'line-number column plus the code field');
+  expect(
+    renderers,
+    hasLength(2),
+    reason: 'line-number column plus the code field',
+  );
   return renderers;
 }
 
 void main() {
-  testWidgets('code and line numbers share one text metric under a diverged type scale',
-      (WidgetTester tester) async {
-    await _pumpCodeView(tester);
+  testWidgets(
+    'code and line numbers share one text metric under a diverged type scale',
+    (WidgetTester tester) async {
+      await _pumpCodeView(tester);
 
-    final fields = tester.widgetList<EditableText>(find.byType(EditableText)).toList();
-    expect(fields.last.style.fontSize, fields.first.style.fontSize);
-    expect(fields.last.style.height, fields.first.style.height);
+      final fields = tester
+          .widgetList<EditableText>(find.byType(EditableText))
+          .toList();
+      expect(fields.last.style.fontSize, fields.first.style.fontSize);
+      expect(fields.last.style.height, fields.first.style.height);
 
-    // Both columns must stay on the same family: with even leading
-    // distribution the baseline's place in the line box comes from the font's
-    // own ascent/descent, so two families would drift even at equal metrics.
-    expect(fields.first.style.fontFamily, AppFonts.monoFamily);
-    expect(fields.last.style.fontFamily, AppFonts.monoFamily);
-  });
+      // Both columns must stay on the same family: with even leading
+      // distribution the baseline's place in the line box comes from the font's
+      // own ascent/descent, so two families would drift even at equal metrics.
+      expect(fields.first.style.fontFamily, AppFonts.monoFamily);
+      expect(fields.last.style.fontFamily, AppFonts.monoFamily);
+    },
+  );
 
-  testWidgets('every line number sits on its code line', (WidgetTester tester) async {
+  testWidgets('every line number sits on its code line', (
+    WidgetTester tester,
+  ) async {
     final renderers = await _pumpCodeView(tester);
     final numbers = renderers.first;
     final code = renderers.last;
@@ -71,10 +81,14 @@ void main() {
     // accumulates per line, which is how a line-height mismatch presents.
     for (var line = 0; line < _codeLineStarts.length; line++) {
       final numberBottom = numbers.localToGlobal(
-        numbers.getLocalRectForCaret(TextPosition(offset: _numberLineStarts[line])).bottomLeft,
+        numbers
+            .getLocalRectForCaret(TextPosition(offset: _numberLineStarts[line]))
+            .bottomLeft,
       );
       final codeBottom = code.localToGlobal(
-        code.getLocalRectForCaret(TextPosition(offset: _codeLineStarts[line])).bottomLeft,
+        code
+            .getLocalRectForCaret(TextPosition(offset: _codeLineStarts[line]))
+            .bottomLeft,
       );
       expect(
         numberBottom.dy,
@@ -84,7 +98,9 @@ void main() {
     }
   });
 
-  testWidgets('selection overlay origin sits on the first glyph', (tester) async {
+  testWidgets('selection overlay origin sits on the first glyph', (
+    tester,
+  ) async {
     final renderers = await _pumpCodeView(tester);
     final editable = tester.state<EditableTextState>(
       find.byType(EditableText).last,

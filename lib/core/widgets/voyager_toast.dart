@@ -122,7 +122,10 @@ class VoyagerToast {
 
   /// Fades the toast out, then removes the overlay entry.
   void dismiss() {
-    assert(_inserted, 'dismiss() before the toast was inserted into an overlay');
+    assert(
+      _inserted,
+      'dismiss() before the toast was inserted into an overlay',
+    );
     if (_dismissed) return;
     _dismissed = true;
     // Dismissed before the toast ever built — an overlay entry builds on the

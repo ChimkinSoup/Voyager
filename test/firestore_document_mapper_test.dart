@@ -75,49 +75,49 @@ void main() {
     expect(merged.version, 5);
   });
 
-  test('remote journal entry merge prefers newer updatedAt when versions tie', () {
-    final older = DateTime.utc(2024, 1, 1);
-    final newer = DateTime.utc(2024, 2, 1);
-    final local = JournalEntry(
-      id: 'entry-1',
-      journalId: 'journal-1',
-      title: 'Local title',
-      body: 'Local body',
-      entryDate: older,
-      createdAt: older,
-      updatedAt: newer,
-    );
+  test(
+    'remote journal entry merge prefers newer updatedAt when versions tie',
+    () {
+      final older = DateTime.utc(2024, 1, 1);
+      final newer = DateTime.utc(2024, 2, 1);
+      final local = JournalEntry(
+        id: 'entry-1',
+        journalId: 'journal-1',
+        title: 'Local title',
+        body: 'Local body',
+        entryDate: older,
+        createdAt: older,
+        updatedAt: newer,
+      );
 
-    final merged = mergeJournalEntryFromRemote(
-      {
-        'journalId': 'journal-1',
-        'title': 'Remote title',
-        'body': 'Remote body',
-        'entryDate': older.toIso8601String(),
-        'updatedAt': older.toIso8601String(),
-      },
-      'entry-1',
-      local: local,
-    );
+      final merged = mergeJournalEntryFromRemote(
+        {
+          'journalId': 'journal-1',
+          'title': 'Remote title',
+          'body': 'Remote body',
+          'entryDate': older.toIso8601String(),
+          'updatedAt': older.toIso8601String(),
+        },
+        'entry-1',
+        local: local,
+      );
 
-    expect(merged.title, 'Local title');
-    expect(merged.body, 'Local body');
-  });
+      expect(merged.title, 'Local title');
+      expect(merged.body, 'Local body');
+    },
+  );
 
   test('remote journal entry merge applies remote delete', () {
     final now = utcNow();
     final deletedAt = now.add(const Duration(hours: 1));
-    final merged = mergeJournalEntryFromRemote(
-      {
-        'journalId': 'journal-1',
-        'title': 'Deleted entry',
-        'body': '',
-        'entryDate': now.toIso8601String(),
-        'updatedAt': deletedAt.toIso8601String(),
-        'deletedAt': deletedAt.toIso8601String(),
-      },
-      'entry-1',
-    );
+    final merged = mergeJournalEntryFromRemote({
+      'journalId': 'journal-1',
+      'title': 'Deleted entry',
+      'body': '',
+      'entryDate': now.toIso8601String(),
+      'updatedAt': deletedAt.toIso8601String(),
+      'deletedAt': deletedAt.toIso8601String(),
+    }, 'entry-1');
 
     expect(merged.deletedAt, deletedAt);
   });
@@ -210,10 +210,7 @@ void main() {
       journalPayload,
       legacyJournalId,
     );
-    final restoredEntry = mergeJournalEntryFromRemote(
-      entryPayload,
-      entry.id,
-    );
+    final restoredEntry = mergeJournalEntryFromRemote(entryPayload, entry.id);
 
     expect(restoredJournal.id, legacyJournalId);
     expect(restoredEntry.journalId, legacyJournalId);
@@ -258,10 +255,7 @@ void main() {
       calendarPayload,
       legacyCalendarId,
     );
-    final restoredEvent = mergeCalendarEventFromRemote(
-      eventPayload,
-      event.id,
-    );
+    final restoredEvent = mergeCalendarEventFromRemote(eventPayload, event.id);
 
     expect(restoredCalendar.id, legacyCalendarId);
     expect(restoredEvent.calendarId, legacyCalendarId);
@@ -273,18 +267,15 @@ void main() {
     // reverse mapper passes anything it does not recognise straight through,
     // which is what keeps both spellings working.
     final now = utcNow();
-    final restored = mergeCalendarEventFromRemote(
-      {
-        'id': 'event-2',
-        'calendarId': legacyCalendarId,
-        'title': 'Older event',
-        'start': now.toIso8601String(),
-        'end': now.toIso8601String(),
-        'updatedAt': now.toIso8601String(),
-        'version': 1,
-      },
-      'event-2',
-    );
+    final restored = mergeCalendarEventFromRemote({
+      'id': 'event-2',
+      'calendarId': legacyCalendarId,
+      'title': 'Older event',
+      'start': now.toIso8601String(),
+      'end': now.toIso8601String(),
+      'updatedAt': now.toIso8601String(),
+      'version': 1,
+    }, 'event-2');
 
     expect(restored.calendarId, legacyCalendarId);
   });
@@ -294,33 +285,26 @@ void main() {
   // one-way trapdoor: `softDelete` could set one but no later revision from
   // anywhere could lift it, so a record restored on one device stayed
   // invisible on every other one forever.
-  test(
-    'mergeJournalFromRemote lets a newer remote lift a local tombstone',
-    () {
-      final now = utcNow();
-      final deletedAt = now.subtract(const Duration(days: 1));
-      final local = Journal(
-        id: 'journal-deleted',
-        name: 'Old name',
-        createdAt: now,
-        updatedAt: deletedAt,
-        deletedAt: deletedAt,
-      );
-      final remote = {
-        'name': 'Remote rename',
-        'updatedAt': now.toIso8601String(),
-      };
+  test('mergeJournalFromRemote lets a newer remote lift a local tombstone', () {
+    final now = utcNow();
+    final deletedAt = now.subtract(const Duration(days: 1));
+    final local = Journal(
+      id: 'journal-deleted',
+      name: 'Old name',
+      createdAt: now,
+      updatedAt: deletedAt,
+      deletedAt: deletedAt,
+    );
+    final remote = {
+      'name': 'Remote rename',
+      'updatedAt': now.toIso8601String(),
+    };
 
-      final merged = mergeJournalFromRemote(
-        remote,
-        local.id,
-        local: local,
-      );
+    final merged = mergeJournalFromRemote(remote, local.id, local: local);
 
-      expect(merged.deletedAt, isNull);
-      expect(merged.name, 'Remote rename');
-    },
-  );
+    expect(merged.deletedAt, isNull);
+    expect(merged.name, 'Remote rename');
+  });
 
   // The other half of the same rule, and the reason lifting is safe: a remote
   // copy that loses the version comparison never reaches the deletedAt merge
@@ -344,11 +328,7 @@ void main() {
         'version': 3,
       };
 
-      final merged = mergeJournalFromRemote(
-        remote,
-        local.id,
-        local: local,
-      );
+      final merged = mergeJournalFromRemote(remote, local.id, local: local);
 
       expect(merged.deletedAt, deletedAt);
       expect(merged.name, 'Local name');
@@ -407,16 +387,20 @@ void main() {
         updatedAt: now,
         version: 1,
       );
-      final merged = mergeJobApplicationFromRemote({
-        'company': 'Tesla',
-        'title': 'SWE Intern',
-        'status': 'Applied',
-        'dateApplied': now.toIso8601String(),
-        'seasonIds': const <String>[],
-        'createdAt': now.toIso8601String(),
-        'updatedAt': DateTime.utc(2026, 9).toIso8601String(),
-        'version': 2,
-      }, 'app-1', local: local);
+      final merged = mergeJobApplicationFromRemote(
+        {
+          'company': 'Tesla',
+          'title': 'SWE Intern',
+          'status': 'Applied',
+          'dateApplied': now.toIso8601String(),
+          'seasonIds': const <String>[],
+          'createdAt': now.toIso8601String(),
+          'updatedAt': DateTime.utc(2026, 9).toIso8601String(),
+          'version': 2,
+        },
+        'app-1',
+        local: local,
+      );
 
       expect(merged.seasonIds, isEmpty);
     });
@@ -434,10 +418,10 @@ void main() {
       );
       final document = jobApplicationToFirestore(application);
       expect(document['seasonIds'], ['fall', 'spring']);
-      expect(
-        mergeJobApplicationFromRemote(document, 'app-1').seasonIds,
-        ['fall', 'spring'],
-      );
+      expect(mergeJobApplicationFromRemote(document, 'app-1').seasonIds, [
+        'fall',
+        'spring',
+      ]);
     });
   });
 }

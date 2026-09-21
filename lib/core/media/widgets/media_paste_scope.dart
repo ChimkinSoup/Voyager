@@ -55,7 +55,9 @@ MediaPasteRoute routeMediaPaste({
     return intoTextField ? MediaPasteRoute.text : MediaPasteRoute.ignore;
   }
   if (!intoTextField) {
-    return requireFocusedField ? MediaPasteRoute.ignore : MediaPasteRoute.attach;
+    return requireFocusedField
+        ? MediaPasteRoute.ignore
+        : MediaPasteRoute.attach;
   }
   if (!hasText) return MediaPasteRoute.attach;
   return fieldTakesBoth ? MediaPasteRoute.both : MediaPasteRoute.text;

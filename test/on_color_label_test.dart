@@ -78,10 +78,7 @@ void main() {
     });
 
     test('an explicit light candidate wins over the theme ink', () {
-      expect(
-        onColorLabel(nearBlack, light: bone, themeInk: slate),
-        bone,
-      );
+      expect(onColorLabel(nearBlack, light: bone, themeInk: slate), bone);
     });
   });
 

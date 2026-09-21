@@ -110,7 +110,8 @@ class HollowSliderThumbShape extends SliderComponentShape {
   }
 }
 
-class GradientSliderTrackShape extends SliderTrackShape with BaseSliderTrackShape {
+class GradientSliderTrackShape extends SliderTrackShape
+    with BaseSliderTrackShape {
   const GradientSliderTrackShape({
     required this.gradient,
     required this.inactiveColor,
@@ -173,8 +174,7 @@ class GradientSliderTrackShape extends SliderTrackShape with BaseSliderTrackShap
       rect.bottom,
     );
     if (showActive && activeRect.width > 0) {
-      final activePaint = Paint()
-        ..shader = gradient.createShader(activeRect);
+      final activePaint = Paint()..shader = gradient.createShader(activeRect);
       context.canvas.drawRRect(
         RRect.fromRectAndRadius(activeRect, radius),
         activePaint,

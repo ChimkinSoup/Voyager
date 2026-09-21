@@ -50,11 +50,9 @@ void main() {
   });
 
   test('a settled contribution uses room', () {
-    final s = roomYearSummary(
-      _room(),
-      [_event(RoomEventKind.contribution, 150000, DateTime(2026, 3, 5, 12))],
-      now: DateTime(2026, 3, 10),
-    );
+    final s = roomYearSummary(_room(), [
+      _event(RoomEventKind.contribution, 150000, DateTime(2026, 3, 5, 12)),
+    ], now: DateTime(2026, 3, 10));
     expect(s.usedCents, 150000);
     expect(s.capacityCents, 700000);
     expect(s.remainingCents, 550000);
@@ -65,12 +63,20 @@ void main() {
       _event(RoomEventKind.contribution, 100000, DateTime(2026, 4, 1, 8)),
     ];
     expect(
-      roomYearSummary(_room(), events, now: DateTime(2026, 3, 31, 23)).usedCents,
+      roomYearSummary(
+        _room(),
+        events,
+        now: DateTime(2026, 3, 31, 23),
+      ).usedCents,
       0,
     );
     // Any time on the day itself, even before the event's clock time.
     expect(
-      roomYearSummary(_room(), events, now: DateTime(2026, 4, 1, 0, 1)).usedCents,
+      roomYearSummary(
+        _room(),
+        events,
+        now: DateTime(2026, 4, 1, 0, 1),
+      ).usedCents,
       100000,
     );
   });
@@ -80,10 +86,18 @@ void main() {
       _event(RoomEventKind.contribution, 200000, DateTime(2026, 5, 1, 12)),
       _event(RoomEventKind.withdrawal, 50000, DateTime(2026, 6, 1, 12)),
     ];
-    final thisYear = roomYearSummary(_room(), events, now: DateTime(2026, 7, 1));
+    final thisYear = roomYearSummary(
+      _room(),
+      events,
+      now: DateTime(2026, 7, 1),
+    );
     expect(thisYear.remainingCents, 500000);
 
-    final nextYear = roomYearSummary(_room(), events, now: DateTime(2027, 1, 1));
+    final nextYear = roomYearSummary(
+      _room(),
+      events,
+      now: DateTime(2027, 1, 1),
+    );
     // Unused 5,000 + new 7,000 limit + 500 withdrawn last year.
     expect(nextYear.capacityCents, 500000 + 700000 + 50000);
     expect(nextYear.usedCents, 0);

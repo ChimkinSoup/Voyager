@@ -40,7 +40,7 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
     super.initState();
     _hoveredDate = widget.initialStartDate;
     _focusedMonth = DateTime(_hoveredDate.year, _hoveredDate.month, 1);
-    
+
     _firstSelected = widget.initialStartDate;
     if (widget.initialStartDate.year != widget.initialEndDate.year ||
         widget.initialStartDate.month != widget.initialEndDate.month ||
@@ -63,11 +63,17 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
   @override
   void didUpdateWidget(covariant DateSelectorPopover oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialStartDate != oldWidget.initialStartDate || widget.initialEndDate != oldWidget.initialEndDate) {
+    if (widget.initialStartDate != oldWidget.initialStartDate ||
+        widget.initialEndDate != oldWidget.initialEndDate) {
       if (widget.initialStartDate != _firstSelected) {
         _firstSelected = widget.initialStartDate;
-        if (_focusedMonth.year != _firstSelected!.year || _focusedMonth.month != _firstSelected!.month) {
-          _focusedMonth = DateTime(_firstSelected!.year, _firstSelected!.month, 1);
+        if (_focusedMonth.year != _firstSelected!.year ||
+            _focusedMonth.month != _firstSelected!.month) {
+          _focusedMonth = DateTime(
+            _firstSelected!.year,
+            _firstSelected!.month,
+            1,
+          );
         }
       }
       if (widget.initialStartDate.year != widget.initialEndDate.year ||
@@ -110,7 +116,7 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
         }
       }
     });
-    
+
     if (widget.singleDateMode || _secondSelected != null) {
       _submit();
     }
@@ -165,8 +171,11 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
       dayDelta = 7;
     } else if (key == LogicalKeyboardKey.keyK) {
       dayDelta = -7;
-    } else if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
-      setState(() { _showHoverRing = true; });
+    } else if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      setState(() {
+        _showHoverRing = true;
+      });
       _handleDateTap(_hoveredDate);
       return;
     }
@@ -179,7 +188,8 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
           _hoveredDate.month,
           _hoveredDate.day + dayDelta,
         );
-        if (_hoveredDate.year != _focusedMonth.year || _hoveredDate.month != _focusedMonth.month) {
+        if (_hoveredDate.year != _focusedMonth.year ||
+            _hoveredDate.month != _focusedMonth.month) {
           _focusedMonth = DateTime(_hoveredDate.year, _hoveredDate.month, 1);
         }
       });
@@ -265,7 +275,10 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                 final chipDate = c['date'] as DateTime;
                 final isSelected = _isQuickChipSelected(chipDate);
                 return ActionChip(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 0,
+                  ),
                   // Half the default: the labels have to sit inside the
                   // pane at their natural width, unabbreviated.
                   labelPadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -277,9 +290,7 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                           : theme.colorScheme.onSurface,
                     ),
                   ),
-                  backgroundColor: isSelected
-                      ? accent
-                      : Colors.transparent,
+                  backgroundColor: isSelected ? accent : Colors.transparent,
                   side: isSelected
                       ? BorderSide(color: accent, width: 1)
                       : BorderSide(
@@ -309,7 +320,9 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                 ),
                 Text(
                   DateFormat.yMMMM().format(_focusedMonth),
-                  style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(PhosphorIconsRegular.caretRight, size: 16),
@@ -340,7 +353,7 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                   );
                   final isCurrentMonth = date.month == _focusedMonth.month;
                   final isToday = _isSameDay(date, today);
-                  
+
                   bool isSelected = false;
                   bool isInRange = false;
                   bool isRangeStart = false;
@@ -397,18 +410,25 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                                     child: Stack(
                                       clipBehavior: Clip.none,
                                       children: [
-                                        if ((isInRange || isRangeEnd) && !isRangeStart)
+                                        if ((isInRange || isRangeEnd) &&
+                                            !isRangeStart)
                                           Positioned(
                                             top: 0,
                                             bottom: 0,
-                                            left: 0, // NEVER extend left! Prevents painting over previous cell
-                                            right: -1, // overlap center slightly
+                                            left:
+                                                0, // NEVER extend left! Prevents painting over previous cell
+                                            right:
+                                                -1, // overlap center slightly
                                             child: Container(
                                               decoration: BoxDecoration(
                                                 color: highlightColor,
                                                 borderRadius: BorderRadius.only(
-                                                  topLeft: Radius.circular(isFirstDayOfWeek ? 100 : 0),
-                                                  bottomLeft: Radius.circular(isFirstDayOfWeek ? 100 : 0),
+                                                  topLeft: Radius.circular(
+                                                    isFirstDayOfWeek ? 100 : 0,
+                                                  ),
+                                                  bottomLeft: Radius.circular(
+                                                    isFirstDayOfWeek ? 100 : 0,
+                                                  ),
                                                 ),
                                               ),
                                             ),
@@ -421,18 +441,25 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                                     child: Stack(
                                       clipBehavior: Clip.none,
                                       children: [
-                                        if ((isInRange || isRangeStart) && !isRangeEnd)
+                                        if ((isInRange || isRangeStart) &&
+                                            !isRangeEnd)
                                           Positioned(
                                             top: 0,
                                             bottom: 0,
                                             left: -1, // overlap center slightly
-                                            right: isLastDayOfWeek ? 0 : -16, // Bridge securely to next cell
+                                            right: isLastDayOfWeek
+                                                ? 0
+                                                : -16, // Bridge securely to next cell
                                             child: Container(
                                               decoration: BoxDecoration(
                                                 color: highlightColor,
                                                 borderRadius: BorderRadius.only(
-                                                  topRight: Radius.circular(isLastDayOfWeek ? 100 : 0),
-                                                  bottomRight: Radius.circular(isLastDayOfWeek ? 100 : 0),
+                                                  topRight: Radius.circular(
+                                                    isLastDayOfWeek ? 100 : 0,
+                                                  ),
+                                                  bottomRight: Radius.circular(
+                                                    isLastDayOfWeek ? 100 : 0,
+                                                  ),
                                                 ),
                                               ),
                                             ),
@@ -443,7 +470,7 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                                 ],
                               ),
                             ),
-                          
+
                           // 2. Uniform Background for Translucent Circle
                           if (isInRange || isRangeStart || isRangeEnd)
                             Container(
@@ -460,20 +487,24 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                             width: 36,
                             height: 36,
                             decoration: BoxDecoration(
-                              color: isSelected 
-                                  ? accent 
-                                  : Colors.transparent,
-                              border: (isHovered && _showHoverRing) 
-                                  ? Border.all(color: theme.colorScheme.onSurface, width: 2) 
+                              color: isSelected ? accent : Colors.transparent,
+                              border: (isHovered && _showHoverRing)
+                                  ? Border.all(
+                                      color: theme.colorScheme.onSurface,
+                                      width: 2,
+                                    )
                                   : null,
                               shape: BoxShape.circle,
                             ),
                             clipBehavior: Clip.antiAlias,
                             child: Material(
-                              color: Colors.transparent, // Let Container handle the background color securely
+                              color: Colors
+                                  .transparent, // Let Container handle the background color securely
                               child: InkWell(
                                 onTap: () {
-                                  setState(() { _showHoverRing = false; });
+                                  setState(() {
+                                    _showHoverRing = false;
+                                  });
                                   _handleDateTap(date);
                                 },
                                 child: Center(
@@ -482,10 +513,13 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                                     children: [
                                       Text(
                                         '${date.day}',
-                                        style: theme.textTheme.bodyMedium?.copyWith(
-                                          color: textColor,
-                                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                        ),
+                                        style: theme.textTheme.bodyMedium
+                                            ?.copyWith(
+                                              color: textColor,
+                                              fontWeight: isSelected
+                                                  ? FontWeight.bold
+                                                  : FontWeight.normal,
+                                            ),
                                       ),
                                       if (isToday && !isSelected)
                                         Container(

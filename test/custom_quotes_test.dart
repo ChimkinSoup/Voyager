@@ -124,10 +124,7 @@ void main() {
           deletedAt: deletedAt,
         ),
       );
-      expect(
-        mergeCustomQuoteFromRemote(remote, 'q1').deletedAt,
-        deletedAt,
-      );
+      expect(mergeCustomQuoteFromRemote(remote, 'q1').deletedAt, deletedAt);
     });
   });
 

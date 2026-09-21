@@ -25,12 +25,7 @@ const _addedColumns = {
   'dismissed_notifications_table': ['updated_at', 'version', 'deleted_at'],
   'bucket_list_items_table': ['version', 'deleted_at'],
   'tag_colors_table': ['updated_at', 'version'],
-  'custom_words_table': [
-    'created_at',
-    'updated_at',
-    'version',
-    'deleted_at',
-  ],
+  'custom_words_table': ['created_at', 'updated_at', 'version', 'deleted_at'],
   'settings_table': ['updated_at', 'sync_backfill_version'],
 };
 
@@ -41,9 +36,7 @@ Future<void> _rewindToSchema75(File file) async {
   final db = AppDatabase(NativeDatabase(file));
   for (final entry in _addedColumns.entries) {
     for (final column in entry.value) {
-      await db.customStatement(
-        'ALTER TABLE ${entry.key} DROP COLUMN $column',
-      );
+      await db.customStatement('ALTER TABLE ${entry.key} DROP COLUMN $column');
     }
   }
   await db.customStatement('PRAGMA user_version = 75');
@@ -145,12 +138,16 @@ void main() {
     );
 
     final notifications = DriftNotificationRepository(upgraded);
-    expect((await notifications.listPinnedNotes()).single.text,
-        'Call the dentist');
+    expect(
+      (await notifications.listPinnedNotes()).single.text,
+      'Call the dentist',
+    );
     expect(await notifications.listDismissals(), {'task-7|important'});
 
-    expect((await DriftBucketListRepository(upgraded).listItems()).single.title,
-        'See the aurora');
+    expect(
+      (await DriftBucketListRepository(upgraded).listItems()).single.title,
+      'See the aurora',
+    );
 
     final upgradedSettings = DriftSettingsRepository(upgraded);
     expect(await upgradedSettings.getTagColors(), {'travel': 0xFF00FF00});
@@ -174,9 +171,9 @@ void main() {
     final upgraded = AppDatabase(NativeDatabase(file));
     addTearDown(upgraded.close);
 
-    final note = (await DriftNotificationRepository(upgraded)
-            .listPinnedNotes(includeDeleted: true))
-        .single;
+    final note = (await DriftNotificationRepository(
+      upgraded,
+    ).listPinnedNotes(includeDeleted: true)).single;
     expect(note.deletedAt, isNull, reason: 'an existing note is not deleted');
     expect(note.version, 0);
 

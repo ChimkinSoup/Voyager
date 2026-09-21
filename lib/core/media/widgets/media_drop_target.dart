@@ -42,9 +42,8 @@ class MediaDropTarget extends ConsumerWidget {
     Formats.heic,
   ];
 
-  bool _hasImage(DropSession session) => session.items.any(
-    (item) => _formats.any(item.canProvide),
-  );
+  bool _hasImage(DropSession session) =>
+      session.items.any((item) => _formats.any(item.canProvide));
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -86,5 +85,6 @@ class MediaDropTarget extends ConsumerWidget {
 /// [DropRegion] reaches straight for a native message channel that only
 /// exists inside a running app, so mounting one under `flutter test` throws
 /// before the widget around it can be exercised at all.
-final bool _dropTargetsSupported =
-    !Platform.environment.containsKey('FLUTTER_TEST');
+final bool _dropTargetsSupported = !Platform.environment.containsKey(
+  'FLUTTER_TEST',
+);

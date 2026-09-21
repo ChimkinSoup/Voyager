@@ -42,9 +42,7 @@ void main() {
     test('is stable for the same tag and spread across the palette', () {
       expect(colorForTag('food'), colorForTag('food'));
 
-      final seen = {
-        for (var i = 0; i < 200; i++) colorForTag('tag$i'),
-      };
+      final seen = {for (var i = 0; i < 200; i++) colorForTag('tag$i')};
       // Not a uniformity claim — just that the index is actually varying
       // rather than collapsing every tag onto one swatch.
       expect(seen.length, greaterThan(kTagPaletteDark.length ~/ 2));
@@ -96,8 +94,7 @@ void main() {
   });
 
   group('tagColorsProvider', () {
-    test('hands out the palette the current theme can actually show',
-        () async {
+    test('hands out the palette the current theme can actually show', () async {
       await repo.upsertTagColor(
         TagColorRecord(
           tag: 'food',
@@ -185,19 +182,21 @@ void main() {
       expect(merged.colorValue, colorForTag('food'));
     });
 
-    test('is its own idempotence check — a second pass writes nothing',
-        () async {
-      await repo.upsertTagColor(
-        TagColorRecord(
-          tag: 'food',
-          colorValue: 0xFF3A1C77,
-          updatedAt: DateTime.utc(2026, 1, 1),
-        ),
-      );
+    test(
+      'is its own idempotence check — a second pass writes nothing',
+      () async {
+        await repo.upsertTagColor(
+          TagColorRecord(
+            tag: 'food',
+            colorValue: 0xFF3A1C77,
+            updatedAt: DateTime.utc(2026, 1, 1),
+          ),
+        );
 
-      expect(await reconcileTagPalette(repo), 1);
-      expect(await reconcileTagPalette(repo), 0);
-    });
+        expect(await reconcileTagPalette(repo), 1);
+        expect(await reconcileTagPalette(repo), 0);
+      },
+    );
   });
 }
 

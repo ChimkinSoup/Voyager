@@ -48,9 +48,7 @@ void main() {
       laterRan = true;
     });
 
-    await PendingFlushRegistry.instance.flushAll(
-      perCallbackDeadline: deadline,
-    );
+    await PendingFlushRegistry.instance.flushAll(perCallbackDeadline: deadline);
 
     expect(laterRan, isTrue);
   });

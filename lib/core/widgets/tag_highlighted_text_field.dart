@@ -453,8 +453,7 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
                           textScaler: textScaler,
                           textHeightBehavior: textHeightBehavior,
                           locale: locale,
-                          tagColorFor:
-                              widget.tagColorFor ?? _fallbackTagColor,
+                          tagColorFor: widget.tagColorFor ?? _fallbackTagColor,
                         ),
                       ),
                     );

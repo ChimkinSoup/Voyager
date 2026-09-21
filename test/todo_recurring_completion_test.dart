@@ -187,10 +187,7 @@ void main() {
   ) async {
     final db = await _pumpWithRepeatingTask(
       tester,
-      rule: const RecurrenceRule(
-        frequency: EventRecurrence.daily,
-        interval: 3,
-      ),
+      rule: const RecurrenceRule(frequency: EventRecurrence.daily, interval: 3),
       dueLocal: DateTime.now().copyWith(
         hour: 8,
         minute: 0,

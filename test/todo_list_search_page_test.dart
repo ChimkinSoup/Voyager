@@ -130,7 +130,9 @@ void main() {
     expect(find.byType(TodoListSearchBar), findsOneWidget);
   });
 
-  testWidgets('switching to the all-tasks view clears the filter', (tester) async {
+  testWidgets('switching to the all-tasks view clears the filter', (
+    tester,
+  ) async {
     await pumpTodoPage(tester, active: 3, done: 0, seedSecondList: true);
     await _pressCtrlF(tester);
     await _search(tester, '1');
@@ -390,10 +392,7 @@ void main() {
 
     expect(find.byType(TodoListSearchBar), findsOneWidget);
     // Nothing was submitted as a task, and the composer is empty again.
-    expect(
-      tester.widget<TextField>(_composer).controller!.text,
-      isEmpty,
-    );
+    expect(tester.widget<TextField>(_composer).controller!.text, isEmpty);
     expect(_row('Task 3'), findsOneWidget);
     expect(find.text('Task 0'), findsNothing);
   });

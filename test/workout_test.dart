@@ -182,23 +182,26 @@ void main() {
       expect(nextLb.weightKg, closeTo(100 - poundsToKilograms(10), 0.001));
     });
 
-    test('seed prescriptions mirror exercise targets as single-segment sets', () {
-      final now = utcNow();
-      final exercise = Exercise(
-        id: 'e',
-        name: 'Bench',
-        targetSets: 3,
-        targetReps: 8,
-        targetWeightKg: 100,
-        createdAt: now,
-        updatedAt: now,
-      );
-      final seeded = seedPrescriptionsFromExercise(exercise);
-      expect(seeded, hasLength(3));
-      expect(seeded.every((p) => p.segments.length == 1), isTrue);
-      expect(seeded.first.top.weightKg, 100);
-      expect(seeded.first.top.reps, 8);
-    });
+    test(
+      'seed prescriptions mirror exercise targets as single-segment sets',
+      () {
+        final now = utcNow();
+        final exercise = Exercise(
+          id: 'e',
+          name: 'Bench',
+          targetSets: 3,
+          targetReps: 8,
+          targetWeightKg: 100,
+          createdAt: now,
+          updatedAt: now,
+        );
+        final seeded = seedPrescriptionsFromExercise(exercise);
+        expect(seeded, hasLength(3));
+        expect(seeded.every((p) => p.segments.length == 1), isTrue);
+        expect(seeded.first.top.weightKg, 100);
+        expect(seeded.first.top.reps, 8);
+      },
+    );
 
     test('prescription JSON round-trips', () {
       final prescriptions = [
@@ -208,9 +211,7 @@ void main() {
             SetSegment(weightKg: 80, reps: 8),
           ],
         ),
-        const SetPrescription(
-          segments: [SetSegment(weightKg: 90, reps: 10)],
-        ),
+        const SetPrescription(segments: [SetSegment(weightKg: 90, reps: 10)]),
       ];
       final decoded = decodeSetPrescriptions(
         encodeSetPrescriptions(prescriptions),
@@ -223,10 +224,7 @@ void main() {
 
   group('buildExerciseHistory', () {
     test('groups completed sets by session day, oldest first', () {
-      final sessions = {
-        'a': DateTime(2026, 8, 1),
-        'b': DateTime(2026, 8, 5),
-      };
+      final sessions = {'a': DateTime(2026, 8, 1), 'b': DateTime(2026, 8, 5)};
       final logs = [
         _log(sessionId: 'b', exerciseId: 'e', weightKg: 105, setIndex: 0),
         _log(sessionId: 'a', exerciseId: 'e', weightKg: 100, setIndex: 0),
@@ -261,10 +259,7 @@ void main() {
         createdAt: now,
         updatedAt: now,
       );
-      final history = buildExerciseHistory(
-        [log],
-        {'a': DateTime(2026, 8, 1)},
-      );
+      final history = buildExerciseHistory([log], {'a': DateTime(2026, 8, 1)});
       expect(history.single.setWeightsKg, [100]);
       expect(history.single.volumeKg, 100 * 8 + 60 * 8);
     });
@@ -315,8 +310,10 @@ void main() {
 
     test('the unit label rides along with the value', () {
       expect(WeightUnit.kg.formatKilogramsWithUnit(100), '100 kg');
-      expect(WeightUnit.lb.formatKilogramsWithUnit(poundsToKilograms(45)),
-          '45 lb');
+      expect(
+        WeightUnit.lb.formatKilogramsWithUnit(poundsToKilograms(45)),
+        '45 lb',
+      );
     });
   });
 
@@ -351,10 +348,10 @@ void main() {
 
       final plans = await repo.listPlans();
       expect(plans, hasLength(2));
-      expect(
-        plans.map((p) => p.mode).toSet(),
-        {WorkoutPlanMode.weekly, WorkoutPlanMode.cycle},
-      );
+      expect(plans.map((p) => p.mode).toSet(), {
+        WorkoutPlanMode.weekly,
+        WorkoutPlanMode.cycle,
+      });
       expect(plans.where((p) => p.isActive), hasLength(1));
       expect(await repo.listExercises(), hasLength(kStarterExercises.length));
     });
@@ -375,47 +372,48 @@ void main() {
       await repo.setActivePlan(kCycleWorkoutPlanId);
 
       final plans = await repo.listPlans();
-      expect(
-        plans.where((p) => p.isActive).map((p) => p.id),
-        [kCycleWorkoutPlanId],
-      );
+      expect(plans.where((p) => p.isActive).map((p) => p.id), [
+        kCycleWorkoutPlanId,
+      ]);
     });
 
-    test('deleting an exercise takes its plan entries but not its history',
-        () async {
-      await repo.ensureSeeded();
-      final exercise = (await repo.listExercises()).first;
-      final now = utcNow();
+    test(
+      'deleting an exercise takes its plan entries but not its history',
+      () async {
+        await repo.ensureSeeded();
+        final exercise = (await repo.listExercises()).first;
+        final now = utcNow();
 
-      await repo.upsertPlanEntry(
-        WorkoutPlanEntry(
-          id: newId(),
-          planId: kWeeklyWorkoutPlanId,
-          dayIndex: 1,
-          exerciseId: exercise.id,
-          createdAt: now,
-          updatedAt: now,
-        ),
-      );
-      await repo.upsertSession(
-        WorkoutSession(
-          id: 'session',
-          date: DateTime(2026, 8, 1),
-          startedAt: now,
-          endedAt: now,
-          createdAt: now,
-          updatedAt: now,
-        ),
-      );
-      await repo.upsertSetLog(
-        _log(sessionId: 'session', exerciseId: exercise.id),
-      );
+        await repo.upsertPlanEntry(
+          WorkoutPlanEntry(
+            id: newId(),
+            planId: kWeeklyWorkoutPlanId,
+            dayIndex: 1,
+            exerciseId: exercise.id,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+        await repo.upsertSession(
+          WorkoutSession(
+            id: 'session',
+            date: DateTime(2026, 8, 1),
+            startedAt: now,
+            endedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+        await repo.upsertSetLog(
+          _log(sessionId: 'session', exerciseId: exercise.id),
+        );
 
-      await repo.softDeleteExercise(exercise.id);
+        await repo.softDeleteExercise(exercise.id);
 
-      expect(await repo.listPlanEntries(kWeeklyWorkoutPlanId), isEmpty);
-      expect(await repo.listSetLogs(exerciseId: exercise.id), hasLength(1));
-    });
+        expect(await repo.listPlanEntries(kWeeklyWorkoutPlanId), isEmpty);
+        expect(await repo.listSetLogs(exerciseId: exercise.id), hasLength(1));
+      },
+    );
 
     test('getActiveSession returns only an unfinished session', () async {
       final now = utcNow();
@@ -433,44 +431,45 @@ void main() {
       expect(await repo.getActiveSession(), isNull);
     });
 
-    test('a movement carries its target, shared by every day it is on',
-        () async {
-      await repo.ensureSeeded();
-      final exercise = (await repo.listExercises()).first;
-      expect(exercise.targetSets, kDefaultTargetSets);
-      expect(exercise.targetReps, kDefaultTargetReps);
+    test(
+      'a movement carries its target, shared by every day it is on',
+      () async {
+        await repo.ensureSeeded();
+        final exercise = (await repo.listExercises()).first;
+        expect(exercise.targetSets, kDefaultTargetSets);
+        expect(exercise.targetReps, kDefaultTargetReps);
 
-      final now = utcNow();
-      // The same lift on two different days of the plan.
-      for (final dayIndex in [1, 4]) {
-        await repo.upsertPlanEntry(
-          WorkoutPlanEntry(
-            id: newId(),
-            planId: kWeeklyWorkoutPlanId,
-            dayIndex: dayIndex,
-            exerciseId: exercise.id,
-            createdAt: now,
-            updatedAt: now,
-          ),
+        final now = utcNow();
+        // The same lift on two different days of the plan.
+        for (final dayIndex in [1, 4]) {
+          await repo.upsertPlanEntry(
+            WorkoutPlanEntry(
+              id: newId(),
+              planId: kWeeklyWorkoutPlanId,
+              dayIndex: dayIndex,
+              exerciseId: exercise.id,
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+        }
+
+        await repo.upsertExercise(
+          exercise.copyWith(targetSets: 5, targetReps: 3, targetWeightKg: 60),
         );
-      }
 
-      await repo.upsertExercise(
-        exercise.copyWith(targetSets: 5, targetReps: 3, targetWeightKg: 60),
-      );
+        // One write, and both days now read 5 × 3 · 60 — there is no per-day
+        // copy left that could disagree.
+        final updated = (await repo.getExercise(exercise.id))!;
+        expect(updated.targetSets, 5);
+        expect(updated.targetReps, 3);
+        expect(updated.targetWeightKg, 60);
+        final entries = await repo.listPlanEntries(kWeeklyWorkoutPlanId);
+        expect(entries.map((e) => e.dayIndex), unorderedEquals([1, 4]));
+      },
+    );
 
-      // One write, and both days now read 5 × 3 · 60 — there is no per-day
-      // copy left that could disagree.
-      final updated = (await repo.getExercise(exercise.id))!;
-      expect(updated.targetSets, 5);
-      expect(updated.targetReps, 3);
-      expect(updated.targetWeightKg, 60);
-      final entries = await repo.listPlanEntries(kWeeklyWorkoutPlanId);
-      expect(entries.map((e) => e.dayIndex), unorderedEquals([1, 4]));
-    });
-
-    test('the v68 backfill carries per-day targets onto the movement',
-        () async {
+    test('the v68 backfill carries per-day targets onto the movement', () async {
       // Rebuild the plan-entry table in its pre-v68 shape so the migration's
       // real statement runs against the columns it was written for.
       await db.customStatement('DROP TABLE workout_plan_entries_table');
@@ -575,8 +574,7 @@ void main() {
       expect(curl.targetWeightKg, 0);
     });
 
-    test('the v117 backfill lifts a per-day recipe onto the movement',
-        () async {
+    test('the v117 backfill lifts a per-day recipe onto the movement', () async {
       // Rebuild the plan-entry table in its v116 shape so the migration's real
       // statement runs against the columns it was written for.
       await db.customStatement('DROP TABLE workout_plan_entries_table');
@@ -698,10 +696,11 @@ void main() {
       await repo.upsertSetLogsBatch(logs);
 
       final stored = await repo.listSetLogs(sessionId: 's');
-      expect(
-        stored.map((l) => '${l.exerciseId}${l.setIndex}'),
-        ['a0', 'a1', 'b0'],
-      );
+      expect(stored.map((l) => '${l.exerciseId}${l.setIndex}'), [
+        'a0',
+        'a1',
+        'b0',
+      ]);
     });
 
     test('custom prescriptions and drop segments persist', () async {
@@ -728,9 +727,7 @@ void main() {
                 SetSegment(weightKg: 80, reps: 8),
               ],
             ),
-            SetPrescription(
-              segments: [SetSegment(weightKg: 90, reps: 10)],
-            ),
+            SetPrescription(segments: [SetSegment(weightKg: 90, reps: 10)]),
           ],
           createdAt: now,
           updatedAt: now,

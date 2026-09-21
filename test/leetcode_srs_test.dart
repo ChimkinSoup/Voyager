@@ -45,7 +45,11 @@ void main() {
 
   group('gradeLeetCodeProblem', () {
     test('the first Good grade schedules one day out', () {
-      final graded = gradeLeetCodeProblem(_problem(), StudyGrade.good, now: _now);
+      final graded = gradeLeetCodeProblem(
+        _problem(),
+        StudyGrade.good,
+        now: _now,
+      );
       expect(graded.interval, 1);
       expect(graded.ease, 2.5);
       expect(graded.reviewCount, 1);
@@ -74,7 +78,11 @@ void main() {
     });
 
     test('grading leaves the problem content alone', () {
-      final graded = gradeLeetCodeProblem(_problem(), StudyGrade.easy, now: _now);
+      final graded = gradeLeetCodeProblem(
+        _problem(),
+        StudyGrade.easy,
+        now: _now,
+      );
       expect(graded.title, 'Two Sum');
       expect(graded.difficulty, LeetCodeDifficulty.easy);
       expect(graded.solvedAt, _now);
@@ -143,23 +151,13 @@ void main() {
     test('same-day problems are shuffled, not left in input order', () {
       final problems = [
         for (var i = 0; i < 8; i++)
-          _problem(
-            id: 'p$i',
-            solvedAt: DateTime(2026, 8, 9, i).toUtc(),
-          ),
+          _problem(id: 'p$i', solvedAt: DateTime(2026, 8, 9, i).toUtc()),
       ];
 
-      final queue = dueLeetCodeProblems(
-        problems,
-        now: _now,
-        random: Random(1),
-      );
+      final queue = dueLeetCodeProblems(problems, now: _now, random: Random(1));
 
       expect(queue.map((p) => p.id).toSet(), problems.map((p) => p.id).toSet());
-      expect(
-        queue.map((p) => p.id),
-        isNot(problems.map((p) => p.id).toList()),
-      );
+      expect(queue.map((p) => p.id), isNot(problems.map((p) => p.id).toList()));
     });
 
     test('shuffle stays inside each due day', () {

@@ -388,9 +388,7 @@ void main() {
         .onTap!();
     await tester.pumpAndSettle();
 
-    final stored = await harness.container.read(
-      jobApplicationsProvider.future,
-    );
+    final stored = await harness.container.read(jobApplicationsProvider.future);
     expect(stored, hasLength(2));
     expect(
       stored.map((application) => application.title),
@@ -436,10 +434,7 @@ void main() {
     );
     // Filed under nothing reads as a dash rather than as a blank cell.
     expect(
-      find.descendant(
-        of: find.byType(JobsTableRow),
-        matching: find.text('—'),
-      ),
+      find.descendant(of: find.byType(JobsTableRow), matching: find.text('—')),
       findsOneWidget,
     );
   });
@@ -683,9 +678,7 @@ void main() {
     await tester.tap(find.byType(ModalBarrier).last);
     await tester.pumpAndSettle();
 
-    final stored = await harness.container.read(
-      jobApplicationsProvider.future,
-    );
+    final stored = await harness.container.read(jobApplicationsProvider.future);
     // Stored in the Seasons list's order, not the order they were ticked.
     expect(stored.single.seasonIds, ['a', 'b']);
     // And the pill counts rather than trying to name both.
@@ -716,9 +709,7 @@ void main() {
     await tester.tap(find.text('Online Assessment').last);
     await tester.pumpAndSettle();
 
-    final stored = await harness.container.read(
-      jobApplicationsProvider.future,
-    );
+    final stored = await harness.container.read(jobApplicationsProvider.future);
     expect(stored.single.status, 'Online Assessment');
     // The panel was never opened — the capsule is the whole interaction.
     expect(find.text('Application URL'), findsNothing);
@@ -832,9 +823,7 @@ void main() {
     seasons.firstWhere((item) => item.label == 'Fall 2026').onTap!();
     await tester.pumpAndSettle();
 
-    final stored = await harness.container.read(
-      jobApplicationsProvider.future,
-    );
+    final stored = await harness.container.read(jobApplicationsProvider.future);
     expect(stored.single.seasonIds, ['live']);
     // Moved, not archived: the season it landed in is still running.
     expect(find.text('Datadog'), findsOneWidget);
@@ -916,56 +905,58 @@ void main() {
 
   // AUDIT.md: the panel held the row it opened with and wrote it whole, so a
   // status set from the table was reverted by the panel's next keystroke.
-  testWidgets('a status set from the table survives an edit in the open panel', (
-    tester,
-  ) async {
-    final harness = await pumpJobsPage(
-      tester,
-      seed: (repo) async {
-        await repo.upsertApplication(
-          makeApplication(company: 'Datadog', title: 'SWE'),
-        );
-      },
-    );
-    await tester.tap(find.text('SWE'));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'a status set from the table survives an edit in the open panel',
+    (tester) async {
+      final harness = await pumpJobsPage(
+        tester,
+        seed: (repo) async {
+          await repo.upsertApplication(
+            makeApplication(company: 'Datadog', title: 'SWE'),
+          );
+        },
+      );
+      await tester.tap(find.text('SWE'));
+      await tester.pumpAndSettle();
 
-    await tester.tap(
-      find.descendant(
-        of: find.byType(JobsTableRow),
-        matching: find.text('Applied'),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Interview').last);
-    await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(JobsTableRow),
+          matching: find.text('Applied'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Interview').last);
+      await tester.pumpAndSettle();
 
-    expect(
-      find.descendant(
-        of: find.byType(JobsEditPanel),
-        matching: find.text('Interview'),
-      ),
-      findsOneWidget,
-      reason: 'the panel adopts the change rather than showing the old status',
-    );
-
-    final notes = find
-        .descendant(
+      expect(
+        find.descendant(
           of: find.byType(JobsEditPanel),
-          matching: find.byType(EditableText),
-        )
-        .last;
-    await tester.enterText(notes, 'Recruiter call Friday');
-    // Past the panel's 400ms autosave debounce.
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.pumpAndSettle();
+          matching: find.text('Interview'),
+        ),
+        findsOneWidget,
+        reason:
+            'the panel adopts the change rather than showing the old status',
+      );
 
-    final stored = (await harness.container.read(
-      jobApplicationsProvider.future,
-    )).single;
-    expect(stored.status, 'Interview');
-    expect(stored.notes, 'Recruiter call Friday');
-  });
+      final notes = find
+          .descendant(
+            of: find.byType(JobsEditPanel),
+            matching: find.byType(EditableText),
+          )
+          .last;
+      await tester.enterText(notes, 'Recruiter call Friday');
+      // Past the panel's 400ms autosave debounce.
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      final stored = (await harness.container.read(
+        jobApplicationsProvider.future,
+      )).single;
+      expect(stored.status, 'Interview');
+      expect(stored.notes, 'Recruiter call Friday');
+    },
+  );
 
   // AUDIT.md: each toggle closed over the settings the popover opened with, so
   // the second one undid the first.
@@ -990,10 +981,10 @@ void main() {
     await tester.pumpAndSettle();
 
     final settings = harness.container.read(settingsProvider).value!;
-    expect(
-      settings.jobsHiddenColumns.toSet(),
-      {JobColumn.notes.id, JobColumn.season.id},
-    );
+    expect(settings.jobsHiddenColumns.toSet(), {
+      JobColumn.notes.id,
+      JobColumn.season.id,
+    });
   });
 
   // The name-taken toast carries no actions and used to carry no dwell, so it
@@ -1003,9 +994,7 @@ void main() {
   ) async {
     await pumpJobsPage(tester, seed: (repo) async {});
 
-    await tester.tap(
-      find.byTooltip('Manage stages, categories and seasons'),
-    );
+    await tester.tap(find.byTooltip('Manage stages, categories and seasons'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('New stage'));
     await tester.pumpAndSettle();

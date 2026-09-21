@@ -248,11 +248,11 @@ void main() {
       find.byType(EditableText),
     );
 
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyV, character: 'V');
-      await tester.pump();
-      expect(find.text('V-LINE'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyV, character: 'V');
+    await tester.pump();
+    expect(find.text('V-LINE'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();

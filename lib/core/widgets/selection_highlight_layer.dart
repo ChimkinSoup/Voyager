@@ -169,7 +169,8 @@ class _SelectionHighlightLayerState extends State<SelectionHighlightLayer> {
       textAlign: widget.textAlign,
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
-      textHeightBehavior: widget.textHeightBehavior ??
+      textHeightBehavior:
+          widget.textHeightBehavior ??
           DefaultTextHeightBehavior.maybeOf(context),
       locale: widget.locale,
       color: widget.color,

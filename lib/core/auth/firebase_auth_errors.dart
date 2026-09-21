@@ -63,11 +63,7 @@ String? _messageFromEmbeddedDetails(String message) {
     }
   }
 
-  const notFoundHints = [
-    'user-not-found',
-    'user_not_found',
-    'email not found',
-  ];
+  const notFoundHints = ['user-not-found', 'user_not_found', 'email not found'];
   for (final hint in notFoundHints) {
     if (message.contains(hint)) {
       return 'No account found for this email.';

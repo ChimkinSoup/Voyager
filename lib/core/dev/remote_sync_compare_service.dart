@@ -51,10 +51,7 @@ class JournalEntryCompareResult {
 }
 
 class JournalCompareReport {
-  const JournalCompareReport({
-    required this.results,
-    required this.comparedAt,
-  });
+  const JournalCompareReport({required this.results, required this.comparedAt});
 
   final List<JournalEntryCompareResult> results;
   final DateTime comparedAt;
@@ -363,12 +360,7 @@ class RemoteSyncCompareService {
         localOnly++;
         taskDetails.add(
           'Task ${task.id} "${task.title}": '
-          '${_diagnoseMissingOnRemote(
-            documentId: task.id,
-            collection: FirestoreCollections.todoTasks,
-            localSummary: _formatLocalTodoSummary(task),
-            rawRemote: rawRemoteTaskDocs[task.id],
-          ).replaceAll('\n', ' ')}',
+          '${_diagnoseMissingOnRemote(documentId: task.id, collection: FirestoreCollections.todoTasks, localSummary: _formatLocalTodoSummary(task), rawRemote: rawRemoteTaskDocs[task.id]).replaceAll('\n', ' ')}',
         );
         continue;
       }
@@ -466,8 +458,7 @@ class RemoteSyncCompareService {
           firestoreDocumentId: firestoreDocId,
           rawData: doc.data,
         );
-        if (remote != null &&
-            parseFirestoreDate(remote['deletedAt']) == null) {
+        if (remote != null && parseFirestoreDate(remote['deletedAt']) == null) {
           resolved[localDocId] = remote;
         }
       } catch (_) {
@@ -559,11 +550,7 @@ class RemoteSyncCompareService {
     }
 
     compare('name', local.name, remote['name'] as String? ?? '');
-    compare(
-      'colorValue',
-      '${local.colorValue}',
-      '${remote['colorValue']}',
-    );
+    compare('colorValue', '${local.colorValue}', '${remote['colorValue']}');
     compare('version', '${local.version}', '${parseVersion(remote)}');
     _addInstantDiff(
       diffs,
@@ -659,8 +646,7 @@ class RemoteSyncCompareService {
   }) {
     final buffer = StringBuffer(
       'Entry exists locally but not in resolved remote set.\n',
-    )
-      ..writeln('  $localSummary');
+    )..writeln('  $localSummary');
     if (rawRemote == null) {
       buffer.writeln(
         '  Remote: no document found in $collection with id $documentId '
@@ -692,7 +678,10 @@ class RemoteSyncCompareService {
 
   String _formatDiffs(List<FieldDiff> diffs) {
     return diffs
-        .map((d) => '${d.field}: local="${_preview(d.local)}" remote="${_preview(d.remote)}"')
+        .map(
+          (d) =>
+              '${d.field}: local="${_preview(d.local)}" remote="${_preview(d.remote)}"',
+        )
         .join('; ');
   }
 
@@ -797,7 +786,9 @@ class RemoteSyncCompareService {
     final buffer = StringBuffer()
       ..writeln('=' * 80)
       ..writeln('${comparedAt.toIso8601String()} | TODO_LIST_COMPARE')
-      ..writeln('List "${result.listName}" (${result.listId}): ${result.status.name}');
+      ..writeln(
+        'List "${result.listName}" (${result.listId}): ${result.status.name}',
+      );
 
     if (result.detail != null) {
       buffer.writeln('  ${result.detail}');

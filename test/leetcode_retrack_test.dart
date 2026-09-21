@@ -267,7 +267,9 @@ void main() {
     expect(saved.solutions.single.algorithm, 'Hash map of complements');
   });
 
-  testWidgets('an empty solution takes the submission language', (tester) async {
+  testWidgets('an empty solution takes the submission language', (
+    tester,
+  ) async {
     final repo = await _openModal(
       tester,
       api: _FakeLeetCodeApi(recent: _twoSum),

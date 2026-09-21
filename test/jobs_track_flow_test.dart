@@ -122,11 +122,7 @@ Finder fieldLabelled(String label) => find.descendant(
   matching: find.byType(TextField),
 );
 
-Future<void> typeInto(
-  WidgetTester tester,
-  String label,
-  String text,
-) async {
+Future<void> typeInto(WidgetTester tester, String label, String text) async {
   await tester.enterText(fieldLabelled(label).first, text);
   await tester.pump();
 }
@@ -178,9 +174,7 @@ void main() {
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
 
-    final stored = await harness.container.read(
-      jobApplicationsProvider.future,
-    );
+    final stored = await harness.container.read(jobApplicationsProvider.future);
     expect(stored, isEmpty);
   });
 
@@ -219,9 +213,7 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
-    final stored = await harness.container.read(
-      jobApplicationsProvider.future,
-    );
+    final stored = await harness.container.read(jobApplicationsProvider.future);
     expect(stored, hasLength(1));
     expect(stored.single.company, 'Tesla');
     expect(stored.single.title, 'SWE Intern');
@@ -262,9 +254,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Track an application'), findsNothing);
-    final stored = await harness.container.read(
-      jobApplicationsProvider.future,
-    );
+    final stored = await harness.container.read(jobApplicationsProvider.future);
     expect(stored, hasLength(1));
     expect(stored.single.seasonIds, ['live']);
   });
@@ -417,9 +407,7 @@ void main() {
     expect(harness.drafts.draft, isNull);
   });
 
-  testWidgets('a retired season is not offered while tracking', (
-    tester,
-  ) async {
+  testWidgets('a retired season is not offered while tracking', (tester) async {
     await pumpJobs(
       tester,
       seed: (repo) async {
@@ -511,9 +499,7 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
-    final stored = await harness.container.read(
-      jobApplicationsProvider.future,
-    );
+    final stored = await harness.container.read(jobApplicationsProvider.future);
     // In the Seasons list's own order, not the order they were ticked.
     expect(stored.single.seasonIds, ['a', 'b']);
   });
@@ -541,11 +527,7 @@ void main() {
         .map((t) => t.data)
         .whereType<String>()
         .where(
-          (t) => const {
-            'Winter 2027',
-            'Fall 2026',
-            'Spring 2027',
-          }.contains(t),
+          (t) => const {'Winter 2027', 'Fall 2026', 'Spring 2027'}.contains(t),
         )
         .toList();
     expect(listed, ['Winter 2027', 'Fall 2026', 'Spring 2027']);

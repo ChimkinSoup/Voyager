@@ -116,9 +116,9 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
       // duplicate that would double-count the same spending.
       final budgets = await repo.listBudgets();
       final match = budgets.cast<Budget?>().firstWhere(
-            (b) => b != null && b.tag.toLowerCase() == tag.toLowerCase(),
-            orElse: () => null,
-          );
+        (b) => b != null && b.tag.toLowerCase() == tag.toLowerCase(),
+        orElse: () => null,
+      );
       final target = widget.existing ?? match;
 
       await repo.upsertBudget(
@@ -193,7 +193,8 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
   /// widget's own build, not to the chip row's builder below, which reruns on
   /// its own as the tag is typed.
   List<String> _usedTags() {
-    final transactions = ref.watch(transactionsProvider).valueOrNull ?? const [];
+    final transactions =
+        ref.watch(transactionsProvider).valueOrNull ?? const [];
     return rankTagsByUsage(transactions.map((t) => t.tags));
   }
 
@@ -261,8 +262,11 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
                 ListenableBuilder(
                   listenable: _tagController,
                   builder: (context, _) {
-                    final suggestions =
-                        filterTagSuggestions(usedTags, _tag, limit: 12);
+                    final suggestions = filterTagSuggestions(
+                      usedTags,
+                      _tag,
+                      limit: 12,
+                    );
                     if (suggestions.isEmpty) return const SizedBox.shrink();
                     return Padding(
                       padding: const EdgeInsets.only(top: 10),
@@ -272,15 +276,15 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
                         children: [
                           for (final tag in suggestions)
                             ActionChip(
-                              label: Text('#$tag',
-                                  style: const TextStyle(fontSize: 12)),
+                              label: Text(
+                                '#$tag',
+                                style: const TextStyle(fontSize: 12),
+                              ),
                               visualDensity: VisualDensity.compact,
                               onPressed: () {
                                 _tagController.text = tag;
                                 _tagController.selection =
-                                    TextSelection.collapsed(
-                                  offset: tag.length,
-                                );
+                                    TextSelection.collapsed(offset: tag.length);
                               },
                             ),
                         ],
@@ -296,8 +300,9 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
                   focusNode: _limitFocusNode,
                   accentColor: accent,
                   cursorColor: accent,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                     // Bounded so a long paste can't reach the range where

@@ -75,7 +75,8 @@ class DevSettingsController extends ChangeNotifier {
       changed = true;
     }
 
-    if (showJournalRemotePullButton != settings.devShowJournalRemotePullButton) {
+    if (showJournalRemotePullButton !=
+        settings.devShowJournalRemotePullButton) {
       showJournalRemotePullButton = settings.devShowJournalRemotePullButton;
       changed = true;
     }

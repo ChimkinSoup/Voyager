@@ -25,36 +25,39 @@ void main() {
       expect(gate.refusedWrites, 0);
     });
 
-    test('refuses once the allowance is full, and resumes as it drains', () async {
-      final gate = await settledGate();
-      final blockers = <Completer<void>>[];
+    test(
+      'refuses once the allowance is full, and resumes as it drains',
+      () async {
+        final gate = await settledGate();
+        final blockers = <Completer<void>>[];
 
-      // Fill the allowance with writes that never complete — a stalled
-      // connection, which is the whole point.
-      for (var i = 0; i < FirestoreWriteGate.inFlightLimit; i++) {
-        final blocker = Completer<void>();
-        blockers.add(blocker);
-        unawaited(gate.run(() => blocker.future));
-      }
-      expect(gate.inFlight, FirestoreWriteGate.inFlightLimit);
-      expect(gate.isPaused, isTrue);
+        // Fill the allowance with writes that never complete — a stalled
+        // connection, which is the whole point.
+        for (var i = 0; i < FirestoreWriteGate.inFlightLimit; i++) {
+          final blocker = Completer<void>();
+          blockers.add(blocker);
+          unawaited(gate.run(() => blocker.future));
+        }
+        expect(gate.inFlight, FirestoreWriteGate.inFlightLimit);
+        expect(gate.isPaused, isTrue);
 
-      await expectLater(
-        gate.run(() async {}),
-        throwsA(isA<SyncBackpressureException>()),
-      );
-      expect(gate.refusedWrites, 1);
+        await expectLater(
+          gate.run(() async {}),
+          throwsA(isA<SyncBackpressureException>()),
+        );
+        expect(gate.refusedWrites, 1);
 
-      // One acknowledgement is one slot back.
-      blockers.first.complete();
-      await Future<void>.delayed(Duration.zero);
-      expect(gate.isPaused, isFalse);
-      expect(await gate.run(() async => 'through'), 'through');
+        // One acknowledgement is one slot back.
+        blockers.first.complete();
+        await Future<void>.delayed(Duration.zero);
+        expect(gate.isPaused, isFalse);
+        expect(await gate.run(() async => 'through'), 'through');
 
-      for (final blocker in blockers.skip(1)) {
-        blocker.complete();
-      }
-    });
+        for (final blocker in blockers.skip(1)) {
+          blocker.complete();
+        }
+      },
+    );
 
     test('a failed write does not leak its slot', () async {
       final gate = await settledGate();
@@ -78,43 +81,49 @@ void main() {
       expect(gate.peakInFlight, 1);
     });
 
-    test('runs on a tighter allowance until the inherited queue clears', () async {
-      // Never completes: a queue left by an earlier session that is still
-      // wedged. This is the case that used to let a restart hand Firestore a
-      // fresh 50 writes on top of a backlog it could not see.
-      final gate = FirestoreWriteGate(
-        waitForPendingWrites: () => Completer<void>().future,
-      );
-      await Future<void>.delayed(Duration.zero);
+    test(
+      'runs on a tighter allowance until the inherited queue clears',
+      () async {
+        // Never completes: a queue left by an earlier session that is still
+        // wedged. This is the case that used to let a restart hand Firestore a
+        // fresh 50 writes on top of a backlog it could not see.
+        final gate = FirestoreWriteGate(
+          waitForPendingWrites: () => Completer<void>().future,
+        );
+        await Future<void>.delayed(Duration.zero);
 
-      expect(gate.hasStartupBacklog, isTrue);
-      expect(gate.limit, lessThan(FirestoreWriteGate.inFlightLimit));
+        expect(gate.hasStartupBacklog, isTrue);
+        expect(gate.limit, lessThan(FirestoreWriteGate.inFlightLimit));
 
-      final blockers = <Completer<void>>[];
-      for (var i = 0; i < gate.limit; i++) {
-        final blocker = Completer<void>();
-        blockers.add(blocker);
-        unawaited(gate.run(() => blocker.future));
-      }
-      await expectLater(
-        gate.run(() async {}),
-        throwsA(isA<SyncBackpressureException>()),
-      );
+        final blockers = <Completer<void>>[];
+        for (var i = 0; i < gate.limit; i++) {
+          final blocker = Completer<void>();
+          blockers.add(blocker);
+          unawaited(gate.run(() => blocker.future));
+        }
+        await expectLater(
+          gate.run(() async {}),
+          throwsA(isA<SyncBackpressureException>()),
+        );
 
-      for (final blocker in blockers) {
-        blocker.complete();
-      }
-    });
+        for (final blocker in blockers) {
+          blocker.complete();
+        }
+      },
+    );
 
-    test('a probe the platform cannot answer does not wedge the gate', () async {
-      final gate = FirestoreWriteGate(
-        waitForPendingWrites: () => throw UnimplementedError(),
-      );
-      await Future<void>.delayed(Duration.zero);
+    test(
+      'a probe the platform cannot answer does not wedge the gate',
+      () async {
+        final gate = FirestoreWriteGate(
+          waitForPendingWrites: () => throw UnimplementedError(),
+        );
+        await Future<void>.delayed(Duration.zero);
 
-      expect(gate.hasStartupBacklog, isFalse);
-      expect(gate.limit, FirestoreWriteGate.inFlightLimit);
-    });
+        expect(gate.hasStartupBacklog, isFalse);
+        expect(gate.limit, FirestoreWriteGate.inFlightLimit);
+      },
+    );
   });
 
   group('write gate stalls', () {
@@ -213,7 +222,9 @@ void main() {
         async.flushMicrotasks();
 
         for (var i = 0; i < 5; i++) {
-          unawaited(gate.run(() => Completer<void>().future).catchError((_) {}));
+          unawaited(
+            gate.run(() => Completer<void>().future).catchError((_) {}),
+          );
         }
         async.elapse(FirestoreWriteGate.writeTimeout * 2);
 

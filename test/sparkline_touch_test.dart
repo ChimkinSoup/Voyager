@@ -242,7 +242,9 @@ void _readingTests() {
 
     // A day per x, as `interpolateConsecutive` emits: Jan 1 2026 through the
     // end of March.
-    final spots = [for (var day = 0; day <= 89; day++) FlSpot(day.toDouble(), 0)];
+    final spots = [
+      for (var day = 0; day <= 89; day++) FlSpot(day.toDouble(), 0),
+    ];
 
     // Jan 1 is day 0, Feb 1 is day 31, Mar 1 is day 59.
     final janAndMar = [
@@ -272,7 +274,9 @@ void _readingTests() {
       // carried its own interpolated reading. They must all land on one.
       // February's zone runs 16..44 — midway to January on one side, midway
       // to March on the other.
-      final febDays = [for (var day = 16; day <= 44; day++) anchor(day.toDouble())];
+      final febDays = [
+        for (var day = 16; day <= 44; day++) anchor(day.toDouble()),
+      ];
       expect(febDays.toSet(), {31.0});
     });
 
@@ -283,7 +287,9 @@ void _readingTests() {
     test('every day of a logged period collapses onto its record', () {
       // The other half: drifting a little off January used to swap its stored
       // value for a nearby interpolated one.
-      final janDays = [for (var day = 0; day <= 15; day++) anchor(day.toDouble())];
+      final janDays = [
+        for (var day = 0; day <= 15; day++) anchor(day.toDouble()),
+      ];
       expect(janDays.toSet(), {0.0});
       expect(anchor(70), 59.0);
     });
@@ -324,7 +330,9 @@ void _readingTests() {
           from: late,
           values: const [],
           periodStartOf: monthly,
-          spots: [for (var day = 0; day <= 40; day++) FlSpot(day.toDouble(), 0)],
+          spots: [
+            for (var day = 0; day <= 40; day++) FlSpot(day.toDouble(), 0),
+          ],
           periodStarts: const [-4, 27],
         ),
         0.0,

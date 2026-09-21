@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Wraps a child in a local Overlay and ClipRect so that any Overlay items 
+/// Wraps a child in a local Overlay and ClipRect so that any Overlay items
 /// (like ReorderableListView drag feedback) are clipped to the bounds of the child.
 class LocalOverlayWrapper extends StatefulWidget {
   final Widget child;
@@ -34,9 +34,6 @@ class _LocalOverlayWrapperState extends State<LocalOverlayWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    return Overlay(
-      initialEntries: [_entry],
-      clipBehavior: Clip.hardEdge,
-    );
+    return Overlay(initialEntries: [_entry], clipBehavior: Clip.hardEdge);
   }
 }

@@ -90,11 +90,7 @@ void main() {
 
     // 60px of travel — half the commit threshold — but thrown hard enough that
     // it would coast well past it. Deciding on distance alone would ignore it.
-    await tester.fling(
-      find.byType(StudyFlipCard),
-      const Offset(60, 0),
-      3000,
-    );
+    await tester.fling(find.byType(StudyFlipCard), const Offset(60, 0), 3000);
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(
@@ -152,11 +148,7 @@ void main() {
   ) async {
     await _pumpCramPage(tester, reducedMotion: true);
 
-    await tester.fling(
-      find.byType(StudyFlipCard),
-      const Offset(200, 0),
-      3000,
-    );
+    await tester.fling(find.byType(StudyFlipCard), const Offset(200, 0), 3000);
     await tester.pump(const Duration(milliseconds: 60));
     expect(
       _cardOffset(tester),

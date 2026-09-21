@@ -82,20 +82,23 @@ void main() {
     expect(loaded.signedCents, -4299);
   });
 
-  test('soft delete hides from default listing but tombstone remains', () async {
-    final tx = make(
-      type: TransactionType.deposit,
-      amountCents: 500,
-      occurredAt: DateTime(2026, 7, 15),
-    );
-    await repo.upsertTransaction(tx);
-    await repo.softDeleteTransaction(tx.id);
+  test(
+    'soft delete hides from default listing but tombstone remains',
+    () async {
+      final tx = make(
+        type: TransactionType.deposit,
+        amountCents: 500,
+        occurredAt: DateTime(2026, 7, 15),
+      );
+      await repo.upsertTransaction(tx);
+      await repo.softDeleteTransaction(tx.id);
 
-    expect(await repo.listTransactions(), isEmpty);
-    final withDeleted = await repo.listTransactions(includeDeleted: true);
-    expect(withDeleted, hasLength(1));
-    expect(withDeleted.single.deletedAt, isNotNull);
-  });
+      expect(await repo.listTransactions(), isEmpty);
+      final withDeleted = await repo.listTransactions(includeDeleted: true);
+      expect(withDeleted, hasLength(1));
+      expect(withDeleted.single.deletedAt, isNotNull);
+    },
+  );
 
   test('purge removes tombstones past the retention window', () async {
     final tx = make(
@@ -111,8 +114,7 @@ void main() {
     expect(await repo.listTransactions(includeDeleted: true), hasLength(1));
 
     // Past the retention window.
-    final future =
-        utcNow().add(Duration(days: softDeleteRetentionDays + 1));
+    final future = utcNow().add(Duration(days: softDeleteRetentionDays + 1));
     await repo.purgeExpiredDeleted(future);
     expect(await repo.listTransactions(includeDeleted: true), isEmpty);
   });
@@ -300,7 +302,8 @@ void main() {
     expect(bill.nextDue(DateTime(2026, 6, 10)), DateTime(2026, 7, 15));
     // A payment already behind the series changes nothing.
     expect(
-      bill.copyWith(paidThroughDate: DateTime(2026, 5, 15))
+      bill
+          .copyWith(paidThroughDate: DateTime(2026, 5, 15))
           .nextDue(DateTime(2026, 6, 10)),
       DateTime(2026, 6, 15),
     );
@@ -330,23 +333,25 @@ void main() {
     );
   }
 
-  test('budgets persist, list alphabetically, and soft delete + purge',
-      () async {
-    await repo.upsertBudget(makeBudget(tag: 'travel', limitCents: 50000));
-    final dining = makeBudget(tag: 'dining_out', limitCents: 20000);
-    await repo.upsertBudget(dining);
+  test(
+    'budgets persist, list alphabetically, and soft delete + purge',
+    () async {
+      await repo.upsertBudget(makeBudget(tag: 'travel', limitCents: 50000));
+      final dining = makeBudget(tag: 'dining_out', limitCents: 20000);
+      await repo.upsertBudget(dining);
 
-    final list = await repo.listBudgets();
-    expect(list.map((b) => b.tag), ['dining_out', 'travel']);
+      final list = await repo.listBudgets();
+      expect(list.map((b) => b.tag), ['dining_out', 'travel']);
 
-    await repo.softDeleteBudget(dining.id);
-    expect((await repo.listBudgets()).map((b) => b.tag), ['travel']);
-    expect(await repo.listBudgets(includeDeleted: true), hasLength(2));
+      await repo.softDeleteBudget(dining.id);
+      expect((await repo.listBudgets()).map((b) => b.tag), ['travel']);
+      expect(await repo.listBudgets(includeDeleted: true), hasLength(2));
 
-    final future = utcNow().add(Duration(days: softDeleteRetentionDays + 1));
-    await repo.purgeExpiredDeleted(future);
-    expect(await repo.listBudgets(includeDeleted: true), hasLength(1));
-  });
+      final future = utcNow().add(Duration(days: softDeleteRetentionDays + 1));
+      await repo.purgeExpiredDeleted(future);
+      expect(await repo.listBudgets(includeDeleted: true), hasLength(1));
+    },
+  );
 
   test('budget spend counts only tagged expenses in the given month', () {
     final month = DateTime(2026, 7, 15);
@@ -402,10 +407,7 @@ void main() {
   test('monthPaceFraction tracks how far through the month we are', () {
     // July has 31 days.
     expect(monthPaceFraction(DateTime(2026, 7, 31)), 1.0);
-    expect(
-      monthPaceFraction(DateTime(2026, 7, 1)),
-      closeTo(1 / 31, 1e-9),
-    );
+    expect(monthPaceFraction(DateTime(2026, 7, 1)), closeTo(1 / 31, 1e-9));
     // April has 30 days, so the 15th is halfway.
     expect(monthPaceFraction(DateTime(2026, 4, 15)), closeTo(0.5, 1e-9));
   });
@@ -460,8 +462,11 @@ void main() {
     expect(list.map((c) => c.name), ['Eating out', 'Transport']);
     expect(list.first.tags, ['mcdonalds', 'burger_king']);
     expect(list.first.colorValue, 0xFFAA0000);
-    expect(list.first.containsTag('MCDONALDS'), isTrue,
-        reason: 'tag matching is case-insensitive');
+    expect(
+      list.first.containsTag('MCDONALDS'),
+      isTrue,
+      reason: 'tag matching is case-insensitive',
+    );
 
     await repo.softDeleteCategory(eating.id);
     expect((await repo.listCategories()).map((c) => c.name), ['Transport']);
@@ -678,10 +683,7 @@ void main() {
       ).daysUntilTarget(from),
       -8,
     );
-    expect(
-      makeGoal(name: 'g', targetCents: 100).daysUntilTarget(from),
-      isNull,
-    );
+    expect(makeGoal(name: 'g', targetCents: 100).daysUntilTarget(from), isNull);
   });
 
   // Day counts are differenced in UTC so a DST transition inside the interval
@@ -778,8 +780,9 @@ void main() {
     final settingsRepo = DriftSettingsRepository(db);
     final base = await settingsRepo.getSettings();
     expect(base.showAnnualizedSubscriptionCost, isFalse);
-    await settingsRepo
-        .saveSettings(base.copyWith(showAnnualizedSubscriptionCost: true));
+    await settingsRepo.saveSettings(
+      base.copyWith(showAnnualizedSubscriptionCost: true),
+    );
     final reloaded = await settingsRepo.getSettings();
     expect(reloaded.showAnnualizedSubscriptionCost, isTrue);
   });

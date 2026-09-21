@@ -90,10 +90,9 @@ Future<void> _pumpInbox(
 }
 
 /// Top-left of the reminder's text while the row is showing it.
-Offset _displayTextOrigin(WidgetTester tester, String noteText) =>
-    tester.renderObject<RenderBox>(find.text(noteText)).localToGlobal(
-      Offset.zero,
-    );
+Offset _displayTextOrigin(WidgetTester tester, String noteText) => tester
+    .renderObject<RenderBox>(find.text(noteText))
+    .localToGlobal(Offset.zero);
 
 /// Top-left of the same text once the row has become a field.
 Offset _editTextOrigin(WidgetTester tester) => tester

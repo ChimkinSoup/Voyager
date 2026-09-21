@@ -53,7 +53,10 @@ void main() {
   late _FlakySyncRepository syncRepo;
   late DriftJournalRepository journalRepo;
 
-  RemoteSyncService buildService({AppDatabase? database, String deviceId = 'device-a'}) {
+  RemoteSyncService buildService({
+    AppDatabase? database,
+    String deviceId = 'device-a',
+  }) {
     final db0 = database ?? db;
     final engine = SyncEngine(
       syncRepository: syncRepo,
@@ -63,7 +66,9 @@ void main() {
     );
     return RemoteSyncService(
       syncRepository: syncRepo,
-      journalRepository: database == null ? journalRepo : DriftJournalRepository(db0),
+      journalRepository: database == null
+          ? journalRepo
+          : DriftJournalRepository(db0),
       dreamRepository: DriftDreamRepository(db0),
       todoRepository: DriftTodoRepository(db0),
       leetCodeRepository: DriftLeetCodeRepository(db0),
@@ -208,78 +213,86 @@ void main() {
   });
 
   group('text written to the row outside any editing session', () {
-    test('survives a pull after the row is published without its operations',
-        () async {
-      final before = buildService();
-      final id = await seedSyncedEntry(before);
-      before.dispose();
+    test(
+      'survives a pull after the row is published without its operations',
+      () async {
+        final before = buildService();
+        final id = await seedSyncedEntry(before);
+        before.dispose();
 
-      // A recovery writes the text straight to SQLite, so no character
-      // operation ever records it.
-      final seeded = (await journalRepo.getEntry(id))!;
-      await journalRepo.upsertEntry(
-        seeded.copyWith(body: 'Hello world', bumpVersion: true),
-      );
+        // A recovery writes the text straight to SQLite, so no character
+        // operation ever records it.
+        final seeded = (await journalRepo.getEntry(id))!;
+        await journalRepo.upsertEntry(
+          seeded.copyWith(body: 'Hello world', bumpVersion: true),
+        );
 
-      // Any later save publishes the row as it stands: a snapshot at the
-      // row's own revision, beside a log that still spells 'Hello'.
-      final after = buildService();
-      after.pushJournalEntryNow((await journalRepo.getEntry(id))!);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+        // Any later save publishes the row as it stands: a snapshot at the
+        // row's own revision, beside a log that still spells 'Hello'.
+        final after = buildService();
+        after.pushJournalEntryNow((await journalRepo.getEntry(id))!);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      await after.pullJournalEntries();
-      expect((await journalRepo.getEntry(id))!.body, 'Hello world');
+        await after.pullJournalEntries();
+        expect((await journalRepo.getEntry(id))!.body, 'Hello world');
 
-      // What the drain does with the upload the pull found owed.
-      await after.pushOutboxDocument(FirestoreCollections.journalEntries, id);
-      final dbB = AppDatabase.inMemory();
-      addTearDown(dbB.close);
-      final b = buildService(database: dbB, deviceId: 'device-b');
-      await b.pullJournalEntries();
-      expect(
-        (await DriftJournalRepository(dbB).getEntry(id))!.body,
-        'Hello world',
-      );
-    });
+        // What the drain does with the upload the pull found owed.
+        await after.pushOutboxDocument(FirestoreCollections.journalEntries, id);
+        final dbB = AppDatabase.inMemory();
+        addTearDown(dbB.close);
+        final b = buildService(database: dbB, deviceId: 'device-b');
+        await b.pullJournalEntries();
+        expect(
+          (await DriftJournalRepository(dbB).getEntry(id))!.body,
+          'Hello world',
+        );
+      },
+    );
 
-    test("a stale row republished at its revision still takes the log's text",
-        () async {
-      final a = buildService();
-      final id = await seedSyncedEntry(a);
-      a.dispose();
+    test(
+      "a stale row republished at its revision still takes the log's text",
+      () async {
+        final a = buildService();
+        final id = await seedSyncedEntry(a);
+        a.dispose();
 
-      final dbB = AppDatabase.inMemory();
-      addTearDown(dbB.close);
-      final repoB = DriftJournalRepository(dbB);
-      final b = buildService(database: dbB, deviceId: 'device-b');
-      await b.pullJournalEntries();
-      await b.prepareEditingSession(
-        collection: FirestoreCollections.journalEntries,
-        documentId: id,
-        initialText: 'Hello',
-      );
-      b.recordJournalTextChange(entryId: id, before: 'Hello', after: 'Hello there');
-      await b.saveJournalEntryThenScheduleUpload(
-        entryId: id,
-        saveLocal: () async {
-          final current = await repoB.getEntry(id);
-          await repoB.upsertEntry(current!.copyWith(body: 'Hello there'));
-        },
-      );
-      await b.flushDocument(FirestoreCollections.journalEntries, id);
+        final dbB = AppDatabase.inMemory();
+        addTearDown(dbB.close);
+        final repoB = DriftJournalRepository(dbB);
+        final b = buildService(database: dbB, deviceId: 'device-b');
+        await b.pullJournalEntries();
+        await b.prepareEditingSession(
+          collection: FirestoreCollections.journalEntries,
+          documentId: id,
+          initialText: 'Hello',
+        );
+        b.recordJournalTextChange(
+          entryId: id,
+          before: 'Hello',
+          after: 'Hello there',
+        );
+        await b.saveJournalEntryThenScheduleUpload(
+          entryId: id,
+          saveLocal: () async {
+            final current = await repoB.getEntry(id);
+            await repoB.upsertEntry(current!.copyWith(body: 'Hello there'));
+          },
+        );
+        await b.flushDocument(FirestoreCollections.journalEntries, id);
 
-      // A has not pulled B's edit and changes the mood, publishing its stale
-      // 'Hello' as the newest revision.
-      await Future<void>.delayed(const Duration(milliseconds: 5));
-      final stale = (await journalRepo.getEntry(id))!.copyWith(mood: 3);
-      await journalRepo.upsertEntry(stale);
-      final a2 = buildService();
-      a2.pushJournalEntryNow(stale);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+        // A has not pulled B's edit and changes the mood, publishing its stale
+        // 'Hello' as the newest revision.
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        final stale = (await journalRepo.getEntry(id))!.copyWith(mood: 3);
+        await journalRepo.upsertEntry(stale);
+        final a2 = buildService();
+        a2.pushJournalEntryNow(stale);
+        await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      await a2.pullJournalEntries();
-      expect((await journalRepo.getEntry(id))!.body, 'Hello there');
-    });
+        await a2.pullJournalEntries();
+        expect((await journalRepo.getEntry(id))!.body, 'Hello there');
+      },
+    );
   });
 
   group('a pulled body pushed into an open editor', () {
@@ -299,7 +312,11 @@ void main() {
         documentId: id,
         initialText: 'Hello',
       );
-      b.recordJournalTextChange(entryId: id, before: 'Hello', after: 'Hello there');
+      b.recordJournalTextChange(
+        entryId: id,
+        before: 'Hello',
+        after: 'Hello there',
+      );
       await b.saveJournalEntryThenScheduleUpload(
         entryId: id,
         saveLocal: () async {
@@ -349,7 +366,11 @@ void main() {
         documentId: id,
         initialText: 'Hello',
       );
-      b.recordJournalTextChange(entryId: id, before: 'Hello', after: 'Hello there');
+      b.recordJournalTextChange(
+        entryId: id,
+        before: 'Hello',
+        after: 'Hello there',
+      );
       await b.saveJournalEntryThenScheduleUpload(
         entryId: id,
         saveLocal: () async {
@@ -400,7 +421,11 @@ void main() {
         documentId: id,
         initialText: 'Hello',
       );
-      b.recordJournalTextChange(entryId: id, before: 'Hello', after: 'Hello there');
+      b.recordJournalTextChange(
+        entryId: id,
+        before: 'Hello',
+        after: 'Hello there',
+      );
       await b.saveJournalEntryThenScheduleUpload(
         entryId: id,
         saveLocal: () async {
@@ -427,41 +452,43 @@ void main() {
   });
 
   group('the settings document', () {
-    test("navigating on one device keeps another device's newer profile edit",
-        () async {
-      final a = buildService();
-      final repoA = DriftSettingsRepository(db);
-      final dbB = AppDatabase.inMemory();
-      addTearDown(dbB.close);
-      final repoB = DriftSettingsRepository(dbB);
-      final b = buildService(database: dbB, deviceId: 'device-b');
+    test(
+      "navigating on one device keeps another device's newer profile edit",
+      () async {
+        final a = buildService();
+        final repoA = DriftSettingsRepository(db);
+        final dbB = AppDatabase.inMemory();
+        addTearDown(dbB.close);
+        final repoB = DriftSettingsRepository(dbB);
+        final b = buildService(database: dbB, deviceId: 'device-b');
 
-      // Both devices start in step.
-      await b.pushSettings(await repoB.getSettings());
-      await a.pullSettings();
+        // Both devices start in step.
+        await b.pushSettings(await repoB.getSettings());
+        await a.pullSettings();
 
-      // B records something the user typed.
-      await Future<void>.delayed(const Duration(milliseconds: 5));
-      await repoB.saveSettings(
-        (await repoB.getSettings()).copyWith(
-          jobProfileGitHubUrl: 'https://github.com/me',
-        ),
-      );
-      await b.pushSettings(await repoB.getSettings());
+        // B records something the user typed.
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        await repoB.saveSettings(
+          (await repoB.getSettings()).copyWith(
+            jobProfileGitHubUrl: 'https://github.com/me',
+          ),
+        );
+        await b.pushSettings(await repoB.getSettings());
 
-      // A has not pulled since, and the user moves to another page on it.
-      await Future<void>.delayed(const Duration(milliseconds: 5));
-      await repoA.saveSettings(
-        (await repoA.getSettings()).copyWith(lastSeenNavPage: '/finance'),
-      );
-      await a.pushSettings(await repoA.getSettings());
+        // A has not pulled since, and the user moves to another page on it.
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        await repoA.saveSettings(
+          (await repoA.getSettings()).copyWith(lastSeenNavPage: '/finance'),
+        );
+        await a.pushSettings(await repoA.getSettings());
 
-      await b.pullSettings();
-      expect(
-        (await repoB.getSettings()).jobProfileGitHubUrl,
-        'https://github.com/me',
-      );
-    });
+        await b.pullSettings();
+        expect(
+          (await repoB.getSettings()).jobProfileGitHubUrl,
+          'https://github.com/me',
+        );
+      },
+    );
   });
 
   group('both devices wrote while one of them was offline', () {
@@ -486,7 +513,11 @@ void main() {
       syncRepo.offline = false;
 
       // Meanwhile B prepends.
-      b.recordJournalTextChange(entryId: id, before: 'Hello', after: 'Oh. Hello');
+      b.recordJournalTextChange(
+        entryId: id,
+        before: 'Hello',
+        after: 'Oh. Hello',
+      );
       await b.saveJournalEntryThenScheduleUpload(
         entryId: id,
         saveLocal: () async {
@@ -502,47 +533,53 @@ void main() {
       expect(body, contains('Oh.'));
     });
 
-    test('a replay after a restart never deletes the other device\'s text',
-        () async {
-      final a = buildService();
-      final id = await seedSyncedEntry(a);
+    test(
+      'a replay after a restart never deletes the other device\'s text',
+      () async {
+        final a = buildService();
+        final id = await seedSyncedEntry(a);
 
-      final dbB = AppDatabase.inMemory();
-      addTearDown(dbB.close);
-      final repoB = DriftJournalRepository(dbB);
-      final b = buildService(database: dbB, deviceId: 'device-b');
-      await b.pullJournalEntries();
-      await b.prepareEditingSession(
-        collection: FirestoreCollections.journalEntries,
-        documentId: id,
-        initialText: 'Hello',
-      );
+        final dbB = AppDatabase.inMemory();
+        addTearDown(dbB.close);
+        final repoB = DriftJournalRepository(dbB);
+        final b = buildService(database: dbB, deviceId: 'device-b');
+        await b.pullJournalEntries();
+        await b.prepareEditingSession(
+          collection: FirestoreCollections.journalEntries,
+          documentId: id,
+          initialText: 'Hello',
+        );
 
-      syncRepo.offline = true;
-      await typeAndSave(a, id, before: 'Hello', after: 'Hello world');
-      a.dispose(); // restart: A's pending operations are gone
-      syncRepo.offline = false;
+        syncRepo.offline = true;
+        await typeAndSave(a, id, before: 'Hello', after: 'Hello world');
+        a.dispose(); // restart: A's pending operations are gone
+        syncRepo.offline = false;
 
-      b.recordJournalTextChange(entryId: id, before: 'Hello', after: 'Oh. Hello');
-      await b.saveJournalEntryThenScheduleUpload(
-        entryId: id,
-        saveLocal: () async {
-          final current = await repoB.getEntry(id);
-          await repoB.upsertEntry(current!.copyWith(body: 'Oh. Hello'));
-        },
-      );
-      await b.flushDocument(FirestoreCollections.journalEntries, id);
+        b.recordJournalTextChange(
+          entryId: id,
+          before: 'Hello',
+          after: 'Oh. Hello',
+        );
+        await b.saveJournalEntryThenScheduleUpload(
+          entryId: id,
+          saveLocal: () async {
+            final current = await repoB.getEntry(id);
+            await repoB.upsertEntry(current!.copyWith(body: 'Oh. Hello'));
+          },
+        );
+        await b.flushDocument(FirestoreCollections.journalEntries, id);
 
-      final a2 = buildService();
-      await a2.pushOutboxDocument(FirestoreCollections.journalEntries, id);
-      await a2.pullJournalEntries();
+        final a2 = buildService();
+        await a2.pushOutboxDocument(FirestoreCollections.journalEntries, id);
+        await a2.pullJournalEntries();
 
-      // Neither device's words may be gone from both the row and the log.
-      await b.pullJournalEntries();
-      final onB = (await repoB.getEntry(id))!.body;
-      final onA = (await journalRepo.getEntry(id))!.body;
-      expect('$onA|$onB', contains('world'));
-      expect(onB, contains('Oh.'));
-    });
+        // Neither device's words may be gone from both the row and the log.
+        await b.pullJournalEntries();
+        final onB = (await repoB.getEntry(id))!.body;
+        final onA = (await journalRepo.getEntry(id))!.body;
+        expect('$onA|$onB', contains('world'));
+        expect(onB, contains('Oh.'));
+      },
+    );
   });
 }

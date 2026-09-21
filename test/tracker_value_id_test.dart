@@ -11,14 +11,16 @@ void main() {
     );
   });
 
-  test('trackerValueId is the same across cadences sharing a canonical date',
-      () {
-    // A daily value on Jan 1, a monthly value anchored to Jan 1, and a yearly
-    // value anchored to Jan 1 must all resolve to one row for a given tracker.
-    final janFirst = DateTime(2026, 1, 1);
-    final id = trackerValueId('tracker-1', janFirst);
-    expect(id, 'tracker-1_2026-01-01');
-  });
+  test(
+    'trackerValueId is the same across cadences sharing a canonical date',
+    () {
+      // A daily value on Jan 1, a monthly value anchored to Jan 1, and a yearly
+      // value anchored to Jan 1 must all resolve to one row for a given tracker.
+      final janFirst = DateTime(2026, 1, 1);
+      final id = trackerValueId('tracker-1', janFirst);
+      expect(id, 'tracker-1_2026-01-01');
+    },
+  );
 
   test('trackerValueId distinguishes different dates', () {
     expect(
@@ -28,9 +30,6 @@ void main() {
   });
 
   test('trackerValueId zero-pads month and day', () {
-    expect(
-      trackerValueId('t', DateTime(2026, 3, 5)),
-      't_2026-03-05',
-    );
+    expect(trackerValueId('t', DateTime(2026, 3, 5)), 't_2026-03-05');
   });
 }

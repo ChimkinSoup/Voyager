@@ -82,16 +82,18 @@ class FirestoreSyncRepository implements SyncRepository {
   }
 
   @override
-  Future<Map<String, dynamic>?> getDocument(String collection, String id) async {
+  Future<Map<String, dynamic>?> getDocument(
+    String collection,
+    String id,
+  ) async {
     final snap = await _doc(collection, id).get();
     if (!snap.exists || snap.data() == null) return null;
     return snap.data();
   }
 
   @override
-  Future<List<({String id, Map<String, dynamic> data})>> listCollectionDocuments(
-    String collection,
-  ) async {
+  Future<List<({String id, Map<String, dynamic> data})>>
+  listCollectionDocuments(String collection) async {
     final query = await _collection(collection).get();
     return query.docs
         .map((doc) => (id: doc.id, data: Map<String, dynamic>.from(doc.data())))
@@ -165,7 +167,9 @@ class FirestoreSyncRepository implements SyncRepository {
         final existing = GoogleCalendarSyncLock(
           deviceId: snap.data()!['deviceId'] as String,
           lockedAt: DateTime.parse(snap.data()!['lockedAt'] as String).toUtc(),
-          expiresAt: DateTime.parse(snap.data()!['expiresAt'] as String).toUtc(),
+          expiresAt: DateTime.parse(
+            snap.data()!['expiresAt'] as String,
+          ).toUtc(),
         );
         if (existing.isValid(lock.deviceId, now)) {
           txn.set(ref, {
@@ -282,7 +286,8 @@ class FirestoreSyncRepository implements SyncRepository {
   @override
   Future<void> appendOperation(SyncOperation operation) async {
     await writeGate.run(
-      () => _doc('sync_operations', operation.id).set(_operationData(operation)),
+      () =>
+          _doc('sync_operations', operation.id).set(_operationData(operation)),
     );
   }
 
@@ -291,7 +296,10 @@ class FirestoreSyncRepository implements SyncRepository {
     for (final chunk in _chunked(operations, firestoreWriteChunkSize)) {
       final batch = _firestore.batch();
       for (final operation in chunk) {
-        batch.set(_doc('sync_operations', operation.id), _operationData(operation));
+        batch.set(
+          _doc('sync_operations', operation.id),
+          _operationData(operation),
+        );
       }
       await writeGate.run(batch.commit, weight: chunk.length);
     }
@@ -314,14 +322,18 @@ class FirestoreSyncRepository implements SyncRepository {
     var bytes = 0;
     var count = 0;
     for (final operation in operations) {
-      final size = utf8.encode(operation.payload).length + _operationOverheadBytes;
+      final size =
+          utf8.encode(operation.payload).length + _operationOverheadBytes;
       if (count > 0 && bytes + size > _maxCommitBytes) {
         await writeGate.run(batch.commit, weight: count);
         batch = _firestore.batch();
         bytes = 0;
         count = 0;
       }
-      batch.set(_doc('sync_operations', operation.id), _operationData(operation));
+      batch.set(
+        _doc('sync_operations', operation.id),
+        _operationData(operation),
+      );
       bytes += size;
       count++;
     }
@@ -337,7 +349,10 @@ class FirestoreSyncRepository implements SyncRepository {
     String collection,
     Map<String, Map<String, dynamic>> documentsById,
   ) async {
-    for (final chunk in _chunked(documentsById.entries.toList(), firestoreWriteChunkSize)) {
+    for (final chunk in _chunked(
+      documentsById.entries.toList(),
+      firestoreWriteChunkSize,
+    )) {
       final batch = _firestore.batch();
       for (final entry in chunk) {
         batch.set(
@@ -517,13 +532,14 @@ class NoOpSyncRepository implements SyncRepository {
   }
 
   @override
-  Future<Map<String, dynamic>?> getDocument(String collection, String id) async => null;
+  Future<Map<String, dynamic>?> getDocument(
+    String collection,
+    String id,
+  ) async => null;
 
   @override
-  Future<List<({String id, Map<String, dynamic> data})>> listCollectionDocuments(
-    String collection,
-  ) async =>
-      const [];
+  Future<List<({String id, Map<String, dynamic> data})>>
+  listCollectionDocuments(String collection) async => const [];
 
   @override
   Future<Map<String, dynamic>?> getRemoteSettings() async => null;

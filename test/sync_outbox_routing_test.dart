@@ -139,25 +139,28 @@ void main() {
     expect(await allRows(), hasLength(1));
   });
 
-  test('rows for the same id in different collections are independent', () async {
-    await worker.enqueue(
-      collection: FirestoreCollections.journalEntries,
-      documentId: 'shared-id',
-    );
-    await worker.enqueue(
-      collection: FirestoreCollections.todoTasks,
-      documentId: 'shared-id',
-    );
+  test(
+    'rows for the same id in different collections are independent',
+    () async {
+      await worker.enqueue(
+        collection: FirestoreCollections.journalEntries,
+        documentId: 'shared-id',
+      );
+      await worker.enqueue(
+        collection: FirestoreCollections.todoTasks,
+        documentId: 'shared-id',
+      );
 
-    await worker.clearFor(
-      collection: FirestoreCollections.journalEntries,
-      documentId: 'shared-id',
-    );
+      await worker.clearFor(
+        collection: FirestoreCollections.journalEntries,
+        documentId: 'shared-id',
+      );
 
-    final rows = await allRows();
-    expect(rows, hasLength(1));
-    expect(rows.single.collectionName, FirestoreCollections.todoTasks);
-  });
+      final rows = await allRows();
+      expect(rows, hasLength(1));
+      expect(rows.single.collectionName, FirestoreCollections.todoTasks);
+    },
+  );
 
   test('a queued transaction actually drains', () async {
     // Finance, calendars, trackers and the rest upload through
@@ -282,68 +285,74 @@ void main() {
     expect(await allRows(), isEmpty);
   });
 
-  test('a paused gate stops the drain instead of feeding a full queue',
-      () async {
-    // The outbox is where refused writes land, so it is the last thing that
-    // should be pushing more at a Firestore that is already holding too many.
-    // Before the gate reached this worker it wrote straight past the bound
-    // that the rest of the app respects.
-    final firestore = FakeFirebaseFirestore();
-    // Never completes: Firestore cannot confirm the queue it inherited, which
-    // is the tighter of the two allowances.
-    final gate = FirestoreWriteGate(
-      waitForPendingWrites: () => Completer<void>().future,
-    );
-    final blockers = <Completer<void>>[];
-    for (var i = 0; i < gate.limit; i++) {
-      final blocker = Completer<void>();
-      blockers.add(blocker);
-      unawaited(gate.run(() => blocker.future));
-    }
-    expect(gate.isPaused, isTrue);
+  test(
+    'a paused gate stops the drain instead of feeding a full queue',
+    () async {
+      // The outbox is where refused writes land, so it is the last thing that
+      // should be pushing more at a Firestore that is already holding too many.
+      // Before the gate reached this worker it wrote straight past the bound
+      // that the rest of the app respects.
+      final firestore = FakeFirebaseFirestore();
+      // Never completes: Firestore cannot confirm the queue it inherited, which
+      // is the tighter of the two allowances.
+      final gate = FirestoreWriteGate(
+        waitForPendingWrites: () => Completer<void>().future,
+      );
+      final blockers = <Completer<void>>[];
+      for (var i = 0; i < gate.limit; i++) {
+        final blocker = Completer<void>();
+        blockers.add(blocker);
+        unawaited(gate.run(() => blocker.future));
+      }
+      expect(gate.isPaused, isTrue);
 
-    final worker = OutboxSyncWorker(
-      db,
-      firestore,
-      _StubAuthRepository(),
-      yieldDelay: Duration.zero,
-      writeGate: gate,
-    );
+      final worker = OutboxSyncWorker(
+        db,
+        firestore,
+        _StubAuthRepository(),
+        yieldDelay: Duration.zero,
+        writeGate: gate,
+      );
 
-    final at = DateTime.utc(2026, 5, 1);
-    await DriftFinanceRepository(db).upsertTransaction(
-      FinancialTransaction(
-        id: 'txn-1',
-        type: TransactionType.expense,
-        amountCents: 1250,
-        occurredAt: at,
-        note: 'Coffee',
-        createdAt: at,
-        updatedAt: at,
-      ),
-      recordLocalActivity: false,
-    );
-    await worker.enqueue(
-      collection: FirestoreCollections.transactions,
-      documentId: 'txn-1',
-    );
+      final at = DateTime.utc(2026, 5, 1);
+      await DriftFinanceRepository(db).upsertTransaction(
+        FinancialTransaction(
+          id: 'txn-1',
+          type: TransactionType.expense,
+          amountCents: 1250,
+          occurredAt: at,
+          note: 'Coffee',
+          createdAt: at,
+          updatedAt: at,
+        ),
+        recordLocalActivity: false,
+      );
+      await worker.enqueue(
+        collection: FirestoreCollections.transactions,
+        documentId: 'txn-1',
+      );
 
-    await worker.startDraining();
+      await worker.startDraining();
 
-    final snap = await firestore
-        .doc('users/user-1/${FirestoreCollections.transactions}/txn-1')
-        .get();
-    expect(snap.exists, isFalse, reason: 'the drain wrote past a paused gate');
-    // Still queued, and specifically not parked: nothing is wrong with the
-    // write, only with the moment.
-    final rows = await allRows();
-    expect(rows, hasLength(1));
-    expect(rows.single.failureReason, isNull);
+      final snap = await firestore
+          .doc('users/user-1/${FirestoreCollections.transactions}/txn-1')
+          .get();
+      expect(
+        snap.exists,
+        isFalse,
+        reason: 'the drain wrote past a paused gate',
+      );
+      // Still queued, and specifically not parked: nothing is wrong with the
+      // write, only with the moment.
+      final rows = await allRows();
+      expect(rows, hasLength(1));
+      expect(rows.single.failureReason, isNull);
 
-    for (final blocker in blockers) {
-      blocker.complete();
-    }
-  });
+      for (final blocker in blockers) {
+        blocker.complete();
+      }
+    },
+  );
 
   test('the gate reopening drains the rows it stopped for', () async {
     // The other half of the case above. Standing the drain down is only right
@@ -351,9 +360,7 @@ void main() {
     // restarted or the user happens to alt-tab away and back.
     final firestore = FakeFirebaseFirestore();
     final drained = Completer<void>();
-    final gate = FirestoreWriteGate(
-      waitForPendingWrites: () => drained.future,
-    );
+    final gate = FirestoreWriteGate(waitForPendingWrites: () => drained.future);
     final blockers = <Completer<void>>[];
     for (var i = 0; i < gate.limit; i++) {
       final blocker = Completer<void>();

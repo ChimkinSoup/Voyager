@@ -25,9 +25,7 @@ class ModalScrimObserver extends NavigatorObserver {
   final _open = <Route<dynamic>>{};
 
   static bool _isScrimmed(Route<dynamic> route) =>
-      route is ModalRoute &&
-      !route.opaque &&
-      (route.barrierColor?.a ?? 0) > 0;
+      route is ModalRoute && !route.opaque && (route.barrierColor?.a ?? 0) > 0;
 
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {

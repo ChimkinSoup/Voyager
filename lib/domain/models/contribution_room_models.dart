@@ -31,9 +31,7 @@ class AnnualLimit {
     if (raw is! List) return const [];
     final limits = <AnnualLimit>[
       for (final entry in raw)
-        if (entry is Map &&
-            entry['fromYear'] is num &&
-            entry['cents'] is num)
+        if (entry is Map && entry['fromYear'] is num && entry['cents'] is num)
           AnnualLimit(
             fromYear: (entry['fromYear'] as num).toInt(),
             cents: (entry['cents'] as num).toInt(),
@@ -45,7 +43,9 @@ class AnnualLimit {
 
   @override
   bool operator ==(Object other) =>
-      other is AnnualLimit && other.fromYear == fromYear && other.cents == cents;
+      other is AnnualLimit &&
+      other.fromYear == fromYear &&
+      other.cents == cents;
 
   @override
   int get hashCode => Object.hash(fromYear, cents);

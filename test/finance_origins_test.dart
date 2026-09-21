@@ -34,16 +34,20 @@ void main() {
   group('ledgerTransactionTitle', () {
     test('origin and note', () {
       expect(
-        ledgerTransactionTitle('Walmart', 'Toothpaste', TransactionType.expense),
+        ledgerTransactionTitle(
+          'Walmart',
+          'Toothpaste',
+          TransactionType.expense,
+        ),
         (origin: 'Walmart', detail: 'Toothpaste'),
       );
     });
 
     test('origin only', () {
-      expect(
-        ledgerTransactionTitle('Walmart', null, TransactionType.expense),
-        (origin: 'Walmart', detail: null),
-      );
+      expect(ledgerTransactionTitle('Walmart', null, TransactionType.expense), (
+        origin: 'Walmart',
+        detail: null,
+      ));
     });
 
     test('note only', () {
@@ -54,21 +58,21 @@ void main() {
     });
 
     test('neither falls back to the type', () {
-      expect(
-        ledgerTransactionTitle(null, null, TransactionType.expense),
-        (origin: null, detail: 'Expense'),
-      );
-      expect(
-        ledgerTransactionTitle(null, null, TransactionType.deposit),
-        (origin: null, detail: 'Deposit'),
-      );
+      expect(ledgerTransactionTitle(null, null, TransactionType.expense), (
+        origin: null,
+        detail: 'Expense',
+      ));
+      expect(ledgerTransactionTitle(null, null, TransactionType.deposit), (
+        origin: null,
+        detail: 'Deposit',
+      ));
     });
 
     test('whitespace-only counts as empty, and set values are trimmed', () {
-      expect(
-        ledgerTransactionTitle('   ', ' \t', TransactionType.deposit),
-        (origin: null, detail: 'Deposit'),
-      );
+      expect(ledgerTransactionTitle('   ', ' \t', TransactionType.deposit), (
+        origin: null,
+        detail: 'Deposit',
+      ));
       expect(
         ledgerTransactionTitle(' Costco ', '  ', TransactionType.expense),
         (origin: 'Costco', detail: null),
@@ -78,22 +82,40 @@ void main() {
 
   group('recentTransactionOrigins', () {
     test('distinct, most recently used first', () {
-      final origins = recentTransactionOrigins([
-        _tx('a', origin: 'Walmart', occurredAt: DateTime(2026, 9, 1)),
-        _tx('b', origin: 'Costco', occurredAt: DateTime(2026, 9, 5)),
-        _tx('c', origin: 'Walmart', occurredAt: DateTime(2026, 9, 8)),
-        _tx('d', origin: 'Target', occurredAt: DateTime(2026, 9, 3)),
-      ], TransactionType.expense, _now);
+      final origins = recentTransactionOrigins(
+        [
+          _tx('a', origin: 'Walmart', occurredAt: DateTime(2026, 9, 1)),
+          _tx('b', origin: 'Costco', occurredAt: DateTime(2026, 9, 5)),
+          _tx('c', origin: 'Walmart', occurredAt: DateTime(2026, 9, 8)),
+          _tx('d', origin: 'Target', occurredAt: DateTime(2026, 9, 3)),
+        ],
+        TransactionType.expense,
+        _now,
+      );
 
       expect(origins, ['Walmart', 'Costco', 'Target']);
     });
 
     test('same day breaks ties by updatedAt', () {
       final day = DateTime(2026, 9, 1);
-      final origins = recentTransactionOrigins([
-        _tx('a', origin: 'Old', occurredAt: day, updatedAt: DateTime(2026, 9, 2)),
-        _tx('b', origin: 'New', occurredAt: day, updatedAt: DateTime(2026, 9, 3)),
-      ], TransactionType.expense, _now);
+      final origins = recentTransactionOrigins(
+        [
+          _tx(
+            'a',
+            origin: 'Old',
+            occurredAt: day,
+            updatedAt: DateTime(2026, 9, 2),
+          ),
+          _tx(
+            'b',
+            origin: 'New',
+            occurredAt: day,
+            updatedAt: DateTime(2026, 9, 3),
+          ),
+        ],
+        TransactionType.expense,
+        _now,
+      );
 
       expect(origins, ['New', 'Old']);
     });
@@ -112,31 +134,43 @@ void main() {
     });
 
     test('case-sensitive: both spellings survive', () {
-      final origins = recentTransactionOrigins([
-        _tx('a', origin: 'Walmart', occurredAt: DateTime(2026, 9, 2)),
-        _tx('b', origin: 'walmart', occurredAt: DateTime(2026, 9, 1)),
-      ], TransactionType.expense, _now);
+      final origins = recentTransactionOrigins(
+        [
+          _tx('a', origin: 'Walmart', occurredAt: DateTime(2026, 9, 2)),
+          _tx('b', origin: 'walmart', occurredAt: DateTime(2026, 9, 1)),
+        ],
+        TransactionType.expense,
+        _now,
+      );
 
       expect(origins, ['Walmart', 'walmart']);
     });
 
     test('soft-deleted and empty origins are left out', () {
-      final origins = recentTransactionOrigins([
-        _tx('a', origin: 'Costco', deletedAt: DateTime(2026, 9, 11)),
-        _tx('b', origin: '   '),
-        _tx('c'),
-        _tx('d', origin: 'Target'),
-      ], TransactionType.expense, _now);
+      final origins = recentTransactionOrigins(
+        [
+          _tx('a', origin: 'Costco', deletedAt: DateTime(2026, 9, 11)),
+          _tx('b', origin: '   '),
+          _tx('c'),
+          _tx('d', origin: 'Target'),
+        ],
+        TransactionType.expense,
+        _now,
+      );
 
       expect(origins, ['Target']);
     });
 
     test('future-dated rows count, ranked as used now', () {
-      final origins = recentTransactionOrigins([
-        _tx('rent', origin: 'Landlord', occurredAt: DateTime(2026, 10, 1)),
-        _tx('b', origin: 'Costco', occurredAt: DateTime(2026, 9, 12, 9)),
-        _tx('c', origin: 'Walmart', occurredAt: DateTime(2026, 9, 11)),
-      ], TransactionType.expense, _now);
+      final origins = recentTransactionOrigins(
+        [
+          _tx('rent', origin: 'Landlord', occurredAt: DateTime(2026, 10, 1)),
+          _tx('b', origin: 'Costco', occurredAt: DateTime(2026, 9, 12, 9)),
+          _tx('c', origin: 'Walmart', occurredAt: DateTime(2026, 9, 11)),
+        ],
+        TransactionType.expense,
+        _now,
+      );
 
       expect(
         origins,
@@ -146,20 +180,24 @@ void main() {
     });
 
     test('a future row ties with now, and updatedAt breaks the tie', () {
-      final origins = recentTransactionOrigins([
-        _tx(
-          'rent',
-          origin: 'Landlord',
-          occurredAt: DateTime(2026, 10, 1),
-          updatedAt: DateTime(2026, 9, 1),
-        ),
-        _tx(
-          'b',
-          origin: 'Costco',
-          occurredAt: _now,
-          updatedAt: DateTime(2026, 9, 12, 12),
-        ),
-      ], TransactionType.expense, _now);
+      final origins = recentTransactionOrigins(
+        [
+          _tx(
+            'rent',
+            origin: 'Landlord',
+            occurredAt: DateTime(2026, 10, 1),
+            updatedAt: DateTime(2026, 9, 1),
+          ),
+          _tx(
+            'b',
+            origin: 'Costco',
+            occurredAt: _now,
+            updatedAt: DateTime(2026, 9, 12, 12),
+          ),
+        ],
+        TransactionType.expense,
+        _now,
+      );
 
       expect(origins, ['Costco', 'Landlord'], reason: 'tied at now; updatedAt');
     });
@@ -195,7 +233,12 @@ void main() {
       _tx('f', type: TransactionType.deposit, cents: 9000, origin: 'Payroll'),
       _tx('g', type: TransactionType.deposit, cents: 1000),
       // Outside the window.
-      _tx('h', cents: 7777, origin: 'Walmart', occurredAt: DateTime(2026, 8, 31)),
+      _tx(
+        'h',
+        cents: 7777,
+        origin: 'Walmart',
+        occurredAt: DateTime(2026, 8, 31),
+      ),
     ];
 
     test('expenses bucket by store, case-sensitive, and sum to spending', () {

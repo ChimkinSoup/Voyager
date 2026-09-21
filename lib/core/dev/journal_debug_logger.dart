@@ -39,7 +39,9 @@ class JournalPageDebugSnapshot {
     final buffer = StringBuffer()
       ..writeln('UI STATE:')
       ..writeln('  selectedEntryId=$selectedEntryId')
-      ..writeln('  journalFilter=$journalFilter viewAllJournals=$viewAllJournals')
+      ..writeln(
+        '  journalFilter=$journalFilter viewAllJournals=$viewAllJournals',
+      )
       ..writeln('  metadataDirty=$metadataDirty')
       ..writeln('  titleFocused=$titleFocused bodyFocused=$bodyFocused')
       ..writeln('  title="${_preview(titleText, 120)}"')
@@ -61,8 +63,8 @@ class JournalDebugLogger extends ChangeNotifier {
     required this._saveSettings,
     SettingsRepository? settingsRepository,
     JournalRepository? journalRepository,
-  })  : _settingsRepository = settingsRepository,
-        _journalRepository = journalRepository;
+  }) : _settingsRepository = settingsRepository,
+       _journalRepository = journalRepository;
 
   final SettingsRepository? _settingsRepository;
   final JournalRepository? _journalRepository;
@@ -79,7 +81,7 @@ class JournalDebugLogger extends ChangeNotifier {
   Future<void> loadFromSettings() async {
     final repo = _settingsRepository;
     if (repo == null) return;
-    
+
     await _enqueue(() async {
       await _pruneAndMarkSession();
     });
@@ -100,7 +102,11 @@ class JournalDebugLogger extends ChangeNotifier {
         await file.writeAsString('$_appStartMarker$kept');
       }
     }
-    await file.writeAsString('$_appStartMarker\n', mode: FileMode.append, flush: true);
+    await file.writeAsString(
+      '$_appStartMarker\n',
+      mode: FileMode.append,
+      flush: true,
+    );
   }
 
   void applySettings(AppSettings settings) {
@@ -217,10 +223,7 @@ class JournalDebugLogger extends ChangeNotifier {
     final trimmed = content.substring(content.length - (_maxLogBytes ~/ 2));
     final nextIndex = trimmed.indexOf('=' * 80);
     final kept = nextIndex >= 0 ? trimmed.substring(nextIndex) : trimmed;
-    await file.writeAsString(
-      '... log truncated ...\n$kept',
-      flush: true,
-    );
+    await file.writeAsString('... log truncated ...\n$kept', flush: true);
   }
 
   Future<String> _formatDbSnapshot(
@@ -240,8 +243,9 @@ class JournalDebugLogger extends ChangeNotifier {
       );
     }
 
-    final scopeJournalId =
-        page?.viewAllJournals == true ? null : page?.journalFilter;
+    final scopeJournalId = page?.viewAllJournals == true
+        ? null
+        : page?.journalFilter;
     final entries = await repo.listEntries(
       journalId: scopeJournalId,
       limit: 40,

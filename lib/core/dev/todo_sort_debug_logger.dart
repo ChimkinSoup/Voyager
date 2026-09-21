@@ -18,8 +18,8 @@ class TodoSortDebugLogger extends ChangeNotifier {
     required this._saveSettings,
     SettingsRepository? settingsRepository,
     TodoRepository? todoRepository,
-  })  : _settingsRepository = settingsRepository,
-        _todoRepository = todoRepository;
+  }) : _settingsRepository = settingsRepository,
+       _todoRepository = todoRepository;
 
   final SettingsRepository? _settingsRepository;
   final TodoRepository? _todoRepository;
@@ -66,7 +66,10 @@ class TodoSortDebugLogger extends ChangeNotifier {
       });
     } else {
       await _enqueue(() async {
-        await _append('LOG_DISABLED', details: 'Todo sort debug logging stopped.');
+        await _append(
+          'LOG_DISABLED',
+          details: 'Todo sort debug logging stopped.',
+        );
       });
     }
   }
@@ -105,11 +108,7 @@ class TodoSortDebugLogger extends ChangeNotifier {
     });
   }
 
-  Future<void> _append(
-    String event, {
-    TodoTask? task,
-    String? details,
-  }) async {
+  Future<void> _append(String event, {TodoTask? task, String? details}) async {
     final repo = _todoRepository;
     if (repo == null) return;
 
@@ -146,10 +145,7 @@ class TodoSortDebugLogger extends ChangeNotifier {
     final trimmed = content.substring(content.length - (_maxLogBytes ~/ 2));
     final nextIndex = trimmed.indexOf('=' * 80);
     final kept = nextIndex >= 0 ? trimmed.substring(nextIndex) : trimmed;
-    await file.writeAsString(
-      '... log truncated ...\n$kept',
-      flush: true,
-    );
+    await file.writeAsString('... log truncated ...\n$kept', flush: true);
   }
 
   Future<String> _formatAllListsSnapshot(TodoRepository repo) async {

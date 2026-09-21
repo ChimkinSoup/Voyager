@@ -32,6 +32,7 @@ class BucketListItem {
   BucketListItem copyWith({
     String? title,
     String? note,
+
     /// Wipes an existing note. Needed because passing `note: ''` is
     /// indistinguishable from passing nothing under the `??` fallback, and
     /// re-completing an item with the note field left blank has to remove
@@ -43,6 +44,7 @@ class BucketListItem {
     int? sortOrder,
     DateTime? updatedAt,
     int? version,
+
     /// Every edit has to advance the version: conflict resolution is
     /// version-first (see remoteVersionWins), so an item left at the version
     /// it was created at can only ever be resolved on wall clock — and a

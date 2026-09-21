@@ -174,17 +174,19 @@ void main() {
       expect(await repo.getFlaggedWords(), isEmpty);
     });
 
-    test('flagging a word that is also custom tombstones the custom row',
-        () async {
-      // §10: otherwise "remove the custom word" would look like it worked
-      // while the bundled spelling kept the word known.
-      await repo.addCustomWord('neve');
-      await repo.flagWord('neve');
-      expect(await repo.getCustomWords(), isEmpty);
-      expect(await repo.getFlaggedWords(), {'neve': null});
-      final custom = await repo.getCustomWordRecord('neve');
-      expect(custom!.deletedAt, isNotNull);
-    });
+    test(
+      'flagging a word that is also custom tombstones the custom row',
+      () async {
+        // §10: otherwise "remove the custom word" would look like it worked
+        // while the bundled spelling kept the word known.
+        await repo.addCustomWord('neve');
+        await repo.flagWord('neve');
+        expect(await repo.getCustomWords(), isEmpty);
+        expect(await repo.getFlaggedWords(), {'neve': null});
+        final custom = await repo.getCustomWordRecord('neve');
+        expect(custom!.deletedAt, isNotNull);
+      },
+    );
 
     test('setFlaggedReplacement edits in place and can clear', () async {
       await repo.flagWord('neve', replacement: 'never');

@@ -60,11 +60,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!auth.isAuthenticated && !loggingIn) return '/login';
       if (auth.isAuthenticated && loggingIn) {
         final settings = await settingsRepo.getSettings();
-        if (settings.startupPageMode == StartupPageMode.lastSeen && settings.lastSeenNavPage != null) {
+        if (settings.startupPageMode == StartupPageMode.lastSeen &&
+            settings.lastSeenNavPage != null) {
           return settings.lastSeenNavPage;
-        } else if (settings.startupPageMode == StartupPageMode.custom && settings.customStartupPage != null) {
+        } else if (settings.startupPageMode == StartupPageMode.custom &&
+            settings.customStartupPage != null) {
           return settings.customStartupPage;
-        } else if (settings.navPageOrder != null && settings.navPageOrder!.isNotEmpty) {
+        } else if (settings.navPageOrder != null &&
+            settings.navPageOrder!.isNotEmpty) {
           return settings.navPageOrder!.first;
         }
         return '/journal';

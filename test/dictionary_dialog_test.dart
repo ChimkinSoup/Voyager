@@ -288,10 +288,7 @@ void main() {
 
       expect(await repo.getFlaggedWords(), isEmpty);
       expect(await repo.getCustomWords(), isEmpty);
-      expect(
-        find.textContaining('No longer flagging "sad"'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('No longer flagging "sad"'), findsOneWidget);
     });
 
     testWidgets('flagging the target of an existing pair is refused', (

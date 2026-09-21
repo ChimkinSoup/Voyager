@@ -67,6 +67,7 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
   late int _colorValue;
   bool _datePopoverOpen = false;
   bool _saving = false;
+
   /// The figure last written into the value field from the asset's latest
   /// valuation, or null before the first one.
   String? _seededText;
@@ -116,9 +117,7 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
   /// impossible without inventing a value.
   bool get _canSave =>
       _nameController.text.trim().isNotEmpty &&
-      (widget.existing != null
-          ? _valueError == null
-          : _parsedCents != null) &&
+      (widget.existing != null ? _valueError == null : _parsedCents != null) &&
       !_saving;
 
   Future<void> _pickDate(BuildContext buttonContext) async {
@@ -191,13 +190,13 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
         // day's entry; any other date appends a new point to the history.
         final valuations = await repo.listAssetValuations(assetId: assetId);
         final sameDay = valuations.cast<AssetValuation?>().firstWhere(
-              (v) =>
-                  v != null &&
-                  v.asOf.year == _asOf.year &&
-                  v.asOf.month == _asOf.month &&
-                  v.asOf.day == _asOf.day,
-              orElse: () => null,
-            );
+          (v) =>
+              v != null &&
+              v.asOf.year == _asOf.year &&
+              v.asOf.month == _asOf.month &&
+              v.asOf.day == _asOf.day,
+          orElse: () => null,
+        );
 
         await repo.upsertAssetValuation(
           AssetValuation(
@@ -471,7 +470,8 @@ class _RoomSection extends ConsumerWidget {
           Text('Contribution room', style: labelStyle),
           const Spacer(),
           GlassButton(
-            onPressed: () => showContributionRoomModal(context, ref, asset: asset),
+            onPressed: () =>
+                showContributionRoomModal(context, ref, asset: asset),
             label: 'Track…',
             dense: true,
           ),

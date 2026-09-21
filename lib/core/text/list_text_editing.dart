@@ -174,7 +174,10 @@ bool applyListEditing({
     return false;
   }
 
-  controller.value = TextEditingValue(text: finalText, selection: finalSelection);
+  controller.value = TextEditingValue(
+    text: finalText,
+    selection: finalSelection,
+  );
   return true;
 }
 
@@ -232,9 +235,7 @@ _TextEdit? _applyEnterContinuation({
 /// and Google Docs all render `<li>` as one of these. None is a Voyager
 /// marker, so a pasted line carrying one is rewritten to use the marker of
 /// the list it lands in rather than keeping the glyph as literal content.
-final RegExp _pastedBulletPattern = RegExp(
-  r'^(\s*)[•‣▪◦·–—][ 	]+(.*)$',
-);
+final RegExp _pastedBulletPattern = RegExp(r'^(\s*)[•‣▪◦·–—][ 	]+(.*)$');
 
 final RegExp _leadingWhitespacePattern = RegExp(r'^[ 	]*');
 
@@ -298,7 +299,8 @@ _TextEdit? _applyPasteContinuation({
   if (match == null) return null;
 
   final markerLength = match.isNumbered
-      ? match.marker.length + 1 // digits + '.'
+      ? match.marker.length +
+            1 // digits + '.'
       : match.marker.length;
   final contentStart =
       lineStart + match.indent.length + markerLength + match.spacing.length;
@@ -485,7 +487,8 @@ bool handleListTab({
     pos = lineEnd + 1;
   }
 
-  final edits = <_NumberEdit>[]; // reused as a generic (start,end,replacement) splice
+  final edits =
+      <_NumberEdit>[]; // reused as a generic (start,end,replacement) splice
   for (final lineStart in lineStarts) {
     final lineEnd = _lineEndFor(text, lineStart);
     final line = text.substring(lineStart, lineEnd);
@@ -583,9 +586,11 @@ bool handleListBackspace({required TextEditingController controller}) {
   if (match == null) return false;
 
   final markerLength = match.isNumbered
-      ? match.marker.length + 1 // digits + '.'
+      ? match.marker.length +
+            1 // digits + '.'
       : match.marker.length; // '-' or '*'
-  final prefixEnd = lineStart + match.indent.length + markerLength + match.spacing.length;
+  final prefixEnd =
+      lineStart + match.indent.length + markerLength + match.spacing.length;
   if (cursor != prefixEnd) return false;
 
   final nextText = text.replaceRange(lineStart, prefixEnd, '');

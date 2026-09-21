@@ -63,8 +63,10 @@ class _CountingDreamRepository implements DreamRepository {
   Future<DreamEntry?> getEntry(String id) => _delegate.getEntry(id);
 
   @override
-  Future<void> upsertEntry(DreamEntry entry, {bool recordLocalActivity = true}) =>
-      _delegate.upsertEntry(entry, recordLocalActivity: recordLocalActivity);
+  Future<void> upsertEntry(
+    DreamEntry entry, {
+    bool recordLocalActivity = true,
+  }) => _delegate.upsertEntry(entry, recordLocalActivity: recordLocalActivity);
 
   @override
   Future<void> softDeleteEntry(String id) => _delegate.softDeleteEntry(id);

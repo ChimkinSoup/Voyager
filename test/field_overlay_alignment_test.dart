@@ -47,47 +47,46 @@ Finder get _editable => find.descendant(
 );
 
 void main() {
-  testWidgets(
-    'the journal title keeps its Vim caret on the text',
-    (tester) async {
-      final controller = TextEditingController(text: 'Hello');
-      final focusNode = FocusNode();
-      addTearDown(controller.dispose);
-      addTearDown(focusNode.dispose);
+  testWidgets('the journal title keeps its Vim caret on the text', (
+    tester,
+  ) async {
+    final controller = TextEditingController(text: 'Hello');
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
 
-      // As journal_page.dart builds it: the body box's own padding, and
-      // nothing outside putting the 48px back.
-      await tester.pumpWidget(
-        _harness(
-          LabeledTextField(
-            label: 'Title',
-            controller: controller,
-            focusNode: focusNode,
-            allowShortHeight: true,
-            contentPadding: const EdgeInsets.fromLTRB(14, 14, 40, 14),
-          ),
+    // As journal_page.dart builds it: the body box's own padding, and
+    // nothing outside putting the 48px back.
+    await tester.pumpWidget(
+      _harness(
+        LabeledTextField(
+          label: 'Title',
+          controller: controller,
+          focusNode: focusNode,
+          allowShortHeight: true,
+          contentPadding: const EdgeInsets.fromLTRB(14, 14, 40, 14),
         ),
-      );
-      await tester.tap(find.byType(TextField));
-      await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pump();
+      ),
+    );
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
 
-      // Under Material's minimum, which is the case [allowShortHeight]
-      // exists for: left to stretch the box, the decorator re-centres the
-      // text off the padding the overlay below is positioned from.
-      expect(
-        tester.getSize(find.byType(LabeledTextField)).height,
-        lessThan(kMinInteractiveDimension),
-      );
-      final overlay = find.descendant(
-        of: find.byType(VimTextOverlay),
-        matching: find.byType(CustomPaint),
-      );
-      expect(overlay, findsOneWidget, reason: 'in Normal mode');
-      expect(_top(tester, overlay), _top(tester, _editable));
-    },
-  );
+    // Under Material's minimum, which is the case [allowShortHeight]
+    // exists for: left to stretch the box, the decorator re-centres the
+    // text off the padding the overlay below is positioned from.
+    expect(
+      tester.getSize(find.byType(LabeledTextField)).height,
+      lessThan(kMinInteractiveDimension),
+    );
+    final overlay = find.descendant(
+      of: find.byType(VimTextOverlay),
+      matching: find.byType(CustomPaint),
+    );
+    expect(overlay, findsOneWidget, reason: 'in Normal mode');
+    expect(_top(tester, overlay), _top(tester, _editable));
+  });
 
   testWidgets('a field with no label and no hint keeps its input on the '
       'overlays', (tester) async {

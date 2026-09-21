@@ -51,9 +51,7 @@ void main() {
         id: 'conference',
         start: _d(2026, 3, 2, 9),
         end: _d(2026, 3, 4, 17),
-        recurrence: const RecurrenceRule(
-          frequency: EventRecurrence.monthly,
-        ),
+        recurrence: const RecurrenceRule(frequency: EventRecurrence.monthly),
       );
       final first = calendarEventTapKey(block, _d(2026, 3, 2));
       expect(calendarEventTapKey(block, _d(2026, 3, 3)), first);
@@ -74,25 +72,31 @@ void main() {
   });
 
   group('Calendar event layout and styling', () {
-    test('calendarMonthEventBarHeight expands for 4 events to reach bottom padding', () {
-      const style = MonthDayCellStyle.full;
-      const cellHeight = 100.0;
-      
-      final heightFor3 = calendarMonthEventBarHeight(
-        cellHeight: cellHeight,
-        style: style,
-        visibleEventCount: 3,
-      );
-      
-      final heightFor4 = calendarMonthEventBarHeight(
-        cellHeight: cellHeight,
-        style: style,
-        visibleEventCount: 4,
-      );
+    test(
+      'calendarMonthEventBarHeight expands for 4 events to reach bottom padding',
+      () {
+        const style = MonthDayCellStyle.full;
+        const cellHeight = 100.0;
 
-      // 4 events should span an extra 3.0px (cellPadding.bottom) across the cell
-      expect(heightFor4 * 4 + 3, equals(heightFor3 * 4 + 3 + style.cellPadding.bottom));
-    });
+        final heightFor3 = calendarMonthEventBarHeight(
+          cellHeight: cellHeight,
+          style: style,
+          visibleEventCount: 3,
+        );
+
+        final heightFor4 = calendarMonthEventBarHeight(
+          cellHeight: cellHeight,
+          style: style,
+          visibleEventCount: 4,
+        );
+
+        // 4 events should span an extra 3.0px (cellPadding.bottom) across the cell
+        expect(
+          heightFor4 * 4 + 3,
+          equals(heightFor3 * 4 + 3 + style.cellPadding.bottom),
+        );
+      },
+    );
   });
 
   group('week column overlap layout', () {
@@ -112,13 +116,15 @@ void main() {
       );
 
       for (final day in [_d(2026, 3, 2), _d(2026, 3, 9), _d(2026, 3, 30)]) {
-        final slot = only(layoutDayColumn(
-          day: day,
-          events: [event],
-          todos: const [],
-          pxPerHour: 60,
-          taskBarHeight: 18,
-        ));
+        final slot = only(
+          layoutDayColumn(
+            day: day,
+            events: [event],
+            todos: const [],
+            pxPerHour: 60,
+            taskBarHeight: 18,
+          ),
+        );
         // 10:00 → 12:00 is two hours on every occurrence, not an 18px stub on
         // all of them but the first.
         expect(slot.top, 600.0, reason: '$day');
@@ -156,15 +162,21 @@ void main() {
     });
 
     test('a one-off event is unaffected', () {
-      final slot = only(layoutDayColumn(
-        day: _d(2026, 3, 2),
-        events: [
-          _timed(id: 'x', start: _d(2026, 3, 2, 9), end: _d(2026, 3, 2, 9, 30)),
-        ],
-        todos: const [],
-        pxPerHour: 60,
-        taskBarHeight: 18,
-      ));
+      final slot = only(
+        layoutDayColumn(
+          day: _d(2026, 3, 2),
+          events: [
+            _timed(
+              id: 'x',
+              start: _d(2026, 3, 2, 9),
+              end: _d(2026, 3, 2, 9, 30),
+            ),
+          ],
+          todos: const [],
+          pxPerHour: 60,
+          taskBarHeight: 18,
+        ),
+      );
       expect(slot.top, 540.0);
       expect(slot.height, 30.0);
     });
@@ -197,8 +209,16 @@ void main() {
 
     test('stacks two same-day events into separate rows', () {
       final week = [for (var i = 2; i <= 8; i++) _d(2026, 3, i)];
-      final a = _timed(id: 'a', start: _d(2026, 3, 4, 9), end: _d(2026, 3, 4, 10));
-      final b = _timed(id: 'b', start: _d(2026, 3, 4, 11), end: _d(2026, 3, 4, 12));
+      final a = _timed(
+        id: 'a',
+        start: _d(2026, 3, 4, 9),
+        end: _d(2026, 3, 4, 10),
+      );
+      final b = _timed(
+        id: 'b',
+        start: _d(2026, 3, 4, 11),
+        end: _d(2026, 3, 4, 12),
+      );
 
       final packed = calendarPackWeekEvents(week, [a, b]);
       expect(packed[2].map((e) => e?.id), ['a', 'b']);

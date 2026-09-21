@@ -123,8 +123,8 @@ class _WorkoutDayColumnState extends ConsumerState<WorkoutDayColumn> {
                             const SizedBox(height: VoyagerSpacing.xs),
                         itemBuilder: (context, i) => _PlanEntryCard(
                           entry: widget.entries[i],
-                          exercise:
-                              widget.exercisesById[widget.entries[i].exerciseId],
+                          exercise: widget
+                              .exercisesById[widget.entries[i].exerciseId],
                           unit: widget.unit,
                           allEntries: widget.allEntries,
                         ),
@@ -153,7 +153,9 @@ class _WorkoutDayColumnState extends ConsumerState<WorkoutDayColumn> {
                   color: widget.isToday
                       ? accent
                       : theme.colorScheme.onSurface.withValues(alpha: 0.85),
-                  fontWeight: widget.isToday ? FontWeight.w700 : FontWeight.w600,
+                  fontWeight: widget.isToday
+                      ? FontWeight.w700
+                      : FontWeight.w600,
                 ),
               ),
               if (widget.subtitle != null)
@@ -353,7 +355,6 @@ String exerciseSummaryLine(Exercise exercise, WeightUnit unit) {
   return '${exercise.targetSets} × ${exercise.targetReps}'
       '${exercise.targetWeightKg > 0 ? ' · ${unit.formatKilogramsWithUnit(exercise.targetWeightKg)}' : ''}';
 }
-
 
 class _EntryDragFeedback extends StatelessWidget {
   const _EntryDragFeedback({required this.label});

@@ -30,7 +30,11 @@ class StudyDeckGraph {
   }
 
   /// What a surface reads while the three lists are still loading.
-  static final empty = StudyDeckGraph(decks: const [], cards: const [], links: const []);
+  static final empty = StudyDeckGraph(
+    decks: const [],
+    cards: const [],
+    links: const [],
+  );
 
   final _decks = <String, StudyDeck>{};
   final _cardsByDeck = <String, List<StudyCard>>{};

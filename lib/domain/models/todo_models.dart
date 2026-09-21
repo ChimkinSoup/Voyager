@@ -159,15 +159,21 @@ class TodoTask extends SoftDeletable {
       createdAt: DateTime.parse(json['createdAt'] as String).toUtc(),
       updatedAt: DateTime.parse(json['updatedAt'] as String).toUtc(),
       version: json['version'] as int? ?? 0,
-      deletedAt: json['deletedAt'] != null ? DateTime.parse(json['deletedAt'] as String).toUtc() : null,
+      deletedAt: json['deletedAt'] != null
+          ? DateTime.parse(json['deletedAt'] as String).toUtc()
+          : null,
       listId: json['listId'] as String,
       title: json['title'] as String,
       notes: json['notes'] as String?,
-      dueDate: json['dueDate'] != null ? DateTime.parse(json['dueDate'] as String).toUtc() : null,
+      dueDate: json['dueDate'] != null
+          ? DateTime.parse(json['dueDate'] as String).toUtc()
+          : null,
       completed: json['completed'] as bool? ?? false,
       starred: json['starred'] as bool? ?? false,
       sortOrder: json['sortOrder'] as int? ?? 0,
-      dueDateSetAt: json['dueDateSetAt'] != null ? DateTime.parse(json['dueDateSetAt'] as String).toUtc() : null,
+      dueDateSetAt: json['dueDateSetAt'] != null
+          ? DateTime.parse(json['dueDateSetAt'] as String).toUtc()
+          : null,
       parentTaskId: json['parentTaskId'] as String?,
       recurrence: RecurrenceRule.parse(json['recurrence'] as String?),
       recurrenceAnchor: json['recurrenceAnchor'] != null

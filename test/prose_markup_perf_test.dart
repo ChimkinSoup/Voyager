@@ -17,7 +17,8 @@ void main() {
   /// no early-out in the parser can be doing the work.
   final body = List.generate(
     120,
-    (i) => 'Paragraph $i with **bold** and *slant* and a #tag-$i in it, '
+    (i) =>
+        'Paragraph $i with **bold** and *slant* and a #tag-$i in it, '
         'plus `code` and \$x_$i\$ to make the zones do something.',
   ).join('\n\n');
 

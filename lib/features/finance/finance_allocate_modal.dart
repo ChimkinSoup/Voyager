@@ -239,8 +239,9 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
                   autofocus: true,
                   accentColor: accent,
                   cursorColor: accent,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                     // Bounded so a long paste can't reach the range where

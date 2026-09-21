@@ -322,96 +322,99 @@ void main() {
         ),
         isEmpty,
       );
-      expect(
-        {
-          ...FirestoreCollections.snapshotOnly,
-          ...FirestoreCollections.crdtBacked,
-        },
-        FirestoreCollections.records,
-      );
+      expect({
+        ...FirestoreCollections.snapshotOnly,
+        ...FirestoreCollections.crdtBacked,
+      }, FirestoreCollections.records);
     });
   });
 
-  group('pending character operations survive a failed upload (finding #3)', () {
-    test('they are still pending after the write throws', () {
-      final session = CharacterOpSession(clientId: 'device-a');
-      session.recordTextChange('', 'hi');
+  group(
+    'pending character operations survive a failed upload (finding #3)',
+    () {
+      test('they are still pending after the write throws', () {
+        final session = CharacterOpSession(clientId: 'device-a');
+        session.recordTextChange('', 'hi');
 
-      final taken = session.takePendingOps();
-      expect(taken, isNotEmpty);
-      expect(session.takePendingOps(), isEmpty);
+        final taken = session.takePendingOps();
+        expect(taken, isNotEmpty);
+        expect(session.takePendingOps(), isEmpty);
 
-      session.restorePendingOps(taken);
-      expect(
-        session.takePendingOps().map((op) => op.id),
-        taken.map((op) => op.id),
-      );
-    });
+        session.restorePendingOps(taken);
+        expect(
+          session.takePendingOps().map((op) => op.id),
+          taken.map((op) => op.id),
+        );
+      });
 
-    test('operations recorded during the failed upload still follow', () {
-      final session = CharacterOpSession(clientId: 'device-a');
-      session.recordTextChange('', 'ab');
-      final inFlight = session.takePendingOps();
+      test('operations recorded during the failed upload still follow', () {
+        final session = CharacterOpSession(clientId: 'device-a');
+        session.recordTextChange('', 'ab');
+        final inFlight = session.takePendingOps();
 
-      // The user kept typing while the upload was in the air.
-      session.recordTextChange('ab', 'abc');
+        // The user kept typing while the upload was in the air.
+        session.recordTextChange('ab', 'abc');
 
-      session.restorePendingOps(inFlight);
-      final pending = session.takePendingOps();
+        session.restorePendingOps(inFlight);
+        final pending = session.takePendingOps();
 
-      expect(pending.length, 3);
-      expect(
-        pending.take(2).map((op) => op.id),
-        inFlight.map((op) => op.id),
-        reason: 'the restored operations must come first',
-      );
-    });
-  });
+        expect(pending.length, 3);
+        expect(
+          pending.take(2).map((op) => op.id),
+          inFlight.map((op) => op.id),
+          reason: 'the restored operations must come first',
+        );
+      });
+    },
+  );
 
   group('startup purge runs after the pull (finding #8)', () {
-    test('an expired tombstone pulled in is removed in the same pass', () async {
-      final server = InMemorySyncRepository();
-      final device = _Device(server, 'device-a');
-      addTearDown(device.close);
+    test(
+      'an expired tombstone pulled in is removed in the same pass',
+      () async {
+        final server = InMemorySyncRepository();
+        final device = _Device(server, 'device-a');
+        addTearDown(device.close);
 
-      final policy = const SoftDeletePolicy();
-      final longGone = policy.purgeCutoff(
-        DateTime.now().toUtc(),
-      ).subtract(const Duration(days: 5));
+        final policy = const SoftDeletePolicy();
+        final longGone = policy
+            .purgeCutoff(DateTime.now().toUtc())
+            .subtract(const Duration(days: 5));
 
-      // Another device deleted this months ago; the tombstone is still on the
-      // server and the pull will faithfully bring it back.
-      await server.upsertDocument(
-        FirestoreCollections.journalEntries,
-        'entry-old',
-        journalEntryToFirestore(
-          entry(id: 'entry-old').copyWith(deletedAt: longGone),
-        ),
-      );
+        // Another device deleted this months ago; the tombstone is still on the
+        // server and the pull will faithfully bring it back.
+        await server.upsertDocument(
+          FirestoreCollections.journalEntries,
+          'entry-old',
+          journalEntryToFirestore(
+            entry(id: 'entry-old').copyWith(deletedAt: longGone),
+          ),
+        );
 
-      var purgeRan = false;
-      await SyncEngine(
-        syncRepository: server,
-        deviceId: 'device-a',
-        debouncer: Debouncer(delay: Duration.zero),
-      ).pullOnStartup(
-        pullFromRemote: () => device.sync.pullJournalEntries(),
-        purgeExpiredDeleted: () async {
-          purgeRan = true;
-          await device.journals.purgeExpiredDeleted(DateTime.now().toUtc());
-        },
-        localRefresh: () async {},
-      );
+        var purgeRan = false;
+        await SyncEngine(
+          syncRepository: server,
+          deviceId: 'device-a',
+          debouncer: Debouncer(delay: Duration.zero),
+        ).pullOnStartup(
+          pullFromRemote: () => device.sync.pullJournalEntries(),
+          purgeExpiredDeleted: () async {
+            purgeRan = true;
+            await device.journals.purgeExpiredDeleted(DateTime.now().toUtc());
+          },
+          localRefresh: () async {},
+        );
 
-      expect(purgeRan, isTrue);
-      expect(
-        await device.journals.getEntry('entry-old'),
-        isNull,
-        reason:
-            'purging before the pull left the row to be re-inserted and sit '
-            'there until the next launch',
-      );
-    });
+        expect(purgeRan, isTrue);
+        expect(
+          await device.journals.getEntry('entry-old'),
+          isNull,
+          reason:
+              'purging before the pull left the row to be re-inserted and sit '
+              'there until the next launch',
+        );
+      },
+    );
   });
 
   group('a restore outranks the old operation log (finding #7)', () {

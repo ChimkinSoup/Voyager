@@ -96,14 +96,12 @@ DateTime _addYearsClamped(DateTime anchor, int years) {
 /// The weekdays a weekly [rule] fires on, defaulting to the weekday [anchor]
 /// itself falls on when the user has not picked any.
 Set<int> effectiveWeekdays(RecurrenceRule rule, DateTime anchor) =>
-    rule.weekdays.isEmpty ? {DateUtils.dateOnly(anchor).weekday} : rule.weekdays;
+    rule.weekdays.isEmpty
+    ? {DateUtils.dateOnly(anchor).weekday}
+    : rule.weekdays;
 
 /// Whether an occurrence of [rule] anchored at [anchor] *starts* on [day].
-bool recurrenceStartsOnDay(
-  DateTime anchor,
-  RecurrenceRule rule,
-  DateTime day,
-) {
+bool recurrenceStartsOnDay(DateTime anchor, RecurrenceRule rule, DateTime day) {
   final a = DateUtils.dateOnly(anchor);
   final d = DateUtils.dateOnly(day);
   if (d.isBefore(a)) return false;

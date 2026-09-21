@@ -116,23 +116,26 @@ void main() {
   });
 
   group('duplicateReferencesForOwner', () {
-    test('the copy gets both galleries, and the original keeps its own', () async {
-      await attach(MediaFacet.front, 1);
-      await attach(MediaFacet.back, 2);
-      final front = await mediaIds(cardId, MediaFacet.front);
-      final back = await mediaIds(cardId, MediaFacet.back);
+    test(
+      'the copy gets both galleries, and the original keeps its own',
+      () async {
+        await attach(MediaFacet.front, 1);
+        await attach(MediaFacet.back, 2);
+        final front = await mediaIds(cardId, MediaFacet.front);
+        final back = await mediaIds(cardId, MediaFacet.back);
 
-      await service.duplicateReferencesForOwner(
-        collection: FirestoreCollections.studyCards,
-        fromDocumentId: cardId,
-        toDocumentId: copyId,
-      );
+        await service.duplicateReferencesForOwner(
+          collection: FirestoreCollections.studyCards,
+          fromDocumentId: cardId,
+          toDocumentId: copyId,
+        );
 
-      expect(await mediaIds(copyId, MediaFacet.front), front);
-      expect(await mediaIds(copyId, MediaFacet.back), back);
-      expect(await mediaIds(cardId, MediaFacet.front), front);
-      expect(await mediaIds(cardId, MediaFacet.back), back);
-    });
+        expect(await mediaIds(copyId, MediaFacet.front), front);
+        expect(await mediaIds(copyId, MediaFacet.back), back);
+        expect(await mediaIds(cardId, MediaFacet.front), front);
+        expect(await mediaIds(cardId, MediaFacet.back), back);
+      },
+    );
 
     test('it copies placements, not blobs', () async {
       await attach(MediaFacet.front, 1);

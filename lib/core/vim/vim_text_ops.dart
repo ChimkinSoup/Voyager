@@ -14,7 +14,6 @@ library;
 
 import 'dart:math' as math;
 
-
 /// How Vim classifies a character for `w`/`b`/`e` and the `iw` text object.
 ///
 /// Vim moves between *runs* of one class: `foo.bar` is three small-word

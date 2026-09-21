@@ -171,9 +171,7 @@ void main() {
         )
         .selected;
     LeetCodeActivitySeries? calendarSelection() => tester
-        .widget<LeetCodeActivityCalendar>(
-          find.byType(LeetCodeActivityCalendar),
-        )
+        .widget<LeetCodeActivityCalendar>(find.byType(LeetCodeActivityCalendar))
         .series;
 
     expect(chartSelection(), isNull);
@@ -302,10 +300,8 @@ void main() {
       ),
     );
 
-    final row = (String label) => find.ancestor(
-      of: find.text(label),
-      matching: find.byType(Row),
-    );
+    final row = (String label) =>
+        find.ancestor(of: find.text(label), matching: find.byType(Row));
 
     expect(find.text('Reviewed'), findsOneWidget);
     expect(

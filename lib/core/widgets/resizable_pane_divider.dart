@@ -94,6 +94,7 @@ class JournalEntryListLayout {
   static const dividerWidth = 12.0;
   static const minListWidth = 180.0;
   static const maxListWidth = 520.0;
+
   /// The editor's metadata controls — weather, a date pill that never
   /// truncates, trash, plus the dev remote-pull button — need ~335px inside
   /// [editorPadding] even with the mood bar moved to a line of its own. At

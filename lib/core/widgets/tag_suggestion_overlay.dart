@@ -224,8 +224,9 @@ class _TagSuggestionPortalState extends ConsumerState<TagSuggestionPortal> {
 
     // Keep the highlighted row put while the list narrows under the same
     // token; start from the top whenever the caret moves to a different tag.
-    final selected =
-        movedToken ? 0 : _selected.clamp(0, suggestions.length - 1);
+    final selected = movedToken
+        ? 0
+        : _selected.clamp(0, suggestions.length - 1);
     if (selected != _selected || !listEquals(_suggestions, suggestions)) {
       setState(() {
         _suggestions = suggestions;
@@ -302,8 +303,8 @@ class _TagSuggestionPortalState extends ConsumerState<TagSuggestionPortal> {
 
   void _move(int delta) {
     setState(() {
-      _selected = (_selected + delta + _suggestions.length) %
-          _suggestions.length;
+      _selected =
+          (_selected + delta + _suggestions.length) % _suggestions.length;
     });
   }
 

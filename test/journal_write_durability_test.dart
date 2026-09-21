@@ -68,7 +68,10 @@ class _BlockingWeatherApiClient implements WeatherApiClient {
     bool resetArchive = false,
   }) async {
     await refreshGate.future;
-    return WeatherForecast(fetchedAt: DateTime.now().toUtc(), periods: const []);
+    return WeatherForecast(
+      fetchedAt: DateTime.now().toUtc(),
+      periods: const [],
+    );
   }
 }
 
@@ -156,10 +159,7 @@ void main() {
     expect(created, hasLength(2));
     for (final entry in created) {
       expect(
-        await remote.getDocument(
-          FirestoreCollections.journalEntries,
-          entry.id,
-        ),
+        await remote.getDocument(FirestoreCollections.journalEntries, entry.id),
         isNotNull,
         reason: 'entry ${entry.id} never reached the remote',
       );

@@ -55,11 +55,7 @@ void main() {
       for (var i = 0; i < 3000; i++) {
         legacy.add(_legacyAfter(legacy.last));
       }
-      for (final start in [
-        <String>[],
-        FractionalIndex.spread(500),
-        legacy,
-      ]) {
+      for (final start in [<String>[], FractionalIndex.spread(500), legacy]) {
         final keys = _insertRandomly([...start], 400, random);
         for (var i = 1; i < keys.length; i++) {
           expect(keys[i - 1].compareTo(keys[i]), lessThan(0));

@@ -39,8 +39,7 @@ class SearchService {
 
     return candidates.where((entry) {
       final haystack =
-          foldedText?[entry.id] ??
-          '${entry.title} ${entry.body}'.toLowerCase();
+          foldedText?[entry.id] ?? '${entry.title} ${entry.body}'.toLowerCase();
       return tokens.every(haystack.contains);
     }).toList();
   }

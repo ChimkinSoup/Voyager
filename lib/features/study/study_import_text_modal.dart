@@ -120,9 +120,9 @@ class _StudyImportTextModalState extends ConsumerState<_StudyImportTextModal> {
       invalidateStudyCards(ref);
 
       if (!mounted) return;
-      Navigator.of(context).pop(
-        _ImportOutcome(importedCount: cards.length, skipped: skipped),
-      );
+      Navigator.of(
+        context,
+      ).pop(_ImportOutcome(importedCount: cards.length, skipped: skipped));
     } catch (error, stackTrace) {
       // Reported rather than swallowed into the zone: the sheet stays open on
       // the user's typing, so they need to be told why it did not close.
@@ -135,9 +135,9 @@ class _StudyImportTextModalState extends ConsumerState<_StudyImportTextModal> {
         ),
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not import.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Could not import.')));
       }
     } finally {
       // Cleared however the write ended. Left set, the Import button is
@@ -196,10 +196,7 @@ class _StudyImportTextModalState extends ConsumerState<_StudyImportTextModal> {
                 ),
               ),
               const SizedBox(height: 14),
-              Text(
-                _previewSummary(),
-                style: theme.textTheme.labelLarge,
-              ),
+              Text(_previewSummary(), style: theme.textTheme.labelLarge),
               if (previewCards.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 ...previewCards.map((card) {
@@ -243,7 +240,7 @@ class _StudyImportTextModalState extends ConsumerState<_StudyImportTextModal> {
                 label: _importing
                     ? 'Importing…'
                     : 'Import ${_parsed.cards.length} card'
-                        '${_parsed.cards.length == 1 ? '' : 's'}',
+                          '${_parsed.cards.length == 1 ? '' : 's'}',
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ],
@@ -295,7 +292,9 @@ Future<void> _showSkippedLinesDialog(
                   Text(
                     line.rawLine,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.65,
+                      ),
                       fontFamily: 'monospace',
                     ),
                   ),

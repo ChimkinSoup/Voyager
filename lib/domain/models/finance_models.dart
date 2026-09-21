@@ -149,11 +149,11 @@ class Subscription extends SoftDeletable {
   /// The next due date on or after [from] (defaults to now), skipping the
   /// occurrence [paidThroughDate] settles.
   DateTime nextDue([DateTime? from]) => nextDueAfterPaid(
-        anchor: anchorDueDate,
-        period: period,
-        paidThrough: paidThroughDate,
-        from: from ?? DateTime.now(),
-      );
+    anchor: anchorDueDate,
+    period: period,
+    paidThrough: paidThroughDate,
+    from: from ?? DateTime.now(),
+  );
 
   /// Whole days from [from]'s calendar day until the next due date. 0 = due
   /// today, negative should never occur (the next due date is always >= today).
@@ -163,9 +163,11 @@ class Subscription extends SoftDeletable {
     // Counted in UTC so the subtraction is offset-free: differencing two local
     // wall-clock midnights across a DST transition yields 23h or 25h for a
     // nominal day, which truncates a bill due tomorrow to "Due today".
-    return DateTime.utc(due.year, due.month, due.day)
-        .difference(DateTime.utc(base.year, base.month, base.day))
-        .inDays;
+    return DateTime.utc(
+      due.year,
+      due.month,
+      due.day,
+    ).difference(DateTime.utc(base.year, base.month, base.day)).inDays;
   }
 
   Subscription copyWith({
@@ -254,9 +256,11 @@ DateTime nextDueDate(DateTime anchor, BillingPeriod period, DateTime from) {
       // differencing them locally counts a day short — enough to land the
       // "next" due date in the past — and adding a Duration to a wall-clock
       // midnight lands at 23:00 the day before.
-      final elapsed = DateTime.utc(today.year, today.month, today.day)
-          .difference(DateTime.utc(start.year, start.month, start.day))
-          .inDays;
+      final elapsed = DateTime.utc(
+        today.year,
+        today.month,
+        today.day,
+      ).difference(DateTime.utc(start.year, start.month, start.day)).inDays;
       final cycles = (elapsed / step).ceil();
       return DateTime(start.year, start.month, start.day + cycles * step);
     case BillingPeriod.monthly:
@@ -265,8 +269,8 @@ DateTime nextDueDate(DateTime anchor, BillingPeriod period, DateTime from) {
       final stepMonths = period == BillingPeriod.monthly
           ? 1
           : period == BillingPeriod.quarterly
-              ? 3
-              : 12;
+          ? 3
+          : 12;
       var cycles = 0;
       DateTime due;
       do {
@@ -290,8 +294,11 @@ DateTime nextDueAfterPaid({
 }) {
   final due = nextDueDate(anchor, period, from);
   if (paidThrough == null) return due;
-  final paidDay =
-      DateTime(paidThrough.year, paidThrough.month, paidThrough.day);
+  final paidDay = DateTime(
+    paidThrough.year,
+    paidThrough.month,
+    paidThrough.day,
+  );
   if (due.isAfter(paidDay)) return due;
   // Resolved one day past the settled occurrence rather than by adding a
   // period to it: the series still runs off the untouched anchor, so a bill
@@ -576,9 +583,11 @@ class SavingsGoal extends SoftDeletable {
     final base = from ?? DateTime.now();
     // UTC for the same reason as [Subscription.daysUntilDue]: a DST
     // transition inside the interval would otherwise cost or add a day.
-    return DateTime.utc(target.year, target.month, target.day)
-        .difference(DateTime.utc(base.year, base.month, base.day))
-        .inDays;
+    return DateTime.utc(
+      target.year,
+      target.month,
+      target.day,
+    ).difference(DateTime.utc(base.year, base.month, base.day)).inDays;
   }
 
   SavingsGoal copyWith({

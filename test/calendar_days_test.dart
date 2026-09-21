@@ -124,10 +124,7 @@ void main() {
       // Spanning the spring-forward: the record on Mar 15 is 14 calendar days
       // out, and used to be filed under day 13.
       final spots = analytics.interpolateConsecutive(
-        values: [
-          value(springForward, 0),
-          value(DateTime(2026, 3, 15), 14),
-        ],
+        values: [value(springForward, 0), value(DateTime(2026, 3, 15), 14)],
         from: springForward,
         to: DateTime(2026, 3, 15),
         maxDays: 14,

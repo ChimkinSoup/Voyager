@@ -38,24 +38,26 @@ Future<void> showMediaLightbox(
     'captions must line up one-for-one with assets',
   );
   _openLightboxes++;
-  return Navigator.of(context, rootNavigator: true).push(
-    PageRouteBuilder<void>(
-      opaque: false,
-      barrierColor: Colors.black87,
-      barrierDismissible: true,
-      barrierLabel: 'Close image',
-      pageBuilder: (_, _, _) => _MediaLightbox(
-        assets: assets,
-        initialIndex: initialIndex,
-        onRemove: onRemove,
-        viewportFraction: viewportFraction,
-        captions: captions,
-      ),
-      transitionsBuilder: (_, animation, _, child) =>
-          FadeTransition(opacity: animation, child: child),
-      transitionDuration: const Duration(milliseconds: 160),
-    ),
-  ).whenComplete(() => _openLightboxes--);
+  return Navigator.of(context, rootNavigator: true)
+      .push(
+        PageRouteBuilder<void>(
+          opaque: false,
+          barrierColor: Colors.black87,
+          barrierDismissible: true,
+          barrierLabel: 'Close image',
+          pageBuilder: (_, _, _) => _MediaLightbox(
+            assets: assets,
+            initialIndex: initialIndex,
+            onRemove: onRemove,
+            viewportFraction: viewportFraction,
+            captions: captions,
+          ),
+          transitionsBuilder: (_, animation, _, child) =>
+              FadeTransition(opacity: animation, child: child),
+          transitionDuration: const Duration(milliseconds: 160),
+        ),
+      )
+      .whenComplete(() => _openLightboxes--);
 }
 
 int _openLightboxes = 0;
@@ -170,12 +172,8 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
     // Scaled about the centre rather than about the last pointer position:
     // the buttons have no pointer, and anchoring to the origin would walk the
     // image off-screen as it grew.
-    controller.value = Matrix4.identity()..scaleByDouble(
-      target,
-      target,
-      target,
-      1,
-    );
+    controller.value = Matrix4.identity()
+      ..scaleByDouble(target, target, target, 1);
   }
 
   /// Whether the page at [index] is magnified, and so owns its own drag.
@@ -342,7 +340,8 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
     // settings_page.dart for why the latter takes the process down on Windows.
     final targetPath = await FilePicker.platform.saveFile(
       dialogTitle: 'Save image',
-      fileName: 'voyager_image_${_current.contentHash.substring(0, 8)}'
+      fileName:
+          'voyager_image_${_current.contentHash.substring(0, 8)}'
           '.$extension',
       type: FileType.custom,
       allowedExtensions: [extension],
@@ -375,9 +374,7 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
     }
     setState(() {
       _assets = [..._assets]..removeAt(index);
-      _captions = _captions == null
-          ? null
-          : ([..._captions!]..removeAt(index));
+      _captions = _captions == null ? null : ([..._captions!]..removeAt(index));
       // Stand on the image that took its place, or on the new last one when
       // the removed image was itself last.
       _index = index.clamp(0, _assets.length - 1);
@@ -522,7 +519,9 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
                       ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+                        borderRadius: BorderRadius.circular(
+                          VoyagerTheme.fieldRadius,
+                        ),
                       ),
                       child: Text(
                         '${_index + 1} / ${assets.length}',

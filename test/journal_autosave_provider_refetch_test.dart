@@ -34,7 +34,8 @@ class _CountingJournalRepository implements JournalRepository {
   var countEntriesCalls = 0;
 
   /// Whole-table reads since [resetCounts].
-  int get tableScans => listEntriesCalls + getAllEntriesCalls + countEntriesCalls;
+  int get tableScans =>
+      listEntriesCalls + getAllEntriesCalls + countEntriesCalls;
 
   void resetCounts() {
     listEntriesCalls = 0;
@@ -67,7 +68,9 @@ class _CountingJournalRepository implements JournalRepository {
   }
 
   @override
-  Future<Map<String, int>> countEntriesByJournal({bool includeDeleted = false}) {
+  Future<Map<String, int>> countEntriesByJournal({
+    bool includeDeleted = false,
+  }) {
     countEntriesCalls++;
     return _delegate.countEntriesByJournal(includeDeleted: includeDeleted);
   }
@@ -78,8 +81,10 @@ class _CountingJournalRepository implements JournalRepository {
   Future<JournalEntry?> getEntry(String id) => _delegate.getEntry(id);
 
   @override
-  Future<void> upsertEntry(JournalEntry entry, {bool recordLocalActivity = true}) =>
-      _delegate.upsertEntry(entry, recordLocalActivity: recordLocalActivity);
+  Future<void> upsertEntry(
+    JournalEntry entry, {
+    bool recordLocalActivity = true,
+  }) => _delegate.upsertEntry(entry, recordLocalActivity: recordLocalActivity);
 
   @override
   Future<void> softDeleteEntry(String id) => _delegate.softDeleteEntry(id);
@@ -99,8 +104,13 @@ class _CountingJournalRepository implements JournalRepository {
   Future<Journal?> getJournal(String id) => _delegate.getJournal(id);
 
   @override
-  Future<void> upsertJournal(Journal journal, {bool recordLocalActivity = true}) =>
-      _delegate.upsertJournal(journal, recordLocalActivity: recordLocalActivity);
+  Future<void> upsertJournal(
+    Journal journal, {
+    bool recordLocalActivity = true,
+  }) => _delegate.upsertJournal(
+    journal,
+    recordLocalActivity: recordLocalActivity,
+  );
 
   @override
   Future<void> softDeleteJournal(String id) => _delegate.softDeleteJournal(id);

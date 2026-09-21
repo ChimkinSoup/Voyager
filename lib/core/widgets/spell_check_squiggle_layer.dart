@@ -195,7 +195,8 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
     if (_spansForText == text && _spansGeneration == service.generation) {
       return _cachedSpans;
     }
-    _cachedSpans = (_spansForText != null && _spansGeneration == service.generation)
+    _cachedSpans =
+        (_spansForText != null && _spansGeneration == service.generation)
         ? service.checkIncremental(
             oldText: _spansForText!,
             oldSpans: _cachedSpans,
@@ -221,9 +222,11 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
       final selection = widget.controller.selection;
       // A paste / Vim put is a finished edit, even if the caret lands inside
       // the new word. Only a keystroke-sized change hides the active token.
-      final looksLikeTyping = inserted > 0 &&
+      final looksLikeTyping =
+          inserted > 0 &&
           inserted <= VoyagerSpellCheckService.maxDeferredInsertionLength;
-      _activeEditRange = widget.suppressActiveWord &&
+      _activeEditRange =
+          widget.suppressActiveWord &&
               looksLikeTyping &&
               selection.isValid &&
               selection.isCollapsed
@@ -231,7 +234,8 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
           : null;
     } else if (_activeEditRange != null) {
       final selection = widget.controller.selection;
-      final stillInside = selection.isValid &&
+      final stillInside =
+          selection.isValid &&
           selection.isCollapsed &&
           selection.baseOffset >= _activeEditRange!.start &&
           selection.baseOffset <= _activeEditRange!.end;
@@ -307,18 +311,12 @@ class _SpellCheckSquiggleLayerState extends State<SpellCheckSquiggleLayer> {
     // lets this paint into the vertical padding the text scrolls through.
     final scrollController = widget.scrollController;
     if (scrollController == null) {
-      return Transform.translate(
-        offset: Offset(0, clearance),
-        child: richText,
-      );
+      return Transform.translate(offset: Offset(0, clearance), child: richText);
     }
 
     return ScrollOffsetFollower(
       controller: scrollController,
-      child: Transform.translate(
-        offset: Offset(0, clearance),
-        child: richText,
-      ),
+      child: Transform.translate(offset: Offset(0, clearance), child: richText),
     );
   }
 }

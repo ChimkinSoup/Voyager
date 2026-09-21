@@ -92,28 +92,31 @@ void main() {
     expect((await repo.listAssets()).single.contributionRoomId, 'room');
   });
 
-  test('contribute writes a linked deposit, the event and a valuation', () async {
-    await addRoom();
-    final asset = await addAsset('a', roomId: 'room', valueCents: 100000);
+  test(
+    'contribute writes a linked deposit, the event and a valuation',
+    () async {
+      await addRoom();
+      final asset = await addAsset('a', roomId: 'room', valueCents: 100000);
 
-    final event = await contribute(asset, 25000, valuationCents: 125000);
+      final event = await contribute(asset, 25000, valuationCents: 125000);
 
-    final tx = (await repo.listTransactions()).single;
-    expect(tx.type, TransactionType.deposit);
-    expect(tx.amountCents, 25000);
-    expect(tx.roomEventId, event.id);
-    expect(tx.origin, 'Asset a');
-    expect(tx.note, 'March');
+      final tx = (await repo.listTransactions()).single;
+      expect(tx.type, TransactionType.deposit);
+      expect(tx.amountCents, 25000);
+      expect(tx.roomEventId, event.id);
+      expect(tx.origin, 'Asset a');
+      expect(tx.note, 'March');
 
-    final stored = (await repo.getAssetRoomEvent(event.id))!;
-    expect(stored.transactionId, tx.id);
-    expect(stored.roomId, 'room');
+      final stored = (await repo.getAssetRoomEvent(event.id))!;
+      expect(stored.transactionId, tx.id);
+      expect(stored.roomId, 'room');
 
-    final valuations = await repo.listAssetValuations(assetId: 'a');
-    expect(valuations.first.valueCents, 125000);
-    expect(valuations.first.asOf, DateTime(2026, 3, 5));
-    expect(stored.valuationId, valuations.first.id);
-  });
+      final valuations = await repo.listAssetValuations(assetId: 'a');
+      expect(valuations.first.valueCents, 125000);
+      expect(valuations.first.asOf, DateTime(2026, 3, 5));
+      expect(stored.valuationId, valuations.first.id);
+    },
+  );
 
   test('withdraw writes an expense', () async {
     await addRoom();
@@ -149,33 +152,38 @@ void main() {
     expect(() => contribute(asset, 1000), throwsStateError);
   });
 
-  test('deleting the ledger row takes the event; restore brings both', () async {
-    await addRoom();
-    final asset = await addAsset('a', roomId: 'room');
-    final event = await contribute(asset, 25000);
-    final tx = (await repo.listTransactions()).single;
+  test(
+    'deleting the ledger row takes the event; restore brings both',
+    () async {
+      await addRoom();
+      final asset = await addAsset('a', roomId: 'room');
+      final event = await contribute(asset, 25000);
+      final tx = (await repo.listTransactions()).single;
 
-    await repo.softDeleteTransaction(tx.id);
-    expect(await repo.listAssetRoomEvents(), isEmpty);
-    expect(await repo.listTransactions(), isEmpty);
+      await repo.softDeleteTransaction(tx.id);
+      expect(await repo.listAssetRoomEvents(), isEmpty);
+      expect(await repo.listTransactions(), isEmpty);
 
-    await repo.restoreAssetRoomEvent(event.id);
-    final restored = (await repo.getAssetRoomEvent(event.id))!;
-    expect(restored.deletedAt, isNull);
-    expect(restored.version, greaterThan(event.version + 1));
-    expect((await repo.getTransaction(tx.id))!.deletedAt, isNull);
-  });
+      await repo.restoreAssetRoomEvent(event.id);
+      final restored = (await repo.getAssetRoomEvent(event.id))!;
+      expect(restored.deletedAt, isNull);
+      expect(restored.version, greaterThan(event.version + 1));
+      expect((await repo.getTransaction(tx.id))!.deletedAt, isNull);
+    },
+  );
 
-  test('deleting the event takes the ledger row but not the valuation',
-      () async {
-    await addRoom();
-    final asset = await addAsset('a', roomId: 'room');
-    final event = await contribute(asset, 25000, valuationCents: 25000);
+  test(
+    'deleting the event takes the ledger row but not the valuation',
+    () async {
+      await addRoom();
+      final asset = await addAsset('a', roomId: 'room');
+      final event = await contribute(asset, 25000, valuationCents: 25000);
 
-    await repo.softDeleteAssetRoomEvent(event.id);
-    expect(await repo.listTransactions(), isEmpty);
-    expect(await repo.listAssetValuations(assetId: 'a'), hasLength(1));
-  });
+      await repo.softDeleteAssetRoomEvent(event.id);
+      expect(await repo.listTransactions(), isEmpty);
+      expect(await repo.listAssetValuations(assetId: 'a'), hasLength(1));
+    },
+  );
 
   test('a transfer is two legs, no ledger rows, deleted together', () async {
     await addRoom();
@@ -362,9 +370,9 @@ void main() {
     final file = File('${dir.path}/voyager.sqlite');
 
     final seed = AppDatabase(NativeDatabase(file));
-    await DriftFinanceRepository(seed).upsertAsset(
-      Asset(id: 'a', createdAt: _t0, updatedAt: _t0, name: 'Old'),
-    );
+    await DriftFinanceRepository(
+      seed,
+    ).upsertAsset(Asset(id: 'a', createdAt: _t0, updatedAt: _t0, name: 'Old'));
     await seed.customStatement('DROP TABLE contribution_rooms_table');
     await seed.customStatement('DROP TABLE asset_room_events_table');
     await seed.customStatement(

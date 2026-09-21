@@ -27,7 +27,9 @@ import 'package:voyager/features/finance/finance_transaction_modal.dart';
 
 import 'fakes/fake_weather_api_client.dart';
 
-Future<DriftFinanceRepository> _openTransactionSheet(WidgetTester tester) async {
+Future<DriftFinanceRepository> _openTransactionSheet(
+  WidgetTester tester,
+) async {
   tester.view.physicalSize = const Size(1200, 900);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);

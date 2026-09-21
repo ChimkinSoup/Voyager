@@ -75,12 +75,14 @@ class PerfStallLogger extends ChangeNotifier {
     final marker = File(await _pathFor(_enabledFileName));
     if (!await marker.exists()) return;
     _start();
-    _enqueue((file) => file.writeAsString(
-          '\n=== APP START ${_stamp(DateTime.now())} '
-          '(${_buildMode()} build) ===\n',
-          mode: FileMode.append,
-          flush: true,
-        ));
+    _enqueue(
+      (file) => file.writeAsString(
+        '\n=== APP START ${_stamp(DateTime.now())} '
+        '(${_buildMode()} build) ===\n',
+        mode: FileMode.append,
+        flush: true,
+      ),
+    );
   }
 
   Future<void> setEnabled(bool value) async {
@@ -93,12 +95,14 @@ class PerfStallLogger extends ChangeNotifier {
       if (await marker.exists()) await marker.delete();
       _stop();
     }
-    _enqueue((file) => file.writeAsString(
-          '\n=== LOGGING ${value ? 'STARTED' : 'STOPPED'} '
-          '${_stamp(DateTime.now())} (${_buildMode()} build) ===\n',
-          mode: FileMode.append,
-          flush: true,
-        ));
+    _enqueue(
+      (file) => file.writeAsString(
+        '\n=== LOGGING ${value ? 'STARTED' : 'STOPPED'} '
+        '${_stamp(DateTime.now())} (${_buildMode()} build) ===\n',
+        mode: FileMode.append,
+        flush: true,
+      ),
+    );
   }
 
   /// Notes something the app did, for the record of any stall that follows
@@ -166,7 +170,8 @@ class PerfStallLogger extends ChangeNotifier {
     if (blocked < stallThreshold || gap > _sleepGap) return;
     _report(
       startedAt: DateTime.now().subtract(gap),
-      line: 'Dart thread blocked ${blocked.inMilliseconds}ms '
+      line:
+          'Dart thread blocked ${blocked.inMilliseconds}ms '
           '(input and timers waited)',
     );
   }
@@ -179,7 +184,8 @@ class PerfStallLogger extends ChangeNotifier {
         // Timings arrive in batches after the fact; the report time is the
         // closest wall-clock anchor available.
         startedAt: DateTime.now().subtract(total),
-        line: 'slow frame ${total.inMilliseconds}ms '
+        line:
+            'slow frame ${total.inMilliseconds}ms '
             '(waited ${timing.vsyncOverhead.inMilliseconds}ms for the Dart '
             'thread, build ${timing.buildDuration.inMilliseconds}ms, '
             'raster ${timing.rasterDuration.inMilliseconds}ms)',
@@ -243,7 +249,9 @@ class PerfStallLogger extends ChangeNotifier {
     } catch (_) {
       page = null;
     }
-    buffer.writeln('  page: ${page ?? '(unknown)'}   focus: ${_describeFocus()}');
+    buffer.writeln(
+      '  page: ${page ?? '(unknown)'}   focus: ${_describeFocus()}',
+    );
 
     int within(ListQueue<DateTime> stamps) {
       final since = startedAt.subtract(_inputWindow);
@@ -311,7 +319,8 @@ class PerfStallLogger extends ChangeNotifier {
 
   static String _stamp(DateTime at, {bool dateless = false}) {
     String two(int v) => v.toString().padLeft(2, '0');
-    final time = '${two(at.hour)}:${two(at.minute)}:${two(at.second)}'
+    final time =
+        '${two(at.hour)}:${two(at.minute)}:${two(at.second)}'
         '.${at.millisecond.toString().padLeft(3, '0')}';
     if (dateless) return time;
     return '${at.year}-${two(at.month)}-${two(at.day)} $time';

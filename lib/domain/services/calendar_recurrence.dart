@@ -24,15 +24,15 @@ import 'package:voyager/domain/services/recurrence_engine.dart';
 
 class NormalizedCalendarEvent {
   NormalizedCalendarEvent(this.event)
-      : startLocal = DateUtils.dateOnly(event.start.toLocal()),
-        endLocal = DateUtils.dateOnly(event.end.toLocal()),
-        untilLocal = event.recurrenceEndDate == null
-            ? null
-            : DateUtils.dateOnly(event.recurrenceEndDate!.toLocal()),
-        exceptionDays = {
-          for (final d in event.exceptionDates)
-            epochDay(DateUtils.dateOnly(d.toLocal())),
-        };
+    : startLocal = DateUtils.dateOnly(event.start.toLocal()),
+      endLocal = DateUtils.dateOnly(event.end.toLocal()),
+      untilLocal = event.recurrenceEndDate == null
+          ? null
+          : DateUtils.dateOnly(event.recurrenceEndDate!.toLocal()),
+      exceptionDays = {
+        for (final d in event.exceptionDates)
+          epochDay(DateUtils.dateOnly(d.toLocal())),
+      };
 
   final CalendarEvent event;
 
@@ -59,8 +59,7 @@ class NormalizedCalendarEvent {
 /// exactly once rather than once per checked day.
 List<NormalizedCalendarEvent> normalizeCalendarEvents(
   List<CalendarEvent> events,
-) =>
-    [for (final e in events) NormalizedCalendarEvent(e)];
+) => [for (final e in events) NormalizedCalendarEvent(e)];
 
 /// The start date of the occurrence that covers [localDay], or null when none
 /// does.
@@ -110,8 +109,7 @@ DateTime? _coveringOccurrenceStart(
 bool calendarEventOccursOnDayNormalized(
   NormalizedCalendarEvent n,
   DateTime localDay, // must already be date-only local
-) =>
-    _coveringOccurrenceStart(n, localDay) != null;
+) => _coveringOccurrenceStart(n, localDay) != null;
 
 bool calendarEventOccursOnDay(CalendarEvent event, DateTime day) =>
     calendarEventOccursOnDayNormalized(

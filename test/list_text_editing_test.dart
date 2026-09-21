@@ -8,7 +8,9 @@ import 'package:voyager/core/text/list_text_editing.dart';
 /// would (controller already holds the post-keystroke value).
 TextEditingController _typeAtEnd(String previousText, String typed) {
   final controller = TextEditingController(text: previousText + typed)
-    ..selection = TextSelection.collapsed(offset: previousText.length + typed.length);
+    ..selection = TextSelection.collapsed(
+      offset: previousText.length + typed.length,
+    );
   applyListEditing(controller: controller, previousText: previousText);
   return controller;
 }
@@ -18,7 +20,9 @@ TextEditingController _typeAtEnd(String previousText, String typed) {
 /// is the state `onChanged` sees.
 TextEditingController _pasteAtEnd(String previousText, String pasted) {
   final controller = TextEditingController(text: previousText + pasted)
-    ..selection = TextSelection.collapsed(offset: previousText.length + pasted.length);
+    ..selection = TextSelection.collapsed(
+      offset: previousText.length + pasted.length,
+    );
   applyListEditing(controller: controller, previousText: previousText);
   return controller;
 }
@@ -113,7 +117,10 @@ void main() {
 
     test('nested indent levels renumber independently', () {
       final c = controllerFor('1. a\n  5. x\n  9. y\n7. b');
-      applyListEditing(controller: c, previousText: '1. a\n  5. x\n  9. y\n7. b');
+      applyListEditing(
+        controller: c,
+        previousText: '1. a\n  5. x\n  9. y\n7. b',
+      );
       expect(c.text, '1. a\n  5. x\n  6. y\n2. b');
     });
 
@@ -161,13 +168,16 @@ void main() {
       expect(c.text, '- item');
     });
 
-    test('non-list lines report unhandled so callers keep default Tab behavior', () {
-      final c = TextEditingController(text: 'plain text')
-        ..selection = const TextSelection.collapsed(offset: 4);
-      final handled = handleListTab(controller: c, outdent: false);
-      expect(handled, isFalse);
-      expect(c.text, 'plain text');
-    });
+    test(
+      'non-list lines report unhandled so callers keep default Tab behavior',
+      () {
+        final c = TextEditingController(text: 'plain text')
+          ..selection = const TextSelection.collapsed(offset: 4);
+        final handled = handleListTab(controller: c, outdent: false);
+        expect(handled, isFalse);
+        expect(c.text, 'plain text');
+      },
+    );
 
     test('indenting a numbered item renumbers both the old and new blocks', () {
       final text = '1. a\n2. b\n3. c';
@@ -190,14 +200,12 @@ void main() {
     });
 
     test('multi-line paste of list content integrates with renumbering', () {
-      final c = TextEditingController(text: '1. existing\n1. pasted a\n1. pasted b')
-        ..selection = TextSelection.collapsed(
-          offset: '1. existing\n1. pasted a\n1. pasted b'.length,
-        );
-      applyListEditing(
-        controller: c,
-        previousText: '1. existing',
-      );
+      final c =
+          TextEditingController(text: '1. existing\n1. pasted a\n1. pasted b')
+            ..selection = TextSelection.collapsed(
+              offset: '1. existing\n1. pasted a\n1. pasted b'.length,
+            );
+      applyListEditing(controller: c, previousText: '1. existing');
       expect(c.text, '1. existing\n2. pasted a\n3. pasted b');
     });
   });
@@ -271,18 +279,23 @@ void main() {
       expect(controller.text, 'x\ny- a');
     });
 
-    test('replacing a selection with a multi-line paste continues the list', () {
-      final controller = TextEditingController(text: '- one\ntwo')
-        ..selection = const TextSelection.collapsed(offset: 9);
-      applyListEditing(controller: controller, previousText: '- x');
-      expect(controller.text, '- one\n- two');
-    });
+    test(
+      'replacing a selection with a multi-line paste continues the list',
+      () {
+        final controller = TextEditingController(text: '- one\ntwo')
+          ..selection = const TextSelection.collapsed(offset: 9);
+        applyListEditing(controller: controller, previousText: '- x');
+        expect(controller.text, '- one\n- two');
+      },
+    );
   });
 
   // The unit tests above drive [applyListEditing] directly; this one proves a
   // real clipboard paste reaches it, through the same `onChanged` wiring the
   // journal, dream journal, todo and calendar notes fields use.
-  testWidgets('a clipboard paste continues the list end to end', (tester) async {
+  testWidgets('a clipboard paste continues the list end to end', (
+    tester,
+  ) async {
     const pasted = 'one\ntwo\nthree';
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
@@ -368,17 +381,20 @@ void main() {
       expect(c.selection, const TextSelection.collapsed(offset: 0));
     });
 
-    test('removing a middle marker renumbers the trailing block if still contiguous', () {
-      const text = '1. a\n2. b\n3. c';
-      final markerEnd = text.indexOf('2. ') + '2. '.length;
-      final c = TextEditingController(text: text)
-        ..selection = TextSelection.collapsed(offset: markerEnd);
-      final handled = handleListBackspace(controller: c);
-      expect(handled, isTrue);
-      // "b" is no longer numbered, breaking contiguity, so "3. c" is now a
-      // fresh anchored block and keeps its own number.
-      expect(c.text, '1. a\nb\n3. c');
-    });
+    test(
+      'removing a middle marker renumbers the trailing block if still contiguous',
+      () {
+        const text = '1. a\n2. b\n3. c';
+        final markerEnd = text.indexOf('2. ') + '2. '.length;
+        final c = TextEditingController(text: text)
+          ..selection = TextSelection.collapsed(offset: markerEnd);
+        final handled = handleListBackspace(controller: c);
+        expect(handled, isTrue);
+        // "b" is no longer numbered, breaking contiguity, so "3. c" is now a
+        // fresh anchored block and keeps its own number.
+        expect(c.text, '1. a\nb\n3. c');
+      },
+    );
 
     test('does nothing when cursor is not right at the marker boundary', () {
       final c = TextEditingController(text: '- item')

@@ -386,11 +386,7 @@ EditableTextContextMenuBuilder voyagerTextContextMenuBuilder(
 ) {
   final selection = value.selection;
   if (!selection.isValid) return null;
-  final found = knownWordAtCursor(
-    context,
-    value.text,
-    selection.extentOffset,
-  );
+  final found = knownWordAtCursor(context, value.text, selection.extentOffset);
   if (found == null) return null;
   if (!selection.isCollapsed &&
       (selection.start < found.range.start ||

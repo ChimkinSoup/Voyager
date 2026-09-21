@@ -4,10 +4,15 @@
 /// [overshoot] is the raw distance already past the boundary; [dimension] is
 /// the size of the scrollable/draggable region (used to scale how quickly
 /// resistance ramps up). Mirrors UIScrollView's rubber-banding constant.
-double rubberBand(double overshoot, double dimension, [double constant = 0.55]) {
+double rubberBand(
+  double overshoot,
+  double dimension, [
+  double constant = 0.55,
+]) {
   if (dimension <= 0) return 0;
   final magnitude =
-      (overshoot.abs() * dimension * constant) / (dimension + constant * overshoot.abs());
+      (overshoot.abs() * dimension * constant) /
+      (dimension + constant * overshoot.abs());
   return overshoot.isNegative ? -magnitude : magnitude;
 }
 

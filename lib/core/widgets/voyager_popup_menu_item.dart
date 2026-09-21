@@ -23,7 +23,9 @@ Future<T?> showVoyagerMenu<T>({
 }) {
   final theme = Theme.of(context);
   final menuStyle = VoyagerMenuTheme.showMenuStyle(theme);
-  final shape = accentColor != null ? VoyagerMenuTheme.shape(accentColor) : menuStyle.shape;
+  final shape = accentColor != null
+      ? VoyagerMenuTheme.shape(accentColor)
+      : menuStyle.shape;
 
   return Navigator.of(context).push<T>(
     VoyagerPopupMenuRoute<T>(
@@ -105,8 +107,10 @@ class VoyagerPopupMenuRouteLayout extends SingleChildLayoutDelegate {
       } else {
         final double availableAbove = position.top - padding.top - 8;
         if (availableAbove > availableBelow) {
-          y = (position.top - 8 - childSize.height)
-              .clamp(padding.top, position.top - 8);
+          y = (position.top - 8 - childSize.height).clamp(
+            padding.top,
+            position.top - 8,
+          );
         } else {
           y = position.top;
         }
@@ -248,7 +252,6 @@ class VoyagerPopupMenuRoute<T> extends PopupRoute<T> {
   }
 }
 
-
 /// Builds popup menu entries with position-aware rounded hover highlights.
 List<PopupMenuEntry<T>> voyagerPopupMenuEntries<T>(
   List<({T value, Widget child})> items,
@@ -278,18 +281,11 @@ List<PopupMenuEntry<T>> voyagerSelectMenuEntries<T>({
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                items[i].label,
-                overflow: TextOverflow.ellipsis,
-              ),
+              child: Text(items[i].label, overflow: TextOverflow.ellipsis),
             ),
             if (items[i].value == selected) ...[
               const SizedBox(width: 8),
-              Icon(
-                PhosphorIconsRegular.check,
-                size: 18,
-                color: checkColor,
-              ),
+              Icon(PhosphorIconsRegular.check, size: 18, color: checkColor),
             ],
           ],
         ),
@@ -327,7 +323,9 @@ class _VoyagerPopupMenuItemState<T>
     final style =
         widget.labelTextStyle?.resolve(states) ??
         popupMenuTheme.labelTextStyle?.resolve(states) ??
-        theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.onSurface);
+        theme.textTheme.labelLarge?.copyWith(
+          color: theme.colorScheme.onSurface,
+        );
     final padding = widget.padding ?? VoyagerMenuTheme.itemPadding(theme);
     final highlightRadius = VoyagerMenuTheme.itemHighlightRadius(
       widget.position,

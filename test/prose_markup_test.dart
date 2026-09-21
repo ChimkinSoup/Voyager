@@ -35,10 +35,7 @@ void main() {
     });
 
     test('independent adjacent spans', () {
-      expect(shape('__u__ next to **b**'), [
-        'underline:0..5',
-        'bold:14..19',
-      ]);
+      expect(shape('__u__ next to **b**'), ['underline:0..5', 'bold:14..19']);
     });
 
     test('plain prose parses to nothing', () {
@@ -102,8 +99,8 @@ void main() {
             final outer = spans[i];
             final inner = spans[j];
             final disjoint = inner.start >= outer.end;
-            final contained = inner.start >= outer.start &&
-                inner.end <= outer.end;
+            final contained =
+                inner.start >= outer.start && inner.end <= outer.end;
             expect(
               disjoint || contained,
               isTrue,
@@ -263,31 +260,36 @@ void main() {
     });
 
     test('a caret outside every span reveals nothing', () {
-      expect(markup.revealedBy(const TextSelection.collapsed(offset: 0)),
-          isEmpty);
-      expect(markup.revealedBy(const TextSelection.collapsed(offset: 20)),
-          isEmpty);
+      expect(
+        markup.revealedBy(const TextSelection.collapsed(offset: 0)),
+        isEmpty,
+      );
+      expect(
+        markup.revealedBy(const TextSelection.collapsed(offset: 20)),
+        isEmpty,
+      );
     });
 
     test('a caret inside the inner span reveals it and its ancestors', () {
-      expect(
-        markup.revealedBy(const TextSelection.collapsed(offset: 11)),
-        {bold, italic},
-      );
+      expect(markup.revealedBy(const TextSelection.collapsed(offset: 11)), {
+        bold,
+        italic,
+      });
     });
 
     test('a caret inside only the outer span reveals only it', () {
-      expect(
-        markup.revealedBy(const TextSelection.collapsed(offset: 5)),
-        {bold},
-      );
+      expect(markup.revealedBy(const TextSelection.collapsed(offset: 5)), {
+        bold,
+      });
     });
 
     test('a caret on a span edge reveals it', () {
-      expect(markup.revealedBy(const TextSelection.collapsed(offset: 2)),
-          {bold});
-      expect(markup.revealedBy(const TextSelection.collapsed(offset: 19)),
-          {bold});
+      expect(markup.revealedBy(const TextSelection.collapsed(offset: 2)), {
+        bold,
+      });
+      expect(markup.revealedBy(const TextSelection.collapsed(offset: 19)), {
+        bold,
+      });
     });
 
     test('a selection reveals every span it touches', () {
@@ -302,8 +304,10 @@ void main() {
     });
 
     test('an invalid selection reveals nothing', () {
-      expect(markup.revealedBy(const TextSelection.collapsed(offset: -1)),
-          isEmpty);
+      expect(
+        markup.revealedBy(const TextSelection.collapsed(offset: -1)),
+        isEmpty,
+      );
     });
   });
 

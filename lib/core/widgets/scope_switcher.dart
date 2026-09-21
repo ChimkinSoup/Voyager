@@ -80,20 +80,20 @@ class ScopeSwitcher<T> extends StatelessWidget {
             onTap: items.isEmpty
                 ? null
                 : () => showContextualPopover<void>(
-                      context: context,
-                      buttonContext: buttonContext,
-                      accentColor: accent,
-                      width: popoverWidth,
-                      builder: (context) => _ScopeMenu<T>(
-                        items: items,
-                        selectedValue: selectedValue,
-                        onSelected: onSelected,
-                        // Resolved here, outside the popover: inside it the
-                        // theme's primary is re-tinted to [accent], so the
-                        // all-scope row would wear the open scope's colour.
-                        appAccent: theme.colorScheme.primary,
-                      ),
+                    context: context,
+                    buttonContext: buttonContext,
+                    accentColor: accent,
+                    width: popoverWidth,
+                    builder: (context) => _ScopeMenu<T>(
+                      items: items,
+                      selectedValue: selectedValue,
+                      onSelected: onSelected,
+                      // Resolved here, outside the popover: inside it the
+                      // theme's primary is re-tinted to [accent], so the
+                      // all-scope row would wear the open scope's colour.
+                      appAccent: theme.colorScheme.primary,
                     ),
+                  ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               child: Row(

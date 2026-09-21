@@ -10,5 +10,7 @@ String todoListDocumentIdForFirestore(String localId) {
 }
 
 String todoListDocumentIdFromFirestore(String firestoreId) {
-  return firestoreId == legacyTodoListFirestoreId ? legacyTodoListId : firestoreId;
+  return firestoreId == legacyTodoListFirestoreId
+      ? legacyTodoListId
+      : firestoreId;
 }

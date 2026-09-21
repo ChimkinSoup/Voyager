@@ -87,7 +87,7 @@ computeColorPaletteLayout({
 
   double boxW = intrinsicW;
   double boxH = intrinsicH;
-  
+
   var scrollable = false;
   if (boxH > cappedMaxHeight) {
     boxH = cappedMaxHeight;
@@ -163,9 +163,13 @@ class ColorPaletteGrid extends StatelessWidget {
 
         final visualDiameter = _swatchVisualRadius(swatchRadius) * 2;
         final cell = visualDiameter + _paletteSpacing;
-        final columns = math.max(1, ((availableWidth - 32 + _paletteSpacing) / cell).floor());
+        final columns = math.max(
+          1,
+          ((availableWidth - 32 + _paletteSpacing) / cell).floor(),
+        );
         final rows = (palette.length / columns).ceil();
-        final intrinsicH = rows * visualDiameter + (rows - 1) * _paletteSpacing + 32.0;
+        final intrinsicH =
+            rows * visualDiameter + (rows - 1) * _paletteSpacing + 32.0;
 
         // Cap the visible height. Inside an unbounded context (SingleChildScrollView)
         // constraints.maxHeight is infinity, so we fall back to maxHeight param.
@@ -176,8 +180,9 @@ class ColorPaletteGrid extends StatelessWidget {
         final viewportH = math.min(intrinsicH, capH);
         final needsScroll = intrinsicH > capH;
 
-        final normalizedSelected =
-            selected == null ? null : normalizeColorValue(selected!);
+        final normalizedSelected = selected == null
+            ? null
+            : normalizeColorValue(selected!);
 
         final wrap = Padding(
           padding: const EdgeInsets.all(16.0),
@@ -301,8 +306,6 @@ class _ColorPickerFieldState extends ConsumerState<ColorPickerField> {
     );
   }
 }
-
-
 
 Future<int?> pickColorFromPalette(
   BuildContext context, {
@@ -436,7 +439,7 @@ class _ColorSwatch extends StatelessWidget {
     final theme = Theme.of(context);
     final usedRingColor = theme.colorScheme.onSurface.withValues(alpha: 0.88);
     final diameter = radius * 2;
-    
+
     final swatchColor = paletteColor(colorValue, context);
     final checkColor = onColorLabel(swatchColor);
 
@@ -446,7 +449,11 @@ class _ColorSwatch extends StatelessWidget {
       // The selection ring *is* the focus indicator, so keyboard traversal
       // has to carry the selection with it — otherwise arrow keys move an
       // invisible cursor and Enter saves whatever was picked by mouse.
-      onFocusChange: selectOnFocus ? (focused) { if (focused) onTap(); } : null,
+      onFocusChange: selectOnFocus
+          ? (focused) {
+              if (focused) onTap();
+            }
+          : null,
       customBorder: const CircleBorder(),
       child: Ink(
         width: diameter,
@@ -460,11 +467,13 @@ class _ColorSwatch extends StatelessWidget {
               ? Border.all(color: usedRingColor, width: 3)
               : null,
         ),
-        child: selected ? Icon(
-          PhosphorIconsFill.checkFat,
-          color: checkColor,
-          size: radius * 1.2,
-        ) : null,
+        child: selected
+            ? Icon(
+                PhosphorIconsFill.checkFat,
+                color: checkColor,
+                size: radius * 1.2,
+              )
+            : null,
       ),
     );
   }

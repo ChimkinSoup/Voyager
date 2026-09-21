@@ -6,10 +6,7 @@
 /// another device since [before] was read, and replacing it with [after] would
 /// delete them.
 class OrderedListEdit<T> {
-  const OrderedListEdit({
-    required this.written,
-    required this.removedIds,
-  });
+  const OrderedListEdit({required this.written, required this.removedIds});
 
   /// Items to write, each with the position it should be stored at: new items,
   /// items whose content changed, and items the user moved.

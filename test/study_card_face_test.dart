@@ -83,7 +83,9 @@ void main() {
       final assets = <MediaAsset>[];
       await tester.runAsync(() async {
         for (var i = 0; i < count; i++) {
-          assets.add(await service.ingestBytes(_pngOf(40 + i, 30, r: 40 * (i + 1))));
+          assets.add(
+            await service.ingestBytes(_pngOf(40 + i, 30, r: 40 * (i + 1))),
+          );
         }
       });
       return assets;
@@ -219,12 +221,14 @@ void main() {
       await pumpFace(tester, text: '', images: images);
       await settle(tester);
 
-      MediaAsset shown() => tester.widget<MediaImage>(
-        find.descendant(
-          of: find.byType(StudyCardImageCarousel),
-          matching: find.byType(MediaImage),
-        ),
-      ).asset;
+      MediaAsset shown() => tester
+          .widget<MediaImage>(
+            find.descendant(
+              of: find.byType(StudyCardImageCarousel),
+              matching: find.byType(MediaImage),
+            ),
+          )
+          .asset;
 
       expect(shown().id, images.first.id);
 
@@ -306,12 +310,14 @@ void main() {
       );
       await tester.pump();
 
-      final shown = tester.widget<MediaImage>(
-        find.descendant(
-          of: find.byType(StudyCardImageCarousel),
-          matching: find.byType(MediaImage),
-        ),
-      ).asset;
+      final shown = tester
+          .widget<MediaImage>(
+            find.descendant(
+              of: find.byType(StudyCardImageCarousel),
+              matching: find.byType(MediaImage),
+            ),
+          )
+          .asset;
       expect(shown.id, images.first.id);
     });
 

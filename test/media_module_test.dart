@@ -506,42 +506,42 @@ void main() {
   });
 
   group('deleteAssetEverywhere', () {
-    test('detaches every reference and drops local bytes immediately', () async {
-      final first = await service.attachBytes(
-        bytes: pngOf(40, 40),
-        collection: FirestoreCollections.todoTasks,
-        documentId: 'task-1',
-      );
-      await service.addReference(
-        mediaId: first.mediaId,
-        collection: FirestoreCollections.journalEntries,
-        documentId: 'entry-1',
-      );
-      final asset = (await repository.getAsset(first.mediaId))!;
-      expect(await fileStore.hasBytes(asset), isTrue);
+    test(
+      'detaches every reference and drops local bytes immediately',
+      () async {
+        final first = await service.attachBytes(
+          bytes: pngOf(40, 40),
+          collection: FirestoreCollections.todoTasks,
+          documentId: 'task-1',
+        );
+        await service.addReference(
+          mediaId: first.mediaId,
+          collection: FirestoreCollections.journalEntries,
+          documentId: 'entry-1',
+        );
+        final asset = (await repository.getAsset(first.mediaId))!;
+        expect(await fileStore.hasBytes(asset), isTrue);
 
-      await service.deleteAssetEverywhere(first.mediaId);
+        await service.deleteAssetEverywhere(first.mediaId);
 
-      expect(
-        await service.referencesFor(
-          FirestoreCollections.todoTasks,
-          'task-1',
-        ),
-        isEmpty,
-      );
-      expect(
-        await service.referencesFor(
-          FirestoreCollections.journalEntries,
-          'entry-1',
-        ),
-        isEmpty,
-      );
-      final tombstone = await repository.getAsset(first.mediaId);
-      expect(tombstone, isNotNull);
-      expect(tombstone!.deletedAt, isNotNull);
-      expect(await fileStore.hasBytes(asset), isFalse);
-      expect(await repository.listAssets(), isEmpty);
-    });
+        expect(
+          await service.referencesFor(FirestoreCollections.todoTasks, 'task-1'),
+          isEmpty,
+        );
+        expect(
+          await service.referencesFor(
+            FirestoreCollections.journalEntries,
+            'entry-1',
+          ),
+          isEmpty,
+        );
+        final tombstone = await repository.getAsset(first.mediaId);
+        expect(tombstone, isNotNull);
+        expect(tombstone!.deletedAt, isNotNull);
+        expect(await fileStore.hasBytes(asset), isFalse);
+        expect(await repository.listAssets(), isEmpty);
+      },
+    );
 
     test('reclaims disk space before the retention window closes', () async {
       final reference = await service.attachBytes(

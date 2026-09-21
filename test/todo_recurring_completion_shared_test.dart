@@ -85,10 +85,7 @@ void main() {
     expect(outcome.listId, _listId);
     final task = (await repo.getTask(_taskId))!;
     expect(task.completed, isFalse);
-    expect(
-      task.dueDate!.toLocal(),
-      DateTime(due.year, due.month, due.day + 7),
-    );
+    expect(task.dueDate!.toLocal(), DateTime(due.year, due.month, due.day + 7));
   });
 
   test('a one-off task is written as plainly completed', () async {
@@ -103,24 +100,27 @@ void main() {
     expect(task.dueDate!.toLocal(), due);
   });
 
-  test('a repeat whose due date was cleared completes rather than stranding', () async {
-    await seed(
-      rule: const RecurrenceRule(frequency: EventRecurrence.weekly),
-      dueLocal: DateTime(2026, 3, 2),
-    );
-    // A repeat is anchored on a due date; without one there is no occurrence
-    // to move on to, and returning early would leave a row showing a check
-    // that was never written.
-    final seeded = (await repo.getTask(_taskId))!;
-    await repo.upsertTask(
-      seeded.copyWith(clearDueDate: true, clearRecurrenceAnchor: true),
-    );
+  test(
+    'a repeat whose due date was cleared completes rather than stranding',
+    () async {
+      await seed(
+        rule: const RecurrenceRule(frequency: EventRecurrence.weekly),
+        dueLocal: DateTime(2026, 3, 2),
+      );
+      // A repeat is anchored on a due date; without one there is no occurrence
+      // to move on to, and returning early would leave a row showing a check
+      // that was never written.
+      final seeded = (await repo.getTask(_taskId))!;
+      await repo.upsertTask(
+        seeded.copyWith(clearDueDate: true, clearRecurrenceAnchor: true),
+      );
 
-    final outcome = await complete();
+      final outcome = await complete();
 
-    expect(outcome!.rolledForward, isFalse);
-    expect((await repo.getTask(_taskId))!.completed, isTrue);
-  });
+      expect(outcome!.rolledForward, isFalse);
+      expect((await repo.getTask(_taskId))!.completed, isTrue);
+    },
+  );
 
   test('a task that is gone writes nothing', () async {
     expect(

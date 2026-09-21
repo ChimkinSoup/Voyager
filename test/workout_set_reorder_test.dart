@@ -79,9 +79,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(result, isNotNull);
-    expect(
-      [for (final p in result!.prescriptions) p.top.reps],
-      [10, 5],
-    );
+    expect([for (final p in result!.prescriptions) p.top.reps], [10, 5]);
   });
 }

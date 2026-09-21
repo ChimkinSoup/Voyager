@@ -31,7 +31,8 @@ DateTime addCalendarDays(DateTime date, int days) =>
 /// Compares in UTC, which has no transitions to lose an hour to. The local
 /// y/m/d fields are carried across rather than converted, so this counts days
 /// on the calendar instead of elapsed time between two instants.
-int calendarDaysBetween(DateTime from, DateTime to) =>
-    DateTime.utc(to.year, to.month, to.day)
-        .difference(DateTime.utc(from.year, from.month, from.day))
-        .inDays;
+int calendarDaysBetween(DateTime from, DateTime to) => DateTime.utc(
+  to.year,
+  to.month,
+  to.day,
+).difference(DateTime.utc(from.year, from.month, from.day)).inDays;

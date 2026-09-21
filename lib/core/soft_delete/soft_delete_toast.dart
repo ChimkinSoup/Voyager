@@ -258,11 +258,7 @@ Future<bool> softDeleteWithUndo({
     );
     return false;
   }
-  showSoftDeleteUndoToast(
-    overlay: overlay,
-    message: message,
-    restore: restore,
-  );
+  showSoftDeleteUndoToast(overlay: overlay, message: message, restore: restore);
   return true;
 }
 

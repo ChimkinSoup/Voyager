@@ -47,14 +47,17 @@ List<String> recentTransactionOrigins(
 ) {
   DateTime usedAt(FinancialTransaction t) =>
       t.occurredAt.isAfter(now) ? now : t.occurredAt;
-  final candidates = [
-    for (final t in transactions)
-      if (t.deletedAt == null && t.type == type && trimToNull(t.origin) != null)
-        t,
-  ]..sort((a, b) {
-      final byUsed = usedAt(b).compareTo(usedAt(a));
-      return byUsed != 0 ? byUsed : b.updatedAt.compareTo(a.updatedAt);
-    });
+  final candidates =
+      [
+        for (final t in transactions)
+          if (t.deletedAt == null &&
+              t.type == type &&
+              trimToNull(t.origin) != null)
+            t,
+      ]..sort((a, b) {
+        final byUsed = usedAt(b).compareTo(usedAt(a));
+        return byUsed != 0 ? byUsed : b.updatedAt.compareTo(a.updatedAt);
+      });
   final seen = <String>{};
   return [
     for (final t in candidates)

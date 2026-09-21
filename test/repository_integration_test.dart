@@ -154,10 +154,7 @@ void main() {
     await journalRepo.upsertEntry(second);
 
     final entries = await journalRepo.listEntries(journalId: journal.id);
-    expect(entries.map((e) => e.title), [
-      'Second created',
-      'First created',
-    ]);
+    expect(entries.map((e) => e.title), ['Second created', 'First created']);
   });
 
   test(
@@ -334,55 +331,59 @@ void main() {
     expect(await todoRepo.nextSortOrder(list.id), unstarredSortOrderBase);
   });
 
-  test('todo repository nextSortOrder inserts above existing unstarred tasks',
-      () async {
-    final now = utcNow();
-    final list = TodoListModel(
-      id: newId(),
-      name: 'Inbox',
-      createdAt: now,
-      updatedAt: now,
-    );
-    await todoRepo.upsertList(list);
-
-    await todoRepo.upsertTask(
-      TodoTask(
+  test(
+    'todo repository nextSortOrder inserts above existing unstarred tasks',
+    () async {
+      final now = utcNow();
+      final list = TodoListModel(
         id: newId(),
-        listId: list.id,
-        title: 'Existing',
-        sortOrder: unstarredSortOrderBase,
+        name: 'Inbox',
         createdAt: now,
         updatedAt: now,
-      ),
-    );
+      );
+      await todoRepo.upsertList(list);
 
-    expect(await todoRepo.nextSortOrder(list.id), unstarredSortOrderBase);
-  });
+      await todoRepo.upsertTask(
+        TodoTask(
+          id: newId(),
+          listId: list.id,
+          title: 'Existing',
+          sortOrder: unstarredSortOrderBase,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
 
-  test('todo repository nextSortOrder places new task at top of undated section',
-      () async {
-    final now = utcNow();
-    final list = TodoListModel(
-      id: newId(),
-      name: 'Inbox',
-      createdAt: now,
-      updatedAt: now,
-    );
-    await todoRepo.upsertList(list);
+      expect(await todoRepo.nextSortOrder(list.id), unstarredSortOrderBase);
+    },
+  );
 
-    await todoRepo.upsertTask(
-      TodoTask(
+  test(
+    'todo repository nextSortOrder places new task at top of undated section',
+    () async {
+      final now = utcNow();
+      final list = TodoListModel(
         id: newId(),
-        listId: list.id,
-        title: 'Legacy',
-        sortOrder: 0,
+        name: 'Inbox',
         createdAt: now,
         updatedAt: now,
-      ),
-    );
+      );
+      await todoRepo.upsertList(list);
 
-    expect(await todoRepo.nextSortOrder(list.id), unstarredSortOrderBase);
-  });
+      await todoRepo.upsertTask(
+        TodoTask(
+          id: newId(),
+          listId: list.id,
+          title: 'Legacy',
+          sortOrder: 0,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+
+      expect(await todoRepo.nextSortOrder(list.id), unstarredSortOrderBase);
+    },
+  );
 
   test('tracker repository persists tracker values', () async {
     final now = utcNow();

@@ -104,7 +104,9 @@ void main() {
     await tester.tap(find.text('Undo'));
     await _settle(tester);
 
-    final restored = (await repo.listEntries()).where((e) => e.title == 'Dream 0');
+    final restored = (await repo.listEntries()).where(
+      (e) => e.title == 'Dream 0',
+    );
     expect(restored, hasLength(1));
     expect(restored.single.deletedAt, isNull);
     expect(

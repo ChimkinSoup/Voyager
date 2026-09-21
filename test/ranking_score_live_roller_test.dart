@@ -157,7 +157,10 @@ void main() {
             label: 'Overall',
             onChanged: (score) {
               writes?.add(score);
-              Future<void>.delayed(saveDelay, () => setState(() => stored = score));
+              Future<void>.delayed(
+                saveDelay,
+                () => setState(() => stored = score),
+              );
             },
           ),
         ),

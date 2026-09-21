@@ -159,11 +159,12 @@ class _NotchedFieldBorderState extends State<NotchedFieldBorder>
     final accent = widget.accentColor ?? theme.colorScheme.primary;
     final fillColor =
         theme.inputDecorationTheme.fillColor ?? theme.colorScheme.surface;
-    final restingColor = widget.enabled ? theme.dividerColor : theme.disabledColor;
-    final baseLabelStyle = (widget.labelStyle ??
-            theme.textTheme.bodyLarge ??
-            const TextStyle())
-        .copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final restingColor = widget.enabled
+        ? theme.dividerColor
+        : theme.disabledColor;
+    final baseLabelStyle =
+        (widget.labelStyle ?? theme.textTheme.bodyLarge ?? const TextStyle())
+            .copyWith(color: theme.colorScheme.onSurfaceVariant);
     final resolvedPadding = widget.contentPadding.resolve(
       Directionality.of(context),
     );
@@ -177,11 +178,7 @@ class _NotchedFieldBorderState extends State<NotchedFieldBorder>
             ? Color.lerp(restingColor, accent, focusT)!
             : theme.disabledColor;
         final labelColor = widget.enabled
-            ? Color.lerp(
-                theme.colorScheme.onSurfaceVariant,
-                accent,
-                focusT,
-              )!
+            ? Color.lerp(theme.colorScheme.onSurfaceVariant, accent, focusT)!
             : theme.disabledColor;
 
         final hasLabel = (widget.label ?? '').isNotEmpty;
@@ -220,8 +217,11 @@ class _NotchedFieldBorderState extends State<NotchedFieldBorder>
             resolvedPadding.left,
             widget.borderRadius + gapHorizontalPadding,
           );
-          labelLeft =
-              lerpDouble(resolvedPadding.left, floatedLabelLeft, floatT)!;
+          labelLeft = lerpDouble(
+            resolvedPadding.left,
+            floatedLabelLeft,
+            floatT,
+          )!;
 
           final targetGapWidth =
               floatedPainter.width + gapHorizontalPadding * 2;

@@ -188,10 +188,9 @@ void main() {
   /// wrapped in. A new card's id exists before its row does, so the galleries
   /// have an owner to attach to — hence non-null here, where a journal body
   /// opened before its entry exists would carry none.
-  String editorCardId(WidgetTester tester) =>
-      tester
-          .widget<MediaPasteScope>(find.byType(MediaPasteScope).first)
-          .documentId!;
+  String editorCardId(WidgetTester tester) => tester
+      .widget<MediaPasteScope>(find.byType(MediaPasteScope).first)
+      .documentId!;
 
   Future<void> attach(
     WidgetTester tester,
@@ -211,13 +210,16 @@ void main() {
     await settle(tester);
   }
 
-  Future<List<MediaReference>> referencesFor(String cardId) => media
-      .referencesFor(FirestoreCollections.studyCards, cardId);
+  Future<List<MediaReference>> referencesFor(String cardId) =>
+      media.referencesFor(FirestoreCollections.studyCards, cardId);
 
   testWidgets('a side with neither text nor images cannot be saved', (
     tester,
   ) async {
-    await openEditor(tester, existing: _card(front: '', back: 'answer'));
+    await openEditor(
+      tester,
+      existing: _card(front: '', back: 'answer'),
+    );
     expect(saveEnabled(tester), isFalse);
   });
 

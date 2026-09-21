@@ -28,16 +28,15 @@ StudyCard _card(
   dueAt: _epoch.add(dueIn),
 );
 
-StudyCard _dueOn(String id, DateTime localDay, {int hour = 12}) => _card(
-  id,
-).copyWith(
-  dueAt: DateTime(
-    localDay.year,
-    localDay.month,
-    localDay.day,
-    hour,
-  ).toUtc(),
-);
+StudyCard _dueOn(String id, DateTime localDay, {int hour = 12}) =>
+    _card(id).copyWith(
+      dueAt: DateTime(
+        localDay.year,
+        localDay.month,
+        localDay.day,
+        hour,
+      ).toUtc(),
+    );
 
 void main() {
   group('sortStudyCardsByMastery', () {
@@ -49,10 +48,7 @@ void main() {
 
       final sorted = sortStudyCardsByMastery([mature, young, learning, fresh]);
 
-      expect(
-        sorted.map((c) => c.id),
-        ['new', 'learning', 'young', 'mature'],
-      );
+      expect(sorted.map((c) => c.id), ['new', 'learning', 'young', 'mature']);
     });
 
     test('a long-overdue mature card still sorts after an unseen one', () {
@@ -103,10 +99,11 @@ void main() {
       final newer = _dueOn('newer', DateTime(2026, 6, 3));
       final middle = _dueOn('middle', DateTime(2026, 6, 2));
 
-      final ordered = orderStudyReviewQueue(
-        [newer, older, middle],
-        random: Random(1),
-      );
+      final ordered = orderStudyReviewQueue([
+        newer,
+        older,
+        middle,
+      ], random: Random(1));
 
       expect(ordered.map((c) => c.id), ['older', 'middle', 'newer']);
     });
@@ -120,10 +117,7 @@ void main() {
       final ordered = orderStudyReviewQueue(cards, random: Random(1));
 
       expect(ordered.map((c) => c.id).toSet(), cards.map((c) => c.id).toSet());
-      expect(
-        ordered.map((c) => c.id),
-        isNot(cards.map((c) => c.id).toList()),
-      );
+      expect(ordered.map((c) => c.id), isNot(cards.map((c) => c.id).toList()));
     });
 
     test('shuffle stays inside each due day', () {
@@ -136,10 +130,10 @@ void main() {
         _dueOn('d', DateTime(2026, 6, 2), hour: 15),
       ];
 
-      final ordered = orderStudyReviewQueue(
-        [...day2, ...day1],
-        random: Random(7),
-      );
+      final ordered = orderStudyReviewQueue([
+        ...day2,
+        ...day1,
+      ], random: Random(7));
       final ids = ordered.map((c) => c.id).toList();
 
       expect(ids.take(2).toSet(), {'a', 'b'});
@@ -163,10 +157,7 @@ void main() {
       final ordered = orderStudyCramQueue(cards, random: Random(1));
 
       expect(ordered.map((c) => c.id).toSet(), cards.map((c) => c.id).toSet());
-      expect(
-        ordered.map((c) => c.id),
-        isNot(cards.map((c) => c.id).toList()),
-      );
+      expect(ordered.map((c) => c.id), isNot(cards.map((c) => c.id).toList()));
     });
 
     test('leaves the input list alone', () {
@@ -181,16 +172,21 @@ void main() {
 
     test('counts calendar days, not elapsed hours', () {
       // Due at 9am tomorrow is "1", though it's under 24 hours away.
-      final card = _card('c', dueIn: Duration.zero).copyWith(
-        dueAt: DateTime(2026, 6, 11, 9).toUtc(),
-      );
+      final card = _card(
+        'c',
+        dueIn: Duration.zero,
+      ).copyWith(dueAt: DateTime(2026, 6, 11, 9).toUtc());
       expect(studyDaysUntilDue(card, now: now), 1);
     });
 
     test('a card due today, overdue, or never studied all read 0', () {
-      final today = _card('t').copyWith(dueAt: DateTime(2026, 6, 10, 23).toUtc());
+      final today = _card(
+        't',
+      ).copyWith(dueAt: DateTime(2026, 6, 10, 23).toUtc());
       final overdue = _card('o').copyWith(dueAt: DateTime(2026, 6, 1).toUtc());
-      final fresh = _card('n').copyWith(dueAt: DateTime(2026, 6, 10, 8).toUtc());
+      final fresh = _card(
+        'n',
+      ).copyWith(dueAt: DateTime(2026, 6, 10, 8).toUtc());
 
       expect(studyDaysUntilDue(today, now: now), 0);
       expect(studyDaysUntilDue(overdue, now: now), 0);

@@ -117,7 +117,9 @@ class WeatherService {
     final lon = remote['weatherLon'];
     if (lat is! num || lon is! num) return;
 
-    final remoteUpdated = parseFirestoreDate(remote['weatherLocationUpdatedAt']);
+    final remoteUpdated = parseFirestoreDate(
+      remote['weatherLocationUpdatedAt'],
+    );
     final local = await _settingsRepository.getSettings();
     if (remoteUpdated != null &&
         local.weatherLocationUpdatedAt != null &&
@@ -126,7 +128,8 @@ class WeatherService {
     }
 
     final locationChanged =
-        local.weatherLat != lat.toDouble() || local.weatherLon != lon.toDouble();
+        local.weatherLat != lat.toDouble() ||
+        local.weatherLon != lon.toDouble();
 
     await _settingsRepository.saveSettings(
       local.copyWith(
@@ -258,9 +261,7 @@ class WeatherService {
     final raw = settings.weatherForecastJson;
     if (raw == null || raw.isEmpty) return null;
     try {
-      return WeatherForecast.fromJson(
-        jsonDecode(raw) as Map<String, dynamic>,
-      );
+      return WeatherForecast.fromJson(jsonDecode(raw) as Map<String, dynamic>);
     } catch (_) {
       return null;
     }
@@ -320,9 +321,7 @@ class WeatherService {
     final pruned = prunePastForecast(forecast);
     final current = await _settingsRepository.getSettings();
     await _settingsRepository.saveSettings(
-      current.copyWith(
-        weatherForecastJson: jsonEncode(pruned.toJson()),
-      ),
+      current.copyWith(weatherForecastJson: jsonEncode(pruned.toJson())),
       recordLocalActivity: false,
     );
   }

@@ -164,7 +164,10 @@ void main() {
   ) async {
     _setWindow(tester, 1920);
     await tester.pumpWidget(
-      _header([_snippet('a', 'Acme'), _snippet('b', 'Beta')], profileLinks: true),
+      _header([
+        _snippet('a', 'Acme'),
+        _snippet('b', 'Beta'),
+      ], profileLinks: true),
     );
 
     final acme = tester.getRect(_chip('Acme'));

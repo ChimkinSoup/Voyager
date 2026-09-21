@@ -54,10 +54,10 @@ void main() {
       expect(counts.hard, 1);
       expect(counts.total, 3);
       expect(counts.solves, hasLength(3));
-      expect(
-        counts.solvesFor(LeetCodeDifficulty.easy).map((s) => s.solvedAt),
-        [day, day.add(const Duration(hours: 1))],
-      );
+      expect(counts.solvesFor(LeetCodeDifficulty.easy).map((s) => s.solvedAt), [
+        day,
+        day.add(const Duration(hours: 1)),
+      ]);
     });
   });
 

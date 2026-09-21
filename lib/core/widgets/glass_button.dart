@@ -41,9 +41,9 @@ class GlassButton extends StatefulWidget {
     this.autofocus = false,
     this.canRequestFocus = false,
   }) : assert(
-          label != null || child != null || icon != null,
-          'GlassButton must have either a label, child, or icon',
-        );
+         label != null || child != null || icon != null,
+         'GlassButton must have either a label, child, or icon',
+       );
 
   /// Callback when the button is tapped. If null or [enabled] is false, the button is disabled.
   final VoidCallback? onPressed;
@@ -145,7 +145,9 @@ class _GlassButtonState extends State<GlassButton>
 
   FocusNode get _effectiveFocusNode =>
       widget.focusNode ??
-      (_internalFocusNode ??= FocusNode(canRequestFocus: widget.canRequestFocus));
+      (_internalFocusNode ??= FocusNode(
+        canRequestFocus: widget.canRequestFocus,
+      ));
 
   @override
   void initState() {
@@ -207,26 +209,30 @@ class _GlassButtonState extends State<GlassButton>
     final isDark = theme.brightness == Brightness.dark;
     final isInteractive = widget.enabled && widget.onPressed != null;
 
-    final effectiveRadius = widget.borderRadius ??
+    final effectiveRadius =
+        widget.borderRadius ??
         BorderRadius.circular(widget.dense ? 10.0 : 12.0);
 
     // Light keeps an accent-tinted wafer; dark defaults to the field plate so
     // the control separates from the live grid without a BackdropFilter.
-    final baseColor = widget.color ??
+    final baseColor =
+        widget.color ??
         (isDark
             ? (theme.inputDecorationTheme.fillColor ??
-                theme.colorScheme.surface)
+                  theme.colorScheme.surface)
             : theme.colorScheme.primary);
 
     // Ink Slate on cream glass, bone on the dark plate — both are onSurface.
     // A tinted dark button is a near-solid wafer of [color], so a pale tint
     // needs dark text instead.
-    final defaultFg = widget.textColor ??
+    final defaultFg =
+        widget.textColor ??
         (isDark && widget.color != null
             ? onColorLabel(
                 Color.alphaBlend(
                   widget.color!.withValues(
-                    alpha: widget.glassOpacity ??
+                    alpha:
+                        widget.glassOpacity ??
                         GlassButton.defaultGlassOpacity(isDark),
                   ),
                   theme.colorScheme.surface,
@@ -262,24 +268,27 @@ class _GlassButtonState extends State<GlassButton>
       opacityMultiplier = 0.5;
     }
 
-    final currentGlassOpacity =
-        (baseGlassOpacity * opacityMultiplier).clamp(0.01, 0.97);
+    final currentGlassOpacity = (baseGlassOpacity * opacityMultiplier).clamp(
+      0.01,
+      0.97,
+    );
 
     // Light: flat accent wafer. Dark: matte [SurfaceGrain] uses
     // [currentGlassOpacity] as the plate alpha (near-solid → ~97%).
     final fillAlpha = nearSolid ? 0.97 : currentGlassOpacity;
 
     // Specular edge highlights
-    final borderHighlight = widget.borderColor ??
-        (isDark ? Colors.white : baseColor);
+    final borderHighlight =
+        widget.borderColor ?? (isDark ? Colors.white : baseColor);
     final borderShadow = isDark
         ? vc.shadow.withValues(alpha: 0.5)
         : baseColor.withValues(alpha: 0.3);
 
-    final currentBorderOpacity =
-        (baseBorderOpacity * (_isHovered ? 1.3 : 1.0)).clamp(0.1, 0.9);
+    final currentBorderOpacity = (baseBorderOpacity * (_isHovered ? 1.3 : 1.0))
+        .clamp(0.1, 0.9);
 
-    final effectivePadding = widget.padding ??
+    final effectivePadding =
+        widget.padding ??
         EdgeInsets.symmetric(
           horizontal: widget.dense ? 10.0 : 16.0,
           vertical: widget.dense ? 6.0 : 10.0,
@@ -310,14 +319,15 @@ class _GlassButtonState extends State<GlassButton>
         children.add(
           Text(
             widget.label!,
-            style: (widget.dense
-                    ? theme.textTheme.labelMedium
-                    : theme.textTheme.labelLarge)
-                ?.copyWith(
-              color: fgColor,
-              fontWeight: FontWeight.normal,
-              letterSpacing: 0.2,
-            ),
+            style:
+                (widget.dense
+                        ? theme.textTheme.labelMedium
+                        : theme.textTheme.labelLarge)
+                    ?.copyWith(
+                      color: fgColor,
+                      fontWeight: FontWeight.normal,
+                      letterSpacing: 0.2,
+                    ),
           ),
         );
       }
@@ -361,7 +371,10 @@ class _GlassButtonState extends State<GlassButton>
                       ? (_isHovered ? 0.35 : 0.2)
                       : (_isHovered ? 0.25 : 0.12),
                 ),
-                blurRadius: widget.elevation * (_isHovered ? 6.0 : 4.0) * vc.shadowBlurScale,
+                blurRadius:
+                    widget.elevation *
+                    (_isHovered ? 6.0 : 4.0) *
+                    vc.shadowBlurScale,
                 offset: Offset(0, _isHovered ? 4.0 : 2.0),
               ),
             // A crisp ring, not a glow: `shadowBlurScale` widens shadows so a
@@ -386,8 +399,12 @@ class _GlassButtonState extends State<GlassButton>
             foregroundPainter: _GlassBorderPainter(
               borderRadius: effectiveRadius,
               borderWidth: _isHovered || _isFocused ? 1.5 : 1.0,
-              highlightColor: borderHighlight.withValues(alpha: currentBorderOpacity),
-              shadowColor: borderShadow.withValues(alpha: currentBorderOpacity * 0.4),
+              highlightColor: borderHighlight.withValues(
+                alpha: currentBorderOpacity,
+              ),
+              shadowColor: borderShadow.withValues(
+                alpha: currentBorderOpacity * 0.4,
+              ),
               outlineColor: baseColor.withValues(alpha: 0.35),
             ),
             child: Stack(
@@ -497,10 +514,7 @@ class _GlassButtonState extends State<GlassButton>
     );
 
     if (widget.tooltip != null && widget.tooltip!.isNotEmpty) {
-      result = Tooltip(
-        message: widget.tooltip!,
-        child: result,
-      );
+      result = Tooltip(message: widget.tooltip!, child: result);
     }
 
     return result;

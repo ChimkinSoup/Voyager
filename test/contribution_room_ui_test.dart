@@ -119,24 +119,18 @@ Future<void> _rightClick(WidgetTester tester, Finder target) async {
 void main() {
   setUpAll(() => driftRuntimeOptions.dontWarnAboutMultipleDatabases = true);
 
-  testWidgets('every asset in the room shows the shared bar, others none',
-      (tester) async {
-    await _harness(
-      tester,
-      home: const FinanceAnalyticsView(),
-      seed: _seedRoom,
-    );
+  testWidgets('every asset in the room shows the shared bar, others none', (
+    tester,
+  ) async {
+    await _harness(tester, home: const FinanceAnalyticsView(), seed: _seedRoom);
     expect(find.text(r'$1,000/$7,000'), findsNWidgets(2));
     expect(find.text('Savings'), findsOneWidget);
   });
 
-  testWidgets('the menu offers room actions only on tracked assets',
-      (tester) async {
-    await _harness(
-      tester,
-      home: const FinanceAnalyticsView(),
-      seed: _seedRoom,
-    );
+  testWidgets('the menu offers room actions only on tracked assets', (
+    tester,
+  ) async {
+    await _harness(tester, home: const FinanceAnalyticsView(), seed: _seedRoom);
 
     await _rightClick(tester, find.text('TFSA A'));
     expect(find.text('Contribute…'), findsOneWidget);
@@ -151,8 +145,9 @@ void main() {
     expect(find.text('Contribute…'), findsNothing);
   });
 
-  testWidgets('Contribute proposes the new value and fills the bar',
-      (tester) async {
+  testWidgets('Contribute proposes the new value and fills the bar', (
+    tester,
+  ) async {
     final (repo, _) = await _harness(
       tester,
       home: const FinanceAnalyticsView(),
@@ -188,51 +183,49 @@ void main() {
   });
 
   testWidgets(
-      'revaluing from an edited contribution refreshes the open asset sheet',
-      (tester) async {
-    final (repo, _) = await _harness(
-      tester,
-      home: const FinanceAnalyticsView(),
-      seed: _seedRoom,
-    );
+    'revaluing from an edited contribution refreshes the open asset sheet',
+    (tester) async {
+      final (repo, _) = await _harness(
+        tester,
+        home: const FinanceAnalyticsView(),
+        seed: _seedRoom,
+      );
 
-    await tester.tap(find.text('TFSA A'));
-    await tester.pumpAndSettle();
-    expect(find.text('1000.00'), findsOneWidget);
+      await tester.tap(find.text('TFSA A'));
+      await tester.pumpAndSettle();
+      expect(find.text('1000.00'), findsOneWidget);
 
-    await tester.tap(find.text('Contribution'));
-    await tester.pumpAndSettle();
-    final sheet = find.byType(BottomSheet).last;
-    // Amount, new value, note.
-    final fields = find.descendant(
-      of: sheet,
-      matching: find.byType(EditableText),
-    );
-    await tester.enterText(fields.at(1), '4321');
-    await tester.pump();
-    await tester.tap(find.descendant(of: sheet, matching: find.text('Save')));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Contribution'));
+      await tester.pumpAndSettle();
+      final sheet = find.byType(BottomSheet).last;
+      // Amount, new value, note.
+      final fields = find.descendant(
+        of: sheet,
+        matching: find.byType(EditableText),
+      );
+      await tester.enterText(fields.at(1), '4321');
+      await tester.pump();
+      await tester.tap(find.descendant(of: sheet, matching: find.text('Save')));
+      await tester.pumpAndSettle();
 
-    // The asset sheet underneath follows the new figure...
-    expect(find.text('4321.00'), findsOneWidget);
-    expect(find.text('1000.00'), findsNothing);
+      // The asset sheet underneath follows the new figure...
+      expect(find.text('4321.00'), findsOneWidget);
+      expect(find.text('1000.00'), findsNothing);
 
-    // ...so saving it doesn't write the old one back.
-    await tester.tap(find.text('Save'));
-    await tester.pumpAndSettle();
-    expect(
-      (await repo.listAssetValuations(assetId: 'a')).first.valueCents,
-      432100,
-    );
-  });
+      // ...so saving it doesn't write the old one back.
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(
+        (await repo.listAssetValuations(assetId: 'a')).first.valueCents,
+        432100,
+      );
+    },
+  );
 
-  testWidgets('the asset sheet leaves a typed value alone when revalued',
-      (tester) async {
-    await _harness(
-      tester,
-      home: const FinanceAnalyticsView(),
-      seed: _seedRoom,
-    );
+  testWidgets('the asset sheet leaves a typed value alone when revalued', (
+    tester,
+  ) async {
+    await _harness(tester, home: const FinanceAnalyticsView(), seed: _seedRoom);
 
     await tester.tap(find.text('TFSA A'));
     await tester.pumpAndSettle();
@@ -259,8 +252,9 @@ void main() {
     expect(find.text('999'), findsOneWidget);
   });
 
-  testWidgets('a linked ledger row offers no Convert or Duplicate',
-      (tester) async {
+  testWidgets('a linked ledger row offers no Convert or Duplicate', (
+    tester,
+  ) async {
     await _harness(
       tester,
       home: const FinancePage(),
@@ -291,12 +285,16 @@ void main() {
     await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
 
-    await _rightClick(tester, find.textContaining('Coffee', findRichText: true));
+    await _rightClick(
+      tester,
+      find.textContaining('Coffee', findRichText: true),
+    );
     expect(find.text('Duplicate'), findsOneWidget);
   });
 
-  testWidgets('deleting a linked ledger row and undoing restores its event',
-      (tester) async {
+  testWidgets('deleting a linked ledger row and undoing restores its event', (
+    tester,
+  ) async {
     final (repo, _) = await _harness(
       tester,
       home: const FinancePage(),

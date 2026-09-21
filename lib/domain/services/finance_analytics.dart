@@ -40,8 +40,9 @@ DateTime cashFlowPeriodStart(
   final day = DateTime(date.year, date.month, date.day);
   switch (granularity) {
     case CashFlowGranularity.weekly:
-      final offset =
-          weekStartsMonday ? day.weekday - DateTime.monday : day.weekday % 7;
+      final offset = weekStartsMonday
+          ? day.weekday - DateTime.monday
+          : day.weekday % 7;
       // Calendar-day arithmetic, not a Duration: a Duration is absolute
       // elapsed time, so subtracting one across a DST transition lands an
       // hour off a wall-clock midnight and the bucket key stops matching the
@@ -55,11 +56,7 @@ DateTime cashFlowPeriodStart(
 }
 
 /// Steps a bucket start back by [count] periods.
-DateTime _stepBack(
-  DateTime start,
-  CashFlowGranularity granularity,
-  int count,
-) {
+DateTime _stepBack(DateTime start, CashFlowGranularity granularity, int count) {
   switch (granularity) {
     case CashFlowGranularity.weekly:
       // See cashFlowPeriodStart: stepping by a Duration drifts an hour across
@@ -175,9 +172,10 @@ List<BreakdownSlice> spendingBreakdown(
     } else {
       final primaryTag = t.tags.first;
       if (groupByCategory) {
-        final category = categories
-            .cast<FinanceCategory?>()
-            .firstWhere((c) => c!.containsTag(primaryTag), orElse: () => null);
+        final category = categories.cast<FinanceCategory?>().firstWhere(
+          (c) => c!.containsTag(primaryTag),
+          orElse: () => null,
+        );
         if (category != null) {
           label = category.name;
           colorValue = category.colorValue;
@@ -265,10 +263,7 @@ List<BreakdownSlice> originBreakdown(
 /// past the parent. [parentCents] is the number the donut's centre should
 /// read.
 class BreakdownFocusResult {
-  const BreakdownFocusResult({
-    required this.parentCents,
-    required this.slices,
-  });
+  const BreakdownFocusResult({required this.parentCents, required this.slices});
 
   final int parentCents;
   final List<BreakdownSlice> slices;
@@ -355,9 +350,10 @@ BreakdownFocusResult spendingBreakdownFocusedByCategory(
     } else if (untagged) {
       continue;
     } else {
-      final category = categories
-          .cast<FinanceCategory?>()
-          .firstWhere((c) => c!.containsTag(t.tags.first), orElse: () => null);
+      final category = categories.cast<FinanceCategory?>().firstWhere(
+        (c) => c!.containsTag(t.tags.first),
+        orElse: () => null,
+      );
       if (uncategorized) {
         if (category != null) continue;
       } else if (category?.name != label) {
@@ -441,8 +437,11 @@ List<NetWorthPoint> netWorthSeries(
   // reflects the present rather than a stale month-end.
   final dates = <DateTime>[
     for (var i = months - 1; i >= 1; i--)
-      DateTime(today.year, today.month - i + 1, 1)
-          .subtract(const Duration(days: 1)),
+      DateTime(
+        today.year,
+        today.month - i + 1,
+        1,
+      ).subtract(const Duration(days: 1)),
     DateTime(today.year, today.month, today.day),
   ];
 

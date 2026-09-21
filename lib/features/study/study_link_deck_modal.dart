@@ -152,7 +152,8 @@ class _StudyLinkDeckModalState extends ConsumerState<_StudyLinkDeckModal> {
                       PhosphorIconsRegular.caretRight,
                       size: 16,
                     ),
-                    onTap: () => setState(() => _stack = [..._stack, folder.id]),
+                    onTap: () =>
+                        setState(() => _stack = [..._stack, folder.id]),
                   ),
                 for (final deck in decks)
                   Builder(
@@ -182,9 +183,7 @@ class _StudyLinkDeckModalState extends ConsumerState<_StudyLinkDeckModal> {
                     padding: const EdgeInsets.all(24),
                     child: Text(
                       'No folders or decks here.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: muted,
-                      ),
+                      style: theme.textTheme.bodyMedium?.copyWith(color: muted),
                     ),
                   ),
               ],

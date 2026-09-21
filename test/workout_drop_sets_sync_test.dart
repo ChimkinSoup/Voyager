@@ -56,13 +56,17 @@ void main() {
     // wipe the recipe this device has.
     final local = _bench(version: 1);
 
-    final merged = mergeExerciseFromRemote({
-      'name': 'Bench',
-      'sortOrder': 3,
-      'createdAt': '2026-01-01T00:00:00.000Z',
-      'updatedAt': '2099-01-01T00:00:00.000Z',
-      'version': 5,
-    }, local.id, local: local);
+    final merged = mergeExerciseFromRemote(
+      {
+        'name': 'Bench',
+        'sortOrder': 3,
+        'createdAt': '2026-01-01T00:00:00.000Z',
+        'updatedAt': '2099-01-01T00:00:00.000Z',
+        'version': 5,
+      },
+      local.id,
+      local: local,
+    );
 
     expect(merged.sortOrder, 3);
     expect(merged.prescriptionMode, WorkoutPrescriptionMode.custom);
@@ -77,15 +81,19 @@ void main() {
       version: 1,
     );
 
-    final merged = mergeExerciseFromRemote({
-      'name': 'Bench Press',
-      'sortOrder': 0,
-      'prescriptionMode': 'inherit',
-      'setPrescriptions': const <Map<String, dynamic>>[],
-      'createdAt': '2026-01-01T00:00:00.000Z',
-      'updatedAt': '2099-01-01T00:00:00.000Z',
-      'version': 5,
-    }, local.id, local: local);
+    final merged = mergeExerciseFromRemote(
+      {
+        'name': 'Bench Press',
+        'sortOrder': 0,
+        'prescriptionMode': 'inherit',
+        'setPrescriptions': const <Map<String, dynamic>>[],
+        'createdAt': '2026-01-01T00:00:00.000Z',
+        'updatedAt': '2099-01-01T00:00:00.000Z',
+        'version': 5,
+      },
+      local.id,
+      local: local,
+    );
 
     expect(merged.prescriptionMode, WorkoutPrescriptionMode.inherit);
     expect(merged.setPrescriptions, isEmpty);

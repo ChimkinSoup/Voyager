@@ -16,7 +16,10 @@ import 'package:voyager/core/widgets/spell_check_field_support.dart';
 const _pad = EdgeInsets.all(8);
 
 /// How far past `contentPadding.left` InputDecorator placed the text.
-Future<double> _inputGap(WidgetTester tester, InputDecoration decoration) async {
+Future<double> _inputGap(
+  WidgetTester tester,
+  InputDecoration decoration,
+) async {
   final controller = TextEditingController(text: 'tst');
   addTearDown(controller.dispose);
   await tester.pumpWidget(

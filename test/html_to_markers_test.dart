@@ -83,10 +83,7 @@ void main() {
     });
 
     test('formatting survives a block break', () {
-      expect(
-        htmlToProseMarkers('<p><b>one</b></p><p>two</p>'),
-        '**one**\ntwo',
-      );
+      expect(htmlToProseMarkers('<p><b>one</b></p><p>two</p>'), '**one**\ntwo');
     });
   });
 
@@ -103,10 +100,7 @@ void main() {
     });
 
     test('a style and a tag saying the same thing write one marker', () {
-      expect(
-        htmlToProseMarkers('<b style="font-weight:bold">x</b>'),
-        '**x**',
-      );
+      expect(htmlToProseMarkers('<b style="font-weight:bold">x</b>'), '**x**');
     });
 
     test('a Word stylesheet is not prose', () {

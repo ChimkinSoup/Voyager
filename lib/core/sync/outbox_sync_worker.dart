@@ -180,11 +180,12 @@ class OutboxSyncWorker {
         // 1. Query exactly 500 retryable items from Outbox. Rows carrying a
         // failureReason were abandoned deliberately and are kept only as a
         // record, so they must not re-enter the drain.
-        final pendingList = await (_db.select(_db.pendingUploadsTable)
-              ..where((t) => t.failureReason.isNull())
-              ..orderBy([(t) => OrderingTerm.asc(t.addedAt)])
-              ..limit(500))
-            .get();
+        final pendingList =
+            await (_db.select(_db.pendingUploadsTable)
+                  ..where((t) => t.failureReason.isNull())
+                  ..orderBy([(t) => OrderingTerm.asc(t.addedAt)])
+                  ..limit(500))
+                .get();
 
         if (pendingList.isEmpty) break; // Queue is empty, we are done!
         // Only re-queues after this read count as newer than what the round
@@ -405,7 +406,10 @@ class OutboxSyncWorker {
           leetCodeReviewLogToFirestore,
         );
       case FirestoreCollections.studyFolders:
-        return byId(DriftStudyRepository(_db).getFolder, studyFolderToFirestore);
+        return byId(
+          DriftStudyRepository(_db).getFolder,
+          studyFolderToFirestore,
+        );
       case FirestoreCollections.studyDecks:
         return byId(DriftStudyRepository(_db).getDeck, studyDeckToFirestore);
       case FirestoreCollections.studyCards:
@@ -422,9 +426,15 @@ class OutboxSyncWorker {
           studyDeckLinkToFirestore,
         );
       case FirestoreCollections.exercises:
-        return byId(DriftWorkoutRepository(_db).getExercise, exerciseToFirestore);
+        return byId(
+          DriftWorkoutRepository(_db).getExercise,
+          exerciseToFirestore,
+        );
       case FirestoreCollections.workoutPlans:
-        return byId(DriftWorkoutRepository(_db).getPlan, workoutPlanToFirestore);
+        return byId(
+          DriftWorkoutRepository(_db).getPlan,
+          workoutPlanToFirestore,
+        );
       case FirestoreCollections.workoutPlanEntries:
         return byId(
           DriftWorkoutRepository(_db).getPlanEntry,
@@ -514,17 +524,17 @@ class OutboxSyncWorker {
         );
       case FirestoreCollections.transactions:
         return fromList(
-          await DriftFinanceRepository(_db).listTransactions(
-            includeDeleted: true,
-          ),
+          await DriftFinanceRepository(
+            _db,
+          ).listTransactions(includeDeleted: true),
           (record) => record.id,
           transactionToFirestore,
         );
       case FirestoreCollections.subscriptions:
         return fromList(
-          await DriftFinanceRepository(_db).listSubscriptions(
-            includeDeleted: true,
-          ),
+          await DriftFinanceRepository(
+            _db,
+          ).listSubscriptions(includeDeleted: true),
           (record) => record.id,
           subscriptionToFirestore,
         );
@@ -536,7 +546,9 @@ class OutboxSyncWorker {
         );
       case FirestoreCollections.financeCategories:
         return fromList(
-          await DriftFinanceRepository(_db).listCategories(includeDeleted: true),
+          await DriftFinanceRepository(
+            _db,
+          ).listCategories(includeDeleted: true),
           (record) => record.id,
           financeCategoryToFirestore,
         );
@@ -548,17 +560,17 @@ class OutboxSyncWorker {
         );
       case FirestoreCollections.assetValuations:
         return fromList(
-          await DriftFinanceRepository(_db).listAssetValuations(
-            includeDeleted: true,
-          ),
+          await DriftFinanceRepository(
+            _db,
+          ).listAssetValuations(includeDeleted: true),
           (record) => record.id,
           assetValuationToFirestore,
         );
       case FirestoreCollections.contributionRooms:
         return fromList(
-          await DriftFinanceRepository(_db).listContributionRooms(
-            includeDeleted: true,
-          ),
+          await DriftFinanceRepository(
+            _db,
+          ).listContributionRooms(includeDeleted: true),
           (record) => record.id,
           contributionRoomToFirestore,
         );
@@ -569,17 +581,17 @@ class OutboxSyncWorker {
         );
       case FirestoreCollections.savingsGoals:
         return fromList(
-          await DriftFinanceRepository(_db).listSavingsGoals(
-            includeDeleted: true,
-          ),
+          await DriftFinanceRepository(
+            _db,
+          ).listSavingsGoals(includeDeleted: true),
           (record) => record.id,
           savingsGoalToFirestore,
         );
       case FirestoreCollections.goalAllocations:
         return fromList(
-          await DriftFinanceRepository(_db).listGoalAllocations(
-            includeDeleted: true,
-          ),
+          await DriftFinanceRepository(
+            _db,
+          ).listGoalAllocations(includeDeleted: true),
           (record) => record.id,
           goalAllocationToFirestore,
         );
@@ -660,7 +672,9 @@ class OutboxSyncWorker {
         // inserts the default row rather than returning null.
         final settings = await DriftSettingsRepository(_db).getSettings();
         return {
-          FirestoreCollections.settingsDocumentId: settingsToFirestore(settings),
+          FirestoreCollections.settingsDocumentId: settingsToFirestore(
+            settings,
+          ),
         };
       default:
         return const {};
@@ -919,8 +933,7 @@ class OutboxSyncWorker {
     )) {
       return;
     }
-    final permanent =
-        classifySyncFailure(error) == SyncFailureKind.permanent;
+    final permanent = classifySyncFailure(error) == SyncFailureKind.permanent;
     if (permanent || !drainableCollections.contains(collection)) {
       await instance.park(
         collection: collection,

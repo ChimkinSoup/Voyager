@@ -40,7 +40,8 @@ double roundRankingScore(
 }) {
   // A pasted run of 400 digits parses to infinity, and `.round()` on that
   // throws rather than clamping.
-  if (!value.isFinite) return value.isNaN || value < 0 ? 0 : scoreMax.toDouble();
+  if (!value.isFinite)
+    return value.isNaN || value < 0 ? 0 : scoreMax.toDouble();
   final steps = _stepsPerPoint(precision);
   // Multiply-round-divide rather than `(value / step).round() * step`: the
   // division is exact for these three denominators, so 84 / 10 is the double
@@ -270,8 +271,7 @@ class RankingFilters {
   bool get hasPopoverFilters => hasScoreRange || hasImages || tag != null;
 
   /// Drops the popover's own narrowing, leaving the chip selection alone.
-  RankingFilters withoutPopoverFilters() =>
-      RankingFilters(statuses: statuses);
+  RankingFilters withoutPopoverFilters() => RankingFilters(statuses: statuses);
 
   /// The same narrowing with the chips taken off, which is the scope the hero
   /// stats and the chip counts are measured against (§5.2).

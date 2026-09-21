@@ -86,9 +86,7 @@ RecurrenceEditResult deleteRecurringEvent(
         return RecurrenceEditResult(softDeletes: [master.id]);
       }
       return RecurrenceEditResult(
-        upserts: [
-          master.copyWith(recurrenceEndDate: addDays(occurrence, -1)),
-        ],
+        upserts: [master.copyWith(recurrenceEndDate: addDays(occurrence, -1))],
       );
   }
 }
@@ -197,7 +195,8 @@ CalendarEvent occurrenceView(CalendarEvent master, DateTime occurrenceDate) {
   final masterStart = DateUtils.dateOnly(master.start.toLocal());
   if (occurrence == masterStart) return master;
 
-  final span = epochDay(DateUtils.dateOnly(master.end.toLocal())) -
+  final span =
+      epochDay(DateUtils.dateOnly(master.end.toLocal())) -
       epochDay(masterStart);
   return master.copyWith(
     start: _onDateKeepingTime(occurrence, master.start),
@@ -221,7 +220,8 @@ CalendarEvent rebaseToAnchor(
   final editedStart = DateUtils.dateOnly(edited.start.toLocal());
   final shift = recurrenceRebaseShiftDays(edited, occurrenceDate);
   final span =
-      epochDay(DateUtils.dateOnly(edited.end.toLocal())) - epochDay(editedStart);
+      epochDay(DateUtils.dateOnly(edited.end.toLocal())) -
+      epochDay(editedStart);
 
   final newStartDate = addDays(masterStart, shift);
   // [recurrenceEndDate] caps the pattern, so it is measured in the same frame

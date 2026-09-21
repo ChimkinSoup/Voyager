@@ -257,8 +257,7 @@ bool isInAlphanumericRun(String text, int start, int end) {
 
 /// A character `wordRunPattern` can carry: a letter, a digit, or the
 /// apostrophe that holds `XM6's` together as one run.
-bool _isRunChar(int unit) =>
-    _isLetter(unit) || _isDigit(unit) || unit == 0x27;
+bool _isRunChar(int unit) => _isLetter(unit) || _isDigit(unit) || unit == 0x27;
 
 bool _isDigit(int unit) => unit >= 0x30 && unit <= 0x39;
 

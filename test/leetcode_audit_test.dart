@@ -77,8 +77,9 @@ class _FakeLeetCodeRepository implements LeetCodeRepository {
   final List<LeetCodeProblem> problems;
 
   @override
-  Future<List<LeetCodeProblem>> listProblems({bool includeDeleted = false}) async =>
-      problems;
+  Future<List<LeetCodeProblem>> listProblems({
+    bool includeDeleted = false,
+  }) async => problems;
 
   @override
   Future<LeetCodeProblem?> getProblem(String id) async =>
@@ -328,59 +329,66 @@ void main() {
     });
   });
 
-  test('LC-08 a soft delete bumps the version like every other mutation', () async {
-    final db = AppDatabase.inMemory();
-    addTearDown(db.close);
-    final repo = DriftLeetCodeRepository(db);
+  test(
+    'LC-08 a soft delete bumps the version like every other mutation',
+    () async {
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+      final repo = DriftLeetCodeRepository(db);
 
-    await repo.upsertProblem(_problem(version: 5));
-    await repo.softDeleteProblem('p1');
+      await repo.upsertProblem(_problem(version: 5));
+      await repo.softDeleteProblem('p1');
 
-    final deleted = await repo.getProblem('p1');
-    expect(deleted!.deletedAt, isNotNull);
-    // A tombstone left at version 5 could only win on a wall-clock comparison
-    // between two devices; version is what the conflict resolver checks first.
-    expect(deleted.version, 6);
-  });
+      final deleted = await repo.getProblem('p1');
+      expect(deleted!.deletedAt, isNotNull);
+      // A tombstone left at version 5 could only win on a wall-clock comparison
+      // between two devices; version is what the conflict resolver checks first.
+      expect(deleted.version, 6);
+    },
+  );
 
-  test('LC-08 deleting a row that is already gone is a no-op, not a throw',
-      () async {
-    final db = AppDatabase.inMemory();
-    addTearDown(db.close);
-    final repo = DriftLeetCodeRepository(db);
+  test(
+    'LC-08 deleting a row that is already gone is a no-op, not a throw',
+    () async {
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+      final repo = DriftLeetCodeRepository(db);
 
-    await repo.softDeleteProblem('never-existed');
+      await repo.softDeleteProblem('never-existed');
 
-    expect(await repo.getProblem('never-existed'), isNull);
-  });
+      expect(await repo.getProblem('never-existed'), isNull);
+    },
+  );
 
-  testWidgets('LC-07 "Clear filters" empties the search box, not just the grid',
-      (tester) async {
-    await _pumpDeck(tester, [_problem()]);
-    await _search(tester, 'zzzznomatch');
+  testWidgets(
+    'LC-07 "Clear filters" empties the search box, not just the grid',
+    (tester) async {
+      await _pumpDeck(tester, [_problem()]);
+      await _search(tester, 'zzzznomatch');
 
-    await tester.tap(
-      find.ancestor(
-        of: find.text('Clear filters'),
-        matching: find.byType(GlassButton),
-      ),
-    );
-    await tester.pump();
+      await tester.tap(
+        find.ancestor(
+          of: find.text('Clear filters'),
+          matching: find.byType(GlassButton),
+        ),
+      );
+      await tester.pump();
 
-    // The grid un-filters either way. What used to stay behind was the query
-    // in the box, so the user's next keystroke appended to invisible-but-live
-    // stale text and the grid snapped back to "No matches" on one character.
-    // Read what the field is actually displaying — an uncontrolled TextField
-    // has no controller of its own to inspect, but it still shows the query.
-    expect(
-      tester
-          .widget<EditableText>(find.byType(EditableText).first)
-          .controller
-          .text,
-      '',
-    );
-    expect(find.byType(LeetCodeMiniFlashcard), findsOneWidget);
-  });
+      // The grid un-filters either way. What used to stay behind was the query
+      // in the box, so the user's next keystroke appended to invisible-but-live
+      // stale text and the grid snapped back to "No matches" on one character.
+      // Read what the field is actually displaying — an uncontrolled TextField
+      // has no controller of its own to inspect, but it still shows the query.
+      expect(
+        tester
+            .widget<EditableText>(find.byType(EditableText).first)
+            .controller
+            .text,
+        '',
+      );
+      expect(find.byType(LeetCodeMiniFlashcard), findsOneWidget);
+    },
+  );
 
   testWidgets('LC-07 typing after a clear filters on the new query alone', (
     tester,
@@ -538,24 +546,26 @@ void main() {
     expect(written.version, 10);
   });
 
-  testWidgets('LC-04 an edit does not resurrect a problem deleted underneath it',
-      (tester) async {
-    final opened = _problem(version: 3);
-    final repo = _MutableLeetCodeRepository({opened.id: opened});
-    await _openEditModal(tester, repo, opened);
+  testWidgets(
+    'LC-04 an edit does not resurrect a problem deleted underneath it',
+    (tester) async {
+      final opened = _problem(version: 3);
+      final repo = _MutableLeetCodeRepository({opened.id: opened});
+      await _openEditModal(tester, repo, opened);
 
-    repo.problems[opened.id] = _problem(
-      version: 4,
-      deletedAt: DateTime.utc(2026, 8, 25),
-    );
+      repo.problems[opened.id] = _problem(
+        version: 4,
+        deletedAt: DateTime.utc(2026, 8, 25),
+      );
 
-    await _tapSave(tester);
+      await _tapSave(tester);
 
-    // The constructor used to omit deletedAt entirely, and the upsert writes
-    // every column — so the tombstone was cleared by a save that never meant
-    // to touch it.
-    expect(repo.saved.single.deletedAt, DateTime.utc(2026, 8, 25));
-  });
+      // The constructor used to omit deletedAt entirely, and the upsert writes
+      // every column — so the tombstone was cleared by a save that never meant
+      // to touch it.
+      expect(repo.saved.single.deletedAt, DateTime.utc(2026, 8, 25));
+    },
+  );
 
   testWidgets('LC-03 a failed save leaves the Save button pressable', (
     tester,
@@ -585,48 +595,55 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  test('LC-10 a failed counts fetch expires, so a later read retries', () async {
-    var attempts = 0;
-    final container = ProviderContainer(
-      overrides: [
-        leetCodeApiClientProvider.overrideWithValue(
-          _FlakyCountsApi(() {
-            attempts++;
-            if (attempts == 1) throw Exception('offline');
-            return const LeetCodeQuestionCounts(easy: 1, medium: 2, hard: 3);
-          }),
-        ),
-      ],
-    );
-    addTearDown(container.dispose);
+  test(
+    'LC-10 a failed counts fetch expires, so a later read retries',
+    () async {
+      var attempts = 0;
+      final container = ProviderContainer(
+        overrides: [
+          leetCodeApiClientProvider.overrideWithValue(
+            _FlakyCountsApi(() {
+              attempts++;
+              if (attempts == 1) throw Exception('offline');
+              return const LeetCodeQuestionCounts(easy: 1, medium: 2, hard: 3);
+            }),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
 
-    // A listener, the way the rings watch it — then it goes away, the way the
-    // page does when the user navigates off it.
-    var sub = container.listen(leetcodeQuestionCountsProvider, (_, __) {});
-    await expectLater(
-      container.read(leetcodeQuestionCountsProvider.future),
-      throwsA(isA<Exception>()),
-    );
-    sub.close();
-    await pumpEventQueue();
+      // A listener, the way the rings watch it — then it goes away, the way the
+      // page does when the user navigates off it.
+      var sub = container.listen(leetcodeQuestionCountsProvider, (_, __) {});
+      await expectLater(
+        container.read(leetcodeQuestionCountsProvider.future),
+        throwsA(isA<Exception>()),
+      );
+      sub.close();
+      await pumpEventQueue();
 
-    // The error is not held: coming back re-runs the fetch. It used to be
-    // cached for the life of the process, with nothing on screen saying the
-    // fetch had failed and no control to retry.
-    sub = container.listen(leetcodeQuestionCountsProvider, (_, __) {});
-    final counts = await container.read(leetcodeQuestionCountsProvider.future);
-    expect(counts.total, 6);
-    expect(attempts, 2);
+      // The error is not held: coming back re-runs the fetch. It used to be
+      // cached for the life of the process, with nothing on screen saying the
+      // fetch had failed and no control to retry.
+      sub = container.listen(leetcodeQuestionCountsProvider, (_, __) {});
+      final counts = await container.read(
+        leetcodeQuestionCountsProvider.future,
+      );
+      expect(counts.total, 6);
+      expect(attempts, 2);
 
-    // A success *is* held past its last listener — the counts move a handful
-    // of times a week, so re-fetching on every visit would be waste.
-    sub.close();
-    await pumpEventQueue();
-    container.listen(leetcodeQuestionCountsProvider, (_, __) {});
-    expect(await container.read(leetcodeQuestionCountsProvider.future), counts);
-    expect(attempts, 2);
-  });
-
+      // A success *is* held past its last listener — the counts move a handful
+      // of times a week, so re-fetching on every visit would be waste.
+      sub.close();
+      await pumpEventQueue();
+      container.listen(leetcodeQuestionCountsProvider, (_, __) {});
+      expect(
+        await container.read(leetcodeQuestionCountsProvider.future),
+        counts,
+      );
+      expect(attempts, 2);
+    },
+  );
 }
 
 /// A client whose request never completes — a captive portal, a hung proxy, a

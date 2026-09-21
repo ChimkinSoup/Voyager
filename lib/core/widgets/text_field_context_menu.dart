@@ -189,9 +189,9 @@ class _TextFieldContextMenuState extends ConsumerState<TextFieldContextMenu> {
   /// pinned first and not repeated below it (`FLAGGED_WORDS.md` §6).
   List<String> _suggestionsFor(SuggestionSpan span, String? flagged) {
     if (flagged == null) return span.suggestions;
-    final pair = ref.read(voyagerSpellCheckServiceProvider).replacementFor(
-      flagged,
-    );
+    final pair = ref
+        .read(voyagerSpellCheckServiceProvider)
+        .replacementFor(flagged);
     if (pair == null) return span.suggestions;
     return [pair, ...span.suggestions.where((s) => s != pair)];
   }

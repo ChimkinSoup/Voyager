@@ -240,7 +240,10 @@ void main() {
 
       await _openAlsoShow(tester, 'Home');
 
-      expect(find.text('There are no other calendars to show.'), findsOneWidget);
+      expect(
+        find.text('There are no other calendars to show.'),
+        findsOneWidget,
+      );
     });
 
     // Saving reloads the list behind the dialog; the rows it already has stay

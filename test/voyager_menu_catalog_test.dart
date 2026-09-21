@@ -33,7 +33,10 @@ void main() {
               },
             );
             expect(entries, hasLength(2));
-            expect(entries[0].runtimeType.toString(), contains('VoyagerPopupMenuItem'));
+            expect(
+              entries[0].runtimeType.toString(),
+              contains('VoyagerPopupMenuItem'),
+            );
             return const SizedBox.shrink();
           },
         ),
@@ -42,10 +45,7 @@ void main() {
   });
 
   test('weather catalog maps icon strings', () {
-    expect(
-      VoyagerMenuCatalogEntry.weatherRain.weatherIconValue,
-      'rain',
-    );
+    expect(VoyagerMenuCatalogEntry.weatherRain.weatherIconValue, 'rain');
     expect(
       VoyagerMenuCatalogEntryLabels.forWeatherIcon('snow'),
       VoyagerMenuCatalogEntry.weatherSnow,

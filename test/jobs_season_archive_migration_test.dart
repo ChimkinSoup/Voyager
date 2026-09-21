@@ -42,12 +42,7 @@ void main() {
     var db = AppDatabase(NativeDatabase(file));
     var repo = DriftJobRepository(db);
     await repo.upsertSeason(
-      JobSeason(
-        id: 'fall',
-        name: 'Fall 2025',
-        createdAt: now,
-        updatedAt: now,
-      ),
+      JobSeason(id: 'fall', name: 'Fall 2025', createdAt: now, updatedAt: now),
     );
     await repo.upsertApplication(
       JobApplication(
@@ -121,10 +116,10 @@ void main() {
     await repo.upsertApplication(
       applications.single.copyWith(seasonIds: const ['fall', 'spring']),
     );
-    expect(
-      (await repo.listApplications()).single.seasonIds,
-      ['fall', 'spring'],
-    );
+    expect((await repo.listApplications()).single.seasonIds, [
+      'fall',
+      'spring',
+    ]);
     await db.close();
   });
 

@@ -165,7 +165,9 @@ class SyncEngine {
     );
     if (callStart != null) {
       final elapsed = DateTime.now().difference(callStart).inMilliseconds;
-      debugPrint('[sync] firestore batch calls for $collection took ${elapsed}ms');
+      debugPrint(
+        '[sync] firestore batch calls for $collection took ${elapsed}ms',
+      );
     }
     _syncActivity?.recordUpload(collection);
   }
@@ -339,7 +341,9 @@ class SyncEngine {
     );
     if (callStart != null) {
       final elapsed = DateTime.now().difference(callStart).inMilliseconds;
-      debugPrint('[sync] firestore calls for $collection/$documentId took ${elapsed}ms');
+      debugPrint(
+        '[sync] firestore calls for $collection/$documentId took ${elapsed}ms',
+      );
     }
     _syncActivity?.recordUpload(collection);
   }

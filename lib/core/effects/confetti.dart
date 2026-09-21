@@ -168,11 +168,7 @@ abstract final class ConfettiOverlay {
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
     final local = origin.alongSize(box.size);
-    burst(
-      context,
-      globalPosition: box.localToGlobal(local),
-      effect: effect,
-    );
+    burst(context, globalPosition: box.localToGlobal(local), effect: effect);
   }
 }
 
@@ -242,11 +238,12 @@ class _ConfettiBurstState extends State<_ConfettiBurst>
   void initState() {
     super.initState();
     _particles = _spawn(widget.effect);
-    _controller = AnimationController(vsync: this, duration: widget.effect.duration)
-      ..addStatusListener((status) {
-        if (status == AnimationStatus.completed) widget.onComplete();
-      })
-      ..forward();
+    _controller =
+        AnimationController(vsync: this, duration: widget.effect.duration)
+          ..addStatusListener((status) {
+            if (status == AnimationStatus.completed) widget.onComplete();
+          })
+          ..forward();
   }
 
   static List<_Particle> _spawn(ConfettiEffect e) {

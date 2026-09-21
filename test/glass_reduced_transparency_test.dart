@@ -83,34 +83,36 @@ void main() {
     );
   });
 
-  testWidgets('MaterializeTransition blurs on arrival and clears once settled', (
-    tester,
-  ) async {
-    Future<void> pumpAt(double t) => tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: MaterializeTransition(
-            t: AlwaysStoppedAnimation<double>(t),
-            child: const SizedBox(width: 100, height: 100),
+  testWidgets(
+    'MaterializeTransition blurs on arrival and clears once settled',
+    (tester) async {
+      Future<void> pumpAt(double t) => tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MaterializeTransition(
+              t: AlwaysStoppedAnimation<double>(t),
+              child: const SizedBox(width: 100, height: 100),
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    await pumpAt(0.0);
-    expect(
-      find.byType(BackdropFilter),
-      findsOneWidget,
-      reason: 'the surface should arrive as a material, frosting its backdrop',
-    );
+      await pumpAt(0.0);
+      expect(
+        find.byType(BackdropFilter),
+        findsOneWidget,
+        reason:
+            'the surface should arrive as a material, frosting its backdrop',
+      );
 
-    await pumpAt(1.0);
-    expect(
-      find.byType(BackdropFilter),
-      findsNothing,
-      reason: 'a settled surface must cost no filter at all',
-    );
-  });
+      await pumpAt(1.0);
+      expect(
+        find.byType(BackdropFilter),
+        findsNothing,
+        reason: 'a settled surface must cost no filter at all',
+      );
+    },
+  );
 
   testWidgets('MaterializeTransition skips the blur under reduced motion', (
     tester,
@@ -136,46 +138,47 @@ void main() {
     );
   });
 
-  testWidgets('GlassButton dark defaults use onSurface label and SurfaceGrain', (
-    tester,
-  ) async {
-    await _pump(
-      tester,
-      GlassButton(onPressed: () {}, label: 'Save'),
-      highContrast: false,
-      theme: VoyagerTheme.dark(),
-    );
+  testWidgets(
+    'GlassButton dark defaults use onSurface label and SurfaceGrain',
+    (tester) async {
+      await _pump(
+        tester,
+        GlassButton(onPressed: () {}, label: 'Save'),
+        highContrast: false,
+        theme: VoyagerTheme.dark(),
+      );
 
-    final text = tester.widget<Text>(find.text('Save'));
-    expect(
-      text.style?.color,
-      VoyagerTheme.dark().colorScheme.onSurface,
-      reason: 'dark glass labels must not stay on black ink',
-    );
+      final text = tester.widget<Text>(find.text('Save'));
+      expect(
+        text.style?.color,
+        VoyagerTheme.dark().colorScheme.onSurface,
+        reason: 'dark glass labels must not stay on black ink',
+      );
 
-    expect(
-      find.descendant(
-        of: find.byType(GlassButton),
-        matching: find.byType(SurfaceGrain),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: find.byType(GlassButton),
-        matching: find.byType(PaperTexture),
-      ),
-      findsNothing,
-    );
+      expect(
+        find.descendant(
+          of: find.byType(GlassButton),
+          matching: find.byType(SurfaceGrain),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(GlassButton),
+          matching: find.byType(PaperTexture),
+        ),
+        findsNothing,
+      );
 
-    final grain = tester.widget<SurfaceGrain>(
-      find.descendant(
-        of: find.byType(GlassButton),
-        matching: find.byType(SurfaceGrain),
-      ),
-    );
-    expect(grain.color.a, closeTo(0.95, 0.001));
-  });
+      final grain = tester.widget<SurfaceGrain>(
+        find.descendant(
+          of: find.byType(GlassButton),
+          matching: find.byType(SurfaceGrain),
+        ),
+      );
+      expect(grain.color.a, closeTo(0.95, 0.001));
+    },
+  );
 
   testWidgets('GlassButton light defaults keep the thin accent wafer', (
     tester,

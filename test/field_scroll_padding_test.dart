@@ -13,17 +13,16 @@ Future<void> _pumpField(WidgetTester tester, Widget field) async {
   await tester.pumpWidget(
     ProviderScope(
       child: MaterialApp(
-        home: VimEnabledScope(
-          enabled: false,
-          child: Scaffold(body: field),
-        ),
+        home: VimEnabledScope(enabled: false, child: Scaffold(body: field)),
       ),
     ),
   );
 }
 
 void main() {
-  testWidgets('VoyagerTextField uses zero caret scroll padding', (tester) async {
+  testWidgets('VoyagerTextField uses zero caret scroll padding', (
+    tester,
+  ) async {
     await _pumpField(tester, const VoyagerTextField());
     expect(
       tester.widget<TextField>(find.byType(TextField)).scrollPadding,
@@ -31,7 +30,9 @@ void main() {
     );
   });
 
-  testWidgets('LabeledTextField uses zero caret scroll padding', (tester) async {
+  testWidgets('LabeledTextField uses zero caret scroll padding', (
+    tester,
+  ) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
     await _pumpField(
@@ -44,8 +45,9 @@ void main() {
     );
   });
 
-  testWidgets('TagHighlightedTextField uses zero caret scroll padding',
-      (tester) async {
+  testWidgets('TagHighlightedTextField uses zero caret scroll padding', (
+    tester,
+  ) async {
     final controller = TextEditingController();
     final focusNode = FocusNode();
     addTearDown(controller.dispose);
@@ -60,8 +62,9 @@ void main() {
     );
   });
 
-  testWidgets('LeetCode code editor uses zero caret scroll padding',
-      (tester) async {
+  testWidgets('LeetCode code editor uses zero caret scroll padding', (
+    tester,
+  ) async {
     final controller = CodeController(text: 'x = 1');
     await tester.pumpWidget(
       ProviderScope(
@@ -135,7 +138,8 @@ void main() {
         expect(
           scrollController.offset,
           0,
-          reason: 'scroll offset jittered to ${scrollController.offset} on frame $i',
+          reason:
+              'scroll offset jittered to ${scrollController.offset} on frame $i',
         );
       }
     },

@@ -36,9 +36,7 @@ void main() {
     expect(stored.jobProfilePortfolioUrl, 'https://juno.dev');
 
     // Clearing a slot is what the Settings dialog does with an emptied field.
-    await repo.saveSettings(
-      stored.copyWith(clearJobProfileGitHubUrl: true),
-    );
+    await repo.saveSettings(stored.copyWith(clearJobProfileGitHubUrl: true));
     stored = await repo.getSettings();
     expect(stored.jobProfileGitHubUrl, isNull);
     expect(stored.jobProfileLinkedInUrl, 'https://linkedin.com/in/juno');
@@ -71,9 +69,7 @@ void main() {
     test('a slot cleared on another device clears here too', () {
       final merged = roundTrip(
         AppSettings(updatedAt: DateTime.utc(2026, 8, 28)),
-        into: const AppSettings(
-          jobProfileGitHubUrl: 'https://github.com/juno',
-        ),
+        into: const AppSettings(jobProfileGitHubUrl: 'https://github.com/juno'),
       );
       expect(merged.jobProfileGitHubUrl, isNull);
     });

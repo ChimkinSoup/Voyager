@@ -209,21 +209,22 @@ void main() {
       expect(controller.text, 'go X');
     });
 
-    testWidgets('a word-boundary trigger will not fire before a word character', (
-      tester,
-    ) async {
-      await pumpField(
-        tester,
-        snippets: [snippet('ee', 'X', word: true)],
-        text: 'X',
-      );
-      // Caret before the existing letter; typing the trigger leaves a word
-      // character after the match, so `w` must not expand.
-      controller.selection = const TextSelection.collapsed(offset: 0);
-      await tester.pump();
-      await type(tester, 'ee');
-      expect(controller.text, 'eeX');
-    });
+    testWidgets(
+      'a word-boundary trigger will not fire before a word character',
+      (tester) async {
+        await pumpField(
+          tester,
+          snippets: [snippet('ee', 'X', word: true)],
+          text: 'X',
+        );
+        // Caret before the existing letter; typing the trigger leaves a word
+        // character after the match, so `w` must not expand.
+        controller.selection = const TextSelection.collapsed(offset: 0);
+        await tester.pump();
+        await type(tester, 'ee');
+        expect(controller.text, 'eeX');
+      },
+    );
 
     testWidgets('a replacement longer than its trigger does not re-expand', (
       tester,
@@ -776,33 +777,35 @@ void main() {
       expect(focusNode.hasFocus, isTrue);
     });
 
-    testWidgets('a key that changed no text cannot vouch for a later write', (
-      tester,
-    ) async {
-      await pumpField(
-        tester,
-        vimEnabled: true,
-        snippets: [snippet('ea', 'X')],
-      );
-      await type(tester, 'e');
-      await press(tester, LogicalKeyboardKey.escape);
-      // `a` enters Insert without typing anything, so the token it records is
-      // spent by the selection-only notification that follows it.
-      await press(tester, _keyFor('a'));
+    testWidgets(
+      'a key that changed no text cannot vouch for a later write',
+      (tester) async {
+        await pumpField(
+          tester,
+          vimEnabled: true,
+          snippets: [snippet('ea', 'X')],
+        );
+        await type(tester, 'e');
+        await press(tester, LogicalKeyboardKey.escape);
+        // `a` enters Insert without typing anything, so the token it records is
+        // spent by the selection-only notification that follows it.
+        await press(tester, _keyFor('a'));
 
-      // A write the user did not make: a sync pull, a redo, a CRDT merge. It
-      // happens to insert the same character the last key press produced, and
-      // used to be treated as typing on the strength of that stale token.
-      controller.value = const TextEditingValue(
-        text: 'ea',
-        selection: TextSelection.collapsed(offset: 2),
-      );
-      await tester.pump();
-      expect(controller.text, 'ea');
-      // Desktop only: where there is no soft keyboard, a character with no key
-      // event behind it is by definition not typing — which is the whole point
-      // of the token. See [_hardwareKeyboardTypes].
-    }, variant: TargetPlatformVariant.only(TargetPlatform.windows));
+        // A write the user did not make: a sync pull, a redo, a CRDT merge. It
+        // happens to insert the same character the last key press produced, and
+        // used to be treated as typing on the strength of that stale token.
+        controller.value = const TextEditingValue(
+          text: 'ea',
+          selection: TextSelection.collapsed(offset: 2),
+        );
+        await tester.pump();
+        expect(controller.text, 'ea');
+        // Desktop only: where there is no soft keyboard, a character with no key
+        // event behind it is by definition not typing — which is the whole point
+        // of the token. See [_hardwareKeyboardTypes].
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.windows),
+    );
 
     testWidgets('Tab in Visual mode leaves the range alone', (tester) async {
       await pumpField(
@@ -954,27 +957,24 @@ void main() {
       expect(_marks(tester).offsets, isEmpty);
     });
 
-    testWidgets('Normal u does not restore a stale trigger after a later edit', (
-      tester,
-    ) async {
-      await pumpField(
-        tester,
-        vimEnabled: true,
-        snippets: [snippet('ee', 'XY')],
-      );
-      await type(tester, 'ee');
-      await type(tester, 'z');
-      await press(tester, LogicalKeyboardKey.escape);
-      await press(tester, _keyFor('u'));
-      expect(controller.text, isNot('ee'));
-    });
+    testWidgets(
+      'Normal u does not restore a stale trigger after a later edit',
+      (tester) async {
+        await pumpField(
+          tester,
+          vimEnabled: true,
+          snippets: [snippet('ee', 'XY')],
+        );
+        await type(tester, 'ee');
+        await type(tester, 'z');
+        await press(tester, LogicalKeyboardKey.escape);
+        await press(tester, _keyFor('u'));
+        expect(controller.text, isNot('ee'));
+      },
+    );
 
     testWidgets('Insert u still types the letter', (tester) async {
-      await pumpField(
-        tester,
-        vimEnabled: true,
-        snippets: [snippet('ee', 'X')],
-      );
+      await pumpField(tester, vimEnabled: true, snippets: [snippet('ee', 'X')]);
       await type(tester, 'u');
       expect(controller.text, 'u');
     });

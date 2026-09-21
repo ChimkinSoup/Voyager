@@ -44,54 +44,61 @@ List<CharacterOperation> _mixedAuthorshipOps(String text) {
 /// positions, corrupting the operation log. This showed up in production as
 /// doubled letters in the "Remote" side of a journal sync conflict.
 void main() {
-  test(
-    'skipping recordTextChange after a Tab-indent silently re-seeds the '
-    'session, discarding remote devices\' character authorship',
-    () {
-      final ops = _mixedAuthorshipOps('1. a\n2. b');
-      final session = CharacterOpSession(clientId: 'device-a', initialOperations: ops);
-      expect(session.text, '1. a\n2. b');
-      // A real synced entry: authorship split across two devices.
-      expect(session.allOps.map((op) => op.clientId).toSet(), {'device-a', 'device-b'});
+  test('skipping recordTextChange after a Tab-indent silently re-seeds the '
+      'session, discarding remote devices\' character authorship', () {
+    final ops = _mixedAuthorshipOps('1. a\n2. b');
+    final session = CharacterOpSession(
+      clientId: 'device-a',
+      initialOperations: ops,
+    );
+    expect(session.text, '1. a\n2. b');
+    // A real synced entry: authorship split across two devices.
+    expect(session.allOps.map((op) => op.clientId).toSet(), {
+      'device-a',
+      'device-b',
+    });
 
-      // Tab-indent "2. b" the way handleListTab does, but — reproducing the
-      // bug — WITHOUT telling the session about it.
-      final controller = TextEditingController(text: '1. a\n2. b')
-        ..selection = const TextSelection.collapsed(offset: 9);
-      handleListTab(controller: controller, outdent: false);
-      expect(controller.text, '1. a\n  2. b'); // real text now has the indent
+    // Tab-indent "2. b" the way handleListTab does, but — reproducing the
+    // bug — WITHOUT telling the session about it.
+    final controller = TextEditingController(text: '1. a\n2. b')
+      ..selection = const TextSelection.collapsed(offset: 9);
+    handleListTab(controller: controller, outdent: false);
+    expect(controller.text, '1. a\n  2. b'); // real text now has the indent
 
-      // A later, ordinary keystroke diffs against the *real* current text
-      // (what the field's own `_lastText` bookkeeping correctly observed)
-      // — but the session's internal character-op list was never updated
-      // for the indent, so this `before` doesn't match what the session
-      // actually holds.
-      final before = controller.text; // '1. a\n  2. b', but the session still thinks '1. a\n2. b'
-      controller.text = '1. a\n  2. bx';
-      session.recordTextChange(before, controller.text);
+    // A later, ordinary keystroke diffs against the *real* current text
+    // (what the field's own `_lastText` bookkeeping correctly observed)
+    // — but the session's internal character-op list was never updated
+    // for the indent, so this `before` doesn't match what the session
+    // actually holds.
+    final before = controller
+        .text; // '1. a\n  2. b', but the session still thinks '1. a\n2. b'
+    controller.text = '1. a\n  2. bx';
+    session.recordTextChange(before, controller.text);
 
-      // The text itself happens to reconstruct correctly locally (the
-      // session's self-repair kicks in), but the repair re-seeds every
-      // character as freshly authored by *this* client — device-b's
-      // authorship of "2. b" is silently erased. Once this session's ops
-      // are pushed and merged against a remote copy that still has
-      // device-b's *original* operations for those same characters, the
-      // remote ends up with two distinct operation sets for the same
-      // text, reconstructing as doubled characters — exactly like the
-      // reported merge conflict.
-      expect(session.text, controller.text); // text looks fine locally...
-      expect(
-        session.allOps.map((op) => op.clientId).toSet(),
-        {'device-a'}, // ...but device-b's authorship is gone.
-      );
-    },
-  );
+    // The text itself happens to reconstruct correctly locally (the
+    // session's self-repair kicks in), but the repair re-seeds every
+    // character as freshly authored by *this* client — device-b's
+    // authorship of "2. b" is silently erased. Once this session's ops
+    // are pushed and merged against a remote copy that still has
+    // device-b's *original* operations for those same characters, the
+    // remote ends up with two distinct operation sets for the same
+    // text, reconstructing as doubled characters — exactly like the
+    // reported merge conflict.
+    expect(session.text, controller.text); // text looks fine locally...
+    expect(
+      session.allOps.map((op) => op.clientId).toSet(),
+      {'device-a'}, // ...but device-b's authorship is gone.
+    );
+  });
 
   test(
     'recordTextChange after every mutation (the fix) keeps the session in sync',
     () {
       final ops = _mixedAuthorshipOps('1. a\n2. b');
-      final session = CharacterOpSession(clientId: 'device-a', initialOperations: ops);
+      final session = CharacterOpSession(
+        clientId: 'device-a',
+        initialOperations: ops,
+      );
       final controller = TextEditingController(text: '1. a\n2. b')
         ..selection = const TextSelection.collapsed(offset: 9);
 
@@ -102,10 +109,10 @@ void main() {
       expect(session.text, controller.text);
       // No spurious re-seed: device-b's authorship of its characters
       // survives (only the two new indent-space ops are device-a's).
-      expect(
-        session.allOps.map((op) => op.clientId).toSet(),
-        {'device-a', 'device-b'},
-      );
+      expect(session.allOps.map((op) => op.clientId).toSet(), {
+        'device-a',
+        'device-b',
+      });
 
       before = controller.text;
       controller.text = '1. a\n  2. bx';

@@ -23,11 +23,7 @@ void main() {
   group('proseReadRanges', () {
     test('a delimiter is laid out at zero width, not dropped', () {
       final ranges = proseReadRanges('a **b** c', theme);
-      expect(ranges.map((r) => (r.start, r.end)), [
-        (2, 4),
-        (4, 5),
-        (5, 7),
-      ]);
+      expect(ranges.map((r) => (r.start, r.end)), [(2, 4), (4, 5), (5, 7)]);
       expect(ranges[0].style.fontSize, 0);
       expect(ranges[1].style.fontWeight, FontWeight.bold);
       expect(ranges[2].style.fontSize, 0);
@@ -68,7 +64,10 @@ void main() {
       final out = applyStyledRanges(
         const [
           TextSpan(text: 'abc'),
-          TextSpan(text: 'def', style: TextStyle(color: Color(0xFF00FF00))),
+          TextSpan(
+            text: 'def',
+            style: TextStyle(color: Color(0xFF00FF00)),
+          ),
         ],
         const [
           (start: 2, end: 4, style: TextStyle(fontWeight: FontWeight.bold)),
@@ -124,9 +123,8 @@ void main() {
       return out;
     }
 
-    Future<void> pump(WidgetTester tester, Widget child) => tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: child)),
-    );
+    Future<void> pump(WidgetTester tester, Widget child) =>
+        tester.pumpWidget(MaterialApp(home: Scaffold(body: child)));
 
     testWidgets('VoyagerProseText hides the markers and bolds the word', (
       tester,
@@ -176,9 +174,7 @@ void main() {
         ),
       );
       expect(find.byType(Container), findsWidgets); // the pill
-      final tag = runs(
-        tester,
-      ).where((r) => r.$1 == '#project').toList();
+      final tag = runs(tester).where((r) => r.$1 == '#project').toList();
       expect(tag, isNotEmpty);
       expect(tag.first.$2?.fontWeight, FontWeight.bold);
     });

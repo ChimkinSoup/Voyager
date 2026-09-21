@@ -99,20 +99,14 @@ void main() {
       parseJobClipboard(
         'https://Software Engineer en.wikipedia.org/wiki/Shark',
       ),
-      (
-        title: 'Software Engineer',
-        url: 'https://en.wikipedia.org/wiki/Shark',
-      ),
+      (title: 'Software Engineer', url: 'https://en.wikipedia.org/wiki/Shark'),
     );
     // The same, with the real link carrying its own scheme too.
     expect(
       parseJobClipboard(
         'https://Software Engineer https://en.wikipedia.org/wiki/Shark',
       ),
-      (
-        title: 'Software Engineer',
-        url: 'https://en.wikipedia.org/wiki/Shark',
-      ),
+      (title: 'Software Engineer', url: 'https://en.wikipedia.org/wiki/Shark'),
     );
   });
 

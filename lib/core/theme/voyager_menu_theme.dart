@@ -87,7 +87,9 @@ abstract final class VoyagerMenuTheme {
   );
 
   static MenuThemeData menuTheme({Color? accentColor, Color? color}) =>
-      MenuThemeData(style: menuStyle(accentColor: accentColor, color: color));
+      MenuThemeData(
+        style: menuStyle(accentColor: accentColor, color: color),
+      );
 
   static ({
     Color color,

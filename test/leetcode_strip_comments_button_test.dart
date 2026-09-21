@@ -29,8 +29,9 @@ Future<LeetCodeCodeController> _pumpEditor(
 }
 
 void main() {
-  testWidgets('the strip button removes the language\'s line comments',
-      (WidgetTester tester) async {
+  testWidgets('the strip button removes the language\'s line comments', (
+    WidgetTester tester,
+  ) async {
     final controller = await _pumpEditor(
       tester,
       code: '// lead\nint a = 1; // trail\nint b = 2;',
@@ -46,11 +47,15 @@ void main() {
     // The caret has to land somewhere inside the new text: CodeController
     // leaves the selection unset after a fullText write, which reads as
     // offset -1 and throws the moment the field is focused.
-    expect(controller.selection.baseOffset, inInclusiveRange(0, controller.fullText.length));
+    expect(
+      controller.selection.baseOffset,
+      inInclusiveRange(0, controller.fullText.length),
+    );
   });
 
-  testWidgets('the strip button follows the selected language',
-      (WidgetTester tester) async {
+  testWidgets('the strip button follows the selected language', (
+    WidgetTester tester,
+  ) async {
     final controller = await _pumpEditor(
       tester,
       code: 'x = 1  # trail\ny = "a // b"',
@@ -65,14 +70,16 @@ void main() {
     expect(controller.fullText, 'x = 1\ny = "a // b"');
   });
 
-  testWidgets('the language row lays the pills and the button out without overflow',
-      (WidgetTester tester) async {
-    await _pumpEditor(tester, code: 'int a = 1;', language: 'java');
+  testWidgets(
+    'the language row lays the pills and the button out without overflow',
+    (WidgetTester tester) async {
+      await _pumpEditor(tester, code: 'int a = 1;', language: 'java');
 
-    final row = tester.getRect(find.byType(GlassButton));
-    final field = tester.getRect(find.byType(LeetCodeCodeInput));
-    expect(row.right, moreOrLessEquals(field.right, epsilon: 0.5));
-    expect(row.height, lessThanOrEqualTo(32));
-    expect(tester.takeException(), isNull);
-  });
+      final row = tester.getRect(find.byType(GlassButton));
+      final field = tester.getRect(find.byType(LeetCodeCodeInput));
+      expect(row.right, moreOrLessEquals(field.right, epsilon: 0.5));
+      expect(row.height, lessThanOrEqualTo(32));
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

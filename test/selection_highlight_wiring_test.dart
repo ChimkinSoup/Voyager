@@ -78,11 +78,7 @@ void main() {
     testWidgets('LabeledTextField', (tester) async {
       await pump(
         tester,
-        LabeledTextField(
-          label: 'Body',
-          controller: controller,
-          maxLines: null,
-        ),
+        LabeledTextField(label: 'Body', controller: controller, maxLines: null),
       );
       expect(find.byType(SelectionHighlightLayer), findsOneWidget);
       expect(fieldSelectionColor(tester), Colors.transparent);
@@ -93,10 +89,7 @@ void main() {
     testWidgets('TagHighlightedTextField', (tester) async {
       await pump(
         tester,
-        TagHighlightedTextField(
-          controller: controller,
-          focusNode: focusNode,
-        ),
+        TagHighlightedTextField(controller: controller, focusNode: focusNode),
       );
       expect(find.byType(SelectionHighlightLayer), findsNothing);
       expect(fieldSelectionColor(tester), isNot(Colors.transparent));
@@ -128,10 +121,7 @@ void main() {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
-          body: LeetCodeCodeView(
-            code: 'a\n\nb',
-            language: 'python',
-          ),
+          body: LeetCodeCodeView(code: 'a\n\nb', language: 'python'),
         ),
       ),
     );

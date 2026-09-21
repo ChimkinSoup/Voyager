@@ -91,9 +91,7 @@ class PendingTextMergeBuffer {
   }) {
     final key = documentKey(collection, documentId);
     final previous =
-        _pending[key]?.remoteText ??
-        _lastKnownRemoteText[key] ??
-        remoteText;
+        _pending[key]?.remoteText ?? _lastKnownRemoteText[key] ?? remoteText;
     final next = PendingTextMerge(
       previousRemoteText: previous,
       remoteText: remoteText,

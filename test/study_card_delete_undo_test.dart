@@ -123,8 +123,9 @@ void main() {
       findsOneWidget,
       reason: 'undo brings the session back to the card it was taken off',
     );
-    final restored = (await DriftStudyRepository(db).listCards(_deckId))
-        .where((c) => c.id == 'card-0');
+    final restored = (await DriftStudyRepository(
+      db,
+    ).listCards(_deckId)).where((c) => c.id == 'card-0');
     expect(restored, hasLength(1));
     expect(restored.single.deletedAt, isNull);
   });

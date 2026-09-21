@@ -609,7 +609,11 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
     }
     final padding = contentPadding.resolve(Directionality.of(context));
     return Padding(
-      padding: EdgeInsets.only(left: padding.left, right: padding.right, top: 6),
+      padding: EdgeInsets.only(
+        left: padding.left,
+        right: padding.right,
+        top: 6,
+      ),
       child: content,
     );
   }

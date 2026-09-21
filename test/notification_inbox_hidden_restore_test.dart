@@ -163,10 +163,7 @@ Finder _dismissOf(String title) => find.descendant(
 );
 
 Finder get _hiddenTrigger => find
-    .ancestor(
-      of: find.textContaining('Hidden ('),
-      matching: find.byType(Stack),
-    )
+    .ancestor(of: find.textContaining('Hidden ('), matching: find.byType(Stack))
     .first;
 
 void main() {

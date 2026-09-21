@@ -260,7 +260,9 @@ class _ContributionRoomModalState
                 children: [
                   Expanded(
                     child: Text(
-                      _editing ? 'Contribution room' : 'Track contribution room',
+                      _editing
+                          ? 'Contribution room'
+                          : 'Track contribution room',
                       style: theme.textTheme.titleMedium,
                     ),
                   ),

@@ -67,10 +67,9 @@ void main() {
     // Older devices simply never wrote the key; the absent value must not
     // arrive as a surprise pad on the next sync.
     final local = AppSettings(updatedAt: DateTime.utc(2026, 8, 30));
-    final merged = mergeSettingsFromRemote(
-      {'settingsUpdatedAt': DateTime.utc(2026, 8, 31).toIso8601String()},
-      local,
-    );
+    final merged = mergeSettingsFromRemote({
+      'settingsUpdatedAt': DateTime.utc(2026, 8, 31).toIso8601String(),
+    }, local);
     expect(merged.leetCodeEnableScratchCode, isFalse);
   });
 

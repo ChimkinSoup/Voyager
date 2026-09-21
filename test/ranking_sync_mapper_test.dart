@@ -136,15 +136,18 @@ void main() {
       expect(merged.tags, isEmpty);
     });
 
-    test('a remote tag written by an older build is normalized on the way in', () {
-      final merged = mergeRankingParentFromRemote(
-        remote({
-          'tags': ['#Thai', 'rom com', 'THAI'],
-        }),
-        'p1',
-      );
-      expect(merged.tags, ['thai']);
-    });
+    test(
+      'a remote tag written by an older build is normalized on the way in',
+      () {
+        final merged = mergeRankingParentFromRemote(
+          remote({
+            'tags': ['#Thai', 'rom com', 'THAI'],
+          }),
+          'p1',
+        );
+        expect(merged.tags, ['thai']);
+      },
+    );
   });
 
   group('Category merge', () {
@@ -387,10 +390,10 @@ void main() {
       final payload = rankingParentToFirestore(cleared);
       // Written as an explicit null: uploads merge into the stored document,
       // and a key left out would keep the old score there.
-      expect(
-        (payload['fieldValues'] as Map)['plot'],
-        {'score': null, 'notes': 'ok'},
-      );
+      expect((payload['fieldValues'] as Map)['plot'], {
+        'score': null,
+        'notes': 'ok',
+      });
 
       final merged = mergeRankingParentFromRemote(payload, 'p1', local: scored);
       expect(merged.fieldValues['plot']!.score, isNull);
@@ -403,10 +406,10 @@ void main() {
       );
       final emptied = scored.copyWith(fieldValues: const {});
       final payload = rankingParentToFirestore(emptied);
-      expect(
-        (payload['fieldValues'] as Map)['plot'],
-        {'score': null, 'notes': ''},
-      );
+      expect((payload['fieldValues'] as Map)['plot'], {
+        'score': null,
+        'notes': '',
+      });
       final merged = mergeRankingParentFromRemote(payload, 'p1', local: scored);
       expect(merged.fieldValues, isEmpty);
     });

@@ -39,9 +39,9 @@ Future<void> _loadIosevka() async {
     ..addFont(
       Future.value(
         ByteData.view(
-          File('assets/Iosevka-Regular/Iosevka-Aile-01.ttf')
-              .readAsBytesSync()
-              .buffer,
+          File(
+            'assets/Iosevka-Regular/Iosevka-Aile-01.ttf',
+          ).readAsBytesSync().buffer,
         ),
       ),
     );

@@ -25,8 +25,9 @@ class _FakeLeetCodeRepository implements LeetCodeRepository {
   final List<LeetCodeProblem> problems;
 
   @override
-  Future<List<LeetCodeProblem>> listProblems({bool includeDeleted = false}) async =>
-      problems;
+  Future<List<LeetCodeProblem>> listProblems({
+    bool includeDeleted = false,
+  }) async => problems;
 
   @override
   Future<LeetCodeProblem?> getProblem(String id) async =>
@@ -118,10 +119,8 @@ Future<void> _search(WidgetTester tester, String query) async {
   await tester.pump();
 }
 
-Finder _button(String label) => find.ancestor(
-  of: find.text(label),
-  matching: find.byType(GlassButton),
-);
+Finder _button(String label) =>
+    find.ancestor(of: find.text(label), matching: find.byType(GlassButton));
 
 void main() {
   testWidgets('every tracked problem shows as a mini flashcard', (
@@ -164,7 +163,11 @@ void main() {
 
     testWidgets('the difficulty pills narrow the grid', (tester) async {
       await _pumpDeck(tester, [
-        _problem(id: '1', title: 'Two Sum', difficulty: LeetCodeDifficulty.easy),
+        _problem(
+          id: '1',
+          title: 'Two Sum',
+          difficulty: LeetCodeDifficulty.easy,
+        ),
         _problem(
           id: '2',
           title: 'Merge Intervals',
@@ -193,7 +196,11 @@ void main() {
 
     testWidgets('the counts follow the filter', (tester) async {
       await _pumpDeck(tester, [
-        _problem(id: '1', title: 'Two Sum', difficulty: LeetCodeDifficulty.easy),
+        _problem(
+          id: '1',
+          title: 'Two Sum',
+          difficulty: LeetCodeDifficulty.easy,
+        ),
         _scheduled(
           id: '2',
           title: 'Merge Intervals',
@@ -224,10 +231,7 @@ void main() {
 
       expect(tester.widget<GlassButton>(_button('Study')).onPressed, isNull);
       // Cram ignores the schedule, so it stays available.
-      expect(
-        tester.widget<GlassButton>(_button('Cram')).onPressed,
-        isNotNull,
-      );
+      expect(tester.widget<GlassButton>(_button('Cram')).onPressed, isNotNull);
     });
 
     testWidgets('Study opens a session over what is due', (tester) async {
@@ -266,7 +270,11 @@ void main() {
 
     testWidgets('Cram takes the filtered set too', (tester) async {
       await _pumpDeck(tester, [
-        _problem(id: '1', title: 'Two Sum', difficulty: LeetCodeDifficulty.easy),
+        _problem(
+          id: '1',
+          title: 'Two Sum',
+          difficulty: LeetCodeDifficulty.easy,
+        ),
         _scheduled(
           id: '2',
           title: 'Merge Intervals',

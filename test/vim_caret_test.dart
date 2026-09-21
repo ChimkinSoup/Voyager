@@ -90,7 +90,9 @@ void main() {
       return pixels;
     }
 
-    testWidgets('repaints a light glyph on a dark accent block', (tester) async {
+    testWidgets('repaints a light glyph on a dark accent block', (
+      tester,
+    ) async {
       final pixels = await renderCaret(
         tester,
         text: 'X',
@@ -176,8 +178,14 @@ void main() {
         late final _Pixels pixels;
         await tester.runAsync(() async {
           final image = await boundary.toImage();
-          final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-          pixels = _Pixels(data!.buffer.asUint8List(), image.width, image.height);
+          final data = await image.toByteData(
+            format: ui.ImageByteFormat.rawRgba,
+          );
+          pixels = _Pixels(
+            data!.buffer.asUint8List(),
+            image.width,
+            image.height,
+          );
           image.dispose();
         });
 
@@ -198,7 +206,9 @@ void main() {
       },
     );
 
-    testWidgets('repaints a dark glyph on a light accent block', (tester) async {
+    testWidgets('repaints a dark glyph on a light accent block', (
+      tester,
+    ) async {
       final pixels = await renderCaret(
         tester,
         text: 'X',
@@ -213,7 +223,9 @@ void main() {
       );
     });
 
-    testWidgets('Visual mode uses the same block caret treatment', (tester) async {
+    testWidgets('Visual mode uses the same block caret treatment', (
+      tester,
+    ) async {
       final pixels = await renderCaret(
         tester,
         text: 'Z',
@@ -254,43 +266,41 @@ void main() {
       expect(pixels.firstRowWithAccent(_darkAccent), isNotNull);
     });
 
-    testWidgets('an empty field repaints the hint\'s first letter on the block', (
-      tester,
-    ) async {
-      // The field paints the placeholder below this layer, where the opaque
-      // block would swallow its first letter.
-      final overHint = await renderCaret(
-        tester,
-        text: '',
-        caretOffset: 0,
-        accentColor: _darkAccent,
-        hintText: 'Start writing...',
-      );
-      expect(
-        overHint.hasForeground(vimBlockCaretForeground(_darkAccent)),
-        isTrue,
-      );
+    testWidgets(
+      'an empty field repaints the hint\'s first letter on the block',
+      (tester) async {
+        // The field paints the placeholder below this layer, where the opaque
+        // block would swallow its first letter.
+        final overHint = await renderCaret(
+          tester,
+          text: '',
+          caretOffset: 0,
+          accentColor: _darkAccent,
+          hintText: 'Start writing...',
+        );
+        expect(
+          overHint.hasForeground(vimBlockCaretForeground(_darkAccent)),
+          isTrue,
+        );
 
-      final overSpace = await renderCaret(
-        tester,
-        text: '',
-        caretOffset: 0,
-        accentColor: _darkAccent,
-      );
-      expect(
-        overSpace.hasForeground(vimBlockCaretForeground(_darkAccent)),
-        isFalse,
-        reason: 'nothing to repaint without a hint',
-      );
-    });
+        final overSpace = await renderCaret(
+          tester,
+          text: '',
+          caretOffset: 0,
+          accentColor: _darkAccent,
+        );
+        expect(
+          overSpace.hasForeground(vimBlockCaretForeground(_darkAccent)),
+          isFalse,
+          reason: 'nothing to repaint without a hint',
+        );
+      },
+    );
   });
 
   group('vimHintCaretGlyph', () {
     test('takes the placeholder\'s first letter on an empty field', () {
-      expect(
-        vimHintCaretGlyph(text: '', hintText: 'Start writing...'),
-        'S',
-      );
+      expect(vimHintCaretGlyph(text: '', hintText: 'Start writing...'), 'S');
     });
 
     test('keeps a surrogate pair whole', () {
@@ -300,7 +310,10 @@ void main() {
     test('gives nothing once the field has text', () {
       // The placeholder is off screen by then, so the block goes back to
       // measuring the glyph it actually sits on.
-      expect(vimHintCaretGlyph(text: 'a', hintText: 'Start writing...'), isNull);
+      expect(
+        vimHintCaretGlyph(text: 'a', hintText: 'Start writing...'),
+        isNull,
+      );
     });
 
     test('gives nothing for a field without a hint', () {
@@ -311,7 +324,11 @@ void main() {
 
   group('vimCaretGlyphPaintOrigin', () {
     // bodySmall-like metrics with strut — the dream-journal note field.
-    const style = TextStyle(fontSize: 12, height: 1.45, color: Color(0xFF333333));
+    const style = TextStyle(
+      fontSize: 12,
+      height: 1.45,
+      color: Color(0xFF333333),
+    );
     final strut = StrutStyle.fromTextStyle(style, forceStrutHeight: true);
 
     test('aligns the probe glyph box onto the paragraph glyph box', () {
@@ -416,12 +433,7 @@ class _Pixels {
 
   Color colorAt(int x, int y) {
     final i = (y * width + x) * 4;
-    return Color.fromARGB(
-      bytes[i + 3],
-      bytes[i],
-      bytes[i + 1],
-      bytes[i + 2],
-    );
+    return Color.fromARGB(bytes[i + 3], bytes[i], bytes[i + 1], bytes[i + 2]);
   }
 
   int? firstRowWithAccent(Color accent) {

@@ -251,10 +251,7 @@ void main() {
 
     expect(sawMorphRow, isTrue);
     final thursday = DateTime(browsed.year, browsed.month, browsed.day + 3);
-    expect(
-      find.text(DateFormat.MMMM().format(thursday)),
-      findsOneWidget,
-    );
+    expect(find.text(DateFormat.MMMM().format(thursday)), findsOneWidget);
   });
 
   testWidgets('month ↔ year fades the highlight instead of snapping', (

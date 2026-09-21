@@ -77,11 +77,7 @@ class ProseEmphasisTheme {
 /// spellcheck squiggles. It must be sorted and non-overlapping, the same
 /// contract [buildStyledRuns] takes.
 typedef ProseSpanBuilder =
-    TextSpan Function(
-      String text,
-      TextStyle base, {
-      List<StyledRange> extra,
-    });
+    TextSpan Function(String text, TextStyle base, {List<StyledRange> extra});
 
 /// The [ProseSpanBuilder] for a field with no emphasis parsing — the exclusion
 /// list in §4.1, and every single-line field. Identical to what the layers
@@ -207,13 +203,14 @@ TextStyle _emphasisStyle(EmphasisKind kind, ProseEmphasisTheme theme) =>
       // Underline is pure paint — it moves no glyph — so a metrics-only theme
       // leaves it out entirely rather than drawing a second copy behind the
       // field's own.
-      EmphasisKind.underline => theme.underlineColor == null
-          ? const TextStyle()
-          : TextStyle(
-              decoration: TextDecoration.underline,
-              decorationColor: theme.underlineColor,
-              decorationStyle: TextDecorationStyle.solid,
-            ),
+      EmphasisKind.underline =>
+        theme.underlineColor == null
+            ? const TextStyle()
+            : TextStyle(
+                decoration: TextDecoration.underline,
+                decorationColor: theme.underlineColor,
+                decorationStyle: TextDecorationStyle.solid,
+              ),
       // The fill itself is not here: `backgroundColor` can only paint a hard
       // rect, and the highlight's corners are rounded. The run is *marked*,
       // and `ProseHighlightLayer` / `ProseHighlightUnderlay` paint it — see

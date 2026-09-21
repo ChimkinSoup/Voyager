@@ -168,9 +168,7 @@ void main() {
     // Found by its label, not by position: the date capsule moved out of the
     // capsule row at the top of the editor and onto the History heading at the
     // bottom, and an index would have silently started tapping the season.
-    await tester.tap(
-      find.widgetWithText(SelectorPill, 'Aug 20, 2026'),
-    );
+    await tester.tap(find.widgetWithText(SelectorPill, 'Aug 20, 2026'));
     await tester.pumpAndSettle();
 
     expect(

@@ -24,8 +24,7 @@ Future<_Pixels> _render(
   required String text,
   required TextSelection selection,
 }) async {
-  final controller = TextEditingController(text: text)
-    ..selection = selection;
+  final controller = TextEditingController(text: text)..selection = selection;
   addTearDown(controller.dispose);
   final focusNode = FocusNode();
   addTearDown(focusNode.dispose);
@@ -121,7 +120,8 @@ void main() {
     expect(
       painted.last - painted.first + 1,
       painted.length,
-      reason: 'found ${painted.last - painted.first + 1 - painted.length} '
+      reason:
+          'found ${painted.last - painted.first + 1 - painted.length} '
           'unhighlighted pixel row(s) inside the selection — the seam is back',
     );
 
@@ -162,7 +162,8 @@ void main() {
     expect(
       shortest,
       lessThan(longest ~/ 2),
-      reason: 'the short middle line is highlighted nearly as wide as the long '
+      reason:
+          'the short middle line is highlighted nearly as wide as the long '
           'ones ($shortest vs $longest) — the selection is still a box',
     );
   });
@@ -191,7 +192,8 @@ void main() {
     expect(
       widest - narrowest,
       lessThanOrEqualTo(1),
-      reason: 'the lines whose break is selected are $widest px wide against '
+      reason:
+          'the lines whose break is selected are $widest px wide against '
           "the last line's $narrowest — there is a trailing mark",
     );
   });

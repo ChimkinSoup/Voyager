@@ -163,9 +163,7 @@ void main() {
 
     test('ignores unknown and soft-deleted ids', () async {
       await repo.upsertCalendar(
-        (await repo.getCalendar(
-          'shifts',
-        ))!.copyWith(deletedAt: utcNow()),
+        (await repo.getCalendar('shifts'))!.copyWith(deletedAt: utcNow()),
       );
       await overlay(legacyCalendarId, ['ghost', 'shifts', 'holidays']);
 
@@ -235,10 +233,9 @@ void main() {
 
       // A restore does not bring the link back.
       await repo.upsertCalendar(_calendar('holidays'));
-      expect(
-        (await repo.getCalendar(legacyCalendarId))!.overlayCalendarIds,
-        ['work'],
-      );
+      expect((await repo.getCalendar(legacyCalendarId))!.overlayCalendarIds, [
+        'work',
+      ]);
     });
   });
 
@@ -305,9 +302,12 @@ void main() {
     tearDown(() => dir.deleteSync(recursive: true));
 
     Future<List<String>> calendarColumns(AppDatabase db) async => [
-      for (final row in await db
-          .customSelect("SELECT name FROM pragma_table_info('calendars_table')")
-          .get())
+      for (final row
+          in await db
+              .customSelect(
+                "SELECT name FROM pragma_table_info('calendars_table')",
+              )
+              .get())
         row.read<String>('name'),
     ];
 
@@ -353,9 +353,7 @@ void main() {
     addTearDown(source.close);
     final sourceRepo = DriftCalendarRepository(source);
     await sourceRepo.upsertCalendar(_calendar('holidays'));
-    await sourceRepo.upsertCalendar(
-      _calendar('old', deletedAt: utcNow()),
-    );
+    await sourceRepo.upsertCalendar(_calendar('old', deletedAt: utcNow()));
     await sourceRepo.upsertCalendar(
       _calendar('host', overlays: ['ghost', 'holidays', 'old']),
     );

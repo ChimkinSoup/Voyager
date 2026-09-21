@@ -130,7 +130,9 @@ List<LeetCodeProblem> _problems() {
 }
 
 List<Override> _studyOverrides() => [
-  studyRepositoryProvider.overrideWithValue(_RecordingStudyRepository(_cards(3))),
+  studyRepositoryProvider.overrideWithValue(
+    _RecordingStudyRepository(_cards(3)),
+  ),
   remoteSyncServiceProvider.overrideWithValue(_NoopRemoteSync()),
   sessionCheckpointStoreProvider.overrideWithValue(
     MemorySessionCheckpointStore(),

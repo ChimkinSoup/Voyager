@@ -167,7 +167,11 @@ void main() {
     await _pumpInbox(tester, _broken);
 
     final rect = tester.getRect(find.text(_broken));
-    expect(rect.height, greaterThan(20), reason: 'the note has to be two lines');
+    expect(
+      rect.height,
+      greaterThan(20),
+      reason: 'the note has to be two lines',
+    );
     // Only the bullet: the second line is the user's own, not a wrap.
     expect(await _markCount(tester, rect), 1);
   });

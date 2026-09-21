@@ -35,8 +35,9 @@ class _FakeLeetCodeRepository implements LeetCodeRepository {
   final List<LeetCodeProblem> problems;
 
   @override
-  Future<List<LeetCodeProblem>> listProblems({bool includeDeleted = false}) async =>
-      problems;
+  Future<List<LeetCodeProblem>> listProblems({
+    bool includeDeleted = false,
+  }) async => problems;
 
   @override
   Future<LeetCodeProblem?> getProblem(String id) async =>
@@ -83,10 +84,8 @@ List<String> _fadingAncestors(WidgetTester tester, Finder finder) {
   return found;
 }
 
-Finder _glassButton(String label) => find.ancestor(
-  of: find.text(label),
-  matching: find.byType(GlassButton),
-);
+Finder _glassButton(String label) =>
+    find.ancestor(of: find.text(label), matching: find.byType(GlassButton));
 
 /// Stand-in for the shader the app paints behind everything. Deliberately not
 /// a flat fill: a flat backdrop blurs to itself, which would hide the very
@@ -107,11 +106,7 @@ Widget _background({required Widget child}) => Stack(
       Positioned(
         left: (i * 71).toDouble() % 900,
         top: (i * 47).toDouble() % 220,
-        child: Container(
-          width: 30,
-          height: 30,
-          color: const Color(0xFF7C9EFF),
-        ),
+        child: Container(width: 30, height: 30, color: const Color(0xFF7C9EFF)),
       ),
     child,
   ],
@@ -342,10 +337,7 @@ void main() {
     // appearance yet to compare it against.
     controller.value = 0.2;
     await tester.pump();
-    expect(
-      _fadingAncestors(tester, find.byType(GlassSurface)),
-      isNotEmpty,
-    );
+    expect(_fadingAncestors(tester, find.byType(GlassSurface)), isNotEmpty);
 
     // By the time it is merely finishing its scale it must be fully opaque, so
     // the layer drops while the surface is still visibly moving rather than

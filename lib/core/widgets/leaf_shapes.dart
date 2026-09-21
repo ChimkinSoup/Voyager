@@ -10,11 +10,7 @@ import 'package:flutter/material.dart';
 /// which design the live background uses is a manual code change, made one
 /// design at a time on request.
 enum LeafDesign {
-  petal(
-    number: 0,
-    label: 'Petal (current)',
-    pathBuilder: petalPath,
-  ),
+  petal(number: 0, label: 'Petal (current)', pathBuilder: petalPath),
   ovalLeaf(
     number: 1,
     label: 'Oval Leaf',
@@ -105,7 +101,8 @@ enum LeafDesign {
   final Path Function(Rect rect)? veinBuilder;
 
   /// Optional custom watercolor wash painter for designs with specialized multi-layered rendering.
-  final void Function(Canvas canvas, Path path, Rect rect, Color color)? customPainter;
+  final void Function(Canvas canvas, Path path, Rect rect, Color color)?
+  customPainter;
 }
 
 /// Paints [design] filled with a watercolor wash of [color] inside [rect]:
@@ -162,8 +159,11 @@ void paintLeaf(Canvas canvas, LeafDesign design, Rect rect, Color color) {
     canvas.drawPath(
       veinBuilder(rect),
       Paint()
-        ..color = Color.lerp(color, const Color(0xFF4A2E36), 0.55)!
-            .withValues(alpha: 0.30)
+        ..color = Color.lerp(
+          color,
+          const Color(0xFF4A2E36),
+          0.55,
+        )!.withValues(alpha: 0.30)
         ..style = PaintingStyle.stroke
         ..strokeWidth = rect.shortestSide * 0.012
         ..strokeCap = StrokeCap.round
@@ -176,7 +176,11 @@ void paintLeaf(Canvas canvas, LeafDesign design, Rect rect, Color color) {
 /// Rasterizes [design] into a small square image filled with [color], fully
 /// opaque at its densest so per-instance opacity can be applied cheaply at
 /// draw time. See [paintLeaf] for the actual drawing technique.
-ui.Image buildLeafSprite(LeafDesign design, Color color, {double extent = 96.0}) {
+ui.Image buildLeafSprite(
+  LeafDesign design,
+  Color color, {
+  double extent = 96.0,
+}) {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
   paintLeaf(canvas, design, Rect.fromLTWH(0, 0, extent, extent), color);
@@ -195,14 +199,20 @@ Path petalPath(Rect rect) {
   return Path()
     ..moveTo(p(0.50, 0.04).dx, p(0.50, 0.04).dy)
     ..cubicTo(
-      p(0.86, 0.22).dx, p(0.86, 0.22).dy,
-      p(0.96, 0.64).dx, p(0.96, 0.64).dy,
-      p(0.54, 0.96).dx, p(0.54, 0.96).dy,
+      p(0.86, 0.22).dx,
+      p(0.86, 0.22).dy,
+      p(0.96, 0.64).dx,
+      p(0.96, 0.64).dy,
+      p(0.54, 0.96).dx,
+      p(0.54, 0.96).dy,
     )
     ..cubicTo(
-      p(0.14, 0.72).dx, p(0.14, 0.72).dy,
-      p(0.06, 0.28).dx, p(0.06, 0.28).dy,
-      p(0.50, 0.04).dx, p(0.50, 0.04).dy,
+      p(0.14, 0.72).dx,
+      p(0.14, 0.72).dy,
+      p(0.06, 0.28).dx,
+      p(0.06, 0.28).dy,
+      p(0.50, 0.04).dx,
+      p(0.50, 0.04).dy,
     )
     ..close();
 }
@@ -217,14 +227,20 @@ Path ovalLeafPath(Rect rect) {
   return Path()
     ..moveTo(p(0.50, 0.03).dx, p(0.50, 0.03).dy)
     ..cubicTo(
-      p(0.88, 0.18).dx, p(0.88, 0.18).dy,
-      p(0.92, 0.55).dx, p(0.92, 0.55).dy,
-      p(0.50, 0.97).dx, p(0.50, 0.97).dy,
+      p(0.88, 0.18).dx,
+      p(0.88, 0.18).dy,
+      p(0.92, 0.55).dx,
+      p(0.92, 0.55).dy,
+      p(0.50, 0.97).dx,
+      p(0.50, 0.97).dy,
     )
     ..cubicTo(
-      p(0.08, 0.55).dx, p(0.08, 0.55).dy,
-      p(0.12, 0.18).dx, p(0.12, 0.18).dy,
-      p(0.50, 0.03).dx, p(0.50, 0.03).dy,
+      p(0.08, 0.55).dx,
+      p(0.08, 0.55).dy,
+      p(0.12, 0.18).dx,
+      p(0.12, 0.18).dy,
+      p(0.50, 0.03).dx,
+      p(0.50, 0.03).dy,
     )
     ..close();
 }
@@ -240,8 +256,10 @@ Path ovalLeafVeins(Rect rect) {
   final path = Path()
     ..moveTo(p(0.50, 0.10).dx, p(0.50, 0.10).dy)
     ..quadraticBezierTo(
-      p(0.54, 0.50).dx, p(0.54, 0.50).dy,
-      p(0.50, 0.90).dx, p(0.50, 0.90).dy,
+      p(0.54, 0.50).dx,
+      p(0.54, 0.50).dy,
+      p(0.50, 0.90).dx,
+      p(0.50, 0.90).dy,
     );
 
   // Side veins (t, endRightX, endLeftX, endY) kept comfortably inside leaf bounds
@@ -259,9 +277,19 @@ Path ovalLeafVeins(Rect rect) {
     final from = p(0.51, t);
     path
       ..moveTo(from.dx, from.dy)
-      ..quadraticBezierTo(p(rx - 0.04, t + 0.04).dx, p(rx - 0.04, t + 0.04).dy, p(rx, endY).dx, p(rx, endY).dy)
+      ..quadraticBezierTo(
+        p(rx - 0.04, t + 0.04).dx,
+        p(rx - 0.04, t + 0.04).dy,
+        p(rx, endY).dx,
+        p(rx, endY).dy,
+      )
       ..moveTo(from.dx, from.dy)
-      ..quadraticBezierTo(p(lx + 0.04, t + 0.04).dx, p(lx + 0.04, t + 0.04).dy, p(lx, endY).dx, p(lx, endY).dy);
+      ..quadraticBezierTo(
+        p(lx + 0.04, t + 0.04).dx,
+        p(lx + 0.04, t + 0.04).dy,
+        p(lx, endY).dx,
+        p(lx, endY).dy,
+      );
   }
   return path;
 }
@@ -324,11 +352,15 @@ Path _roundedLobesPath(
     final angle = startAngle + i * math.pi / lobes;
     final r = (i.isEven ? outerRadiusFrac : innerRadiusFrac) * baseR;
     points.add(
-      Offset(cx + math.cos(angle) * r * squashX, cy + math.sin(angle) * r * squashY),
+      Offset(
+        cx + math.cos(angle) * r * squashX,
+        cy + math.sin(angle) * r * squashY,
+      ),
     );
   }
 
-  Offset mid(Offset a, Offset b) => Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
+  Offset mid(Offset a, Offset b) =>
+      Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
 
   final start = mid(points.last, points.first);
   final path = Path()..moveTo(start.dx, start.dy);
@@ -354,34 +386,52 @@ Path ivyLeafPath(Rect rect) {
   return Path()
     ..moveTo(p(0.50, 0.28).dx, p(0.50, 0.28).dy)
     ..cubicTo(
-      p(0.50, 0.06).dx, p(0.50, 0.06).dy,
-      p(0.82, 0.02).dx, p(0.82, 0.02).dy,
-      p(0.94, 0.26).dx, p(0.94, 0.26).dy,
+      p(0.50, 0.06).dx,
+      p(0.50, 0.06).dy,
+      p(0.82, 0.02).dx,
+      p(0.82, 0.02).dy,
+      p(0.94, 0.26).dx,
+      p(0.94, 0.26).dy,
     )
     ..cubicTo(
-      p(1.02, 0.46).dx, p(1.02, 0.46).dy,
-      p(0.86, 0.58).dx, p(0.86, 0.58).dy,
-      p(0.68, 0.72).dx, p(0.68, 0.72).dy,
+      p(1.02, 0.46).dx,
+      p(1.02, 0.46).dy,
+      p(0.86, 0.58).dx,
+      p(0.86, 0.58).dy,
+      p(0.68, 0.72).dx,
+      p(0.68, 0.72).dy,
     )
     ..cubicTo(
-      p(0.58, 0.80).dx, p(0.58, 0.80).dy,
-      p(0.52, 0.90).dx, p(0.52, 0.90).dy,
-      p(0.50, 0.97).dx, p(0.50, 0.97).dy,
+      p(0.58, 0.80).dx,
+      p(0.58, 0.80).dy,
+      p(0.52, 0.90).dx,
+      p(0.52, 0.90).dy,
+      p(0.50, 0.97).dx,
+      p(0.50, 0.97).dy,
     )
     ..cubicTo(
-      p(0.48, 0.90).dx, p(0.48, 0.90).dy,
-      p(0.41, 0.79).dx, p(0.41, 0.79).dy,
-      p(0.30, 0.71).dx, p(0.30, 0.71).dy,
+      p(0.48, 0.90).dx,
+      p(0.48, 0.90).dy,
+      p(0.41, 0.79).dx,
+      p(0.41, 0.79).dy,
+      p(0.30, 0.71).dx,
+      p(0.30, 0.71).dy,
     )
     ..cubicTo(
-      p(0.13, 0.57).dx, p(0.13, 0.57).dy,
-      p(-0.01, 0.44).dx, p(-0.01, 0.44).dy,
-      p(0.08, 0.25).dx, p(0.08, 0.25).dy,
+      p(0.13, 0.57).dx,
+      p(0.13, 0.57).dy,
+      p(-0.01, 0.44).dx,
+      p(-0.01, 0.44).dy,
+      p(0.08, 0.25).dx,
+      p(0.08, 0.25).dy,
     )
     ..cubicTo(
-      p(0.19, 0.02).dx, p(0.19, 0.02).dy,
-      p(0.50, 0.06).dx, p(0.50, 0.06).dy,
-      p(0.50, 0.28).dx, p(0.50, 0.28).dy,
+      p(0.19, 0.02).dx,
+      p(0.19, 0.02).dy,
+      p(0.50, 0.06).dx,
+      p(0.50, 0.06).dy,
+      p(0.50, 0.28).dx,
+      p(0.50, 0.28).dy,
     )
     ..close();
 }
@@ -433,23 +483,23 @@ Path sakuraBlossomPath(Rect rect) {
 
     path.moveTo(pBaseLeft.dx, pBaseLeft.dy);
     path.cubicTo(
-      pMidLeft.dx, pMidLeft.dy,
-      pTipLeft.dx, pTipLeft.dy,
-      pTipLeft.dx, pTipLeft.dy,
+      pMidLeft.dx,
+      pMidLeft.dy,
+      pTipLeft.dx,
+      pTipLeft.dy,
+      pTipLeft.dx,
+      pTipLeft.dy,
     );
-    path.quadraticBezierTo(
-      pNotch.dx, pNotch.dy,
-      pTipRight.dx, pTipRight.dy,
-    );
+    path.quadraticBezierTo(pNotch.dx, pNotch.dy, pTipRight.dx, pTipRight.dy);
     path.cubicTo(
-      pTipRight.dx, pTipRight.dy,
-      pMidRight.dx, pMidRight.dy,
-      pBaseRight.dx, pBaseRight.dy,
+      pTipRight.dx,
+      pTipRight.dy,
+      pMidRight.dx,
+      pMidRight.dy,
+      pBaseRight.dx,
+      pBaseRight.dy,
     );
-    path.quadraticBezierTo(
-      cx, cy,
-      pBaseLeft.dx, pBaseLeft.dy,
-    );
+    path.quadraticBezierTo(cx, cy, pBaseLeft.dx, pBaseLeft.dy);
   }
   return path;
 }
@@ -497,42 +547,64 @@ Path lotusBlossomPath(Rect rect) {
   return Path()
     ..moveTo(p(0.50, 0.94).dx, p(0.50, 0.94).dy)
     ..cubicTo(
-      p(0.68, 0.92).dx, p(0.68, 0.92).dy,
-      p(0.94, 0.76).dx, p(0.94, 0.76).dy,
-      p(0.96, 0.54).dx, p(0.96, 0.54).dy,
+      p(0.68, 0.92).dx,
+      p(0.68, 0.92).dy,
+      p(0.94, 0.76).dx,
+      p(0.94, 0.76).dy,
+      p(0.96, 0.54).dx,
+      p(0.96, 0.54).dy,
     )
     ..cubicTo(
-      p(0.86, 0.44).dx, p(0.86, 0.44).dy,
-      p(0.78, 0.32).dx, p(0.78, 0.32).dy,
-      p(0.76, 0.22).dx, p(0.76, 0.22).dy,
+      p(0.86, 0.44).dx,
+      p(0.86, 0.44).dy,
+      p(0.78, 0.32).dx,
+      p(0.78, 0.32).dy,
+      p(0.76, 0.22).dx,
+      p(0.76, 0.22).dy,
     )
     ..quadraticBezierTo(
-      p(0.66, 0.28).dx, p(0.66, 0.28).dy,
-      p(0.64, 0.34).dx, p(0.64, 0.34).dy,
+      p(0.66, 0.28).dx,
+      p(0.66, 0.28).dy,
+      p(0.64, 0.34).dx,
+      p(0.64, 0.34).dy,
     )
     ..cubicTo(
-      p(0.62, 0.16).dx, p(0.62, 0.16).dy,
-      p(0.56, 0.05).dx, p(0.56, 0.05).dy,
-      p(0.50, 0.04).dx, p(0.50, 0.04).dy,
+      p(0.62, 0.16).dx,
+      p(0.62, 0.16).dy,
+      p(0.56, 0.05).dx,
+      p(0.56, 0.05).dy,
+      p(0.50, 0.04).dx,
+      p(0.50, 0.04).dy,
     )
     ..cubicTo(
-      p(0.44, 0.05).dx, p(0.44, 0.05).dy,
-      p(0.38, 0.16).dx, p(0.38, 0.16).dy,
-      p(0.36, 0.34).dx, p(0.36, 0.34).dy,
+      p(0.44, 0.05).dx,
+      p(0.44, 0.05).dy,
+      p(0.38, 0.16).dx,
+      p(0.38, 0.16).dy,
+      p(0.36, 0.34).dx,
+      p(0.36, 0.34).dy,
     )
     ..quadraticBezierTo(
-      p(0.34, 0.28).dx, p(0.34, 0.28).dy,
-      p(0.24, 0.22).dx, p(0.24, 0.22).dy,
+      p(0.34, 0.28).dx,
+      p(0.34, 0.28).dy,
+      p(0.24, 0.22).dx,
+      p(0.24, 0.22).dy,
     )
     ..cubicTo(
-      p(0.22, 0.32).dx, p(0.22, 0.32).dy,
-      p(0.14, 0.44).dx, p(0.14, 0.44).dy,
-      p(0.04, 0.54).dx, p(0.04, 0.54).dy,
+      p(0.22, 0.32).dx,
+      p(0.22, 0.32).dy,
+      p(0.14, 0.44).dx,
+      p(0.14, 0.44).dy,
+      p(0.04, 0.54).dx,
+      p(0.04, 0.54).dy,
     )
     ..cubicTo(
-      p(0.06, 0.76).dx, p(0.06, 0.76).dy,
-      p(0.32, 0.92).dx, p(0.32, 0.92).dy,
-      p(0.50, 0.94).dx, p(0.50, 0.94).dy,
+      p(0.06, 0.76).dx,
+      p(0.06, 0.76).dy,
+      p(0.32, 0.92).dx,
+      p(0.32, 0.92).dy,
+      p(0.50, 0.94).dx,
+      p(0.50, 0.94).dy,
     )
     ..close();
 }
@@ -547,28 +619,38 @@ Path lotusBlossomVeins(Rect rect) {
   final path = Path()
     ..moveTo(p(0.50, 0.92).dx, p(0.50, 0.92).dy)
     ..quadraticBezierTo(
-      p(0.51, 0.50).dx, p(0.51, 0.50).dy,
-      p(0.50, 0.10).dx, p(0.50, 0.10).dy,
+      p(0.51, 0.50).dx,
+      p(0.51, 0.50).dy,
+      p(0.50, 0.10).dx,
+      p(0.50, 0.10).dy,
     )
     ..moveTo(p(0.48, 0.88).dx, p(0.48, 0.88).dy)
     ..quadraticBezierTo(
-      p(0.36, 0.55).dx, p(0.36, 0.55).dy,
-      p(0.26, 0.24).dx, p(0.26, 0.24).dy,
+      p(0.36, 0.55).dx,
+      p(0.36, 0.55).dy,
+      p(0.26, 0.24).dx,
+      p(0.26, 0.24).dy,
     )
     ..moveTo(p(0.52, 0.88).dx, p(0.52, 0.88).dy)
     ..quadraticBezierTo(
-      p(0.64, 0.55).dx, p(0.64, 0.55).dy,
-      p(0.74, 0.24).dx, p(0.74, 0.24).dy,
+      p(0.64, 0.55).dx,
+      p(0.64, 0.55).dy,
+      p(0.74, 0.24).dx,
+      p(0.74, 0.24).dy,
     )
     ..moveTo(p(0.44, 0.90).dx, p(0.44, 0.90).dy)
     ..quadraticBezierTo(
-      p(0.24, 0.72).dx, p(0.24, 0.72).dy,
-      p(0.08, 0.56).dx, p(0.08, 0.56).dy,
+      p(0.24, 0.72).dx,
+      p(0.24, 0.72).dy,
+      p(0.08, 0.56).dx,
+      p(0.08, 0.56).dy,
     )
     ..moveTo(p(0.56, 0.90).dx, p(0.56, 0.90).dy)
     ..quadraticBezierTo(
-      p(0.76, 0.72).dx, p(0.76, 0.72).dy,
-      p(0.92, 0.56).dx, p(0.92, 0.56).dy,
+      p(0.76, 0.72).dx,
+      p(0.76, 0.72).dy,
+      p(0.92, 0.56).dx,
+      p(0.92, 0.56).dy,
     );
 
   for (final fx in [0.44, 0.47, 0.50, 0.53, 0.56]) {
@@ -606,14 +688,20 @@ Path plumeriaBlossomPath(Rect rect) {
 
     path.moveTo(pBase.dx, pBase.dy);
     path.cubicTo(
-      pInnerLeft.dx, pInnerLeft.dy,
-      pOuterLeft.dx, pOuterLeft.dy,
-      pTip.dx, pTip.dy,
+      pInnerLeft.dx,
+      pInnerLeft.dy,
+      pOuterLeft.dx,
+      pOuterLeft.dy,
+      pTip.dx,
+      pTip.dy,
     );
     path.cubicTo(
-      pOuterRight.dx, pOuterRight.dy,
-      pBaseRight.dx, pBaseRight.dy,
-      pBase.dx, pBase.dy,
+      pOuterRight.dx,
+      pOuterRight.dy,
+      pBaseRight.dx,
+      pBaseRight.dy,
+      pBase.dx,
+      pBase.dy,
     );
   }
   return path;
@@ -678,29 +766,38 @@ Path wildRoseBlossomPath(Rect rect) {
 
     path.moveTo(pBaseLeft.dx, pBaseLeft.dy);
     path.cubicTo(
-      pMidLeft.dx, pMidLeft.dy,
-      pLobeLeft.dx, pLobeLeft.dy,
-      pLobeLeft.dx, pLobeLeft.dy,
+      pMidLeft.dx,
+      pMidLeft.dy,
+      pLobeLeft.dx,
+      pLobeLeft.dy,
+      pLobeLeft.dx,
+      pLobeLeft.dy,
     );
     path.cubicTo(
-      pt(0.92, -0.12).dx, pt(0.92, -0.12).dy,
-      pHeartNotch.dx, pHeartNotch.dy,
-      pHeartNotch.dx, pHeartNotch.dy,
+      pt(0.92, -0.12).dx,
+      pt(0.92, -0.12).dy,
+      pHeartNotch.dx,
+      pHeartNotch.dy,
+      pHeartNotch.dx,
+      pHeartNotch.dy,
     );
     path.cubicTo(
-      pt(0.92, 0.12).dx, pt(0.92, 0.12).dy,
-      pLobeRight.dx, pLobeRight.dy,
-      pLobeRight.dx, pLobeRight.dy,
+      pt(0.92, 0.12).dx,
+      pt(0.92, 0.12).dy,
+      pLobeRight.dx,
+      pLobeRight.dy,
+      pLobeRight.dx,
+      pLobeRight.dy,
     );
     path.cubicTo(
-      pMidRight.dx, pMidRight.dy,
-      pBaseRight.dx, pBaseRight.dy,
-      pBaseRight.dx, pBaseRight.dy,
+      pMidRight.dx,
+      pMidRight.dy,
+      pBaseRight.dx,
+      pBaseRight.dy,
+      pBaseRight.dx,
+      pBaseRight.dy,
     );
-    path.quadraticBezierTo(
-      cx, cy,
-      pBaseLeft.dx, pBaseLeft.dy,
-    );
+    path.quadraticBezierTo(cx, cy, pBaseLeft.dx, pBaseLeft.dy);
   }
   return path;
 }
@@ -739,8 +836,14 @@ Path wildRoseBlossomVeins(Rect rect) {
     final angle = -math.pi / 2 + i * 2 * math.pi / petals;
     for (final offset in [-0.20, 0.0, 0.20]) {
       final a = angle + offset;
-      final from = Offset(cx + math.cos(a) * baseR * 0.34, cy + math.sin(a) * baseR * 0.34);
-      final to = Offset(cx + math.cos(a) * baseR * 0.70, cy + math.sin(a) * baseR * 0.70);
+      final from = Offset(
+        cx + math.cos(a) * baseR * 0.34,
+        cy + math.sin(a) * baseR * 0.34,
+      );
+      final to = Offset(
+        cx + math.cos(a) * baseR * 0.70,
+        cy + math.sin(a) * baseR * 0.70,
+      );
       path
         ..moveTo(from.dx, from.dy)
         ..lineTo(to.dx, to.dy);
@@ -776,15 +879,14 @@ Path sunflowerBlossomPath(Rect rect) {
     final pBaseRight = pt(0.34, 0.16);
 
     path.moveTo(pBaseLeft.dx, pBaseLeft.dy);
+    path.cubicTo(pMidLeft.dx, pMidLeft.dy, pTip.dx, pTip.dy, pTip.dx, pTip.dy);
     path.cubicTo(
-      pMidLeft.dx, pMidLeft.dy,
-      pTip.dx, pTip.dy,
-      pTip.dx, pTip.dy,
-    );
-    path.cubicTo(
-      pTip.dx, pTip.dy,
-      pMidRight.dx, pMidRight.dy,
-      pBaseRight.dx, pBaseRight.dy,
+      pTip.dx,
+      pTip.dy,
+      pMidRight.dx,
+      pMidRight.dy,
+      pBaseRight.dx,
+      pBaseRight.dy,
     );
   }
   return path;
@@ -801,14 +903,22 @@ Path sunflowerBlossomVeins(Rect rect) {
 
   // Seed disc inner crosshatch rings
   for (final rFrac in [0.15, 0.26]) {
-    path.addOval(Rect.fromCircle(center: Offset(cx, cy), radius: baseR * rFrac));
+    path.addOval(
+      Rect.fromCircle(center: Offset(cx, cy), radius: baseR * rFrac),
+    );
   }
 
   // Ray midribs
   for (var i = 0; i < rays; i++) {
     final angle = -math.pi / 2 + i * 2 * math.pi / rays;
-    final from = Offset(cx + math.cos(angle) * baseR * 0.36, cy + math.sin(angle) * baseR * 0.36);
-    final to = Offset(cx + math.cos(angle) * baseR * 0.90, cy + math.sin(angle) * baseR * 0.90);
+    final from = Offset(
+      cx + math.cos(angle) * baseR * 0.36,
+      cy + math.sin(angle) * baseR * 0.36,
+    );
+    final to = Offset(
+      cx + math.cos(angle) * baseR * 0.90,
+      cy + math.sin(angle) * baseR * 0.90,
+    );
     path
       ..moveTo(from.dx, from.dy)
       ..lineTo(to.dx, to.dy);
@@ -827,39 +937,57 @@ Path tulipBlossomPath(Rect rect) {
     ..moveTo(p(0.50, 0.96).dx, p(0.50, 0.96).dy)
     // Left outer flare up to left peak
     ..cubicTo(
-      p(0.24, 0.90).dx, p(0.24, 0.90).dy,
-      p(0.12, 0.52).dx, p(0.12, 0.52).dy,
-      p(0.18, 0.16).dx, p(0.18, 0.16).dy,
+      p(0.24, 0.90).dx,
+      p(0.24, 0.90).dy,
+      p(0.12, 0.52).dx,
+      p(0.12, 0.52).dy,
+      p(0.18, 0.16).dx,
+      p(0.18, 0.16).dy,
     )
     // Cleft down to left-center cleft
     ..cubicTo(
-      p(0.28, 0.28).dx, p(0.28, 0.28).dy,
-      p(0.36, 0.32).dx, p(0.36, 0.32).dy,
-      p(0.38, 0.34).dx, p(0.38, 0.34).dy,
+      p(0.28, 0.28).dx,
+      p(0.28, 0.28).dy,
+      p(0.36, 0.32).dx,
+      p(0.36, 0.32).dy,
+      p(0.38, 0.34).dx,
+      p(0.38, 0.34).dy,
     )
     // Up to towering center peak
     ..cubicTo(
-      p(0.42, 0.16).dx, p(0.42, 0.16).dy,
-      p(0.48, 0.05).dx, p(0.48, 0.05).dy,
-      p(0.50, 0.04).dx, p(0.50, 0.04).dy,
+      p(0.42, 0.16).dx,
+      p(0.42, 0.16).dy,
+      p(0.48, 0.05).dx,
+      p(0.48, 0.05).dy,
+      p(0.50, 0.04).dx,
+      p(0.50, 0.04).dy,
     )
     // Down to right-center cleft
     ..cubicTo(
-      p(0.52, 0.05).dx, p(0.52, 0.05).dy,
-      p(0.58, 0.16).dx, p(0.58, 0.16).dy,
-      p(0.62, 0.34).dx, p(0.62, 0.34).dy,
+      p(0.52, 0.05).dx,
+      p(0.52, 0.05).dy,
+      p(0.58, 0.16).dx,
+      p(0.58, 0.16).dy,
+      p(0.62, 0.34).dx,
+      p(0.62, 0.34).dy,
     )
     // Cleft to right peak
     ..cubicTo(
-      p(0.64, 0.32).dx, p(0.64, 0.32).dy,
-      p(0.72, 0.28).dx, p(0.72, 0.28).dy,
-      p(0.82, 0.16).dx, p(0.82, 0.16).dy,
+      p(0.64, 0.32).dx,
+      p(0.64, 0.32).dy,
+      p(0.72, 0.28).dx,
+      p(0.72, 0.28).dy,
+      p(0.82, 0.16).dx,
+      p(0.82, 0.16).dy,
     )
     // Right outer flare down to stem base
     ..cubicTo(
-      p(0.88, 0.52).dx, p(0.88, 0.52).dy,
-      p(0.76, 0.90).dx, p(0.76, 0.90).dy,
-      p(0.50, 0.96).dx, p(0.50, 0.96).dy,
+      p(0.88, 0.52).dx,
+      p(0.88, 0.52).dy,
+      p(0.76, 0.90).dx,
+      p(0.76, 0.90).dy,
+      p(0.50, 0.96).dx,
+      p(0.50, 0.96).dy,
     )
     ..close();
 }
@@ -875,16 +1003,22 @@ Path tulipBlossomVeins(Rect rect) {
     // Left petal overlap curve
     ..moveTo(p(0.38, 0.34).dx, p(0.38, 0.34).dy)
     ..cubicTo(
-      p(0.36, 0.60).dx, p(0.36, 0.60).dy,
-      p(0.42, 0.82).dx, p(0.42, 0.82).dy,
-      p(0.50, 0.94).dx, p(0.50, 0.94).dy,
+      p(0.36, 0.60).dx,
+      p(0.36, 0.60).dy,
+      p(0.42, 0.82).dx,
+      p(0.42, 0.82).dy,
+      p(0.50, 0.94).dx,
+      p(0.50, 0.94).dy,
     )
     // Right petal overlap curve
     ..moveTo(p(0.62, 0.34).dx, p(0.62, 0.34).dy)
     ..cubicTo(
-      p(0.64, 0.60).dx, p(0.64, 0.60).dy,
-      p(0.58, 0.82).dx, p(0.58, 0.82).dy,
-      p(0.50, 0.94).dx, p(0.50, 0.94).dy,
+      p(0.64, 0.60).dx,
+      p(0.64, 0.60).dy,
+      p(0.58, 0.82).dx,
+      p(0.58, 0.82).dy,
+      p(0.50, 0.94).dx,
+      p(0.50, 0.94).dy,
     )
     // Center petal midrib
     ..moveTo(p(0.50, 0.94).dx, p(0.50, 0.94).dy)
@@ -912,14 +1046,20 @@ Path raindropPetalPath(Rect rect) {
   return Path()
     ..moveTo(p(0.50, 0.04).dx, p(0.50, 0.04).dy)
     ..cubicTo(
-      p(0.92, 0.24).dx, p(0.92, 0.24).dy,
-      p(0.98, 0.62).dx, p(0.98, 0.62).dy,
-      p(0.52, 0.96).dx, p(0.52, 0.96).dy,
+      p(0.92, 0.24).dx,
+      p(0.92, 0.24).dy,
+      p(0.98, 0.62).dx,
+      p(0.98, 0.62).dy,
+      p(0.52, 0.96).dx,
+      p(0.52, 0.96).dy,
     )
     ..cubicTo(
-      p(0.18, 0.70).dx, p(0.18, 0.70).dy,
-      p(0.12, 0.26).dx, p(0.12, 0.26).dy,
-      p(0.50, 0.04).dx, p(0.50, 0.04).dy,
+      p(0.18, 0.70).dx,
+      p(0.18, 0.70).dy,
+      p(0.12, 0.26).dx,
+      p(0.12, 0.26).dy,
+      p(0.50, 0.04).dx,
+      p(0.50, 0.04).dy,
     )
     ..close();
 }
@@ -930,7 +1070,10 @@ Path raindropPetalPath(Rect rect) {
 /// 3. Soft outer blur glow for paper fiber absorption.
 /// 4. Delicate dark pigment stroke along the rim (watercolor edge effect).
 void paintWatercolorPetal(Canvas canvas, Path path, Rect rect, Color color) {
-  final center = Offset(rect.left + rect.width * 0.38, rect.top + rect.height * 0.38);
+  final center = Offset(
+    rect.left + rect.width * 0.38,
+    rect.top + rect.height * 0.38,
+  );
   final radius = math.max(rect.width, rect.height) * 0.70;
 
   // Layer 1: Radial wet-in-wet pigment pool
@@ -985,14 +1128,14 @@ void paintWatercolorPetal(Canvas canvas, Path path, Rect rect, Color color) {
   canvas.drawPath(
     path,
     Paint()
-      ..color = Color.lerp(color, const Color(0xFF38121B), 0.50)!.withValues(alpha: 0.42)
+      ..color = Color.lerp(
+        color,
+        const Color(0xFF38121B),
+        0.50,
+      )!.withValues(alpha: 0.42)
       ..style = PaintingStyle.stroke
       ..strokeWidth = rect.shortestSide * 0.018
       ..strokeJoin = StrokeJoin.round
       ..isAntiAlias = true,
   );
 }
-
-
-
-

@@ -56,10 +56,7 @@ Offset vimCaretGlyphPaintOrigin({
   );
   if (boxes.isEmpty) return blockRect.topLeft;
   final probeBox = boxes.first.toRect();
-  return Offset(
-    blockRect.left - probeBox.left,
-    blockRect.top - probeBox.top,
-  );
+  return Offset(blockRect.left - probeBox.left, blockRect.top - probeBox.top);
 }
 
 /// Paints Vim's own caret, Visual-mode selection and search highlights over a
@@ -628,9 +625,7 @@ class _VimOverlayPainter extends CustomPainter {
 
     final clip = clipRect ?? blockRect;
     canvas.save();
-    canvas.clipRRect(
-      RRect.fromRectAndRadius(clip, const Radius.circular(2)),
-    );
+    canvas.clipRRect(RRect.fromRectAndRadius(clip, const Radius.circular(2)));
     charPainter.paint(canvas, paintOrigin);
     canvas.restore();
     charPainter.dispose();

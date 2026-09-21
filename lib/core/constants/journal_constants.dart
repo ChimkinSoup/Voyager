@@ -10,7 +10,9 @@ String journalDocumentIdForFirestore(String localId) {
 }
 
 String journalDocumentIdFromFirestore(String firestoreId) {
-  return firestoreId == legacyJournalFirestoreId ? legacyJournalId : firestoreId;
+  return firestoreId == legacyJournalFirestoreId
+      ? legacyJournalId
+      : firestoreId;
 }
 
 String journalReferenceIdForFirestore(String localJournalId) {

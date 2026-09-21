@@ -56,12 +56,8 @@ void main() {
   test('mergeForecastArchive overwrites buckets when API returns them', () {
     final now = DateTime.utc(2026, 6, 21, 10);
     final merged = mergeForecastArchive(
-      existingPeriods: [
-        _period(DateTime.utc(2026, 6, 21, 6), 10),
-      ],
-      apiPeriods: [
-        _period(DateTime.utc(2026, 6, 21, 6), 11),
-      ],
+      existingPeriods: [_period(DateTime.utc(2026, 6, 21, 6), 10)],
+      apiPeriods: [_period(DateTime.utc(2026, 6, 21, 6), 11)],
       timeZoneOffsetMinutes: offsetMinutes,
       nowUtc: now,
     );
@@ -72,12 +68,8 @@ void main() {
   test('mergeForecastArchive resetArchive ignores existing periods', () {
     final now = DateTime.utc(2026, 6, 21, 10);
     final merged = mergeForecastArchive(
-      existingPeriods: [
-        _period(DateTime.utc(2026, 6, 21, 6), 10),
-      ],
-      apiPeriods: [
-        _period(DateTime.utc(2026, 6, 21, 12), 14),
-      ],
+      existingPeriods: [_period(DateTime.utc(2026, 6, 21, 6), 10)],
+      apiPeriods: [_period(DateTime.utc(2026, 6, 21, 12), 14)],
       timeZoneOffsetMinutes: offsetMinutes,
       nowUtc: now,
       resetArchive: true,

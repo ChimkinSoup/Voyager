@@ -180,13 +180,17 @@ class JournalEntry extends SoftDeletable {
       createdAt: DateTime.parse(json['createdAt'] as String).toUtc(),
       updatedAt: DateTime.parse(json['updatedAt'] as String).toUtc(),
       version: json['version'] as int? ?? 0,
-      deletedAt: json['deletedAt'] != null ? DateTime.parse(json['deletedAt'] as String).toUtc() : null,
+      deletedAt: json['deletedAt'] != null
+          ? DateTime.parse(json['deletedAt'] as String).toUtc()
+          : null,
       journalId: json['journalId'] as String,
       title: json['title'] as String,
       body: json['body'] as String,
       entryDate: DateTime.parse(json['entryDate'] as String).toUtc(),
       richBodyJson: json['richBodyJson'] as String?,
-      timestamp: json['timestamp'] != null ? DateTime.parse(json['timestamp'] as String).toUtc() : null,
+      timestamp: json['timestamp'] != null
+          ? DateTime.parse(json['timestamp'] as String).toUtc()
+          : null,
       tags: List<String>.from(json['tags'] as List? ?? const []),
       mood: json['mood'] as int?,
       quoteId: json['quoteId'] as String?,
@@ -212,7 +216,9 @@ int compareJournalEntriesNewestFirst(JournalEntry a, JournalEntry b) {
   return b.id.compareTo(a.id);
 }
 
-List<JournalEntry> sortJournalEntriesNewestFirst(Iterable<JournalEntry> entries) {
+List<JournalEntry> sortJournalEntriesNewestFirst(
+  Iterable<JournalEntry> entries,
+) {
   final sorted = entries.toList()..sort(compareJournalEntriesNewestFirst);
   return sorted;
 }

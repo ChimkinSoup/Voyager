@@ -67,8 +67,9 @@ void main() {
   /// never sees a focus *change* — so it never opens a text input connection.
   /// The field then looked focused (this is why the test above passed while the
   /// app did not) and swallowed everything typed into it.
-  testWidgets('code field can still be typed into after Normal -> Insert',
-      (tester) async {
+  testWidgets('code field can still be typed into after Normal -> Insert', (
+    tester,
+  ) async {
     final controller = LeetCodeCodeController(text: 'print(1)\nprint(2)');
     addTearDown(controller.dispose);
 
@@ -109,7 +110,8 @@ void main() {
       expect(
         tester.state<EditableTextState>(codeEditable),
         same(editorState),
-        reason: 'the editor must be carried across the mode change, not '
+        reason:
+            'the editor must be carried across the mode change, not '
             'rebuilt — a new state loses the input connection',
       );
     }
@@ -123,8 +125,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(controller.text, startsWith('X'),
-        reason: 'the code box must accept typing once back in Insert');
+    expect(
+      controller.text,
+      startsWith('X'),
+      reason: 'the code box must accept typing once back in Insert',
+    );
 
     // Let CodeController's own analysis debounce expire before teardown.
     await tester.pump(const Duration(seconds: 1));

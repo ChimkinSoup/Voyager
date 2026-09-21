@@ -88,41 +88,45 @@ void main() {
       },
     );
 
-    test('a restore round-trips at a version that outranks the tombstone',
-        () async {
-      final application = await addApplication();
-      final tombstone = (await repo.deleteApplication(application.id)).application;
+    test(
+      'a restore round-trips at a version that outranks the tombstone',
+      () async {
+        final application = await addApplication();
+        final tombstone = (await repo.deleteApplication(
+          application.id,
+        )).application;
 
-      // What JobsActions.restoreApplication writes: the pre-delete snapshot
-      // rebuilt with no deletedAt. Rebuilt rather than copyWith'd, which reads
-      // `deletedAt ?? this.deletedAt` and so cannot clear a tombstone.
-      await repo.upsertApplication(
-        JobApplication(
-          id: application.id,
-          createdAt: application.createdAt,
-          updatedAt: utcNow(),
-          version: application.version + 2,
-          company: application.company,
-          title: application.title,
-          status: application.status,
-          dateApplied: application.dateApplied,
-          applicationUrl: application.applicationUrl,
-          notes: application.notes,
-          seasonIds: application.seasonIds,
-        ),
-      );
+        // What JobsActions.restoreApplication writes: the pre-delete snapshot
+        // rebuilt with no deletedAt. Rebuilt rather than copyWith'd, which reads
+        // `deletedAt ?? this.deletedAt` and so cannot clear a tombstone.
+        await repo.upsertApplication(
+          JobApplication(
+            id: application.id,
+            createdAt: application.createdAt,
+            updatedAt: utcNow(),
+            version: application.version + 2,
+            company: application.company,
+            title: application.title,
+            status: application.status,
+            dateApplied: application.dateApplied,
+            applicationUrl: application.applicationUrl,
+            notes: application.notes,
+            seasonIds: application.seasonIds,
+          ),
+        );
 
-      final restored = await repo.getApplication(application.id);
-      expect(restored, isNotNull);
-      expect(restored!.deletedAt, isNull);
-      expect(restored.title, application.title);
-      expect(
-        restored.version,
-        greaterThan(tombstone.version),
-        reason: 'or the tombstone wins the next sync and deletes it again',
-      );
-      expect(await repo.listApplications(), hasLength(1));
-    });
+        final restored = await repo.getApplication(application.id);
+        expect(restored, isNotNull);
+        expect(restored!.deletedAt, isNull);
+        expect(restored.title, application.title);
+        expect(
+          restored.version,
+          greaterThan(tombstone.version),
+          reason: 'or the tombstone wins the next sync and deletes it again',
+        );
+        expect(await repo.listApplications(), hasLength(1));
+      },
+    );
 
     test('tombstones the status history with it', () async {
       final application = await addApplication();
@@ -264,10 +268,7 @@ void main() {
       );
 
       await repo.upsertStage(stages[1].copyWith(colorValue: 0xFF2E7D32));
-      expect(
-        (await repo.listStages())[1].colorValue,
-        0xFF2E7D32,
-      );
+      expect((await repo.listStages())[1].colorValue, 0xFF2E7D32);
 
       // sortOrder is written through a hand-built companion, which is exactly
       // where a new column gets dropped.

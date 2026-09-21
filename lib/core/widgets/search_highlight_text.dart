@@ -144,17 +144,16 @@ Widget searchHighlightedText(
   }
 
   if (spans.isEmpty) {
-    return Text(
-      text,
-      style: style,
-      maxLines: maxLines,
-      overflow: overflow,
-    );
+    return Text(text, style: style, maxLines: maxLines, overflow: overflow);
   }
 
   return _withHighlightFill(
     highlightFill,
-    Text.rich(TextSpan(children: spans), maxLines: maxLines, overflow: overflow),
+    Text.rich(
+      TextSpan(children: spans),
+      maxLines: maxLines,
+      overflow: overflow,
+    ),
   );
 }
 
@@ -235,9 +234,11 @@ List<TextSpan> keywordSpans(
 }) {
   final needles = _normalizedKeywords(keywords);
   if (needles.isEmpty || text.isEmpty) {
-    return applyStyledRanges([
-      TextSpan(text: text, style: style),
-    ], emphasis, offset);
+    return applyStyledRanges(
+      [TextSpan(text: text, style: style)],
+      emphasis,
+      offset,
+    );
   }
 
   final patterns = <String>[

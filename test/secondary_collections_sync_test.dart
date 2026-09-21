@@ -54,7 +54,10 @@ class _Device {
       trackerRepository: trackers,
       financeRepository: finance,
       notificationRepository: notifications,
-      reminderRepository: DriftReminderRepository(db, syncedWrites: syncedWrites),
+      reminderRepository: DriftReminderRepository(
+        db,
+        syncedWrites: syncedWrites,
+      ),
       bucketListRepository: bucketList,
       mediaRepository: DriftMediaRepository(db),
       settingsRepository: settings,
@@ -121,12 +124,8 @@ void main() {
 
   final now = DateTime.utc(2026, 8, 14, 12);
 
-  Calendar calendar({String id = 'cal-1', String name = 'Work'}) => Calendar(
-    id: id,
-    name: name,
-    createdAt: now,
-    updatedAt: now,
-  );
+  Calendar calendar({String id = 'cal-1', String name = 'Work'}) =>
+      Calendar(id: id, name: name, createdAt: now, updatedAt: now);
 
   group('records travel between devices', () {
     test('a calendar event written on A arrives on B', () async {
@@ -179,7 +178,10 @@ void main() {
       await deviceB.sync.pullTrackerValues();
 
       expect((await deviceB.trackers.listTrackers()).single.name, 'Pushups');
-      expect((await deviceB.trackers.listValues('tracker-1')).single.intValue, 40);
+      expect(
+        (await deviceB.trackers.listValues('tracker-1')).single.intValue,
+        40,
+      );
     });
 
     test('a transaction written on A arrives on B', () async {
@@ -220,8 +222,10 @@ void main() {
 
       await deviceB.sync.pullBucketListItems();
 
-      expect((await deviceB.bucketList.listItems()).single.title,
-          'See the aurora');
+      expect(
+        (await deviceB.bucketList.listItems()).single.title,
+        'See the aurora',
+      );
     });
 
     test('a tag color set on A arrives on B', () async {
@@ -259,8 +263,9 @@ void main() {
       await deviceA.notifications.dismiss('task-7|important');
       await deviceA.settle();
       await deviceB.sync.pullDismissedNotifications();
-      expect(await deviceB.notifications.listDismissals(),
-          {'task-7|important'});
+      expect(await deviceB.notifications.listDismissals(), {
+        'task-7|important',
+      });
 
       await deviceA.notifications.undismiss('task-7|important');
       await deviceA.settle();
@@ -345,27 +350,29 @@ void main() {
       expect(applied.weekStartsOnMonday, isFalse);
     });
 
-    test('an older remote document does not overwrite a newer local one',
-        () async {
-      final localA = await deviceA.settings.getSettings();
-      await deviceA.settings.saveSettings(
-        localA.copyWith(accentColor: 0xFF111111),
-      );
-      await deviceA.settle();
+    test(
+      'an older remote document does not overwrite a newer local one',
+      () async {
+        final localA = await deviceA.settings.getSettings();
+        await deviceA.settings.saveSettings(
+          localA.copyWith(accentColor: 0xFF111111),
+        );
+        await deviceA.settle();
 
-      // B changes it afterwards, so B's row is the newer of the two.
-      final localB = await deviceB.settings.getSettings();
-      await deviceB.settings.saveSettings(
-        localB.copyWith(
-          accentColor: 0xFF222222,
-          updatedAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
-        ),
-      );
+        // B changes it afterwards, so B's row is the newer of the two.
+        final localB = await deviceB.settings.getSettings();
+        await deviceB.settings.saveSettings(
+          localB.copyWith(
+            accentColor: 0xFF222222,
+            updatedAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+          ),
+        );
 
-      await deviceB.sync.pullSettings();
+        await deviceB.sync.pullSettings();
 
-      expect((await deviceB.settings.getSettings()).accentColor, 0xFF222222);
-    });
+        expect((await deviceB.settings.getSettings()).accentColor, 0xFF222222);
+      },
+    );
 
     test('device-local settings never leave the device', () async {
       final local = await deviceA.settings.getSettings();
@@ -392,7 +399,9 @@ void main() {
 
     test('pulling straight back what we just pushed changes nothing', () async {
       final local = await deviceA.settings.getSettings();
-      await deviceA.settings.saveSettings(local.copyWith(accentColor: 0xFF010203));
+      await deviceA.settings.saveSettings(
+        local.copyWith(accentColor: 0xFF010203),
+      );
       await deviceA.settle();
 
       // Firestore echoes our own writes back through the snapshot listener.
@@ -412,8 +421,10 @@ void main() {
       final before = await deviceB.settings.getSettings();
 
       expect(await deviceB.sync.pullSettings(), isFalse);
-      expect((await deviceB.settings.getSettings()).accentColor,
-          before.accentColor);
+      expect(
+        (await deviceB.settings.getSettings()).accentColor,
+        before.accentColor,
+      );
     });
 
     test('a fresh install does not overwrite the account settings', () async {
@@ -443,7 +454,9 @@ void main() {
 
     test('a device-local-only change raises no upload', () async {
       final local = await deviceA.settings.getSettings();
-      await deviceA.settings.saveSettings(local.copyWith(accentColor: 0xFF999999));
+      await deviceA.settings.saveSettings(
+        local.copyWith(accentColor: 0xFF999999),
+      );
       await deviceA.settle();
 
       var uploads = 0;
@@ -477,8 +490,10 @@ void main() {
       await deviceB.sync.pullBucketListItems();
 
       expect((await deviceB.calendars.listCalendars()).single.name, 'Personal');
-      expect((await deviceB.bucketList.listItems()).single.title,
-          'Learn to sail');
+      expect(
+        (await deviceB.bucketList.listItems()).single.title,
+        'Learn to sail',
+      );
     });
 
     test('runs once, then stops', () async {
@@ -486,7 +501,10 @@ void main() {
       await deviceA.settle();
 
       final settings = await deviceA.settings.getSettings();
-      expect(settings.syncBackfillVersion, RemoteSyncService.syncBackfillVersion);
+      expect(
+        settings.syncBackfillVersion,
+        RemoteSyncService.syncBackfillVersion,
+      );
 
       // A second run must be a no-op, or every launch would re-upload
       // everything.
@@ -590,8 +608,11 @@ void main() {
         ),
       );
 
-      final merged = mergeTrackerValueFromRemote(cleared, 'value-1',
-          local: local);
+      final merged = mergeTrackerValueFromRemote(
+        cleared,
+        'value-1',
+        local: local,
+      );
       expect(merged.intValue, isNull);
     });
 
@@ -649,15 +670,17 @@ void main() {
   });
 
   group('document ids', () {
-    test('keys containing characters Firestore rejects survive a round trip',
-        () async {
-      // A dismissal key is '$itemId|$urgencyTierName', and an id can be a
-      // path-like string; a tag is whatever the user typed.
-      for (final key in ['a/b|important', 'plain', '.', '..', 'ünïcode']) {
-        expect(decodeDocumentId(encodeDocumentId(key)), key);
-        expect(encodeDocumentId(key), isNot(contains('/')));
-      }
-    });
+    test(
+      'keys containing characters Firestore rejects survive a round trip',
+      () async {
+        // A dismissal key is '$itemId|$urgencyTierName', and an id can be a
+        // path-like string; a tag is whatever the user typed.
+        for (final key in ['a/b|important', 'plain', '.', '..', 'ünïcode']) {
+          expect(decodeDocumentId(encodeDocumentId(key)), key);
+          expect(encodeDocumentId(key), isNot(contains('/')));
+        }
+      },
+    );
 
     test('a tag containing a slash still syncs', () async {
       await deviceA.settings.setTagColor('work/urgent', 0xFF0000FF);
@@ -665,7 +688,9 @@ void main() {
 
       await deviceB.sync.pullTagColors();
 
-      expect(await deviceB.settings.getTagColors(), {'work/urgent': 0xFF0000FF});
+      expect(await deviceB.settings.getTagColors(), {
+        'work/urgent': 0xFF0000FF,
+      });
     });
   });
 

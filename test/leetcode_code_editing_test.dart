@@ -282,8 +282,11 @@ void main() {
           tabSpaces: 2,
         );
         expect(result, isNotNull, reason: opener);
-        expect(result!.text, 'a ${opener}bcd${_closerFor(opener)} e',
-            reason: opener);
+        expect(
+          result!.text,
+          'a ${opener}bcd${_closerFor(opener)} e',
+          reason: opener,
+        );
         // The wrapped text stays selected, so a second keystroke nests.
         expect(result.selection.start, 3, reason: opener);
         expect(result.selection.end, 6, reason: opener);
@@ -803,12 +806,14 @@ void main() {
       await tester.pump();
 
       await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
-      tester.state<EditableTextState>(codeEditable).updateEditingValue(
-        const TextEditingValue(
-          text: 'ee',
-          selection: TextSelection.collapsed(offset: 2),
-        ),
-      );
+      tester
+          .state<EditableTextState>(codeEditable)
+          .updateEditingValue(
+            const TextEditingValue(
+              text: 'ee',
+              selection: TextSelection.collapsed(offset: 2),
+            ),
+          );
       await tester.pumpAndSettle();
 
       expect(controller.text, 'ee');

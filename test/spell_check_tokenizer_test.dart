@@ -4,7 +4,9 @@ import 'package:voyager/core/spellcheck/spell_check_tokenizer.dart';
 void main() {
   test('extracts plain words with correct ranges', () {
     final ranges = tokenizeWords('hello wrold');
-    final words = [for (final r in ranges) 'hello wrold'.substring(r.start, r.end)];
+    final words = [
+      for (final r in ranges) 'hello wrold'.substring(r.start, r.end),
+    ];
     expect(words, ['hello', 'wrold']);
   });
 
@@ -84,10 +86,10 @@ void main() {
 
     test('only tokens starting inside the window come back', () {
       final ranges = tokenizeWords(text, start: 6, end: 16);
-      expect([for (final r in ranges) text.substring(r.start, r.end)], [
-        'beta',
-        'gamma',
-      ]);
+      expect(
+        [for (final r in ranges) text.substring(r.start, r.end)],
+        ['beta', 'gamma'],
+      );
       expect(ranges.first.start, 6);
     });
 

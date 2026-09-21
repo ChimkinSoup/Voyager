@@ -31,10 +31,14 @@ List<String> _highlighted(WidgetTester tester, Finder finder) {
 }
 
 Future<void> _pumpText(WidgetTester tester, Widget child) => tester.pumpWidget(
-  MaterialApp(home: Scaffold(body: DefaultTextStyle(
-    style: const TextStyle(fontSize: 14, color: Color(0xFF000000)),
-    child: child,
-  ))),
+  MaterialApp(
+    home: Scaffold(
+      body: DefaultTextStyle(
+        style: const TextStyle(fontSize: 14, color: Color(0xFF000000)),
+        child: child,
+      ),
+    ),
+  ),
 );
 
 void main() {
@@ -59,12 +63,18 @@ void main() {
       expect(snippet, startsWith('Opening words that go on'));
     });
 
-    test('keeps the opening words when the match is already near the start', () {
-      final snippet = searchSnippet('A quick AAA appears early', keywords: ['AAA']);
+    test(
+      'keeps the opening words when the match is already near the start',
+      () {
+        final snippet = searchSnippet(
+          'A quick AAA appears early',
+          keywords: ['AAA'],
+        );
 
-      expect(snippet, 'A quick AAA appears early');
-      expect(snippet, isNot(startsWith('…')));
-    });
+        expect(snippet, 'A quick AAA appears early');
+        expect(snippet, isNot(startsWith('…')));
+      },
+    );
 
     test('collapses newlines so both visible lines carry text', () {
       final snippet = searchSnippet('Sept 3\n\n\nWent to the market');
@@ -93,12 +103,15 @@ void main() {
       expect(snippet.indexOf('beta'), lessThan(40));
     });
 
-    test('caps the tail without marking it, leaving the ellipsis to overflow', () {
-      final snippet = searchSnippet('word ' * 500, maxLength: 100);
+    test(
+      'caps the tail without marking it, leaving the ellipsis to overflow',
+      () {
+        final snippet = searchSnippet('word ' * 500, maxLength: 100);
 
-      expect(snippet.length, 100);
-      expect(snippet, isNot(endsWith('…')));
-    });
+        expect(snippet.length, 100);
+        expect(snippet, isNot(endsWith('…')));
+      },
+    );
 
     test('ignores blank and whitespace-only keywords', () {
       final body = '${'filler ' * 100}AAA tail';
@@ -109,7 +122,10 @@ void main() {
     test('matches case-insensitively', () {
       final body = '${'filler ' * 100}Needle tail';
 
-      expect(searchSnippet(body, keywords: ['NEEDLE']), contains('Needle tail'));
+      expect(
+        searchSnippet(body, keywords: ['NEEDLE']),
+        contains('Needle tail'),
+      );
     });
   });
 

@@ -99,7 +99,8 @@ void main() {
       );
 
       expect(chunks, hasLength(1));
-      final decoded = jsonDecode(chunks.single.encode()) as Map<String, dynamic>;
+      final decoded =
+          jsonDecode(chunks.single.encode()) as Map<String, dynamic>;
       expect(decoded.containsKey(CharOpsPayload.groupIdKey), isFalse);
       expect(decoded.containsKey(CharOpsPayload.chunkCountKey), isFalse);
     });
@@ -117,8 +118,10 @@ void main() {
     });
 
     test('round-trips through the merger to the original text', () {
-      final text = List.generate(500, (i) => String.fromCharCode(97 + i % 26))
-          .join();
+      final text = List.generate(
+        500,
+        (i) => String.fromCharCode(97 + i % 26),
+      ).join();
       final chunks = CharOpsPayload.intoChunks(
         charOps: opsForText(text),
         snapshot: {'body': text},
@@ -191,7 +194,10 @@ void main() {
     test('treats a rejected argument as permanent', () {
       expect(
         classifySyncFailure(
-          FirebaseException(plugin: 'cloud_firestore', code: 'invalid-argument'),
+          FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'invalid-argument',
+          ),
         ),
         SyncFailureKind.permanent,
       );
@@ -220,7 +226,10 @@ void main() {
     });
 
     test('defaults an unrecognised error to transient', () {
-      expect(classifySyncFailure(StateError('nope')), SyncFailureKind.transient);
+      expect(
+        classifySyncFailure(StateError('nope')),
+        SyncFailureKind.transient,
+      );
     });
   });
 
@@ -272,8 +281,10 @@ void main() {
 
       // Comfortably past the real single-document ceiling once each character
       // becomes its own operation.
-      final text = List.generate(9000, (i) => String.fromCharCode(97 + i % 26))
-          .join();
+      final text = List.generate(
+        9000,
+        (i) => String.fromCharCode(97 + i % 26),
+      ).join();
 
       await engine.syncDocumentImmediately(
         collection: 'journal_entries',
@@ -352,28 +363,31 @@ void main() {
       expect(stored.map((op) => op.id).toSet(), hasLength(2));
     });
 
-    test('a seeded sequence keeps a restart ordering after the old log', () async {
-      final repo = _RecordingSyncRepository();
-      final engine = SyncEngine(
-        syncRepository: repo,
-        deviceId: 'device-a',
-        debouncer: Debouncer(delay: Duration.zero),
-      );
-      addTearDown(engine.dispose);
+    test(
+      'a seeded sequence keeps a restart ordering after the old log',
+      () async {
+        final repo = _RecordingSyncRepository();
+        final engine = SyncEngine(
+          syncRepository: repo,
+          deviceId: 'device-a',
+          debouncer: Debouncer(delay: Duration.zero),
+        );
+        addTearDown(engine.dispose);
 
-      // What `prepareEditingSession` does with the log it has just read.
-      engine.ensureSequenceAbove(41);
+        // What `prepareEditingSession` does with the log it has just read.
+        engine.ensureSequenceAbove(41);
 
-      await engine.syncDocumentImmediately(
-        collection: 'journal_entries',
-        documentId: 'entry-1',
-        payload: {'body': 'hi'},
-        charOps: opsForText('hi'),
-      );
+        await engine.syncDocumentImmediately(
+          collection: 'journal_entries',
+          documentId: 'entry-1',
+          payload: {'body': 'hi'},
+          charOps: opsForText('hi'),
+        );
 
-      final stored = await repo.listOperations('entry-1');
-      expect(stored.single.sequence, 42);
-    });
+        final stored = await repo.listOperations('entry-1');
+        expect(stored.single.sequence, 42);
+      },
+    );
   });
 }
 

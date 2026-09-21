@@ -241,10 +241,9 @@ void main() {
       expect(memory.checkpoints, isEmpty);
 
       await PendingFlushRegistry.instance.flushAll();
-      expect(
-        memory.checkpoints['studySession__hub']!.remainingQueue,
-        ['paused'],
-      );
+      expect(memory.checkpoints['studySession__hub']!.remainingQueue, [
+        'paused',
+      ]);
     });
 
     test('a disposed session is no longer flushed', () async {

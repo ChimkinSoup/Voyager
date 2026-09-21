@@ -94,8 +94,8 @@ class _DesktopWindowFrameState extends State<DesktopWindowFrame>
           child: AnimatedBuilder(
             animation: _slideAnim,
             builder: (context, child) {
-              final offset = -(1.0 - _slideAnim.value) *
-                  DesktopWindowTitleBar.height;
+              final offset =
+                  -(1.0 - _slideAnim.value) * DesktopWindowTitleBar.height;
               return Transform.translate(
                 offset: Offset(0, offset),
                 child: child,

@@ -125,11 +125,7 @@ void main() {
         DateTime(2026, 3, 4, 12),
         DateTime(2026, 3, 18, 12),
       ])
-        tx(
-          type: TransactionType.expense,
-          amountCents: 1000,
-          occurredAt: day,
-        ),
+        tx(type: TransactionType.expense, amountCents: 1000, occurredAt: day),
     ];
 
     final series = cashFlowSeries(
@@ -145,10 +141,7 @@ void main() {
       expect(point.periodStart.hour, 0);
     }
     // And nothing inside the window was dropped.
-    expect(
-      series.fold<int>(0, (sum, p) => sum + p.expenseCents),
-      5000,
-    );
+    expect(series.fold<int>(0, (sum, p) => sum + p.expenseCents), 5000);
   });
 
   // -- Spending breakdown --------------------------------------------------

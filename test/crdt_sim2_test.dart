@@ -94,90 +94,84 @@ void main() {
     await db.close();
   });
 
-  test(
-    'a stale/incomplete persisted op-chain reconstructs the wrong text '
-    '(demonstrates the underlying hazard)',
-    () {
-      // Only the ops for "Hello" made it to the remote op-log, e.g. because
-      // the app was killed before the ops for the rest of the edit synced,
-      // even though the full "Hello world" was already saved locally.
-      final fullSession = CharacterOpSession(clientId: 'device-a');
-      fullSession.recordTextChange('', 'Hello world');
-      final allOps = fullSession.takePendingOps();
-      final partialOps = allOps.sublist(0, 'Hello'.length);
+  test('a stale/incomplete persisted op-chain reconstructs the wrong text '
+      '(demonstrates the underlying hazard)', () {
+    // Only the ops for "Hello" made it to the remote op-log, e.g. because
+    // the app was killed before the ops for the rest of the edit synced,
+    // even though the full "Hello world" was already saved locally.
+    final fullSession = CharacterOpSession(clientId: 'device-a');
+    fullSession.recordTextChange('', 'Hello world');
+    final allOps = fullSession.takePendingOps();
+    final partialOps = allOps.sublist(0, 'Hello'.length);
 
-      final reloaded = CharacterOpSession(
-        clientId: 'device-a',
-        initialOperations: partialOps,
-      );
+    final reloaded = CharacterOpSession(
+      clientId: 'device-a',
+      initialOperations: partialOps,
+    );
 
-      expect(reloaded.text, 'Hello');
-      expect(reloaded.text, isNot('Hello world'));
-    },
-  );
+    expect(reloaded.text, 'Hello');
+    expect(reloaded.text, isNot('Hello world'));
+  });
 
-  test(
-    'prepareEditingSession diffs a stale op-chain in place instead of '
-    'reseeding',
-    () async {
-      const entryId = 'entry-1';
-      const trueCurrentText = 'Hello world';
+  test('prepareEditingSession diffs a stale op-chain in place instead of '
+      'reseeding', () async {
+    const entryId = 'entry-1';
+    const trueCurrentText = 'Hello world';
 
-      final fullSession = CharacterOpSession(clientId: 'device-a');
-      fullSession.recordTextChange('', trueCurrentText);
-      final allOps = fullSession.takePendingOps();
-      final partialOps = allOps.sublist(0, 'Hello'.length);
+    final fullSession = CharacterOpSession(clientId: 'device-a');
+    fullSession.recordTextChange('', trueCurrentText);
+    final allOps = fullSession.takePendingOps();
+    final partialOps = allOps.sublist(0, 'Hello'.length);
 
-      // Seed the fake remote with only the incomplete op-chain.
-      await syncRepo.appendOperation(_charOpsSyncOperation(partialOps));
+    // Seed the fake remote with only the incomplete op-chain.
+    await syncRepo.appendOperation(_charOpsSyncOperation(partialOps));
 
-      await remoteSync.prepareEditingSession(
-        collection: FirestoreCollections.journalEntries,
-        documentId: entryId,
-        initialText: trueCurrentText,
-      );
+    await remoteSync.prepareEditingSession(
+      collection: FirestoreCollections.journalEntries,
+      documentId: entryId,
+      initialText: trueCurrentText,
+    );
 
-      final session = remoteSync.charOpRegistry.session(
-        FirestoreCollections.journalEntries,
-        entryId,
-      );
-      expect(session, isNotNull);
-      // The guard should have detected the mismatch against the stale
-      // 5-character reconstruction and caught the session up to the real
-      // text by diffing, not reseeding.
-      expect(session!.text, trueCurrentText);
+    final session = remoteSync.charOpRegistry.session(
+      FirestoreCollections.journalEntries,
+      entryId,
+    );
+    expect(session, isNotNull);
+    // The guard should have detected the mismatch against the stale
+    // 5-character reconstruction and caught the session up to the real
+    // text by diffing, not reseeding.
+    expect(session!.text, trueCurrentText);
 
-      // The reconciling diff (" world") is pending, same as any other edit —
-      // it hasn't reached the remote yet, unlike the original 5 "Hello" ops
-      // which are already there (seeded above) and must NOT be resent.
-      final reconcileOps = remoteSync.charOpRegistry.takePendingOps(
-        FirestoreCollections.journalEntries,
-        entryId,
-      );
-      expect(reconcileOps, hasLength('Hello world'.length - 'Hello'.length));
+    // The reconciling diff (" world") is pending, same as any other edit —
+    // it hasn't reached the remote yet, unlike the original 5 "Hello" ops
+    // which are already there (seeded above) and must NOT be resent.
+    final reconcileOps = remoteSync.charOpRegistry.takePendingOps(
+      FirestoreCollections.journalEntries,
+      entryId,
+    );
+    expect(reconcileOps, hasLength('Hello world'.length - 'Hello'.length));
 
-      // Further edits on the reconciled session must merge and validate
-      // cleanly (no colliding fractional positions) against what's actually
-      // on the remote.
-      remoteSync.recordJournalTextChange(
-        entryId: entryId,
-        before: trueCurrentText,
-        after: '$trueCurrentText!',
-      );
-      final newOps = remoteSync.charOpRegistry.takePendingOps(
-        FirestoreCollections.journalEntries,
-        entryId,
-      );
+    // Further edits on the reconciled session must merge and validate
+    // cleanly (no colliding fractional positions) against what's actually
+    // on the remote.
+    remoteSync.recordJournalTextChange(
+      entryId: entryId,
+      before: trueCurrentText,
+      after: '$trueCurrentText!',
+    );
+    final newOps = remoteSync.charOpRegistry.takePendingOps(
+      FirestoreCollections.journalEntries,
+      entryId,
+    );
 
-      final merger = CharacterSequenceCrdtMerger();
-      final merged = merger.mergeOperations(
-        [_charOpsSyncOperation(reconcileOps + newOps)],
-        [_charOpsSyncOperation(partialOps)],
-      );
-      expect(() => merger.validateOpChain(merged), returnsNormally);
-      expect(merger.applyMergedText(merged), '$trueCurrentText!');
-    },
-  );
+    final merger = CharacterSequenceCrdtMerger();
+    final merged = merger.mergeOperations(
+      [_charOpsSyncOperation(reconcileOps + newOps)],
+      [_charOpsSyncOperation(partialOps)],
+    );
+    expect(() => merger.validateOpChain(merged), returnsNormally);
+    expect(merger.applyMergedText(merged), '$trueCurrentText!');
+  });
 
   test(
     'race path does not upload seed ops — only the edit delta is pending',
@@ -192,7 +186,7 @@ void main() {
       final session = CharacterOpSession(
         clientId: 'device-b',
         initialText: text,
-        seedAsPending: false,  // race path — seeds must not be uploaded
+        seedAsPending: false, // race path — seeds must not be uploaded
       );
 
       // No pending ops yet: the seed is internal state only.

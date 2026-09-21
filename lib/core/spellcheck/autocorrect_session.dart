@@ -565,9 +565,9 @@ class AutocorrectSession {
     // per rule so autocorrect and emphasis can never disagree about where a
     // code span ends — and placed last, since it is the only gate here that
     // scans the whole document.
-    if (ProseMarkup.zonesOf(text).any(
-      (zone) => token.start < zone.end && token.end > zone.start,
-    )) {
+    if (ProseMarkup.zonesOf(
+      text,
+    ).any((zone) => token.start < zone.end && token.end > zone.start)) {
       return;
     }
     final correction = pair ?? autocorrectFor(lower, known);

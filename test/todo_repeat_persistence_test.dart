@@ -119,7 +119,9 @@ void main() {
     await _pumpPanel(
       tester,
       // A rule parked by an earlier due-date reset: still stored, still inert.
-      _task(recurrence: const RecurrenceRule(frequency: EventRecurrence.weekly)),
+      _task(
+        recurrence: const RecurrenceRule(frequency: EventRecurrence.weekly),
+      ),
     );
 
     final button = tester.widget<RepeatIconButton>(
@@ -139,9 +141,7 @@ void main() {
     );
 
     // Dim, not accented: it must not read as "repeating" when it cannot be.
-    final icon = tester.widget<Icon>(
-      find.byIcon(PhosphorIconsRegular.repeat),
-    );
+    final icon = tester.widget<Icon>(find.byIcon(PhosphorIconsRegular.repeat));
     expect(icon.color, isNot(const Color(0xFF3366FF)));
 
     await tester.tap(

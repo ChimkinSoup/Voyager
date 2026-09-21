@@ -268,7 +268,9 @@ class ExerciseChip extends StatelessWidget {
         vertical: VoyagerSpacing.sm + 2,
       ),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.55,
+        ),
         borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
         border: Border.all(color: colors.hairline),
       ),
@@ -352,7 +354,9 @@ class AddExerciseButton extends ConsumerWidget {
           hintText: 'Bench Press',
         );
         if (name == null) return;
-        await WorkoutActions(ref).createExercise(name, sortOrder: exerciseCount);
+        await WorkoutActions(
+          ref,
+        ).createExercise(name, sortOrder: exerciseCount);
       },
     );
   }

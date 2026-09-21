@@ -78,8 +78,8 @@ StudyBulkImportParseResult parseStudyBulkImportText(String text) {
           reason: front.isEmpty && back.isEmpty
               ? 'Empty front and back'
               : front.isEmpty
-                  ? 'Empty front'
-                  : 'Empty back',
+              ? 'Empty front'
+              : 'Empty back',
         ),
       );
       continue;

@@ -114,10 +114,11 @@ void main() {
       final written = await repo.reorderSeasons(['c', 'a', 'b']);
 
       expect(written.map((s) => s.id), ['c', 'a', 'b']);
-      expect(
-        (await repo.listSeasons()).map((s) => s.name),
-        ['Fall 2026', 'Fall 2025', 'Spring 2026'],
-      );
+      expect((await repo.listSeasons()).map((s) => s.name), [
+        'Fall 2026',
+        'Fall 2025',
+        'Spring 2026',
+      ]);
     });
 
     test('reordering into the same order writes nothing', () async {

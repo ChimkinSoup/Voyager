@@ -177,9 +177,7 @@ class _VoyagerCrossfadeIndexState extends State<VoyagerCrossfadeIndex>
     // Idle siblings stay mounted (keep-alive) but offstage so they neither
     // paint nor hit-test. Tickers stay parked until they participate again.
     if (!participating) {
-      return Offstage(
-        child: TickerMode(enabled: false, child: child),
-      );
+      return Offstage(child: TickerMode(enabled: false, child: child));
     }
 
     Widget layer = child;
@@ -197,10 +195,7 @@ class _VoyagerCrossfadeIndexState extends State<VoyagerCrossfadeIndex>
       enabled: true,
       child: IgnorePointer(
         ignoring: !interactive,
-        child: ExcludeSemantics(
-          excluding: !interactive,
-          child: layer,
-        ),
+        child: ExcludeSemantics(excluding: !interactive, child: layer),
       ),
     );
   }

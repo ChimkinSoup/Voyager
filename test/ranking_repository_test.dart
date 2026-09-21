@@ -157,10 +157,7 @@ void main() {
       )).copyWith(tags: ['rom-com', 'a24']);
       await repository.upsertParent(parent);
 
-      expect(
-        (await repository.getParent(parent.id))!.tags,
-        ['rom-com', 'a24'],
-      );
+      expect((await repository.getParent(parent.id))!.tags, ['rom-com', 'a24']);
     });
 
     test('an entry written before tags existed reads as untagged', () async {

@@ -206,7 +206,8 @@ class VoyagerSpellCheckService implements SpellCheckService {
     // rather than waiting for the next keystroke that happens to land
     // outside the token. Deletions have nothing to defer.
     final inserted = newEnd - prefix;
-    final activeRange = (allowDeferral &&
+    final activeRange =
+        (allowDeferral &&
             inserted > 0 &&
             inserted <= maxDeferredInsertionLength)
         ? TextRange(start: prefix, end: newEnd)
@@ -237,7 +238,10 @@ class VoyagerSpellCheckService implements SpellCheckService {
       if (span.range.start >= oldScanEnd) {
         spans.add(
           SuggestionSpan(
-            TextRange(start: span.range.start + delta, end: span.range.end + delta),
+            TextRange(
+              start: span.range.start + delta,
+              end: span.range.end + delta,
+            ),
             span.suggestions,
           ),
         );
@@ -289,11 +293,16 @@ class VoyagerSpellCheckService implements SpellCheckService {
   /// guessing at a nonsensical "changed region".
   static const _maxIncrementalEditLength = 200;
 
-  bool _isIncrementalSafe(String oldText, String newText, (int, int, int) diff) {
+  bool _isIncrementalSafe(
+    String oldText,
+    String newText,
+    (int, int, int) diff,
+  ) {
     final (prefix, oldEnd, newEnd) = diff;
     final changedOld = oldEnd - prefix;
     final changedNew = newEnd - prefix;
-    if (changedOld > _maxIncrementalEditLength || changedNew > _maxIncrementalEditLength) {
+    if (changedOld > _maxIncrementalEditLength ||
+        changedNew > _maxIncrementalEditLength) {
       return false;
     }
     // A genuine keystroke edit leaves most of the *old* text untouched
@@ -312,13 +321,15 @@ class VoyagerSpellCheckService implements SpellCheckService {
     if (_hasZoneDelimiter(oldText, prefix, oldEnd) ||
         _hasZoneDelimiter(newText, prefix, newEnd) ||
         (prefix > 0 && _isPairDelimiter(newText.codeUnitAt(prefix - 1))) ||
-        (newEnd < newText.length && _isPairDelimiter(newText.codeUnitAt(newEnd)))) {
+        (newEnd < newText.length &&
+            _isPairDelimiter(newText.codeUnitAt(newEnd)))) {
       return false;
     }
     return true;
   }
 
-  static bool _isPairDelimiter(int unit) => unit == _backtick || unit == _dollar;
+  static bool _isPairDelimiter(int unit) =>
+      unit == _backtick || unit == _dollar;
 
   static const _backtick = 0x60;
   static const _dollar = 0x24;
@@ -338,9 +349,12 @@ class VoyagerSpellCheckService implements SpellCheckService {
   /// `new[prefix:newEnd]`. Null if the texts are identical.
   (int, int, int)? _computeDiff(String oldText, String newText) {
     if (oldText == newText) return null;
-    final maxPrefix = oldText.length < newText.length ? oldText.length : newText.length;
+    final maxPrefix = oldText.length < newText.length
+        ? oldText.length
+        : newText.length;
     var prefix = 0;
-    while (prefix < maxPrefix && oldText.codeUnitAt(prefix) == newText.codeUnitAt(prefix)) {
+    while (prefix < maxPrefix &&
+        oldText.codeUnitAt(prefix) == newText.codeUnitAt(prefix)) {
       prefix++;
     }
     var oldEnd = oldText.length;
@@ -378,7 +392,9 @@ class VoyagerSpellCheckService implements SpellCheckService {
 
   int _boundaryForwardPad(String text, int pos) {
     var i = pos;
-    final limit = pos + _maxBoundaryScan > text.length ? text.length : pos + _maxBoundaryScan;
+    final limit = pos + _maxBoundaryScan > text.length
+        ? text.length
+        : pos + _maxBoundaryScan;
     while (i < limit && _boundaryChar.hasMatch(text[i])) {
       i++;
     }

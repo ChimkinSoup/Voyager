@@ -64,10 +64,7 @@ void main() {
       // Narrow page: the cap bottoms out at the panel's own minimum rather
       // than opening up to the whole page, so the list is never covered.
       expect(
-        EditSidePanelMetrics.clampWidth(
-          EditSidePanelMetrics.defaultWidth,
-          624,
-        ),
+        EditSidePanelMetrics.clampWidth(EditSidePanelMetrics.defaultWidth, 624),
         EditSidePanelMetrics.minWidth,
       );
     });
@@ -164,68 +161,69 @@ void main() {
     expect(find.byType(ResizablePaneDivider), findsOneWidget);
   });
 
-  testWidgets('overlay lays an opaque backdrop under the panel; push does not', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(1400, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'overlay lays an opaque backdrop under the panel; push does not',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    final controller = AnimationController(
-      vsync: tester,
-      duration: EditSidePanelMetrics.duration,
-      value: 1,
-    );
-    addTearDown(controller.dispose);
-    final theme = ThemeData(scaffoldBackgroundColor: const Color(0xFF123456));
+      final controller = AnimationController(
+        vsync: tester,
+        duration: EditSidePanelMetrics.duration,
+        value: 1,
+      );
+      addTearDown(controller.dispose);
+      final theme = ThemeData(scaffoldBackgroundColor: const Color(0xFF123456));
 
-    Future<void> pumpAt(double pageWidth, double listMinWidth) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: theme,
-          home: Scaffold(
-            body: SizedBox(
-              width: pageWidth,
-              height: 400,
-              child: EditSidePanelHost(
-                animation: controller,
-                listMinWidth: listMinWidth,
-                storedWidth: EditSidePanelMetrics.defaultWidth,
-                onWidthCommitted: (_) {},
-                list: const SizedBox.expand(),
-                // The three real editors draw no fill of their own.
-                panel: const SizedBox.expand(),
+      Future<void> pumpAt(double pageWidth, double listMinWidth) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: Scaffold(
+              body: SizedBox(
+                width: pageWidth,
+                height: 400,
+                child: EditSidePanelHost(
+                  animation: controller,
+                  listMinWidth: listMinWidth,
+                  storedWidth: EditSidePanelMetrics.defaultWidth,
+                  onWidthCommitted: (_) {},
+                  list: const SizedBox.expand(),
+                  // The three real editors draw no fill of their own.
+                  panel: const SizedBox.expand(),
+                ),
               ),
             ),
           ),
-        ),
+        );
+        await tester.pump();
+      }
+
+      Finder backdrop() => find.byWidgetPredicate(
+        (w) => w is ColoredBox && w.color == theme.scaffoldBackgroundColor,
       );
-      await tester.pump();
-    }
 
-    Finder backdrop() => find.byWidgetPredicate(
-      (w) => w is ColoredBox && w.color == theme.scaffoldBackgroundColor,
-    );
+      await pumpAt(624, EditSidePanelMetrics.jobsListMinWidth);
+      expect(
+        backdrop(),
+        findsOneWidget,
+        reason: 'without it the list renders straight through the editor',
+      );
+      expect(
+        tester.getSize(backdrop()).width,
+        closeTo(EditSidePanelMetrics.minWidth, 1),
+      );
 
-    await pumpAt(624, EditSidePanelMetrics.jobsListMinWidth);
-    expect(
-      backdrop(),
-      findsOneWidget,
-      reason: 'without it the list renders straight through the editor',
-    );
-    expect(
-      tester.getSize(backdrop()).width,
-      closeTo(EditSidePanelMetrics.minWidth, 1),
-    );
-
-    await pumpAt(1400, EditSidePanelMetrics.jobsListMinWidth);
-    expect(
-      backdrop(),
-      findsNothing,
-      reason: 'push leaves nothing behind the panel to cover',
-    );
-  });
+      await pumpAt(1400, EditSidePanelMetrics.jobsListMinWidth);
+      expect(
+        backdrop(),
+        findsNothing,
+        reason: 'push leaves nothing behind the panel to cover',
+      );
+    },
+  );
 
   testWidgets('the divider draws no line of its own beside the panel', (
     tester,
@@ -260,7 +258,8 @@ void main() {
     // The panel already draws its own left hairline; a grab line beside it
     // read as a double rule.
     expect(
-      tester.widget<ResizablePaneDivider>(find.byType(ResizablePaneDivider))
+      tester
+          .widget<ResizablePaneDivider>(find.byType(ResizablePaneDivider))
           .showLine,
       isFalse,
     );
