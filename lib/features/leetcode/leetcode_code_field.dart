@@ -99,6 +99,15 @@ final _codeTextStyle = AppFonts.style(
   fontSize: 16,
 ).copyWith(fontFamily: AppFonts.monoFamily);
 
+/// One line of [LeetCodeCodeSurface], and the inset above its first one.
+///
+/// Public because anything laid out beside the editor line-for-line — the
+/// cheat sheet's per-line complexity field — has to match both or its lines
+/// drift out of step with the code they belong to.
+final double kLeetCodeCodeLineHeight =
+    (_codeTextStyle.fontSize ?? 16) * (_codeTextStyle.height ?? 1);
+final double kLeetCodeCodeTopInset = _codeContentPadding.top;
+
 /// Width every language capsule takes, wide enough for the longest label
 /// ("javascript"/"typescript") so none of them has to ellipsize.
 const _kLanguagePillWidth = 84.0;

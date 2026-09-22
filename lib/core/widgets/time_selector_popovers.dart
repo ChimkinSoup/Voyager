@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
+import 'package:voyager/core/widgets/select_all_on_click.dart';
+import 'package:voyager/core/widgets/time_text_input_formatter.dart';
 import 'voyager_time_picker_spinner.dart';
 
 class TimeRangePopover extends StatefulWidget {
@@ -72,6 +75,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
       if (_startFocus.hasFocus) {
         setState(() => _activeIsStart = true);
         _startSelectAllNextTap = true;
+        selectAllTimeText(_startController);
       } else {
         _startController.text = _formatTime(_startDt);
       }
@@ -80,6 +84,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
       if (_endFocus.hasFocus) {
         setState(() => _activeIsStart = false);
         _endSelectAllNextTap = true;
+        selectAllTimeText(_endController);
       } else {
         _endController.text = _formatTime(_endDt);
       }
@@ -93,6 +98,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
         _startController.text = _formatTime(_startDt);
         _endController.text = _formatTime(_endDt);
         _startFocus.requestFocus();
+        selectAllTimeText(_startController);
       }
     });
   }
@@ -110,96 +116,9 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
     return TimeOfDay.fromDateTime(dt).format(context);
   }
 
-  DateTime? _parseTime(String query, DateTime referenceTime) {
-    query = query.toLowerCase().trim();
-    if (query.isEmpty) return null;
-
-    final clean = query.replaceAll(RegExp(r'[^a-z0-9]'), '');
-    if (clean.isEmpty) return null;
-
-    bool? isPM;
-    if (clean.endsWith('pm') || clean.endsWith('p')) {
-      isPM = true;
-    } else if (clean.endsWith('am') || clean.endsWith('a')) {
-      isPM = false;
-    }
-
-    String numPart = clean.replaceAll(RegExp(r'[a-z]'), '');
-    if (numPart.isEmpty) return null;
-
-    int hour = 0;
-    int minute = 0;
-
-    if (numPart.length <= 2) {
-      hour = int.parse(numPart);
-      minute = 0;
-    } else if (numPart.length == 3) {
-      hour = int.parse(numPart.substring(0, 1));
-      minute = int.parse(numPart.substring(1, 3));
-    } else if (numPart.length == 4) {
-      hour = int.parse(numPart.substring(0, 2));
-      minute = int.parse(numPart.substring(2, 4));
-    } else {
-      return null;
-    }
-
-    if (minute > 59) return null;
-
-    if (hour > 12 && isPM == null) {
-      if (hour > 23) return null;
-      return DateTime(
-        referenceTime.year,
-        referenceTime.month,
-        referenceTime.day,
-        hour,
-        minute,
-      );
-    }
-
-    if (hour > 12) return null;
-
-    if (isPM != null) {
-      int h24 = hour % 12;
-      if (isPM) h24 += 12;
-      return DateTime(
-        referenceTime.year,
-        referenceTime.month,
-        referenceTime.day,
-        h24,
-        minute,
-      );
-    } else {
-      int h24 = hour % 12;
-      int t1 = h24;
-      int t2 = h24 + 12;
-
-      double refH = referenceTime.hour + referenceTime.minute / 60.0;
-      double t1Diff = (t1 + (minute / 60.0) - refH + 24) % 24;
-      double t2Diff = (t2 + (minute / 60.0) - refH + 24) % 24;
-
-      if (t1Diff < t2Diff) {
-        return DateTime(
-          referenceTime.year,
-          referenceTime.month,
-          referenceTime.day,
-          t1,
-          minute,
-        );
-      } else {
-        return DateTime(
-          referenceTime.year,
-          referenceTime.month,
-          referenceTime.day,
-          t2,
-          minute,
-        );
-      }
-    }
-  }
-
   void _onStartTextChanged() {
     if (!_startFocus.hasFocus) return;
-    final parsed = _parseTime(_startController.text, _startDt);
+    final parsed = parseTimeQuery(_startController.text, _startDt);
     if (parsed != null && parsed != _startDt) {
       _applyStartDt(parsed, updateText: false);
     }
@@ -207,7 +126,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
 
   void _onEndTextChanged() {
     if (!_endFocus.hasFocus) return;
-    final parsed = _parseTime(_endController.text, _endDt);
+    final parsed = parseTimeQuery(_endController.text, _endDt);
     if (parsed != null && parsed != _endDt) {
       _applyEndDt(parsed, updateText: false);
     }
@@ -287,6 +206,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
     required bool isActive,
     required String hintText,
     required VoidCallback onTap,
+    required bool Function() selectAllPending,
     required ValueChanged<String> onSubmitted,
   }) {
     final accent = theme.colorScheme.primary;
@@ -320,37 +240,44 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
         data: fieldTheme,
         child: Material(
           type: MaterialType.transparency,
-          child: TextField(
-            contextMenuBuilder: (context, editableTextState) =>
-                const SizedBox.shrink(),
-            textAlign: TextAlign.center,
+          child: SelectAllOnClick(
             controller: controller,
             focusNode: focusNode,
-            scrollPadding: kVoyagerFieldScrollPadding,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: isActive
-                  ? accent
-                  : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-            ),
-            decoration: InputDecoration(
-              hintText: hintText,
-              hintStyle: theme.textTheme.titleMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+            selectAllPending: selectAllPending,
+            child: TextField(
+              contextMenuBuilder: (context, editableTextState) =>
+                  const SizedBox.shrink(),
+              textAlign: TextAlign.center,
+              controller: controller,
+              focusNode: focusNode,
+              scrollPadding: kVoyagerFieldScrollPadding,
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: isActive
+                    ? accent
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.5),
               ),
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              disabledBorder: InputBorder.none,
-              errorBorder: InputBorder.none,
-              focusedErrorBorder: InputBorder.none,
-              isCollapsed: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 8,
+              decoration: InputDecoration(
+                hintText: hintText,
+                hintStyle: theme.textTheme.titleMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                ),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                isCollapsed: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
               ),
+              onTap: onTap,
+              onSubmitted: onSubmitted,
+              textInputAction: TextInputAction.done,
+              inputFormatters: [TimeTextInputFormatter()],
             ),
-            onTap: onTap,
-            onSubmitted: onSubmitted,
           ),
         ),
       ),
@@ -428,6 +355,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
                           _startSelectAllNextTap = false;
                         }
                       },
+                      selectAllPending: () => _startSelectAllNextTap,
                       onSubmitted: (_) => _endFocus.requestFocus(),
                     ),
                   ),
@@ -458,6 +386,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
                           _endSelectAllNextTap = false;
                         }
                       },
+                      selectAllPending: () => _endSelectAllNextTap,
                       onSubmitted: (_) => _submit(),
                     ),
                   ),
@@ -624,6 +553,7 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
     _timeFocus.addListener(() {
       if (_timeFocus.hasFocus) {
         _selectAllNextTap = true;
+        selectAllTimeText(_timeController);
       } else {
         _timeController.text = _formatTime(_timeDt);
       }
@@ -635,6 +565,7 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
       if (mounted) {
         _timeController.text = _formatTime(_timeDt);
         _timeFocus.requestFocus();
+        selectAllTimeText(_timeController);
       }
     });
   }
@@ -650,96 +581,9 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
     return TimeOfDay.fromDateTime(dt).format(context);
   }
 
-  DateTime? _parseTime(String query, DateTime referenceTime) {
-    query = query.toLowerCase().trim();
-    if (query.isEmpty) return null;
-
-    final clean = query.replaceAll(RegExp(r'[^a-z0-9]'), '');
-    if (clean.isEmpty) return null;
-
-    bool? isPM;
-    if (clean.endsWith('pm') || clean.endsWith('p')) {
-      isPM = true;
-    } else if (clean.endsWith('am') || clean.endsWith('a')) {
-      isPM = false;
-    }
-
-    String numPart = clean.replaceAll(RegExp(r'[a-z]'), '');
-    if (numPart.isEmpty) return null;
-
-    int hour = 0;
-    int minute = 0;
-
-    if (numPart.length <= 2) {
-      hour = int.parse(numPart);
-      minute = 0;
-    } else if (numPart.length == 3) {
-      hour = int.parse(numPart.substring(0, 1));
-      minute = int.parse(numPart.substring(1, 3));
-    } else if (numPart.length == 4) {
-      hour = int.parse(numPart.substring(0, 2));
-      minute = int.parse(numPart.substring(2, 4));
-    } else {
-      return null;
-    }
-
-    if (minute > 59) return null;
-
-    if (hour > 12 && isPM == null) {
-      if (hour > 23) return null;
-      return DateTime(
-        referenceTime.year,
-        referenceTime.month,
-        referenceTime.day,
-        hour,
-        minute,
-      );
-    }
-
-    if (hour > 12) return null;
-
-    if (isPM != null) {
-      int h24 = hour % 12;
-      if (isPM) h24 += 12;
-      return DateTime(
-        referenceTime.year,
-        referenceTime.month,
-        referenceTime.day,
-        h24,
-        minute,
-      );
-    } else {
-      int h24 = hour % 12;
-      int t1 = h24;
-      int t2 = h24 + 12;
-
-      double refH = referenceTime.hour + referenceTime.minute / 60.0;
-      double t1Diff = (t1 + (minute / 60.0) - refH + 24) % 24;
-      double t2Diff = (t2 + (minute / 60.0) - refH + 24) % 24;
-
-      if (t1Diff < t2Diff) {
-        return DateTime(
-          referenceTime.year,
-          referenceTime.month,
-          referenceTime.day,
-          t1,
-          minute,
-        );
-      } else {
-        return DateTime(
-          referenceTime.year,
-          referenceTime.month,
-          referenceTime.day,
-          t2,
-          minute,
-        );
-      }
-    }
-  }
-
   void _onTimeTextChanged() {
     if (!_timeFocus.hasFocus) return;
-    final parsed = _parseTime(_timeController.text, _timeDt);
+    final parsed = parseTimeQuery(_timeController.text, _timeDt);
     if (parsed != null && parsed != _timeDt) {
       _applyTimeDt(parsed, updateText: false);
     }
@@ -774,6 +618,7 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
     required FocusNode focusNode,
     required String hintText,
     required VoidCallback onTap,
+    required bool Function() selectAllPending,
     required ValueChanged<String> onSubmitted,
   }) {
     final accent = theme.colorScheme.primary;
@@ -802,33 +647,40 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
         data: fieldTheme,
         child: Material(
           type: MaterialType.transparency,
-          child: TextField(
-            contextMenuBuilder: (context, editableTextState) =>
-                const SizedBox.shrink(),
-            textAlign: TextAlign.center,
+          child: SelectAllOnClick(
             controller: controller,
             focusNode: focusNode,
-            scrollPadding: kVoyagerFieldScrollPadding,
-            style: theme.textTheme.titleMedium?.copyWith(color: accent),
-            decoration: InputDecoration(
-              hintText: hintText,
-              hintStyle: theme.textTheme.titleMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+            selectAllPending: selectAllPending,
+            child: TextField(
+              contextMenuBuilder: (context, editableTextState) =>
+                  const SizedBox.shrink(),
+              textAlign: TextAlign.center,
+              controller: controller,
+              focusNode: focusNode,
+              scrollPadding: kVoyagerFieldScrollPadding,
+              style: theme.textTheme.titleMedium?.copyWith(color: accent),
+              decoration: InputDecoration(
+                hintText: hintText,
+                hintStyle: theme.textTheme.titleMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                ),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                isCollapsed: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
               ),
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              disabledBorder: InputBorder.none,
-              errorBorder: InputBorder.none,
-              focusedErrorBorder: InputBorder.none,
-              isCollapsed: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 8,
-              ),
+              onTap: onTap,
+              onSubmitted: onSubmitted,
+              textInputAction: TextInputAction.done,
+              inputFormatters: [TimeTextInputFormatter()],
             ),
-            onTap: onTap,
-            onSubmitted: onSubmitted,
           ),
         ),
       ),
@@ -885,6 +737,7 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
                         _selectAllNextTap = false;
                       }
                     },
+                    selectAllPending: () => _selectAllNextTap,
                     onSubmitted: (_) => _submit(),
                   ),
                 ),

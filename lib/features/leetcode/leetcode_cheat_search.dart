@@ -21,8 +21,9 @@ class LeetCodeCheatHit {
 /// Every entry matching [query], across **all** tabs, in tab → section →
 /// entry order.
 ///
-/// Matches `command`, `description` and `complexity`, case-insensitively, on a
-/// plain substring — the same shape the Review Deck's keyword filter uses. A
+/// Matches `command`, `label`, `description` and `complexity`,
+/// case-insensitively, on a plain substring — the same shape the Review Deck's
+/// keyword filter uses. A
 /// blank query matches nothing rather than everything: the caller shows the
 /// unfiltered sheet instead of running this at all.
 List<LeetCodeCheatHit> searchLeetCodeCheatSheet(
@@ -61,6 +62,8 @@ Map<String, int> leetCodeCheatMatchCounts(List<LeetCodeCheatHit> hits) {
 bool _matches(LeetCodeCheatEntry entry, String needle) {
   if (entry.command.toLowerCase().contains(needle)) return true;
   if (entry.description.toLowerCase().contains(needle)) return true;
+  final label = entry.label;
+  if (label != null && label.toLowerCase().contains(needle)) return true;
   final complexity = entry.complexity;
   return complexity != null && complexity.toLowerCase().contains(needle);
 }

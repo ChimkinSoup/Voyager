@@ -513,6 +513,7 @@ Map<String, dynamic> leetCodeCheatEntryToFirestore(LeetCodeCheatEntry entry) =>
       'id': entry.id,
       'sectionId': entry.sectionId,
       'command': entry.command,
+      'label': entry.label,
       'description': entry.description,
       'complexity': entry.complexity,
       'position': entry.position,
@@ -544,6 +545,8 @@ LeetCodeCheatEntry mergeLeetCodeCheatEntryFromRemote(
     id: id,
     sectionId: data['sectionId'] as String? ?? local?.sectionId ?? '',
     command: data['command'] as String? ?? local?.command ?? '',
+    // Null and absent differ, as for complexity below.
+    label: data.containsKey('label') ? data['label'] as String? : local?.label,
     description: data['description'] as String? ?? local?.description ?? '',
     // Null and absent differ here too: null is a complexity the user cleared,
     // and the badge's presence is the only flag the entry has.

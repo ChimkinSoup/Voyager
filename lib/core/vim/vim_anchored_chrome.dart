@@ -189,6 +189,16 @@ class _VimAnchoredChrome extends SingleChildRenderObjectWidget {
   }
 }
 
+/// Whether [rect] is safe to hand to the painting layer.
+///
+/// A rect works its way here through several matrix transforms, and a
+/// degenerate one anywhere in the chain — a zero-scale ancestor, a follower
+/// whose leader has gone, a box measured mid-reparent — turns a coordinate
+/// into NaN or an infinity. `Canvas.clipRect` asserts on NaN, and it does so
+/// once per frame for as long as the chrome is up, so the geometry is checked
+/// here rather than trusted all the way down.
+bool vimRectIsPaintable(Rect rect) => rect.isFinite;
+
 /// What a paint of this chrome is going to do: [shift] it by that much (null
 /// for "paint nothing"), and cut it to [clip], in global coordinates.
 @immutable
@@ -417,6 +427,9 @@ class RenderVimAnchoredChrome extends RenderProxyBox {
       field.getTransformTo(null),
       Offset.zero & field.size,
     );
+    // Nothing sensible to hang off: better a frame with no badge than a badge
+    // placed from a NaN, which paints nowhere and throws on the way.
+    if (!vimRectIsPaintable(fieldRect)) return VimChromePlacement.none;
     final clip = vimAncestorClipRect(field);
     return switch (_fit) {
       VimChromeFit.clip => _resolveClip(fieldRect, clip),
@@ -438,10 +451,13 @@ class RenderVimAnchoredChrome extends RenderProxyBox {
     if (showing == rect) return VimChromePlacement.asIs;
     // Local, because this box's own top-left is exactly where the follower is
     // about to put it.
-    return VimChromePlacement(
-      shift: Offset.zero,
-      clip: clip.shift(-rect.topLeft),
-    );
+    final local = clip.shift(-rect.topLeft);
+    // Belt and braces: [_resolve] has already refused a degenerate field, but
+    // the clip comes from a second walk up the tree and is transformed by the
+    // ancestors' own matrices. Uncut is the honest answer — nothing finite was
+    // asking for a cut.
+    if (!vimRectIsPaintable(local)) return VimChromePlacement.asIs;
+    return VimChromePlacement(shift: Offset.zero, clip: local);
   }
 
   /// Where to paint the child relative to where the follower will put it, or
@@ -486,6 +502,7 @@ class RenderVimAnchoredChrome extends RenderProxyBox {
     var dy = 0.0;
     if (rect.bottom > allowed.bottom) dy = allowed.bottom - rect.bottom;
     if (rect.top + dy < allowed.top) dy = allowed.top - rect.top;
+    if (!dx.isFinite || !dy.isFinite) return VimChromePlacement.none;
     return VimChromePlacement(shift: Offset(dx, dy));
   }
 

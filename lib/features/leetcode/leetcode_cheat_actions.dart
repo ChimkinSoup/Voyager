@@ -196,30 +196,45 @@ class LeetCodeCheatActions {
     return entry;
   }
 
-  /// Saves whichever of the three fields the caller names, leaving the rest
+  /// Saves whichever of the four fields the caller names, leaving the rest
   /// as they are on disk.
   ///
-  /// [complexity] empty or whitespace stores null rather than `''`: the
-  /// badge's presence in Viewing mode is the only flag the entry has, and an
-  /// empty string would draw an empty badge.
+  /// [complexity] and [label] empty or whitespace store null rather than `''`:
+  /// their presence in Viewing mode is the only flag the entry has, and an
+  /// empty string would draw an empty badge or hold an empty column open.
+  ///
+  /// [complexity] keeps its interior shape, though — it is one line per line
+  /// of the command, so a blank first line means "the first line has no cost"
+  /// and trimming it away would slide every badge up a line.
   Future<void> saveEntry(
     String id, {
     String? command,
+    String? label,
     String? description,
     String? complexity,
   }) async {
     final existing = await _repository.getCheatEntry(id);
     if (existing == null) return;
-    final nextComplexity = complexity?.trim();
+    // Trailing blank lines belong to no command line, so they go; a leading
+    // one does not.
+    final nextComplexity = complexity?.trimRight();
+    final nextLabel = label?.trim();
     final unchanged =
         (command == null || command == existing.command) &&
         (description == null || description == existing.description) &&
+        (label == null ||
+            (nextLabel!.isEmpty ? null : nextLabel) == existing.label) &&
         (complexity == null ||
             (nextComplexity!.isEmpty ? null : nextComplexity) ==
                 existing.complexity);
     if (unchanged) return;
 
     var entry = existing.copyWith(command: command, description: description);
+    if (label != null) {
+      entry = nextLabel!.isEmpty
+          ? entry.copyWith(clearLabel: true, bumpVersion: false)
+          : entry.copyWith(label: nextLabel, bumpVersion: false);
+    }
     if (complexity != null) {
       entry = nextComplexity!.isEmpty
           ? entry.copyWith(clearComplexity: true, bumpVersion: false)

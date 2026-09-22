@@ -412,7 +412,7 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
 }
 
 /// `rounded.field` — the reminder input is a field like any other.
-const double _kReminderFieldRadius = 14;
+const double _kReminderFieldRadius = VoyagerTheme.fieldRadius;
 
 const EdgeInsets _kReminderFieldPadding = EdgeInsets.symmetric(
   horizontal: 12,
@@ -902,15 +902,9 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
     } else {
       content = Tooltip(
         message: 'Click to edit reminder',
-        child: InkWell(
-          onTap: _startEditing,
-          borderRadius: BorderRadius.circular(_kInboxRowRadius),
-          // The row-wide highlight below already covers this on hover.
-          hoverColor: Colors.transparent,
-          child: Padding(
-            padding: _kPinnedNoteTextPadding,
-            child: VoyagerProseText(_text, style: noteStyle),
-          ),
+        child: Padding(
+          padding: _kPinnedNoteTextPadding,
+          child: VoyagerProseText(_text, style: noteStyle),
         ),
       );
     }
@@ -938,6 +932,52 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
       child: content,
     );
 
+    // The row highlight covers the text; the delete X has its own
+    // hover fill, matching the feed dismiss control.
+    Widget row = AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      decoration: BoxDecoration(
+        color: _hovered && !_isEditing ? theme.hoverColor : Colors.transparent,
+        borderRadius: BorderRadius.circular(_kInboxRowRadius),
+      ),
+      // Right inset only, matching the feed row's inner padding, so the
+      // dismiss controls of both sections stand in one column. The left
+      // is left alone: the note's own text inset already puts it on the
+      // same pixel as the text in the input above it.
+      padding: const EdgeInsets.fromLTRB(0, 2, 12, 2),
+      child: Row(
+        children: [
+          Expanded(child: content),
+          // The delete X keeps its slot while the row is being edited,
+          // just without the control in it. It is the tallest thing in
+          // the row, so it — not the text or the field — is what sets
+          // the row's height; dropping it on the way into the editor
+          // shrank the row out from under the click that opened it.
+          if (_isEditing)
+            SizedBox.square(dimension: _inboxDismissSlotSize)
+          else
+            _HoverRevealed(
+              revealed: _hovered,
+              child: _InboxDismissButton(onPressed: _handleDelete),
+            ),
+        ],
+      ),
+    );
+
+    if (!_isEditing) {
+      // Outside the container, so the click target is the whole area the
+      // highlight lights up — the text is shorter than the row the X sets,
+      // and the row's own padding is outside that again, so a target around
+      // the text alone left dead strips above and below it.
+      row = InkWell(
+        onTap: _startEditing,
+        borderRadius: BorderRadius.circular(_kInboxRowRadius),
+        // The row-wide highlight above already covers this on hover.
+        hoverColor: Colors.transparent,
+        child: row,
+      );
+    }
+
     return SizeTransition(
       sizeFactor: size,
       alignment: AlignmentDirectional.topStart,
@@ -950,39 +990,7 @@ class _PinnedNoteRowState extends State<_PinnedNoteRow>
           onExit: (_) {
             if (_hovered) setState(() => _hovered = false);
           },
-          // The row highlight covers the text; the delete X has its own
-          // hover fill, matching the feed dismiss control.
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            decoration: BoxDecoration(
-              color: _hovered && !_isEditing
-                  ? theme.hoverColor
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(_kInboxRowRadius),
-            ),
-            // Right inset only, matching the feed row's inner padding, so the
-            // dismiss controls of both sections stand in one column. The left
-            // is left alone: the note's own text inset already puts it on the
-            // same pixel as the text in the input above it.
-            padding: const EdgeInsets.fromLTRB(0, 2, 12, 2),
-            child: Row(
-              children: [
-                Expanded(child: content),
-                // The delete X keeps its slot while the row is being edited,
-                // just without the control in it. It is the tallest thing in
-                // the row, so it — not the text or the field — is what sets
-                // the row's height; dropping it on the way into the editor
-                // shrank the row out from under the click that opened it.
-                if (_isEditing)
-                  SizedBox.square(dimension: _inboxDismissSlotSize)
-                else
-                  _HoverRevealed(
-                    revealed: _hovered,
-                    child: _InboxDismissButton(onPressed: _handleDelete),
-                  ),
-              ],
-            ),
-          ),
+          child: row,
         ),
       ),
     );

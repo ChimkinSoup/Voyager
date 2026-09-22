@@ -526,4 +526,88 @@ void main() {
       expect(barRect(tester).bottom, lessThanOrEqualTo(window.height));
     });
   });
+
+  // A field can sit inside a surface that a `CompositedTransformFollower`
+  // positions — every popover and overlay in the app does it. On any frame
+  // where that follower has not found its leader yet, Flutter's
+  // `FollowerLayer.applyTransform` multiplies in a `Matrix4.zero()`, and the
+  // chrome's `getTransformTo(null)` picks it up: every coordinate it works out
+  // from the field comes back NaN. `Canvas.clipRect` asserts on NaN, once per
+  // frame for as long as the badge is up.
+  group('a field whose transform chain has gone degenerate', () {
+    /// A Vim field under [wrapper], with the badge up.
+    Future<void> pumpWrapped(
+      WidgetTester tester,
+      Widget Function(Widget field) wrapper,
+    ) async {
+      // Tall enough to overflow the box: the scroller only reports a clip
+      // when there is something to cut.
+      controller.text = List.generate(12, (i) => 'line $i').join('\n');
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: wrapper(
+              // Inside a scroller, because the clip is half of what the chrome
+              // works out — a field with nothing clipping it never reaches the
+              // clip path at all.
+              SizedBox(
+                width: 300,
+                height: 120,
+                child: VoyagerScrollView(
+                  controller: scrollController,
+                  child: VimTextScope(
+                    enabled: true,
+                    controller: controller,
+                    multiline: true,
+                    builder: (context, vim) => TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      maxLines: null,
+                      cursorColor: vim.overlayCaretColor(Colors.blue),
+                      cursorWidth: vim.overlayCaretWidth,
+                      decoration: const InputDecoration(
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await enterNormal(tester);
+    }
+
+    testWidgets('a zero matrix paints nothing, and does not throw', (
+      tester,
+    ) async {
+      // Without the guard this throws "Rect argument contained a NaN value"
+      // out of `Canvas.clipRect`, once per frame for as long as the badge is
+      // up. Both halves are needed to get there: the degenerate transform, so
+      // that every coordinate worked out from the field is NaN, and a scroller
+      // above it, so that there is a clip to push at all.
+      await pumpWrapped(
+        tester,
+        (field) => Transform(transform: Matrix4.zero(), child: field),
+      );
+
+      expect(tester.takeException(), isNull);
+    });
+
+    test('the guard is what decides it', () {
+      expect(vimRectIsPaintable(const Rect.fromLTWH(0, 0, 10, 10)), isTrue);
+      expect(vimRectIsPaintable(Rect.fromLTRB(double.nan, 0, 10, 10)), isFalse);
+      expect(
+        vimRectIsPaintable(Rect.fromLTRB(0, 0, double.infinity, 10)),
+        isFalse,
+      );
+      // Flutter's own "everything" rect is built from maxFinite, not infinity,
+      // so it stays paintable.
+      expect(vimRectIsPaintable(Rect.largest), isTrue);
+    });
+  });
 }

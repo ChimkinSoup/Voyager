@@ -40,12 +40,23 @@ String leetCodeCheatSheetMarkdown(
     for (final section in sections) {
       buffer.write('\n## ${section.name}\n');
       for (final entry in data.entriesOf(section.id)) {
-        final complexity = entry.complexity;
+        final label = entry.label;
+        final lines = entry.commandLines;
+        final costs = entry.complexityByLine;
+        // One line of the command per line of the document, each with its own
+        // cost, the way the sheet itself draws them. The first shares the
+        // heading, so a one-line entry — which is most of them — comes out
+        // exactly as it always did.
+        //
         // The command is fenced in backticks so `<>` and `_` survive the paste
-        // as text rather than as markup.
-        buffer.write('\n### `${entry.command}`');
-        if (complexity != null && complexity.isNotEmpty) {
-          buffer.write(' — $complexity');
+        // as text rather than as markup. A label leads the heading, which is
+        // the order the row itself reads in.
+        buffer.write('\n### ');
+        if (label != null && label.isNotEmpty) buffer.write('$label — ');
+        for (var i = 0; i < lines.length; i++) {
+          if (i > 0) buffer.write('\n');
+          buffer.write('`${lines[i]}`');
+          if (costs[i].isNotEmpty) buffer.write(' — ${costs[i]}');
         }
         buffer.write('\n');
         final description = entry.description.trim();

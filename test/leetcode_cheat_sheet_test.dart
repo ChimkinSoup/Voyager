@@ -125,6 +125,7 @@ LeetCodeCheatEntry _entry({
   String id = 'entry-1',
   String sectionId = 'section-1',
   String command = '.add(e)',
+  String? label,
   String description = 'Appends to the back.',
   String? complexity = 'O(1) amortized',
   double position = kCheatPositionStep,
@@ -132,6 +133,7 @@ LeetCodeCheatEntry _entry({
   id: id,
   sectionId: sectionId,
   command: command,
+  label: label,
   description: description,
   complexity: complexity,
   position: position,
@@ -420,6 +422,52 @@ void main() {
     });
   });
 
+  group('complexity per line', () {
+    test('each line of the command gets the line of the field beside it', () {
+      final entry = _entry(
+        command: 'for (int i…)\n  for (int j…)\n  sum += a[i]',
+        complexity: 'O(n)\nO(n²)\nO(1)',
+      );
+      expect(entry.complexityByLine, ['O(n)', 'O(n²)', 'O(1)']);
+    });
+
+    test('a blank line is a line with no badge, wherever it falls', () {
+      // The leading blank is the case that matters: it means "the opening
+      // line costs nothing to say", and it must not slide the rest up.
+      expect(
+        _entry(
+          command: 'while (lo < hi)\n  mid = (lo + hi) / 2',
+          complexity: '\nO(1)',
+        ).complexityByLine,
+        ['', 'O(1)'],
+      );
+    });
+
+    test('a short or absent field leaves the rest of the lines bare', () {
+      expect(_entry(command: 'a\nb\nc', complexity: 'O(1)').complexityByLine, [
+        'O(1)',
+        '',
+        '',
+      ]);
+      expect(_entry(command: 'a\nb', complexity: null).complexityByLine, [
+        '',
+        '',
+      ]);
+    });
+
+    test('a field longer than the command drops its surplus', () {
+      expect(_entry(command: 'a', complexity: 'O(1)\nO(n)').complexityByLine, [
+        'O(1)',
+      ]);
+    });
+
+    test('a single-line entry still reads as one command and one cost', () {
+      final entry = _entry();
+      expect(entry.commandLines, ['.add(e)']);
+      expect(entry.complexityByLine, ['O(1) amortized']);
+    });
+  });
+
   group('export', () {
     LeetCodeCheatSheetData sheet({
       List<LeetCodeCheatTab>? tabs,
@@ -454,6 +502,63 @@ void main() {
       expect(markdown, isNot(contains('Empty')));
       expect(markdown, contains('### `.add(e)` — O(1) amortized'));
       expect(markdown, contains('Appends to the back.'));
+    });
+
+    test(
+      'a label leads the heading, and an entry without one is unchanged',
+      () {
+        String markdownFor(LeetCodeCheatEntry entry) =>
+            leetCodeCheatSheetMarkdown(
+              sheet(
+                tabs: [_tab()],
+                sections: {
+                  'tab-1': [_section(id: 'full', name: 'ArrayList')],
+                },
+                entries: {
+                  'full': [entry],
+                },
+              ),
+            );
+
+        expect(
+          markdownFor(_entry(sectionId: 'full', label: 'Append')),
+          contains('### Append — `.add(e)` — O(1) amortized'),
+        );
+        expect(
+          markdownFor(_entry(sectionId: 'full')),
+          contains('### `.add(e)` — O(1) amortized'),
+        );
+      },
+    );
+
+    test('a block exports one line at a time, each with its own cost', () {
+      final markdown = leetCodeCheatSheetMarkdown(
+        sheet(
+          tabs: [_tab()],
+          sections: {
+            'tab-1': [_section(id: 'full', name: 'ArrayList')],
+          },
+          entries: {
+            'full': [
+              _entry(
+                sectionId: 'full',
+                label: 'Nested scan',
+                command: 'for (a : list)\n  for (b : list)',
+                complexity: 'O(n)\nO(n²)',
+                description: '',
+              ),
+            ],
+          },
+        ),
+      );
+
+      expect(
+        markdown,
+        contains(
+          '### Nested scan — `for (a : list)` — O(n)\n'
+          '`  for (b : list)` — O(n²)\n',
+        ),
+      );
     });
 
     test('a tab with no surviving section is skipped with it', () {
@@ -574,6 +679,22 @@ void main() {
       // Only j1 carries "amortized"; j2's complexity is the bare O(1), which
       // both of them would match.
       expect(searchLeetCodeCheatSheet(data, 'amortized').single.entry.id, 'j1');
+    });
+
+    test('a label is part of the haystack too', () {
+      final labelled = LeetCodeCheatSheetData(
+        tabs: [_tab(id: 'java')],
+        sectionsByTab: {
+          'java': [_section(id: 'jl', tabId: 'java', name: 'ArrayList')],
+        },
+        entriesBySection: {
+          'jl': [_entry(id: 'j1', sectionId: 'jl', label: 'Append')],
+        },
+      );
+      expect(
+        searchLeetCodeCheatSheet(labelled, 'append').single.entry.id,
+        'j1',
+      );
     });
 
     test('is case-insensitive', () {
@@ -823,6 +944,40 @@ void main() {
       expect(back.description, 'Appends to the back.');
       expect(back.complexity, isNull);
       expect(back.sectionId, 'section-1');
+    });
+
+    test('a label round-trips, and null and absent still differ', () {
+      final labelled = _entry(label: 'Append');
+      expect(
+        mergeLeetCodeCheatEntryFromRemote(
+          leetCodeCheatEntryToFirestore(labelled),
+          labelled.id,
+        ).label,
+        'Append',
+      );
+
+      // A label the user cleared has to survive the merge as cleared...
+      final cleared = leetCodeCheatEntryToFirestore(_entry().copyWith());
+      expect(
+        mergeLeetCodeCheatEntryFromRemote(
+          cleared,
+          'entry-1',
+          local: labelled,
+        ).label,
+        isNull,
+      );
+
+      // ...while a document written before the field existed keeps the local
+      // one, exactly as an absent complexity does.
+      final legacy = Map<String, dynamic>.from(cleared)..remove('label');
+      expect(
+        mergeLeetCodeCheatEntryFromRemote(
+          legacy,
+          'entry-1',
+          local: labelled,
+        ).label,
+        'Append',
+      );
     });
 
     test('an older remote loses to the local row', () {

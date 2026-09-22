@@ -2,145 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
+import 'package:voyager/core/widgets/select_all_on_click.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
+import 'package:voyager/core/widgets/time_text_input_formatter.dart';
 import 'package:voyager/core/widgets/voyager_time_picker_spinner.dart';
-
-class TimeTextInputFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    if (newValue.text.isEmpty) return newValue;
-
-    String workingText = newValue.text.toUpperCase();
-    bool isDeletion = oldValue.text.length > newValue.text.length;
-
-    if (isDeletion) {
-      String oldUpper = oldValue.text.toUpperCase();
-      if (oldUpper.endsWith('AM') || oldUpper.endsWith('PM')) {
-        // If they deleted the 'M', strip the remaining 'A' or 'P' and spaces
-        if (workingText.endsWith('A') || workingText.endsWith('P')) {
-          workingText = workingText.replaceAll(RegExp(r'[AP ]+$'), '');
-        }
-      }
-
-      bool isSingleCharBackspace =
-          (oldValue.text.length - newValue.text.length == 1) &&
-          oldValue.selection.isCollapsed;
-      if (isSingleCharBackspace) {
-        int oldOffset = oldValue.selection.baseOffset;
-        if (oldOffset > 0 && oldOffset <= oldValue.text.length) {
-          if (oldValue.text[oldOffset - 1] == ':') {
-            int newOffset = newValue.selection.baseOffset;
-            if (newOffset > 0 && newOffset <= workingText.length) {
-              workingText =
-                  workingText.substring(0, newOffset - 1) +
-                  workingText.substring(newOffset);
-            }
-          }
-        }
-      }
-    }
-
-    String text = workingText.replaceAll(RegExp(r'[^0-9:AMP ]'), '');
-    text = text.replaceFirst(RegExp(r'^[^0-9]+'), '');
-    text = text.replaceAll(RegExp(r' +'), ' ');
-    text = text.replaceAll(RegExp(r':+'), ':');
-
-    String timePart = text.replaceAll(RegExp(r'[AMP ]'), '');
-    String letters = text.replaceAll(RegExp(r'[^APM]'), '');
-    if (letters.isNotEmpty) {
-      if (letters.startsWith('A'))
-        letters = 'AM';
-      else if (letters.startsWith('P'))
-        letters = 'PM';
-      else
-        letters = '';
-    }
-
-    if (!text.contains(':') && timePart.length >= 3) {
-      if (timePart.length == 3) {
-        timePart = '${timePart.substring(0, 1)}:${timePart.substring(1)}';
-      } else if (timePart.length >= 4) {
-        timePart = timePart.substring(0, 4);
-        timePart = '${timePart.substring(0, 2)}:${timePart.substring(2)}';
-      }
-    } else if (text.contains(':')) {
-      timePart = text.replaceAll(RegExp(r'[AMP ]'), '');
-      List<String> parts = timePart.split(':');
-      if (parts.length > 2) parts = parts.sublist(0, 2);
-
-      String before = parts[0];
-      String after = parts.length > 1 ? parts[1] : '';
-
-      if (before.length > 2) before = before.substring(0, 2);
-      if (after.length > 2) after = after.substring(0, 2);
-
-      timePart = '$before:${after}';
-      if (text.endsWith(':') && after.isEmpty) {
-        // preserve trailing colon
-      } else if (after.isEmpty && !text.contains(':')) {
-        timePart = before;
-      }
-    }
-
-    List<String> parts = timePart.split(':');
-    if (parts.isNotEmpty && parts[0].isNotEmpty) {
-      int? h = int.tryParse(parts[0]);
-      if (h != null) {
-        if (h > 23 && !timePart.contains(':') && timePart.length == 2) {
-          timePart = '${timePart.substring(0, 1)}:${timePart.substring(1)}';
-          parts = timePart.split(':');
-          h = int.tryParse(parts[0]);
-        }
-        if (h != null && h > 23) return oldValue;
-      }
-    }
-
-    if (parts.length > 1 && parts[1].isNotEmpty) {
-      if (parts[1].length == 1) {
-        int? m1 = int.tryParse(parts[1]);
-        if (m1 != null && m1 > 5) {
-          parts[1] = '0$m1';
-          timePart = '${parts[0]}:${parts[1]}';
-        }
-      }
-      int? m = int.tryParse(parts[1]);
-      if (m != null && m > 59) return oldValue;
-    }
-
-    String finalText = timePart;
-    if (letters.isNotEmpty) {
-      finalText += ' $letters';
-    }
-
-    if (text.endsWith(' ') && letters.isEmpty) {
-      finalText += ' ';
-    }
-    if (text.endsWith(':') && !finalText.contains(':')) {
-      finalText += ':';
-    }
-
-    int newOffset = newValue.selection.baseOffset;
-    if (finalText != newValue.text) {
-      if (oldValue.text.length > newValue.text.length) {
-        newOffset = newValue.selection.baseOffset;
-        if (newOffset > finalText.length) newOffset = finalText.length;
-      } else {
-        newOffset = finalText.length;
-      }
-    }
-
-    return TextEditingValue(
-      text: finalText,
-      selection: TextSelection.collapsed(
-        offset: newOffset.clamp(0, finalText.length),
-      ),
-    );
-  }
-}
 
 class DateTimeSelectorPopover extends StatefulWidget {
   final DateTime initialDateTime;
@@ -169,6 +36,7 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
   late final FocusNode _timeFocus;
   late final FocusNode _mainFocus;
   bool _focusRequested = false;
+  bool _selectAllNextTap = false;
 
   @override
   void initState() {
@@ -207,6 +75,8 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
               _timeSelected = true;
             }
             _timeController.text = _formatTime(_currentDateTime);
+            _selectAllNextTap = true;
+            selectAllTimeText(_timeController);
           }
         });
       }
@@ -238,10 +108,7 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
               if (mounted) {
                 if (_timeSelected) {
                   _timeFocus.requestFocus();
-                  _timeController.selection = TextSelection(
-                    baseOffset: 0,
-                    extentOffset: _timeController.text.length,
-                  );
+                  selectAllTimeText(_timeController);
                 } else {
                   _mainFocus.requestFocus();
                 }
@@ -256,10 +123,7 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
             if (mounted) {
               if (_timeSelected) {
                 _timeFocus.requestFocus();
-                _timeController.selection = TextSelection(
-                  baseOffset: 0,
-                  extentOffset: _timeController.text.length,
-                );
+                selectAllTimeText(_timeController);
               } else {
                 _mainFocus.requestFocus();
               }
@@ -284,96 +148,9 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
     return TimeOfDay.fromDateTime(dt).format(context);
   }
 
-  DateTime? _parseTime(String query, DateTime referenceTime) {
-    query = query.toLowerCase().trim();
-    if (query.isEmpty) return null;
-
-    final clean = query.replaceAll(RegExp(r'[^a-z0-9]'), '');
-    if (clean.isEmpty) return null;
-
-    bool? isPM;
-    if (clean.endsWith('pm') || clean.endsWith('p')) {
-      isPM = true;
-    } else if (clean.endsWith('am') || clean.endsWith('a')) {
-      isPM = false;
-    }
-
-    String numPart = clean.replaceAll(RegExp(r'[a-z]'), '');
-    if (numPart.isEmpty) return null;
-
-    int hour = 0;
-    int minute = 0;
-
-    if (numPart.length <= 2) {
-      hour = int.parse(numPart);
-      minute = 0;
-    } else if (numPart.length == 3) {
-      hour = int.parse(numPart.substring(0, 1));
-      minute = int.parse(numPart.substring(1, 3));
-    } else if (numPart.length == 4) {
-      hour = int.parse(numPart.substring(0, 2));
-      minute = int.parse(numPart.substring(2, 4));
-    } else {
-      return null;
-    }
-
-    if (minute > 59) return null;
-
-    if (hour > 12 && isPM == null) {
-      if (hour > 23) return null;
-      return DateTime(
-        referenceTime.year,
-        referenceTime.month,
-        referenceTime.day,
-        hour,
-        minute,
-      );
-    }
-
-    if (hour > 12) return null;
-
-    if (isPM != null) {
-      int h24 = hour % 12;
-      if (isPM) h24 += 12;
-      return DateTime(
-        referenceTime.year,
-        referenceTime.month,
-        referenceTime.day,
-        h24,
-        minute,
-      );
-    } else {
-      int h24 = hour % 12;
-      int t1 = h24;
-      int t2 = h24 + 12;
-
-      double refH = referenceTime.hour + referenceTime.minute / 60.0;
-      double t1Diff = (t1 + (minute / 60.0) - refH + 24) % 24;
-      double t2Diff = (t2 + (minute / 60.0) - refH + 24) % 24;
-
-      if (t1Diff < t2Diff) {
-        return DateTime(
-          referenceTime.year,
-          referenceTime.month,
-          referenceTime.day,
-          t1,
-          minute,
-        );
-      } else {
-        return DateTime(
-          referenceTime.year,
-          referenceTime.month,
-          referenceTime.day,
-          t2,
-          minute,
-        );
-      }
-    }
-  }
-
   void _onTimeTextChanged() {
     if (!_timeFocus.hasFocus) return;
-    final parsed = _parseTime(_timeController.text, _currentDateTime);
+    final parsed = parseTimeQuery(_timeController.text, _currentDateTime);
     if (parsed != null && parsed != _currentDateTime) {
       setState(() {
         _currentDateTime = parsed;
@@ -388,6 +165,7 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
     required FocusNode focusNode,
     required String hintText,
     required VoidCallback onTap,
+    required bool Function() selectAllPending,
     required ValueChanged<String> onSubmitted,
   }) {
     final accent = focusColor;
@@ -421,39 +199,44 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
         data: fieldTheme,
         child: Material(
           type: MaterialType.transparency,
-          child: TextField(
-            contextMenuBuilder: (context, editableTextState) =>
-                const SizedBox.shrink(),
-            textAlign: TextAlign.center,
+          child: SelectAllOnClick(
             controller: controller,
             focusNode: focusNode,
-            scrollPadding: kVoyagerFieldScrollPadding,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: focusNode.hasFocus
-                  ? accent
-                  : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-            ),
-            decoration: InputDecoration(
-              hintText: hintText,
-              hintStyle: theme.textTheme.titleMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+            selectAllPending: selectAllPending,
+            child: TextField(
+              contextMenuBuilder: (context, editableTextState) =>
+                  const SizedBox.shrink(),
+              textAlign: TextAlign.center,
+              controller: controller,
+              focusNode: focusNode,
+              scrollPadding: kVoyagerFieldScrollPadding,
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: focusNode.hasFocus
+                    ? accent
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.5),
               ),
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              disabledBorder: InputBorder.none,
-              errorBorder: InputBorder.none,
-              focusedErrorBorder: InputBorder.none,
-              isCollapsed: true,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 8,
+              decoration: InputDecoration(
+                hintText: hintText,
+                hintStyle: theme.textTheme.titleMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                ),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                isCollapsed: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
               ),
+              onTap: onTap,
+              onSubmitted: onSubmitted,
+              textInputAction: TextInputAction.done,
+              inputFormatters: [TimeTextInputFormatter()],
             ),
-            onTap: onTap,
-            onSubmitted: onSubmitted,
-            textInputAction: TextInputAction.done,
-            inputFormatters: [TimeTextInputFormatter()],
           ),
         ),
       ),
@@ -626,12 +409,15 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
                                     focusNode: _timeFocus,
                                     hintText: 'Time',
                                     onTap: () {
-                                      _timeController.selection = TextSelection(
-                                        baseOffset: 0,
-                                        extentOffset:
-                                            _timeController.text.length,
-                                      );
+                                      // The tap that lands focus here selects
+                                      // the whole time; a later tap places the
+                                      // cursor instead of fighting the user.
+                                      if (_selectAllNextTap) {
+                                        selectAllTimeText(_timeController);
+                                        _selectAllNextTap = false;
+                                      }
                                     },
+                                    selectAllPending: () => _selectAllNextTap,
                                     onSubmitted: (_) {
                                       _mainFocus.requestFocus();
                                     },

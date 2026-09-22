@@ -359,10 +359,13 @@ Future<void> copyLeetCodeCode(
 ) async {
   await Clipboard.setData(ClipboardData(text: _firstCodeOf(problem) ?? ''));
   if (!context.mounted) return;
-  final dismiss = showVoyagerToast(
+  // Its own dwell rather than a delayed dismiss: same 1400 ms, but a toast
+  // that owns its clock is one a second copy can join, counting up in place
+  // instead of dealing another card onto the first.
+  showVoyagerToast(
     context,
     message: 'Code copied',
     icon: PhosphorIconsRegular.check,
+    dwell: const Duration(milliseconds: 1400),
   );
-  Future.delayed(const Duration(milliseconds: 1400), dismiss.dismiss);
 }

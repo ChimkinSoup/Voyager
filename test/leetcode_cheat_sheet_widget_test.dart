@@ -18,10 +18,12 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/leetcode_cheat_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/features/leetcode/leetcode_cheat_actions.dart';
 import 'package:voyager/features/leetcode/leetcode_cheat_providers.dart';
 import 'package:voyager/features/leetcode/leetcode_cheat_sheet.dart';
 import 'package:voyager/features/leetcode/leetcode_code_controller.dart';
@@ -49,9 +51,19 @@ final _problem = LeetCodeProblem(
 ///
 /// [sections] adds that many further sections of four entries each, for the
 /// tests that need a document taller than the sheet.
+///
+/// [variedRows] adds three more entries to the first section, covering every
+/// combination the three-column layout has to hold: labelled and badged,
+/// labelled and bare, and badged with no label.
+///
+/// [blockRow] adds one entry whose command is three lines, costed on the
+/// first and last only — the middle line is what proves a blank line in the
+/// field leaves that line bare instead of sliding the rest up.
 Future<ProviderContainer> _seededContainer({
   bool seed = true,
   int sections = 0,
+  bool variedRows = false,
+  bool blockRow = false,
 }) async {
   final db = AppDatabase.inMemory();
   addTearDown(db.close);
@@ -90,6 +102,42 @@ Future<ProviderContainer> _seededContainer({
         updatedAt: _now,
       ),
     );
+    if (variedRows) {
+      const varied = [
+        (id: 'labelled-badged', label: 'Append', complexity: 'O(1)'),
+        (id: 'labelled-bare', label: 'Size', complexity: null),
+        (id: 'bare-badged', label: null, complexity: 'O(n log n)'),
+      ];
+      for (final (index, row) in varied.indexed) {
+        await repo.upsertCheatEntry(
+          LeetCodeCheatEntry(
+            id: row.id,
+            sectionId: 'section-1',
+            command: '.${row.id}()',
+            label: row.label,
+            complexity: row.complexity,
+            position: kCheatPositionStep * (index + 2),
+            createdAt: _now,
+            updatedAt: _now,
+          ),
+        );
+      }
+    }
+    if (blockRow) {
+      await repo.upsertCheatEntry(
+        LeetCodeCheatEntry(
+          id: 'block-1',
+          sectionId: 'section-1',
+          command: 'outer();\n  middle();\n  inner();',
+          label: 'Nested scan',
+          description: 'Two passes, one of them nested.',
+          complexity: 'O(n)\n\nO(n²)',
+          position: kCheatPositionStep * 10,
+          createdAt: _now,
+          updatedAt: _now,
+        ),
+      );
+    }
     for (var s = 1; s <= sections; s++) {
       await repo.upsertCheatSection(
         LeetCodeCheatSection(
@@ -135,12 +183,19 @@ Future<ProviderContainer> _pumpSheetHost(
   WidgetTester tester, {
   bool seed = true,
   int sections = 0,
+  bool variedRows = false,
+  bool blockRow = false,
 }) async {
   tester.view.physicalSize = const Size(1200, 900);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
-  final container = await _seededContainer(seed: seed, sections: sections);
+  final container = await _seededContainer(
+    seed: seed,
+    sections: sections,
+    variedRows: variedRows,
+    blockRow: blockRow,
+  );
 
   await tester.pumpWidget(
     UncontrolledProviderScope(
@@ -586,6 +641,29 @@ void main() {
         expect(rect.bottom, lessThanOrEqualTo(900));
       });
     }
+
+    // The label's *rendered* colour, not the declared one: its own
+    // [TextStyle] merges over the [DefaultTextStyle] the button wraps it in,
+    // so a `foregroundColor` on the button alone loses to the body colour
+    // `bodySmall` already carries.
+    testWidgets('sits on the accent and is labelled against it', (
+      tester,
+    ) async {
+      await _pumpSheetHost(tester, sections: 3);
+      await _openSheet(tester);
+
+      final rail = find.widgetWithText(TextButton, 'Section 2');
+      final scheme = Theme.of(tester.element(rail)).colorScheme;
+      final states = <WidgetState>{};
+
+      final style = tester.widget<TextButton>(rail).style!;
+      expect(style.backgroundColor?.resolve(states), scheme.primary);
+
+      final label = tester.widget<RichText>(
+        find.descendant(of: rail, matching: find.byType(RichText)),
+      );
+      expect(label.text.style?.color, scheme.onPrimary);
+    });
   });
 
   group('reorder handles', () {
@@ -702,6 +780,48 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('Enter in a label moves on to that row\'s code', (tester) async {
+    await _pumpSheetHost(tester);
+    await _openSheet(tester);
+    await tester.tap(find.widgetWithText(Tooltip, 'Edit').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(TextField, 'Label'));
+    await tester.pump();
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'cheatCommand');
+
+    await tester.tap(find.byTooltip('Close the cheat sheet'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a new section starts blank with its name field focused', (
+    tester,
+  ) async {
+    final container = await _pumpSheetHost(tester, sections: 3);
+    await _openSheet(tester);
+    await tester.tap(find.widgetWithText(Tooltip, 'Edit').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(GlassButton, 'Add section'));
+    await tester.pumpAndSettle();
+
+    final sections = container
+        .read(leetCodeCheatSheetProvider)
+        .requireValue
+        .sectionsOf('tab-1');
+    expect(sections.last.name, isEmpty);
+    expect(find.text('New section'), findsNothing);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'cheatSectionName');
+    // The rail names it rather than showing an empty pill.
+    expect(find.text('Untitled section'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Close the cheat sheet'));
+    await tester.pumpAndSettle();
+  });
+
   // The editor's toolbar now carries a seventh labelled button, and six
   // labelled buttons already ask for more width than the app's smallest
   // allowed window leaves once the title has ellipsised to nothing. The group
@@ -748,5 +868,204 @@ void main() {
     // Scaled down, but still the labelled button the other six are.
     expect(find.text('Cheat sheet'), findsOneWidget);
     expect(find.text('Compare'), findsOneWidget);
+  });
+
+  group('the three-column layout', () {
+    testWidgets('badges hang off one right edge, labelled row or not', (
+      tester,
+    ) async {
+      await _pumpSheetHost(tester, variedRows: true);
+      await _openSheet(tester);
+
+      // Two badges, on rows that differ in whether they carry a label — the
+      // label column is the one that collapses, not the complexity column.
+      final rights = <double>[
+        for (final badge in ['O(1)', 'O(n log n)'])
+          tester.getTopRight(find.text(badge)).dx,
+      ];
+      expect(rights.first, moreOrLessEquals(rights.last, epsilon: 0.5));
+    });
+
+    testWidgets('a row with no complexity still keeps the column', (
+      tester,
+    ) async {
+      await _pumpSheetHost(tester, variedRows: true);
+      await _openSheet(tester);
+
+      // The code plate is what gives the empty column away: were it dropped,
+      // the row without a badge would run its code out under where every
+      // other row's badge sits.
+      double plateRight(String command) => tester
+          .getTopRight(
+            find
+                .ancestor(
+                  of: find.textContaining(command),
+                  matching: find.byType(Container),
+                )
+                .first,
+          )
+          .dx;
+
+      expect(
+        plateRight('.labelled-bare()'),
+        moreOrLessEquals(plateRight('.labelled-badged()'), epsilon: 0.5),
+      );
+    });
+
+    testWidgets('one labelled row holds the column open for the rest', (
+      tester,
+    ) async {
+      await _pumpSheetHost(tester, variedRows: true);
+      await _openSheet(tester);
+
+      // Some of these rows carry a label and some do not; a code column that
+      // jogged left and right between them would be worse than the gutter.
+      final lefts = <double>[
+        for (final command in [
+          '.add(e)',
+          '.labelled-badged()',
+          '.bare-badged()',
+        ])
+          tester.getTopLeft(find.textContaining(command)).dx,
+      ];
+      for (final left in lefts) {
+        expect(left, moreOrLessEquals(lefts.first, epsilon: 0.5));
+      }
+    });
+
+    testWidgets('a sheet with no labels at all has no label column', (
+      tester,
+    ) async {
+      await _pumpSheetHost(tester);
+      await _openSheet(tester);
+
+      // Nothing is labelled here, so the code starts where the heading does
+      // rather than behind an empty gutter.
+      expect(
+        tester.getTopLeft(find.textContaining('.add(e)')).dx,
+        lessThan(tester.getTopLeft(find.text('ArrayList').last).dx + 24),
+      );
+    });
+
+    testWidgets('the section heading owns the only rule on the page', (
+      tester,
+    ) async {
+      await _pumpSheetHost(tester, variedRows: true);
+      await _openSheet(tester);
+
+      // One heading in the tab, so one rule: the hairlines that used to sit
+      // between entries are gone, not merely faded.
+      final rules = find.descendant(
+        of: find.ancestor(
+          of: find.text('ArrayList'),
+          matching: find.byType(InkWell),
+        ),
+        matching: find.byType(ColoredBox),
+      );
+      expect(rules, findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(VoyagerScrollView),
+          matching: find.byType(ColoredBox),
+        ),
+        findsOneWidget,
+      );
+    });
+  });
+
+  group('a cost per line', () {
+    testWidgets('each badge sits on the line it belongs to', (tester) async {
+      await _pumpSheetHost(tester, blockRow: true);
+      await _openSheet(tester);
+
+      double topOf(Finder finder) => tester.getTopLeft(finder).dy;
+
+      final first = topOf(find.textContaining('outer();'));
+      final last = topOf(find.textContaining('inner();'));
+      // Sanity: the block really is laid out as separate lines.
+      expect(last, greaterThan(first));
+
+      // Each badge is level with its own line rather than with the block.
+      expect(topOf(find.text('O(n)')), moreOrLessEquals(first, epsilon: 2));
+      expect(topOf(find.text('O(n²)')), moreOrLessEquals(last, epsilon: 2));
+    });
+
+    testWidgets('a blank line leaves that line bare', (tester) async {
+      await _pumpSheetHost(tester, blockRow: true);
+      await _openSheet(tester);
+
+      // Three lines, two costs: the middle line's blank entry draws nothing
+      // and does not hand its neighbour's badge to it.
+      expect(find.text('O(n)'), findsOneWidget);
+      expect(find.text('O(n²)'), findsOneWidget);
+      final middle = tester.getTopLeft(find.textContaining('middle();')).dy;
+      final badges = <double>[
+        tester.getTopLeft(find.text('O(n)')).dy,
+        tester.getTopLeft(find.text('O(n²)')).dy,
+      ];
+      for (final badge in badges) {
+        expect((badge - middle).abs(), greaterThan(2));
+      }
+    });
+
+    testWidgets('a blank first line survives a save', (tester) async {
+      final container = await _pumpSheetHost(tester);
+      await _openSheet(tester);
+
+      // Straight at the action: the field is one line per command line, so
+      // trimming a leading blank would slide every badge up one.
+      await LeetCodeCheatActions.detached(
+        container,
+      ).saveEntry('entry-1', complexity: '\nO(n)\n');
+
+      final entry =
+          (await container
+                  .read(leetCodeRepositoryProvider)
+                  .listCheatEntries(sectionId: 'section-1'))
+              .single;
+      expect(entry.complexity, '\nO(n)');
+      expect(entry.complexityByLine, ['']);
+    });
+  });
+
+  group('complexity tiers', () {
+    test('the cheap, the moderate and the expensive are told apart', () {
+      expect(cheatComplexityTier('O(1)'), CheatComplexityTier.cheap);
+      // The field is free text, so the trailing note has to ride along.
+      expect(cheatComplexityTier('O(1) amortized'), CheatComplexityTier.cheap);
+
+      for (final text in ['O(log n)', 'O(n)', 'O(n log n)', 'O(logn)']) {
+        expect(
+          cheatComplexityTier(text),
+          CheatComplexityTier.moderate,
+          reason: text,
+        );
+      }
+
+      for (final text in [
+        'O(n^2)',
+        'O(n²)',
+        'O(n³)',
+        'O(2^n)',
+        'O(n^k)',
+        'O(n!)',
+      ]) {
+        expect(
+          cheatComplexityTier(text),
+          CheatComplexityTier.expensive,
+          reason: text,
+        );
+      }
+    });
+
+    test('anything it cannot read falls to neutral rather than a guess', () {
+      for (final text in ['O(m+n)', 'amortized', '', 'fast']) {
+        expect(
+          cheatComplexityTier(text),
+          CheatComplexityTier.unknown,
+          reason: text,
+        );
+      }
+    });
   });
 }

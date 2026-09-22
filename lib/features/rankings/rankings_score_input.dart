@@ -8,6 +8,7 @@ import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/field_scroll_padding.dart';
+import 'package:voyager/core/widgets/select_all_on_click.dart';
 import 'package:voyager/core/widgets/voyager_spinner_wheel.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/rankings/ranking_queries.dart';
@@ -529,37 +530,47 @@ class _RankingScorePopoverState extends State<RankingScorePopover> {
         ),
         child: Material(
           type: MaterialType.transparency,
-          child: TextField(
+          child: SelectAllOnClick(
             controller: _textController,
             focusNode: _textFocus,
-            textAlign: TextAlign.center,
-            scrollPadding: kVoyagerFieldScrollPadding,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-            ],
-            contextMenuBuilder: (context, state) => const SizedBox.shrink(),
-            style: theme.textTheme.titleMedium?.copyWith(color: accent),
-            onTap: () {
-              if (!_selectAllNextTap) return;
-              _textController.selection = TextSelection(
-                baseOffset: 0,
-                extentOffset: _textController.text.length,
-              );
-              _selectAllNextTap = false;
-            },
-            onSubmitted: (_) => _dismiss(),
-            decoration: const InputDecoration(
-              isCollapsed: true,
-              // The app fills its fields, and a filled InputDecorator paints
-              // that fill in the *border's* shape — which, with no border, is
-              // a square. Under the rounded box drawn around this field the
-              // square fill reaches into all four corners and eats the curve.
-              filled: false,
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            selectAllPending: () => _selectAllNextTap,
+            child: TextField(
+              controller: _textController,
+              focusNode: _textFocus,
+              textAlign: TextAlign.center,
+              scrollPadding: kVoyagerFieldScrollPadding,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+              ],
+              contextMenuBuilder: (context, state) => const SizedBox.shrink(),
+              style: theme.textTheme.titleMedium?.copyWith(color: accent),
+              onTap: () {
+                if (!_selectAllNextTap) return;
+                _textController.selection = TextSelection(
+                  baseOffset: 0,
+                  extentOffset: _textController.text.length,
+                );
+                _selectAllNextTap = false;
+              },
+              onSubmitted: (_) => _dismiss(),
+              decoration: const InputDecoration(
+                isCollapsed: true,
+                // The app fills its fields, and a filled InputDecorator paints
+                // that fill in the *border's* shape — which, with no border, is
+                // a square. Under the rounded box drawn around this field the
+                // square fill reaches into all four corners and eats the curve.
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
+              ),
             ),
           ),
         ),

@@ -47418,6 +47418,15 @@ class $LeetCodeCheatEntriesTableTable extends LeetCodeCheatEntriesTable
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _descriptionMeta = const VerificationMeta(
     'description',
   );
@@ -47502,6 +47511,7 @@ class $LeetCodeCheatEntriesTableTable extends LeetCodeCheatEntriesTable
     id,
     sectionId,
     command,
+    label,
     description,
     complexity,
     position,
@@ -47542,6 +47552,12 @@ class $LeetCodeCheatEntriesTableTable extends LeetCodeCheatEntriesTable
       );
     } else if (isInserting) {
       context.missing(_commandMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
     }
     if (data.containsKey('description')) {
       context.handle(
@@ -47618,6 +47634,10 @@ class $LeetCodeCheatEntriesTableTable extends LeetCodeCheatEntriesTable
         DriftSqlType.string,
         data['${effectivePrefix}command'],
       )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      ),
       description: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}description'],
@@ -47660,6 +47680,10 @@ class LeetCodeCheatEntriesTableData extends DataClass
   final String id;
   final String sectionId;
   final String command;
+
+  /// Null, not empty string, when unset — a row without one collapses its
+  /// label column rather than drawing an empty one.
+  final String? label;
   final String description;
 
   /// Null, not empty string, when unset — the badge's presence is the flag.
@@ -47673,6 +47697,7 @@ class LeetCodeCheatEntriesTableData extends DataClass
     required this.id,
     required this.sectionId,
     required this.command,
+    this.label,
     required this.description,
     this.complexity,
     required this.position,
@@ -47687,6 +47712,9 @@ class LeetCodeCheatEntriesTableData extends DataClass
     map['id'] = Variable<String>(id);
     map['section_id'] = Variable<String>(sectionId);
     map['command'] = Variable<String>(command);
+    if (!nullToAbsent || label != null) {
+      map['label'] = Variable<String>(label);
+    }
     map['description'] = Variable<String>(description);
     if (!nullToAbsent || complexity != null) {
       map['complexity'] = Variable<String>(complexity);
@@ -47706,6 +47734,9 @@ class LeetCodeCheatEntriesTableData extends DataClass
       id: Value(id),
       sectionId: Value(sectionId),
       command: Value(command),
+      label: label == null && nullToAbsent
+          ? const Value.absent()
+          : Value(label),
       description: Value(description),
       complexity: complexity == null && nullToAbsent
           ? const Value.absent()
@@ -47729,6 +47760,7 @@ class LeetCodeCheatEntriesTableData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       sectionId: serializer.fromJson<String>(json['sectionId']),
       command: serializer.fromJson<String>(json['command']),
+      label: serializer.fromJson<String?>(json['label']),
       description: serializer.fromJson<String>(json['description']),
       complexity: serializer.fromJson<String?>(json['complexity']),
       position: serializer.fromJson<double>(json['position']),
@@ -47745,6 +47777,7 @@ class LeetCodeCheatEntriesTableData extends DataClass
       'id': serializer.toJson<String>(id),
       'sectionId': serializer.toJson<String>(sectionId),
       'command': serializer.toJson<String>(command),
+      'label': serializer.toJson<String?>(label),
       'description': serializer.toJson<String>(description),
       'complexity': serializer.toJson<String?>(complexity),
       'position': serializer.toJson<double>(position),
@@ -47759,6 +47792,7 @@ class LeetCodeCheatEntriesTableData extends DataClass
     String? id,
     String? sectionId,
     String? command,
+    Value<String?> label = const Value.absent(),
     String? description,
     Value<String?> complexity = const Value.absent(),
     double? position,
@@ -47770,6 +47804,7 @@ class LeetCodeCheatEntriesTableData extends DataClass
     id: id ?? this.id,
     sectionId: sectionId ?? this.sectionId,
     command: command ?? this.command,
+    label: label.present ? label.value : this.label,
     description: description ?? this.description,
     complexity: complexity.present ? complexity.value : this.complexity,
     position: position ?? this.position,
@@ -47785,6 +47820,7 @@ class LeetCodeCheatEntriesTableData extends DataClass
       id: data.id.present ? data.id.value : this.id,
       sectionId: data.sectionId.present ? data.sectionId.value : this.sectionId,
       command: data.command.present ? data.command.value : this.command,
+      label: data.label.present ? data.label.value : this.label,
       description: data.description.present
           ? data.description.value
           : this.description,
@@ -47805,6 +47841,7 @@ class LeetCodeCheatEntriesTableData extends DataClass
           ..write('id: $id, ')
           ..write('sectionId: $sectionId, ')
           ..write('command: $command, ')
+          ..write('label: $label, ')
           ..write('description: $description, ')
           ..write('complexity: $complexity, ')
           ..write('position: $position, ')
@@ -47821,6 +47858,7 @@ class LeetCodeCheatEntriesTableData extends DataClass
     id,
     sectionId,
     command,
+    label,
     description,
     complexity,
     position,
@@ -47836,6 +47874,7 @@ class LeetCodeCheatEntriesTableData extends DataClass
           other.id == this.id &&
           other.sectionId == this.sectionId &&
           other.command == this.command &&
+          other.label == this.label &&
           other.description == this.description &&
           other.complexity == this.complexity &&
           other.position == this.position &&
@@ -47850,6 +47889,7 @@ class LeetCodeCheatEntriesTableCompanion
   final Value<String> id;
   final Value<String> sectionId;
   final Value<String> command;
+  final Value<String?> label;
   final Value<String> description;
   final Value<String?> complexity;
   final Value<double> position;
@@ -47862,6 +47902,7 @@ class LeetCodeCheatEntriesTableCompanion
     this.id = const Value.absent(),
     this.sectionId = const Value.absent(),
     this.command = const Value.absent(),
+    this.label = const Value.absent(),
     this.description = const Value.absent(),
     this.complexity = const Value.absent(),
     this.position = const Value.absent(),
@@ -47875,6 +47916,7 @@ class LeetCodeCheatEntriesTableCompanion
     required String id,
     required String sectionId,
     required String command,
+    this.label = const Value.absent(),
     this.description = const Value.absent(),
     this.complexity = const Value.absent(),
     required double position,
@@ -47893,6 +47935,7 @@ class LeetCodeCheatEntriesTableCompanion
     Expression<String>? id,
     Expression<String>? sectionId,
     Expression<String>? command,
+    Expression<String>? label,
     Expression<String>? description,
     Expression<String>? complexity,
     Expression<double>? position,
@@ -47906,6 +47949,7 @@ class LeetCodeCheatEntriesTableCompanion
       if (id != null) 'id': id,
       if (sectionId != null) 'section_id': sectionId,
       if (command != null) 'command': command,
+      if (label != null) 'label': label,
       if (description != null) 'description': description,
       if (complexity != null) 'complexity': complexity,
       if (position != null) 'position': position,
@@ -47921,6 +47965,7 @@ class LeetCodeCheatEntriesTableCompanion
     Value<String>? id,
     Value<String>? sectionId,
     Value<String>? command,
+    Value<String?>? label,
     Value<String>? description,
     Value<String?>? complexity,
     Value<double>? position,
@@ -47934,6 +47979,7 @@ class LeetCodeCheatEntriesTableCompanion
       id: id ?? this.id,
       sectionId: sectionId ?? this.sectionId,
       command: command ?? this.command,
+      label: label ?? this.label,
       description: description ?? this.description,
       complexity: complexity ?? this.complexity,
       position: position ?? this.position,
@@ -47956,6 +48002,9 @@ class LeetCodeCheatEntriesTableCompanion
     }
     if (command.present) {
       map['command'] = Variable<String>(command.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
     }
     if (description.present) {
       map['description'] = Variable<String>(description.value);
@@ -47990,6 +48039,7 @@ class LeetCodeCheatEntriesTableCompanion
           ..write('id: $id, ')
           ..write('sectionId: $sectionId, ')
           ..write('command: $command, ')
+          ..write('label: $label, ')
           ..write('description: $description, ')
           ..write('complexity: $complexity, ')
           ..write('position: $position, ')
@@ -70814,6 +70864,7 @@ typedef $$LeetCodeCheatEntriesTableTableCreateCompanionBuilder =
       required String id,
       required String sectionId,
       required String command,
+      Value<String?> label,
       Value<String> description,
       Value<String?> complexity,
       required double position,
@@ -70828,6 +70879,7 @@ typedef $$LeetCodeCheatEntriesTableTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> sectionId,
       Value<String> command,
+      Value<String?> label,
       Value<String> description,
       Value<String?> complexity,
       Value<double> position,
@@ -70859,6 +70911,11 @@ class $$LeetCodeCheatEntriesTableTableFilterComposer
 
   ColumnFilters<String> get command => $composableBuilder(
     column: $table.command,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -70922,6 +70979,11 @@ class $$LeetCodeCheatEntriesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get description => $composableBuilder(
     column: $table.description,
     builder: (column) => ColumnOrderings(column),
@@ -70975,6 +71037,9 @@ class $$LeetCodeCheatEntriesTableTableAnnotationComposer
 
   GeneratedColumn<String> get command =>
       $composableBuilder(column: $table.command, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
 
   GeneratedColumn<String> get description => $composableBuilder(
     column: $table.description,
@@ -71051,6 +71116,7 @@ class $$LeetCodeCheatEntriesTableTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> sectionId = const Value.absent(),
                 Value<String> command = const Value.absent(),
+                Value<String?> label = const Value.absent(),
                 Value<String> description = const Value.absent(),
                 Value<String?> complexity = const Value.absent(),
                 Value<double> position = const Value.absent(),
@@ -71063,6 +71129,7 @@ class $$LeetCodeCheatEntriesTableTableTableManager
                 id: id,
                 sectionId: sectionId,
                 command: command,
+                label: label,
                 description: description,
                 complexity: complexity,
                 position: position,
@@ -71077,6 +71144,7 @@ class $$LeetCodeCheatEntriesTableTableTableManager
                 required String id,
                 required String sectionId,
                 required String command,
+                Value<String?> label = const Value.absent(),
                 Value<String> description = const Value.absent(),
                 Value<String?> complexity = const Value.absent(),
                 required double position,
@@ -71089,6 +71157,7 @@ class $$LeetCodeCheatEntriesTableTableTableManager
                 id: id,
                 sectionId: sectionId,
                 command: command,
+                label: label,
                 description: description,
                 complexity: complexity,
                 position: position,

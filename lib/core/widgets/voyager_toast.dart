@@ -8,6 +8,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/top_chrome_inset.dart';
 
 /// A button on a toast: something the user can do about what the toast just
 /// told them, instead of having to go find the control themselves.
@@ -46,15 +47,22 @@ class VoyagerToast {
   IconData? _icon;
   Duration? _dwell;
 
+  /// How many times this toast has been raised. A repeat of something already
+  /// on screen joins the card it is already on rather than opening a second
+  /// one, so three quick copies read as one line with a ×3 instead of three
+  /// cards the user has to sit through one after another.
+  int _count = 1;
+
   /// Bumped by every [update] so the toast's dwell clock restarts on each one:
   /// words the user has not read yet deserve their own full countdown, not
   /// whatever was left of the previous message's.
   int _generation = 0;
 
   final _dismissRequested = ValueNotifier<bool>(false);
-  late final OverlayEntry _entry;
+  late final _ToastStack _stack;
   var _dismissed = false;
   var _removed = false;
+  var _built = false;
   final _done = Completer<void>();
 
   /// Completes once the toast is off screen and its entry is out of the
@@ -74,34 +82,31 @@ class VoyagerToast {
   void _finish() {
     if (_removed) return;
     _removed = true;
-    _entry.remove();
+    _stack.remove(this);
     _dismissRequested.dispose();
     _done.complete();
   }
 
-  /// Guards the window between construction and [_insertInto], where [_entry]
+  /// Guards the window between construction and [_insertInto], where [_stack]
   /// is still unassigned. [showVoyagerToastIn] closes it immediately, and the
   /// constructor is private so nothing else can open it — but the class hands
   /// out a mutable handle, and a `late final` read would fail as a
   /// `LateInitializationError` rather than as the contract violation it is.
   var _inserted = false;
 
-  void _insertInto(OverlayState overlay) {
+  void _insertInto(_ToastStack stack) {
     _inserted = true;
-    _entry = OverlayEntry(
-      builder: (context) => _VoyagerToast(
-        message: _message,
-        icon: _icon,
-        actions: actions,
-        dwell: _dwell,
-        linger: linger,
-        generation: _generation,
-        onDismissRequested: dismiss,
-        dismissRequested: _dismissRequested,
-        onDismissed: _finish,
-      ),
-    );
-    overlay.insert(_entry);
+    _stack = stack;
+    stack.add(this);
+  }
+
+  /// Counts another raise of what this card already says: it gains a ×N and
+  /// its dwell restarts, so the repeat gets its own full countdown rather than
+  /// whatever was left of the one the user has already been watching.
+  void _repeat() {
+    _count++;
+    _generation++;
+    _stack.rebuild();
   }
 
   /// Rewrites what the toast says without disturbing the card it says it in.
@@ -117,7 +122,7 @@ class VoyagerToast {
     if (icon != null) _icon = icon;
     if (dwell != null) _dwell = dwell;
     _generation++;
-    _entry.markNeedsBuild();
+    _stack.rebuild();
   }
 
   /// Fades the toast out, then removes the overlay entry.
@@ -128,12 +133,12 @@ class VoyagerToast {
     );
     if (_dismissed) return;
     _dismissed = true;
-    // Dismissed before the toast ever built — an overlay entry builds on the
-    // next frame, and a fetch that fails on a host lookup settles well inside
-    // that gap. There is no State yet to hear the notifier, so nothing would
-    // ever call `_entry.remove()` and the toast would be pinned on screen for
-    // the life of the app. Take the entry out directly instead of animating.
-    if (!_entry.mounted) {
+    // Dismissed before the toast ever built — the stack builds on the next
+    // frame, and a fetch that fails on a host lookup settles well inside that
+    // gap. There is no State yet to hear the notifier, so nothing would ever
+    // take the toast back out of the stack and it would be pinned on screen
+    // for the life of the app. Drop it directly instead of animating.
+    if (!_built) {
       _finish();
       return;
     }
@@ -188,6 +193,18 @@ VoyagerToast showVoyagerToastIn(
   Duration? dwell,
   Duration linger = const Duration(seconds: 4),
 }) {
+  final stack = _ToastStack.of(overlay);
+  final twin = stack.twinOf(
+    message: message,
+    icon: icon,
+    dwell: dwell,
+    actions: actions,
+  );
+  if (twin != null) {
+    twin._repeat();
+    return twin;
+  }
+
   final toast = VoyagerToast._(
     message: message,
     icon: icon,
@@ -195,9 +212,123 @@ VoyagerToast showVoyagerToastIn(
     dwell: dwell,
     linger: linger,
   );
-  toast._insertInto(overlay);
+  toast._insertInto(stack);
   return toast;
 }
+
+/// The toasts standing in one overlay, oldest first, and the single entry that
+/// draws them as a column.
+///
+/// One entry for the lot rather than one each: a toast used to position itself
+/// absolutely at the top of the window, so a second one simply painted over
+/// the first — two cards, at most one of them legible, and a click that could
+/// land on the hidden one's button. Laid out in a column they sit under each
+/// other instead, and the column reflows on its own as cards come and go.
+class _ToastStack {
+  _ToastStack._(this._overlay);
+
+  static _ToastStack of(OverlayState overlay) =>
+      _stacks[overlay] ??= _ToastStack._(overlay);
+
+  final OverlayState _overlay;
+  final _toasts = <VoyagerToast>[];
+  OverlayEntry? _entry;
+
+  /// The card a repeat of [message] should join, or null when this is news.
+  ///
+  /// Only a plain notice coalesces. Something with a button is an offer about
+  /// one particular thing and cannot stand for two of them, and a toast that
+  /// is still spinning — no icon, no dwell — is work in flight that will
+  /// rewrite itself with its own result.
+  ///
+  /// Both ends need a dwell. A card that has none is staying up until its
+  /// owner takes it away, and joining one would hand the repeat a countdown
+  /// that never runs — the toast would sit there counting up, with no caller
+  /// left holding a handle to dismiss it.
+  VoyagerToast? twinOf({
+    required String message,
+    required IconData? icon,
+    required Duration? dwell,
+    required List<VoyagerToastAction> actions,
+  }) {
+    if (icon == null || dwell == null || actions.isNotEmpty) return null;
+    for (final toast in _toasts.reversed) {
+      if (toast._dismissed || toast.actions.isNotEmpty) continue;
+      if (toast._dwell == null) continue;
+      if (toast._message == message && toast._icon == icon) return toast;
+    }
+    return null;
+  }
+
+  void add(VoyagerToast toast) {
+    _toasts.add(toast);
+    // The entry is only in the overlay while there is something to draw. A
+    // host that stayed put would sit *under* every dialog and popover opened
+    // after the app's first toast, since a later insert paints above an
+    // earlier one.
+    if (_entry == null) {
+      _entry = OverlayEntry(builder: _build);
+      _overlay.insert(_entry!);
+    } else {
+      rebuild();
+    }
+  }
+
+  void remove(VoyagerToast toast) {
+    if (!_toasts.remove(toast)) return;
+    if (_toasts.isEmpty) {
+      _entry!.remove();
+      _entry = null;
+      return;
+    }
+    rebuild();
+  }
+
+  void rebuild() => _entry?.markNeedsBuild();
+
+  Widget _build(BuildContext context) => Positioned(
+    top: MediaQuery.paddingOf(context).top + 8,
+    left: 0,
+    right: 0,
+    // Below the live workout's island rather than on top of it. Listened to
+    // rather than read so a workout that starts or ends under a standing toast
+    // moves it, instead of leaving it parked over the island until it expires.
+    child: ValueListenableBuilder<double>(
+      valueListenable: topChromeInset,
+      builder: (context, inset, child) => Padding(
+        padding: EdgeInsets.only(top: inset),
+        child: child,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final toast in _toasts)
+            _VoyagerToast(
+              // Keyed on the toast so a card keeps its State — and with it its
+              // entry animation and its dwell clock — when one above it goes
+              // away and the rest move up a place.
+              key: ObjectKey(toast),
+              message: toast._message,
+              icon: toast._icon,
+              count: toast._count,
+              actions: toast.actions,
+              dwell: toast._dwell,
+              linger: toast.linger,
+              generation: toast._generation,
+              onBuilt: () => toast._built = true,
+              onDismissRequested: toast.dismiss,
+              dismissRequested: toast._dismissRequested,
+              onDismissed: toast._finish,
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// The stack standing in each overlay. An [Expando] rather than a map so an
+/// overlay that goes away takes its stack with it.
+final _stacks = Expando<_ToastStack>('toast stack');
 
 /// The longest a hovering pointer holds the dwell open.
 ///
@@ -239,12 +370,15 @@ double _contrast(Color a, Color b) {
 
 class _VoyagerToast extends StatefulWidget {
   const _VoyagerToast({
+    super.key,
     required this.message,
     required this.icon,
+    required this.count,
     required this.actions,
     required this.dwell,
     required this.linger,
     required this.generation,
+    required this.onBuilt,
     required this.onDismissRequested,
     required this.dismissRequested,
     required this.onDismissed,
@@ -252,10 +386,12 @@ class _VoyagerToast extends StatefulWidget {
 
   final String message;
   final IconData? icon;
+  final int count;
   final List<VoyagerToastAction> actions;
   final Duration? dwell;
   final Duration linger;
   final int generation;
+  final VoidCallback onBuilt;
   final VoidCallback onDismissRequested;
   final ValueNotifier<bool> dismissRequested;
   final VoidCallback onDismissed;
@@ -274,6 +410,9 @@ class _VoyagerToastState extends State<_VoyagerToast>
   @override
   void initState() {
     super.initState();
+    // Tells the handle there is now a State to hear a dismissal, so one that
+    // arrives before this point can take the short way out.
+    widget.onBuilt();
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 180),
@@ -399,6 +538,15 @@ class _VoyagerToastState extends State<_VoyagerToast>
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (widget.count > 1) ...[
+              const SizedBox(width: 8),
+              Text(
+                '×${widget.count}',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
             for (final action in widget.actions) ...[
               // Wide enough that the button reads as its own object rather
               // than as the end of the sentence next to it.
@@ -471,11 +619,29 @@ class _VoyagerToastState extends State<_VoyagerToast>
     // A toast with nothing to press stays out of the way entirely.
     if (!interactive) body = IgnorePointer(child: body);
 
-    return Positioned(
-      top: MediaQuery.paddingOf(context).top + 8,
-      left: 0,
-      right: 0,
-      child: body,
+    // The card collapses as it leaves rather than vanishing and dropping the
+    // stack a notch. The gap rides inside the collapse, so a card taken from
+    // the middle takes its spacing with it and the ones below close up as one
+    // movement.
+    //
+    // On the way *out* only. A [SizeTransition] driven straight off the
+    // controller would also grow the card in, which means a clip to nothing
+    // for the first frames it is on screen — and a card with no height has no
+    // button to press. A delete's Undo was unhittable for the whole entry
+    // animation. Read through an [AnimatedBuilder] rather than switched with
+    // `setState`, because `_leaving` is set from a locked phase.
+    return AnimatedBuilder(
+      animation: _controller,
+      child: Padding(padding: const EdgeInsets.only(bottom: 8), child: body),
+      builder: (context, child) => ClipRect(
+        child: Align(
+          alignment: Alignment.topCenter,
+          heightFactor: _leaving
+              ? Curves.easeOut.transform(_controller.value).clamp(0.0, 1.0)
+              : 1.0,
+          child: child,
+        ),
+      ),
     );
   }
 }

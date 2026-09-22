@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
+import 'package:voyager/core/widgets/top_chrome_inset.dart';
 import 'package:voyager/features/workout/active_workout_view.dart';
 import 'package:voyager/features/workout/workout_island.dart';
 import 'package:voyager/features/workout/workout_session_controller.dart';
@@ -32,10 +33,41 @@ class _WorkoutOverlayState extends ConsumerState<WorkoutOverlay>
   );
   var _lastExpanded = false;
 
+  /// Measures the collapsed pill, which is what toasts have to clear. The
+  /// expanded panel is most of the window, so there is no below to move them
+  /// to — they keep the island's offset and land over the panel's top edge.
+  final _islandKey = GlobalKey();
+  var _publishScheduled = false;
+
   @override
   void dispose() {
+    // Post-frame because a notifier fired from here would rebuild the toast
+    // overlay mid-teardown. Ordered before any replacement shell's own first
+    // publish, so it cannot clear a value that has already been re-raised.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => topChromeInset.value = 0,
+    );
     _expansion.dispose();
     super.dispose();
+  }
+
+  /// Publishes the island's height after this frame has laid it out.
+  ///
+  /// Post-frame on two counts: the pill has no size until it is laid out, and
+  /// the toast stack listening on the other end cannot be rebuilt from inside
+  /// this build. Collapsed to one pending callback so a rebuilding island —
+  /// the rest ring ticks every frame — does not queue one per frame.
+  void _schedulePublish() {
+    if (_publishScheduled) return;
+    _publishScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _publishScheduled = false;
+      if (!mounted) return;
+      // No context while the island is off: nothing is holding the top.
+      final height = _islandKey.currentContext?.size?.height;
+      final inset = height == null ? 0.0 : height + VoyagerSpacing.sm;
+      if (topChromeInset.value != inset) topChromeInset.value = inset;
+    });
   }
 
   void _syncExpansion(bool expanded) {
@@ -64,10 +96,12 @@ class _WorkoutOverlayState extends ConsumerState<WorkoutOverlay>
       // rest of the app.
       _lastExpanded = false;
       _expansion.jumpTo(0);
+      _schedulePublish();
       return const SizedBox.shrink();
     }
 
     _syncExpansion(expanded);
+    _schedulePublish();
     final topInset = MediaQuery.paddingOf(context).top;
     final reduced = VoyagerMotion.reduced(context);
 
@@ -95,7 +129,10 @@ class _WorkoutOverlayState extends ConsumerState<WorkoutOverlay>
                       padding: const EdgeInsets.symmetric(
                         horizontal: VoyagerSpacing.lg,
                       ),
-                      child: WorkoutIsland(onTap: controller.expand),
+                      child: WorkoutIsland(
+                        key: _islandKey,
+                        onTap: controller.expand,
+                      ),
                     ),
                   ),
                 ),

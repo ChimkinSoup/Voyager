@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/top_chrome_inset.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/enums.dart';
 
@@ -155,6 +156,139 @@ void main() {
     await tester.pump(const Duration(seconds: 31));
     await tester.pumpAndSettle();
     expect(find.text('Deleted task'), findsNothing);
+  });
+
+  testWidgets('two toasts sit under each other rather than on top', (
+    tester,
+  ) async {
+    final ctx = await pumpHost(tester);
+
+    showVoyagerToast(
+      ctx,
+      message: 'Deleted "Push day"',
+      icon: PhosphorIconsRegular.trash,
+      dwell: const Duration(seconds: 8),
+      actions: [VoyagerToastAction(label: 'Undo', onPressed: () {})],
+    );
+    showVoyagerToast(
+      ctx,
+      message: 'Copied `git diff`',
+      icon: PhosphorIconsRegular.check,
+      dwell: const Duration(milliseconds: 1400),
+    );
+    await tester.pumpAndSettle();
+
+    // Both legible, and the newer one below the offer it arrived over rather
+    // than across it.
+    final offer = tester.getRect(find.text('Deleted "Push day"'));
+    final copy = tester.getRect(find.text('Copied `git diff`'));
+    expect(copy.top, greaterThanOrEqualTo(offer.bottom));
+
+    // The copy takes itself away on its own clock; the longer offer stays,
+    // and closes the gap the copy leaves behind it.
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pumpAndSettle();
+    expect(find.text('Copied `git diff`'), findsNothing);
+    expect(find.text('Deleted "Push day"'), findsOneWidget);
+    expect(tester.getRect(find.text('Deleted "Push day"')), offer);
+  });
+
+  testWidgets('a repeat of what is already up counts up in place', (
+    tester,
+  ) async {
+    final ctx = await pumpHost(tester);
+
+    for (var i = 0; i < 3; i++) {
+      showVoyagerToast(
+        ctx,
+        message: 'Copied `git diff`',
+        icon: PhosphorIconsRegular.check,
+        dwell: const Duration(milliseconds: 1400),
+      );
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+
+    // One card, not three — and it says how many times it happened.
+    expect(find.text('Copied `git diff`'), findsOneWidget);
+    expect(find.text('×3'), findsOneWidget);
+
+    // Each repeat restarts the dwell, so the count is still up a full dwell
+    // after the *first* copy would have taken it away.
+    await tester.pump(const Duration(milliseconds: 1200));
+    expect(find.text('Copied `git diff`'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(find.text('Copied `git diff`'), findsNothing);
+  });
+
+  testWidgets('work in flight never joins another toast', (tester) async {
+    final ctx = await pumpHost(tester);
+
+    final first = showVoyagerToast(ctx, message: 'Adding image…');
+    final second = showVoyagerToast(ctx, message: 'Adding image…');
+    // Pumped rather than settled: a spinner never stops turning.
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // Two uploads are two pieces of work, each with its own result to report,
+    // so they get a card each however alike the wording is.
+    expect(first, isNot(same(second)));
+    expect(find.text('Adding image…'), findsNWidgets(2));
+
+    first.update(message: 'Image added', icon: PhosphorIconsRegular.check);
+    await tester.pump();
+    expect(find.text('Image added'), findsOneWidget);
+    expect(find.text('Adding image…'), findsOneWidget);
+  });
+
+  testWidgets('the stack starts below whatever is holding the top', (
+    tester,
+  ) async {
+    addTearDown(() => topChromeInset.value = 0);
+    final ctx = await pumpHost(tester);
+
+    showVoyagerToast(
+      ctx,
+      message: 'Copied `git diff`',
+      icon: PhosphorIconsRegular.check,
+      dwell: const Duration(milliseconds: 1400),
+    );
+    await tester.pumpAndSettle();
+    final clear = tester.getRect(find.text('Copied `git diff`'));
+
+    // What the live workout's island publishes while it is pinned to the top.
+    // The toast is drawn in the root overlay, a sibling of the shell, so this
+    // notifier is the only thing that can tell it the spot is taken.
+    topChromeInset.value = 64;
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.text('Copied `git diff`')).top, clear.top + 64);
+
+    // And it comes back up when the workout ends under it, rather than staying
+    // parked over an island that is no longer there.
+    topChromeInset.value = 0;
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.text('Copied `git diff`')), clear);
+  });
+
+  testWidgets('a toast is pressable from the frame it appears', (tester) async {
+    final ctx = await pumpHost(tester);
+    var pressed = 0;
+
+    showVoyagerToast(
+      ctx,
+      message: 'Hidden "A"',
+      icon: PhosphorIconsRegular.eyeSlash,
+      dwell: const Duration(seconds: 8),
+      actions: [VoyagerToastAction(label: 'Undo', onPressed: () => pressed++)],
+    );
+    // One frame — the entry animation has barely started. The card is faded
+    // and still sliding down, but it is full height and its button is real:
+    // collapsing it on the way in would leave Undo unhittable until the
+    // animation finished.
+    await tester.pump();
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(pressed, 1);
   });
 
   testWidgets('a dismissed toast completes its done future', (tester) async {

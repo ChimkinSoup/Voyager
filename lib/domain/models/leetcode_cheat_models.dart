@@ -89,10 +89,12 @@ class LeetCodeCheatSection extends SoftDeletable {
   }
 }
 
-/// One command, what it does, and optionally its complexity.
+/// One command, what it does, and optionally a label and its complexity.
 ///
 /// [complexity] is null rather than empty when unset — the badge's presence in
 /// Viewing mode is the flag, and an empty string would draw an empty badge.
+/// [label] follows the same rule: null is what collapses the row's label
+/// column, so rows without one are not indented past the ones with.
 class LeetCodeCheatEntry extends SoftDeletable {
   const LeetCodeCheatEntry({
     required super.id,
@@ -102,6 +104,7 @@ class LeetCodeCheatEntry extends SoftDeletable {
     super.deletedAt,
     required this.sectionId,
     required this.command,
+    this.label,
     this.description = '',
     this.complexity,
     required this.position,
@@ -110,16 +113,44 @@ class LeetCodeCheatEntry extends SoftDeletable {
   final String sectionId;
   final String command;
 
+  /// A short name for the row, shown in its own column to the left of the
+  /// code. Null when unset — see the class doc.
+  final String? label;
+
   /// Markdown-ish prose: `` `inline code` `` and triple-backtick fenced blocks
   /// render, nothing else is parsed.
   final String description;
 
+  /// One per line of [command], newline-separated, since a block's lines
+  /// rarely cost the same — the loop and the lookup inside it are two
+  /// different numbers, and only one badge each says which.
+  ///
+  /// A blank line is a line with no badge, and the list may be shorter than
+  /// the command (the lines past it have none) or longer (the surplus is not
+  /// drawn). [complexityByLine] is what pairs the two up.
   final String? complexity;
+
   final double position;
+
+  /// [complexity] lined up against [command]: exactly one entry per line of
+  /// the command, trimmed, and empty where that line carries no cost.
+  List<String> get complexityByLine {
+    final costs = (complexity ?? '').split('\n');
+    return [
+      for (var i = 0; i < commandLines.length; i++)
+        i < costs.length ? costs[i].trim() : '',
+    ];
+  }
+
+  /// [command] split into the lines the sheet draws it as. Always at least
+  /// one, so an empty command is still a line that can hold a badge.
+  List<String> get commandLines => command.split('\n');
 
   /// [touch] as on [LeetCodeCheatTab.copyWith].
   LeetCodeCheatEntry copyWith({
     String? command,
+    String? label,
+    bool clearLabel = false,
     String? description,
     String? complexity,
     bool clearComplexity = false,
@@ -138,6 +169,7 @@ class LeetCodeCheatEntry extends SoftDeletable {
       deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
       sectionId: sectionId,
       command: command ?? this.command,
+      label: clearLabel ? null : (label ?? this.label),
       description: description ?? this.description,
       complexity: clearComplexity ? null : (complexity ?? this.complexity),
       position: position ?? this.position,

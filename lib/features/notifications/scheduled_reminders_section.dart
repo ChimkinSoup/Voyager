@@ -632,6 +632,35 @@ class _ScheduledReminderEditorState
 
   DateTime get _timeAsDateTime => atLocalMinutes(DateTime.now(), _minutes);
 
+  /// "Fires in 15 hours" for the schedule as the form has it — the Inbox
+  /// row's countdown, before the rule exists. Null when there is nothing to
+  /// count down to: a rule switched off, or a weekly one with no days yet.
+  String? get _countdownLabel {
+    if (!_enabled) return null;
+    if (_kind == ReminderScheduleKind.weekly && _weekdays.isEmpty) return null;
+    final now = DateTime.now();
+    // A draft armed now: the countdown answers from now whatever an existing
+    // rule was armed at.
+    final draft = ScheduledReminderRule(
+      id: '',
+      createdAt: now,
+      updatedAt: now,
+      title: '',
+      scheduleKind: _kind,
+      localTimeMinutes: _minutes,
+      weeklyWeekdays: _kind == ReminderScheduleKind.weekly
+          ? _weekdays
+          : const <int>{},
+      onceLocalDate: _kind == ReminderScheduleKind.once
+          ? DateTime(_onceDate.year, _onceDate.month, _onceDate.day)
+          : null,
+      armedAt: now,
+    );
+    final next = nextRuleFire(draft, now);
+    if (next == null) return 'That time has already passed';
+    return 'Fires in ${reminderDistanceLabel(next, now)}';
+  }
+
   /// The date picker's own size, in the dialog where there is room for it.
   static const _oncePickerSize = Size(500, 380);
 
@@ -878,6 +907,16 @@ class _ScheduledReminderEditorState
                   ],
                 ],
               ),
+              if (_countdownLabel case final countdown?)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    countdown,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
               label('Devices'),
               Wrap(
                 spacing: 6,

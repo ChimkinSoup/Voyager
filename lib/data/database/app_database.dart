@@ -1761,6 +1761,10 @@ class LeetCodeCheatEntriesTable extends Table {
   TextColumn get id => text()();
   TextColumn get sectionId => text()();
   TextColumn get command => text()();
+
+  /// Null, not empty string, when unset — a row without one collapses its
+  /// label column rather than drawing an empty one.
+  TextColumn get label => text().nullable()();
   TextColumn get description => text().withDefault(const Constant(''))();
 
   /// Null, not empty string, when unset — the badge's presence is the flag.
@@ -1845,7 +1849,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 122;
+  int get schemaVersion => 123;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3241,6 +3245,18 @@ class AppDatabase extends _$AppDatabase {
         await _addSettingsColumnIfNotExists(
           migrator,
           settingsTable.leetCodeCheatCollapsedSectionsJson,
+        );
+      }
+      // Only a database that was already at 122 needs this: an older one got
+      // the table from the block above, and `createTable` builds today's
+      // shape with the column already in it.
+      //
+      // Null for every existing row, which reads as "no label" — the column it
+      // feeds collapses, so rows written before this look exactly as they did.
+      if (from >= 122 && from < 123) {
+        await migrator.addColumn(
+          leetCodeCheatEntriesTable,
+          leetCodeCheatEntriesTable.label,
         );
       }
     },

@@ -39,6 +39,36 @@ const double _kOutlineBreakpoint = 1100;
 
 const double _kOutlineWidth = 168;
 
+/// The label column, and the complexity column opposite it.
+///
+/// Both are fixed so that labels and badges line up down the page rather than
+/// tracking whatever the code beside them happens to be — which is the whole
+/// point of giving either one a column. The label column collapses to nothing
+/// on a row with no label, so those rows keep their code at the left margin.
+const double _kLabelWidth = 132;
+
+/// Wide enough for a note as long as "O(1) amortized" to stand on one line.
+/// That matters more here than the 24pt it costs the code: the field is read
+/// line for line against the block beside it, so a wrapped entry looks like
+/// a cost belonging to the next line down.
+const double _kComplexityWidth = 128;
+
+/// The gap either column keeps from the code between them.
+const double _kColumnGap = 12;
+
+/// The strip between the code and the complexity column that the copy hint
+/// lives in, gap included.
+const double _kCopyWidth = _kColumnGap + 14;
+
+/// Editing's complexity field, which has to fit "O(n log n)" inside
+/// [_kComplexityWidth] while standing a line-height taller than it would
+/// choose for itself.
+const double _kEditingComplexitySize = 12;
+
+/// How far the side columns are pushed down to sit on the code's first line
+/// rather than on the top edge of its box.
+const double _kColumnTopInset = 6;
+
 /// How many frames an outline jump may spend building its way towards a
 /// section that is not laid out yet. A viewport a frame, so this is far more
 /// than the longest tab needs and still terminates.
@@ -128,6 +158,9 @@ class _CheatSheetOverlayState extends ConsumerState<_CheatSheetOverlay>
   /// typing has to keep its local text (§8).
   final _entryEditors = <String, _EntryEditors>{};
   final _sectionEditors = <String, _NameEditor>{};
+
+  /// The section just added, whose name field takes focus when it mounts.
+  String? _focusSectionId;
 
   @override
   void initState() {
@@ -431,8 +464,8 @@ class _CheatSheetOverlayState extends ConsumerState<_CheatSheetOverlay>
             sectionKeyFor: _sectionKeyFor,
             onReorderEntries: (sectionId, oldIndex, newIndex) => _actions
                 .reorderEntries(data.entriesOf(sectionId), oldIndex, newIndex),
-            onAddSection: () =>
-                _actions.createSection(tabId: tab.id, name: 'New section'),
+            focusSectionId: _focusSectionId,
+            onAddSection: () => _addSection(tab.id),
             onAddEntry: (sectionId) =>
                 _actions.createEntry(sectionId: sectionId),
             onDeleteSection: _deleteSection,
@@ -643,9 +676,10 @@ class _CheatSheetOverlayState extends ConsumerState<_CheatSheetOverlay>
   _EntryEditors _entryEditorFor(LeetCodeCheatEntry entry) {
     return _entryEditors[entry.id] ??= _EntryEditors(
       entry: entry,
-      onSave: (command, description, complexity) => _actions.saveEntry(
+      onSave: (command, label, description, complexity) => _actions.saveEntry(
         entry.id,
         command: command,
+        label: label,
         description: description,
         complexity: complexity,
       ),
@@ -657,6 +691,21 @@ class _CheatSheetOverlayState extends ConsumerState<_CheatSheetOverlay>
       initial: section.name,
       onSave: (name) => _actions.renameSection(section.id, name),
     );
+  }
+
+  // --- Sections ------------------------------------------------------------
+
+  /// Blank rather than a placeholder name the user has to delete first: the
+  /// field's hint already says what goes there, and the caret is put in it.
+  Future<void> _addSection(String tabId) async {
+    final section = await _actions.createSection(tabId: tabId, name: '');
+    // The list builds lazily, so the new heading has to be scrolled to before
+    // it exists to take focus — and it is only in the list once the reload
+    // the create kicked off has landed.
+    await _container.read(leetCodeCheatSheetProvider.future);
+    if (!mounted) return;
+    setState(() => _focusSectionId = section.id);
+    _scrollSectionIntoView(section.id, budget: _kJumpFrameBudget);
   }
 
   // --- Tabs ----------------------------------------------------------------
@@ -1003,7 +1052,7 @@ class _OutlineRail extends StatelessWidget {
   final ValueChanged<String> onJump;
   final void Function(int oldIndex, int newIndex) onReorder;
 
-  static const _padding = EdgeInsets.symmetric(vertical: 12, horizontal: 8);
+  static const _padding = EdgeInsets.symmetric(vertical: 14, horizontal: 8);
 
   @override
   Widget build(BuildContext context) {
@@ -1054,25 +1103,56 @@ class _OutlineRail extends StatelessWidget {
     );
   }
 
+  /// One section in the rail.
+  ///
+  /// Roomy on purpose: these are headings, not a menu, and a stack of them at
+  /// list density reads as one grey block. The row breathes, the label takes a
+  /// second line before it ellipsises, and the weight says "title".
+  ///
+  /// Solid accent, labelled in `onPrimary` — which the theme derives with
+  /// [onColorLabel], the same rule a calendar event's text follows on its own
+  /// colour. The accent is user-chosen and can land anywhere on the luminance
+  /// range, so a pale one gets dark ink rather than unreadable white.
   Widget _railLabel(ThemeData theme, LeetCodeCheatSection section) {
-    return TextButton(
-      style: TextButton.styleFrom(
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        minimumSize: Size.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        foregroundColor: theme.colorScheme.onSurfaceVariant,
-      ),
-      onPressed: () => onJump(section.id),
-      child: Text(
-        section.name,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.bodySmall,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: TextButton(
+        style: TextButton.styleFrom(
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          backgroundColor: theme.colorScheme.primary,
+          foregroundColor: theme.colorScheme.onPrimary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+          ),
+        ),
+        onPressed: () => onJump(section.id),
+        child: Text(
+          _sectionTitle(section.name),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          // The colour is set here and not left to the button's
+          // `foregroundColor` alone: `bodySmall` already carries the theme's
+          // body colour, and an explicit style on a [Text] merges over the
+          // [DefaultTextStyle] the button wraps its label in.
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onPrimary,
+            fontWeight: FontWeight.w500,
+            height: 1.3,
+            letterSpacing: 0.1,
+          ),
+        ),
       ),
     );
   }
 }
+
+/// What a section is called where it is read. A new section starts blank, and
+/// an empty heading would read as a rendering fault rather than a name to fill.
+String _sectionTitle(String name) =>
+    name.trim().isEmpty ? 'Untitled section' : name;
 
 // --- Viewing -----------------------------------------------------------------
 
@@ -1102,6 +1182,13 @@ class _ViewingBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final sections = data.sectionsOf(tab.id);
+    // Once for the whole tab, so the code column holds one left edge down the
+    // page rather than jogging at every unlabelled row.
+    final showLabel = sections.any(
+      (section) => data
+          .entriesOf(section.id)
+          .any((entry) => (entry.label ?? '').trim().isNotEmpty),
+    );
     return VoyagerScrollView(
       controller: scrollController,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
@@ -1116,16 +1203,14 @@ class _ViewingBody extends StatelessWidget {
               onTap: () => onToggleSection(section.id),
             ),
             if (!collapsed.contains(section.id))
-              for (final (index, entry)
-                  in data.entriesOf(section.id).indexed) ...[
-                if (index > 0) const _EntryDivider(),
+              for (final entry in data.entriesOf(section.id))
                 _ViewingEntry(
                   entry: entry,
                   languageKey: tab.languageKey,
+                  showLabel: showLabel,
                   onCopy: () => onCopyCommand(entry),
                   onEdit: () => onEditEntry(entry),
                 ),
-              ],
             const SizedBox(height: 18),
           ],
           if (sections.isEmpty)
@@ -1163,7 +1248,7 @@ class _SectionHeading extends StatelessWidget {
     final accent = theme.colorScheme.primary;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(6, 10, 6, 6),
         child: Column(
@@ -1173,11 +1258,14 @@ class _SectionHeading extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    name,
+                    _sectionTitle(name),
+                    // Heavier and wider-tracked than anything under it: with
+                    // the rules between entries gone, weight is what tells a
+                    // section boundary from a row's own label.
                     style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       color: accent,
-                      letterSpacing: 0.2,
+                      letterSpacing: 0.4,
                     ),
                   ),
                 ),
@@ -1190,8 +1278,8 @@ class _SectionHeading extends StatelessWidget {
                 ),
               ],
             ),
-            // The heading's own rule: heavier than the hairline between
-            // entries, so a section boundary still outranks an item boundary.
+            // The only horizontal rule on the page, now that the hairlines
+            // between entries are gone.
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: SizedBox(
@@ -1208,10 +1296,21 @@ class _SectionHeading extends StatelessWidget {
 
 /// One entry as Viewing mode shows it: no field borders, no cursors, no drag
 /// handles, no delete affordances.
+///
+/// Three columns — label, code over its note, complexity — so a row is read
+/// down a column rather than across a block. The side columns are fixed width
+/// ([_kLabelWidth], [_kComplexityWidth]) so they line up down the page.
+///
+/// [showLabel] is decided for the page rather than the row: a sheet where
+/// nothing is labelled drops the column entirely rather than indenting every
+/// row behind an empty gutter, but as soon as one row has a label the rest
+/// hold the space, because a code column that jogs left and right down the
+/// page is worse than a little white space.
 class _ViewingEntry extends StatefulWidget {
   const _ViewingEntry({
     required this.entry,
     required this.languageKey,
+    required this.showLabel,
     required this.onCopy,
     required this.onEdit,
     this.keywords = const [],
@@ -1219,6 +1318,7 @@ class _ViewingEntry extends StatefulWidget {
 
   final LeetCodeCheatEntry entry;
   final String? languageKey;
+  final bool showLabel;
   final VoidCallback onCopy;
   final VoidCallback onEdit;
   final List<String> keywords;
@@ -1233,8 +1333,12 @@ class _ViewingEntryState extends State<_ViewingEntry> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final entry = widget.entry;
-    final complexity = entry.complexity;
+    final label = entry.label?.trim();
+    final lines = entry.commandLines;
+    final costs = entry.complexityByLine;
+    final description = entry.description.trim();
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -1251,71 +1355,186 @@ class _ViewingEntryState extends State<_ViewingEntry> {
             color: _hovered
                 ? theme.colorScheme.primary.withValues(alpha: 0.05)
                 : null,
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
           ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
-            child: Column(
+            // Vertical breathing room is what separates one row from the next
+            // now that there is no hairline doing it.
+            padding: const EdgeInsets.fromLTRB(6, 7, 6, 7),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: LeetCodeCheatCommandText(
-                        entry.command,
-                        languageKey: widget.languageKey,
-                        keywords: widget.keywords,
-                        style: theme.textTheme.bodyMedium ?? const TextStyle(),
-                      ),
-                    ),
-                    if (_hovered)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 8),
-                        child: Icon(
-                          PhosphorIconsRegular.copy,
-                          size: 14,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    // Absent when unset — no placeholder, no em dash.
-                    if (complexity != null && complexity.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 8),
-                        child: _ComplexityBadge(complexity),
-                      ),
-                  ],
-                ),
-                // Indented behind an accent rule: the prose is what the code
-                // is not, and the offset says so before a word is read.
-                if (entry.description.trim().isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 5, left: 10),
-                    child: Container(
-                      padding: const EdgeInsets.only(left: 10),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          left: BorderSide(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: 0.3,
+                if (widget.showLabel) ...[
+                  SizedBox(
+                    width: _kLabelWidth,
+                    child: label == null || label.isEmpty
+                        ? null
+                        : Padding(
+                            padding: const EdgeInsets.only(
+                              top: _kColumnTopInset,
                             ),
-                            width: 2,
+                            child: Text(
+                              label,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: _kColumnGap),
+                ],
+                Expanded(
+                  child: Column(
+                    // Stretched, not hugged: a plate that shrank to its own
+                    // command would give every row a different right edge,
+                    // and the column the badges hang off is what makes the
+                    // page scan.
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // One row per line, each carrying its own cost. The
+                      // plate is cut into cells that meet flush, so it still
+                      // reads as one box around the block while every badge
+                      // stays pinned to the line it belongs to — two columns
+                      // measured apart could not stay level once a long line
+                      // wrapped.
+                      for (var i = 0; i < lines.length; i++)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Container(
+                                padding: EdgeInsets.fromLTRB(
+                                  8,
+                                  i == 0 ? 6 : 0,
+                                  8,
+                                  i == lines.length - 1 ? 6 : 0,
+                                ),
+                                // The code sits on its own plate, so the line
+                                // between what to type and what it does is
+                                // drawn before either is read. A neutral tint
+                                // rather than the editor's paper: the syntax
+                                // colours here are theme-aware, and the
+                                // editor's background is dark in both themes.
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: isDark ? 0.05 : 0.04,
+                                  ),
+                                  borderRadius: BorderRadius.vertical(
+                                    top: Radius.circular(
+                                      i == 0 ? VoyagerTheme.fieldRadius : 0,
+                                    ),
+                                    bottom: Radius.circular(
+                                      i == lines.length - 1
+                                          ? VoyagerTheme.fieldRadius
+                                          : 0,
+                                    ),
+                                  ),
+                                ),
+                                child: LeetCodeCheatCommandText(
+                                  lines[i],
+                                  languageKey: widget.languageKey,
+                                  keywords: widget.keywords,
+                                  style:
+                                      theme.textTheme.bodyMedium ??
+                                      const TextStyle(),
+                                ),
+                              ),
+                            ),
+                            // A reserved slot rather than an `if (_hovered)`:
+                            // appearing and disappearing would shove the
+                            // complexity column sideways under the cursor,
+                            // and lining those up is the point. The icon
+                            // rides the first line, since a copy takes the
+                            // whole block either way.
+                            SizedBox(
+                              width: _kCopyWidth,
+                              child: i != 0
+                                  ? null
+                                  : Padding(
+                                      padding: const EdgeInsets.only(
+                                        top: _kColumnTopInset + 1,
+                                      ),
+                                      child: Opacity(
+                                        opacity: _hovered ? 1 : 0,
+                                        child: Icon(
+                                          PhosphorIconsRegular.copy,
+                                          size: 14,
+                                          color: theme
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ),
+                            ),
+                            // Held open even when this line has no cost, so
+                            // every badge on the page hangs off one edge.
+                            SizedBox(
+                              width: _kComplexityWidth,
+                              child: costs[i].isEmpty
+                                  ? null
+                                  : Padding(
+                                      padding: EdgeInsets.only(
+                                        left: _kColumnGap,
+                                        // Only the first line sits below the
+                                        // plate's own top inset.
+                                        top: i == 0 ? _kColumnTopInset : 0,
+                                      ),
+                                      child: Align(
+                                        alignment: Alignment.topRight,
+                                        child: _ComplexityBadge(costs[i]),
+                                      ),
+                                    ),
+                            ),
+                          ],
+                        ),
+                      // Indented behind an accent rule: the prose is what the
+                      // code is not, and the offset says so before a word is
+                      // read.
+                      if (description.isNotEmpty)
+                        Padding(
+                          // Clear of the two columns to its right, so the
+                          // note stays under the code rather than running out
+                          // beneath the badges.
+                          padding: const EdgeInsets.fromLTRB(
+                            10,
+                            6,
+                            _kCopyWidth + _kComplexityWidth,
+                            0,
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.only(left: 10),
+                            decoration: BoxDecoration(
+                              border: Border(
+                                left: BorderSide(
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: 0.3,
+                                  ),
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                            child: LeetCodeCheatDescription(
+                              entry.description,
+                              languageKey: widget.languageKey,
+                              keywords: widget.keywords,
+                              style:
+                                  theme.textTheme.bodySmall?.copyWith(
+                                    // A step under the code it explains, on
+                                    // top of the muted colour, and leaded
+                                    // loosely enough that a note running to
+                                    // three lines still scans.
+                                    fontSize: 11.5,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    height: 1.55,
+                                  ) ??
+                                  const TextStyle(),
+                            ),
                           ),
                         ),
-                      ),
-                      child: LeetCodeCheatDescription(
-                        entry.description,
-                        languageKey: widget.languageKey,
-                        keywords: widget.keywords,
-                        style:
-                            theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              height: 1.35,
-                            ) ??
-                            const TextStyle(),
-                      ),
-                    ),
+                    ],
                   ),
+                ),
               ],
             ),
           ),
@@ -1325,24 +1544,64 @@ class _ViewingEntryState extends State<_ViewingEntry> {
   }
 }
 
-/// The hairline between two entries of the same section — faint enough to
-/// read as a seam rather than a border, so a long section still scans as one
-/// block while each item keeps its own edges.
-class _EntryDivider extends StatelessWidget {
-  const _EntryDivider();
+/// What a complexity reads as costing, inferred from the badge's own text.
+///
+/// Inference, not parsing: the field is free text the user writes, so
+/// "O(1) amortized" has to land on the same tier as a bare "O(1)", and
+/// anything this does not recognise — "O(m+n)", a note in prose — falls to
+/// [CheatComplexityTier.unknown] and is drawn neutral rather than guessed at.
+enum CheatComplexityTier { cheap, moderate, expensive, unknown }
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      child: SizedBox(
-        height: 1,
-        child: ColoredBox(
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.14),
-        ),
-      ),
-    );
+/// The tier [text] falls in, read off the first `O(...)` it contains.
+@visibleForTesting
+CheatComplexityTier cheatComplexityTier(String text) {
+  final match = RegExp(r'[oO]\s*\(([^)]*)').firstMatch(text);
+  if (match == null) return CheatComplexityTier.unknown;
+
+  // Superscripts are how the user is most likely to have typed a power, and
+  // the separators between factors carry no meaning here.
+  final inner = match
+      .group(1)!
+      .toLowerCase()
+      .replaceAll('²', '^2')
+      .replaceAll('³', '^3')
+      .replaceAll(RegExp(r'[\s*·×()]'), '');
+
+  if (inner.contains('!')) return CheatComplexityTier.expensive;
+  // `n^2` and up, and anything with a variable in the exponent: `2^n`, `n^k`.
+  final power = RegExp(r'\^(\d+)').firstMatch(inner);
+  if (power != null && (int.tryParse(power.group(1)!) ?? 0) >= 2) {
+    return CheatComplexityTier.expensive;
   }
+  if (RegExp(r'\^[a-z]').hasMatch(inner)) return CheatComplexityTier.expensive;
+
+  return switch (inner) {
+    '1' => CheatComplexityTier.cheap,
+    'n' || 'logn' || 'nlogn' => CheatComplexityTier.moderate,
+    _ => CheatComplexityTier.unknown,
+  };
+}
+
+/// The colour a tier wears, in the theme in play.
+///
+/// The LeetCode difficulty triad, which is already what green, amber and red
+/// mean everywhere else in this section. Those three are tuned for a dark
+/// page, and amber in particular vanishes on cream at label size — so on the
+/// light theme they keep their hue and are taken down to a lightness that
+/// reads.
+Color _complexityColor(ThemeData theme, CheatComplexityTier tier) {
+  final base = switch (tier) {
+    CheatComplexityTier.cheap => kLeetCodeEasyColor,
+    CheatComplexityTier.moderate => kLeetCodeMediumColor,
+    CheatComplexityTier.expensive => kLeetCodeHardColor,
+    CheatComplexityTier.unknown => theme.colorScheme.onSurfaceVariant,
+  };
+  if (tier == CheatComplexityTier.unknown ||
+      theme.brightness == Brightness.dark) {
+    return base;
+  }
+  final hsl = HSLColor.fromColor(base);
+  return hsl.lightness <= 0.38 ? base : hsl.withLightness(0.38).toColor();
 }
 
 class _ComplexityBadge extends StatelessWidget {
@@ -1353,18 +1612,22 @@ class _ComplexityBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = theme.colorScheme.primary;
+    final color = _complexityColor(theme, cheatComplexityTier(text));
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(4),
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
       ),
       child: Text(
         text,
+        // Right-aligned for the run of it that wraps: the column is sized for
+        // "O(n log n)", and a longer note like "O(1) amortized" takes a
+        // second line rather than being cut.
+        textAlign: TextAlign.right,
         style: theme.textTheme.labelSmall?.copyWith(
           fontFamily: AppFonts.monoFamily,
-          color: accent,
+          color: color,
         ),
       ),
     );
@@ -1392,6 +1655,11 @@ class _SearchResults extends StatelessWidget {
     if (hits.isEmpty) {
       return _EmptyPrompt(message: 'Nothing matches "${query.trim()}".');
     }
+
+    // As in [_ViewingBody], decided once across everything on screen.
+    final showLabel = hits.any(
+      (hit) => (hit.entry.label ?? '').trim().isNotEmpty,
+    );
 
     // Grouped by tab → section, so a hit in Python is visibly a hit in Python.
     final children = <Widget>[];
@@ -1426,13 +1694,12 @@ class _SearchResults extends StatelessWidget {
             ),
           ),
         );
-      } else {
-        children.add(const _EntryDivider());
       }
       children.add(
         _ViewingEntry(
           entry: hit.entry,
           languageKey: hit.tab.languageKey,
+          showLabel: showLabel,
           keywords: [query],
           // A single click on a result is "take me there", not "copy" — the
           // result is a pointer into the sheet, and the copy affordance is
@@ -1464,6 +1731,7 @@ class _EditingBody extends StatelessWidget {
     required this.entryEditorFor,
     required this.sectionEditorFor,
     required this.sectionKeyFor,
+    required this.focusSectionId,
     required this.onReorderEntries,
     required this.onAddSection,
     required this.onAddEntry,
@@ -1481,6 +1749,8 @@ class _EditingBody extends StatelessWidget {
   /// rail can reach a heading in this mode too. Only one of the two bodies is
   /// ever mounted, so the key is never in two places at once.
   final GlobalKey Function(String) sectionKeyFor;
+
+  final String? focusSectionId;
 
   final void Function(String sectionId, int oldIndex, int newIndex)
   onReorderEntries;
@@ -1508,6 +1778,7 @@ class _EditingBody extends StatelessWidget {
                   tab: tab,
                   entries: data.entriesOf(sections[i].id),
                   nameEditor: sectionEditorFor(sections[i]),
+                  autofocus: sections[i].id == focusSectionId,
                   entryEditorFor: entryEditorFor,
                   onReorderEntries: (oldIndex, newIndex) =>
                       onReorderEntries(sections[i].id, oldIndex, newIndex),
@@ -1549,6 +1820,7 @@ class _EditingSection extends StatelessWidget {
     required this.tab,
     required this.entries,
     required this.nameEditor,
+    required this.autofocus,
     required this.entryEditorFor,
     required this.onReorderEntries,
     required this.onAddEntry,
@@ -1560,6 +1832,7 @@ class _EditingSection extends StatelessWidget {
   final LeetCodeCheatTab tab;
   final List<LeetCodeCheatEntry> entries;
   final _NameEditor nameEditor;
+  final bool autofocus;
   final _EntryEditors Function(LeetCodeCheatEntry) entryEditorFor;
   final void Function(int oldIndex, int newIndex) onReorderEntries;
   final VoidCallback onAddEntry;
@@ -1580,6 +1853,7 @@ class _EditingSection extends StatelessWidget {
                 child: VoyagerTextField(
                   controller: nameEditor.controller,
                   focusNode: nameEditor.focusNode,
+                  autofocus: autofocus,
                   onChanged: nameEditor.onChanged,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w600,
@@ -1662,76 +1936,108 @@ class _EditingEntry extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      // The columns Viewing reads the same row in, so a row edits where it is
+      // read. The label column is held open here even when empty — Viewing
+      // collapses it, but this is the only place a label can be typed.
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
+          SizedBox(
+            width: _kLabelWidth,
+            child: VoyagerTextField(
+              controller: editors.label,
+              focusNode: editors.labelFocus,
+              onChanged: (_) => editors.schedule(),
+              // Enter carries on to the code beside it, the field a label is
+              // naming.
+              onSubmitted: (_) => editors.commandFocus.requestFocus(),
+              snippetsAllowed: false,
+              style: theme.textTheme.bodySmall,
+              decoration: const InputDecoration(
+                isDense: true,
+                hintText: 'Label',
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 10,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: _kColumnGap),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 // A code field: highlighting on, spell-check off, snippets
                 // off. Squiggling every identifier would make it unusable.
-                child: LeetCodeCodeSurface(
+                LeetCodeCodeSurface(
                   controller: editors.command,
                   focusNode: editors.commandFocus,
                   scrollable: false,
                 ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 116,
-                child: VoyagerTextField(
-                  controller: editors.complexity,
-                  focusNode: editors.complexityFocus,
+                const SizedBox(height: 6),
+                // A normal prose field — spell-check, snippets and Vim all
+                // on, exactly as every other prose field in the app. Under
+                // the code, where Viewing shows the same text.
+                VoyagerTextField(
+                  controller: editors.description,
+                  focusNode: editors.descriptionFocus,
                   onChanged: (_) => editors.schedule(),
-                  snippetsAllowed: false,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontFamily: AppFonts.monoFamily,
-                  ),
+                  maxLines: null,
+                  minLines: 2,
+                  style: theme.textTheme.bodySmall,
                   decoration: const InputDecoration(
                     isDense: true,
-                    hintText: 'O(1)',
+                    hintText: 'What it does',
                     border: OutlineInputBorder(),
                     contentPadding: EdgeInsets.symmetric(
                       horizontal: 8,
-                      vertical: 10,
+                      vertical: 8,
                     ),
                   ),
                 ),
-              ),
-              _DragGrip(index: index, tooltip: 'Drag to reorder this entry'),
-              IconButton(
-                icon: const Icon(PhosphorIconsRegular.trash, size: 14),
-                tooltip: 'Delete this entry',
-                visualDensity: VisualDensity.compact,
-                color: theme.colorScheme.error,
-                onPressed: onDelete,
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 6),
-          // A normal prose field — spell-check, snippets and Vim all on,
-          // exactly as every other prose field in the app. Inset to match the
-          // indent Viewing gives the same text.
-          Padding(
-            padding: const EdgeInsets.only(left: 20, right: 56),
+          const SizedBox(width: _kColumnGap),
+          SizedBox(
+            width: _kComplexityWidth,
+            // One line per line of the code beside it, which is how the
+            // badges are paired up — so the field takes the editor's line
+            // height and first-line inset rather than its own, and the two
+            // stay in step as the block grows.
             child: VoyagerTextField(
-              controller: editors.description,
-              focusNode: editors.descriptionFocus,
+              controller: editors.complexity,
+              focusNode: editors.complexityFocus,
               onChanged: (_) => editors.schedule(),
+              snippetsAllowed: false,
               maxLines: null,
-              minLines: 2,
-              style: theme.textTheme.bodySmall,
-              decoration: const InputDecoration(
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontFamily: AppFonts.monoFamily,
+                fontSize: _kEditingComplexitySize,
+                height: kLeetCodeCodeLineHeight / _kEditingComplexitySize,
+              ),
+              decoration: InputDecoration(
                 isDense: true,
-                hintText: 'What it does',
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 8,
+                hintText: 'O(1)',
+                border: const OutlineInputBorder(),
+                contentPadding: EdgeInsets.fromLTRB(
+                  8,
+                  kLeetCodeCodeTopInset,
+                  8,
+                  kLeetCodeCodeTopInset,
                 ),
               ),
             ),
+          ),
+          _DragGrip(index: index, tooltip: 'Drag to reorder this entry'),
+          IconButton(
+            icon: const Icon(PhosphorIconsRegular.trash, size: 14),
+            tooltip: 'Delete this entry',
+            visualDensity: VisualDensity.compact,
+            color: theme.colorScheme.error,
+            onPressed: onDelete,
           ),
         ],
       ),
@@ -1786,23 +2092,31 @@ class _DragGrip extends StatelessWidget {
 class _EntryEditors {
   _EntryEditors({required LeetCodeCheatEntry entry, required this.onSave})
     : command = LeetCodeCodeController(text: entry.command),
+      label = TextEditingController(text: entry.label ?? ''),
       description = TextEditingController(text: entry.description),
       complexity = TextEditingController(text: entry.complexity ?? '') {
     command.addListener(schedule);
-    for (final node in [commandFocus, descriptionFocus, complexityFocus]) {
+    for (final node in [
+      commandFocus,
+      labelFocus,
+      descriptionFocus,
+      complexityFocus,
+    ]) {
       node.addListener(() {
         if (!node.hasFocus) unawaited(flush());
       });
     }
   }
 
-  final Future<void> Function(String, String, String) onSave;
+  final Future<void> Function(String, String, String, String) onSave;
 
   final LeetCodeCodeController command;
+  final TextEditingController label;
   final TextEditingController description;
   final TextEditingController complexity;
 
   final commandFocus = FocusNode(debugLabel: 'cheatCommand');
+  final labelFocus = FocusNode(debugLabel: 'cheatLabel');
   final descriptionFocus = FocusNode(debugLabel: 'cheatDescription');
   final complexityFocus = FocusNode(debugLabel: 'cheatComplexity');
 
@@ -1831,15 +2145,17 @@ class _EntryEditors {
   }
 
   Future<void> _write() =>
-      onSave(command.fullText, description.text, complexity.text);
+      onSave(command.fullText, label.text, description.text, complexity.text);
 
   void dispose() {
     debouncer.dispose();
     command.removeListener(schedule);
     command.dispose();
+    label.dispose();
     description.dispose();
     complexity.dispose();
     commandFocus.dispose();
+    labelFocus.dispose();
     descriptionFocus.dispose();
     complexityFocus.dispose();
   }
