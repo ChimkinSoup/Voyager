@@ -464,3 +464,37 @@ List<TrackerValue> wordCountTrackerValues(
       ),
   ];
 }
+
+/// How many recorded days the analytics page's mood chart plots.
+const int kMoodChartDays = 30;
+
+/// The mood chart's points: the average mood of each of the [kMoodChartDays]
+/// most recent local calendar days that have one, oldest first. Days without
+/// a mood are skipped rather than plotted, so the window can span more than
+/// [kMoodChartDays] calendar days.
+///
+/// Only entries in [moodJournalIds] count — a journal with its mood bar
+/// hidden drops out, the same rule the Life Tracker's lifetime average uses.
+List<({DateTime day, double mood})> recentMoodDays(
+  List<JournalEntry> entries, {
+  required Set<String> moodJournalIds,
+}) {
+  final moodsByDay = <DateTime, List<int>>{};
+  for (final entry in entries) {
+    final mood = entry.mood;
+    if (mood == null || !moodJournalIds.contains(entry.journalId)) continue;
+    final d = entry.entryDate.toLocal();
+    moodsByDay
+        .putIfAbsent(DateTime(d.year, d.month, d.day), () => [])
+        .add(mood);
+  }
+  final days = moodsByDay.keys.toList()..sort();
+  return [
+    for (final day in days.skip(math.max(0, days.length - kMoodChartDays)))
+      (
+        day: day,
+        mood:
+            moodsByDay[day]!.reduce((a, b) => a + b) / moodsByDay[day]!.length,
+      ),
+  ];
+}

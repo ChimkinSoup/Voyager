@@ -33,6 +33,7 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
+import 'package:voyager/features/analytics/mood_trend_card.dart';
 import 'package:voyager/features/analytics/sparkline_touch.dart';
 import 'package:voyager/features/analytics/stat_number_format.dart';
 import 'package:voyager/features/calendar/calendar_keyboard_shortcuts.dart';
@@ -217,6 +218,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 workedOutToday: workedOutToday,
               ),
               const SizedBox(height: 12),
+              const MoodTrendCard(),
               // ── Toolbar + tracker grid ────────────────────────────────
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4201,6 +4203,25 @@ class _DetailStatisticsSection extends ConsumerWidget {
     final rows = <Widget>[];
     ({int longest, int current}) streak;
 
+    // The virtual Word Count tracker has a value on every day since the first
+    // entry (0 on silent days — see [wordCountTrackerValues]), so a value
+    // count, streaks and a lowest say nothing; average and highest are taken
+    // over the days that have words.
+    if (tracker.id == kWordCountTrackerId) {
+      final days = values
+          .map((v) => v.intValue ?? 0)
+          .where((n) => n > 0)
+          .toList();
+      if (days.isEmpty) return const SizedBox.shrink();
+      final average = days.reduce((a, b) => a + b) / days.length;
+      final highest = days.reduce((a, b) => a > b ? a : b);
+      rows.addAll([
+        _row(context, 'Average', average.toStringAsFixed(1)),
+        _row(context, 'Highest', compactNumberLabel(highest)),
+      ]);
+      return _section(theme, rows);
+    }
+
     switch (tracker.type) {
       case TrackerType.integer:
         rows.add(
@@ -4270,6 +4291,10 @@ class _DetailStatisticsSection extends ConsumerWidget {
     rows.add(_row(context, 'Current streak', streakLabel(streak.current)));
     rows.add(_row(context, 'Longest streak', streakLabel(streak.longest)));
 
+    return _section(theme, rows);
+  }
+
+  Widget _section(ThemeData theme, List<Widget> rows) {
     return Padding(
       padding: const EdgeInsets.only(top: 20),
       child: Column(

@@ -50,4 +50,12 @@ void main() {
     expect(lit, isNot(contains('10')));
     expect(lit, isNot(contains('15')));
   });
+
+  testWidgets('any minute can be selected, not just multiples of five', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(DateTime(2026, 1, 1, 10, 7)));
+    await tester.pumpAndSettle();
+    expect(_lit(tester), containsAll(<String>['10', '07', 'AM']));
+  });
 }

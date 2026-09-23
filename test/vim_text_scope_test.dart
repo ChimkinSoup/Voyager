@@ -414,6 +414,60 @@ void main() {
     expect(controller.text, 'aoutsidelpha');
   });
 
+  Future<void> pressCtrl(WidgetTester tester, LogicalKeyboardKey key) async {
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(key);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.idle();
+    await tester.pump();
+  }
+
+  // Ctrl+A used to fall through to Flutter's select-all, leaving the session
+  // in Normal under a full highlight — so a paste spliced in after the first
+  // character instead of replacing the text.
+  testWidgets('<C-a> then <C-v> replaces the whole text', (tester) async {
+    await pumpField(
+      tester,
+      vimEnabled: true,
+      text: 'def f():\n    return 1\n',
+      multiline: true,
+    );
+    await press(tester, LogicalKeyboardKey.escape);
+
+    await pressCtrl(tester, LogicalKeyboardKey.keyA);
+    await pressCtrl(tester, LogicalKeyboardKey.keyV);
+
+    expect(controller.text, 'outside');
+  });
+
+  testWidgets('<C-a> then <C-v> replaces a single-line field', (tester) async {
+    await pumpField(tester, vimEnabled: true, text: 'alpha beta');
+    await press(tester, LogicalKeyboardKey.escape);
+
+    await pressCtrl(tester, LogicalKeyboardKey.keyA);
+    await pressCtrl(tester, LogicalKeyboardKey.keyV);
+
+    expect(controller.text, 'outside');
+  });
+
+  testWidgets('<C-a> selects everything for y and d', (tester) async {
+    await pumpField(
+      tester,
+      vimEnabled: true,
+      text: 'one\ntwo\nthree',
+      multiline: true,
+    );
+    await press(tester, LogicalKeyboardKey.escape);
+
+    await pressCtrl(tester, LogicalKeyboardKey.keyA);
+    await typeCommand(tester, 'y');
+    expect(VimRegister.text, 'one\ntwo\nthree\n');
+
+    await pressCtrl(tester, LogicalKeyboardKey.keyA);
+    await typeCommand(tester, 'd');
+    expect(controller.text, '');
+  });
+
   // `<C-d>` is a motion, so it is the one chord that does *not* abort on sight:
   // it may complete a pending operator, and [_moveVertically] clears whatever
   // else was half-typed on its way out.

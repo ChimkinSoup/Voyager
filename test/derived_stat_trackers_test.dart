@@ -162,4 +162,44 @@ void main() {
       expect(byDay[DateTime(2026, 7, 2)], 1);
     });
   });
+
+  group('recentMoodDays', () {
+    JournalEntry moodEntry(
+      String id,
+      DateTime entryDate,
+      int? mood, {
+      String journalId = 'j1',
+    }) => _entry(id, entryDate).copyWith(mood: mood, journalId: journalId);
+
+    test('averages each day, skipping days and journals without a mood', () {
+      final days = recentMoodDays(
+        [
+          moodEntry('a', DateTime(2026, 7, 1, 9), 4),
+          moodEntry('b', DateTime(2026, 7, 1, 21), 7),
+          moodEntry('c', DateTime(2026, 7, 3), 8),
+          moodEntry('d', DateTime(2026, 7, 2), null),
+          moodEntry('e', DateTime(2026, 7, 4), 1, journalId: 'hidden'),
+        ],
+        moodJournalIds: {'j1'},
+      );
+      expect(days, [
+        (day: DateTime(2026, 7, 1), mood: 5.5),
+        (day: DateTime(2026, 7, 3), mood: 8.0),
+      ]);
+    });
+
+    test('keeps only the most recent kMoodChartDays recorded days', () {
+      final days = recentMoodDays(
+        [
+          for (var i = 0; i < kMoodChartDays + 5; i++)
+            // Every other day, so the window spans more calendar days.
+            moodEntry('$i', DateTime(2026, 1, 1 + i * 2), 5),
+        ],
+        moodJournalIds: {'j1'},
+      );
+      expect(days, hasLength(kMoodChartDays));
+      expect(days.first.day, DateTime(2026, 1, 11));
+      expect(days.last.day, DateTime(2026, 1, 1 + (kMoodChartDays + 4) * 2));
+    });
+  });
 }

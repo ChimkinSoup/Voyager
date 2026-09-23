@@ -405,7 +405,6 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
                   opacity: _activeIsStart ? 1.0 : 0.25,
                   child: VoyagerTimePickerSpinner(
                     time: _startDt,
-                    minutesInterval: 5,
                     isActive: _activeIsStart,
                     normalTextStyle: _activeIsStart
                         ? activeNormalTextStyle
@@ -436,7 +435,6 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
                   opacity: !_activeIsStart ? 1.0 : 0.25,
                   child: VoyagerTimePickerSpinner(
                     time: _endDt,
-                    minutesInterval: 5,
                     isActive: !_activeIsStart,
                     normalTextStyle: !_activeIsStart
                         ? activeNormalTextStyle
@@ -751,7 +749,6 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
               children: [
                 VoyagerTimePickerSpinner(
                   time: _timeDt,
-                  minutesInterval: 5,
                   isActive: true,
                   normalTextStyle: activeNormalTextStyle,
                   highlightedTextStyle: activeHighlightTextStyle,

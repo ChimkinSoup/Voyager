@@ -582,38 +582,43 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          Row(
-            children: [
-              if (_dreamScope) ...[
-                _DreamScopeChip(
-                  accentColor: accentColor,
-                  onRemove: _exitDreamScope,
-                ),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                child: TagHighlightedTextField(
-                  controller: _queryController,
-                  focusNode: _queryFocusNode,
-                  // Completion follows the scope: the field filters journal
-                  // entries (see SearchService.searchEntries) or dreams (see
-                  // filterDreamEntries), and each has its own tag pool.
-                  tagScope: _dreamScope ? TagScope.dream : TagScope.journal,
-                  onKeyEvent: _handleQueryKey,
-                  cursorColor: accentColor,
-                  hintText: _dreamScope
-                      ? 'Search dreams or #tag'
-                      : 'Search keywords or #tag',
-                  onChanged: _onQueryChanged,
-                  decoration: const InputDecoration(
-                    filled: false,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
+          // The chip takes its height from the field beside it rather than
+          // from its own contents, so the two line up top and bottom.
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_dreamScope) ...[
+                  _DreamScopeChip(
+                    accentColor: accentColor,
+                    onRemove: _exitDreamScope,
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: TagHighlightedTextField(
+                    controller: _queryController,
+                    focusNode: _queryFocusNode,
+                    // Completion follows the scope: the field filters journal
+                    // entries (see SearchService.searchEntries) or dreams (see
+                    // filterDreamEntries), and each has its own tag pool.
+                    tagScope: _dreamScope ? TagScope.dream : TagScope.journal,
+                    onKeyEvent: _handleQueryKey,
+                    cursorColor: accentColor,
+                    hintText: _dreamScope
+                        ? 'Search dreams or #tag'
+                        : 'Search keywords or #tag',
+                    onChanged: _onQueryChanged,
+                    decoration: const InputDecoration(
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           Expanded(

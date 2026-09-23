@@ -628,7 +628,7 @@ class _CashFlowChartState extends State<_CashFlowChart> {
               Positioned.fill(
                 child: IgnorePointer(
                   child: CustomSingleChildLayout(
-                    delegate: _ChartBubbleLayout(
+                    delegate: ChartBubbleLayout(
                       anchor: Offset(
                         _leftReserved + rodCentre,
                         maxY == 0
@@ -1352,7 +1352,7 @@ class _BreakdownPieState extends State<_BreakdownPie> {
                       ? 0
                       : ((slices[touched].amountCents / total) * 100).round();
                   return CustomSingleChildLayout(
-                    delegate: _ChartBubbleLayout(
+                    delegate: ChartBubbleLayout(
                       anchor: centre + _arcMidpoint(touched),
                     ),
                     child: ChartHoverBubble(
@@ -1604,28 +1604,21 @@ class _NetWorthChartState extends State<_NetWorthChart> {
         FlSpot(i.toDouble(), series[i].totalCents / 100),
     ];
     final values = spots.map((s) => s.y).toList();
-    var minValue = values.reduce((a, b) => a < b ? a : b);
-    var maxValue = values.reduce((a, b) => a > b ? a : b);
-    // The lowest month the series actually contains, kept before the flat-
-    // series nudge below invents a range around it. This is where the hover
-    // indicator line stops — see `getTouchLineStart`.
-    final floor = minValue;
-    if (minValue == maxValue) {
-      minValue -= 1;
-      maxValue += 1;
-    }
+    // The lowest month the series actually contains. Together with zero, this
+    // is where the hover indicator line stops — see `getTouchLineStart`.
+    final floor = values.reduce((a, b) => a < b ? a : b);
+    // The range always takes in zero, the wealth floor readers expect, so a
+    // change reads against the whole net worth rather than filling the plot
+    // from its lowest month.
+    final minValue = math.min(0.0, floor);
+    var maxValue = math.max(0.0, values.reduce((a, b) => a > b ? a : b));
+    if (minValue == maxValue) maxValue = 1;
     final pad = (maxValue - minValue) * 0.15;
-    var minY = minValue - pad;
-    var maxY = maxValue + pad;
+    final minY = minValue < 0 ? minValue - pad : 0.0;
+    final maxY = maxValue > 0 ? maxValue + pad : 0.0;
 
-    // Zero is the wealth floor readers expect. Show it whenever the series
-    // touches or dips below it, and stretch the plot so an all-negative
-    // series still has room to draw that baseline above the curve.
+    // Draw the zero baseline whenever the series touches or dips below it.
     final showZeroLine = floor <= 0;
-    if (showZeroLine) {
-      if (maxY < 0) maxY = 0;
-      if (minY > 0) minY = 0;
-    }
 
     final touched =
         _touchedIndex != null &&
@@ -1652,13 +1645,13 @@ class _NetWorthChartState extends State<_NetWorthChart> {
           touchSpotThreshold: 10000,
           touchCallback: _handleTouch,
           // The indicator line hangs from the hovered point down to this y.
-          // fl_chart's default is the bottom of the *plot*, which sits a
-          // 15%-of-range pad below the lowest month in the series — so the
-          // lowest point on the curve, the one most likely to be $0, still
-          // trailed a stub of line below itself with nothing under it to
-          // point at. Ending on the series' own floor makes that stub exactly
-          // zero-length while every higher point keeps a line to read down.
-          getTouchLineStart: (_, _) => floor,
+          // fl_chart's default is the bottom of the *plot*, which for a series
+          // below zero sits a 15%-of-range pad under its lowest month — so
+          // that point trailed a stub of line below itself with nothing under
+          // it to point at. Ending on zero, or on the series' own floor when
+          // it dips lower, makes that stub exactly zero-length while every
+          // higher point keeps a line to read down.
+          getTouchLineStart: (_, _) => math.min(floor, 0),
         ),
         extraLinesData: ExtraLinesData(
           horizontalLines: [
@@ -1758,7 +1751,7 @@ class _NetWorthChartState extends State<_NetWorthChart> {
               Positioned.fill(
                 child: IgnorePointer(
                   child: CustomSingleChildLayout(
-                    delegate: _ChartBubbleLayout(
+                    delegate: ChartBubbleLayout(
                       anchor: Offset(
                         spots[touched!].x / spanX * plotWidth,
                         spanY == 0
@@ -1787,44 +1780,6 @@ class _NetWorthChartState extends State<_NetWorthChart> {
       },
     );
   }
-}
-
-/// Centres a [ChartHoverBubble] on the datapoint it describes, sitting it just
-/// above the point.
-///
-/// A layout delegate rather than arithmetic at the call site because both
-/// offsets need the bubble's real size, and the bubble is sized to whatever
-/// date and amount it happens to be showing.
-///
-/// Horizontally the bubble is clamped into the plot. Centred on a point at
-/// either end it overhangs by half its width, and the net-worth bubble's
-/// ledger/assets line made that wide enough to run past the window edge. The
-/// bubble slides off-centre there instead; it still sits directly above the
-/// point, just not centred on it.
-class _ChartBubbleLayout extends SingleChildLayoutDelegate {
-  const _ChartBubbleLayout({required this.anchor});
-
-  /// The datapoint, in the enclosing [Stack]'s coordinates.
-  final Offset anchor;
-
-  static const double _gap = 8;
-
-  @override
-  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
-      constraints.loosen();
-
-  @override
-  Offset getPositionForChild(Size size, Size childSize) => Offset(
-    (anchor.dx - childSize.width / 2).clamp(
-      0.0,
-      math.max(0.0, size.width - childSize.width),
-    ),
-    anchor.dy - childSize.height - _gap,
-  );
-
-  @override
-  bool shouldRelayout(_ChartBubbleLayout oldDelegate) =>
-      anchor != oldDelegate.anchor;
 }
 
 class _AssetRow extends ConsumerStatefulWidget {

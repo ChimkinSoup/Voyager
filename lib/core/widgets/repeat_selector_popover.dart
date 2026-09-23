@@ -4,6 +4,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/domain/models/recurrence_rule.dart';
 import 'package:voyager/domain/services/recurrence_engine.dart';
 
@@ -143,7 +144,7 @@ class _RepeatSelectorPopoverState extends State<RepeatSelectorPopover> {
             onTap: () => _commit(RecurrenceRule(frequency: frequency)),
           ),
         Divider(
-          height: 9,
+          height: 1,
           thickness: 1,
           color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
         ),
@@ -166,151 +167,163 @@ class _RepeatSelectorPopoverState extends State<RepeatSelectorPopover> {
     final theme = Theme.of(context);
     final isWeekly = _customFrequency == EventRecurrence.weekly;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            IconButton(
-              onPressed: () => setState(() => _customMode = false),
-              icon: const Icon(PhosphorIconsRegular.caretLeft, size: 16),
-              tooltip: 'Back',
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-            ),
-            Expanded(
-              child: Text(
-                'Custom repeat',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
+    // The preset page is a full-bleed list, so the popover carries no padding
+    // of its own; the custom editor is a form and has to inset itself clear of
+    // the clipped corners.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              IconButton(
+                onPressed: () => setState(() => _customMode = false),
+                icon: const Icon(PhosphorIconsRegular.caretLeft, size: 16),
+                tooltip: 'Back',
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints.tightFor(
+                  width: 28,
+                  height: 28,
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Text('Every', style: theme.textTheme.labelMedium),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 56,
-              height: 34,
-              child: TextField(
-                controller: _intervalController,
-                focusNode: _intervalFocusNode,
-                textAlign: TextAlign.center,
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(3),
-                ],
-                style: theme.textTheme.labelLarge,
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(
-                      VoyagerTheme.fieldRadius,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(
-                      VoyagerTheme.fieldRadius,
-                    ),
-                    borderSide: BorderSide(color: _accent, width: 1.6),
+              Expanded(
+                child: Text(
+                  'Custom repeat',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                // Empty is a transient state while typing, not a value: leave
-                // [_customInterval] alone until a real number lands so the unit
-                // label does not flicker to "1" mid-edit.
-                onChanged: (value) {
-                  final parsed = int.tryParse(value);
-                  if (parsed != null && parsed >= 1) {
-                    setState(() => _customInterval = parsed);
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Text('Every', style: theme.textTheme.labelMedium),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 56,
+                height: 34,
+                child: TextField(
+                  controller: _intervalController,
+                  focusNode: _intervalFocusNode,
+                  textAlign: TextAlign.center,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(3),
+                  ],
+                  style: theme.textTheme.labelLarge,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(
+                        VoyagerTheme.fieldRadius,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(
+                        VoyagerTheme.fieldRadius,
+                      ),
+                      borderSide: BorderSide(color: _accent, width: 1.6),
+                    ),
+                  ),
+                  // Empty is a transient state while typing, not a value: leave
+                  // [_customInterval] alone until a real number lands so the unit
+                  // label does not flicker to "1" mid-edit.
+                  onChanged: (value) {
+                    final parsed = int.tryParse(value);
+                    if (parsed != null && parsed >= 1) {
+                      setState(() => _customInterval = parsed);
+                    }
+                  },
+                  onSubmitted: (_) => _setInterval(_customInterval),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Loose, not [Expanded]: a tight width makes the dropdown's own
+              // row space-between, which strands the caret at the far edge.
+              Flexible(
+                child: _UnitDropdown(
+                  value: _customFrequency,
+                  interval: _customInterval,
+                  accent: _accent,
+                  onChanged: (value) =>
+                      setState(() => _customFrequency = value),
+                ),
+              ),
+            ],
+          ),
+          if (isWeekly) ...[
+            const SizedBox(height: 12),
+            Text('On', style: theme.textTheme.labelMedium),
+            const SizedBox(height: 6),
+            _WeekdayChips(
+              selected: effectiveWeekdays(
+                RecurrenceRule(
+                  frequency: EventRecurrence.weekly,
+                  weekdays: _customWeekdays,
+                ),
+                widget.anchor,
+              ),
+              accent: _accent,
+              onToggle: (weekday) {
+                setState(() {
+                  final next = {
+                    ...effectiveWeekdays(
+                      RecurrenceRule(
+                        frequency: EventRecurrence.weekly,
+                        weekdays: _customWeekdays,
+                      ),
+                      widget.anchor,
+                    ),
+                  };
+                  if (next.contains(weekday)) {
+                    next.remove(weekday);
+                  } else {
+                    next.add(weekday);
                   }
-                },
-                onSubmitted: (_) => _setInterval(_customInterval),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _UnitDropdown(
-                value: _customFrequency,
-                interval: _customInterval,
-                accent: _accent,
-                onChanged: (value) => setState(() => _customFrequency = value),
-              ),
+                  // Never let the set empty out: an empty weekly rule silently
+                  // falls back to the anchor weekday, so the chip the user just
+                  // cleared would light straight back up.
+                  if (next.isNotEmpty) _customWeekdays = next;
+                });
+              },
             ),
           ],
-        ),
-        if (isWeekly) ...[
           const SizedBox(height: 12),
-          Text('On', style: theme.textTheme.labelMedium),
-          const SizedBox(height: 6),
-          _WeekdayChips(
-            selected: effectiveWeekdays(
+          Text(
+            recurrenceRuleLabel(
               RecurrenceRule(
-                frequency: EventRecurrence.weekly,
-                weekdays: _customWeekdays,
+                frequency: _customFrequency,
+                interval: _customInterval < 1 ? 1 : _customInterval,
+                weekdays: isWeekly ? _customWeekdays : const {},
               ),
-              widget.anchor,
+              anchor: widget.anchor,
             ),
-            accent: _accent,
-            onToggle: (weekday) {
-              setState(() {
-                final next = {
-                  ...effectiveWeekdays(
-                    RecurrenceRule(
-                      frequency: EventRecurrence.weekly,
-                      weekdays: _customWeekdays,
-                    ),
-                    widget.anchor,
-                  ),
-                };
-                if (next.contains(weekday)) {
-                  next.remove(weekday);
-                } else {
-                  next.add(weekday);
-                }
-                // Never let the set empty out: an empty weekly rule silently
-                // falls back to the anchor weekday, so the chip the user just
-                // cleared would light straight back up.
-                if (next.isNotEmpty) _customWeekdays = next;
-              });
-            },
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: _accent,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              GlassButton(
+                onPressed: () => setState(() => _customMode = false),
+                label: 'Cancel',
+                dense: true,
+              ),
+              const Spacer(),
+              GlassButton(onPressed: _saveCustom, label: 'Done', dense: true),
+            ],
           ),
         ],
-        const SizedBox(height: 12),
-        Text(
-          recurrenceRuleLabel(
-            RecurrenceRule(
-              frequency: _customFrequency,
-              interval: _customInterval < 1 ? 1 : _customInterval,
-              weekdays: isWeekly ? _customWeekdays : const {},
-            ),
-            anchor: widget.anchor,
-          ),
-          style: theme.textTheme.labelMedium?.copyWith(
-            color: _accent,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            GlassButton(
-              onPressed: () => setState(() => _customMode = false),
-              label: 'Cancel',
-              dense: true,
-            ),
-            const Spacer(),
-            GlassButton(onPressed: _saveCustom, label: 'Done', dense: true),
-          ],
-        ),
-      ],
+      ),
     );
   }
 }
@@ -400,23 +413,67 @@ class _UnitDropdown extends StatelessWidget {
     };
   }
 
+  /// Opens the unit list as a Voyager menu rather than a Material dropdown:
+  /// the theme styles [showVoyagerMenu] routes, so a plain [DropdownButton]
+  /// drops its own unthemed card over the popover.
+  Future<void> _openMenu(BuildContext context) async {
+    final button = context.findRenderObject() as RenderBox?;
+    if (button == null) return;
+    final overlay =
+        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+    final topLeft = button.localToGlobal(Offset.zero, ancestor: overlay);
+    final buttonRect = topLeft & button.size;
+
+    final picked = await showVoyagerMenu<EventRecurrence>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(buttonRect.left, buttonRect.bottom, buttonRect.width, 0),
+        Offset.zero & overlay.size,
+      ),
+      // Narrower than the menu default, which is wider than the popover it
+      // drops inside; wide enough for "months" and its checkmark.
+      constraints: const BoxConstraints(minWidth: 128, maxWidth: 128),
+      accentColor: accent,
+      items: voyagerSelectMenuEntries<EventRecurrence>(
+        context: context,
+        items: [for (final unit in _units) (value: unit, label: _label(unit))],
+        selected: value,
+        // The menu's own default is a page-sized row on [bodyLarge]; inside
+        // this popover everything, the trigger included, is a step down.
+        height: 34,
+        textStyle: Theme.of(context).textTheme.labelLarge,
+      ),
+    );
+    if (picked != null) onChanged(picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return DropdownButtonHideUnderline(
-      child: DropdownButton<EventRecurrence>(
-        value: value,
-        isDense: true,
-        isExpanded: true,
-        borderRadius: BorderRadius.circular(10),
-        style: theme.textTheme.labelLarge,
-        onChanged: (v) {
-          if (v != null) onChanged(v);
-        },
-        items: [
-          for (final unit in _units)
-            DropdownMenuItem(value: unit, child: Text(_label(unit))),
-        ],
+    return InkWell(
+      onTap: () => _openMenu(context),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                _label(value),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelLarge,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              PhosphorIconsRegular.caretDown,
+              size: 16,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -267,10 +267,16 @@ List<PopupMenuEntry<T>> voyagerPopupMenuEntries<T>(
 }
 
 /// Select-style menu entries with a checkmark on the active value.
+///
+/// [height] and [textStyle] override the menu default for a menu that has to
+/// sit inside something smaller than a page — a picker popover, say, whose own
+/// type is a step down from the menu's.
 List<PopupMenuEntry<T>> voyagerSelectMenuEntries<T>({
   required BuildContext context,
   required List<({T value, String label})> items,
   required T selected,
+  double height = kMinInteractiveDimension,
+  TextStyle? textStyle,
 }) {
   final checkColor = Theme.of(context).colorScheme.primary;
   return [
@@ -278,10 +284,15 @@ List<PopupMenuEntry<T>> voyagerSelectMenuEntries<T>({
       VoyagerPopupMenuItem<T>(
         value: items[i].value,
         position: VoyagerMenuTheme.positionFor(i, items.length),
+        height: height,
         child: Row(
           children: [
             Expanded(
-              child: Text(items[i].label, overflow: TextOverflow.ellipsis),
+              child: Text(
+                items[i].label,
+                overflow: TextOverflow.ellipsis,
+                style: textStyle,
+              ),
             ),
             if (items[i].value == selected) ...[
               const SizedBox(width: 8),

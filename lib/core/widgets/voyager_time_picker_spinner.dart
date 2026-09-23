@@ -10,7 +10,7 @@ class VoyagerTimePickerSpinner extends StatefulWidget {
     required this.time,
     required this.onTimeChange,
     this.onInteraction,
-    this.minutesInterval = 5,
+    this.minutesInterval = 1,
     this.itemHeight = 40.0,
     this.spacing = 20.0,
     this.isActive = true,

@@ -840,8 +840,11 @@ class _SparklinePainter extends CustomPainter {
   /// Where point [i] of [values] lands in a plot of [size]. Shared with the
   /// hover bubble so it anchors to exactly the point that is drawn.
   static Offset pointAt(List<double> values, int i, Size size) {
-    final min = values.reduce(math.min);
+    final lowest = values.reduce(math.min);
     final max = values.reduce(math.max);
+    // The floor sits a little below the lightest set, so the lowest point
+    // doesn't sit on the baseline and small changes read less steep.
+    final min = lowest - (max - lowest) * 0.15;
     // A perfectly flat series has zero range; pad it so the line lands
     // mid-height instead of dividing by zero.
     final range = (max - min).abs() < 0.001 ? 1.0 : max - min;

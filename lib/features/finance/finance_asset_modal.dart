@@ -17,6 +17,7 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/services/finance_analytics.dart';
+import 'package:voyager/features/finance/finance_asset_value_chart.dart';
 import 'package:voyager/features/finance/finance_contribution_room_modal.dart';
 import 'package:voyager/features/finance/finance_room_bar.dart';
 import 'package:voyager/features/finance/finance_room_history.dart';
@@ -321,6 +322,10 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
                 ],
               ),
               const SizedBox(height: 12),
+              if (existing != null) ...[
+                AssetValueChart(assetId: existing.id, color: accent),
+                const SizedBox(height: 16),
+              ],
               VoyagerTextField(
                 controller: _nameController,
                 autofocus: existing == null,

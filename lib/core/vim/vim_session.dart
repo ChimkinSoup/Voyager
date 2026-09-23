@@ -590,6 +590,19 @@ class VimSession {
     _clearPending();
   }
 
+  /// `<C-a>`: select the whole text as linewise Visual — `ggVG`. Left to
+  /// Flutter, select-all highlighted everything while the session stayed in
+  /// Normal, so a paste or `d` after it acted at the caret instead of on the
+  /// highlight.
+  void _selectAll() {
+    if (_text.isEmpty) return;
+    _setMode(VimMode.visualLine);
+    _visualAnchor = 0;
+    _visualCursor = _lineLastChar(_text.length);
+    _desiredColumn = _visualLineEndColumn;
+    _applyValue(textController.value.copyWith(selection: _visualSelection()));
+  }
+
   void _leaveVisual({int? caret}) {
     final target = caret ?? _visualCursor;
     _setMode(VimMode.normal);
@@ -781,6 +794,10 @@ class VimSession {
     }
     if (key == LogicalKeyboardKey.keyV) {
       _pasteFromSystemClipboard();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.keyA) {
+      _selectAll();
       return KeyEventResult.handled;
     }
     // Half-page scrolls. Fields here are short enough that a fixed jump reads

@@ -196,7 +196,7 @@ _TextEdit? _applyEnterContinuation({
   if (text.length != previousText.length + 1) return null;
 
   final newlineOffset = selection.baseOffset - 1;
-  if (newlineOffset < 0 ||
+  if (newlineOffset <= 0 ||
       newlineOffset >= text.length ||
       text[newlineOffset] != '\n') {
     return null;

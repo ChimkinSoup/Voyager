@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 
@@ -174,4 +176,42 @@ class ChartHoverBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Centres a [ChartHoverBubble] on the datapoint it describes, sitting it just
+/// above the point.
+///
+/// A layout delegate rather than arithmetic at the call site because both
+/// offsets need the bubble's real size, and the bubble is sized to whatever
+/// date and amount it happens to be showing.
+///
+/// Horizontally the bubble is clamped into the plot. Centred on a point at
+/// either end it overhangs by half its width, and the net-worth bubble's
+/// ledger/assets line made that wide enough to run past the window edge. The
+/// bubble slides off-centre there instead; it still sits directly above the
+/// point, just not centred on it.
+class ChartBubbleLayout extends SingleChildLayoutDelegate {
+  const ChartBubbleLayout({required this.anchor});
+
+  /// The datapoint, in the enclosing [Stack]'s coordinates.
+  final Offset anchor;
+
+  static const double _gap = 8;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      constraints.loosen();
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) => Offset(
+    (anchor.dx - childSize.width / 2).clamp(
+      0.0,
+      math.max(0.0, size.width - childSize.width),
+    ),
+    anchor.dy - childSize.height - _gap,
+  );
+
+  @override
+  bool shouldRelayout(ChartBubbleLayout oldDelegate) =>
+      anchor != oldDelegate.anchor;
 }

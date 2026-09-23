@@ -369,7 +369,6 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
                                   },
                                   child: VoyagerTimePickerSpinner(
                                     time: _currentDateTime,
-                                    minutesInterval: 5,
                                     isActive: _timeSelected,
                                     normalTextStyle: _timeSelected
                                         ? activeNormalTextStyle

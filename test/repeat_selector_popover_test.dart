@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/widgets/repeat_selector_popover.dart';
+import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/domain/models/recurrence_rule.dart';
 
 final _anchor = DateTime(2026, 3, 2); // a Monday
@@ -127,8 +128,13 @@ void main() {
     final rule = await _choose(tester, (t) async {
       await t.tap(find.text('Custom…'));
       await t.pumpAndSettle();
-      await t.tap(find.byType(DropdownButton<EventRecurrence>));
+      // The unit control opens the app's own menu, not a Material dropdown.
+      await t.tap(find.text('day'));
       await t.pumpAndSettle();
+      expect(
+        find.byType(VoyagerPopupMenuItem<EventRecurrence>),
+        findsNWidgets(4),
+      );
       await t.tap(find.text('week').last);
       await t.pumpAndSettle();
       // Monday is preselected from the anchor; add Wednesday and Friday.

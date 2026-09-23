@@ -55,6 +55,14 @@ void main() {
       expect(c.text, 'just text\n');
     });
 
+    test('Enter at the very start of the document does not throw', () {
+      final controller = TextEditingController(text: '\n- foo')
+        ..selection = const TextSelection.collapsed(offset: 1);
+      applyListEditing(controller: controller, previousText: '- foo');
+      expect(controller.text, '\n- foo');
+      expect(controller.selection, const TextSelection.collapsed(offset: 1));
+    });
+
     test('does not trigger on non-newline typing', () {
       final c = _typeAtEnd('- foo', 'x');
       expect(c.text, '- foox');
