@@ -192,6 +192,29 @@ class _MediaPasteScopeState extends ConsumerState<MediaPasteScope> {
     );
   }
 
+  /// The image half of a paste a field has kept Ctrl+V for — a Vim field in
+  /// Normal mode, which pastes the text half itself. Attaches the clipboard's
+  /// image wherever [_handlePaste] would have from the same field.
+  Future<void> _pasteImage() async {
+    if (_busy || widget.documentId == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final offer = await widget.clipboard.peek();
+    if (!mounted) return;
+    switch (routeMediaPaste(
+      hasImage: offer.hasImage,
+      hasText: offer.hasText,
+      intoTextField: true,
+      fieldTakesBoth: widget.fieldTakesBoth,
+      requireFocusedField: widget.requireFocusedField,
+    )) {
+      case MediaPasteRoute.attach || MediaPasteRoute.both:
+        await _attachFromClipboard(messenger, overlay);
+      case MediaPasteRoute.text || MediaPasteRoute.ignore:
+        return;
+    }
+  }
+
   /// Reads the clipboard's image and attaches it to this scope's owner.
   Future<void> _attachFromClipboard(
     ScaffoldMessengerState messenger,
@@ -222,6 +245,7 @@ class _MediaPasteScopeState extends ConsumerState<MediaPasteScope> {
   @override
   Widget build(BuildContext context) {
     return MediaPasteOwnerScope(
+      pasteImage: _pasteImage,
       child: Shortcuts(
         shortcuts: const {
           SingleActivator(LogicalKeyboardKey.keyV, control: true):
@@ -258,12 +282,22 @@ class _MediaPasteScopeState extends ConsumerState<MediaPasteScope> {
 /// the key and a pasted screenshot would never reach the gallery. Inside this
 /// marker the field leaves the key alone and the scope routes the text half
 /// through [pasteProse] instead — same behaviour, one owner.
+///
+/// The exception is a Vim field outside Insert mode, which keeps Ctrl+V for
+/// its own text paste and hands the image half back through [pasteImage].
 class MediaPasteOwnerScope extends InheritedWidget {
-  const MediaPasteOwnerScope({super.key, required super.child});
+  const MediaPasteOwnerScope({
+    super.key,
+    required this.pasteImage,
+    required super.child,
+  });
 
-  static bool of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<MediaPasteOwnerScope>() !=
-      null;
+  /// Attaches the clipboard's image, if any, to the enclosing scope's gallery
+  /// — by the same rules as a paste the scope handles itself.
+  final Future<void> Function() pasteImage;
+
+  static MediaPasteOwnerScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<MediaPasteOwnerScope>();
 
   @override
   bool updateShouldNotify(MediaPasteOwnerScope oldWidget) => false;

@@ -319,9 +319,11 @@ class _VimTextScopeState extends State<VimTextScope> {
   /// inherited widget for the same reason [_snippetScope] is.
   AutocorrectScopeData _autocorrectScope = AutocorrectScopeData.disabled;
 
-  /// Whether a [MediaPasteScope] above this field already owns Ctrl+V — see
-  /// [MediaPasteOwnerScope].
-  bool _mediaOwnsPaste = false;
+  /// The [MediaPasteScope] above this field, which already owns Ctrl+V — see
+  /// [MediaPasteOwnerScope]. Null where there is none.
+  MediaPasteOwnerScope? _mediaPaste;
+
+  bool get _mediaOwnsPaste => _mediaPaste != null;
 
   /// Stands in for [VimSession.modeListenable] when Vim is off, so a field with
   /// only snippets running builds through the same [ValueListenableBuilder] as
@@ -405,7 +407,7 @@ class _VimTextScopeState extends State<VimTextScope> {
       _snippetScope = scope;
       _syncSnippetSession();
     }
-    _mediaOwnsPaste = MediaPasteOwnerScope.of(context);
+    _mediaPaste = MediaPasteOwnerScope.maybeOf(context);
     final autocorrect = AutocorrectEnabledScope.of(context);
     if (autocorrect != _autocorrectScope) {
       _autocorrectScope = autocorrect;
@@ -471,6 +473,9 @@ class _VimTextScopeState extends State<VimTextScope> {
               requireMatchingSelection: false,
             ) ??
             false,
+        // Looked up live: the enclosing scope is read in
+        // didChangeDependencies, which can change it under a live session.
+        pasteImage: () async => _mediaPaste?.pasteImage(),
       );
       session.modeListenable.addListener(_syncOverlay);
       session.searchListenable.addListener(_syncOverlay);

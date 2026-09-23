@@ -10,6 +10,8 @@ import 'package:voyager/core/media/media_clipboard.dart';
 import 'package:voyager/core/media/media_service.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/core/vim/vim_enabled_scope.dart';
+import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/data/services/media_file_store.dart';
@@ -176,19 +178,23 @@ void main() {
     });
 
     /// The text half of a paste goes through Flutter's own clipboard, which a
-    /// test has to answer for.
-    void mockSystemClipboard(String text) {
+    /// test has to answer for. Null [text] is a clipboard holding none.
+    void mockSystemClipboard(String? text) {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-            if (call.method == 'Clipboard.getData') return {'text': text};
+            if (call.method == 'Clipboard.getData' && text != null) {
+              return {'text': text};
+            }
             return null;
           });
     }
 
     Future<void> pumpScope(
       WidgetTester tester,
-      MediaClipboard clipboard,
-    ) async {
+      MediaClipboard clipboard, {
+      bool vim = false,
+      bool fieldTakesBoth = false,
+    }) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -198,12 +204,19 @@ void main() {
             ),
           ],
           child: MaterialApp(
-            home: Scaffold(
-              body: MediaPasteScope(
-                collection: FirestoreCollections.todoTasks,
-                documentId: 'task-1',
-                clipboard: clipboard,
-                child: TextField(controller: controller),
+            home: VimEnabledScope(
+              enabled: vim,
+              child: Scaffold(
+                body: MediaPasteScope(
+                  collection: FirestoreCollections.todoTasks,
+                  documentId: 'task-1',
+                  clipboard: clipboard,
+                  fieldTakesBoth: fieldTakesBoth,
+                  // The app's field, so a Vim session sits under the scope.
+                  child: vim
+                      ? LabeledTextField(label: 'Notes', controller: controller)
+                      : TextField(controller: controller),
+                ),
               ),
             ),
           ),
@@ -305,6 +318,64 @@ void main() {
 
       expect(controller.text, 'hello');
       expect(await referenceCount(), 0);
+    });
+
+    testWidgets('attaches an image-only paste from a Vim field in Normal', (
+      tester,
+    ) async {
+      mockSystemClipboard(null);
+      await pumpScope(tester, _FakeClipboard(image: pngOf(8, 8)), vim: true);
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+
+      await pressPaste(tester, until: () async => await referenceCount() == 1);
+
+      expect(await referenceCount(), 1);
+      expect(controller.text, isEmpty);
+    });
+
+    testWidgets('a text paste from a Vim field in Normal stays Vim\'s', (
+      tester,
+    ) async {
+      mockSystemClipboard('hello');
+      await pumpScope(
+        tester,
+        _FakeClipboard(text: 'hello', image: pngOf(8, 8)),
+        vim: true,
+      );
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+
+      await pressPaste(tester, until: () async => controller.text == 'hello');
+
+      // Pasted once, by Vim, and the image left alone as it is in Insert.
+      expect(controller.text, 'hello');
+      expect(await referenceCount(), 0);
+    });
+
+    testWidgets('an image-capable Vim field in Normal takes both halves', (
+      tester,
+    ) async {
+      mockSystemClipboard('hello');
+      await pumpScope(
+        tester,
+        _FakeClipboard(text: 'hello', image: pngOf(8, 8)),
+        vim: true,
+        fieldTakesBoth: true,
+      );
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+
+      await pressPaste(tester, until: () async => await referenceCount() == 1);
+
+      expect(controller.text, 'hello');
+      expect(await referenceCount(), 1);
     });
 
     testWidgets('a text paste with nothing focused does nothing', (

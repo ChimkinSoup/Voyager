@@ -129,6 +129,7 @@ class VimSession {
     required this.isMultiline,
     this.isFieldFocused = _alwaysFocused,
     this.trySnippetUndo,
+    this.pasteImage,
     this.shiftWidth = kVimShiftWidth,
     this.smartIndent = false,
     UndoHistoryController? undoController,
@@ -171,6 +172,14 @@ class VimSession {
   /// undo path without holding a session that settings sync may recreate.
   /// Null in tests that do not care, and a no-op when snippets are off.
   final bool Function()? trySnippetUndo;
+
+  /// Hands the image half of a `<C-v>` to the gallery around the field, which
+  /// decides — as it does for Insert's paste — whether the image goes in.
+  ///
+  /// Wired live by `VimTextScope` to the enclosing `MediaPasteScope`, which
+  /// never sees Ctrl+V outside Insert because this session claims it. Null in
+  /// tests that do not care; a no-op where no gallery surrounds the field.
+  final Future<void> Function()? pasteImage;
 
   /// Spaces one `>>` / `<<` moves a line by.
   final int shiftWidth;
@@ -2077,12 +2086,16 @@ class VimSession {
       return;
     }
     final payload = data?.text;
-    if (payload == null || payload.isEmpty) return;
-    _paste(
-      before: false,
-      source: payload,
-      sourceLinewise: payload.endsWith('\n'),
-    );
+    if (payload != null && payload.isNotEmpty) {
+      _paste(
+        before: false,
+        source: payload,
+        sourceLinewise: payload.endsWith('\n'),
+      );
+    }
+    // After the text, as Insert's paste does it: the attach is asynchronous
+    // and the gallery repainting under the field can take the focus off it.
+    await pasteImage?.call();
   }
 
   // ==========================================================================
