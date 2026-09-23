@@ -490,8 +490,8 @@
     "semantic_hash": ""
   },
   "lib/core/widgets/time_selector_popovers.dart": {
-    "mtime": 1790037101.4085116,
-    "ast_hash": "768041ae978437aeef6896d5e0720fb4",
+    "mtime": 1790142013.3075922,
+    "ast_hash": "5354b5ad74ae12de940053b77036d8f7",
     "semantic_hash": ""
   },
   "lib/core/widgets/voyager_dropdown_button.dart": {
@@ -505,8 +505,8 @@
     "semantic_hash": ""
   },
   "lib/core/widgets/voyager_popup_menu_item.dart": {
-    "mtime": 1789972029.6582236,
-    "ast_hash": "5bab30a3fb19be74e8b47d49b5f74c1f",
+    "mtime": 1790099139.6732626,
+    "ast_hash": "5e3e3e11e7e1ec89c0f6d7192276e0f7",
     "semantic_hash": ""
   },
   "lib/core/widgets/voyager_text_field.dart": {
@@ -515,8 +515,8 @@
     "semantic_hash": ""
   },
   "lib/core/widgets/voyager_time_picker_spinner.dart": {
-    "mtime": 1789972029.6592238,
-    "ast_hash": "fb5c35f9c69fd977be801cd418e52eb0",
+    "mtime": 1790142013.2660491,
+    "ast_hash": "3c515f601f956b8b025c6b83924bc4d4",
     "semantic_hash": ""
   },
   "lib/core/widgets/weather_icon.dart": {
@@ -580,8 +580,8 @@
     "semantic_hash": "d1a6fb8c3a13f54b8bd2ed92e3e3abd6"
   },
   "lib/domain/models/analytics_models.dart": {
-    "mtime": 1789888234.6307964,
-    "ast_hash": "e65c04d0ce6f1c3538df0dc350000f2d",
+    "mtime": 1790055995.3086843,
+    "ast_hash": "fc31808706c8f04bd0d354ca700dd93f",
     "semantic_hash": ""
   },
   "lib/domain/models/calendar_models.dart": {
@@ -715,8 +715,8 @@
     "semantic_hash": ""
   },
   "lib/features/analytics/analytics_page.dart": {
-    "mtime": 1789970589.0294714,
-    "ast_hash": "ae5eaad008aa78b3229682c19d75d1f3",
+    "mtime": 1790055972.9616983,
+    "ast_hash": "bc6997a7085540ebd2460f74d35bb57d",
     "semantic_hash": ""
   },
   "lib/features/analytics/heatmap_calendar.dart": {
@@ -860,8 +860,8 @@
     "semantic_hash": "1b91afc64820d268533d5f411432fab4"
   },
   "lib/features/search/search_page.dart": {
-    "mtime": 1789970590.9383428,
-    "ast_hash": "1004e7b34740f907188228f9baf90259",
+    "mtime": 1790098277.0036838,
+    "ast_hash": "2de79f3ca295f2d240801c8cefdc0b4a",
     "semantic_hash": ""
   },
   "lib/features/settings/key_binding_dialog.dart": {
@@ -1365,8 +1365,8 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "lib/core/widgets/datetime_selector_popover.dart": {
-    "mtime": 1790037101.4079733,
-    "ast_hash": "3ce750c8eb8e9ae9d5fa88fdef350172",
+    "mtime": 1790142013.3246198,
+    "ast_hash": "899445ff0a5b57f6f73f313566132dce",
     "semantic_hash": ""
   },
   "lib/features/calendar/calendar_todo_panel.dart": {
@@ -1435,13 +1435,13 @@
     "semantic_hash": ""
   },
   "lib/features/finance/finance_analytics_view.dart": {
-    "mtime": 1789972029.6752238,
-    "ast_hash": "dbeb8ca91c4a9fef80ef0c231778943e",
+    "mtime": 1790145038.0927944,
+    "ast_hash": "e2dfb35b5eb3c22dc484e4ee5703e765",
     "semantic_hash": ""
   },
   "lib/features/finance/finance_asset_modal.dart": {
-    "mtime": 1789972029.6762238,
-    "ast_hash": "1effe1ce89efe2272600f3837175b856",
+    "mtime": 1790113259.1893666,
+    "ast_hash": "79a887733f552565308e3f978cf85790",
     "semantic_hash": ""
   },
   "lib/features/finance/finance_bill_radar.dart": {
@@ -1495,8 +1495,8 @@
     "semantic_hash": ""
   },
   "test/derived_stat_trackers_test.dart": {
-    "mtime": 1789888203.6875992,
-    "ast_hash": "f7d8e2d4b14a489a6bd3846a085429a0",
+    "mtime": 1790055990.2144015,
+    "ast_hash": "6b482fe468e59438976566fc4fca1ac4",
     "semantic_hash": ""
   },
   "test/finance_analytics_test.dart": {
@@ -1990,8 +1990,8 @@
     "semantic_hash": "257687a49a2f5dce1ff708bed36f0663"
   },
   "lib/core/text/list_text_editing.dart": {
-    "mtime": 1789972029.6364894,
-    "ast_hash": "4541a2fed43d2c5940b39c78ed5bb96b",
+    "mtime": 1790147889.830409,
+    "ast_hash": "3c4da74f3222fbcd060b04a46be1d7c3",
     "semantic_hash": ""
   },
   "lib/core/widgets/voyager_checkbox.dart": {
@@ -2025,8 +2025,8 @@
     "semantic_hash": ""
   },
   "test/list_text_editing_test.dart": {
-    "mtime": 1789972029.7206047,
-    "ast_hash": "f788f2b296e03740adedcf03cdd1cbe8",
+    "mtime": 1790147899.6688306,
+    "ast_hash": "b0579a4e533c6950681f7c3e1dbe877e",
     "semantic_hash": ""
   },
   "test/shell_navigation_rail_test.dart": {
@@ -2495,8 +2495,8 @@
     "semantic_hash": ""
   },
   "lib/features/workout/exercise_detail_view.dart": {
-    "mtime": 1789970579.7820408,
-    "ast_hash": "fc50fde94a73bea3a5e7343577ebba95",
+    "mtime": 1790145049.7852807,
+    "ast_hash": "343ceebec05b2b0daa7bca5e71a72776",
     "semantic_hash": ""
   },
   "lib/features/workout/workout_actions.dart": {
@@ -2645,8 +2645,8 @@
     "semantic_hash": "d0cbb589d2d23536aacb5eb9bea8d073"
   },
   "lib/core/vim/vim_session.dart": {
-    "mtime": 1789945437.9020412,
-    "ast_hash": "142468f9482fe7e85e1f216951c15ef5",
+    "mtime": 1790141814.4837418,
+    "ast_hash": "d0fc611676af5346f66d6a54225e7028",
     "semantic_hash": ""
   },
   "lib/core/vim/vim_text_ops.dart": {
@@ -2700,8 +2700,8 @@
     "semantic_hash": "f0327ed8c44dc622e749bbcec0740673"
   },
   "test/vim_text_scope_test.dart": {
-    "mtime": 1789972029.7639074,
-    "ast_hash": "c4bf2dc2cf7579be45ade79c8f8d156c",
+    "mtime": 1790141764.34858,
+    "ast_hash": "1e94a9135234a3dc64fa63e2dffc6b19",
     "semantic_hash": ""
   },
   "VIM.md": {
@@ -2970,8 +2970,8 @@
     "semantic_hash": ""
   },
   "lib/core/widgets/chart_hover_bubble.dart": {
-    "mtime": 1789157991.3877897,
-    "ast_hash": "413c1667066548740658d0548f3fe8f9",
+    "mtime": 1790113234.7605128,
+    "ast_hash": "4990f75f58e7df581c0aeb3b0854ee72",
     "semantic_hash": ""
   },
   "lib/core/widgets/field_hint_style.dart": {
@@ -3560,8 +3560,8 @@
     "semantic_hash": "db0c040be52f334a9454cbdfca9dcef1"
   },
   "lib/core/widgets/repeat_selector_popover.dart": {
-    "mtime": 1789972029.6504893,
-    "ast_hash": "4ec92e37744430c07be6796f6344ba43",
+    "mtime": 1790099203.9944744,
+    "ast_hash": "b9d1c699316a225f2b8c0eb88a9f8b9a",
     "semantic_hash": ""
   },
   "lib/domain/jobs/job_queries.dart": {
@@ -3680,9 +3680,9 @@
     "semantic_hash": ""
   },
   "test/repeat_selector_popover_test.dart": {
-    "mtime": 1787193223.1991177,
-    "ast_hash": "62a151797636e7709d82e7878baf1c58",
-    "semantic_hash": "62a151797636e7709d82e7878baf1c58"
+    "mtime": 1790098774.749416,
+    "ast_hash": "66d62117d92222942ab79edf81611a97",
+    "semantic_hash": ""
   },
   "test/study_card_bulk_import_test.dart": {
     "mtime": 1789972029.743621,
@@ -4760,8 +4760,8 @@
     "semantic_hash": ""
   },
   "test/time_picker_spinner_highlight_test.dart": {
-    "mtime": 1788998263.3088477,
-    "ast_hash": "a25cf5db57feb7371fed257680d89576",
+    "mtime": 1790142018.8722363,
+    "ast_hash": "739147604e22b1905c632892dbd57d84",
     "semantic_hash": ""
   },
   "test/todo_recurring_completion_shared_test.dart": {
@@ -5762,6 +5762,21 @@
   "test/time_field_editing_test.dart": {
     "mtime": 1790037101.4879425,
     "ast_hash": "92fc9446ae721ea2d2077da2908a1aba",
+    "semantic_hash": ""
+  },
+  "lib/features/analytics/mood_trend_card.dart": {
+    "mtime": 1790056869.6674504,
+    "ast_hash": "546883d62e2ce6921c9250d8f8787725",
+    "semantic_hash": ""
+  },
+  "lib/features/finance/finance_asset_value_chart.dart": {
+    "mtime": 1790144889.4175932,
+    "ast_hash": "ba3d63b013b8c37b8301a09c187c8165",
+    "semantic_hash": ""
+  },
+  "test/finance_asset_value_chart_test.dart": {
+    "mtime": 1790113300.1332078,
+    "ast_hash": "e582508007323c9d3c205622bb9f3dfe",
     "semantic_hash": ""
   }
 }

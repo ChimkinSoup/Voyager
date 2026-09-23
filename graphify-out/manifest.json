@@ -2645,8 +2645,8 @@
     "semantic_hash": "d0cbb589d2d23536aacb5eb9bea8d073"
   },
   "lib/core/vim/vim_session.dart": {
-    "mtime": 1790141814.4837418,
-    "ast_hash": "d0fc611676af5346f66d6a54225e7028",
+    "mtime": 1790149840.8943498,
+    "ast_hash": "f135cb4c9ae3cc07a38fb6f69292d302",
     "semantic_hash": ""
   },
   "lib/core/vim/vim_text_ops.dart": {
@@ -2655,8 +2655,8 @@
     "semantic_hash": ""
   },
   "lib/core/vim/vim_text_scope.dart": {
-    "mtime": 1789971414.9775474,
-    "ast_hash": "14363d0e09e163824a08030e2ab636cb",
+    "mtime": 1790149641.9876173,
+    "ast_hash": "2bb2fa3c2f56eba9bb88d602904501ab",
     "semantic_hash": ""
   },
   "lib/core/widgets/tag_suggestion_overlay.dart": {
@@ -3910,8 +3910,8 @@
     "semantic_hash": ""
   },
   "lib/core/media/widgets/media_paste_scope.dart": {
-    "mtime": 1789972029.6294906,
-    "ast_hash": "3c93c4fcd12da8d5baec77150d4e1b30",
+    "mtime": 1790149841.4522033,
+    "ast_hash": "98bd2c60cdcc0329fb1bc017881a1cca",
     "semantic_hash": ""
   },
   "lib/core/motion/window_visibility.dart": {
@@ -4120,9 +4120,9 @@
     "semantic_hash": ""
   },
   "test/media_paste_scope_test.dart": {
-    "mtime": 1787959666.4583638,
-    "ast_hash": "e54f3a8237850fc519538c361cf33ea1",
-    "semantic_hash": "e54f3a8237850fc519538c361cf33ea1"
+    "mtime": 1790149848.9687662,
+    "ast_hash": "d4c64d1365aeafe3a1f3d8327f753ad8",
+    "semantic_hash": ""
   },
   "test/media_provider_wiring_test.dart": {
     "mtime": 1787790731.0111074,
