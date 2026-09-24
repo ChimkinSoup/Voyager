@@ -4,6 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/features/shell/shell_page_transition.dart';
 
 void main() {
@@ -19,7 +20,7 @@ void main() {
   /// Whether anything is still fading: the departing branch sits in a
   /// fractional opacity while it does.
   bool fading(WidgetTester tester) => tester
-      .widgetList<Opacity>(find.byType(Opacity))
+      .widgetList<VoyagerFade>(find.byType(VoyagerFade))
       .any((o) => o.opacity > 0 && o.opacity < 1);
 
   testWidgets('a switch made under instantShellBranchSwitch lands at once', (

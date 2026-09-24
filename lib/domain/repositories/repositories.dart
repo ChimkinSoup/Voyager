@@ -714,6 +714,11 @@ abstract class SettingsRepository {
     bool recordLocalActivity = true,
   });
 
+  /// Records [AppSettings.lastSeenNavPage] on its own. [saveSettings] leaves
+  /// that field alone, so a save from an older copy of the settings can't
+  /// roll it back.
+  Future<void> saveLastSeenNavPage(String path);
+
   Future<Map<String, int>> getTagColors();
 
   /// Tag colors with their sync metadata, as distinct from [getTagColors]'

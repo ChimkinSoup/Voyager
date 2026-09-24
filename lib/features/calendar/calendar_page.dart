@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math' show max;
 import 'dart:ui' show lerpDouble;
 
-import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,6 +37,7 @@ import 'package:voyager/features/calendar/calendar_day_grid.dart';
 import 'package:voyager/features/calendar/calendar_event_delete.dart';
 import 'package:voyager/features/calendar/calendar_manage_sheet.dart';
 import 'package:voyager/features/calendar/calendar_todo_panel.dart';
+import 'package:voyager/features/calendar/calendar_week_morph_entries.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
 
@@ -183,6 +184,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   List<CalendarEvent>? _weekMorphEvents;
   List<CalendarDayIndicator>? _weekMorphIndicators;
   List<CalendarTodoMarker>? _weekMorphTodos;
+  // Set for the build that hands a month→week morph off to the live week
+  // view, whose entries the morph already brought on screen — so they don't
+  // fade in a second time.
+  bool _skipWeekEntryFade = false;
 
   // Wide enough for the widest row 2 can get — a multi-day date range, a time
   // range, and the pinned repeat button — without the pills having to scroll.
@@ -213,6 +218,32 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
   bool _isChainedWeekToYear = false;
   bool _isChainedYearToWeek = false;
+
+  /// Whether this branch is the one on screen — see the todo markers read in
+  /// [build]. Listened to rather than read with [TickerMode.valuesOf], which
+  /// would rebuild the whole page, grid included, every time the branch is
+  /// switched to or away from.
+  ValueListenable<TickerModeData>? _tickerMode;
+
+  /// The todo markers changed while this branch was off screen.
+  bool _todoMarkersStale = false;
+
+  void _onTickerModeChanged() {
+    if (_tickerMode!.value.enabled && _todoMarkersStale) {
+      _todoMarkersStale = false;
+      setState(() {});
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final tickerMode = TickerMode.getValuesNotifier(context);
+    if (tickerMode != _tickerMode) {
+      _tickerMode?.removeListener(_onTickerModeChanged);
+      _tickerMode = tickerMode..addListener(_onTickerModeChanged);
+    }
+  }
 
   @override
   void initState() {
@@ -1361,6 +1392,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
 
   @override
   void dispose() {
+    _tickerMode?.removeListener(_onTickerModeChanged);
     _disposeMorphListener();
     _disposeWeekMorphListener();
     _weekTimelineScrollController.removeListener(_onWeekTimelineScrolled);
@@ -1460,7 +1492,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           _focused = weekStart;
           _rememberViewedWeek(weekStart, weekStartsMonday);
           _weekMorphController.duration = _weekMorphDuration;
+          _skipWeekEntryFade = true;
         });
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _skipWeekEntryFade = false,
+        );
       },
     );
 
@@ -2480,6 +2516,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             // The morph row's cells carry today's fill into the month row;
             // painting it here too would double it and leave a copy behind.
             showTodayHighlight: false,
+            // The morph layer carries the entries, except in the chained
+            // week→year morph, which has none to carry.
+            showEntries: chained,
             entryFadeEnabled: false,
             interactive: false,
             weekdayAccentColor: accentColor,
@@ -2637,6 +2676,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           : _focused,
       monthNavigation: _mode == CalendarViewMode.month,
       highlightedWeekStart: _highlightedWeekStart(weekStartsMonday),
+      weekEntryFadeEnabled: !_skipWeekEntryFade,
       accentColor: accentColor,
     );
   }
@@ -2691,11 +2731,16 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     // rebuilds this whole page's grid off-screen, on whatever tab the user
     // is actually looking at. ShellBranchContainer already wraps the
     // inactive branches in TickerMode(enabled: false), so that's the signal
-    // used here too: read (no subscription) while offstage, watch (and pick
-    // up whatever changed while away) once this branch is active again.
-    final todosAsync = TickerMode.valuesOf(context).enabled
-        ? ref.watch(calendarTodoMarkersProvider)
-        : ref.read(calendarTodoMarkersProvider);
+    // used here too: a change while offstage is only noted, and picked up
+    // once this branch is active again — and only if there was one.
+    ref.listen(calendarTodoMarkersProvider, (_, _) {
+      if (_tickerMode?.value.enabled ?? true) {
+        setState(() {});
+      } else {
+        _todoMarkersStale = true;
+      }
+    });
+    final todosAsync = ref.read(calendarTodoMarkersProvider);
     final calendars = ref
         .watch(
           calendarsProvider.select(
@@ -4233,6 +4278,7 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
   late final double _monthTitleHeight;
   late final Widget _inactiveMonthChild;
   late final double _frozenEntryLayoutHeight;
+  late final List<CalendarWeekMorphEntry> _morphEntries;
 
   @override
   void initState() {
@@ -4250,6 +4296,15 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
     _inactiveMonthChild = widget.inactiveMonthRows;
     _frozenEntryLayoutHeight = calendarMorphMonthInnerCellHeight(
       widget.monthRowRects.first.height,
+    );
+    _morphEntries = calendarWeekMorphEntries(
+      weekDates: _weekDates,
+      month: widget.morphMonth,
+      events: widget.events,
+      todoMarkers: widget.todoMarkers,
+      indicators: widget.indicators,
+      monthRowRects: widget.monthRowRects,
+      weekColumnRects: widget.weekColumnRects,
     );
 
     // Today's week, as the month view highlights it — not the anchor week, or
@@ -4411,6 +4466,21 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
                           ),
                         ),
                       ),
+                    ),
+                  ),
+                  // Events travel between their month pills and their week
+                  // blocks; todos fade in and out at their week bars. Both
+                  // directions — the week→month live grid behind draws none.
+                  Positioned.fill(
+                    child: CalendarWeekMorphEntriesLayer(
+                      entries: _morphEntries,
+                      t: t,
+                      scrollOffset: calendarWeekEffectiveScrollOffset(
+                        widget.weekTimelineScrollController,
+                        widget.weekTimelineScrollOffset,
+                      ),
+                      monthRowRects: widget.monthRowRects,
+                      weekColumnRects: widget.weekColumnRects,
                     ),
                   ),
                   // Hour lines fade in during month→week only.
@@ -4577,7 +4647,8 @@ class _MonthWeekMorphCell extends StatelessWidget {
       todoMarkers: dayTodos,
       showTodoIcons: dayTodos.isNotEmpty,
       hasWorkout: hasWorkout,
-      hideEntries: false,
+      // The morph layer's entry overlay carries the event bars.
+      hideEntries: true,
       entryOpacity: progress.monthEntryOpacity,
       dayNumberOpacity: (1.0 - t).clamp(0.0, 1.0),
       frozenEntryLayoutHeight: frozenEntryLayoutHeight,

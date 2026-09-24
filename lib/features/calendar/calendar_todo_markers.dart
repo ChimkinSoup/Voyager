@@ -460,6 +460,34 @@ class CalendarWeekTaskBar extends StatelessWidget {
   }
 }
 
+/// Whether [CalendarWeekEventBlock]'s segment on [day] runs on into the
+/// neighbouring column on its left and right — square-capped, and stretched
+/// across the gap between columns.
+(bool left, bool right) calendarWeekEventBridges(
+  CalendarEvent event, {
+  DateTime? day,
+  bool isFirstColumn = false,
+  bool isLastColumn = false,
+}) {
+  if (day == null) return (false, false);
+  // The caps belong to the *occurrence* covering [day], not to the series
+  // anchor. Comparing against the anchor leaves every occurrence of a
+  // repeating multi-day event past the first bridged at both ends — and
+  // since showText is `!bridgeLeft`, its title then never appears at all.
+  final occurrenceStart = calendarOccurrenceStartOn(event, day);
+  if (occurrenceStart == null) return (false, false);
+  // epochDay, not difference().inDays: the latter is a day short across a
+  // fall-back transition, which can flatten a real multi-day event.
+  final span =
+      epochDay(DateUtils.dateOnly(event.end.toLocal())) -
+      epochDay(DateUtils.dateOnly(event.start.toLocal()));
+  if (span <= 0) return (false, false);
+  final currentDay = DateUtils.dateOnly(day);
+  final isStart = currentDay == occurrenceStart;
+  final isEnd = currentDay == addDays(occurrenceStart, span);
+  return (!isStart && !isFirstColumn, !isEnd && !isLastColumn);
+}
+
 /// Week-timeline event block.
 class CalendarWeekEventBlock extends StatelessWidget {
   const CalendarWeekEventBlock({
@@ -485,33 +513,12 @@ class CalendarWeekEventBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = paletteColor(event.colorValue, context).withAlpha(255);
 
-    bool bridgeLeft = false;
-    bool bridgeRight = false;
-    bool isStart = true;
-
-    if (day != null) {
-      // The caps belong to the *occurrence* covering [day], not to the series
-      // anchor. Comparing against the anchor leaves every occurrence of a
-      // repeating multi-day event past the first bridged at both ends — and
-      // since showText is `!bridgeLeft`, its title then never appears at all.
-      final occurrenceStart = calendarOccurrenceStartOn(event, day!);
-      if (occurrenceStart != null) {
-        // epochDay, not difference().inDays: the latter is a day short across a
-        // fall-back transition, which can flatten a real multi-day event.
-        final span =
-            epochDay(DateUtils.dateOnly(event.end.toLocal())) -
-            epochDay(DateUtils.dateOnly(event.start.toLocal()));
-        final currentDay = DateUtils.dateOnly(day!);
-
-        if (span > 0) {
-          isStart = currentDay == occurrenceStart;
-          final isEnd = currentDay == addDays(occurrenceStart, span);
-
-          bridgeLeft = !isStart && !isFirstColumn;
-          bridgeRight = !isEnd && !isLastColumn;
-        }
-      }
-    }
+    final (bridgeLeft, bridgeRight) = calendarWeekEventBridges(
+      event,
+      day: day,
+      isFirstColumn: isFirstColumn,
+      isLastColumn: isLastColumn,
+    );
 
     const radius = calendarEventCornerRadius;
     final leftRadius = bridgeLeft ? 0.0 : radius;

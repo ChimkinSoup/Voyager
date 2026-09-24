@@ -84,7 +84,9 @@ String _localDayKey(DateTime now) =>
 Future<JournalEntry>? _resolving;
 
 /// Today's Quick Journal Entry, created on the spot when there is none — or
-/// when the one there was has since been deleted, from anywhere.
+/// when the one there was has since been deleted, from anywhere, or re-dated
+/// to another day (one started after midnight and moved back to the day it
+/// is about).
 ///
 /// Serialized, so the notepad and the in-app hotkey can never both create one.
 Future<JournalEntry> resolveQuickJournalEntry(ProviderContainer container) {
@@ -101,7 +103,11 @@ Future<JournalEntry> _resolve(ProviderContainer container) async {
   final pointer = await store.load();
   if (pointer != null && pointer.day == today) {
     final existing = await repo.getEntry(pointer.entryId);
-    if (existing != null && existing.deletedAt == null) return existing;
+    if (existing != null &&
+        existing.deletedAt == null &&
+        _localDayKey(existing.entryDate.toLocal()) == today) {
+      return existing;
+    }
   }
 
   final settingsRepo = container.read(settingsRepositoryProvider);

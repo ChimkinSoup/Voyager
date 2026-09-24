@@ -4154,6 +4154,13 @@ class DriftSettingsRepository implements SettingsRepository {
     }
   }
 
+  @override
+  Future<void> saveLastSeenNavPage(String path) async {
+    await (_db.update(_db.settingsTable)..where((t) => t.id.equals(1))).write(
+      SettingsTableCompanion(lastSeenNavPage: Value(path)),
+    );
+  }
+
   bool _sameSyncedSettings(AppSettings a, AppSettings b) {
     // Compared as encoded JSON rather than field by field: the payload builder
     // is the single list of what syncs, so a field added there is covered here
@@ -4365,7 +4372,6 @@ class DriftSettingsRepository implements SettingsRepository {
             ),
             startupPageMode: Value(settings.startupPageMode.name),
             customStartupPage: Value(settings.customStartupPage),
-            lastSeenNavPage: Value(settings.lastSeenNavPage),
             todoCompletedSectionExpanded: Value(
               settings.todoCompletedSectionExpanded,
             ),

@@ -268,11 +268,12 @@ class _ShellBranchChangeFlusherState
 
       final currentPath = shellPathForIndex(widget.branchIndex);
       PerfStallLogger.instance.breadcrumb('switched page to $currentPath');
-      final repo = ref.read(settingsRepositoryProvider);
-      final settingsNotifier = ref.read(settingsProvider.notifier);
-      repo.getSettings().then((s) {
-        settingsNotifier.saveSettings(s.copyWith(lastSeenNavPage: currentPath));
-      });
+      // Straight to the repository: nothing on screen shows this, and
+      // publishing it through [settingsProvider] would rebuild every page
+      // watching settings in the middle of the switch animation.
+      unawaited(
+        ref.read(settingsRepositoryProvider).saveLastSeenNavPage(currentPath),
+      );
     }
   }
 

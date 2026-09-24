@@ -234,7 +234,12 @@ class _MediaGalleryStripState extends ConsumerState<MediaGalleryStrip> {
             canRequestFocus: true,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 140),
-              padding: const EdgeInsets.all(6),
+              // The empty row is one big tap target, so it runs to the border
+              // and carries the inset itself — otherwise its hover highlight
+              // stops short of the outline.
+              padding: _references.isEmpty
+                  ? EdgeInsets.zero
+                  : const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
                 border: Border.all(
@@ -295,9 +300,10 @@ class _EmptyStrip extends StatelessWidget {
     final theme = Theme.of(context);
     return InkWell(
       onTap: busy ? null : onPick,
-      borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+      // Inside the strip's 1px border, so one less to meet its inner curve.
+      borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius - 1),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 14),
         child: Row(
           children: [
             Icon(PhosphorIconsRegular.imageSquare, size: 18, color: accent),

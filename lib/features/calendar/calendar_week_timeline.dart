@@ -310,6 +310,7 @@ class CalendarWeekTimeline extends StatefulWidget {
     this.showWeekdayHeader = true,
     this.showDayDateLabels = true,
     this.showTodayHighlight = true,
+    this.showEntries = true,
     this.entryFadeEnabled = true,
     this.editingEventId,
     this.weekdayAccentColor,
@@ -335,6 +336,13 @@ class CalendarWeekTimeline extends StatefulWidget {
   /// When false, today's column is not filled — the week→month morph cell
   /// paints it instead, so it can travel into the month row.
   final bool showTodayHighlight;
+
+  /// When false, events and todos are not drawn (the layout still makes room
+  /// for them) — the week→month morph overlay carries them instead.
+  final bool showEntries;
+
+  /// Whether entries fade in on first build. Later week changes fade them in
+  /// whenever this is true at the time.
   final bool entryFadeEnabled;
   final String? editingEventId;
 
@@ -354,8 +362,7 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
     with SingleTickerProviderStateMixin {
   late final ScrollController _scrollController;
   late final bool _ownsScrollController;
-  AnimationController? _entryFadeController;
-  late Animation<double> _entryFade;
+  late final AnimationController _entryFadeController;
 
   // Formats an hour (0-24) as "12 AM", "1 AM", "12 PM", etc. — no ":00".
   static String _hourLabel(int hour) => calendarWeekHourLabel(hour);
@@ -363,15 +370,12 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
   @override
   void initState() {
     super.initState();
-    if (widget.entryFadeEnabled) {
-      _entryFadeController = AnimationController(
-        vsync: this,
-        duration: const Duration(milliseconds: 300),
-      )..forward();
-      _entryFade = _entryFadeController!;
-    } else {
-      _entryFade = const AlwaysStoppedAnimation(1.0);
-    }
+    _entryFadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+      value: widget.entryFadeEnabled ? 0 : 1,
+    );
+    if (widget.entryFadeEnabled) _entryFadeController.forward();
     if (widget.scrollController != null) {
       _scrollController = widget.scrollController!;
       _ownsScrollController = false;
@@ -388,10 +392,8 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
   @override
   void didUpdateWidget(CalendarWeekTimeline oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.entryFadeEnabled &&
-        oldWidget.weekStart != widget.weekStart &&
-        _entryFadeController != null) {
-      _entryFadeController!
+    if (widget.entryFadeEnabled && oldWidget.weekStart != widget.weekStart) {
+      _entryFadeController
         ..value = 0
         ..forward();
     }
@@ -399,7 +401,7 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
 
   @override
   void dispose() {
-    _entryFadeController?.dispose();
+    _entryFadeController.dispose();
     if (_ownsScrollController) {
       _scrollController.dispose();
     }
@@ -608,29 +610,30 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                         ),
 
                         FadeTransition(
-                          opacity: _entryFade,
+                          opacity: _entryFadeController,
                           child: Stack(
                             clipBehavior: Clip.none,
                             children: [
                               // ── Pinned all-day shelf (above bordered timed columns) ──
-                              for (var i = 0; i < 7; i++)
-                                Positioned(
-                                  left: i * cellW + margin,
-                                  top: allDayAreaTop,
-                                  width: cellW - margin * 2,
-                                  height: allDayShelfHeight,
-                                  child: _AllDayShelfColumn(
-                                    day: weekDays[i],
-                                    columnEvents: packedAllDayShelf[i],
-                                    rowCount: allDayShelfRowCount,
-                                    margin: margin,
-                                    isFirstColumn: i == 0,
-                                    isLastColumn: i == 6,
-                                    onEventTap: widget.onEventTap,
-                                    entryMenuBuilder: widget.entryMenuBuilder,
-                                    editingEventId: widget.editingEventId,
+                              if (widget.showEntries)
+                                for (var i = 0; i < 7; i++)
+                                  Positioned(
+                                    left: i * cellW + margin,
+                                    top: allDayAreaTop,
+                                    width: cellW - margin * 2,
+                                    height: allDayShelfHeight,
+                                    child: _AllDayShelfColumn(
+                                      day: weekDays[i],
+                                      columnEvents: packedAllDayShelf[i],
+                                      rowCount: allDayShelfRowCount,
+                                      margin: margin,
+                                      isFirstColumn: i == 0,
+                                      isLastColumn: i == 6,
+                                      onEventTap: widget.onEventTap,
+                                      entryMenuBuilder: widget.entryMenuBuilder,
+                                      editingEventId: widget.editingEventId,
+                                    ),
                                   ),
-                                ),
 
                               // ── Scrollable timed grid (12 AM – 12 AM) ──
                               Positioned(
@@ -664,21 +667,22 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                                               child: const SizedBox.expand(),
                                             ),
                                           ),
-                                          for (var i = 0; i < 7; i++)
-                                            _DayTimedColumn(
-                                              day: weekDays[i],
-                                              columnRect:
-                                                  timelineColumnRects[i],
-                                              events: widget.events,
-                                              todoMarkers: widget.todoMarkers,
-                                              onEventTap: widget.onEventTap,
-                                              onTodoTap: widget.onTodoTap,
-                                              entryMenuBuilder:
-                                                  widget.entryMenuBuilder,
-                                              interactive: widget.interactive,
-                                              editingEventId:
-                                                  widget.editingEventId,
-                                            ),
+                                          if (widget.showEntries)
+                                            for (var i = 0; i < 7; i++)
+                                              _DayTimedColumn(
+                                                day: weekDays[i],
+                                                columnRect:
+                                                    timelineColumnRects[i],
+                                                events: widget.events,
+                                                todoMarkers: widget.todoMarkers,
+                                                onEventTap: widget.onEventTap,
+                                                onTodoTap: widget.onTodoTap,
+                                                entryMenuBuilder:
+                                                    widget.entryMenuBuilder,
+                                                interactive: widget.interactive,
+                                                editingEventId:
+                                                    widget.editingEventId,
+                                              ),
                                         ],
                                       ),
                                     ),

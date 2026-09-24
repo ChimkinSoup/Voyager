@@ -546,7 +546,8 @@ class CalendarDayCell extends StatelessWidget {
   /// When set, adjacent-month borders lerp from muted (0) to active (1).
   final double? adjacentBorderT;
 
-  /// When true, chronological entry stack is omitted (morph overlay paints items).
+  /// When true, the event bars are omitted (morph overlay paints them); the
+  /// "+N" badge stays, fading with [entryOpacity].
   final bool hideEntries;
 
   /// Fades the chronological entry stack (used during month↔week morph).
@@ -721,115 +722,122 @@ class CalendarDayCell extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Opacity(
-              opacity: dayNumberOpacity.clamp(0.0, 1.0),
-              child: CalendarDayNumber(
-                date: date,
-                month: month,
-                fontSize: style.fontSize,
-                mutedWhenAdjacent: !inMonth,
-                adjacentTextT: adjacentTextT,
-                isSelected: isSelected,
-                accentColor: accentColor,
-                leading: inMonth && hasWorkout
-                    ? CalendarWorkoutIcon(
-                        fontSize: style.fontSize,
-                        color: accentColor,
-                      )
-                    : null,
-              ),
-            ),
-            if (indicators.isNotEmpty) ...[
-              const SizedBox(height: 2),
+        // With 4+ events the event area deliberately bleeds into
+        // cellPadding.bottom, so the column must be free to exceed this box.
+        OverflowBox(
+          maxHeight: double.infinity,
+          alignment: Alignment.topCenter,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               Opacity(
-                opacity: entryOpacity.clamp(0.0, 1.0),
-                child: CalendarDayIndicatorDots(
-                  indicators: indicators,
-                  dotSize: style.dotSize,
+                opacity: dayNumberOpacity.clamp(0.0, 1.0),
+                child: CalendarDayNumber(
+                  date: date,
+                  month: month,
+                  fontSize: style.fontSize,
+                  mutedWhenAdjacent: !inMonth,
+                  adjacentTextT: adjacentTextT,
+                  isSelected: isSelected,
+                  accentColor: accentColor,
+                  leading: inMonth && hasWorkout
+                      ? CalendarWorkoutIcon(
+                          fontSize: style.fontSize,
+                          color: accentColor,
+                        )
+                      : null,
                 ),
               ),
-            ],
-            if (inMonth && displayedEventCount > 0 && !hideEntries) ...[
-              const SizedBox(height: 2),
-              Opacity(
-                opacity: entryOpacity.clamp(0.0, 1.0),
-                child: SizedBox(
-                  height: clampedEventAreaHeight,
-                  child: OverflowBox(
-                    maxHeight: double.infinity,
-                    alignment: Alignment.topCenter,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (var i = 0; i < displayedEventCount; i++) ...[
-                          if (i > 0) const SizedBox(height: 1),
-                          SizedBox(
-                            height: barHeight,
-                            child: i < events.length && events[i] != null
-                                ? LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      final eventFontSize =
-                                          calendarMonthEventFontSize(
-                                            barHeight: barHeight,
-                                            style: style,
-                                          );
-                                      final event = events[i]!;
-                                      final eventEntry = event.isFullDay
-                                          ? CalendarDayEntry.allDayEvent(
-                                              event,
-                                              day: date,
-                                            )
-                                          : CalendarDayEntry.timedEvent(
-                                              event,
-                                              day: date,
+              if (indicators.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Opacity(
+                  opacity: entryOpacity.clamp(0.0, 1.0),
+                  child: CalendarDayIndicatorDots(
+                    indicators: indicators,
+                    dotSize: style.dotSize,
+                  ),
+                ),
+              ],
+              if (inMonth && displayedEventCount > 0 && !hideEntries) ...[
+                const SizedBox(height: 2),
+                Opacity(
+                  opacity: entryOpacity.clamp(0.0, 1.0),
+                  child: SizedBox(
+                    height: clampedEventAreaHeight,
+                    child: OverflowBox(
+                      maxHeight: double.infinity,
+                      alignment: Alignment.topCenter,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (var i = 0; i < displayedEventCount; i++) ...[
+                            if (i > 0) const SizedBox(height: 1),
+                            SizedBox(
+                              height: barHeight,
+                              child: i < events.length && events[i] != null
+                                  ? LayoutBuilder(
+                                      builder: (context, constraints) {
+                                        final eventFontSize =
+                                            calendarMonthEventFontSize(
+                                              barHeight: barHeight,
+                                              style: style,
                                             );
-                                      return calendarEntryContextMenu(
-                                        builder: entryMenuBuilder,
-                                        entry: eventEntry,
-                                        child: CalendarDayEventBar(
-                                          event: event,
-                                          date: date,
-                                          fontSize: eventFontSize,
-                                          height: barHeight,
-                                          isStart: calendarEventBarStartsOnDay(
-                                            event,
-                                            date,
+                                        final event = events[i]!;
+                                        final eventEntry = event.isFullDay
+                                            ? CalendarDayEntry.allDayEvent(
+                                                event,
+                                                day: date,
+                                              )
+                                            : CalendarDayEntry.timedEvent(
+                                                event,
+                                                day: date,
+                                              );
+                                        return calendarEntryContextMenu(
+                                          builder: entryMenuBuilder,
+                                          entry: eventEntry,
+                                          child: CalendarDayEventBar(
+                                            event: event,
+                                            date: date,
+                                            fontSize: eventFontSize,
+                                            height: barHeight,
+                                            isStart:
+                                                calendarEventBarStartsOnDay(
+                                                  event,
+                                                  date,
+                                                ),
+                                            isEnd: calendarEventBarEndsOnDay(
+                                              event,
+                                              date,
+                                            ),
+                                            isFirstColumn: isFirstColumn,
+                                            isLastColumn: isLastColumn,
+                                            isBottom:
+                                                displayedEventCount >= 4 &&
+                                                i == displayedEventCount - 1,
+                                            cellMargin: style.cellMargin,
+                                            cellPadding: style.cellPadding,
+                                            highlighted:
+                                                editingEventId == event.id,
+                                            onTap: onEntryTap == null
+                                                ? null
+                                                : () => onEntryTap!(eventEntry),
                                           ),
-                                          isEnd: calendarEventBarEndsOnDay(
-                                            event,
-                                            date,
-                                          ),
-                                          isFirstColumn: isFirstColumn,
-                                          isLastColumn: isLastColumn,
-                                          isBottom:
-                                              displayedEventCount >= 4 &&
-                                              i == displayedEventCount - 1,
-                                          cellMargin: style.cellMargin,
-                                          cellPadding: style.cellPadding,
-                                          highlighted:
-                                              editingEventId == event.id,
-                                          onTap: onEntryTap == null
-                                              ? null
-                                              : () => onEntryTap!(eventEntry),
-                                        ),
-                                      );
-                                    },
-                                  )
-                                : null,
-                          ),
+                                        );
+                                      },
+                                    )
+                                  : null,
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
-        if (inMonth && overflowCount > 0 && !hideEntries)
+        if (inMonth && overflowCount > 0)
           Positioned(
             top: 0,
             right: 0,

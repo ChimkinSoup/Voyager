@@ -99,10 +99,23 @@ class _StudyFlipCardState extends State<StudyFlipCard>
   /// announced at its start isn't announced a second time when it lands.
   late bool _reportedShowingBack;
 
+  /// Whether the back is in the tree. It joins on the first flip rather than
+  /// at the card's edge-on midpoint: building a heavy back (a LeetCode card's
+  /// highlighted code) inside the animation dropped the frames where the turn
+  /// is most visible. Once in, both faces stay mounted and only the one facing
+  /// the viewer paints, so turning back and forth rebuilds neither. It isn't
+  /// built up front because a deck grid would then build every tile's back.
+  late bool _backMounted;
+
+  /// Bumped by [_reset] so the next card's faces start fresh — scroll offsets
+  /// and the like — the way they did when a hidden face was unmounted.
+  int _generation = 0;
+
   @override
   void initState() {
     super.initState();
     _reportedShowingBack = widget.initiallyShowingBack;
+    _backMounted = widget.initiallyShowingBack;
     _controller = AnimationController(vsync: this, duration: widget.duration)
       ..addStatusListener(_handleStatus)
       ..value = widget.initiallyShowingBack ? 1 : 0;
@@ -125,6 +138,7 @@ class _StudyFlipCardState extends State<StudyFlipCard>
       // A flip queued against the old face means nothing once the caller has
       // named the face itself.
       _queuedFlip = false;
+      if (widget.initiallyShowingBack) _backMounted = true;
       _controller.value = widget.initiallyShowingBack ? 1 : 0;
     }
   }
@@ -172,6 +186,7 @@ class _StudyFlipCardState extends State<StudyFlipCard>
       return;
     }
     final toBack = _controller.value == 0;
+    if (!_backMounted) setState(() => _backMounted = true);
     if (widget.notifyFlipOnStart) _report(toBack);
     if (toBack) {
       _controller.forward();
@@ -182,6 +197,10 @@ class _StudyFlipCardState extends State<StudyFlipCard>
 
   void _reset() {
     _queuedFlip = false;
+    setState(() {
+      _backMounted = false;
+      _generation++;
+    });
     _controller.value = 0;
   }
 
@@ -194,40 +213,61 @@ class _StudyFlipCardState extends State<StudyFlipCard>
       onTapDown: widget.tapEnabled ? (_) => _press.forward() : null,
       onTapUp: widget.tapEnabled ? (_) => _press.reverse() : null,
       onTapCancel: widget.tapEnabled ? () => _press.reverse() : null,
-      child: _pressScaled(
-        reduced,
-        AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) {
-            final v = _controller.value;
-            if (reduced) {
-              // No 3D rotation under reduced-motion — a plain crossfade instead.
-              return Stack(
+      // Keeps each frame of the turn from repainting the page around the card.
+      child: RepaintBoundary(
+        child: _pressScaled(
+          reduced,
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              final v = _controller.value;
+              if (reduced) {
+                // No 3D rotation under reduced-motion — a plain crossfade instead.
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Opacity(opacity: 1 - v, child: widget.front),
+                    Opacity(opacity: v, child: widget.back),
+                  ],
+                );
+              }
+              final t = VoyagerSpring.moveCurve.transform(v);
+              final angle = t * math.pi;
+              final showBack = t >= 0.5;
+              final transform = Matrix4.identity()
+                ..setEntry(3, 2, 0.001)
+                ..rotateY(angle);
+              // Each face is its own layer, so the turn only re-composites
+              // what the faces already painted instead of repainting them.
+              return Transform(
                 alignment: Alignment.center,
-                children: [
-                  Opacity(opacity: 1 - v, child: widget.front),
-                  Opacity(opacity: v, child: widget.back),
-                ],
+                transform: transform,
+                child: Stack(
+                  key: ValueKey(_generation),
+                  alignment: Alignment.center,
+                  // The faces size exactly as they did as the card's only child.
+                  fit: StackFit.passthrough,
+                  children: [
+                    Visibility(
+                      visible: !showBack,
+                      maintainState: true,
+                      child: RepaintBoundary(child: widget.front),
+                    ),
+                    if (_backMounted)
+                      Visibility(
+                        visible: showBack,
+                        maintainState: true,
+                        child: Transform(
+                          alignment: Alignment.center,
+                          transform: Matrix4.identity()..rotateY(math.pi),
+                          child: RepaintBoundary(child: widget.back),
+                        ),
+                      ),
+                  ],
+                ),
               );
-            }
-            final t = VoyagerSpring.moveCurve.transform(v);
-            final angle = t * math.pi;
-            final showBack = t >= 0.5;
-            final transform = Matrix4.identity()
-              ..setEntry(3, 2, 0.001)
-              ..rotateY(angle);
-            return Transform(
-              alignment: Alignment.center,
-              transform: transform,
-              child: showBack
-                  ? Transform(
-                      alignment: Alignment.center,
-                      transform: Matrix4.identity()..rotateY(math.pi),
-                      child: widget.back,
-                    )
-                  : widget.front,
-            );
-          },
+            },
+          ),
         ),
       ),
     );

@@ -217,7 +217,6 @@ class _StudyPageState extends ConsumerState<StudyPage>
           : null,
       body: Builder(
         builder: (context) {
-          final reducedMotion = VoyagerMotion.reduced(context);
           return Stack(
             children: [
               AnimatedBuilder(
@@ -229,14 +228,9 @@ class _StudyPageState extends ConsumerState<StudyPage>
                   // covering the screen.
                   final locked =
                       _zoom.status == AnimationStatus.forward || t == 1;
-                  final faded = Opacity(
+                  return Opacity(
                     opacity: 1 - t,
                     child: IgnorePointer(ignoring: locked, child: child),
-                  );
-                  if (reducedMotion || t == 0) return faded;
-                  return Transform.scale(
-                    scale: 1 - kVoyagerCrossfadeRecede * t,
-                    child: faded,
                   );
                 },
                 child: _HubContent(
@@ -251,8 +245,7 @@ class _StudyPageState extends ConsumerState<StudyPage>
                   animation: _zoom,
                   builder: (context, _) {
                     final t = _zoom.value.clamp(0.0, 1.0);
-                    // Mirror of the Hub's close: fade in while enlarging from
-                    // the recessed scale up to full size.
+                    // Mirror of the Hub's close: fade in.
                     final faded = Opacity(
                       opacity: t,
                       child: IgnorePointer(
@@ -272,15 +265,7 @@ class _StudyPageState extends ConsumerState<StudyPage>
                         ),
                       ),
                     );
-                    if (reducedMotion || t == 1) {
-                      return Positioned.fill(child: faded);
-                    }
-                    return Positioned.fill(
-                      child: Transform.scale(
-                        scale: 1 - kVoyagerCrossfadeRecede * (1 - t),
-                        child: faded,
-                      ),
-                    );
+                    return Positioned.fill(child: faded);
                   },
                 ),
             ],

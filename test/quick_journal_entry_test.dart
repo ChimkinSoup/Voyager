@@ -108,4 +108,18 @@ void main() {
     final today = await resolveQuickJournalEntry(container);
     expect(today.id, isNot(yesterday.id));
   });
+
+  test('an entry re-dated to another day is not reused', () async {
+    final first = await resolveQuickJournalEntry(container);
+    final repo = DriftJournalRepository(db);
+    await repo.upsertEntry(
+      first.copyWith(
+        entryDate: first.entryDate.subtract(const Duration(days: 1)),
+      ),
+    );
+
+    final next = await resolveQuickJournalEntry(container);
+    expect(next.id, isNot(first.id));
+    expect(await repo.getEntry(first.id), isNotNull);
+  });
 }

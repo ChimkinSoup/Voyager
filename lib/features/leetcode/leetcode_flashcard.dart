@@ -46,19 +46,16 @@ class LeetCodeFlashcard extends StatefulWidget {
 }
 
 class _LeetCodeFlashcardState extends State<LeetCodeFlashcard> {
-  // One key per face rather than one shared between them: under reduced
-  // motion [StudyFlipCard] crossfades, so *both* faces are mounted at once and
-  // a single GlobalKey on both would be a duplicate.
+  // One key per face rather than one shared between them: [StudyFlipCard]
+  // keeps *both* faces mounted once the card has turned, so a single GlobalKey
+  // on both would be a duplicate.
   final _frontTitleKey = GlobalKey();
   final _backTitleKey = GlobalKey();
 
-  void _openDetail() {
-    // The rect only seeds the detail view's zoom, so either face's title
-    // serves. When both are mounted the front is the one the card grew from.
-    final box =
-        (_frontTitleKey.currentContext ?? _backTitleKey.currentContext)
-                ?.findRenderObject()
-            as RenderBox?;
+  /// Zooms out of the title that was tapped — the other face's is mounted too,
+  /// but hidden.
+  void _openDetail(GlobalKey titleKey) {
+    final box = titleKey.currentContext?.findRenderObject() as RenderBox?;
     final rect = box == null
         ? Offset.zero & MediaQuery.sizeOf(context)
         : box.localToGlobal(Offset.zero) & box.size;
@@ -74,12 +71,12 @@ class _LeetCodeFlashcardState extends State<LeetCodeFlashcard> {
       front: _CardFront(
         problem: widget.problem,
         titleKey: _frontTitleKey,
-        onTitleTap: _openDetail,
+        onTitleTap: () => _openDetail(_frontTitleKey),
       ),
       back: _CardBack(
         problem: widget.problem,
         titleKey: _backTitleKey,
-        onTitleTap: _openDetail,
+        onTitleTap: () => _openDetail(_backTitleKey),
       ),
     );
   }

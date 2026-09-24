@@ -66,7 +66,7 @@ class LeetCodePage extends ConsumerWidget {
                   const Spacer(),
                   // Right-aligned opposite the segmented control, and nowhere
                   // near the Track FAB in the bottom-right corner.
-                  _ArrivingCheatSheetButton(mode: mode),
+                  const LeetCodeCheatSheetButton(dense: true),
                 ],
               ),
             ),
@@ -82,41 +82,6 @@ class LeetCodePage extends ConsumerWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// The cheat sheet button, moving with the view it sits above rather than
-/// staying put while everything under it changes.
-///
-/// [VoyagerCrossfadeIndex] cannot simply wrap it: that builds a
-/// `StackFit.expand` Stack, and the header [Row] hands an unbounded width to a
-/// child that is not flexible. So the arriving half of the same transition is
-/// applied here — full opacity, enlarging from `1 - [kVoyagerCrossfadeRecede]`
-/// over [kVoyagerCrossfadeDuration], which is exactly what the incoming page
-/// does. Only the arriving half: the button belongs to both views, so there is
-/// no departing copy for it to dissolve out of.
-class _ArrivingCheatSheetButton extends StatelessWidget {
-  const _ArrivingCheatSheetButton({required this.mode});
-
-  /// Drives the animation by keying it. [TweenAnimationBuilder] restarts on a
-  /// changed end value, and this tween's end is always 1 — a new key on every
-  /// switch is what makes it run.
-  final _LeetCodeViewMode mode;
-
-  @override
-  Widget build(BuildContext context) {
-    const button = LeetCodeCheatSheetButton(dense: true);
-    // The body drops its own scale under reduced motion; this follows it.
-    if (VoyagerMotion.reduced(context)) return button;
-    return TweenAnimationBuilder<double>(
-      key: ValueKey(mode),
-      tween: Tween(begin: 1 - kVoyagerCrossfadeRecede, end: 1),
-      // Linear, like the crossfade's own progress — it applies no curve.
-      duration: kVoyagerCrossfadeDuration,
-      builder: (context, scale, child) =>
-          Transform.scale(scale: scale, child: child),
-      child: button,
     );
   }
 }

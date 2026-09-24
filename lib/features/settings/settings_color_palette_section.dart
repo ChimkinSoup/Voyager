@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -90,18 +92,89 @@ class _SettingsColorPaletteSectionState
     await _updatePalette(palette);
   }
 
-  /// Moves [dragged] into [target]'s slot.
-  ///
-  /// Dropping onto a chip to the right lands after it, to the left lands
-  /// before it — `removeAt` has already shifted the later indices down by one
-  /// when the move is rightward, so the single `insert` covers both.
-  Future<void> _moveColor(int dragged, int target) async {
-    final palette = List<int>.from(widget.settings.colorPalette);
-    final from = palette.indexOf(normalizeColorValue(dragged));
-    final to = palette.indexOf(normalizeColorValue(target));
-    if (from < 0 || to < 0 || from == to) return;
-    palette.insert(to, palette.removeAt(from));
-    await _updatePalette(palette);
+  /// Where the drag lifted its chip from, and where the gap it left has
+  /// followed the cursor to — both indices into the palette. Null outside a
+  /// drag.
+  int? _dragFrom;
+  int _dragTo = 0;
+
+  /// Where in the chip the pointer took hold of it, so the feedback's offset
+  /// converts back into the cursor's.
+  Offset _grab = Offset.zero;
+
+  final _wrapKey = GlobalKey();
+  final _slotKeys = <int, GlobalKey>{};
+
+  /// The palette as it would read if the drag dropped now: the dragged chip
+  /// sits in the gap under the cursor, and its old slot has closed up.
+  List<int> get _shownPalette {
+    final palette = widget.settings.colorPalette;
+    final from = _dragFrom;
+    if (from == null || from == _dragTo) return palette;
+    final shown = List<int>.from(palette);
+    return shown..insert(_dragTo, shown.removeAt(from));
+  }
+
+  RenderWrap get _wrap =>
+      _wrapKey.currentContext!.findRenderObject()! as RenderWrap;
+
+  /// Moves the gap next to whichever chip the cursor is nearest — before it
+  /// over its left half, after it over its right. Measured against the chips'
+  /// laid-out slots rather than where they are mid-slide, so the gap doesn't
+  /// chase a chip that is still on its way.
+  void _moveGap(Offset feedback) {
+    // The drag's first move reaches the target before `onDragStarted` has
+    // said which chip it lifted.
+    if (_dragFrom == null) return;
+    final wrap = _wrap;
+    final pointer = wrap.globalToLocal(feedback + _grab);
+    var nearest = 0;
+    var nearestRect = Rect.zero;
+    var best = double.infinity;
+    var i = 0;
+    for (
+      var child = wrap.firstChild;
+      child != null;
+      child = wrap.childAfter(child), i++
+    ) {
+      final rect = (child.parentData! as BoxParentData).offset & child.size;
+      final closest = Offset(
+        pointer.dx.clamp(rect.left, rect.right),
+        pointer.dy.clamp(rect.top, rect.bottom),
+      );
+      final distance = (pointer - closest).distanceSquared;
+      if (distance < best) {
+        best = distance;
+        nearest = i;
+        nearestRect = rect;
+      }
+    }
+    // Over the gap itself: it is already where the cursor is.
+    if (nearest == _dragTo) return;
+    final rest = nearest < _dragTo ? nearest : nearest - 1;
+    final to = pointer.dx < nearestRect.center.dx ? rest : rest + 1;
+    if (to != _dragTo) setState(() => _dragTo = to);
+  }
+
+  void _drop(int color, Offset feedback) {
+    final moved = _dragFrom != _dragTo;
+    final shown = _shownPalette;
+    setState(() => _dragFrom = null);
+    _settleFrom(color, feedback);
+    if (moved) _updatePalette(shown);
+  }
+
+  void _cancelDrag(int color, Offset feedback) {
+    setState(() => _dragFrom = null);
+    _settleFrom(color, feedback);
+  }
+
+  /// Flies [color]'s chip from where the drag let go of it into its slot.
+  void _settleFrom(int color, Offset feedback) {
+    final slot =
+        _slotKeys[color]!.currentContext!.findRenderObject()!
+            as _RenderSlideToLayout;
+    slot.slideFrom(_wrap.globalToLocal(feedback));
   }
 
   /// Moves every record and setting on [color] to a hex the user types, and
@@ -180,11 +253,10 @@ class _SettingsColorPaletteSectionState
         'and the palette swatch — to ${formatColorHex(to)}?';
   }
 
-  Widget _colorChip(int color, {required bool deletable, BorderSide? side}) {
+  Widget _colorChip(int color, {required bool deletable}) {
     return InputChip(
       avatar: CircleAvatar(backgroundColor: Color(color)),
       label: Text(formatColorHex(color)),
-      side: side,
       onDeleted: deletable ? () => _removeColor(color) : null,
       deleteIcon: deletable
           ? const Icon(PhosphorIconsRegular.x, size: 18)
@@ -211,52 +283,59 @@ class _SettingsColorPaletteSectionState
           ),
         ),
         const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final color in palette)
-              DragTarget<int>(
-                onWillAcceptWithDetails: (details) =>
-                    normalizeColorValue(details.data) !=
-                    normalizeColorValue(color),
-                onAcceptWithDetails: (details) =>
-                    _moveColor(details.data, color),
-                builder: (context, candidates, _) => Draggable<int>(
-                  data: color,
-                  feedback: Material(
-                    type: MaterialType.transparency,
-                    child: _colorChip(color, deletable: false),
-                  ),
-                  childWhenDragging: Opacity(
-                    opacity: 0.3,
-                    child: _colorChip(color, deletable: false),
-                  ),
-                  child: ContextMenuRegion(
-                    items: [
-                      ContextMenuItem(
-                        label: 'Replace everywhere…',
-                        icon: PhosphorIconsRegular.swap,
-                        onTap: () => _replaceColorEverywhere(color),
-                      ),
-                    ],
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.grab,
-                      child: _colorChip(
-                        color,
-                        deletable: palette.length > 1,
-                        side: candidates.isEmpty
-                            ? null
-                            : BorderSide(
-                                color: theme.colorScheme.primary,
-                                width: 2,
-                              ),
+        DragTarget<int>(
+          onMove: (details) => _moveGap(details.offset),
+          // Off the palette a drop cancels, so the gap goes back home.
+          onLeave: (_) => setState(() => _dragTo = _dragFrom ?? _dragTo),
+          onAcceptWithDetails: (details) => _drop(details.data, details.offset),
+          builder: (context, _, _) => Wrap(
+            key: _wrapKey,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final (index, color) in _shownPalette.indexed)
+                _SlideToLayout(
+                  key: _slotKeys.putIfAbsent(color, GlobalKey.new),
+                  child: Draggable<int>(
+                    data: color,
+                    dragAnchorStrategy: (draggable, context, position) =>
+                        _grab = childDragAnchorStrategy(
+                          draggable,
+                          context,
+                          position,
+                        ),
+                    onDragStarted: () => setState(() {
+                      _dragFrom = index;
+                      _dragTo = index;
+                    }),
+                    onDraggableCanceled: (_, offset) =>
+                        _cancelDrag(color, offset),
+                    feedback: Material(
+                      type: MaterialType.transparency,
+                      child: _colorChip(color, deletable: false),
+                    ),
+                    // Holds the chip's full width open as the gap.
+                    childWhenDragging: Opacity(
+                      opacity: 0,
+                      child: _colorChip(color, deletable: palette.length > 1),
+                    ),
+                    child: ContextMenuRegion(
+                      items: [
+                        ContextMenuItem(
+                          label: 'Replace everywhere…',
+                          icon: PhosphorIconsRegular.swap,
+                          onTap: () => _replaceColorEverywhere(color),
+                        ),
+                      ],
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.grab,
+                        child: _colorChip(color, deletable: palette.length > 1),
                       ),
                     ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 12),
         Row(
@@ -298,6 +377,65 @@ class _SettingsColorPaletteSectionState
         ],
       ],
     );
+  }
+}
+
+/// Paints its child sliding from wherever it last showed to wherever the
+/// parent lays it out now, so a chip the palette reflows glides to its new
+/// slot instead of jumping.
+///
+/// Done at paint time, from the offset the parent has just assigned, so the
+/// first frame after a reflow still paints the old spot — measuring after
+/// layout from a widget would flash the new one for a frame first.
+class _SlideToLayout extends SingleChildRenderObjectWidget {
+  const _SlideToLayout({super.key, required super.child});
+
+  @override
+  _RenderSlideToLayout createRenderObject(BuildContext context) =>
+      _RenderSlideToLayout();
+}
+
+class _RenderSlideToLayout extends RenderProxyBox {
+  static const _duration = Duration(milliseconds: 200);
+
+  /// All in the parent's coordinates: where the last frame painted the child,
+  /// the slot it is heading for, and where the current slide set out from.
+  Offset? _painted;
+  Offset? _target;
+  Offset _from = Offset.zero;
+  Duration? _start;
+
+  /// Starts the next slide from [position], in the parent's coordinates,
+  /// rather than from where the child last painted.
+  void slideFrom(Offset position) {
+    _painted = position;
+    _target = null;
+    markNeedsPaint();
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    final layout = (parentData! as BoxParentData).offset;
+    final now = SchedulerBinding.instance.currentFrameTimeStamp;
+    if (layout != _target) {
+      _target = layout;
+      _from = _painted ?? layout;
+      _start = _from == layout ? null : now;
+    }
+    var shown = layout;
+    if (_start case final start?) {
+      final t = (now - start).inMicroseconds / _duration.inMicroseconds;
+      if (t >= 1) {
+        _start = null;
+      } else {
+        shown = Offset.lerp(_from, layout, Curves.easeOutCubic.transform(t))!;
+        SchedulerBinding.instance.scheduleFrameCallback((_) {
+          if (attached) markNeedsPaint();
+        });
+      }
+    }
+    _painted = shown;
+    super.paint(context, offset + shown - layout);
   }
 }
 
