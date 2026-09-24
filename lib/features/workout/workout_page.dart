@@ -26,6 +26,19 @@ final workoutPlannerModeProvider = StateProvider<WorkoutPlanMode>(
   (ref) => WorkoutPlanMode.weekly,
 );
 
+/// Today's local date, recomputed at each local midnight so a planner left
+/// open overnight moves its "today" column and "Start today" with the clock.
+final _workoutTodayProvider = Provider.autoDispose<DateTime>((ref) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final timer = Timer(
+    DateTime(now.year, now.month, now.day + 1).difference(now),
+    ref.invalidateSelf,
+  );
+  ref.onDispose(timer.cancel);
+  return today;
+});
+
 class WorkoutPage extends ConsumerWidget {
   const WorkoutPage({super.key});
 
@@ -176,7 +189,7 @@ class _PlannerState extends ConsumerState<_Planner> {
             VoyagerSpacing.lg,
             VoyagerSpacing.md,
           ),
-          child: _PlannerToolbar(plan: plan, exerciseCount: exercises.length),
+          child: _PlannerToolbar(plan: plan),
         ),
         Expanded(
           child: Padding(
@@ -233,10 +246,9 @@ class _PlannerState extends ConsumerState<_Planner> {
 }
 
 class _PlannerToolbar extends ConsumerWidget {
-  const _PlannerToolbar({required this.plan, required this.exerciseCount});
+  const _PlannerToolbar({required this.plan});
 
   final WorkoutPlan plan;
-  final int exerciseCount;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -281,7 +293,7 @@ class _PlannerToolbar extends ConsumerWidget {
           _CycleLengthControl(plan: plan),
           _CycleAnchorControl(plan: plan),
         ],
-        AddExerciseButton(exerciseCount: exerciseCount),
+        const AddExerciseButton(),
         _StartTodayButton(plan: plan),
       ],
     );
@@ -306,6 +318,11 @@ class _ActivePlanButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final active = plan.isActive;
+    // Two offline devices can each activate a different plan, leaving both
+    // flagged active after sync. Only a plan that is the *sole* active one is
+    // locked, so pressing either resolves the tie.
+    final plans = ref.watch(workoutPlansProvider).valueOrNull ?? const [];
+    final soleActive = active && plans.where((p) => p.isActive).length == 1;
     // What GlassButton gives a plain `label`. Restated here because holding
     // the width takes a `child`, and a child brings its own styling.
     final style = theme.textTheme.labelMedium?.copyWith(
@@ -322,7 +339,7 @@ class _ActivePlanButton extends ConsumerWidget {
                 'analytics stat'
           : 'Use this plan for today\'s workout, the calendar and the '
                 'analytics stat',
-      onPressed: active
+      onPressed: soleActive
           ? null
           : () => WorkoutActions(ref).setActivePlan(plan.id),
       child: Row(
@@ -424,7 +441,7 @@ class _CycleAnchorControl extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final anchor = workoutDayKey(plan.cycleAnchor);
+    final anchor = workoutCalendarDate(plan.cycleAnchor);
     return Builder(
       builder: (buttonContext) => GlassButton(
         dense: true,
@@ -447,11 +464,9 @@ class _CycleAnchorControl extends ConsumerWidget {
           );
           if (range == null) return;
           final start = range.start;
-          await WorkoutActions(ref).savePlan(
-            plan.copyWith(
-              cycleAnchor: DateTime(start.year, start.month, start.day),
-            ),
-          );
+          await WorkoutActions(
+            ref,
+          ).savePlan(plan.copyWith(cycleAnchor: workoutStoredDate(start)));
         },
       ),
     );
@@ -482,8 +497,7 @@ class _StartTodayButton extends ConsumerWidget {
     }
 
     final active = ref.watch(activeWorkoutPlanProvider) ?? plan;
-    final today = DateTime.now();
-    final dayIndex = active.dayIndexForDate(today);
+    final dayIndex = active.dayIndexForDate(ref.watch(_workoutTodayProvider));
 
     return GlassButton(
       dense: true,
@@ -492,13 +506,20 @@ class _StartTodayButton extends ConsumerWidget {
       color: Theme.of(context).colorScheme.primary,
       onPressed: dayIndex == null
           ? null
-          : () => startWorkoutForDay(
-              context,
-              ref,
-              plan: active,
-              dayIndex: dayIndex,
-              date: today,
-            ),
+          : () {
+              // Resolved at the press, not at the last build: the button can
+              // have been drawn before midnight.
+              final now = DateTime.now();
+              final pressedIndex = active.dayIndexForDate(now);
+              if (pressedIndex == null) return;
+              startWorkoutForDay(
+                context,
+                ref,
+                plan: active,
+                dayIndex: pressedIndex,
+                date: now,
+              );
+            },
     );
   }
 }
@@ -513,9 +534,18 @@ Future<void> startWorkoutForDay(
   required DateTime date,
 }) async {
   final messenger = ScaffoldMessenger.maybeOf(context);
-  final started = await ref
-      .read(workoutSessionControllerProvider.notifier)
-      .startFromPlan(plan: plan, dayIndex: dayIndex, date: date);
+  final bool started;
+  try {
+    started = await ref
+        .read(workoutSessionControllerProvider.notifier)
+        .startFromPlan(plan: plan, dayIndex: dayIndex, date: date);
+  } catch (error) {
+    debugPrint('[workout] start failed: $error');
+    messenger?.showSnackBar(
+      const SnackBar(content: Text('Couldn\'t start the workout')),
+    );
+    return;
+  }
   if (started) return;
   messenger?.showSnackBar(
     const SnackBar(content: Text('Nothing is planned for that day yet')),
@@ -543,8 +573,7 @@ class _DayBoard extends ConsumerWidget {
     final live = ref.watch(
       workoutSessionControllerProvider.select((s) => s.isLive),
     );
-    final today = DateTime.now();
-    final todayIndex = plan.dayIndexForDate(today);
+    final todayIndex = plan.dayIndexForDate(ref.watch(_workoutTodayProvider));
 
     Widget columnFor(int dayIndex) {
       final dayEntries = [
@@ -557,10 +586,11 @@ class _DayBoard extends ConsumerWidget {
         title: _titleFor(dayIndex),
         subtitle: _subtitleFor(dayIndex, dayEntries.length),
         entries: dayEntries,
-        allEntries: entries,
         exercisesById: exercisesById,
         unit: unit,
         isToday: plan.isActive && dayIndex == todayIndex,
+        // Every start records today, whichever column it came from: doing
+        // Friday's workout on a Wednesday is a Wednesday workout.
         onStart: dayEntries.isEmpty || live
             ? null
             : () => startWorkoutForDay(
@@ -568,7 +598,7 @@ class _DayBoard extends ConsumerWidget {
                 ref,
                 plan: plan,
                 dayIndex: dayIndex,
-                date: _dateForDay(dayIndex, today),
+                date: DateTime.now(),
               ),
       );
     }
@@ -618,19 +648,4 @@ class _DayBoard extends ConsumerWidget {
 
   String? _subtitleFor(int dayIndex, int count) =>
       count == 0 ? null : '$count exercise${count == 1 ? '' : 's'}';
-
-  /// The concrete date a column stands for, used as the started session's day.
-  ///
-  /// Weekly columns resolve to that weekday in the current week; split
-  /// columns to the next occurrence of that slot, today included — starting
-  /// Day 3 on a Day 1 means you are doing Day 3's workout today, so today is
-  /// what gets recorded.
-  DateTime _dateForDay(int dayIndex, DateTime today) {
-    if (plan.mode != WorkoutPlanMode.weekly) return today;
-    final delta = dayIndex - (today.weekday % 7);
-    // Day arithmetic through the constructor, not `add(Duration(days:))`:
-    // the latter adds 24h of real time and lands an hour off across a DST
-    // boundary, which can spill the session onto the neighbouring date.
-    return DateTime(today.year, today.month, today.day + delta);
-  }
 }

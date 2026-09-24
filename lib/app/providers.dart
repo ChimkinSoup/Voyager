@@ -1332,13 +1332,21 @@ final workoutPlansProvider = FutureProvider<List<WorkoutPlan>>((ref) async {
 
 /// The plan that decides what "today's workout" is. Null only in the window
 /// before seeding completes.
+///
+/// Two offline devices can each activate a different plan and both come out
+/// of sync flagged active. The most recently changed one wins, so every
+/// device resolves the tie the same way instead of by SQLite row order.
 final activeWorkoutPlanProvider = Provider<WorkoutPlan?>((ref) {
   final plans = ref.watch(workoutPlansProvider).valueOrNull;
   if (plans == null || plans.isEmpty) return null;
+  WorkoutPlan? newest;
   for (final plan in plans) {
-    if (plan.isActive) return plan;
+    if (!plan.isActive) continue;
+    if (newest == null || plan.updatedAt.isAfter(newest.updatedAt)) {
+      newest = plan;
+    }
   }
-  return plans.first;
+  return newest ?? plans.first;
 });
 
 final workoutPlanEntriesProvider =
@@ -1381,15 +1389,22 @@ final exerciseSetLogsProvider =
           .listSetLogs(exerciseId: exerciseId);
     });
 
-/// Local calendar days that carry at least one finished workout. Backs both
-/// the calendar day icon and the analytics "worked out" boolean, so the two
-/// can never disagree about what counts.
+/// Local calendar days that carry at least one finished workout with a
+/// completed set. Backs both the calendar day icon and the analytics "worked
+/// out" boolean, so the two can never disagree about what counts.
+///
+/// Enforced here rather than at finish time so sessions that arrive through
+/// sync, or were finished before the rule existed, are held to it too.
 final workoutDaysProvider = FutureProvider<Set<DateTime>>((ref) async {
   ref.keepAlive();
   final sessions = await ref.watch(workoutSessionsProvider.future);
+  final withWork = await ref
+      .watch(workoutRepositoryProvider)
+      .listSessionIdsWithCompletedSets();
   return {
     for (final session in sessions)
-      if (session.endedAt != null) workoutDayKey(session.date),
+      if (session.endedAt != null && withWork.contains(session.id))
+        workoutCalendarDate(session.date),
   };
 });
 

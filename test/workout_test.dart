@@ -105,16 +105,27 @@ void main() {
 
   group('WorkoutSetLog', () {
     test('matching the plan is not a deviation', () {
-      expect(_log(sessionId: 's', exerciseId: 'e').deviatesFromPlan, isFalse);
+      expect(
+        _log(sessionId: 's', exerciseId: 'e').deviatesFromPlanIn(WeightUnit.kg),
+        isFalse,
+      );
     });
 
     test('a heavier or lighter set deviates', () {
       expect(
-        _log(sessionId: 's', exerciseId: 'e', weightKg: 105).deviatesFromPlan,
+        _log(
+          sessionId: 's',
+          exerciseId: 'e',
+          weightKg: 105,
+        ).deviatesFromPlanIn(WeightUnit.kg),
         isTrue,
       );
       expect(
-        _log(sessionId: 's', exerciseId: 'e', reps: 6).deviatesFromPlan,
+        _log(
+          sessionId: 's',
+          exerciseId: 'e',
+          reps: 6,
+        ).deviatesFromPlanIn(WeightUnit.kg),
         isTrue,
       );
     });
@@ -167,7 +178,7 @@ void main() {
         createdAt: now,
         updatedAt: now,
       );
-      expect(log.deviatesFromPlan, isTrue);
+      expect(log.deviatesFromPlanIn(WeightUnit.kg), isTrue);
     });
   });
 

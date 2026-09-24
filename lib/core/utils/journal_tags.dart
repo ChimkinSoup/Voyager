@@ -70,6 +70,26 @@ const kTagPaletteLight = <int>[
   0xFF5B6BC9, // Lavender
 ];
 
+/// The accents' names, index for index with [kTagPaletteDark] — reordered
+/// together with it or not at all. What the calendar import prompt offers an
+/// AI to pick from, since a name survives the round trip better than a hex.
+const kTagPaletteNames = <String>[
+  'Rosewater',
+  'Flamingo',
+  'Pink',
+  'Mauve',
+  'Red',
+  'Maroon',
+  'Peach',
+  'Yellow',
+  'Green',
+  'Teal',
+  'Sky',
+  'Sapphire',
+  'Blue',
+  'Lavender',
+];
+
 /// The stable color for [tag], in the canonical (dark) palette.
 ///
 /// This is the value that gets *stored* and synced. Storage stays on one

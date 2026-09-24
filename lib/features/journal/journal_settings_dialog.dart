@@ -4,6 +4,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 
 /// Per-journal settings: which editor controls the journal shows, whether its
@@ -149,6 +150,47 @@ class _JournalSettingsDialog extends ConsumerWidget {
                 value: journal.showQuotes,
                 onChanged: (v) =>
                     _saveJournal(ref, (j) => j.copyWith(showQuotes: v)),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('On this day'),
+                subtitle: Text(
+                  'Resurface entries from this day in past years, or from one '
+                  'month ago.',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+              SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<OnThisDayCadence>(
+                  segments: const [
+                    ButtonSegment(
+                      value: OnThisDayCadence.off,
+                      label: Text('Off'),
+                    ),
+                    ButtonSegment(
+                      value: OnThisDayCadence.yearly,
+                      label: Text('Yearly'),
+                    ),
+                    ButtonSegment(
+                      value: OnThisDayCadence.monthlyAndYearly,
+                      label: Text('Monthly + yearly', softWrap: false),
+                    ),
+                  ],
+                  selected: {journal.onThisDayCadence},
+                  showSelectedIcon: false,
+                  // Segments split the width evenly, and the default padding
+                  // left "Monthly + yearly" a few pixels short of one line.
+                  style: const ButtonStyle(
+                    padding: WidgetStatePropertyAll(
+                      EdgeInsets.symmetric(horizontal: 4),
+                    ),
+                  ),
+                  onSelectionChanged: (selection) => _saveJournal(
+                    ref,
+                    (j) => j.copyWith(onThisDayCadence: selection.first),
+                  ),
+                ),
               ),
               const Divider(height: 24),
               _toggle(

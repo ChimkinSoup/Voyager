@@ -38,14 +38,30 @@ class _WorkoutIslandState extends ConsumerState<WorkoutIsland>
   );
   DateTime? _trackedEnd;
 
+  /// A backgrounded app pauses the ticker, which then resumes from where it
+  /// stopped rather than where the countdown now is.
+  late final AppLifecycleListener _lifecycle = AppLifecycleListener(
+    onResume: () {
+      final state = ref.read(workoutSessionControllerProvider);
+      _syncRest(state.restEndsAt, state.restTotalSeconds, force: true);
+    },
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle;
+  }
+
   @override
   void dispose() {
+    _lifecycle.dispose();
     _rest.dispose();
     super.dispose();
   }
 
-  void _syncRest(DateTime? endsAt, int totalSeconds) {
-    if (endsAt == _trackedEnd) return;
+  void _syncRest(DateTime? endsAt, int totalSeconds, {bool force = false}) {
+    if (endsAt == _trackedEnd && !force) return;
     _trackedEnd = endsAt;
     if (endsAt == null || totalSeconds <= 0) {
       _rest.stop();
@@ -59,9 +75,13 @@ class _WorkoutIslandState extends ConsumerState<WorkoutIsland>
       return;
     }
     // Resumes mid-drain rather than restarting: the countdown may be picked
-    // up on a rebuild that happens seconds after it started.
-    _rest.duration = remaining;
-    _rest.forward(from: 0);
+    // up on a rebuild that happens seconds after it started, and the ring has
+    // to agree with the countdown text beside it.
+    final total = Duration(seconds: totalSeconds);
+    _rest.duration = total;
+    _rest.forward(
+      from: (1 - remaining.inMilliseconds / total.inMilliseconds).clamp(0, 1),
+    );
   }
 
   @override

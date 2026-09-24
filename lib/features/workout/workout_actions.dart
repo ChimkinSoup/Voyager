@@ -62,7 +62,14 @@ class WorkoutActions {
     );
   }
 
-  Future<Exercise> createExercise(String name, {int sortOrder = 0}) async {
+  Future<Exercise> createExercise(String name) async {
+    // After the highest order on any row, deleted ones included. The library
+    // count collided with a surviving exercise's order after a delete, and
+    // tied rows sort differently between rebuilds and between devices.
+    final all = await _ref.read(workoutRepositoryProvider).getAllExercises();
+    final sortOrder = all.isEmpty
+        ? 0
+        : all.map((e) => e.sortOrder).reduce((a, b) => a > b ? a : b) + 1;
     final now = utcNow();
     final exercise = Exercise(
       id: newId(),
@@ -103,12 +110,8 @@ class WorkoutActions {
     required String planId,
     required int dayIndex,
     required String exerciseId,
-    required List<WorkoutPlanEntry> existing,
   }) async {
-    final onDay = existing.where((e) => e.dayIndex == dayIndex);
-    final nextOrder = onDay.isEmpty
-        ? 0
-        : onDay.map((e) => e.sortOrder).reduce((a, b) => a > b ? a : b) + 1;
+    final nextOrder = await _nextPlanEntryOrder(planId, dayIndex);
     final now = utcNow();
     await savePlanEntry(
       WorkoutPlanEntry(
@@ -128,18 +131,36 @@ class WorkoutActions {
   Future<void> movePlanEntry({
     required WorkoutPlanEntry entry,
     required int dayIndex,
-    required List<WorkoutPlanEntry> existing,
   }) async {
     if (entry.dayIndex == dayIndex) return;
-    final onDay = existing.where(
-      (e) => e.dayIndex == dayIndex && e.id != entry.id,
+    final nextOrder = await _nextPlanEntryOrder(
+      entry.planId,
+      dayIndex,
+      excludingId: entry.id,
     );
-    final nextOrder = onDay.isEmpty
-        ? 0
-        : onDay.map((e) => e.sortOrder).reduce((a, b) => a > b ? a : b) + 1;
     await savePlanEntry(
       entry.copyWith(dayIndex: dayIndex, sortOrder: nextOrder),
     );
+  }
+
+  /// The order after the last entry on [dayIndex], read from the database
+  /// rather than from the planner's last build: two drops landing before it
+  /// rebuilt got the same order, and tied cards swapped places between
+  /// rebuilds and between devices. Deleted entries count too, so undoing a
+  /// removal can't collide with whatever replaced it.
+  Future<int> _nextPlanEntryOrder(
+    String planId,
+    int dayIndex, {
+    String? excludingId,
+  }) async {
+    final onDay = [
+      for (final e
+          in await _ref
+              .read(workoutRepositoryProvider)
+              .listPlanEntries(planId, includeDeleted: true))
+        if (e.dayIndex == dayIndex && e.id != excludingId) e.sortOrder,
+    ];
+    return onDay.isEmpty ? 0 : onDay.reduce((a, b) => a > b ? a : b) + 1;
   }
 
   Future<void> deletePlanEntry(String id) async {

@@ -570,8 +570,8 @@
     "semantic_hash": ""
   },
   "lib/data/repositories/drift_repositories.dart": {
-    "mtime": 1790037101.421229,
-    "ast_hash": "57af1697bce7c751d916001ba9e7498a",
+    "mtime": 1790193796.8136137,
+    "ast_hash": "3a7bace1ae512b597a8ccf303d884eaf",
     "semantic_hash": ""
   },
   "lib/data/services/quotes_loader.dart": {
@@ -625,8 +625,8 @@
     "semantic_hash": ""
   },
   "lib/domain/repositories/repositories.dart": {
-    "mtime": 1789929519.7593977,
-    "ast_hash": "ee9805b38921d345f2d97c6c9ba28ae8",
+    "mtime": 1790193796.749971,
+    "ast_hash": "5f335d5b93bf710a7eda99550525aa4a",
     "semantic_hash": ""
   },
   "lib/domain/repositories/weather_api_client.dart": {
@@ -740,8 +740,8 @@
     "semantic_hash": "d0994cbea6ba9180639b6bfde3dc17f2"
   },
   "lib/features/calendar/calendar_day_grid.dart": {
-    "mtime": 1789970589.1259656,
-    "ast_hash": "d9cc8379c40e90a2f1e75a7f175e7ce6",
+    "mtime": 1790186639.001122,
+    "ast_hash": "138934c7c2fee0fe19857900c27902c5",
     "semantic_hash": ""
   },
   "lib/features/calendar/calendar_event_panel.dart": {
@@ -765,18 +765,18 @@
     "semantic_hash": ""
   },
   "lib/features/calendar/calendar_page.dart": {
-    "mtime": 1789970589.3438084,
-    "ast_hash": "6886ee25c0dd2cce50ee4bd1b239c461",
+    "mtime": 1790198671.5175407,
+    "ast_hash": "ce0f155d84fa2c7cbf1bc5420b917c79",
     "semantic_hash": ""
   },
   "lib/features/calendar/calendar_todo_markers.dart": {
-    "mtime": 1789970589.3650627,
-    "ast_hash": "f41c1de6a8feb46dde40dede2c94873f",
+    "mtime": 1790186639.0021493,
+    "ast_hash": "edc916c53260abd9be621a90624074f3",
     "semantic_hash": ""
   },
   "lib/features/calendar/calendar_week_timeline.dart": {
-    "mtime": 1789970589.4337015,
-    "ast_hash": "12190cd0c70e42c52d5bd111a965e511",
+    "mtime": 1790186797.4797611,
+    "ast_hash": "2141e6d4aab3cef24eb28bb168b0632f",
     "semantic_hash": ""
   },
   "lib/features/calendar/month_zoom_prewarm_tracker.dart": {
@@ -880,8 +880,8 @@
     "semantic_hash": ""
   },
   "lib/features/settings/settings_color_palette_section.dart": {
-    "mtime": 1789970591.077258,
-    "ast_hash": "e2d2e1e4b7fec457d1d5526ec83f09a6",
+    "mtime": 1790211507.359768,
+    "ast_hash": "3518da633f622d888cdab9c4df44c28e",
     "semantic_hash": ""
   },
   "lib/features/settings/settings_page.dart": {
@@ -895,8 +895,8 @@
     "semantic_hash": "b5a15edc83e7e993ae96eb801e3d331d"
   },
   "lib/features/shell/app_shell.dart": {
-    "mtime": 1789931344.5020704,
-    "ast_hash": "cb7ecf1b81f80fa47093b64837b537d3",
+    "mtime": 1790193796.8146513,
+    "ast_hash": "d4bc8633b544b40885c9222e9674f789",
     "semantic_hash": ""
   },
   "lib/features/shell/shell_destinations.dart": {
@@ -905,7 +905,7 @@
     "semantic_hash": ""
   },
   "lib/features/shell/shell_keyboard_shortcuts.dart": {
-    "mtime": 1789970591.1705422,
+    "mtime": 1790198842.6976924,
     "ast_hash": "1bc8a83b73cd3ff757c806915f39b1fc",
     "semantic_hash": ""
   },
@@ -915,8 +915,8 @@
     "semantic_hash": ""
   },
   "lib/features/shell/shell_page_transition.dart": {
-    "mtime": 1789970591.1745636,
-    "ast_hash": "60dd9369641981e5107d2e82fecddcab",
+    "mtime": 1790194340.3764968,
+    "ast_hash": "8669c5c08e88990c09da94722e29ffe1",
     "semantic_hash": ""
   },
   "lib/features/shell/weather_chart_curve.dart": {
@@ -2265,13 +2265,13 @@
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_flashcard.dart": {
-    "mtime": 1789970590.3742836,
-    "ast_hash": "313e4c2207289ec9ea69617b21a3ea88",
+    "mtime": 1790191118.9056406,
+    "ast_hash": "250fc4765e6d39b4a4909e37b215e627",
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_page.dart": {
-    "mtime": 1789931664.2279732,
-    "ast_hash": "c35c4dc658d218326e9dc85191a472f9",
+    "mtime": 1790194542.3502755,
+    "ast_hash": "874b1e3c96cc3ed8f3440fefe58841cc",
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_progress_rings.dart": {
@@ -2350,8 +2350,8 @@
     "semantic_hash": ""
   },
   "lib/features/study/study_flip_card.dart": {
-    "mtime": 1789970591.295452,
-    "ast_hash": "951e3000e189fb46ee52acc77e16aac8",
+    "mtime": 1790191118.9068477,
+    "ast_hash": "f9faa49229486cb2a41cca1dd580002f",
     "semantic_hash": ""
   },
   "lib/features/study/study_keyboard_shortcuts.dart": {
@@ -2370,8 +2370,8 @@
     "semantic_hash": ""
   },
   "lib/features/study/study_page.dart": {
-    "mtime": 1789970591.4084227,
-    "ast_hash": "c8c3e56c662d060c8153e818f058b76b",
+    "mtime": 1790194269.9185941,
+    "ast_hash": "b42a598fdbd640012ae8e5144374ea2c",
     "semantic_hash": ""
   },
   "lib/features/study/study_providers.dart": {
@@ -2855,8 +2855,8 @@
     "semantic_hash": ""
   },
   "lib/core/motion/voyager_crossfade.dart": {
-    "mtime": 1789972029.6304898,
-    "ast_hash": "f72414b8569f549a518dee8dfc3f071d",
+    "mtime": 1790199781.4414299,
+    "ast_hash": "4803155cc0388953a401bd2267de2cdb",
     "semantic_hash": ""
   },
   "test/glass_transition_backdrop_test.dart": {
@@ -3895,8 +3895,8 @@
     "semantic_hash": ""
   },
   "lib/core/media/widgets/media_gallery_strip.dart": {
-    "mtime": 1789972029.6284902,
-    "ast_hash": "4041a5754c3778ac3c2c8e7b6d72920c",
+    "mtime": 1790216587.758842,
+    "ast_hash": "289a261e4ad030819ecff4c6bbc44fb3",
     "semantic_hash": ""
   },
   "lib/core/media/widgets/media_image.dart": {
@@ -5270,8 +5270,8 @@
     "semantic_hash": ""
   },
   "test/settings_color_palette_reorder_test.dart": {
-    "mtime": 1789583413.4637418,
-    "ast_hash": "d7202e541c1161c1bcb01f80c4d98aca",
+    "mtime": 1790211467.2073226,
+    "ast_hash": "328a838e1d5d33e5e5cee9695973ab44",
     "semantic_hash": ""
   },
   "test/snippet_records_sync_test.dart": {
@@ -5415,8 +5415,8 @@
     "semantic_hash": ""
   },
   "lib/features/hotkeys/quick_journal_entry.dart": {
-    "mtime": 1789970589.893989,
-    "ast_hash": "1d335ff532913a720ebe5d13fdc1fb57",
+    "mtime": 1790207515.1100955,
+    "ast_hash": "76f449ff6dace0fc4fde184fd660028d",
     "semantic_hash": ""
   },
   "lib/features/notifications/reminder_bell_button.dart": {
@@ -5475,8 +5475,8 @@
     "semantic_hash": ""
   },
   "test/quick_journal_entry_test.dart": {
-    "mtime": 1789888641.2232974,
-    "ast_hash": "6f256037c43b7c2ce5dedd31310f8cb2",
+    "mtime": 1790207496.1730008,
+    "ast_hash": "a8950af9de5813b8a26820d6ba9ecea6",
     "semantic_hash": ""
   },
   "test/reminder_engine_test.dart": {
@@ -5495,8 +5495,8 @@
     "semantic_hash": ""
   },
   "test/shell_instant_switch_test.dart": {
-    "mtime": 1789698374.7740467,
-    "ast_hash": "8b342881d2c9db37bbb07d4f5a31553c",
+    "mtime": 1790194340.4159799,
+    "ast_hash": "19f6923e68b9134d988e811bf9ae5f67",
     "semantic_hash": ""
   },
   "AUDIT_TESTING.md": {
@@ -5777,6 +5777,36 @@
   "test/finance_asset_value_chart_test.dart": {
     "mtime": 1790113300.1332078,
     "ast_hash": "e582508007323c9d3c205622bb9f3dfe",
+    "semantic_hash": ""
+  },
+  "lib/features/calendar/calendar_week_morph_entries.dart": {
+    "mtime": 1790187212.8066115,
+    "ast_hash": "c6ccc09b626a278b350adcb92c3ebefe",
+    "semantic_hash": ""
+  },
+  "test/calendar_branch_switch_rebuild_test.dart": {
+    "mtime": 1790198666.2605624,
+    "ast_hash": "80e5595dc582ab908cc85c558c009c99",
+    "semantic_hash": ""
+  },
+  "test/calendar_week_morph_events_test.dart": {
+    "mtime": 1790189265.6962075,
+    "ast_hash": "daff84532f0331dacc82a4fc0f6e615c",
+    "semantic_hash": ""
+  },
+  "test/crossfade_no_rebuild_test.dart": {
+    "mtime": 1790194156.5902412,
+    "ast_hash": "f630ec9d72dea7cb0a886b6c8898ee6b",
+    "semantic_hash": ""
+  },
+  "test/media_gallery_strip_empty_ink_test.dart": {
+    "mtime": 1790216572.7050245,
+    "ast_hash": "cbe403c009f5dc36749ea6a1aa6c13e9",
+    "semantic_hash": ""
+  },
+  "test/shell_hidden_branch_ink_test.dart": {
+    "mtime": 1790199763.1297586,
+    "ast_hash": "acb0471a6bb9b1ffc0705a622e9ecf25",
     "semantic_hash": ""
   }
 }

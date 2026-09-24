@@ -11,6 +11,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
+import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/features/journal/journal_settings_dialog.dart';
 
@@ -155,6 +156,36 @@ void main() {
     await toggle(tester, 'Include in "All journals"');
 
     expect((await readJournal(db, _firstId)).includeInAllView, isFalse);
+  });
+
+  testWidgets('On this day starts off and the chosen cadence writes through', (
+    tester,
+  ) async {
+    final db = await pumpSettingsLauncher(tester);
+    await openSettings(tester, _firstId);
+
+    final control = tester.widget<SegmentedButton<OnThisDayCadence>>(
+      find.byType(SegmentedButton<OnThisDayCadence>),
+    );
+    expect(control.selected, {OnThisDayCadence.off});
+
+    await tester.tap(find.text('Monthly + yearly'));
+    await tester.pumpAndSettle();
+    expect(
+      (await readJournal(db, _firstId)).onThisDayCadence,
+      OnThisDayCadence.monthlyAndYearly,
+    );
+
+    await tester.tap(find.text('Yearly'));
+    await tester.pumpAndSettle();
+    expect(
+      (await readJournal(db, _firstId)).onThisDayCadence,
+      OnThisDayCadence.yearly,
+    );
+    expect(
+      (await readJournal(db, _secondId)).onThisDayCadence,
+      OnThisDayCadence.off,
+    );
   });
 
   testWidgets('the default-view toggle records the journal in settings', (

@@ -89,14 +89,14 @@ class ActiveWorkoutView extends ConsumerWidget {
                                   constraints.maxHeight < _roomyWheelsMinHeight
                                   ? 3
                                   : 5,
-                              deviatesFromPlan: set.deviatesFromPlan,
+                              deviatesFromPlan: set.deviatesFromPlanIn(unit),
                               onInteraction: controller.cancelRest,
                               onWeightChanged: (kg) =>
                                   controller.updateCurrentSet(weightKg: kg),
                               onRepsChanged: (reps) =>
                                   controller.updateCurrentSet(reps: reps),
                             ),
-                            if (set.deviatesFromPlan)
+                            if (set.deviatesFromPlanIn(unit))
                               Padding(
                                 padding: const EdgeInsets.only(
                                   top: VoyagerSpacing.xs,
@@ -121,7 +121,7 @@ class ActiveWorkoutView extends ConsumerWidget {
                             ),
                             const SizedBox(height: VoyagerSpacing.lg),
                             _SetCountField(
-                              key: ValueKey(set.exerciseId),
+                              key: ValueKey(set.exerciseOrder),
                               count: state.currentExerciseSets.length,
                               onChanged: controller.setCurrentExerciseSetCount,
                             ),
@@ -429,7 +429,7 @@ class _SetRow extends StatelessWidget {
                               '${set.hasDrops ? ' ↓' : ''}'
                         : 'Set ${index + 1}${set.hasDrops ? ' ↓' : ''}',
                     style: theme.textTheme.labelMedium?.copyWith(
-                      color: set.deviatesFromPlan && set.completed
+                      color: set.deviatesFromPlanIn(unit) && set.completed
                           ? accent
                           : theme.colorScheme.onSurface,
                     ),
@@ -540,14 +540,14 @@ class _ExerciseStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = VoyagerColors.of(context);
-    final currentExerciseId = state.currentSet?.exerciseId;
+    final currentOrder = state.currentSet?.exerciseOrder;
 
     return SizedBox(
       height: 36,
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
-          for (final exercise in state.sessionExercises)
+          for (final (:order, :exercise) in state.sessionExercises)
             Padding(
               padding: const EdgeInsets.only(right: VoyagerSpacing.sm),
               child: InkWell(
@@ -556,7 +556,7 @@ class _ExerciseStrip extends StatelessWidget {
                   // Land on the first set of that exercise still to be done,
                   // falling back to its first set once it's all logged.
                   final sets = state.logs.where(
-                    (l) => l.exerciseId == exercise.id,
+                    (l) => l.exerciseOrder == order,
                   );
                   if (sets.isEmpty) return;
                   final target = sets.firstWhere(
@@ -571,14 +571,14 @@ class _ExerciseStrip extends StatelessWidget {
                     horizontal: VoyagerSpacing.md,
                   ),
                   decoration: BoxDecoration(
-                    color: exercise.id == currentExerciseId
+                    color: order == currentOrder
                         ? theme.colorScheme.primary.withValues(alpha: 0.14)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(
                       VoyagerTheme.fieldRadius,
                     ),
                     border: Border.all(
-                      color: exercise.id == currentExerciseId
+                      color: order == currentOrder
                           ? theme.colorScheme.primary.withValues(alpha: 0.6)
                           : colors.hairline,
                     ),

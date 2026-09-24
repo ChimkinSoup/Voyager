@@ -34,7 +34,6 @@ class WorkoutDayColumn extends ConsumerStatefulWidget {
     required this.title,
     this.subtitle,
     required this.entries,
-    required this.allEntries,
     required this.exercisesById,
     required this.unit,
     this.isToday = false,
@@ -48,10 +47,6 @@ class WorkoutDayColumn extends ConsumerStatefulWidget {
 
   /// Entries on this day, already ordered.
   final List<WorkoutPlanEntry> entries;
-
-  /// Every entry in the plan — needed to work out the next sort order on the
-  /// receiving day when something is dropped.
-  final List<WorkoutPlanEntry> allEntries;
 
   final Map<String, Exercise> exercisesById;
   final WeightUnit unit;
@@ -126,7 +121,6 @@ class _WorkoutDayColumnState extends ConsumerState<WorkoutDayColumn> {
                           exercise: widget
                               .exercisesById[widget.entries[i].exerciseId],
                           unit: widget.unit,
-                          allEntries: widget.allEntries,
                         ),
                       ),
               ),
@@ -192,14 +186,9 @@ class _WorkoutDayColumnState extends ConsumerState<WorkoutDayColumn> {
         planId: widget.planId,
         dayIndex: widget.dayIndex,
         exerciseId: data.exercise.id,
-        existing: widget.allEntries,
       );
     } else if (data is PlanEntryDragData) {
-      await actions.movePlanEntry(
-        entry: data.entry,
-        dayIndex: widget.dayIndex,
-        existing: widget.allEntries,
-      );
+      await actions.movePlanEntry(entry: data.entry, dayIndex: widget.dayIndex);
     }
   }
 }
@@ -230,7 +219,6 @@ class _PlanEntryCard extends ConsumerWidget {
     required this.entry,
     required this.exercise,
     required this.unit,
-    required this.allEntries,
   });
 
   final WorkoutPlanEntry entry;
@@ -239,7 +227,6 @@ class _PlanEntryCard extends ConsumerWidget {
   /// device before its tombstone arrived.
   final Exercise? exercise;
   final WeightUnit unit;
-  final List<WorkoutPlanEntry> allEntries;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

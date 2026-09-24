@@ -66,6 +66,7 @@ class AppShell extends ConsumerWidget {
     return ShellKeyboardShortcuts(
       navigationShell: navigationShell,
       orderedDestinations: orderedDestinations,
+      settings: settings,
       child: PopScope(
         // Always false: when a branch has something of its own to pop,
         // go_router routes the gesture to that branch's navigator and this

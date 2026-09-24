@@ -1,4 +1,5 @@
 import 'package:voyager/core/text/prose_markup.dart';
+import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
 
 /// The mood every new entry starts at, and what the v85 migration wrote over
@@ -21,6 +22,7 @@ class Journal extends SoftDeletable {
     this.showWeather = true,
     this.showQuotes = true,
     this.includeInAllView = true,
+    this.onThisDayCadence = OnThisDayCadence.off,
   });
 
   final String name;
@@ -47,6 +49,10 @@ class Journal extends SoftDeletable {
   /// in search, analytics and the tag pool.
   final bool includeInAllView;
 
+  /// Whether the journal page resurfaces this journal's past entries, and
+  /// from how far back. See `features/journal/on_this_day.dart`.
+  final OnThisDayCadence onThisDayCadence;
+
   Journal copyWith({
     String? name,
     int? colorValue,
@@ -56,6 +62,7 @@ class Journal extends SoftDeletable {
     bool? showWeather,
     bool? showQuotes,
     bool? includeInAllView,
+    OnThisDayCadence? onThisDayCadence,
     DateTime? deletedAt,
     bool bumpVersion = true,
   }) {
@@ -73,6 +80,7 @@ class Journal extends SoftDeletable {
       showWeather: showWeather ?? this.showWeather,
       showQuotes: showQuotes ?? this.showQuotes,
       includeInAllView: includeInAllView ?? this.includeInAllView,
+      onThisDayCadence: onThisDayCadence ?? this.onThisDayCadence,
     );
   }
 }

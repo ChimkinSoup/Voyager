@@ -151,7 +151,7 @@ class WorkoutExercisePanel extends ConsumerWidget {
       hintText: 'Bench Press',
     );
     if (name == null) return;
-    await WorkoutActions(ref).createExercise(name, sortOrder: exercises.length);
+    await WorkoutActions(ref).createExercise(name);
   }
 }
 
@@ -337,9 +337,7 @@ class _DragFeedback extends StatelessWidget {
 
 /// Button that opens the "add exercise" flow from outside the panel.
 class AddExerciseButton extends ConsumerWidget {
-  const AddExerciseButton({super.key, required this.exerciseCount});
-
-  final int exerciseCount;
+  const AddExerciseButton({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -354,9 +352,7 @@ class AddExerciseButton extends ConsumerWidget {
           hintText: 'Bench Press',
         );
         if (name == null) return;
-        await WorkoutActions(
-          ref,
-        ).createExercise(name, sortOrder: exerciseCount);
+        await WorkoutActions(ref).createExercise(name);
       },
     );
   }

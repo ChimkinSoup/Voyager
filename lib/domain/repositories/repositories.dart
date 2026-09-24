@@ -596,6 +596,13 @@ abstract class WorkoutRepository {
     WorkoutSession session, {
     bool recordLocalActivity = true,
   });
+
+  /// Writes a new session and its materialised sets in one transaction, so a
+  /// crash can never leave an open session with no sets behind.
+  Future<void> createSessionWithLogs(
+    WorkoutSession session,
+    List<WorkoutSetLog> logs,
+  );
   Future<void> softDeleteSession(String id);
 
   Future<List<WorkoutSetLog>> listSetLogs({
@@ -604,6 +611,10 @@ abstract class WorkoutRepository {
     bool includeDeleted = false,
   });
   Future<WorkoutSetLog?> getSetLog(String id);
+
+  /// Sessions holding at least one live, completed set — the ones that count
+  /// as a workout day.
+  Future<Set<String>> listSessionIdsWithCompletedSets();
   Future<void> upsertSetLog(
     WorkoutSetLog log, {
     bool recordLocalActivity = true,

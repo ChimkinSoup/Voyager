@@ -1409,6 +1409,68 @@ void main() {
     });
   });
 
+  group('On this day cadence in backups', () {
+    Future<Journal> restoreJournal(
+      Map<String, Object> contents,
+      String name,
+    ) async {
+      final zip = await writeBackupZip(contents, 'voyager_otd_$name');
+      addTearDown(zip.delete);
+      final target = AppDatabase.inMemory();
+      addTearDown(target.close);
+      await importerFor(target, RecordingUploader()).importFromZip(zip);
+      return (await DriftJournalRepository(target).getJournal('j'))!;
+    }
+
+    Future<Map<String, Object>> exportJournal(OnThisDayCadence cadence) async {
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+      final now = DateTime.utc(2026, 1, 1);
+      await DriftJournalRepository(db).upsertJournal(
+        Journal(
+          id: 'j',
+          name: 'J',
+          createdAt: now,
+          updatedAt: now,
+          onThisDayCadence: cadence,
+        ),
+      );
+      return exporterFor(db).buildArchiveContents();
+    }
+
+    List<Map<String, dynamic>> journalRecords(Map<String, Object> contents) =>
+        (contents['${FirestoreCollections.journals}.json']! as List)
+            .cast<Map<String, dynamic>>();
+
+    test('an export carries the cadence and a restore keeps it', () async {
+      for (final cadence in [
+        OnThisDayCadence.yearly,
+        OnThisDayCadence.monthlyAndYearly,
+      ]) {
+        final contents = await exportJournal(cadence);
+        expect(
+          journalRecords(contents).single['data']['onThisDayCadence'],
+          cadence.name,
+        );
+        expect(
+          (await restoreJournal(contents, cadence.name)).onThisDayCadence,
+          cadence,
+        );
+      }
+    });
+
+    test('a backup made before the cadence existed restores as off', () async {
+      final contents = await exportJournal(OnThisDayCadence.yearly);
+      (journalRecords(contents).single['data'] as Map).remove(
+        'onThisDayCadence',
+      );
+      expect(
+        (await restoreJournal(contents, 'legacy')).onThisDayCadence,
+        OnThisDayCadence.off,
+      );
+    });
+  });
+
   group('Backup format', () {
     test('rejects an archive with no manifest', () async {
       // The shape older backups had: journal entries under journals.json.

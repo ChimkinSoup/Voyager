@@ -10,6 +10,11 @@ enum BillingPeriod { weekly, biweekly, monthly, quarterly, yearly }
 
 enum TrackerCadence { daily, weekly, monthly, yearly }
 
+/// Which past entries a journal's On this day card brings back.
+/// - [yearly]: the same month and day in every past year.
+/// - [monthlyAndYearly]: that, plus the same day of the prior month.
+enum OnThisDayCadence { off, yearly, monthlyAndYearly }
+
 /// How an integer tracker's history is visualised.
 /// - [independent]: each period stands alone → heatmap square.
 /// - [consecutive]: values form a continuous series → line/sparkline graph.

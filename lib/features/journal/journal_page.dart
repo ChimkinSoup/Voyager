@@ -64,6 +64,7 @@ import 'package:voyager/features/hotkeys/quick_journal_entry.dart';
 import 'package:voyager/features/journal/journal_entry_actions.dart';
 import 'package:voyager/features/journal/journal_entry_delete.dart';
 import 'package:voyager/features/journal/journal_manage_sheet.dart';
+import 'package:voyager/features/journal/on_this_day_overlay.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/sync/sync_conflict_banner.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
@@ -1214,6 +1215,14 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     await _loadEntryById(id);
   }
 
+  /// Opens an On this day memory and scrolls the list to it: a memory is a
+  /// month or years back, usually far below the visible rows.
+  Future<void> _openMemory(String id) async {
+    await _openEntry(id);
+    if (!mounted || _selectedEntryId != id) return;
+    setState(() => _shouldScrollToSelected = true);
+  }
+
   /// The journal hotkey's in-app path: today's Quick Journal Entry — the same
   /// one the notepad floater binds to — opened for editing, in its journal.
   Future<void> _openQuickJournalEntry() async {
@@ -1710,7 +1719,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _invalidateJournalEntryCaches();
   }
 
-  void _scrollToSelectedEntry(List<JournalEntry> filtered) {
+  /// [retry] counts the re-measured jumps after one that landed with the row
+  /// still unbuilt.
+  void _scrollToSelectedEntry(List<JournalEntry> filtered, {int retry = 0}) {
     if (!mounted || _selectedEntryId == null) return;
 
     if (_selectedEntryKey.currentContext != null) {
@@ -1726,31 +1737,48 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final index = filtered.indexWhere((e) => e.id == _selectedEntryId);
     if (index == -1) return;
 
-    double estimatedOffset = 0.0;
-    for (int i = 0; i < index; i++) {
-      final entry = filtered[i];
-      final hasPreview = firstSentencePreview(entry.body).isNotEmpty;
-      estimatedOffset += hasPreview ? 68.0 : 52.0;
-    }
-
     if (!_entryListScrollController.hasClients) return;
+    final pos = _entryListScrollController.position;
 
-    final viewport = _entryListScrollController.position.viewportDimension;
-    final target = math.max(0.0, estimatedOffset - viewport / 2 + 34.0);
+    // The hardcoded heights only give the rows' proportions. Their real size
+    // comes from the list's own extent, which it measures from the rows it
+    // has laid out; a year-old entry sits hundreds of rows down, where the
+    // unscaled estimate fell several rows short of it.
+    double weight(JournalEntry entry) =>
+        firstSentencePreview(entry.body).isNotEmpty ? 68.0 : 52.0;
+    var before = 0.0;
+    var total = 0.0;
+    for (var i = 0; i < filtered.length; i++) {
+      final w = weight(filtered[i]);
+      if (i < index) before += w;
+      total += w;
+    }
+    final scale = (pos.maxScrollExtent + pos.viewportDimension) / total;
+    final rowCentre = (before + weight(filtered[index]) / 2) * scale;
+    final target = math.max(0.0, rowCentre - pos.viewportDimension / 2);
 
-    _jumpToTarget(target);
+    // Still short when heights vary along the list. By then the rows around
+    // the landing spot are laid out, so measuring again closes in.
+    _jumpToTarget(
+      target,
+      onMissed: retry < 4
+          ? () => _scrollToSelectedEntry(filtered, retry: retry + 1)
+          : null,
+    );
   }
 
   /// Walks the list down towards [target], materializing rows as it goes.
   ///
+  /// [onMissed] runs if the selected row still isn't built where it lands.
+  ///
   /// [attempt] is what stops it. `target` is an estimate built from hardcoded
-  /// per-row heights that are not tied to the rendered `ListTile` at all, so a
+  /// per-row heights, scaled but not exact, so a
   /// theme, density or text-scale change can push it past the real
   /// `maxScrollExtent` of a fully materialized list — and the retry, whose only
   /// exit was `target <= maxScrollExtent`, then re-armed itself every frame:
   /// one `jumpTo` per vsync forever, pinning the list at the bottom. Not a
   /// hang, which is why it would present as a janky list stuck at the end.
-  void _jumpToTarget(double target, {int attempt = 0}) {
+  void _jumpToTarget(double target, {int attempt = 0, VoidCallback? onMissed}) {
     if (!mounted || !_entryListScrollController.hasClients) return;
     final pos = _entryListScrollController.position;
 
@@ -1760,7 +1788,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       // Force layout by jumping to current max extent, then repeat next frame
       pos.jumpTo(pos.maxScrollExtent);
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _jumpToTarget(target, attempt: attempt + 1);
+        if (mounted) {
+          _jumpToTarget(target, attempt: attempt + 1, onMissed: onMissed);
+        }
       });
     } else {
       // We reached the target area, or hit the absolute end
@@ -1774,6 +1804,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
           );
+        } else {
+          onMissed?.call();
         }
       });
     }
@@ -2428,7 +2460,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       _optimisticallyHiddenEntryIds.removeWhere((id) => !knownIds.contains(id));
     }
 
-    return Column(
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SyncConflictBanner(),
@@ -2731,7 +2763,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                     ),
                                   ),
                                 ];
-                                final controls = <Widget>[
+                                // [fitDate] lets the date pill shrink and
+                                // ellipsize, for a line the controls hold
+                                // alone: at a half-screen width even they
+                                // overflow with the pill held at its floor.
+                                // It needs the bounded width a Flexible gives,
+                                // so it stays off beside the slider's Expanded.
+                                List<Widget> controls({
+                                  required bool fitDate,
+                                }) => [
                                   if (showWeatherPicker) ...[
                                     PopupMenuButton<VoyagerMenuCatalogEntry>(
                                       tooltip: 'Weather',
@@ -2759,35 +2799,40 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                     ),
                                     const SizedBox(width: 8),
                                   ],
-                                  Builder(
-                                    builder: (ctx) {
-                                      // Now, with nothing selected: the date a
-                                      // new entry would be filed under.
-                                      final date =
-                                          _selectedEntry?.entryDate.toLocal() ??
-                                          DateTime.now();
-                                      final label =
-                                          '${DateFormat.yMMMd().format(date)} at ${formatTime12Hour(date)}';
-                                      // A floor rather than a fixed width: it
-                                      // holds the row still across every label
-                                      // the formatter can produce, and a label
-                                      // pushed past it by text scaling still
-                                      // gets the room instead of overflowing.
-                                      return ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                          minWidth: _journalDatePillMinWidth,
-                                        ),
-                                        child: SelectorPill(
-                                          dense: false,
-                                          ellipsize: false,
-                                          isActive: _isDatePickerOpen,
-                                          label: label,
-                                          accentColor: accentColor,
-                                          onTap: () =>
-                                              _changeEntryDateAndTime(ctx),
-                                        ),
-                                      );
-                                    },
+                                  Flexible(
+                                    fit: FlexFit.loose,
+                                    flex: fitDate ? 1 : 0,
+                                    child: Builder(
+                                      builder: (ctx) {
+                                        // Now, with nothing selected: the date a
+                                        // new entry would be filed under.
+                                        final date =
+                                            _selectedEntry?.entryDate
+                                                .toLocal() ??
+                                            DateTime.now();
+                                        final label =
+                                            '${DateFormat.yMMMd().format(date)} at ${formatTime12Hour(date)}';
+                                        // A floor rather than a fixed width: it
+                                        // holds the row still across every label
+                                        // the formatter can produce, and a label
+                                        // pushed past it by text scaling still
+                                        // gets the room instead of overflowing.
+                                        return ConstrainedBox(
+                                          constraints: const BoxConstraints(
+                                            minWidth: _journalDatePillMinWidth,
+                                          ),
+                                          child: SelectorPill(
+                                            dense: false,
+                                            ellipsize: fitDate,
+                                            isActive: _isDatePickerOpen,
+                                            label: label,
+                                            accentColor: accentColor,
+                                            onTap: () =>
+                                                _changeEntryDateAndTime(ctx),
+                                          ),
+                                        );
+                                      },
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
                                   if (_selectedEntry != null &&
@@ -2817,13 +2862,26 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                     ),
                                   ),
                                 ];
-                                Widget line(List<Widget> children) =>
-                                    ConstrainedBox(
-                                      constraints: const BoxConstraints(
-                                        minHeight: kMinInteractiveDimension,
-                                      ),
-                                      child: Row(children: children),
-                                    );
+                                Widget line(
+                                  List<Widget> children, {
+                                  MainAxisAlignment alignment =
+                                      MainAxisAlignment.start,
+                                }) => ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    minHeight: kMinInteractiveDimension,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: alignment,
+                                    children: children,
+                                  ),
+                                );
+                                // Right-aligned rather than led by a Spacer,
+                                // which would take a flex share away from the
+                                // date pill and squeeze it even when it fits.
+                                Widget controlsLine() => line(
+                                  controls(fitDate: true),
+                                  alignment: MainAxisAlignment.end,
+                                );
                                 // Too narrow to share a line (a half-screen
                                 // window beside a wide entry list): the
                                 // controls cannot shrink, so the slider was
@@ -2833,24 +2891,19 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                     constraints.maxWidth <
                                         _journalMetadataRowMinWidth) {
                                   return Column(
-                                    children: [
-                                      line(moodBar),
-                                      line([const Spacer(), ...controls]),
-                                    ],
+                                    children: [line(moodBar), controlsLine()],
                                   );
                                 }
                                 // With the mood bar hidden the slider's
-                                // Expanded goes with it, so a Spacer takes
-                                // over its stretch — otherwise the date pill
-                                // and trash slide left into the empty space
+                                // Expanded goes with it, so the controls are
+                                // right-aligned — otherwise the date pill and
+                                // trash slide left into the empty space
                                 // instead of staying where they always are.
+                                if (!showMoodBar) return controlsLine();
                                 return line([
-                                  if (showMoodBar) ...[
-                                    ...moodBar,
-                                    const SizedBox(width: 12),
-                                  ] else
-                                    const Spacer(),
-                                  ...controls,
+                                  ...moodBar,
+                                  const SizedBox(width: 12),
+                                  ...controls(fitDate: false),
                                 ]);
                               },
                             ),
@@ -2880,6 +2933,20 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                 ],
               );
             },
+          ),
+        ),
+      ],
+    );
+    final now = DateTime.now();
+    return Stack(
+      children: [
+        content,
+        Positioned.fill(
+          child: OnThisDayOverlay(
+            today: DateTime(now.year, now.month, now.day),
+            journalId: _viewAllJournals ? null : entryListScope,
+            ready: !entriesLoading,
+            onOpen: (id) => unawaited(_openMemory(id)),
           ),
         ),
       ],

@@ -32,6 +32,10 @@ class JournalsTable extends Table {
   BoolColumn get showQuotes => boolean().withDefault(const Constant(true))();
   BoolColumn get includeInAllView =>
       boolean().withDefault(const Constant(true))();
+
+  /// An [OnThisDayCadence] name.
+  TextColumn get onThisDayCadence =>
+      text().withDefault(const Constant('off'))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -1364,6 +1368,8 @@ class WorkoutSessionsTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+@TableIndex(name: 'idx_workout_set_logs_session_id', columns: {#sessionId})
+@TableIndex(name: 'idx_workout_set_logs_exercise_id', columns: {#exerciseId})
 class WorkoutSetLogsTable extends Table {
   TextColumn get id => text()();
   TextColumn get sessionId => text()();
@@ -1849,7 +1855,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 123;
+  int get schemaVersion => 125;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3257,6 +3263,28 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(
           leetCodeCheatEntriesTable,
           leetCodeCheatEntriesTable.label,
+        );
+      }
+      if (from < 124) {
+        // Declared via @TableIndex, so createAll() covers fresh databases.
+        // Every live-workout read filters set logs by one of these.
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_workout_set_logs_session_id '
+          'ON workout_set_logs_table (session_id)',
+        );
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_workout_set_logs_exercise_id '
+          'ON workout_set_logs_table (exercise_id)',
+        );
+      }
+      // Every existing journal reads 'off', so nothing resurfaces until the
+      // user opts a journal in.
+      if (from < 125) {
+        await _addColumnIfNotExists(
+          migrator,
+          'journals_table',
+          journalsTable,
+          journalsTable.onThisDayCadence,
         );
       }
     },

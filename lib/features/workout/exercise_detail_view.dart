@@ -139,8 +139,15 @@ class _ExerciseDetailCardState extends ConsumerState<_ExerciseDetailCard> {
   Future<void> _flushCues() async {
     final text = _cuesController.text;
     if (text == _exercise.formCues) return;
-    await _save(_exercise.copyWith(formCues: text));
+    await _save((await _latest()).copyWith(formCues: text));
   }
+
+  /// The movement as it is on disk now. Each save copies only the field it
+  /// edits onto this, so a rename or a pulled edit made while the modal is
+  /// open survives, instead of being overwritten from the copy taken when it
+  /// opened.
+  Future<Exercise> _latest() async =>
+      await _repository.getExercise(widget.exercise.id) ?? _exercise;
 
   /// Writes the movement's planned sets — everywhere it is planned, since
   /// they live on the movement rather than on the day it was dropped on.
@@ -153,19 +160,20 @@ class _ExerciseDetailCardState extends ConsumerState<_ExerciseDetailCard> {
   /// Deliberately does no `setState`: the fields hold their own text while
   /// they are being typed in, and rebuilding the section under the caret would
   /// fight the user for the cursor.
-  Future<void> _saveSets(List<SetPrescription> sets) {
+  Future<void> _saveSets(List<SetPrescription> sets) async {
     final first = sets.first.top;
     final uniform = sets.every((set) => !set.hasDrops && set.top == first);
+    final base = await _latest();
     return _save(
       uniform
-          ? _exercise.copyWith(
+          ? base.copyWith(
               prescriptionMode: WorkoutPrescriptionMode.inherit,
               setPrescriptions: const [],
               targetSets: sets.length,
               targetReps: first.reps,
               targetWeightKg: first.weightKg,
             )
-          : _exercise.copyWith(
+          : base.copyWith(
               prescriptionMode: WorkoutPrescriptionMode.custom,
               setPrescriptions: sets,
             ),
@@ -191,6 +199,14 @@ class _ExerciseDetailCardState extends ConsumerState<_ExerciseDetailCard> {
     final settings = ref.watch(settingsProvider).valueOrNull;
     final unit = settings?.weightUnit ?? WeightUnit.lb;
     final logsAsync = ref.watch(exerciseSetLogsProvider(widget.exercise.id));
+    final name =
+        ref
+            .watch(exercisesProvider)
+            .valueOrNull
+            ?.where((e) => e.id == widget.exercise.id)
+            .firstOrNull
+            ?.name ??
+        _exercise.name;
     final sessionsAsync = ref.watch(workoutSessionsProvider);
 
     final history = () {
@@ -212,12 +228,7 @@ class _ExerciseDetailCardState extends ConsumerState<_ExerciseDetailCard> {
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  _exercise.name,
-                  style: theme.textTheme.headlineSmall,
-                ),
-              ),
+              Expanded(child: Text(name, style: theme.textTheme.headlineSmall)),
               IconButton(
                 onPressed: widget.onClose,
                 icon: const Icon(PhosphorIconsRegular.x, size: 20),
@@ -262,7 +273,7 @@ class _ExerciseDetailCardState extends ConsumerState<_ExerciseDetailCard> {
                   _WeightSparkline(history: history, unit: unit),
                   const SizedBox(height: VoyagerSpacing.xl),
                   Text(
-                    'Volume · last $kVolumeHeatmapDays sessions',
+                    'Volume · last $kVolumeHeatmapDays training days',
                     style: theme.textTheme.labelLarge,
                   ),
                   const SizedBox(height: VoyagerSpacing.sm),
@@ -704,9 +715,9 @@ class _SummaryLine extends StatelessWidget {
     final best = history
         .expand((d) => d.setWeightsKg)
         .fold<double>(0, math.max);
-    final sessions = history.length;
+    final days = history.length;
     return Text(
-      '$sessions session${sessions == 1 ? '' : 's'} · '
+      '$days training day${days == 1 ? '' : 's'} · '
       'best ${unit.formatKilogramsWithUnit(best)}',
       style: muted,
     );
@@ -986,8 +997,12 @@ class _VolumeHeatmapState extends State<_VolumeHeatmap> {
 
   /// Only the square still hovered may clear the bubble — the pointer enters
   /// the next square before it leaves the last.
+  ///
+  /// Matched by date, not identity: the summaries are rebuilt whenever the
+  /// history reloads, and a stale hovered object then matched no square and
+  /// left the bubble stuck on screen.
   void _exit(ExerciseDaySummary day) {
-    if (_hover?.day != day) return;
+    if (_hover?.day.date != day.date) return;
     setState(() => _hover = null);
   }
 
@@ -1035,7 +1050,7 @@ class _VolumeHeatmapState extends State<_VolumeHeatmap> {
                       ),
                       borderRadius: BorderRadius.circular(7),
                       border: Border.all(
-                        color: hover?.day == day
+                        color: hover?.day.date == day.date
                             ? VoyagerListItemSurface.focusBorderColor(context)
                             : colors.hairline,
                       ),

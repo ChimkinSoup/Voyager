@@ -125,6 +125,18 @@ class $JournalsTableTable extends JournalsTable
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _onThisDayCadenceMeta = const VerificationMeta(
+    'onThisDayCadence',
+  );
+  @override
+  late final GeneratedColumn<String> onThisDayCadence = GeneratedColumn<String>(
+    'on_this_day_cadence',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('off'),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -181,6 +193,7 @@ class $JournalsTableTable extends JournalsTable
     showWeather,
     showQuotes,
     includeInAllView,
+    onThisDayCadence,
     createdAt,
     updatedAt,
     version,
@@ -265,6 +278,15 @@ class $JournalsTableTable extends JournalsTable
         ),
       );
     }
+    if (data.containsKey('on_this_day_cadence')) {
+      context.handle(
+        _onThisDayCadenceMeta,
+        onThisDayCadence.isAcceptableOrUnknown(
+          data['on_this_day_cadence']!,
+          _onThisDayCadenceMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -338,6 +360,10 @@ class $JournalsTableTable extends JournalsTable
         DriftSqlType.bool,
         data['${effectivePrefix}include_in_all_view'],
       )!,
+      onThisDayCadence: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}on_this_day_cadence'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -374,6 +400,9 @@ class JournalsTableData extends DataClass
   final bool showWeather;
   final bool showQuotes;
   final bool includeInAllView;
+
+  /// An [OnThisDayCadence] name.
+  final String onThisDayCadence;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -388,6 +417,7 @@ class JournalsTableData extends DataClass
     required this.showWeather,
     required this.showQuotes,
     required this.includeInAllView,
+    required this.onThisDayCadence,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -407,6 +437,7 @@ class JournalsTableData extends DataClass
     map['show_weather'] = Variable<bool>(showWeather);
     map['show_quotes'] = Variable<bool>(showQuotes);
     map['include_in_all_view'] = Variable<bool>(includeInAllView);
+    map['on_this_day_cadence'] = Variable<String>(onThisDayCadence);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -429,6 +460,7 @@ class JournalsTableData extends DataClass
       showWeather: Value(showWeather),
       showQuotes: Value(showQuotes),
       includeInAllView: Value(includeInAllView),
+      onThisDayCadence: Value(onThisDayCadence),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -453,6 +485,7 @@ class JournalsTableData extends DataClass
       showWeather: serializer.fromJson<bool>(json['showWeather']),
       showQuotes: serializer.fromJson<bool>(json['showQuotes']),
       includeInAllView: serializer.fromJson<bool>(json['includeInAllView']),
+      onThisDayCadence: serializer.fromJson<String>(json['onThisDayCadence']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -472,6 +505,7 @@ class JournalsTableData extends DataClass
       'showWeather': serializer.toJson<bool>(showWeather),
       'showQuotes': serializer.toJson<bool>(showQuotes),
       'includeInAllView': serializer.toJson<bool>(includeInAllView),
+      'onThisDayCadence': serializer.toJson<String>(onThisDayCadence),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -489,6 +523,7 @@ class JournalsTableData extends DataClass
     bool? showWeather,
     bool? showQuotes,
     bool? includeInAllView,
+    String? onThisDayCadence,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -503,6 +538,7 @@ class JournalsTableData extends DataClass
     showWeather: showWeather ?? this.showWeather,
     showQuotes: showQuotes ?? this.showQuotes,
     includeInAllView: includeInAllView ?? this.includeInAllView,
+    onThisDayCadence: onThisDayCadence ?? this.onThisDayCadence,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -531,6 +567,9 @@ class JournalsTableData extends DataClass
       includeInAllView: data.includeInAllView.present
           ? data.includeInAllView.value
           : this.includeInAllView,
+      onThisDayCadence: data.onThisDayCadence.present
+          ? data.onThisDayCadence.value
+          : this.onThisDayCadence,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -550,6 +589,7 @@ class JournalsTableData extends DataClass
           ..write('showWeather: $showWeather, ')
           ..write('showQuotes: $showQuotes, ')
           ..write('includeInAllView: $includeInAllView, ')
+          ..write('onThisDayCadence: $onThisDayCadence, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -569,6 +609,7 @@ class JournalsTableData extends DataClass
     showWeather,
     showQuotes,
     includeInAllView,
+    onThisDayCadence,
     createdAt,
     updatedAt,
     version,
@@ -587,6 +628,7 @@ class JournalsTableData extends DataClass
           other.showWeather == this.showWeather &&
           other.showQuotes == this.showQuotes &&
           other.includeInAllView == this.includeInAllView &&
+          other.onThisDayCadence == this.onThisDayCadence &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -603,6 +645,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
   final Value<bool> showWeather;
   final Value<bool> showQuotes;
   final Value<bool> includeInAllView;
+  final Value<String> onThisDayCadence;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -618,6 +661,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     this.showWeather = const Value.absent(),
     this.showQuotes = const Value.absent(),
     this.includeInAllView = const Value.absent(),
+    this.onThisDayCadence = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -634,6 +678,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     this.showWeather = const Value.absent(),
     this.showQuotes = const Value.absent(),
     this.includeInAllView = const Value.absent(),
+    this.onThisDayCadence = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -653,6 +698,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     Expression<bool>? showWeather,
     Expression<bool>? showQuotes,
     Expression<bool>? includeInAllView,
+    Expression<String>? onThisDayCadence,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -669,6 +715,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
       if (showWeather != null) 'show_weather': showWeather,
       if (showQuotes != null) 'show_quotes': showQuotes,
       if (includeInAllView != null) 'include_in_all_view': includeInAllView,
+      if (onThisDayCadence != null) 'on_this_day_cadence': onThisDayCadence,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -687,6 +734,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     Value<bool>? showWeather,
     Value<bool>? showQuotes,
     Value<bool>? includeInAllView,
+    Value<String>? onThisDayCadence,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -703,6 +751,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
       showWeather: showWeather ?? this.showWeather,
       showQuotes: showQuotes ?? this.showQuotes,
       includeInAllView: includeInAllView ?? this.includeInAllView,
+      onThisDayCadence: onThisDayCadence ?? this.onThisDayCadence,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -741,6 +790,9 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
     if (includeInAllView.present) {
       map['include_in_all_view'] = Variable<bool>(includeInAllView.value);
     }
+    if (onThisDayCadence.present) {
+      map['on_this_day_cadence'] = Variable<String>(onThisDayCadence.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -771,6 +823,7 @@ class JournalsTableCompanion extends UpdateCompanion<JournalsTableData> {
           ..write('showWeather: $showWeather, ')
           ..write('showQuotes: $showQuotes, ')
           ..write('includeInAllView: $includeInAllView, ')
+          ..write('onThisDayCadence: $onThisDayCadence, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -48186,6 +48239,14 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'idx_reminder_delivery_logs_state_id',
     'CREATE INDEX idx_reminder_delivery_logs_state_id ON reminder_delivery_logs_table (delivery_state_id)',
   );
+  late final Index idxWorkoutSetLogsSessionId = Index(
+    'idx_workout_set_logs_session_id',
+    'CREATE INDEX idx_workout_set_logs_session_id ON workout_set_logs_table (session_id)',
+  );
+  late final Index idxWorkoutSetLogsExerciseId = Index(
+    'idx_workout_set_logs_exercise_id',
+    'CREATE INDEX idx_workout_set_logs_exercise_id ON workout_set_logs_table (exercise_id)',
+  );
   late final Index idxMediaAssetsContentHash = Index(
     'idx_media_assets_content_hash',
     'CREATE INDEX idx_media_assets_content_hash ON media_assets_table (content_hash)',
@@ -48284,6 +48345,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     idxTodoTasksListId,
     idxTodoTasksParentTaskId,
     idxReminderDeliveryLogsStateId,
+    idxWorkoutSetLogsSessionId,
+    idxWorkoutSetLogsExerciseId,
     idxMediaAssetsContentHash,
     idxMediaReferencesOwner,
     idxMediaReferencesMediaId,
@@ -48308,6 +48371,7 @@ typedef $$JournalsTableTableCreateCompanionBuilder =
       Value<bool> showWeather,
       Value<bool> showQuotes,
       Value<bool> includeInAllView,
+      Value<String> onThisDayCadence,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -48325,6 +48389,7 @@ typedef $$JournalsTableTableUpdateCompanionBuilder =
       Value<bool> showWeather,
       Value<bool> showQuotes,
       Value<bool> includeInAllView,
+      Value<String> onThisDayCadence,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -48383,6 +48448,11 @@ class $$JournalsTableTableFilterComposer
 
   ColumnFilters<bool> get includeInAllView => $composableBuilder(
     column: $table.includeInAllView,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get onThisDayCadence => $composableBuilder(
+    column: $table.onThisDayCadence,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -48461,6 +48531,11 @@ class $$JournalsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get onThisDayCadence => $composableBuilder(
+    column: $table.onThisDayCadence,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -48530,6 +48605,11 @@ class $$JournalsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get onThisDayCadence => $composableBuilder(
+    column: $table.onThisDayCadence,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -48587,6 +48667,7 @@ class $$JournalsTableTableTableManager
                 Value<bool> showWeather = const Value.absent(),
                 Value<bool> showQuotes = const Value.absent(),
                 Value<bool> includeInAllView = const Value.absent(),
+                Value<String> onThisDayCadence = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -48602,6 +48683,7 @@ class $$JournalsTableTableTableManager
                 showWeather: showWeather,
                 showQuotes: showQuotes,
                 includeInAllView: includeInAllView,
+                onThisDayCadence: onThisDayCadence,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -48619,6 +48701,7 @@ class $$JournalsTableTableTableManager
                 Value<bool> showWeather = const Value.absent(),
                 Value<bool> showQuotes = const Value.absent(),
                 Value<bool> includeInAllView = const Value.absent(),
+                Value<String> onThisDayCadence = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -48634,6 +48717,7 @@ class $$JournalsTableTableTableManager
                 showWeather: showWeather,
                 showQuotes: showQuotes,
                 includeInAllView: includeInAllView,
+                onThisDayCadence: onThisDayCadence,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

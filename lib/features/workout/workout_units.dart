@@ -50,3 +50,31 @@ extension WeightUnitDisplay on WeightUnit {
   /// a nearby label.
   String formatKilogramsWithUnit(double kg) => '${formatKilograms(kg)} $label';
 }
+
+extension WorkoutSetLogPlanCheck on WorkoutSetLog {
+  /// Whether the user moved off the planned numbers for this set — the
+  /// condition the active view paints in the accent colour.
+  ///
+  /// Weights are compared as stops on [unit]'s wheel, not in kilograms: a
+  /// plan written in the other unit rarely lands on a stop (60 kg is
+  /// 132.28 lb), so turning the wheel off and back stored 132.5 lb and
+  /// flagged a change the wheel never showed.
+  bool deviatesFromPlanIn(WeightUnit unit) {
+    bool sameWeight(double a, double b) =>
+        unit.wheelIndexForKilograms(a) == unit.wheelIndexForKilograms(b);
+
+    if (!sameWeight(weightKg, plannedWeightKg) || reps != plannedReps) {
+      return true;
+    }
+    if (dropSegments.length != plannedDropSegments.length) return true;
+    for (var i = 0; i < dropSegments.length; i++) {
+      final drop = dropSegments[i];
+      final planned = plannedDropSegments[i];
+      if (!sameWeight(drop.weightKg, planned.weightKg) ||
+          drop.reps != planned.reps) {
+        return true;
+      }
+    }
+    return false;
+  }
+}

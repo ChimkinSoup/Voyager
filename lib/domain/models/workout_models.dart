@@ -32,6 +32,28 @@ DateTime workoutDayKey(DateTime instant) {
   return DateTime(local.year, local.month, local.day);
 }
 
+/// Stored form of the calendar day [instant] falls on locally: UTC midnight
+/// of that date. [WorkoutSession.date] and [WorkoutPlan.cycleAnchor] name a
+/// date, not a moment, so they are written zone-free — local midnight as an
+/// instant read back a day early on any device further west.
+DateTime workoutStoredDate(DateTime instant) {
+  final local = instant.toLocal();
+  return DateTime.utc(local.year, local.month, local.day);
+}
+
+/// The calendar date a stored [WorkoutSession.date] or
+/// [WorkoutPlan.cycleAnchor] names, as a local-midnight key.
+///
+/// Rounded to the nearest UTC midnight rather than read in the device's zone.
+/// Rows written through [workoutStoredDate] are exactly UTC midnight; rows
+/// from older builds hold *local* midnight as an instant, which lies within
+/// twelve hours of UTC midnight of the same date for every zone from UTC−11
+/// to UTC+12 — so both resolve to the date they were written for.
+DateTime workoutCalendarDate(DateTime stored) {
+  final nearest = stored.toUtc().add(const Duration(hours: 12));
+  return DateTime(nearest.year, nearest.month, nearest.day);
+}
+
 /// A movement in the library — the thing a "Bench Press" card refers to.
 ///
 /// Every set the user ever performs points back at one of these, which is
@@ -190,8 +212,9 @@ class WorkoutPlan extends SoftDeletable {
   /// Ignored by weekly plans, which always have seven slots.
   final int cycleLength;
 
-  /// Local calendar date that is Day 1 of the cycle. A cycle plan cannot
-  /// resolve "which day is today" without one — see [dayIndexForDate].
+  /// Calendar date that is Day 1 of the cycle, stored the way
+  /// [WorkoutSession.date] is. A cycle plan cannot resolve "which day is
+  /// today" without one — see [dayIndexForDate].
   final DateTime cycleAnchor;
   final bool isActive;
 
@@ -209,7 +232,7 @@ class WorkoutPlan extends SoftDeletable {
   int? dayIndexForDate(DateTime date) {
     final day = workoutDayKey(date);
     if (mode == WorkoutPlanMode.weekly) return day.weekday % 7;
-    final anchor = workoutDayKey(cycleAnchor);
+    final anchor = workoutCalendarDate(cycleAnchor);
     // Differenced as UTC calendar dates, not as local instants: a DST
     // boundary anywhere between anchor and today makes the local span 23 or
     // 25 hours, which truncates to the wrong whole-day count and slides the
@@ -292,9 +315,11 @@ class SetSegment {
 
   Map<String, dynamic> toJson() => {'weightKg': weightKg, 'reps': reps};
 
+  /// Reps are clamped to what the wheel can show: a 0 displayed as 1 and was
+  /// then logged as 0, so the set counted no volume although a rep was shown.
   factory SetSegment.fromJson(Map<String, dynamic> json) => SetSegment(
     weightKg: (json['weightKg'] as num?)?.toDouble() ?? 0,
-    reps: (json['reps'] as num?)?.toInt() ?? 0,
+    reps: ((json['reps'] as num?)?.toInt() ?? 1).clamp(1, kMaxReps),
   );
 
   /// Weight compared in whole grams so that two segments that are equal also
@@ -344,7 +369,7 @@ class SetPrescription {
       }
     }
     if (segments.isEmpty) {
-      segments.add(const SetSegment(weightKg: 0, reps: 0));
+      segments.add(const SetSegment(weightKg: 0, reps: 1));
     }
     return SetPrescription(segments: segments);
   }
@@ -526,7 +551,8 @@ class WorkoutSession extends SoftDeletable {
   final String? planId;
   final int? dayIndex;
 
-  /// Local calendar day the workout counts toward (midnight-normalised). Held
+  /// Calendar day the workout counts toward, stored through
+  /// [workoutStoredDate] and read through [workoutCalendarDate]. Held
   /// separately from [startedAt] so a session started at 11pm and finished
   /// after midnight still lands on the day it belongs to.
   final DateTime date;
@@ -650,19 +676,6 @@ class WorkoutSetLog extends SoftDeletable {
     SetSegment(weightKg: weightKg, reps: reps),
     ...dropSegments,
   ];
-
-  /// Whether the user moved off the planned numbers for this set — the
-  /// condition the active view paints in the accent colour.
-  bool get deviatesFromPlan {
-    if ((weightKg - plannedWeightKg).abs() > 0.001 || reps != plannedReps) {
-      return true;
-    }
-    if (dropSegments.length != plannedDropSegments.length) return true;
-    for (var i = 0; i < dropSegments.length; i++) {
-      if (dropSegments[i] != plannedDropSegments[i]) return true;
-    }
-    return false;
-  }
 
   double get volumeKg =>
       weightKg * reps +
@@ -800,15 +813,21 @@ List<ExerciseDaySummary> buildExerciseHistory(
     if (!log.completed || log.deletedAt != null) continue;
     final sessionDate = sessionDates[log.sessionId];
     if (sessionDate == null) continue;
-    (byDay[workoutDayKey(sessionDate)] ??= []).add(log);
+    (byDay[workoutCalendarDate(sessionDate)] ??= []).add(log);
   }
 
   final days = byDay.keys.toList()..sort();
   return [
     for (final day in days)
       () {
+        // In the order they were lifted: a day can hold two sessions, and
+        // sorting by position within a session interleaved their sets.
         final sets = byDay[day]!
           ..sort((a, b) {
+            final aAt = a.completedAt, bAt = b.completedAt;
+            if (aAt != null && bAt != null && aAt != bAt) {
+              return aAt.compareTo(bAt);
+            }
             final byExercise = a.exerciseOrder.compareTo(b.exerciseOrder);
             return byExercise != 0
                 ? byExercise

@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voyager/core/platform/platform_info.dart';
+import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
+import 'package:voyager/features/shell/shortcuts_help_dialog.dart';
 
 /// In-app only. Never registered with [hotkey_manager].
 bool get supportsShellTabShortcuts =>
@@ -49,6 +53,13 @@ bool isShellTabShortcutEvent(KeyEvent event) {
 }
 
 @visibleForTesting
+bool isShortcutsHelpEvent(KeyEvent event) {
+  if (event is! KeyDownEvent) return false;
+  if (!HardwareKeyboard.instance.isControlPressed) return false;
+  return event.logicalKey == LogicalKeyboardKey.slash;
+}
+
+@visibleForTesting
 int shellTabDeltaForEvent(KeyEvent event) {
   return HardwareKeyboard.instance.isShiftPressed ? -1 : 1;
 }
@@ -61,7 +72,8 @@ class PreviousShellTabIntent extends Intent {
   const PreviousShellTabIntent();
 }
 
-/// Wraps authenticated shell content with Ctrl+Tab / Ctrl+Shift+Tab navigation.
+/// Wraps authenticated shell content with Ctrl+Tab / Ctrl+Shift+Tab navigation,
+/// and Ctrl+/ for the shortcuts list.
 ///
 /// Uses a [HardwareKeyboard] handler so shortcuts keep working even when branch
 /// switches leave no focused widget (Flutter's [Shortcuts] widget requires focus).
@@ -70,11 +82,13 @@ class ShellKeyboardShortcuts extends StatefulWidget {
     super.key,
     required this.navigationShell,
     required this.orderedDestinations,
+    required this.settings,
     required this.child,
   });
 
   final StatefulNavigationShell navigationShell;
   final List<({ShellDestination dest, int originalIndex})> orderedDestinations;
+  final AppSettings settings;
   final Widget child;
 
   static const Map<ShortcutActivator, Intent> shortcuts = {
@@ -106,7 +120,15 @@ class _ShellKeyboardShortcutsState extends State<ShellKeyboardShortcuts> {
   }
 
   bool _handleKeyEvent(KeyEvent event) {
-    if (!mounted || !isShellTabShortcutEvent(event)) return false;
+    if (!mounted) return false;
+    if (isShortcutsHelpEvent(event)) {
+      // With the list already open the root navigator can pop, so this bails
+      // and the dialog's own binding closes it instead.
+      if (!shellTabShortcutsEnabled(context)) return false;
+      unawaited(showShortcutsHelpDialog(context, widget.settings));
+      return true;
+    }
+    if (!isShellTabShortcutEvent(event)) return false;
     if (!shellTabShortcutsEnabled(context)) return false;
 
     _goToRelativeTab(shellTabDeltaForEvent(event));

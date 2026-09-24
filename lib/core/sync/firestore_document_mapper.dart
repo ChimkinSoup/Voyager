@@ -182,6 +182,7 @@ Map<String, dynamic> journalToFirestore(Journal journal) => {
   'showWeather': journal.showWeather,
   'showQuotes': journal.showQuotes,
   'includeInAllView': journal.includeInAllView,
+  'onThisDayCadence': journal.onThisDayCadence.name,
   'createdAt': _dateToFirestoreRequired(journal.createdAt),
   'updatedAt': _dateToFirestoreRequired(journal.updatedAt),
   'version': journal.version,
@@ -222,6 +223,11 @@ Journal mergeJournalFromRemote(
     showQuotes: data['showQuotes'] as bool? ?? local?.showQuotes ?? true,
     includeInAllView:
         data['includeInAllView'] as bool? ?? local?.includeInAllView ?? true,
+    onThisDayCadence: _enumFromName(
+      OnThisDayCadence.values,
+      data['onThisDayCadence'],
+      local?.onThisDayCadence ?? OnThisDayCadence.off,
+    ),
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

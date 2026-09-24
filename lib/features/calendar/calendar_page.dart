@@ -35,6 +35,7 @@ import 'package:voyager/features/calendar/calendar_grid.dart';
 import 'package:voyager/features/calendar/calendar_keyboard_shortcuts.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
 import 'package:voyager/features/calendar/calendar_event_delete.dart';
+import 'package:voyager/features/calendar/calendar_import_dialog.dart';
 import 'package:voyager/features/calendar/calendar_manage_sheet.dart';
 import 'package:voyager/features/calendar/calendar_todo_panel.dart';
 import 'package:voyager/features/calendar/calendar_week_morph_entries.dart';
@@ -1173,6 +1174,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             ? () => _goToToday(weekStartsMonday: weekStartsMonday)
             : null,
         tooltip: _goToTodayTooltip(),
+        visualDensity: VisualDensity.compact,
         icon: const Icon(PhosphorIconsRegular.clock),
       ),
     );
@@ -1241,6 +1243,19 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           onPressed: () => unawaited(_openCalendarManageSheet()),
           icon: const Icon(PhosphorIconsRegular.gear),
         ),
+        IconButton(
+          tooltip: 'Import events',
+          iconSize: 18,
+          visualDensity: VisualDensity.compact,
+          onPressed: () => unawaited(
+            showCalendarImportDialog(
+              context,
+              calendars: calendars,
+              initialCalendarId: _selectedCalendarId ?? _lastSpecificCalendarId,
+            ),
+          ),
+          icon: const Icon(PhosphorIconsRegular.downloadSimple),
+        ),
       ],
     );
   }
@@ -1286,19 +1301,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       }
     });
     unawaited(_persistCalendarView());
-  }
-
-  Future<void> _syncGoogle() async {
-    final service = ref.read(googleCalendarSyncProvider);
-    await service.syncReadOnly(const []);
-    ref.invalidate(calendarEventsProvider);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Google Calendar sync complete (read-only)'),
-        ),
-      );
-    }
   }
 
   void _shiftFocus(int delta, {required bool weekStartsMonday}) {
@@ -2149,6 +2151,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           child: IconButton(
             onPressed: () =>
                 _shiftFocus(-1, weekStartsMonday: weekStartsMonday),
+            visualDensity: VisualDensity.compact,
             icon: const Icon(PhosphorIconsRegular.caretLeft),
           ),
         ),
@@ -2156,6 +2159,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         ExcludeFocus(
           child: IconButton(
             onPressed: () => _shiftFocus(1, weekStartsMonday: weekStartsMonday),
+            visualDensity: VisualDensity.compact,
             icon: const Icon(PhosphorIconsRegular.caretRight),
           ),
         ),
@@ -2842,30 +2846,46 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                             _dayViewDate == null)
                           _buildFocusHeader(context, weekStartsMonday),
                         const SizedBox(width: 8),
-                        GlassButton(
-                          onPressed: _syncGoogle,
-                          label: 'Sync Google',
-                          icon: const Icon(PhosphorIconsRegular.arrowClockwise),
-                          dense: true,
-                        ),
-                        const SizedBox(width: 8),
+                        // Outlined in the view selector's style rather than a
+                        // filled plate, so it sits with the rest of the
+                        // toolbar; tinted like the selected calendar.
                         Builder(
-                          builder: (btnCtx) => GlassButton(
-                            onPressed: () {
-                              final box =
-                                  btnCtx.findRenderObject() as RenderBox?;
-                              Rect? anchor;
-                              if (box != null) {
-                                final origin = box.localToGlobal(Offset.zero);
-                                anchor = origin & box.size;
-                              }
-                              _openEditor(
-                                day: _defaultNewEventDate(),
-                                anchorRect: anchor,
-                              );
-                            },
-                            label: 'Add event',
-                            dense: true,
+                          builder: (btnCtx) => ExcludeFocus(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor:
+                                    calendarAccentColor ??
+                                    Theme.of(context).colorScheme.primary,
+                                elevation: 0,
+                                // The view selector's height.
+                                fixedSize: const Size.fromHeight(34),
+                                visualDensity: VisualDensity.compact,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                    VoyagerTheme.fieldRadius,
+                                  ),
+                                ),
+                              ),
+                              onPressed: () {
+                                final box =
+                                    btnCtx.findRenderObject() as RenderBox?;
+                                Rect? anchor;
+                                if (box != null) {
+                                  final origin = box.localToGlobal(Offset.zero);
+                                  anchor = origin & box.size;
+                                }
+                                _openEditor(
+                                  day: _defaultNewEventDate(),
+                                  anchorRect: anchor,
+                                );
+                              },
+                              icon: const Icon(
+                                PhosphorIconsRegular.plus,
+                                size: 16,
+                              ),
+                              label: const Text('Add event'),
+                            ),
                           ),
                         ),
                       ],
@@ -4087,11 +4107,12 @@ class _ViewModeSegmentedControl extends StatelessWidget {
     final side =
         buttonStyle.side?.resolve(const {}) ??
         BorderSide(color: colorScheme.outline);
+    // 34px tall, the calendar toolbar's height: 24px of label + 5px each side.
     final padding =
         buttonStyle.padding?.resolve(const {}) ??
-        const EdgeInsets.symmetric(horizontal: 12, vertical: 8);
+        const EdgeInsets.symmetric(horizontal: 12, vertical: 5);
     final minSize =
-        buttonStyle.minimumSize?.resolve(const {}) ?? const Size(48, 40);
+        buttonStyle.minimumSize?.resolve(const {}) ?? const Size(48, 34);
     final textStyle =
         buttonStyle.textStyle?.resolve(const {}) ?? theme.textTheme.labelLarge;
     const outerRadius = Radius.circular(VoyagerTheme.fieldRadius);
@@ -4132,9 +4153,14 @@ class _ViewModeSegmentedControl extends StatelessWidget {
         ),
         child: Padding(
           padding: padding,
-          child: Text(
-            _labels[index],
-            style: textStyle?.copyWith(color: foreground),
+          // The row stretches each segment to the control's height; a bare
+          // Text would take all of it and paint its line at the top.
+          child: Center(
+            widthFactor: 1,
+            child: Text(
+              _labels[index],
+              style: textStyle?.copyWith(color: foreground),
+            ),
           ),
         ),
       );

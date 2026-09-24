@@ -103,6 +103,7 @@ class DriftJournalRepository implements JournalRepository {
             showWeather: Value(journal.showWeather),
             showQuotes: Value(journal.showQuotes),
             includeInAllView: Value(journal.includeInAllView),
+            onThisDayCadence: Value(journal.onThisDayCadence.name),
             createdAt: Value(journal.createdAt),
             updatedAt: Value(journal.updatedAt),
             version: Value(journal.version),
@@ -345,6 +346,7 @@ class DriftJournalRepository implements JournalRepository {
     showWeather: row.showWeather,
     showQuotes: row.showQuotes,
     includeInAllView: row.includeInAllView,
+    onThisDayCadence: OnThisDayCadence.values.byName(row.onThisDayCadence),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -5795,8 +5797,7 @@ class DriftWorkoutRepository implements WorkoutRepository {
     final now = utcNow();
     // The anchor only matters for the cycle plan, but both rows carry one so
     // the column can stay non-nullable. Today is the sensible Day 1.
-    final localNow = DateTime.now();
-    final today = DateTime(localNow.year, localNow.month, localNow.day);
+    final today = workoutStoredDate(DateTime.now());
 
     if (!existingPlanIds.contains(kWeeklyWorkoutPlanId)) {
       await upsertPlan(
@@ -5907,12 +5908,7 @@ class DriftWorkoutRepository implements WorkoutRepository {
 
   @override
   Future<void> softDeleteExercise(String id) async {
-    await (_db.update(_db.exercisesTable)..where((t) => t.id.equals(id))).write(
-      ExercisesTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
+    await _softDeleteRow(_db.exercisesTable, id);
     // Plan entries pointing at a deleted exercise would render as blank cards,
     // so they go with it. Logged sets deliberately do not: they are history,
     // and the detail view still needs them to explain past volume.
@@ -6036,14 +6032,7 @@ class DriftWorkoutRepository implements WorkoutRepository {
 
   @override
   Future<void> softDeletePlanEntry(String id) async {
-    await (_db.update(
-      _db.workoutPlanEntriesTable,
-    )..where((t) => t.id.equals(id))).write(
-      WorkoutPlanEntriesTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
+    await _softDeleteRow(_db.workoutPlanEntriesTable, id);
     _syncActivity?.recordLocalSave(FirestoreCollections.workoutPlanEntries);
   }
 
@@ -6051,11 +6040,9 @@ class DriftWorkoutRepository implements WorkoutRepository {
   Future<List<WorkoutSession>> listSessions({
     bool includeDeleted = false,
   }) async {
-    final rows = await _db.select(_db.workoutSessionsTable).get();
-    final sessions = rows
-        .where((r) => includeDeleted || r.deletedAt == null)
-        .map(_mapSession)
-        .toList();
+    final query = _db.select(_db.workoutSessionsTable);
+    if (!includeDeleted) query.where((t) => t.deletedAt.isNull());
+    final sessions = (await query.get()).map(_mapSession).toList();
     sessions.sort((a, b) => b.startedAt.compareTo(a.startedAt));
     return sessions;
   }
@@ -6105,15 +6092,24 @@ class DriftWorkoutRepository implements WorkoutRepository {
   }
 
   @override
+  Future<void> createSessionWithLogs(
+    WorkoutSession session,
+    List<WorkoutSetLog> logs,
+  ) async {
+    // One transaction: a kill between the two writes left an open session
+    // with no sets, which the next launch restored as a workout that was
+    // already "done".
+    await _db.transaction(() async {
+      await upsertSession(session, recordLocalActivity: false);
+      await upsertSetLogsBatch(logs, recordLocalActivity: false);
+    });
+    _syncActivity?.recordLocalSave(FirestoreCollections.workoutSessions);
+    _syncActivity?.recordLocalSave(FirestoreCollections.workoutSetLogs);
+  }
+
+  @override
   Future<void> softDeleteSession(String id) async {
-    await (_db.update(
-      _db.workoutSessionsTable,
-    )..where((t) => t.id.equals(id))).write(
-      WorkoutSessionsTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
+    await _softDeleteRow(_db.workoutSessionsTable, id);
     final logs = await (_db.select(
       _db.workoutSetLogsTable,
     )..where((t) => t.sessionId.equals(id))).get();
@@ -6137,11 +6133,8 @@ class DriftWorkoutRepository implements WorkoutRepository {
     if (exerciseId != null) {
       query.where((t) => t.exerciseId.equals(exerciseId));
     }
-    final rows = await query.get();
-    final logs = rows
-        .where((r) => includeDeleted || r.deletedAt == null)
-        .map(_mapSetLog)
-        .toList();
+    if (!includeDeleted) query.where((t) => t.deletedAt.isNull());
+    final logs = (await query.get()).map(_mapSetLog).toList();
     logs.sort((a, b) {
       final byExercise = a.exerciseOrder.compareTo(b.exerciseOrder);
       return byExercise != 0 ? byExercise : a.setIndex.compareTo(b.setIndex);
@@ -6155,6 +6148,18 @@ class DriftWorkoutRepository implements WorkoutRepository {
       _db.workoutSetLogsTable,
     )..where((t) => t.id.equals(id))).getSingleOrNull();
     return row == null ? null : _mapSetLog(row);
+  }
+
+  @override
+  Future<Set<String>> listSessionIdsWithCompletedSets() async {
+    final rows = await _db
+        .customSelect(
+          'SELECT DISTINCT session_id FROM workout_set_logs_table '
+          'WHERE completed = 1 AND deleted_at IS NULL',
+          readsFrom: {_db.workoutSetLogsTable},
+        )
+        .get();
+    return {for (final row in rows) row.read<String>('session_id')};
   }
 
   @override
@@ -6197,15 +6202,28 @@ class DriftWorkoutRepository implements WorkoutRepository {
 
   @override
   Future<void> softDeleteSetLog(String id) async {
-    await (_db.update(
-      _db.workoutSetLogsTable,
-    )..where((t) => t.id.equals(id))).write(
-      WorkoutSetLogsTableCompanion(
-        deletedAt: Value(utcNow()),
-        updatedAt: Value(utcNow()),
-      ),
-    );
+    await _softDeleteRow(_db.workoutSetLogsTable, id);
     _syncActivity?.recordLocalSave(FirestoreCollections.workoutSetLogs);
+  }
+
+  /// Tombstones one row and bumps its [version] in the same statement, as
+  /// [DriftJournalRepository.softDeleteJournal] does. Merging is
+  /// version-first, so a tombstone left at the old version lost to any edit
+  /// another device made from the same base — however much later the delete
+  /// happened — and the row came back.
+  Future<void> _softDeleteRow(TableInfo<Table, dynamic> table, String id) {
+    final now = utcNow();
+    return _db.customUpdate(
+      'UPDATE ${table.actualTableName} '
+      'SET deleted_at = ?, updated_at = ?, version = version + 1 '
+      'WHERE id = ?',
+      variables: [
+        Variable.withDateTime(now),
+        Variable.withDateTime(now),
+        Variable.withString(id),
+      ],
+      updates: {table},
+    );
   }
 
   @override
