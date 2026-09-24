@@ -23,7 +23,9 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
+import 'package:voyager/features/settings/backup_list_dialog.dart';
 import 'package:voyager/features/settings/custom_quotes_dialog.dart';
+import 'package:voyager/features/settings/services/auto_backup_service.dart';
 import 'package:voyager/features/settings/devices_section.dart';
 import 'package:voyager/features/settings/dictionary_dialog.dart';
 import 'package:voyager/features/settings/job_experience_snippets_dialog.dart';
@@ -531,6 +533,7 @@ class SettingsPage extends ConsumerWidget {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 4),
+          const _AutoBackupTiles(),
           ListTile(
             title: const Text('Export Backup'),
             subtitle: const Text(
@@ -595,37 +598,14 @@ class SettingsPage extends ConsumerWidget {
                   allowedExtensions: ['zip'],
                 );
                 if (result == null || result.files.single.path == null) return;
+                if (!context.mounted) return;
 
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Importing backup...')),
-                  );
-                }
-
-                final file = File(result.files.single.path!);
-                final summary = await ref
-                    .read(dataImportServiceProvider)
-                    .importFromZip(file);
-
-                // A restore can rewrite any collection, so nothing on screen
-                // can be assumed still current.
-                invalidateAllDataProvidersFrom(ref);
-
-                if (context.mounted) {
-                  final restored = summary.restoredTotal;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        restored == 0 && !summary.settingsRestored
-                            ? 'Backup imported — everything in it was already '
-                                  'up to date.'
-                            : 'Backup imported: $restored record(s) restored, '
-                                  '${summary.skipped} already up to date.',
-                      ),
-                      duration: const Duration(seconds: 4),
-                    ),
-                  );
-                }
+                // Behind a pre-restore snapshot, like any other restore.
+                await confirmAndRestoreBackup(
+                  context,
+                  ref,
+                  File(result.files.single.path!),
+                );
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(
@@ -971,6 +951,90 @@ class SettingsPage extends ConsumerWidget {
 /// Its own widget rather than a row in the list above so that recomputing the
 /// cache size — which walks the media directory — rebuilds only this tile and
 /// not the whole settings page.
+/// The automatic-backups switch and its status row — AUTO_BACKUP_HLD.md §9.
+class _AutoBackupTiles extends ConsumerStatefulWidget {
+  const _AutoBackupTiles();
+
+  @override
+  ConsumerState<_AutoBackupTiles> createState() => _AutoBackupTilesState();
+}
+
+class _AutoBackupTilesState extends ConsumerState<_AutoBackupTiles> {
+  @override
+  void initState() {
+    super.initState();
+    // Fresh each time Settings opens (§9.2).
+    ref.read(autoBackupServiceProvider).refreshStatus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final service = ref.watch(autoBackupServiceProvider);
+    final status = service.status;
+    final theme = Theme.of(context);
+
+    final (Color? dot, String word) = switch (status?.health) {
+      null => (null, ''),
+      AutoBackupHealth.backingUp => (null, 'Backing up…'),
+      AutoBackupHealth.off => (theme.colorScheme.outline, 'Off'),
+      AutoBackupHealth.attention => (Colors.amber, 'Attention'),
+      AutoBackupHealth.notYetBackedUp => (
+        theme.colorScheme.outline,
+        'Not yet backed up',
+      ),
+      AutoBackupHealth.due => (theme.colorScheme.outline, 'Due'),
+      AutoBackupHealth.healthy => (Colors.green, 'Healthy'),
+    };
+
+    return Column(
+      children: [
+        SwitchListTile(
+          title: const Text('Automatic backups'),
+          subtitle: const Text(
+            'A verified backup every day on this device: the last 3 days, '
+            'one about a week old and one about a month old',
+          ),
+          value: status?.enabled ?? true,
+          onChanged: status == null ? null : (v) => service.setEnabled(v),
+        ),
+        ListTile(
+          leading: const Icon(PhosphorIconsRegular.shieldCheck),
+          title: Text(
+            status == null
+                ? 'Reading backups…'
+                : [
+                        '${status.backupCount} '
+                            '${status.backupCount == 1 ? 'backup' : 'backups'}',
+                        if (status.snapshotCount > 0)
+                          '+ ${status.snapshotCount} restore '
+                              '${status.snapshotCount == 1 ? 'snapshot' : 'snapshots'}',
+                      ].join(' ') +
+                      ' · ${formatBackupBytes(status.totalBytes)}',
+          ),
+          subtitle: status == null ? null : Text(status.detail),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (status?.health == AutoBackupHealth.backingUp)
+                const SizedBox.square(
+                  dimension: 10,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else if (dot != null)
+                Icon(Icons.circle, size: 10, color: dot),
+              const SizedBox(width: 6),
+              Text(word, style: theme.textTheme.labelMedium),
+              const SizedBox(width: 4),
+              const Icon(PhosphorIconsRegular.caretRight),
+            ],
+          ),
+          onTap: () => showBackupListDialog(context),
+        ),
+      ],
+    );
+  }
+}
+
 class _MediaStorageTile extends ConsumerWidget {
   const _MediaStorageTile();
 

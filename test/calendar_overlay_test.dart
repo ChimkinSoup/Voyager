@@ -358,6 +358,7 @@ void main() {
       _calendar('host', overlays: ['ghost', 'holidays', 'old']),
     );
     final contents = await DataExportService(
+      db: source,
       collections: _collectionsFor(source),
       settingsRepository: DriftSettingsRepository(source),
     ).buildArchiveContents();

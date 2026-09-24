@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
@@ -23,6 +24,19 @@ class BackupFormatException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// The archive does not read back as the backup it claims to be: the ZIP will
+/// not decode, or a member fails its checksum or record count. What a retained
+/// automatic backup failing its re-check means (AUTO_BACKUP_HLD.md §6.2).
+class BackupDamagedException extends BackupFormatException {
+  BackupDamagedException(super.message);
+}
+
+/// A backup in a format this build does not read — made by an older or a
+/// newer version. Not damage: the file may be fine for the build that made it.
+class BackupVersionException extends BackupFormatException {
+  BackupVersionException(super.message);
 }
 
 /// Uploads restored records — `RemoteSyncService.pushRestoredRecords` in the
@@ -97,17 +111,6 @@ class DataImportService {
     final backupSettings = parsed['settings'] as Map<String, dynamic>?;
     final backupBlobs = parsed['media'] as Map<String, Uint8List>? ?? const {};
 
-    // Read the current state of every collection up front. Comparing the
-    // backup against it is what keeps the restore — and the upload that
-    // follows — down to the records that actually differ.
-    final localByCollection = <String, Map<String, Map<String, dynamic>>>{};
-    for (final collection in _collections) {
-      localByCollection[collection.name] = {
-        for (final record in await collection.read()) record.id: record.data,
-      };
-    }
-    final localSettings = await _settingsRepository.getSettings();
-
     final restored = <String, List<Object>>{};
     // What a collection's `afterRestore` wrote on top of its restored records.
     // Uploaded with them but not counted as restored — nothing in the backup
@@ -119,6 +122,19 @@ class DataImportService {
     // One transaction for the whole restore: a backup half-applied because
     // the process died partway through would be worse than one not applied.
     await _db.transaction(() async {
+      // Read the current state of every collection up front. Comparing the
+      // backup against it is what keeps the restore — and the upload that
+      // follows — down to the records that actually differ. Inside the
+      // transaction, so a sync pull cannot land between this read and the
+      // writes below and leave a restored record versioned under it.
+      final localByCollection = <String, Map<String, Map<String, dynamic>>>{};
+      for (final collection in _collections) {
+        localByCollection[collection.name] = {
+          for (final record in await collection.read()) record.id: record.data,
+        };
+      }
+      final localSettings = await _settingsRepository.getSettings();
+
       for (final collection in _collections) {
         final local = localByCollection[collection.name]!;
         final records = [
@@ -241,7 +257,12 @@ class DataImportService {
     var written = 0;
     for (final asset in await repository.getAllAssets()) {
       final bytes = byContentHash[asset.contentHash];
-      if (bytes == null) continue;
+      // The name is the hash of the content, so bytes that do not hash to it
+      // are not this asset's — and a name that is not a hash at all could
+      // point the write outside the cache.
+      if (bytes == null || sha256.convert(bytes).toString() != asset.contentHash) {
+        continue;
+      }
       final format = MediaImageFormat.fromMimeType(asset.mimeType);
       if (format == null) continue;
       await store.writeBytes(asset.contentHash, format, bytes);
@@ -309,7 +330,7 @@ Map<String, Object?> extractBackupIsolate(List<int> zipBytes) {
   try {
     archive = ZipDecoder().decodeBytes(zipBytes);
   } catch (error) {
-    throw BackupFormatException('That file could not be read as a ZIP.');
+    throw BackupDamagedException('That file could not be read as a ZIP.');
   }
 
   Object? readJson(String fileName) {
@@ -325,17 +346,33 @@ Map<String, Object?> extractBackupIsolate(List<int> zipBytes) {
   // nonsense.
   final manifest = readJson(backupManifestFileName);
   if (manifest is! Map) {
-    throw BackupFormatException(
+    throw BackupDamagedException(
       'This ZIP has no $backupManifestFileName, so it is not a Voyager backup '
       '(backups taken before this version are not supported).',
     );
   }
   final formatVersion = (manifest['formatVersion'] as num?)?.toInt();
   if (formatVersion != backupFormatVersion) {
-    throw BackupFormatException(
+    throw BackupVersionException(
       'This backup is format version $formatVersion; this version of Voyager '
       'reads version $backupFormatVersion.',
     );
+  }
+
+  // Archives written before checksums existed have none, and are read as
+  // before. Checked before any member is parsed, so a damaged archive is
+  // refused whole rather than restored up to the damage.
+  final checksums = manifest['checksums'];
+  if (checksums is Map) {
+    for (final entry in checksums.entries) {
+      final file = archive.findFile(entry.key as String);
+      if (file == null ||
+          sha256.convert(file.content as List<int>).toString() != entry.value) {
+        throw BackupDamagedException(
+          'This backup is damaged: ${entry.key} does not match its checksum.',
+        );
+      }
+    }
   }
 
   final media = <String, Uint8List>{};
@@ -349,7 +386,12 @@ Map<String, Object?> extractBackupIsolate(List<int> zipBytes) {
   for (final entry in (manifest['collections'] as Map? ?? {}).entries) {
     final name = entry.key as String;
     final content = readJson('$name.json');
-    if (content is! List) continue;
+    if (content is! List || content.length != (entry.value as num).toInt()) {
+      throw BackupDamagedException(
+        'This backup is damaged: $name.json does not hold the '
+        '${entry.value} record(s) its manifest lists.',
+      );
+    }
     collections[name] = [
       for (final record in content) Map<String, dynamic>.from(record as Map),
     ];
@@ -360,5 +402,31 @@ Map<String, Object?> extractBackupIsolate(List<int> zipBytes) {
     'collections': collections,
     'settings': settings is Map ? Map<String, dynamic>.from(settings) : null,
     'media': media,
+    'manifest': Map<String, dynamic>.from(manifest),
   };
+}
+
+/// Background isolate entry point — must be top-level.
+///
+/// Proves [zipBytes] would restore: runs the restore's own parser, which
+/// checks the format version, every checksum and every record count, then
+/// returns the manifest. Throws a [BackupVersionException] for a format this
+/// build does not read, and a [BackupDamagedException] for anything else the
+/// parser trips on — a garbled member can fail in any number of ways.
+Map<String, dynamic> verifyBackupIsolate(List<int> zipBytes) {
+  try {
+    return extractBackupIsolate(zipBytes)['manifest']! as Map<String, dynamic>;
+  } on BackupFormatException {
+    rethrow;
+  } catch (error) {
+    // Running out of memory says nothing about the file.
+    if (error is OutOfMemoryError || error is StackOverflowError) rethrow;
+    throw BackupDamagedException('This backup is damaged: $error');
+  }
+}
+
+/// Reads and verifies the backup at [file] off the UI isolate. See
+/// [verifyBackupIsolate].
+Future<Map<String, dynamic>> verifyBackupFile(File file) async {
+  return compute(verifyBackupIsolate, await file.readAsBytes());
 }

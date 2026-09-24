@@ -181,10 +181,10 @@ class _JournalSettingsDialog extends ConsumerWidget {
                   showSelectedIcon: false,
                   // Segments split the width evenly, and the default padding
                   // left "Monthly + yearly" a few pixels short of one line.
-                  style: const ButtonStyle(
-                    padding: WidgetStatePropertyAll(
-                      EdgeInsets.symmetric(horizontal: 4),
-                    ),
+                  style: SegmentedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    selectedBackgroundColor: accent.withValues(alpha: 0.18),
+                    selectedForegroundColor: accent,
                   ),
                   onSelectionChanged: (selection) => _saveJournal(
                     ref,

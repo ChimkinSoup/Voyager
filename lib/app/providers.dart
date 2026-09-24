@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Directory;
 import 'dart:math' show Random;
 import 'dart:ui';
 
@@ -7,6 +8,8 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:voyager/app/auth_notifier.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/dev/cache_status.dart';
@@ -74,6 +77,7 @@ import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/features/settings/services/auto_backup_service.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
 import 'package:voyager/features/settings/services/color_replacement_service.dart';
 import 'package:voyager/features/settings/services/data_export_service.dart';
@@ -366,6 +370,7 @@ final colorReplacementServiceProvider = Provider<ColorReplacementService>((
 
 final dataExportServiceProvider = Provider<DataExportService>((ref) {
   return DataExportService(
+    db: ref.watch(databaseProvider),
     collections: ref.watch(backupCollectionsProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
     mediaRepository: ref.watch(mediaRepositoryProvider),
@@ -388,6 +393,24 @@ final dataImportServiceProvider = Provider<DataImportService>((ref) {
         ref.read(remoteSyncServiceProvider).pushSettings(settings),
     mediaRepository: ref.watch(mediaRepositoryProvider),
     mediaFileStore: ref.watch(mediaFileStoreProvider),
+  );
+});
+
+/// Daily verified backups and guarded restores — AUTO_BACKUP_HLD.md. Started
+/// by [VoyagerApp]. Everything is read lazily so the service is built once and
+/// its timers are never torn down by an unrelated provider rebuilding.
+final autoBackupServiceProvider = ChangeNotifierProvider<AutoBackupService>((
+  ref,
+) {
+  return AutoBackupService(
+    // App-private and never under Documents, which OneDrive may be syncing
+    // (§8.1).
+    directory: () async => Directory(
+      p.join((await getApplicationSupportDirectory()).path, 'backups'),
+    ),
+    exporter: () => ref.read(dataExportServiceProvider),
+    importer: () => ref.read(dataImportServiceProvider),
+    freeBytes: (path) => ref.read(mediaFileStoreProvider).freeBytesAt(path),
   );
 });
 
@@ -2082,7 +2105,11 @@ final notificationBadgeStateProvider = Provider<NotificationUrgency?>((ref) {
       ref.watch(visibleNotificationFeedProvider).valueOrNull ??
       const <NotificationFeedItem>[];
   final pendingStats = ref.watch(pendingStatEntriesProvider).valueOrNull ?? 0;
-  if (feed.any((i) => i.urgency == NotificationUrgency.important)) {
+  final backupsFailing = ref.watch(
+    autoBackupServiceProvider.select((s) => s.status?.failing ?? false),
+  );
+  if (backupsFailing ||
+      feed.any((i) => i.urgency == NotificationUrgency.important)) {
     return NotificationUrgency.important;
   }
   if (feed.isNotEmpty || pendingStats > 0) return NotificationUrgency.semi;

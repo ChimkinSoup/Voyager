@@ -40,14 +40,20 @@ class MediaFileStore {
   ///
   /// The extension is carried so that a file dragged out of the cache, or
   /// handed to a "Save as…", opens in whatever the OS associates with it.
+  ///
+  /// [contentHash] arrives from synced and restored records, so it is refused
+  /// unless it is a bare name: `../x` would otherwise point outside the cache.
   Future<File> fileFor(String contentHash, MediaImageFormat format) async {
+    if (!_isBareName(contentHash)) {
+      throw ArgumentError.value(contentHash, 'contentHash', 'not a bare name');
+    }
     final dir = await root();
     return File(p.join(dir.path, '$contentHash.${format.extension}'));
   }
 
   Future<File?> fileForAsset(MediaAsset asset) async {
     final format = MediaImageFormat.fromMimeType(asset.mimeType);
-    if (format == null) return null;
+    if (format == null || !_isBareName(asset.contentHash)) return null;
     final file = await fileFor(asset.contentHash, format);
     return await file.exists() ? file : null;
   }
@@ -83,6 +89,8 @@ class MediaFileStore {
   /// Removes a blob from disk. Missing is success — purge runs on every
   /// device, and only one of them has to have had the bytes.
   Future<void> deleteBytes(String contentHash, MediaImageFormat format) async {
+    // No file can have been written under a name [fileFor] refuses.
+    if (!_isBareName(contentHash)) return;
     final file = await fileFor(contentHash, format);
     if (await file.exists()) await file.delete();
   }
@@ -140,6 +148,16 @@ class MediaFileStore {
     }
   }
 
+  /// Free bytes on the volume holding [path], or null when the platform will
+  /// not say.
+  Future<int?> freeBytesAt(String path) async {
+    try {
+      return (await _volumeStats(path))?.free;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<bool> isDiskLow() async {
     final fraction = await freeSpaceFraction();
     return fraction != null && fraction < lowDiskFreeFraction;
@@ -184,3 +202,7 @@ class MediaFileStore {
     return (total: total * 1024, free: free * 1024);
   }
 }
+
+final _bareName = RegExp(r'^[A-Za-z0-9_-]+$');
+
+bool _isBareName(String contentHash) => _bareName.hasMatch(contentHash);

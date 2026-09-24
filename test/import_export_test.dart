@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:archive/archive.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crypto/crypto.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
@@ -150,6 +151,7 @@ List<BackupCollection> collectionsFor(AppDatabase db) => buildBackupCollections(
 );
 
 DataExportService exporterFor(AppDatabase db) => DataExportService(
+  db: db,
   collections: collectionsFor(db),
   settingsRepository: DriftSettingsRepository(db),
 );
@@ -876,7 +878,8 @@ void main() {
       final bytes = Uint8List.fromList(
         List<int>.generate(512, (i) => (i * 7) % 256),
       );
-      const contentHash = 'roundtriphash';
+      // The restore only writes bytes that hash to their asset's name.
+      final contentHash = sha256.convert(bytes).toString();
       final now = DateTime.utc(2026, 3, 4);
       await sourceMedia.upsertAsset(
         MediaAsset(
@@ -893,6 +896,7 @@ void main() {
       await sourceStore.writeBytes(contentHash, MediaImageFormat.jpeg, bytes);
 
       final exported = await DataExportService(
+        db: source,
         collections: collectionsFor(source),
         settingsRepository: DriftSettingsRepository(source),
         mediaRepository: sourceMedia,

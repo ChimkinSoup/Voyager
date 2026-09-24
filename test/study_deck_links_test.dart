@@ -561,6 +561,7 @@ void main() {
       final source = await _seed(linked: false);
       await _addLink(source, _aws, _hub, minute: 1);
       final contents = await DataExportService(
+        db: source,
         collections: _collectionsFor(source),
         settingsRepository: DriftSettingsRepository(source),
       ).buildArchiveContents();

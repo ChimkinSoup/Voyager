@@ -10,6 +10,7 @@ import 'package:voyager/core/caps_lock/caps_lock_indicator_scope.dart';
 import 'package:voyager/core/dev/perf_stall_logger.dart';
 import 'package:voyager/core/motion/modal_scrim_observer.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
+import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/reminders/reminder_engine.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
@@ -68,6 +69,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
         if (key != null && mounted) _focusReminder(key);
       }),
     );
+    ref.read(autoBackupServiceProvider).start();
     _selectionOnResume.install();
     WindowsKeyboardReconciler.instance.install();
     if (desktopWindowChromeActive) {
@@ -179,6 +181,11 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       unawaited(resyncWindowsKeyboardState());
       // Timers do not run while a phone app is suspended.
       ref.read(reminderEngineProvider).refresh();
+      if (isAndroid) ref.read(autoBackupServiceProvider).resume();
+    }
+    // Android backs up only in the foreground (AUTO_BACKUP_HLD.md §6.1).
+    if (isAndroid && state == AppLifecycleState.paused) {
+      ref.read(autoBackupServiceProvider).pause();
     }
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||

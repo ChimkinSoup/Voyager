@@ -4,7 +4,7 @@ Voyager takes a full backup of itself every day and keeps a small, age-tiered se
 
 Related: `lib/features/settings/services/data_export_service.dart`, `lib/features/settings/services/data_import_service.dart`, `lib/features/settings/services/backup_collections.dart`, `lib/features/settings/settings_page.dart` (Backup & Restore section), `lib/app/voyager_app.dart` (lifecycle), `android/app/src/main/AndroidManifest.xml`, `JOURNAL_DATA_LOSS_POSTMORTEM.md`.
 
-Status: **design** (not implemented). Decisions locked 2026-09-24; remaining questions in §12.
+Status: **implemented** (`auto_backup_service.dart`, `auto_backup_retention.dart`, `backup_list_dialog.dart`). Decisions locked 2026-09-24; audited and hardened the same day; remaining questions in §12.
 
 ---
 
@@ -103,24 +103,30 @@ If the app hasn't been opened for a while, the rule keeps what it has and doesn'
 
 - **Trigger:** on startup (deferred about 30 s so it doesn't compete with first paint and the initial pull), then an hourly check while the app runs. Each check asks one question: *is there a verified automatic backup captured on today's local date?* If not, it runs. The hourly check covers a desktop left open past midnight, sleep and hibernate, and time-zone changes without any midnight-timer logic.
 - **Single flight:** an in-process guard stops overlapping runs. Windows already enforces one instance (`Local\Voyager.SingleInstance` in `windows/runner/main.cpp`). On Android, one engine means one process.
-- **Android:** runs only while the app is in the foreground. No WorkManager in v1: a background isolate would need its own DB connection and sync stack, which would be a bigger and riskier change than this feature. On days the app isn't opened, there's no backup, which is also true on desktop.
+- **Android:** runs only while the app is in the foreground: the timers stop when the app is paused and restart on resume, so a run never starts just before the OS freezes the process and a day in the background doesn't count as a day the app was open. No WorkManager in v1: a background isolate would need its own DB connection and sync stack, which would be a bigger and riskier change than this feature. On days the app isn't opened, there's no backup, which is also true on desktop.
 
 ### 6.2 Pipeline
 
 ```
-snapshot ─► write .partial ─► flush ─► verify from disk ─► rename ─► prune ─► record status
-   │              │                         │
-   └─ fail ───────┴─────────────────────────┴─► delete .partial, keep everything, record failure
+snapshot ─► write .partial ─► flush ─► verify from disk ─► rename ─► re-check retained ─► prune ─► record status
+   │              │                         │                │               │                 │
+   └─ fail ───────┴─────────────────────────┴────────────────┴───────────────┴─────────────────┴─► delete .partial, record failure
 ```
+
+Success is recorded only at the end, so a failure in any step, including re-check or prune, shows as a failed attempt. If today's backup already exists but the run that took it failed afterwards, the next check re-runs only re-check and prune rather than taking a second backup (which would push an older day out of the three dailies).
 
 1. **Consistent snapshot.** `buildArchiveContents` currently reads one collection per `await`, so a sync pull that lands mid-export can leave, say, an entry without its journal. The collection and settings reads move inside a single Drift transaction so the export is one point in time. Media blobs are read afterwards; they're content-addressed and immutable, so this is safe. The transaction blocks writes for the read duration (a few hundred ms at today's size), which is fine once a day.
 2. **Checksums.** The manifest gains `checksums: {memberName: sha256}` for every archive member. This is additive, so `formatVersion` stays 2 and older builds ignore the field.
-3. **Write to a temp name** `voyager_auto_<yyyyMMdd'T'HHmmss'Z'>.zip.partial` with `flush: true`.
+3. **Write to a temp name** `voyager_auto_<yyyy-MM-dd_HH-mm-ss±HHmm>.zip.partial` (local time to the second plus the UTC offset, e.g. `voyager_auto_2026-09-24_18-25-30-0400.zip`) with `flush: true`. Backups with the earlier UTC names (`voyager_auto_20260924T222530Z.zip`) are renamed on startup.
 4. **Verify from disk.** Re-read the file, run the existing `extractBackupIsolate`, which is the restore path's own parser, check every checksum, and confirm that per-collection record counts match the manifest. This proves the file is restorable by this build, not just that bytes were written.
-5. **Rename** to `.zip`. Names are unique, so the rename never overwrites anything. That matters on Windows, where renaming over an existing file fails.
-6. **Prune** (§5).
-7. **Re-check the retained set.** Re-verify the checksums of every other retained automatic backup (about 60 MB of hashing at today's size, once a day). A file that fails is deleted and dropped from the retention input, so its tier refills from the next good file instead of pointing at a corrupt one, and health goes to *Attention* (§9.3). This catches disk corruption before you need the file, not when you do.
-8. **Record status** (last success, last failure and reason, last re-check result) in `backups/state.json`. The UI reads this file; retention never relies on it.
+5. **Rename** to `.zip`. A rename silently replaces an existing file, on Windows too (Dart uses `MOVEFILE_REPLACE_EXISTING`). Names are unique to the second, and the target is checked first: a clash fails the run rather than replacing a backup.
+6. **Re-check the retained set** *before* pruning. Re-verify every other retained automatic backup (about 60 MB of hashing at today's size, once a day), so a bad file is out of the retention input and its tier refills from the next good file. Each file lands in one of four outcomes:
+   - **Verified:** stays in the rotation.
+   - **Damaged** (the ZIP won't decode, or a checksum or record count doesn't match): renamed to `<name>.damaged`, which takes it out of the list and the rotation *without deleting it*, in case the check was wrong. Health goes to *Attention*.
+   - **Unsupported format** (made by a build that reads a different `formatVersion`): renamed to `<name>.unsupported`. It's kept for the build that made it and hidden from this one. That's not damage, so health is unaffected. Without this, the first build after a format bump would have treated every v2 backup as corrupt.
+   - **Unreadable right now** (held open by a virus scanner or ZIP tool, out of memory): left alone and out of that day's pruning. Health goes to *Attention* ("could not be re-checked").
+7. **Prune** (§5).
+8. **Record status** (last outcome, last success, last failure and reason, last re-check result) in `backups/state.json`. The UI reads this file; retention never relies on it. Updates are serialised and written via a temp file plus rename, so two updates never lose each other's change and a crash never leaves a truncated file.
 
 On startup, leftover `.partial` files from a crash are deleted.
 
@@ -161,7 +167,9 @@ The snapshot appears at the top of the backup list as **"Before restore · today
 
 Restoring the snapshot is itself a restore, so it takes its own snapshot first. An undo can be undone.
 
-**Lifetime.** Pre-restore snapshots sit outside the §5 rotation, so they never count as or displace a daily, weekly or monthly backup. Each one is deleted 7 days after it was taken. They're taken even when automatic backups are off, because protecting a restore is a separate concern from scheduled backups.
+**Lifetime.** Pre-restore snapshots sit outside the §5 rotation, so they never count as or displace a daily, weekly or monthly backup. Each one is deleted 7 days after it was taken, checked hourly whether or not automatic backups are on. They're taken even when automatic backups are off, because protecting a restore is a separate concern from scheduled backups.
+
+Only one restore runs at a time; a second is refused while the first is in progress.
 
 The confirmation dialog has to say this in plain words: *"Anything changed since <capture time> will be replaced on all your devices. A snapshot of the current state is saved first, so you can undo this."*
 
@@ -194,7 +202,11 @@ The SHA-256 checksums detect **corruption** (bit rot, truncated writes, a half-c
 
 ### 8.5 Restoring untrusted archives
 
-Already sound, and worth keeping that way. `_restoreMediaBlobs` writes files under names derived from **existing asset rows' `contentHash`**, never from archive member names, so a crafted ZIP can't path-traverse. The format version is checked before anything is written, and the whole DB restore is one transaction. The remaining gap is memory: the whole ZIP is decoded in memory, so a hostile "zip bomb" could OOM the app. That's acceptable for self-made backups. Add a size cap if restoring shared files ever becomes a feature.
+`_restoreMediaBlobs` writes files under names derived from asset rows' `contentHash`, never from archive member names. Those rows are restored from the same archive, though, so `contentHash` is untrusted. Two guards cover it:
+- `MediaFileStore.fileFor` refuses anything that isn't a bare name (`^[A-Za-z0-9_-]+$`), so a value like `../x` can't write or delete outside the cache. This also covers the sync and download paths.
+- The restore writes a blob only if its bytes hash to the asset's `contentHash`.
+
+The format version is checked before anything is written. The whole DB restore, including the read of current local state it compares against, is one transaction, so a sync pull can't land in between. The remaining gap is memory: the whole ZIP is decoded in memory, so a hostile "zip bomb" could OOM the app. That's acceptable for self-made backups. Add a size cap if restoring shared files ever becomes a feature.
 
 ---
 
@@ -234,8 +246,9 @@ Evaluated in this order; the first match wins:
 |---|---|---|
 | **Backing up…** (neutral, spinner) | A run is in progress | "Taking today's backup" |
 | **Off** (neutral) | Toggle is off | "Automatic backups are off · last backup 3 days ago" |
-| **Attention** (amber) | The last attempt failed, **or** a retained file failed re-verification (§6.2 step 7), **or** the newest verified backup is more than 1 local day old even though the app has been opened since then | The recorded reason, e.g. "Not enough free space (needs 18 MB)" |
+| **Attention** (amber) | The last attempt failed, **or** a retained file was damaged or could not be re-checked (§6.2 step 6), **or** the newest verified backup is more than 1 local day old even though the app has been opened since then | The recorded reason, e.g. "Not enough free space (needs 18 MB)" |
 | **Not yet backed up** (neutral) | No automatic backup has ever succeeded on this device and no attempt has failed | "First backup runs shortly after startup" |
+| **Due** (neutral) | The newest backup is older than yesterday, but the app hasn't been open since, so today's run just hasn't happened yet | "Today's backup runs shortly" |
 | **Healthy** (green) | A backup captured today or yesterday passed verification, the last attempt succeeded and every retained file passed its last re-check | "Last backup today 09:14, verified" |
 
 "Healthy" is a claim that restoring would work, which is why it depends on the re-check and not just on files existing.

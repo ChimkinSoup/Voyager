@@ -34,6 +34,7 @@ import 'package:voyager/features/analytics/tracker_entry_row.dart';
 import 'package:voyager/features/calendar/calendar_event_delete.dart';
 import 'package:voyager/features/finance/finance_subscription_modal.dart';
 import 'package:voyager/features/notifications/scheduled_reminders_section.dart';
+import 'package:voyager/features/settings/services/auto_backup_service.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/core/text/prose_editing_controller.dart';
@@ -92,6 +93,7 @@ class _NotificationInboxPopoverState
                 onClearAll: _clearAll,
                 onShowHidden: () => _hiddenKey.currentState?.reveal(),
               ),
+              const _BackupAlertSection(),
               const _PinnedNotesSection(),
               const ScheduledRemindersSection(),
               const _FeedSection(),
@@ -1010,6 +1012,56 @@ const double _kInboxRowRadius = 16;
 /// Sized to [VoyagerCheckbox]'s own footprint (a 20px box in 10px of padding),
 /// which is the largest thing that goes in it.
 const double _kFeedLeadingSlot = 40;
+
+/// "Backups failing" — shown while there has been no successful automatic
+/// backup on the last two days the app was open (AUTO_BACKUP_HLD.md §9.4).
+///
+/// Device-local and derived, like the backups themselves, so it has no
+/// dismissal: it goes away when a backup succeeds or backups are turned off.
+class _BackupAlertSection extends ConsumerWidget {
+  const _BackupAlertSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final service = ref.watch(autoBackupServiceProvider);
+    final status = service.status;
+    if (status == null || !status.failing) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final running = status.health == AutoBackupHealth.backingUp;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Row(
+        children: [
+          const Icon(
+            PhosphorIconsRegular.warningCircle,
+            size: 20,
+            color: Colors.amber,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Backups failing', style: theme.textTheme.bodyMedium),
+                Text(
+                  status.detail,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          GlassButton(
+            dense: true,
+            label: running ? 'Retrying…' : 'Retry',
+            onPressed: running ? null : service.runIfDue,
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _FeedSection extends ConsumerWidget {
   const _FeedSection();

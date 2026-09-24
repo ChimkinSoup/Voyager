@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
+import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/services/media_file_store.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -29,15 +31,18 @@ const backupFormatVersion = 2;
 
 class DataExportService {
   DataExportService({
+    required AppDatabase db,
     required List<BackupCollection> collections,
     required SettingsRepository settingsRepository,
     MediaRepository? mediaRepository,
     MediaFileStore? mediaFileStore,
-  }) : _collections = collections,
+  }) : _db = db,
+       _collections = collections,
        _settingsRepository = settingsRepository,
        _mediaRepository = mediaRepository,
        _mediaFileStore = mediaFileStore;
 
+  final AppDatabase _db;
   final List<BackupCollection> _collections;
   final SettingsRepository _settingsRepository;
 
@@ -58,7 +63,7 @@ class DataExportService {
     // Serializing and zipping is CPU-bound, so it runs off the UI isolate.
     final zipBytes = await compute(generateBackupZipIsolate, files);
 
-    return await destination.writeAsBytes(zipBytes);
+    return await destination.writeAsBytes(zipBytes, flush: true);
   }
 
   /// Every file the archive will hold, keyed by name, as JSON-encodable
@@ -68,21 +73,28 @@ class DataExportService {
     final files = <String, Object>{};
     final counts = <String, int>{};
 
-    // One collection at a time rather than all at once: a full history of set
-    // logs or review entries is large, and holding every collection's models
-    // and payloads live simultaneously is what spikes memory.
-    for (final collection in _collections) {
-      final records = await collection.read();
-      files['${collection.name}.json'] = [
-        for (final record in records) record.toJson(),
-      ];
-      counts[collection.name] = records.length;
-    }
+    // One transaction, so the archive is a single point in time: a sync pull
+    // landing between two collection reads would otherwise leave, say, an
+    // entry without its journal. Writes wait for the few hundred ms it takes.
+    await _db.transaction(() async {
+      // One collection at a time rather than all at once: a full history of
+      // set logs or review entries is large, and holding every collection's
+      // models and payloads live simultaneously is what spikes memory.
+      for (final collection in _collections) {
+        final records = await collection.read();
+        files['${collection.name}.json'] = [
+          for (final record in records) record.toJson(),
+        ];
+        counts[collection.name] = records.length;
+      }
 
-    files['${FirestoreCollections.settings}.json'] = settingsToFirestore(
-      await _settingsRepository.getSettings(),
-    );
+      files['${FirestoreCollections.settings}.json'] = settingsToFirestore(
+        await _settingsRepository.getSettings(),
+      );
+    });
 
+    // Outside the transaction: blobs are content-addressed and never
+    // rewritten, so reading them later cannot disagree with the rows above.
     final blobs = await _readMediaBlobs();
     files.addAll(blobs);
 
@@ -124,15 +136,30 @@ class DataExportService {
 }
 
 /// Background isolate entry point — must be top-level.
+///
+/// The manifest, when present, is written last with a `checksums` map of
+/// every other member's SHA-256, so a restore can tell a damaged archive from
+/// a good one before writing anything. Additive: readers that predate it
+/// ignore the field, which is why [backupFormatVersion] did not change.
 List<int> generateBackupZipIsolate(Map<String, Object> files) {
   final archive = Archive();
+  final checksums = <String, String>{};
   for (final entry in files.entries) {
+    if (entry.key == backupManifestFileName) continue;
     // Members under `media/` are already bytes. Everything else is a
     // structure to serialise — see [backupMediaDirectory].
     final bytes = entry.key.startsWith(backupMediaDirectory)
         ? entry.value as List<int>
         : utf8.encode(jsonEncode(entry.value));
+    checksums[entry.key] = sha256.convert(bytes).toString();
     archive.addFile(ArchiveFile(entry.key, bytes.length, bytes));
+  }
+  final manifest = files[backupManifestFileName];
+  if (manifest != null) {
+    final bytes = utf8.encode(
+      jsonEncode({...manifest as Map, 'checksums': checksums}),
+    );
+    archive.addFile(ArchiveFile(backupManifestFileName, bytes.length, bytes));
   }
   return ZipEncoder().encode(archive)!;
 }
