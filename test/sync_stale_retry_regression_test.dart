@@ -17,9 +17,6 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
-import 'package:voyager/domain/services/weather_service.dart';
-
-import 'fakes/fake_weather_api_client.dart';
 
 /// Refuses the first write of each document once, the way a full
 /// FirestoreWriteGate or a dropped connection does.
@@ -97,12 +94,6 @@ RemoteSyncService _buildService(
     bucketListRepository: DriftBucketListRepository(db),
     mediaRepository: DriftMediaRepository(db),
     settingsRepository: DriftSettingsRepository(db),
-    weatherService: WeatherService(
-      settingsRepository: DriftSettingsRepository(db),
-      syncRepository: syncRepo,
-      weatherApiClient: FakeWeatherApiClient(),
-      deviceId: 'device-a',
-    ),
     syncEngine: engine,
     deviceId: 'device-a',
     uploadDebounceDelay: Duration.zero,

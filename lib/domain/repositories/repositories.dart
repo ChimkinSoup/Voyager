@@ -1137,10 +1137,31 @@ abstract class SyncRepository {
   /// This includes echoes of this device's own writes — callers that already
   /// know they just wrote a given id should treat that as a no-op rather
   /// than re-merging it.
-  Stream<Map<String, Map<String, dynamic>>> watchCollection(String collection);
+  ///
+  /// With [changedSince], only documents the server wrote after it are
+  /// watched, so the first snapshot is what changed rather than everything.
+  Stream<Map<String, Map<String, dynamic>>> watchCollection(
+    String collection, {
+    DateTime? changedSince,
+  });
   Future<Map<String, dynamic>?> getDocument(String collection, String id);
   Future<List<({String id, Map<String, dynamic> data})>>
   listCollectionDocuments(String collection);
+
+  /// The documents in [collection] the server wrote after [since] — all
+  /// of them when null — with the newest of those write times.
+  ///
+  /// [fromServer] is false when the answer came from the local cache, which
+  /// can't vouch for what the server holds. [newestWrite] is null when no
+  /// document listed carries a write time.
+  Future<
+    ({
+      List<({String id, Map<String, dynamic> data})> documents,
+      DateTime? newestWrite,
+      bool fromServer,
+    })
+  >
+  listChangedDocuments(String collection, {DateTime? since});
   Future<Map<String, dynamic>?> getRemoteSettings();
   Future<void> upsertRemoteSettings(Map<String, dynamic> data);
 

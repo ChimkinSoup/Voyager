@@ -20,9 +20,6 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/ordered_list_edit.dart';
-import 'package:voyager/domain/services/weather_service.dart';
-
-import 'fakes/fake_weather_api_client.dart';
 
 const _a = Snippet(id: 'a', trigger: 'ee', replacement: 'expanded');
 const _b = Snippet(id: 'b', trigger: 'brb', replacement: 'be right back');
@@ -53,12 +50,6 @@ class _Device {
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
       settingsRepository: settings,
-      weatherService: WeatherService(
-        settingsRepository: settings,
-        syncRepository: syncRepo,
-        weatherApiClient: FakeWeatherApiClient(),
-        deviceId: deviceId,
-      ),
       syncEngine: SyncEngine(
         syncRepository: syncRepo,
         deviceId: deviceId,

@@ -34,9 +34,6 @@ import 'package:voyager/domain/models/sync_conflict.dart';
 import 'package:voyager/domain/services/character_op_session.dart';
 import 'package:voyager/domain/services/character_operation.dart';
 import 'package:voyager/domain/services/character_sequence_crdt_merger.dart';
-import 'package:voyager/domain/services/weather_service.dart';
-
-import 'fakes/fake_weather_api_client.dart';
 
 const _entryId = 'entry-1';
 
@@ -194,12 +191,6 @@ void main() {
         mediaRepository: DriftMediaRepository(db),
         settingsRepository: DriftSettingsRepository(db),
         syncConflictRepository: DriftSyncConflictRepository(db),
-        weatherService: WeatherService(
-          settingsRepository: DriftSettingsRepository(db),
-          syncRepository: syncRepo,
-          weatherApiClient: FakeWeatherApiClient(),
-          deviceId: 'device-a',
-        ),
         syncEngine: engine,
         deviceId: 'device-a',
         uploadDebounceDelay: Duration.zero,

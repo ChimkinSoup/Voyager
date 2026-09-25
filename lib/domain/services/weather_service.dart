@@ -139,6 +139,10 @@ class WeatherService {
         weatherLocationUpdatedAt: remoteUpdated ?? utcNow(),
         clearWeatherForecastJson: locationChanged,
       ),
+      // The location isn't a synced setting, so this save can only look like
+      // one when it overwrote a concurrent `pullSettings` with [local]'s stale
+      // copy — and pushing that would revert the pull on every device.
+      recordLocalActivity: false,
     );
   }
 

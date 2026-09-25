@@ -8,7 +8,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_write_gate.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/data/remote/firestore_sync_repository.dart'
-    show firestoreWriteChunkSize;
+    show FirestoreSyncRepository, firestoreWriteChunkSize;
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/enums.dart';
@@ -202,6 +202,47 @@ void main() {
     expect(snap.exists, isTrue);
     expect(snap.data()?['note'], 'Coffee');
     expect(await allRows(), isEmpty);
+  });
+
+  test('a drained upload is visible to an incremental pull', () async {
+    // The outbox writes to Firestore directly rather than through
+    // `FirestoreSyncRepository`, and without the server write time an edit
+    // made offline was invisible to every other device's incremental pull and
+    // live listener until the weekly full pull.
+    final firestore = FakeFirebaseFirestore();
+    final worker = OutboxSyncWorker(
+      db,
+      firestore,
+      _StubAuthRepository(),
+      yieldDelay: Duration.zero,
+    );
+    final since = DateTime.now().toUtc().subtract(const Duration(minutes: 1));
+
+    final at = DateTime.utc(2026, 5, 1);
+    await DriftFinanceRepository(db).upsertTransaction(
+      FinancialTransaction(
+        id: 'txn-1',
+        type: TransactionType.expense,
+        amountCents: 1250,
+        occurredAt: at,
+        note: 'Coffee',
+        createdAt: at,
+        updatedAt: at,
+      ),
+      recordLocalActivity: false,
+    );
+    await worker.enqueue(
+      collection: FirestoreCollections.transactions,
+      documentId: 'txn-1',
+    );
+    await worker.startDraining();
+
+    final listed = await FirestoreSyncRepository(
+      firestore,
+      'user-1',
+    ).listChangedDocuments(FirestoreCollections.transactions, since: since);
+    expect(listed.documents.map((d) => d.id), ['txn-1']);
+    expect(listed.newestWrite, isNotNull);
   });
 
   test('a queued row whose entity is gone is just cleared', () async {

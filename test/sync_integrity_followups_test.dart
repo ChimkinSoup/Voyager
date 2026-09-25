@@ -24,9 +24,6 @@ import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
-import 'package:voyager/domain/services/weather_service.dart';
-
-import 'fakes/fake_weather_api_client.dart';
 
 class _StubAuthRepository implements AuthRepository {
   @override
@@ -87,12 +84,6 @@ RemoteSyncService _buildService(
     bucketListRepository: DriftBucketListRepository(db),
     mediaRepository: DriftMediaRepository(db),
     settingsRepository: DriftSettingsRepository(db),
-    weatherService: WeatherService(
-      settingsRepository: DriftSettingsRepository(db),
-      syncRepository: syncRepo,
-      weatherApiClient: FakeWeatherApiClient(),
-      deviceId: 'device-a',
-    ),
     syncEngine: SyncEngine(
       syncRepository: syncRepo,
       deviceId: 'device-a',

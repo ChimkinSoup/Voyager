@@ -130,9 +130,8 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
         // Idempotent — a drain already running simply keeps going.
         unawaited(OutboxSyncWorker.instance.startDraining());
       }
-      // Weather is skipped: it runs on its own minute timer and refreshing it
-      // here would spend a request the timer is about to spend anyway.
-      await ref.read(remoteSyncServiceProvider).pullAll(skipWeather: true);
+      // Weather isn't part of it: it runs on its own minute timer.
+      await ref.read(remoteSyncServiceProvider).pullAll();
     } catch (error, stackTrace) {
       FlutterError.reportError(
         FlutterErrorDetails(
@@ -251,15 +250,19 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     final backgroundSync = ref.read(backgroundSyncOrchestratorProvider);
     final remoteSync = ref.read(remoteSyncServiceProvider);
     final liveSync = ref.read(liveSyncProvider);
-    final weatherService = ref.read(weatherServiceProvider);
     final quotesFuture = ref.read(quotesLoadedProvider.future);
     final shellWarmupFuture = ref.read(shellDataWarmupProvider.future);
 
     await quotesFuture;
     if (!mounted) return;
 
+    // Alongside the sync rather than after it: the weather location is the
+    // only thing it needs from the pull, and it syncs that for itself.
+    final weatherWarmup = _warmUpWeather();
+
     final warmupTracker = ref.read(warmupTrackerProvider);
     warmupTracker.begin('Startup sync');
+    final syncStopwatch = Stopwatch()..start();
     try {
       await sync.pullOnStartup(
         purgeExpiredDeleted: backgroundSync.purgeExpiredDeleted,
@@ -301,14 +304,27 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
         },
       );
       warmupTracker.complete('Startup sync');
+      debugPrint(
+        '[sync] startup sync took ${syncStopwatch.elapsedMilliseconds}ms',
+      );
     } catch (_) {
       warmupTracker.fail('Startup sync');
       rethrow;
     }
     if (!mounted) return;
+    await weatherWarmup;
+    if (!mounted) return;
+    await shellWarmupFuture;
+  }
 
+  Future<void> _warmUpWeather() async {
+    final weatherService = ref.read(weatherServiceProvider);
+    final warmupTracker = ref.read(warmupTrackerProvider);
     warmupTracker.begin('Weather warmup');
+    final stopwatch = Stopwatch()..start();
     try {
+      await weatherService.syncLocationFromRemote();
+      if (!mounted) return;
       await weatherService.refreshIfNeeded();
       if (!mounted) return;
       await weatherService.fetchForecastIfNeeded();
@@ -316,6 +332,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
       ref.invalidate(currentWeatherProvider);
       ref.invalidate(weatherForecastProvider);
       warmupTracker.complete('Weather warmup');
+      debugPrint('[weather] warmup took ${stopwatch.elapsedMilliseconds}ms');
     } catch (error, stackTrace) {
       warmupTracker.fail('Weather warmup');
       FlutterError.reportError(
@@ -327,8 +344,6 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
         ),
       );
     }
-    if (!mounted) return;
-    await shellWarmupFuture;
   }
 
   void _startWeatherRefreshTimer() {

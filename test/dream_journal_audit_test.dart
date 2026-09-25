@@ -16,9 +16,6 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
-import 'package:voyager/domain/services/weather_service.dart';
-
-import 'fakes/fake_weather_api_client.dart';
 
 DreamEntry _dream({
   required String id,
@@ -74,12 +71,6 @@ void main() {
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
       settingsRepository: DriftSettingsRepository(db),
-      weatherService: WeatherService(
-        settingsRepository: DriftSettingsRepository(db),
-        syncRepository: syncRepo,
-        weatherApiClient: FakeWeatherApiClient(),
-        deviceId: 'device-a',
-      ),
       syncEngine: engine,
       uploadDebounceDelay: Duration.zero,
     );

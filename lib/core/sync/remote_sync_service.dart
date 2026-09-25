@@ -20,6 +20,7 @@ import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/sync/sync_conflict_detector.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
+import 'package:voyager/core/sync/sync_watermark_store.dart';
 import 'package:voyager/domain/models/sync_conflict.dart';
 import 'package:voyager/domain/services/character_op_session.dart';
 import 'package:voyager/domain/services/character_operation.dart';
@@ -45,7 +46,6 @@ import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/data/remote/firestore_sync_repository.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
-import 'package:voyager/domain/services/weather_service.dart';
 
 class RemoteSyncService {
   RemoteSyncService({
@@ -66,13 +66,13 @@ class RemoteSyncService {
     required BucketListRepository bucketListRepository,
     required MediaRepository mediaRepository,
     required SettingsRepository settingsRepository,
-    required WeatherService weatherService,
     required SyncEngine syncEngine,
     SyncConflictRepository? syncConflictRepository,
     SyncActivityController? syncActivity,
     CrdtDocumentResolver? crdtResolver,
     CharacterOpRegistry? charOpRegistry,
     SyncConflictDetector? conflictDetector,
+    SyncWatermarkStore? watermarkStore,
     Duration uploadDebounceDelay = const Duration(seconds: syncDebounceSeconds),
     this.deviceId = 'local-device',
     this.forceConflictUi = false,
@@ -93,7 +93,6 @@ class RemoteSyncService {
        _bucketListRepository = bucketListRepository,
        _mediaRepository = mediaRepository,
        _settingsRepository = settingsRepository,
-       _weatherService = weatherService,
        _syncEngine = syncEngine,
        _syncConflictRepository = syncConflictRepository,
        _syncActivity = syncActivity,
@@ -101,6 +100,7 @@ class RemoteSyncService {
        _charOpRegistry = charOpRegistry ?? CharacterOpRegistry(),
        _ownsCharOpRegistry = charOpRegistry == null,
        _conflictDetector = conflictDetector ?? SyncConflictDetector(),
+       _watermarkStore = watermarkStore ?? MemorySyncWatermarkStore(),
        _charMerger = CharacterSequenceCrdtMerger(),
        _uploadDebounceDelay = uploadDebounceDelay;
 
@@ -121,7 +121,6 @@ class RemoteSyncService {
   final BucketListRepository _bucketListRepository;
   final MediaRepository _mediaRepository;
   final SettingsRepository _settingsRepository;
-  final WeatherService _weatherService;
   final SyncEngine _syncEngine;
   final SyncConflictRepository? _syncConflictRepository;
   final SyncActivityController? _syncActivity;
@@ -132,6 +131,23 @@ class RemoteSyncService {
   /// service — see `charOpRegistryProvider`.
   final bool _ownsCharOpRegistry;
   final SyncConflictDetector _conflictDetector;
+  final SyncWatermarkStore _watermarkStore;
+
+  /// Each collection's [SyncWatermark.changedSince] as of its last pull, so
+  /// [LiveSyncController] can listen from where the pull left off.
+  final Map<String, DateTime> _changedSince = {};
+
+  /// How often a collection is pulled whole regardless of its watermark.
+  ///
+  /// The safety net for writes the watermark can't see: one from a build that
+  /// predates the server write time (a `merge` upsert keeps the old stamp),
+  /// or an operation-log entry whose document write never followed.
+  static const _fullPullInterval = Duration(days: 7);
+
+  /// How far behind this device's clock a full pull sets the mark when no
+  /// document it found carries a server write time. Generous because the
+  /// only cost is re-pulling what changed in that window.
+  static const _clockAllowance = Duration(hours: 1);
   final CharacterSequenceCrdtMerger _charMerger;
   final Duration _uploadDebounceDelay;
   final String deviceId;
@@ -214,9 +230,11 @@ class RemoteSyncService {
     final echo = _selfEchoes[key];
     if (echo == null) return false;
 
-    _selfEchoes.remove(key);
-    if (remote == null) return false;
-    if (DateTime.now().difference(echo.at) >= _selfEchoWindow) return false;
+    if (remote == null ||
+        DateTime.now().difference(echo.at) >= _selfEchoWindow) {
+      _selfEchoes.remove(key);
+      return false;
+    }
 
     // Uploads write with `merge: true`, so the stored document is a superset of
     // what we sent. Comparing only the keys we actually pushed is what makes a
@@ -226,7 +244,12 @@ class RemoteSyncService {
       for (final key in echo.keys)
         if (remote.containsKey(key)) key: remote[key],
     };
-    return _payloadFingerprint(pushed) == echo.fingerprint;
+    final matches = _payloadFingerprint(pushed) == echo.fingerprint;
+    // Kept on a match: one write is delivered twice — from the local cache,
+    // then again once the server fills in its write time — and both are ours.
+    // Only identical content can match, so keeping it can't swallow an edit.
+    if (!matches) _selfEchoes.remove(key);
+    return matches;
   }
 
   /// A payload rendered so two of them compare equal when their contents are.
@@ -1318,47 +1341,91 @@ class RemoteSyncService {
     return merged;
   }
 
-  Future<void> pullAll({bool skipWeather = false}) async {
+  Future<void> pullAll() async {
     if (forceConflictUi) {
       _forceNextDownloadConflict = true;
     }
-    await pullJournalAndTodoData();
-    await pullSecondaryData();
-    if (!skipWeather) {
-      await Future.wait<void>([
-        _weatherService.syncLocationFromRemote(),
-        _weatherService.syncForecastFromRemote(),
-      ]);
+    final timings = <_PullTiming>[];
+    final stopwatch = Stopwatch()..start();
+    try {
+      await runZoned(
+        () =>
+            Future.wait<void>([pullJournalAndTodoData(), pullSecondaryData()]),
+        zoneValues: {_pullTimingsKey: timings},
+      );
+      // After the pull, never before — see [backfillSyncedCollections].
+      await backfillSyncedCollections();
+    } finally {
+      debugPrint(_describePull(stopwatch.elapsed, timings));
     }
-    // After the pull, never before — see [backfillSyncedCollections].
-    await backfillSyncedCollections();
+  }
+
+  /// Zone key under which [pullAll] collects each collection's [_PullTiming].
+  /// A zone rather than a field so an overlapping pull (a reconnect landing
+  /// during the startup one) keeps its own list.
+  static const _pullTimingsKey = #remoteSyncPullTimings;
+
+  /// One line for the log: the total, then the slowest collections, which is
+  /// where any time worth winning back will be.
+  static String _describePull(Duration elapsed, List<_PullTiming> timings) {
+    final documents = timings.fold<int>(0, (sum, t) => sum + t.documents);
+    final full = timings.where((t) => t.full).length;
+    final slowest = [...timings]
+      ..sort((a, b) => b.elapsed.compareTo(a.elapsed));
+    final top = slowest
+        .take(5)
+        .map(
+          (t) =>
+              '${t.collection} ${t.elapsed.inMilliseconds}ms '
+              '(${t.documents}${t.full ? ', full' : ''})',
+        )
+        .join(', ');
+    return '[sync] pullAll took ${elapsed.inMilliseconds}ms: $documents docs '
+        'from ${timings.length} collections, $full pulled whole. '
+        'Slowest: $top';
+  }
+
+  /// Runs [pulls] one after another. [pullAll] runs chains of these side by
+  /// side; inside one, parents land before children, so the orphan filter in
+  /// a read query never hides a row whose parent simply has not landed yet.
+  static Future<void> _inOrder(List<Future<bool> Function()> pulls) async {
+    for (final pull in pulls) {
+      await pull();
+    }
   }
 
   Future<void> pullJournalAndTodoData() async {
-    await pullJournals();
-    await pullJournalEntries();
-    await pullDreamEntries();
-    await pullTodoLists();
-    await pullTodoTasks();
-    await pullLeetCodeProblems();
-    await pullLeetCodeReviewLog();
-    // Parents before children, so the orphan filter in the read query never
-    // hides a section or entry whose tab simply has not landed yet.
-    await pullLeetCodeCheatTabs();
-    await pullLeetCodeCheatSections();
-    await pullLeetCodeCheatEntries();
-    await pullStudyFolders();
-    await pullStudyDecks();
-    await pullStudyCards();
-    await pullStudyReviewLog();
-    await pullStudyDeckLinks();
-    await pullExercises();
-    await pullWorkoutPlans();
-    await pullWorkoutPlanEntries();
-    await pullWorkoutSessions();
-    await pullWorkoutSetLogs();
-    await pullCustomQuotes();
+    await Future.wait<void>([
+      _inOrder([pullJournals, pullJournalEntries]),
+      pullDreamEntries(),
+      _inOrder([pullTodoLists, pullTodoTasks]),
+      _inOrder([pullLeetCodeProblems, pullLeetCodeReviewLog]),
+      _inOrder([
+        pullLeetCodeCheatTabs,
+        pullLeetCodeCheatSections,
+        pullLeetCodeCheatEntries,
+      ]),
+      _inOrder([
+        pullStudyFolders,
+        pullStudyDecks,
+        pullStudyCards,
+        pullStudyReviewLog,
+        pullStudyDeckLinks,
+      ]),
+      _inOrder([
+        pullExercises,
+        pullWorkoutPlans,
+        pullWorkoutPlanEntries,
+        pullWorkoutSessions,
+        pullWorkoutSetLogs,
+      ]),
+      pullCustomQuotes(),
+    ]);
   }
+
+  /// The watermark [LiveSyncController] should listen from, or null to
+  /// listen to the whole collection.
+  DateTime? changedSinceFor(String collection) => _changedSince[collection];
 
   /// Returns whether anything was actually applied — false when every id in
   /// [documentIds] turned out to be a self-echo of our own recent write (see
@@ -2681,6 +2748,9 @@ class RemoteSyncService {
     await ScrollActivityGate.instance.waitUntilIdle();
 
     final List<({String id, Map<String, dynamic> data})> docs;
+    SyncWatermark? advance;
+    Stopwatch? stopwatch;
+    var full = false;
     if (onlyFirestoreDocumentIds != null) {
       final scoped = <({String id, Map<String, dynamic> data})>[];
       for (final firestoreDocId in onlyFirestoreDocumentIds) {
@@ -2701,7 +2771,11 @@ class RemoteSyncService {
       }
       docs = scoped;
     } else {
-      docs = await _syncRepository.listCollectionDocuments(collection);
+      stopwatch = Stopwatch()..start();
+      final listed = await _listChangedDocuments(collection);
+      docs = listed.documents;
+      advance = listed.advance;
+      full = listed.full;
     }
 
     for (final doc in docs) {
@@ -2729,7 +2803,64 @@ class RemoteSyncService {
         );
       }
     }
+    // Only once every document has been applied: a pull that threw partway
+    // must be asked for the same documents again.
+    if (advance != null) {
+      await _watermarkStore.write(collection, advance);
+      _changedSince[collection] = advance.changedSince;
+    }
+    if (stopwatch != null) {
+      (Zone.current[_pullTimingsKey] as List<_PullTiming>?)?.add(
+        _PullTiming(
+          collection: collection,
+          documents: docs.length,
+          full: full,
+          elapsed: stopwatch.elapsed,
+        ),
+      );
+    }
     return docs.isNotEmpty;
+  }
+
+  /// What changed in [collection] since its watermark — everything, when it
+  /// has none or its last full pull is [_fullPullInterval] old — and the
+  /// watermark to store once it has been applied, or null when the listing
+  /// came from the local cache and can't vouch for the server.
+  Future<
+    ({
+      List<({String id, Map<String, dynamic> data})> documents,
+      SyncWatermark? advance,
+      bool full,
+    })
+  >
+  _listChangedDocuments(String collection) async {
+    final mark = await _watermarkStore.read(collection);
+    if (mark != null) _changedSince[collection] = mark.changedSince;
+    final startedAt = DateTime.now().toUtc();
+    final full =
+        mark == null ||
+        startedAt.difference(mark.lastFullPullAt) >= _fullPullInterval;
+    final listed = await _syncRepository.listChangedDocuments(
+      collection,
+      since: full ? null : mark.changedSince,
+    );
+    if (!listed.fromServer) {
+      return (documents: listed.documents, advance: null, full: full);
+    }
+    // The newest write seen is safe on any clock: whatever the server writes
+    // next is stamped after it. Without one, a full pull falls back on this
+    // device's clock, well behind, and an incremental one stays where it was.
+    final changedSince =
+        listed.newestWrite ??
+        (full ? startedAt.subtract(_clockAllowance) : mark.changedSince);
+    return (
+      documents: listed.documents,
+      advance: SyncWatermark(
+        changedSince: changedSince,
+        lastFullPullAt: full ? startedAt : mark.lastFullPullAt,
+      ),
+      full: full,
+    );
   }
 
   /// Whether the local row outranks the resolved remote snapshot [data] on
@@ -5385,39 +5516,46 @@ class RemoteSyncService {
 
   /// Pulls everything that isn't journal/todo-shaped.
   Future<void> pullSecondaryData() async {
-    await pullSettings();
-    await pullCalendars();
-    await pullCalendarEvents();
-    await pullTrackers();
-    await pullTrackerValues();
-    await pullTransactions();
-    await pullSubscriptions();
-    await pullBudgets();
-    await pullFinanceCategories();
-    await pullAssets();
-    await pullAssetValuations();
-    await pullContributionRooms();
-    await pullAssetRoomEvents();
-    await pullSavingsGoals();
-    await pullGoalAllocations();
-    await pullPinnedNotes();
-    await pullDismissedNotifications();
-    await pullDeviceRegistrations();
-    await pullScheduledReminderRules();
-    await pullEntityReminders();
-    await pullReminderDeliveryStates();
-    await pullReminderDeliveryLogs();
-    await pullBucketListItems();
-    await pullJobStages();
-    await pullJobSeasons();
-    await pullJobCategories();
-    await pullJobCompanies();
-    await pullJobApplications();
-    await pullJobStatusEvents();
-    await pullTagColors();
-    await pullCustomWords();
-    await pullSnippets();
-    await pullJobExperienceSnippets();
+    await Future.wait<void>([
+      // Settings ahead of the snippet records: its pull adopts snippets still
+      // kept in the settings document's legacy lists.
+      _inOrder([
+        pullSettings,
+        pullTagColors,
+        pullCustomWords,
+        pullSnippets,
+        pullJobExperienceSnippets,
+      ]),
+      _inOrder([pullCalendars, pullCalendarEvents]),
+      _inOrder([pullTrackers, pullTrackerValues]),
+      _inOrder([
+        pullTransactions,
+        pullSubscriptions,
+        pullBudgets,
+        pullFinanceCategories,
+      ]),
+      _inOrder([pullAssets, pullAssetValuations]),
+      _inOrder([pullContributionRooms, pullAssetRoomEvents]),
+      _inOrder([pullSavingsGoals, pullGoalAllocations]),
+      pullPinnedNotes(),
+      pullDismissedNotifications(),
+      pullDeviceRegistrations(),
+      _inOrder([
+        pullScheduledReminderRules,
+        pullEntityReminders,
+        pullReminderDeliveryStates,
+        pullReminderDeliveryLogs,
+      ]),
+      pullBucketListItems(),
+      _inOrder([
+        pullJobStages,
+        pullJobSeasons,
+        pullJobCategories,
+        pullJobCompanies,
+        pullJobApplications,
+        pullJobStatusEvents,
+      ]),
+    ]);
   }
 
   /// Uploads everything in the newly synced collections once, so data that
@@ -5585,6 +5723,20 @@ class _SelfEcho {
   final String fingerprint;
 }
 
+class _PullTiming {
+  const _PullTiming({
+    required this.collection,
+    required this.documents,
+    required this.full,
+    required this.elapsed,
+  });
+
+  final String collection;
+  final int documents;
+  final bool full;
+  final Duration elapsed;
+}
+
 class LiveSyncController {
   LiveSyncController({
     required RemoteSyncService remoteSync,
@@ -5687,10 +5839,15 @@ class LiveSyncController {
 
     for (final collection in _watchedCollections) {
       _subscriptions.add(
-        _syncRepository.watchCollection(collection).listen((changed) {
-          if (changed.isEmpty) return;
-          unawaited(_handleRemoteChange(collection, changed));
-        }),
+        _syncRepository
+            .watchCollection(
+              collection,
+              changedSince: _remoteSync.changedSinceFor(collection),
+            )
+            .listen((changed) {
+              if (changed.isEmpty) return;
+              unawaited(_handleRemoteChange(collection, changed));
+            }),
       );
     }
   }

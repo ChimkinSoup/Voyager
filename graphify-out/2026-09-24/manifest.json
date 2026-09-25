@@ -125,8 +125,8 @@
     "semantic_hash": "17e52eb33a0fc696097fe0601ac2c857"
   },
   "lib/app/providers.dart": {
-    "mtime": 1789972029.6201775,
-    "ast_hash": "fb9a2f66ddee9e1daff04ab43e847642",
+    "mtime": 1790222318.1861668,
+    "ast_hash": "999a424bb9e19e668adafd10ef6fe2a0",
     "semantic_hash": ""
   },
   "lib/app/voyager_app.dart": {
@@ -265,8 +265,8 @@
     "semantic_hash": ""
   },
   "lib/core/sync/firestore_document_mapper.dart": {
-    "mtime": 1790037101.4068978,
-    "ast_hash": "b5828afdcdb98b42cb6be0c8d99fd4b9",
+    "mtime": 1790280464.5613399,
+    "ast_hash": "e56a930aa78c60015ec75f85a02b8d37",
     "semantic_hash": ""
   },
   "lib/core/sync/firestore_pull_service.dart": {
@@ -360,8 +360,8 @@
     "semantic_hash": "d6e03c92f0ea46c992ad610183fec84c"
   },
   "lib/core/utils/journal_tags.dart": {
-    "mtime": 1789180978.0193954,
-    "ast_hash": "80e6a38bc110fa47818eb82ecbdd66ca",
+    "mtime": 1790229943.6166356,
+    "ast_hash": "d852c8fb9ebbd9ce1eebaaca69840f0e",
     "semantic_hash": ""
   },
   "lib/core/utils/key_binding.dart": {
@@ -525,13 +525,13 @@
     "semantic_hash": "268a7a3a47fa90c40e8ac8c6e3402cf9"
   },
   "lib/data/database/app_database.dart": {
-    "mtime": 1790037101.410108,
-    "ast_hash": "ab764a497fab918cb2fa8471532f2147",
+    "mtime": 1790281185.6398885,
+    "ast_hash": "6babe5307c99adbb9a3dd3322823493a",
     "semantic_hash": ""
   },
   "lib/data/database/app_database.g.dart": {
-    "mtime": 1790037101.4192307,
-    "ast_hash": "56eed2cb9955089434859b2e03d99680",
+    "mtime": 1790280559.1752436,
+    "ast_hash": "3ce2f04766bb3ccbb90d40b3710d7a92",
     "semantic_hash": ""
   },
   "lib/data/remote/cloud_function_weather_client.dart": {
@@ -570,8 +570,8 @@
     "semantic_hash": ""
   },
   "lib/data/repositories/drift_repositories.dart": {
-    "mtime": 1790193796.8136137,
-    "ast_hash": "3a7bace1ae512b597a8ccf303d884eaf",
+    "mtime": 1790280464.5403357,
+    "ast_hash": "9a1cd35589d0272741763f9b9e2f26d7",
     "semantic_hash": ""
   },
   "lib/data/services/quotes_loader.dart": {
@@ -590,13 +590,13 @@
     "semantic_hash": ""
   },
   "lib/domain/models/enums.dart": {
-    "mtime": 1789584799.4900403,
-    "ast_hash": "8cebc88e7b7291350e6dea16dec5a28e",
+    "mtime": 1790280464.3852568,
+    "ast_hash": "6c0e7686bb4b220d207f90e8c27f2574",
     "semantic_hash": ""
   },
   "lib/domain/models/journal_models.dart": {
-    "mtime": 1789972029.6632237,
-    "ast_hash": "89dbfa943990f9e442f6fc6f12a926e1",
+    "mtime": 1790280464.4442594,
+    "ast_hash": "1d38b986086dc03b8edc97e999ecc78c",
     "semantic_hash": ""
   },
   "lib/domain/models/settings_models.dart": {
@@ -625,8 +625,8 @@
     "semantic_hash": ""
   },
   "lib/domain/repositories/repositories.dart": {
-    "mtime": 1790193796.749971,
-    "ast_hash": "5f335d5b93bf710a7eda99550525aa4a",
+    "mtime": 1790222318.1970215,
+    "ast_hash": "88b9e9e7de050ee4c7ff239bb515c67c",
     "semantic_hash": ""
   },
   "lib/domain/repositories/weather_api_client.dart": {
@@ -765,8 +765,8 @@
     "semantic_hash": ""
   },
   "lib/features/calendar/calendar_page.dart": {
-    "mtime": 1790198671.5175407,
-    "ast_hash": "ce0f155d84fa2c7cbf1bc5420b917c79",
+    "mtime": 1790230057.9215908,
+    "ast_hash": "06f054af5078c3fc375f92b6cb576335",
     "semantic_hash": ""
   },
   "lib/features/calendar/calendar_todo_markers.dart": {
@@ -850,8 +850,8 @@
     "semantic_hash": ""
   },
   "lib/features/journal/journal_page.dart": {
-    "mtime": 1789969915.3616953,
-    "ast_hash": "234050c5b4e69d580d2b4ed6a249110d",
+    "mtime": 1790286355.4061384,
+    "ast_hash": "4027164fea93e0c02b52ed68ded39f86",
     "semantic_hash": ""
   },
   "lib/features/search/search_entry_save_helper.dart": {
@@ -895,8 +895,8 @@
     "semantic_hash": "b5a15edc83e7e993ae96eb801e3d331d"
   },
   "lib/features/shell/app_shell.dart": {
-    "mtime": 1790193796.8146513,
-    "ast_hash": "d4bc8633b544b40885c9222e9674f789",
+    "mtime": 1790276383.4093833,
+    "ast_hash": "f6764ce1f7e216f5691bbc54299c6064",
     "semantic_hash": ""
   },
   "lib/features/shell/shell_destinations.dart": {
@@ -905,8 +905,8 @@
     "semantic_hash": ""
   },
   "lib/features/shell/shell_keyboard_shortcuts.dart": {
-    "mtime": 1790198842.6976924,
-    "ast_hash": "1bc8a83b73cd3ff757c806915f39b1fc",
+    "mtime": 1790276390.1970704,
+    "ast_hash": "be4b6cec345c0867a3b6ea4ce2916ee4",
     "semantic_hash": ""
   },
   "lib/features/shell/shell_page_storage_keys.dart": {
@@ -1065,8 +1065,8 @@
     "semantic_hash": ""
   },
   "test/import_export_test.dart": {
-    "mtime": 1789929519.9155948,
-    "ast_hash": "4687fd9e40b71b693f6324d99642dcd8",
+    "mtime": 1790281097.3226318,
+    "ast_hash": "5cfb4ca9942c76e41c33ce213d72775c",
     "semantic_hash": ""
   },
   "test/journal_weather_snapshot_test.dart": {
@@ -2485,38 +2485,38 @@
     "semantic_hash": ""
   },
   "lib/domain/models/workout_models.dart": {
-    "mtime": 1789968013.8320203,
-    "ast_hash": "40f2279bc004e492ca49dff9f06c6dc3",
+    "mtime": 1790222318.1970215,
+    "ast_hash": "d1b272996289d949c5b7f22eb0419728",
     "semantic_hash": ""
   },
   "lib/features/workout/active_workout_view.dart": {
-    "mtime": 1789969977.4824538,
-    "ast_hash": "3fc869e2277115fc95ab88ed611b09e9",
+    "mtime": 1790222318.1990206,
+    "ast_hash": "ed4a378d90901c7443baf2345f7b2dc2",
     "semantic_hash": ""
   },
   "lib/features/workout/exercise_detail_view.dart": {
-    "mtime": 1790145049.7852807,
-    "ast_hash": "343ceebec05b2b0daa7bca5e71a72776",
+    "mtime": 1790222318.200019,
+    "ast_hash": "b8f61b2a96c90af711e3cfebc79de0ec",
     "semantic_hash": ""
   },
   "lib/features/workout/workout_actions.dart": {
-    "mtime": 1789970592.3324356,
-    "ast_hash": "451c8669d529bbbe4b713002ab945d14",
+    "mtime": 1790222318.2010207,
+    "ast_hash": "94f4e56d417052d5f36c4b3628c55282",
     "semantic_hash": ""
   },
   "lib/features/workout/workout_day_column.dart": {
-    "mtime": 1789972029.6822233,
-    "ast_hash": "e4c017de844a82db0b810fb1ae3a52aa",
+    "mtime": 1790222318.2010207,
+    "ast_hash": "4e6eb35454f75e51672fc00e5c86c93a",
     "semantic_hash": ""
   },
   "lib/features/workout/workout_exercise_panel.dart": {
-    "mtime": 1789972029.6822233,
-    "ast_hash": "9619b0342fdb793c82b6f50436f3ee80",
+    "mtime": 1790222318.2023392,
+    "ast_hash": "cb3fede80ce14612cf11cadbfb30a526",
     "semantic_hash": ""
   },
   "lib/features/workout/workout_island.dart": {
-    "mtime": 1789970592.395373,
-    "ast_hash": "7f0bb52da063a39ffc21528860e923dd",
+    "mtime": 1790222318.2033439,
+    "ast_hash": "cc79b6fed27448a323ddf58d155e1302",
     "semantic_hash": ""
   },
   "lib/features/workout/workout_name_modal.dart": {
@@ -2530,13 +2530,13 @@
     "semantic_hash": ""
   },
   "lib/features/workout/workout_page.dart": {
-    "mtime": 1789970592.4385407,
-    "ast_hash": "3b891278b44a0aaa478f61726254886c",
+    "mtime": 1790222318.2033439,
+    "ast_hash": "0233f98539e82a663ea7283de963dde9",
     "semantic_hash": ""
   },
   "lib/features/workout/workout_session_controller.dart": {
-    "mtime": 1789970592.5195515,
-    "ast_hash": "3de777ece3a2a5aa8199f1a19d54e46e",
+    "mtime": 1790222318.2043495,
+    "ast_hash": "89977614336ecebb468d942e6d2dce0b",
     "semantic_hash": ""
   },
   "lib/features/workout/workout_target_editor.dart": {
@@ -2545,9 +2545,9 @@
     "semantic_hash": ""
   },
   "lib/features/workout/workout_units.dart": {
-    "mtime": 1786836611.9560802,
-    "ast_hash": "a363765f5d76d42c70ab8cbacd71a011",
-    "semantic_hash": "a363765f5d76d42c70ab8cbacd71a011"
+    "mtime": 1790222318.205349,
+    "ast_hash": "80d483eab626271a19200b89927c50b8",
+    "semantic_hash": ""
   },
   "lib/features/workout/workout_wheel_pair.dart": {
     "mtime": 1789970592.539574,
@@ -2620,8 +2620,8 @@
     "semantic_hash": "33af145388ec1c14fcd14be90b93d4a8"
   },
   "test/workout_test.dart": {
-    "mtime": 1789972029.767908,
-    "ast_hash": "d314a3ad0f53426e489702c29b633004",
+    "mtime": 1790222318.2068532,
+    "ast_hash": "f5da2fdf0769d63979ae2bee26f056e4",
     "semantic_hash": ""
   },
   "WORKOUT_TRACKER.md": {
@@ -3505,8 +3505,8 @@
     "semantic_hash": ""
   },
   "lib/features/journal/journal_settings_dialog.dart": {
-    "mtime": 1789931324.9560795,
-    "ast_hash": "47556f2b72a1aadb0d1b3d8feba0f2b0",
+    "mtime": 1790283332.2393086,
+    "ast_hash": "6262e75a8905ef116873678d5cc35903",
     "semantic_hash": ""
   },
   "lib/features/leetcode/leetcode_comment_stripper.dart": {
@@ -3525,9 +3525,9 @@
     "semantic_hash": "a2d575430274af77b0ceff508e51b00b"
   },
   "test/journal_settings_dialog_test.dart": {
-    "mtime": 1787181320.7821808,
-    "ast_hash": "066427a80fcf9216e439dad31a669c3c",
-    "semantic_hash": "066427a80fcf9216e439dad31a669c3c"
+    "mtime": 1790281112.6381042,
+    "ast_hash": "e2a7e1a71ec19f6c80ad19ddfc7bd38a",
+    "semantic_hash": ""
   },
   "test/leetcode_comment_stripper_test.dart": {
     "mtime": 1789972029.715096,
@@ -3705,7 +3705,7 @@
     "semantic_hash": ""
   },
   "AUDIT.md": {
-    "mtime": 1789661970.0242927,
+    "mtime": 1790275801.9173067,
     "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
     "semantic_hash": ""
   },
@@ -5807,6 +5807,106 @@
   "test/shell_hidden_branch_ink_test.dart": {
     "mtime": 1790199763.1297586,
     "ast_hash": "acb0471a6bb9b1ffc0705a622e9ecf25",
+    "semantic_hash": ""
+  },
+  "lib/domain/services/calendar_event_import.dart": {
+    "mtime": 1790276093.9482741,
+    "ast_hash": "be22259a502e689f06491a34fbf0d4c5",
+    "semantic_hash": ""
+  },
+  "lib/features/calendar/calendar_import_dialog.dart": {
+    "mtime": 1790276341.6474464,
+    "ast_hash": "363da4ab3404667e06f6ce672516c507",
+    "semantic_hash": ""
+  },
+  "lib/features/journal/on_this_day.dart": {
+    "mtime": 1790285647.7622545,
+    "ast_hash": "3216c874105af7ba927d69ea9da6d226",
+    "semantic_hash": ""
+  },
+  "lib/features/journal/on_this_day_overlay.dart": {
+    "mtime": 1790285765.246045,
+    "ast_hash": "df8ebc37f034ed7e384bb0c7798fc538",
+    "semantic_hash": ""
+  },
+  "lib/features/shell/shortcuts_help_dialog.dart": {
+    "mtime": 1790276436.9362626,
+    "ast_hash": "939da19ccece89219ee364f814ac3288",
+    "semantic_hash": ""
+  },
+  "test/calendar_event_import_test.dart": {
+    "mtime": 1790276118.030811,
+    "ast_hash": "5406b61432b6f7a9c527ed0afd1a47c7",
+    "semantic_hash": ""
+  },
+  "test/calendar_import_dialog_test.dart": {
+    "mtime": 1790276374.2720857,
+    "ast_hash": "ca3cb0f67700cd44c23a6a08878d3d6d",
+    "semantic_hash": ""
+  },
+  "test/journal_on_this_day_card_test.dart": {
+    "mtime": 1790285760.9609377,
+    "ast_hash": "595b2459da2957a6af43ea9972ef64f0",
+    "semantic_hash": ""
+  },
+  "test/journal_on_this_day_data_test.dart": {
+    "mtime": 1790281068.8859396,
+    "ast_hash": "1e1e67f1c520b6da7446ce085e26fa69",
+    "semantic_hash": ""
+  },
+  "test/journal_on_this_day_match_test.dart": {
+    "mtime": 1790284065.7444117,
+    "ast_hash": "e13c57de88a4ba17a697b4949bd020fb",
+    "semantic_hash": ""
+  },
+  "test/journal_on_this_day_open_scroll_test.dart": {
+    "mtime": 1790286343.0462248,
+    "ast_hash": "928427e50050eea375e3e0f80dd7dfab",
+    "semantic_hash": ""
+  },
+  "test/shortcuts_help_dialog_test.dart": {
+    "mtime": 1790277546.9610002,
+    "ast_hash": "c0951f461acf716cb5a844b69ae9c6b0",
+    "semantic_hash": ""
+  },
+  "test/workout_audit_test.dart": {
+    "mtime": 1790222078.5136065,
+    "ast_hash": "373822b365b9d30e3f307dedc67e70bb",
+    "semantic_hash": ""
+  },
+  "AUTO_BACKUP_HLD.md": {
+    "mtime": 1790281211.1003537,
+    "ast_hash": "06d67de37f180110f485f397542aa7b5",
+    "semantic_hash": ""
+  },
+  "GAPS.md": {
+    "mtime": 1790281929.0356493,
+    "ast_hash": "362d6ea5baaa910ed9c08ed08b76941c",
+    "semantic_hash": ""
+  },
+  "ON_THIS_DAY_HLD.md": {
+    "mtime": 1790286387.0868332,
+    "ast_hash": "75fe124841fed26aefd43c6e37ab5f9a",
+    "semantic_hash": ""
+  },
+  "test/failures/header_dark_isolatedDiff.png": {
+    "mtime": 1790226535.1812398,
+    "ast_hash": "855956dc5375f8d69f185a17ac314690",
+    "semantic_hash": ""
+  },
+  "test/failures/header_dark_maskedDiff.png": {
+    "mtime": 1790226535.1522162,
+    "ast_hash": "a4e08ae1a81f49209085121d6c6a0d28",
+    "semantic_hash": ""
+  },
+  "test/failures/header_dark_masterImage.png": {
+    "mtime": 1790226535.0985637,
+    "ast_hash": "468dfd061fc4f9f23bffedbf99848606",
+    "semantic_hash": ""
+  },
+  "test/failures/header_dark_testImage.png": {
+    "mtime": 1790226535.124568,
+    "ast_hash": "ad799f8bf327d21cf022b390ff9fe937",
     "semantic_hash": ""
   }
 }

@@ -21,14 +21,11 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/leetcode_cheat_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
-import 'package:voyager/domain/services/weather_service.dart';
 import 'package:voyager/features/leetcode/leetcode_cheat_entry.dart';
 import 'package:voyager/features/leetcode/leetcode_cheat_export.dart';
 import 'package:voyager/features/leetcode/leetcode_cheat_providers.dart';
 import 'package:voyager/features/leetcode/leetcode_cheat_search.dart';
 import 'package:voyager/features/leetcode/leetcode_cheat_text.dart';
-
-import 'fakes/fake_weather_api_client.dart';
 
 final _now = DateTime.utc(2026, 9, 20, 12);
 
@@ -58,12 +55,6 @@ class _Device {
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
       settingsRepository: settings,
-      weatherService: WeatherService(
-        settingsRepository: settings,
-        syncRepository: syncRepo,
-        weatherApiClient: FakeWeatherApiClient(),
-        deviceId: deviceId,
-      ),
       syncEngine: SyncEngine(
         syncRepository: syncRepo,
         deviceId: deviceId,

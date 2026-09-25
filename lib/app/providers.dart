@@ -37,6 +37,7 @@ import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/domain/services/character_op_session.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
+import 'package:voyager/core/sync/sync_watermark_store.dart';
 import 'package:voyager/core/sync/synced_write_notifier.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
@@ -565,8 +566,9 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
   // `ref.invalidate(settingsProvider)` landed right after live sync started,
   // disposing the controller it had just started.
   final settings = ref.read(settingsProvider).valueOrNull;
+  final syncRepository = ref.watch(syncRepositoryProvider);
   final service = RemoteSyncService(
-    syncRepository: ref.watch(syncRepositoryProvider),
+    syncRepository: syncRepository,
     journalRepository: ref.watch(journalRepositoryProvider),
     dreamRepository: ref.watch(dreamRepositoryProvider),
     todoRepository: ref.watch(todoRepositoryProvider),
@@ -583,13 +585,18 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
     bucketListRepository: ref.watch(bucketListRepositoryProvider),
     mediaRepository: ref.watch(mediaRepositoryProvider),
     settingsRepository: ref.watch(settingsRepositoryProvider),
-    weatherService: ref.watch(weatherServiceProvider),
     syncEngine: ref.watch(syncEngineProvider),
     syncConflictRepository: ref.watch(syncConflictRepositoryProvider),
     syncActivity: ref.read(syncActivityProvider),
     charOpRegistry: ref.watch(charOpRegistryProvider),
     deviceId: ref.watch(deviceIdProvider),
     forceConflictUi: settings?.devForceConflictUi ?? false,
+    watermarkStore: syncRepository is FirestoreSyncRepository
+        ? DriftSyncWatermarkStore(
+            ref.watch(databaseProvider),
+            syncRepository.userId,
+          )
+        : null,
   );
   ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {
     next.whenData((s) => service.forceConflictUi = s.devForceConflictUi);

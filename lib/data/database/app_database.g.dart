@@ -48106,6 +48106,347 @@ class LeetCodeCheatEntriesTableCompanion
   }
 }
 
+class $SyncWatermarksTableTable extends SyncWatermarksTable
+    with TableInfo<$SyncWatermarksTableTable, SyncWatermarksTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncWatermarksTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _collectionMeta = const VerificationMeta(
+    'collection',
+  );
+  @override
+  late final GeneratedColumn<String> collection = GeneratedColumn<String>(
+    'collection',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _changedSinceMeta = const VerificationMeta(
+    'changedSince',
+  );
+  @override
+  late final GeneratedColumn<DateTime> changedSince = GeneratedColumn<DateTime>(
+    'changed_since',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastFullPullAtMeta = const VerificationMeta(
+    'lastFullPullAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastFullPullAt =
+      GeneratedColumn<DateTime>(
+        'last_full_pull_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    userId,
+    collection,
+    changedSince,
+    lastFullPullAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_watermarks_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncWatermarksTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_userIdMeta);
+    }
+    if (data.containsKey('collection')) {
+      context.handle(
+        _collectionMeta,
+        collection.isAcceptableOrUnknown(data['collection']!, _collectionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_collectionMeta);
+    }
+    if (data.containsKey('changed_since')) {
+      context.handle(
+        _changedSinceMeta,
+        changedSince.isAcceptableOrUnknown(
+          data['changed_since']!,
+          _changedSinceMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_changedSinceMeta);
+    }
+    if (data.containsKey('last_full_pull_at')) {
+      context.handle(
+        _lastFullPullAtMeta,
+        lastFullPullAt.isAcceptableOrUnknown(
+          data['last_full_pull_at']!,
+          _lastFullPullAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_lastFullPullAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {userId, collection};
+  @override
+  SyncWatermarksTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncWatermarksTableData(
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      )!,
+      collection: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}collection'],
+      )!,
+      changedSince: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}changed_since'],
+      )!,
+      lastFullPullAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_full_pull_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SyncWatermarksTableTable createAlias(String alias) {
+    return $SyncWatermarksTableTable(attachedDatabase, alias);
+  }
+}
+
+class SyncWatermarksTableData extends DataClass
+    implements Insertable<SyncWatermarksTableData> {
+  final String userId;
+  final String collection;
+
+  /// The next pull asks only for documents the server wrote at or after this.
+  final DateTime changedSince;
+
+  /// When this collection was last pulled whole.
+  final DateTime lastFullPullAt;
+  const SyncWatermarksTableData({
+    required this.userId,
+    required this.collection,
+    required this.changedSince,
+    required this.lastFullPullAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['user_id'] = Variable<String>(userId);
+    map['collection'] = Variable<String>(collection);
+    map['changed_since'] = Variable<DateTime>(changedSince);
+    map['last_full_pull_at'] = Variable<DateTime>(lastFullPullAt);
+    return map;
+  }
+
+  SyncWatermarksTableCompanion toCompanion(bool nullToAbsent) {
+    return SyncWatermarksTableCompanion(
+      userId: Value(userId),
+      collection: Value(collection),
+      changedSince: Value(changedSince),
+      lastFullPullAt: Value(lastFullPullAt),
+    );
+  }
+
+  factory SyncWatermarksTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncWatermarksTableData(
+      userId: serializer.fromJson<String>(json['userId']),
+      collection: serializer.fromJson<String>(json['collection']),
+      changedSince: serializer.fromJson<DateTime>(json['changedSince']),
+      lastFullPullAt: serializer.fromJson<DateTime>(json['lastFullPullAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'userId': serializer.toJson<String>(userId),
+      'collection': serializer.toJson<String>(collection),
+      'changedSince': serializer.toJson<DateTime>(changedSince),
+      'lastFullPullAt': serializer.toJson<DateTime>(lastFullPullAt),
+    };
+  }
+
+  SyncWatermarksTableData copyWith({
+    String? userId,
+    String? collection,
+    DateTime? changedSince,
+    DateTime? lastFullPullAt,
+  }) => SyncWatermarksTableData(
+    userId: userId ?? this.userId,
+    collection: collection ?? this.collection,
+    changedSince: changedSince ?? this.changedSince,
+    lastFullPullAt: lastFullPullAt ?? this.lastFullPullAt,
+  );
+  SyncWatermarksTableData copyWithCompanion(SyncWatermarksTableCompanion data) {
+    return SyncWatermarksTableData(
+      userId: data.userId.present ? data.userId.value : this.userId,
+      collection: data.collection.present
+          ? data.collection.value
+          : this.collection,
+      changedSince: data.changedSince.present
+          ? data.changedSince.value
+          : this.changedSince,
+      lastFullPullAt: data.lastFullPullAt.present
+          ? data.lastFullPullAt.value
+          : this.lastFullPullAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncWatermarksTableData(')
+          ..write('userId: $userId, ')
+          ..write('collection: $collection, ')
+          ..write('changedSince: $changedSince, ')
+          ..write('lastFullPullAt: $lastFullPullAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(userId, collection, changedSince, lastFullPullAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncWatermarksTableData &&
+          other.userId == this.userId &&
+          other.collection == this.collection &&
+          other.changedSince == this.changedSince &&
+          other.lastFullPullAt == this.lastFullPullAt);
+}
+
+class SyncWatermarksTableCompanion
+    extends UpdateCompanion<SyncWatermarksTableData> {
+  final Value<String> userId;
+  final Value<String> collection;
+  final Value<DateTime> changedSince;
+  final Value<DateTime> lastFullPullAt;
+  final Value<int> rowid;
+  const SyncWatermarksTableCompanion({
+    this.userId = const Value.absent(),
+    this.collection = const Value.absent(),
+    this.changedSince = const Value.absent(),
+    this.lastFullPullAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SyncWatermarksTableCompanion.insert({
+    required String userId,
+    required String collection,
+    required DateTime changedSince,
+    required DateTime lastFullPullAt,
+    this.rowid = const Value.absent(),
+  }) : userId = Value(userId),
+       collection = Value(collection),
+       changedSince = Value(changedSince),
+       lastFullPullAt = Value(lastFullPullAt);
+  static Insertable<SyncWatermarksTableData> custom({
+    Expression<String>? userId,
+    Expression<String>? collection,
+    Expression<DateTime>? changedSince,
+    Expression<DateTime>? lastFullPullAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (userId != null) 'user_id': userId,
+      if (collection != null) 'collection': collection,
+      if (changedSince != null) 'changed_since': changedSince,
+      if (lastFullPullAt != null) 'last_full_pull_at': lastFullPullAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SyncWatermarksTableCompanion copyWith({
+    Value<String>? userId,
+    Value<String>? collection,
+    Value<DateTime>? changedSince,
+    Value<DateTime>? lastFullPullAt,
+    Value<int>? rowid,
+  }) {
+    return SyncWatermarksTableCompanion(
+      userId: userId ?? this.userId,
+      collection: collection ?? this.collection,
+      changedSince: changedSince ?? this.changedSince,
+      lastFullPullAt: lastFullPullAt ?? this.lastFullPullAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (collection.present) {
+      map['collection'] = Variable<String>(collection.value);
+    }
+    if (changedSince.present) {
+      map['changed_since'] = Variable<DateTime>(changedSince.value);
+    }
+    if (lastFullPullAt.present) {
+      map['last_full_pull_at'] = Variable<DateTime>(lastFullPullAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncWatermarksTableCompanion(')
+          ..write('userId: $userId, ')
+          ..write('collection: $collection, ')
+          ..write('changedSince: $changedSince, ')
+          ..write('lastFullPullAt: $lastFullPullAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -48227,6 +48568,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $LeetCodeCheatSectionsTableTable(this);
   late final $LeetCodeCheatEntriesTableTable leetCodeCheatEntriesTable =
       $LeetCodeCheatEntriesTableTable(this);
+  late final $SyncWatermarksTableTable syncWatermarksTable =
+      $SyncWatermarksTableTable(this);
   late final Index idxTodoTasksListId = Index(
     'idx_todo_tasks_list_id',
     'CREATE INDEX idx_todo_tasks_list_id ON todo_tasks_table (list_id)',
@@ -48342,6 +48685,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     leetCodeCheatTabsTable,
     leetCodeCheatSectionsTable,
     leetCodeCheatEntriesTable,
+    syncWatermarksTable,
     idxTodoTasksListId,
     idxTodoTasksParentTaskId,
     idxReminderDeliveryLogsStateId,
@@ -71280,6 +71624,209 @@ typedef $$LeetCodeCheatEntriesTableTableProcessedTableManager =
       LeetCodeCheatEntriesTableData,
       PrefetchHooks Function()
     >;
+typedef $$SyncWatermarksTableTableCreateCompanionBuilder =
+    SyncWatermarksTableCompanion Function({
+      required String userId,
+      required String collection,
+      required DateTime changedSince,
+      required DateTime lastFullPullAt,
+      Value<int> rowid,
+    });
+typedef $$SyncWatermarksTableTableUpdateCompanionBuilder =
+    SyncWatermarksTableCompanion Function({
+      Value<String> userId,
+      Value<String> collection,
+      Value<DateTime> changedSince,
+      Value<DateTime> lastFullPullAt,
+      Value<int> rowid,
+    });
+
+class $$SyncWatermarksTableTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncWatermarksTableTable> {
+  $$SyncWatermarksTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get collection => $composableBuilder(
+    column: $table.collection,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get changedSince => $composableBuilder(
+    column: $table.changedSince,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastFullPullAt => $composableBuilder(
+    column: $table.lastFullPullAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SyncWatermarksTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncWatermarksTableTable> {
+  $$SyncWatermarksTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get collection => $composableBuilder(
+    column: $table.collection,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get changedSince => $composableBuilder(
+    column: $table.changedSince,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastFullPullAt => $composableBuilder(
+    column: $table.lastFullPullAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SyncWatermarksTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncWatermarksTableTable> {
+  $$SyncWatermarksTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<String> get collection => $composableBuilder(
+    column: $table.collection,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get changedSince => $composableBuilder(
+    column: $table.changedSince,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastFullPullAt => $composableBuilder(
+    column: $table.lastFullPullAt,
+    builder: (column) => column,
+  );
+}
+
+class $$SyncWatermarksTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncWatermarksTableTable,
+          SyncWatermarksTableData,
+          $$SyncWatermarksTableTableFilterComposer,
+          $$SyncWatermarksTableTableOrderingComposer,
+          $$SyncWatermarksTableTableAnnotationComposer,
+          $$SyncWatermarksTableTableCreateCompanionBuilder,
+          $$SyncWatermarksTableTableUpdateCompanionBuilder,
+          (
+            SyncWatermarksTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $SyncWatermarksTableTable,
+              SyncWatermarksTableData
+            >,
+          ),
+          SyncWatermarksTableData,
+          PrefetchHooks Function()
+        > {
+  $$SyncWatermarksTableTableTableManager(
+    _$AppDatabase db,
+    $SyncWatermarksTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncWatermarksTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncWatermarksTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$SyncWatermarksTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> userId = const Value.absent(),
+                Value<String> collection = const Value.absent(),
+                Value<DateTime> changedSince = const Value.absent(),
+                Value<DateTime> lastFullPullAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncWatermarksTableCompanion(
+                userId: userId,
+                collection: collection,
+                changedSince: changedSince,
+                lastFullPullAt: lastFullPullAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String userId,
+                required String collection,
+                required DateTime changedSince,
+                required DateTime lastFullPullAt,
+                Value<int> rowid = const Value.absent(),
+              }) => SyncWatermarksTableCompanion.insert(
+                userId: userId,
+                collection: collection,
+                changedSince: changedSince,
+                lastFullPullAt: lastFullPullAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SyncWatermarksTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncWatermarksTableTable,
+      SyncWatermarksTableData,
+      $$SyncWatermarksTableTableFilterComposer,
+      $$SyncWatermarksTableTableOrderingComposer,
+      $$SyncWatermarksTableTableAnnotationComposer,
+      $$SyncWatermarksTableTableCreateCompanionBuilder,
+      $$SyncWatermarksTableTableUpdateCompanionBuilder,
+      (
+        SyncWatermarksTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $SyncWatermarksTableTable,
+          SyncWatermarksTableData
+        >,
+      ),
+      SyncWatermarksTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -71455,4 +72002,6 @@ class $AppDatabaseManager {
         _db,
         _db.leetCodeCheatEntriesTable,
       );
+  $$SyncWatermarksTableTableTableManager get syncWatermarksTable =>
+      $$SyncWatermarksTableTableTableManager(_db, _db.syncWatermarksTable);
 }

@@ -14,6 +14,23 @@ class InMemorySyncRepository implements SyncRepository {
   bool unsentWriteBacklog = false;
 
   final _documents = <String, Map<String, dynamic>>{};
+
+  /// When each document was last written — the server write time Firestore
+  /// stamps, kept beside the document the way it is kept off it there.
+  final _writeTimes = <String, DateTime>{};
+  DateTime? _lastWriteTime;
+
+  /// Strictly increasing, like server commit times: two writes inside one
+  /// clock tick must still be told apart.
+  DateTime _nextWriteTime() {
+    var now = DateTime.now().toUtc();
+    final last = _lastWriteTime;
+    if (last != null && !now.isAfter(last)) {
+      now = last.add(const Duration(microseconds: 1));
+    }
+    return _lastWriteTime = now;
+  }
+
   final _watchers = <String, StreamController<Map<String, dynamic>>>{};
   final _collectionWatchers =
       <String, StreamController<Map<String, Map<String, dynamic>>>>{};
@@ -43,6 +60,7 @@ class InMemorySyncRepository implements SyncRepository {
   ) async {
     final key = _key(collection, id);
     _documents[key] = data;
+    _writeTimes[key] = _nextWriteTime();
     _watchers[key]?.add(data);
     _notifyCollection(collection, id);
   }
@@ -73,7 +91,10 @@ class InMemorySyncRepository implements SyncRepository {
   }
 
   @override
-  Stream<Map<String, Map<String, dynamic>>> watchCollection(String collection) {
+  Stream<Map<String, Map<String, dynamic>>> watchCollection(
+    String collection, {
+    DateTime? changedSince,
+  }) {
     final controller = _collectionWatchers.putIfAbsent(
       collection,
       StreamController<Map<String, Map<String, dynamic>>>.broadcast,
@@ -94,6 +115,35 @@ class InMemorySyncRepository implements SyncRepository {
           ),
         )
         .toList();
+  }
+
+  @override
+  Future<
+    ({
+      List<({String id, Map<String, dynamic> data})> documents,
+      DateTime? newestWrite,
+      bool fromServer,
+    })
+  >
+  listChangedDocuments(String collection, {DateTime? since}) async {
+    final prefix = '$collection/';
+    final documents = <({String id, Map<String, dynamic> data})>[];
+    DateTime? newest;
+    for (final entry in _documents.entries) {
+      if (!entry.key.startsWith(prefix)) continue;
+      final written = _writeTimes[entry.key];
+      if (since != null && (written == null || !written.isAfter(since))) {
+        continue;
+      }
+      documents.add((
+        id: entry.key.substring(prefix.length),
+        data: Map<String, dynamic>.from(entry.value),
+      ));
+      if (written != null && (newest == null || written.isAfter(newest))) {
+        newest = written;
+      }
+    }
+    return (documents: documents, newestWrite: newest, fromServer: true);
   }
 
   Map<String, dynamic>? _remoteSettings;
@@ -207,6 +257,7 @@ class InMemorySyncRepository implements SyncRepository {
   Future<void> deleteDocument(String collection, String id) async {
     final key = _key(collection, id);
     _documents.remove(key);
+    _writeTimes.remove(key);
     _watchers[key]?.add(<String, dynamic>{});
     _notifyCollection(collection, id);
   }

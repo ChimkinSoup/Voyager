@@ -30,9 +30,6 @@ import 'package:voyager/domain/services/character_op_session.dart';
 import 'package:voyager/domain/services/character_operation.dart';
 import 'package:voyager/domain/services/character_sequence_crdt_merger.dart';
 import 'package:voyager/domain/models/settings_models.dart';
-import 'package:voyager/domain/services/weather_service.dart';
-
-import 'fakes/fake_weather_api_client.dart';
 
 SyncOperation _charOpsSyncOperation(List<CharacterOperation> ops) {
   return SyncOperation(
@@ -77,12 +74,6 @@ void main() {
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
       settingsRepository: DriftSettingsRepository(db),
-      weatherService: WeatherService(
-        settingsRepository: DriftSettingsRepository(db),
-        syncRepository: syncRepo,
-        weatherApiClient: FakeWeatherApiClient(),
-        deviceId: 'device-a',
-      ),
       syncEngine: engine,
       deviceId: 'device-a',
       uploadDebounceDelay: Duration.zero,

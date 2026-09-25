@@ -67,13 +67,6 @@ don't: the dream editor has no `MediaPasteScope` / `MediaDropTarget` / `MediaFan
 Neither does the quick-journal hotkey floater, so a screenshot can't be pasted there
 either. Minor; the same three widgets would cover both.
 
-### Automatic local backups
-Backup is manual only (Settings → Export Backup). There's also no copy of
-`voyager.sqlite` before schema migrations, and the schema is at v124
-(`app_database.dart:1854`). Suggest: a rolling daily snapshot (keep ~7) plus a
-pre-migration copy whenever `from < to`. A bad migration on a single-user database
-otherwise depends entirely on Firestore to recover.
-
 ---
 
 ## P2: Per feature
@@ -103,15 +96,6 @@ The planner, live session and exercise detail work well together. Gaps:
 
 ### Todo
 - No completion timestamp (P1 above).
-- No smart views: Today, Overdue, Starred and Upcoming across lists. Only "All tasks"
-  and per-list views exist.
-- No priority or tags on tasks. Stars are the only signal.
-
-### Calendar
-- Google Calendar ingest is abandoned. The scaffolding
-  (`GoogleCalendarSyncService`, `sync_engine.dart:491`) and the claims in README and
-  PRODUCT.md are still there; worth deleting so the docs stay honest.
-- No `.ics` export or subscription, and no location field on events.
 
 ### Analytics / trackers
 - Tracker types are integer, boolean and enum (`lib/domain/models/enums.dart:1`).
@@ -120,21 +104,15 @@ The planner, live session and exercise detail work well together. Gaps:
 - No note per logged value (e.g. *why* energy was 3).
 
 ### Finance
-- No **CSV import** of bank exports, which is usually the thing that keeps a ledger
-  alive, and no CSV export.
 - The ledger filters by tag only, with no text or amount search.
-- Currency is hard-coded to `$` (`finance_models.dart:727`). Fine for you; note it for
-  a second user.
 
 ### Journal
 - No export of a journal or entry range to Markdown or PDF. The only export is the full
   JSON backup.
-- "On this day" (above, parked).
 
 ### Study / LeetCode
 - No due count in the inbox (above).
-- Study has no retention or forecast stats, and no deck export (import from text
-  exists; export doesn't).
+- Study has no retention or forecast stats
 
 ### Settings
 - About has no version number (`settings_page.dart:639`), and `pubspec.yaml` is still
@@ -165,12 +143,6 @@ The planner, live session and exercise detail work well together. Gaps:
 
 ## Seen in the live pass
 
-- **Test data is mixed into real data.** Analytics shows "Test Integer Sparkline",
-  "Test weekly/monthly sparkline" and "Beans". Study has "Debug: Randomized Test Deck
-  (860)". Finance has "Tester", "test" and "Tester 2" subscriptions (the last at
-  $2,342/quarter, which inflates the ≈$845/mo radar total). Rankings has "arst",
-  "Test" and "queued". Clearing these, or giving the Dev page a sandbox profile or DB,
-  is part of calling it complete. Otherwise every total and chart is slightly wrong.
 - **Search results have no date or journal.** Each hit shows title and snippet only,
   so there's no way to tell which day "Fun Day" was without opening it. Cheap fix,
   separate from the parked search-scope item.
@@ -181,11 +153,10 @@ The planner, live session and exercise detail work well together. Gaps:
   also help (see above).
 - **Study's due count lives only on the Study page** ("Study 65 due"). This confirms the
   inbox gap above.
-- **Two small display bugs** (not gaps, noted in passing):
+- **One small display bugs** (not gaps, noted in passing):
   - Analytics sparkline x-axis: the last label collides with its neighbour
     ("Sep 8" / "Sep 24" overprint at the right edge of the monthly tracker).
   - The Calendar month header reads "September" with no year, so a month view in
-    another year looks identical. It may be deliberate; I didn't check the other views.
 
 ---
 

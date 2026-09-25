@@ -1153,6 +1153,24 @@ class PendingUploadsTable extends Table {
   Set<Column> get primaryKey => {documentId, collectionName};
 }
 
+/// Device-local: how far each collection's startup pull has got, per account.
+///
+/// Lives in the database rather than beside it so it can never claim rows the
+/// database doesn't hold — replace the file and the marks go with it.
+class SyncWatermarksTable extends Table {
+  TextColumn get userId => text()();
+  TextColumn get collection => text()();
+
+  /// The next pull asks only for documents the server wrote after this.
+  DateTimeColumn get changedSince => dateTime()();
+
+  /// When this collection was last pulled whole.
+  DateTimeColumn get lastFullPullAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {userId, collection};
+}
+
 class StudyFoldersTable extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
@@ -1849,13 +1867,14 @@ class LeetCodeCheatEntriesTable extends Table {
     LeetCodeCheatTabsTable,
     LeetCodeCheatSectionsTable,
     LeetCodeCheatEntriesTable,
+    SyncWatermarksTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 125;
+  int get schemaVersion => 126;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3286,6 +3305,10 @@ class AppDatabase extends _$AppDatabase {
           journalsTable,
           journalsTable.onThisDayCadence,
         );
+      }
+      // Empty, so the first pull after this is a full one.
+      if (from < 126) {
+        await migrator.createTable(syncWatermarksTable);
       }
     },
   );

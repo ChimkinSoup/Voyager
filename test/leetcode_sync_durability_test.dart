@@ -19,9 +19,6 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
-import 'package:voyager/domain/services/weather_service.dart';
-
-import 'fakes/fake_weather_api_client.dart';
 
 /// The server, but the LeetCode collection is unreachable — the shape of every
 /// upload failure this guard exists for.
@@ -91,12 +88,6 @@ void main() {
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
       settingsRepository: settings,
-      weatherService: WeatherService(
-        settingsRepository: settings,
-        syncRepository: syncRepo,
-        weatherApiClient: FakeWeatherApiClient(),
-        deviceId: 'device-a',
-      ),
       syncEngine: SyncEngine(
         syncRepository: syncRepo,
         deviceId: 'device-a',

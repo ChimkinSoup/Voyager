@@ -14,9 +14,6 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
-import 'package:voyager/domain/services/weather_service.dart';
-
-import 'fakes/fake_weather_api_client.dart';
 
 void main() {
   late AppDatabase db;
@@ -45,13 +42,6 @@ void main() {
       debouncer: Debouncer(delay: Duration.zero),
     );
 
-    final weatherService = WeatherService(
-      settingsRepository: DriftSettingsRepository(db),
-      syncRepository: syncRepo,
-      weatherApiClient: FakeWeatherApiClient(),
-      deviceId: 'device-a',
-    );
-
     deviceA = RemoteSyncService(
       syncRepository: syncRepo,
       journalRepository: journalRepo,
@@ -70,7 +60,6 @@ void main() {
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
       settingsRepository: DriftSettingsRepository(db),
-      weatherService: weatherService,
       syncEngine: engineA,
       uploadDebounceDelay: Duration.zero,
     );
@@ -92,7 +81,6 @@ void main() {
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
       settingsRepository: DriftSettingsRepository(db),
-      weatherService: weatherService,
       syncEngine: SyncEngine(
         syncRepository: syncRepo,
         deviceId: 'device-b',
@@ -322,12 +310,6 @@ void main() {
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
       settingsRepository: DriftSettingsRepository(db),
-      weatherService: WeatherService(
-        settingsRepository: DriftSettingsRepository(db),
-        syncRepository: syncRepo,
-        weatherApiClient: FakeWeatherApiClient(),
-        deviceId: 'device-a',
-      ),
       syncEngine: debouncedEngine,
       uploadDebounceDelay: const Duration(milliseconds: 80),
     );

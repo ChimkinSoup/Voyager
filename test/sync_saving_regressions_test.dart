@@ -19,9 +19,6 @@ import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/character_op_session.dart';
-import 'package:voyager/domain/services/weather_service.dart';
-
-import 'fakes/fake_weather_api_client.dart';
 
 /// Counts the reads a pull actually spends, so "the snapshot already carried
 /// this document" is an assertion rather than a hope.
@@ -76,12 +73,6 @@ class _Device {
       bucketListRepository: DriftBucketListRepository(db),
       mediaRepository: DriftMediaRepository(db),
       settingsRepository: settings,
-      weatherService: WeatherService(
-        settingsRepository: settings,
-        syncRepository: server,
-        weatherApiClient: FakeWeatherApiClient(),
-        deviceId: deviceId,
-      ),
       syncEngine: SyncEngine(
         syncRepository: server,
         deviceId: deviceId,
@@ -225,6 +216,21 @@ void main() {
         opsBefore,
         reason: 'a suppressed echo must not spend the CRDT query either',
       );
+    });
+
+    test('the server confirming our write is still our echo', () async {
+      final stored = await pushCalendar('Work');
+
+      // Firestore delivers one write twice: from the local cache, then again
+      // once the server has filled in its write time — same content both times.
+      for (final delivery in ['local cache', 'server confirmation']) {
+        final applied = await device.sync.pullForCollection(
+          FirestoreCollections.calendars,
+          documentIds: {'cal-1'},
+          documentData: {'cal-1': stored},
+        );
+        expect(applied, isFalse, reason: 'the $delivery delivery');
+      }
     });
 
     test('a mark is consumed once, not left to eat the next change', () async {

@@ -40,9 +40,7 @@ import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/data/remote/firestore_sync_repository.dart';
-import 'package:voyager/domain/services/weather_service.dart';
 import 'package:voyager/core/sync/debouncer.dart';
-import '../test/fakes/fake_weather_api_client.dart';
 
 class FakeAuthRepository implements AuthRepository {
   @override
@@ -854,6 +852,12 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
 }
 
 void main() {
+  // `FieldValue` fixes its factory the first time one is made. Constructing a
+  // fake first installs the mock factory, so the outbox's server-timestamp
+  // stamp in the hand-rolled-mock test below can't lock in the method-channel
+  // one and break every fake-backed test after it.
+  setUpAll(FakeFirebaseFirestore.new);
+
   group('Backup media binaries', () {
     late Directory sourceMediaDir;
     late Directory targetMediaDir;
@@ -1144,6 +1148,9 @@ void main() {
         // relationship with the server, not anything the user wrote.
         'pending_uploads_table',
         'sync_conflicts_table',
+        // How far this device's pulls have got. A restore pushes what it
+        // restores, so the marks never need to travel with the data.
+        'sync_watermarks_table',
       };
 
       expect(
@@ -1825,12 +1832,6 @@ void main() {
           deviceId: 'device-test',
           debouncer: Debouncer(delay: Duration.zero),
         );
-        final weatherService = WeatherService(
-          settingsRepository: DriftSettingsRepository(db),
-          syncRepository: syncRepo,
-          weatherApiClient: FakeWeatherApiClient(),
-          deviceId: 'device-test',
-        );
         final remoteSync = RemoteSyncService(
           syncRepository: syncRepo,
           journalRepository: journalRepo,
@@ -1849,7 +1850,6 @@ void main() {
           bucketListRepository: DriftBucketListRepository(db),
           mediaRepository: DriftMediaRepository(db),
           settingsRepository: DriftSettingsRepository(db),
-          weatherService: weatherService,
           syncEngine: syncEngine,
           uploadDebounceDelay: Duration.zero,
         );
@@ -1936,12 +1936,6 @@ void main() {
           bucketListRepository: DriftBucketListRepository(db),
           mediaRepository: DriftMediaRepository(db),
           settingsRepository: DriftSettingsRepository(db),
-          weatherService: WeatherService(
-            settingsRepository: DriftSettingsRepository(db),
-            syncRepository: syncRepo,
-            weatherApiClient: FakeWeatherApiClient(),
-            deviceId: 'device-test',
-          ),
           syncEngine: syncEngine,
           uploadDebounceDelay: Duration.zero,
         );

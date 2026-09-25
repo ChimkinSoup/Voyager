@@ -10,9 +10,6 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
-import 'package:voyager/domain/services/weather_service.dart';
-
-import 'fakes/fake_weather_api_client.dart';
 
 /// An [InMemorySyncRepository] whose writes can be switched off, standing in
 /// for an unreachable or wedged Firestore.
@@ -84,12 +81,6 @@ void main() {
       bucketListRepository: DriftBucketListRepository(db0),
       mediaRepository: DriftMediaRepository(db0),
       settingsRepository: DriftSettingsRepository(db0),
-      weatherService: WeatherService(
-        settingsRepository: DriftSettingsRepository(db0),
-        syncRepository: syncRepo,
-        weatherApiClient: FakeWeatherApiClient(),
-        deviceId: deviceId,
-      ),
       syncEngine: engine,
       syncConflictRepository: DriftSyncConflictRepository(db0),
       deviceId: deviceId,

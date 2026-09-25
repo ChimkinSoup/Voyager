@@ -24,9 +24,6 @@ import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
-import 'package:voyager/domain/services/weather_service.dart';
-
-import 'fakes/fake_weather_api_client.dart';
 
 /// One device: its own database and repositories, wired to the shared server.
 class _Device {
@@ -61,12 +58,6 @@ class _Device {
       bucketListRepository: bucketList,
       mediaRepository: DriftMediaRepository(db),
       settingsRepository: settings,
-      weatherService: WeatherService(
-        settingsRepository: settings,
-        syncRepository: syncRepo,
-        weatherApiClient: FakeWeatherApiClient(),
-        deviceId: deviceId,
-      ),
       syncEngine: SyncEngine(
         syncRepository: syncRepo,
         deviceId: deviceId,

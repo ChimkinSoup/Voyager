@@ -34,6 +34,8 @@ class FirestoreSyncRepository implements SyncRepository {
   final FirebaseFirestore _firestore;
   final String _userId;
 
+  String get userId => _userId;
+
   /// Bounds how many writes are handed to Firestore before it acknowledges
   /// them — see [FirestoreWriteGate].
   final FirestoreWriteGate writeGate;
@@ -50,6 +52,34 @@ class FirestoreSyncRepository implements SyncRepository {
     return _firestore.collection('users/$_userId/$collection');
   }
 
+  /// When the server last wrote a document, stamped on every upsert so a pull
+  /// can ask for only what changed. The server's clock, not this device's:
+  /// a device whose clock runs slow would otherwise write into the past, below
+  /// a mark another device has already moved beyond.
+  static const _writeTimeField = '_serverWrittenAt';
+
+  /// [data] with the server write time added. Every write to a synced
+  /// collection must go through this — [OutboxSyncWorker] included — or the
+  /// change is invisible to incremental pulls and live listeners.
+  static Map<String, dynamic> stamped(Map<String, dynamic> data) => {
+    ...data,
+    _writeTimeField: FieldValue.serverTimestamp(),
+  };
+
+  /// A document as the rest of the app knows it — the write time is this
+  /// class's business, and a pending one reads as null anyway.
+  static Map<String, dynamic> _unstamped(Map<String, dynamic> data) =>
+      Map<String, dynamic>.from(data)..remove(_writeTimeField);
+
+  Query<Map<String, dynamic>> _changedSince(
+    String collection,
+    DateTime? since,
+  ) {
+    final all = _collection(collection);
+    if (since == null) return all;
+    return all.where(_writeTimeField, isGreaterThan: Timestamp.fromDate(since));
+  }
+
   @override
   Future<void> upsertDocument(
     String collection,
@@ -57,7 +87,7 @@ class FirestoreSyncRepository implements SyncRepository {
     Map<String, dynamic> data,
   ) async {
     await writeGate.run(
-      () => _doc(collection, id).set(data, SetOptions(merge: true)),
+      () => _doc(collection, id).set(stamped(data), SetOptions(merge: true)),
     );
   }
 
@@ -65,18 +95,21 @@ class FirestoreSyncRepository implements SyncRepository {
   Stream<Map<String, dynamic>> watchDocument(String collection, String id) {
     return _doc(collection, id).snapshots().map((snap) {
       if (!snap.exists || snap.data() == null) return <String, dynamic>{};
-      return snap.data()!;
+      return _unstamped(snap.data()!);
     });
   }
 
   @override
-  Stream<Map<String, Map<String, dynamic>>> watchCollection(String collection) {
-    return _collection(collection).snapshots().map(
+  Stream<Map<String, Map<String, dynamic>>> watchCollection(
+    String collection, {
+    DateTime? changedSince,
+  }) {
+    return _changedSince(collection, changedSince).snapshots().map(
       (snap) => {
         for (final change in snap.docChanges)
           if (change.type != DocumentChangeType.removed &&
               change.doc.data() != null)
-            change.doc.id: Map<String, dynamic>.from(change.doc.data()!),
+            change.doc.id: _unstamped(change.doc.data()!),
       },
     );
   }
@@ -88,7 +121,7 @@ class FirestoreSyncRepository implements SyncRepository {
   ) async {
     final snap = await _doc(collection, id).get();
     if (!snap.exists || snap.data() == null) return null;
-    return snap.data();
+    return _unstamped(snap.data()!);
   }
 
   @override
@@ -96,8 +129,35 @@ class FirestoreSyncRepository implements SyncRepository {
   listCollectionDocuments(String collection) async {
     final query = await _collection(collection).get();
     return query.docs
-        .map((doc) => (id: doc.id, data: Map<String, dynamic>.from(doc.data())))
+        .map((doc) => (id: doc.id, data: _unstamped(doc.data())))
         .toList();
+  }
+
+  @override
+  Future<
+    ({
+      List<({String id, Map<String, dynamic> data})> documents,
+      DateTime? newestWrite,
+      bool fromServer,
+    })
+  >
+  listChangedDocuments(String collection, {DateTime? since}) async {
+    final query = await _changedSince(collection, since).get();
+    DateTime? newest;
+    for (final doc in query.docs) {
+      final written = doc.data()[_writeTimeField];
+      if (written is! Timestamp) continue;
+      final at = written.toDate().toUtc();
+      if (newest == null || at.isAfter(newest)) newest = at;
+    }
+    return (
+      documents: [
+        for (final doc in query.docs)
+          (id: doc.id, data: _unstamped(doc.data())),
+      ],
+      newestWrite: newest,
+      fromServer: !query.metadata.isFromCache,
+    );
   }
 
   DocumentReference<Map<String, dynamic>> get _settingsDoc =>
@@ -357,7 +417,7 @@ class FirestoreSyncRepository implements SyncRepository {
       for (final entry in chunk) {
         batch.set(
           _doc(collection, entry.key),
-          entry.value,
+          stamped(entry.value),
           SetOptions(merge: true),
         );
       }
@@ -527,7 +587,10 @@ class NoOpSyncRepository implements SyncRepository {
   }
 
   @override
-  Stream<Map<String, Map<String, dynamic>>> watchCollection(String collection) {
+  Stream<Map<String, Map<String, dynamic>>> watchCollection(
+    String collection, {
+    DateTime? changedSince,
+  }) {
     return const Stream.empty();
   }
 
@@ -540,6 +603,20 @@ class NoOpSyncRepository implements SyncRepository {
   @override
   Future<List<({String id, Map<String, dynamic> data})>>
   listCollectionDocuments(String collection) async => const [];
+
+  @override
+  Future<
+    ({
+      List<({String id, Map<String, dynamic> data})> documents,
+      DateTime? newestWrite,
+      bool fromServer,
+    })
+  >
+  listChangedDocuments(String collection, {DateTime? since}) async => (
+    documents: const <({String id, Map<String, dynamic> data})>[],
+    newestWrite: null,
+    fromServer: false,
+  );
 
   @override
   Future<Map<String, dynamic>?> getRemoteSettings() async => null;

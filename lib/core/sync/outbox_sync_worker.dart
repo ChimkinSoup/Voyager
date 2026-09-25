@@ -9,7 +9,7 @@ import 'package:voyager/core/sync/firestore_write_gate.dart';
 import 'package:voyager/core/sync/sync_error_classification.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/firestore_sync_repository.dart'
-    show firestoreWriteChunkSize;
+    show FirestoreSyncRepository, firestoreWriteChunkSize;
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
@@ -267,7 +267,12 @@ class OutboxSyncWorker {
                 reference: _firestore.doc(
                   'users/$userId/$collection/$firestoreId',
                 ),
-                data: data,
+                // Stamped like any other upload, or incremental pulls and live
+                // listeners on other devices never see this change. The
+                // settings document is read whole, never by write time.
+                data: collection == FirestoreCollections.settings
+                    ? data
+                    : FirestoreSyncRepository.stamped(data),
               ),
             );
           }
