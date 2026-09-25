@@ -18,7 +18,7 @@ class HeatmapCalendar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final analytics = AnalyticsService();
-    final max = values.fold<int>(0, (m, v) {
+    final max = values.fold<double>(0, (m, v) {
       final current = v.intValue ?? 0;
       return current > m ? current : m;
     });

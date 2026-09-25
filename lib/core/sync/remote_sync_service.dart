@@ -3,6 +3,7 @@ import 'dart:convert';
 
 // ignore_for_file: prefer_initializing_formals
 import 'package:flutter/foundation.dart';
+import 'package:voyager/core/dev/error_logger.dart';
 import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/sync/char_ops_encoder.dart';
@@ -1181,6 +1182,11 @@ class RemoteSyncService {
             documentIds: {firestoreDocumentIdForLocal(collection, documentId)},
           ).catchError((Object error, StackTrace stackTrace) {
             debugPrint('[sync] catch-up pull for $documentId failed: $error');
+            ErrorLogger.instance.record(
+              error,
+              stackTrace,
+              context: 'sync: catch-up pull for $collection/$documentId',
+            );
             return false;
           }),
         );
@@ -5410,6 +5416,11 @@ class RemoteSyncService {
       );
     } catch (error, stackTrace) {
       debugPrint('[sync] upload failed for settings: $error\n$stackTrace');
+      ErrorLogger.instance.record(
+        error,
+        stackTrace,
+        context: 'sync: settings upload',
+      );
       await OutboxSyncWorker.recordFailure(
         collection: FirestoreCollections.settings,
         documentId: FirestoreCollections.settingsDocumentId,

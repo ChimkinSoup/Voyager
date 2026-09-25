@@ -19,8 +19,8 @@ class AnalyticsService {
   int booleanTrueCount(List<TrackerValue> values) =>
       values.where((v) => v.boolValue == true).length;
 
-  Map<DateTime, int> integerSeries(List<TrackerValue> values) {
-    final map = <DateTime, int>{};
+  Map<DateTime, double> integerSeries(List<TrackerValue> values) {
+    final map = <DateTime, double>{};
     for (final value in values) {
       if (value.intValue != null) {
         map[value.periodStart] = value.intValue!;
@@ -33,7 +33,7 @@ class AnalyticsService {
     required TrackerType type,
     required TrackerValue? value,
     required StatisticTracker tracker,
-    required int maxInPeriod,
+    required double maxInPeriod,
     List<TrackerValue>? allValues,
     // Lets a caller that already knows this (e.g. computed once for a whole
     // row of squares) skip the O(n) scan over [allValues] below.
@@ -65,12 +65,12 @@ class AnalyticsService {
   }
 
   /// Rolling maximum of [intValue] across the last [days] calendar days.
-  int rollingMax(List<TrackerValue> values, {int days = 365}) {
+  double rollingMax(List<TrackerValue> values, {int days = 365}) {
     if (values.isEmpty) return 1;
     final cutoff = DateTime.now().subtract(Duration(days: days));
     return values
         .where((v) => v.periodStart.isAfter(cutoff) && v.intValue != null)
-        .fold<int>(1, (m, v) => v.intValue! > m ? v.intValue! : m);
+        .fold<double>(1, (m, v) => v.intValue! > m ? v.intValue! : m);
   }
 
   /// Produces a continuous [FlSpot] list for a Consecutive integer tracker.
@@ -106,7 +106,7 @@ class AnalyticsService {
       // truncates, filing a record under the day before the one it was
       // recorded on.
       final diff = calendarDaysBetween(from, v.periodStart);
-      if (diff >= 0) dayMap[diff] = v.intValue!.toDouble();
+      if (diff >= 0) dayMap[diff] = v.intValue!;
     }
 
     if (dayMap.isEmpty) return const [];

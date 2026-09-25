@@ -61,10 +61,12 @@ double axisReservedSize(double maxY, double fontSize, double space) {
 /// exactly [lines] gridlines — the baseline plus evenly spaced, round labels
 /// above it (0/1/2/3/4/5, or 0/5/10, rather than 0/0.7/1.4/…).
 ///
-/// The mantissa set is all integers so labels stay whole numbers: every
-/// tracker these charts plot is integer-valued, and a 2.5 tick would render
-/// as a meaningless "2.5 pushups". The step never drops below 1 for the same
-/// reason.
+/// The mantissa set is all integers so labels stay whole numbers, and the
+/// step never drops below 1 — [compactNumberLabel] rounds every tick, so a
+/// fractional step would print duplicate labels. Readings can be decimals
+/// (schema 127); they plot between the whole-number gridlines, and a tracker
+/// whose readings all sit below 1 gets a 0–1-per-step axis rather than one
+/// fitted to its range.
 double niceAxisStep(double maxValue, int lines) {
   final intervals = lines - 1;
   final raw = (maxValue <= 0 ? 1.0 : maxValue) / intervals;

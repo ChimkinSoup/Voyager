@@ -2437,7 +2437,7 @@ TrackerValue mergeTrackerValueFromRemote(
         parseFirestoreDate(data['periodStart']) ??
         local?.periodStart ??
         remoteUpdated,
-    intValue: (data['intValue'] as num?)?.toInt(),
+    intValue: (data['intValue'] as num?)?.toDouble(),
     boolValue: data['boolValue'] as bool?,
     enumValue: data['enumValue'] as String?,
     createdAt:

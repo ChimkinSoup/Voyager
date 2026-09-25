@@ -19,7 +19,7 @@ JournalEntry _entry(String id, DateTime entryDate, {String body = ''}) {
 
 /// Values keyed by day, for asserting on a specific date without depending on
 /// the length of the series (which runs through to today).
-Map<DateTime, int> _byDay(List<TrackerValue> values) => {
+Map<DateTime, double> _byDay(List<TrackerValue> values) => {
   for (final v in values) v.periodStart: v.intValue!,
 };
 

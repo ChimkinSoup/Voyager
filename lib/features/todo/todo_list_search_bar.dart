@@ -36,6 +36,7 @@ class TodoListSearchBar extends StatelessWidget {
     required this.showMatchCount,
     required this.onChanged,
     required this.onClose,
+    this.hintText = 'Search this list',
   });
 
   final TextEditingController controller;
@@ -50,6 +51,7 @@ class TodoListSearchBar extends StatelessWidget {
   final bool showMatchCount;
   final ValueChanged<String> onChanged;
   final VoidCallback onClose;
+  final String hintText;
 
   static String matchLabel(int count) =>
       count == 1 ? '1 match' : '$count matches';
@@ -91,7 +93,7 @@ class TodoListSearchBar extends StatelessWidget {
                 // consumes the key before the field ever sees it.
                 decoration: InputDecoration(
                   isDense: true,
-                  hintText: 'Search this list',
+                  hintText: hintText,
                   hintStyle: fieldHintStyle(context, textStyle),
                   contentPadding: EdgeInsets.zero,
                   filled: false,
@@ -117,6 +119,7 @@ class TodoListSearchBar extends StatelessWidget {
               onPressed: onClose,
               icon: const Icon(PhosphorIconsRegular.x),
             ),
+            const SizedBox(width: 6),
           ],
         ),
       ),

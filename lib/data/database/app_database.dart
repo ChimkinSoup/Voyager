@@ -293,7 +293,7 @@ class TrackerValuesTable extends Table {
   TextColumn get id => text()();
   TextColumn get trackerId => text()();
   DateTimeColumn get periodStart => dateTime()();
-  IntColumn get intValue => integer().nullable()();
+  RealColumn get intValue => real().nullable()();
   BoolColumn get boolValue => boolean().nullable()();
   TextColumn get enumValue => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
@@ -1874,7 +1874,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 126;
+  int get schemaVersion => 127;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3309,6 +3309,11 @@ class AppDatabase extends _$AppDatabase {
       // Empty, so the first pull after this is a full one.
       if (from < 126) {
         await migrator.createTable(syncWatermarksTable);
+      }
+      // Rebuilds the table so `int_value` takes REAL affinity; existing whole
+      // numbers copy across unchanged.
+      if (from < 127) {
+        await migrator.alterTable(TableMigration(trackerValuesTable));
       }
     },
   );

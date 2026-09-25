@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
+import 'package:voyager/core/constants/build_info.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/data/database/app_database.dart';
@@ -101,6 +102,7 @@ class DataExportService {
     files[backupManifestFileName] = {
       'formatVersion': backupFormatVersion,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
+      'build': buildLabel,
       'collections': counts,
       'mediaFiles': blobs.length,
     };

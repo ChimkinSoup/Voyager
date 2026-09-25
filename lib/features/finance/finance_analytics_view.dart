@@ -529,6 +529,9 @@ class _CashFlowChartState extends State<_CashFlowChart> {
                 sideTitles: SideTitles(
                   showTitles: true,
                   reservedSize: _leftReserved,
+                  // maxY is the peak plus headroom, not a tick, so fl_chart's
+                  // extra label at the axis max would crowd the top tick's.
+                  maxIncluded: false,
                   getTitlesWidget: (value, _) => Text(
                     _compactMoney(value),
                     style: theme.textTheme.labelSmall?.copyWith(fontSize: 9),

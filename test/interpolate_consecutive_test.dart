@@ -15,7 +15,7 @@ void main() {
       updatedAt: now,
       trackerId: 't',
       periodStart: from.add(Duration(days: dayOffset)),
-      intValue: intValue,
+      intValue: intValue.toDouble(),
     );
   }
 

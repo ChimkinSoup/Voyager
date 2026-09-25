@@ -60,7 +60,7 @@ void main() {
       updatedAt: from,
       trackerId: 't',
       periodStart: periodStart,
-      intValue: intValue,
+      intValue: intValue.toDouble(),
     );
 
     // Daily: each period is the day itself.
@@ -235,7 +235,7 @@ void _readingTests() {
       updatedAt: from,
       trackerId: 't',
       periodStart: periodStart,
-      intValue: intValue,
+      intValue: intValue.toDouble(),
     );
 
     DateTime monthly(DateTime d) => DateTime(d.year, d.month, 1);

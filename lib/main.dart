@@ -13,6 +13,7 @@ import 'package:voyager/core/reminders/device_registration.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/tags/tag_palette.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/dev/error_logger.dart';
 import 'package:voyager/core/dev/perf_stall_logger.dart';
 import 'package:voyager/features/finance/finance_ui_prefs.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
@@ -22,6 +23,9 @@ import 'package:voyager/firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Before the keyboard workaround, which wraps it and so keeps the known
+  // debug-only desync out of the log.
+  ErrorLogger.instance.install();
   // First, so a stall anywhere in startup is on the record too.
   unawaited(PerfStallLogger.instance.restore());
   installWindowsKeyboardWorkaround();

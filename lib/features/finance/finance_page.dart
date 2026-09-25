@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
@@ -24,10 +27,12 @@ import 'package:voyager/features/finance/finance_bill_radar.dart';
 import 'package:voyager/features/finance/finance_budget_panel.dart';
 import 'package:voyager/features/finance/finance_goals_view.dart';
 import 'package:voyager/features/finance/finance_net_flow_hero.dart';
+import 'package:voyager/features/finance/finance_search.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart';
 import 'package:voyager/features/finance/finance_ui_prefs.dart';
 import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
+import 'package:voyager/features/todo/todo_list_search_bar.dart';
 
 /// Screen width at/above which the dashboard splits into ledger (left 60%) and
 /// insights sidebar (right 40%).
@@ -172,14 +177,146 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
   /// already requested but not yet built.
   var _builtMode = FinanceViewMode.ledger;
 
+  // The Ctrl+F search bar. [_searchTokens] is the query as the tokens every
+  // shown transaction has to match; the raw text lives in the controller.
+  final _searchController = TextEditingController();
+  final _searchFocusNode = FocusNode();
+  var _searchOpen = false;
+  var _searchTokens = const <String>[];
+  Timer? _searchDebounce;
+  // Same delay as the To-Do search bar: a burst of keystrokes costs one filter
+  // pass over the ledger, not one per character.
+  static const _searchDebounceDelay = Duration(milliseconds: 150);
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_handleSearchShortcut);
+    _searchFocusNode.onKeyEvent = _handleSearchKey;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Every shell branch stays mounted, so leaving the page is a TickerMode
+    // flip rather than a dispose. The filter goes with the page, as on To-Do.
+    if (!TickerMode.valuesOf(context).enabled && _searchOpen) {
+      _resetSearch();
+    }
+  }
+
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleSearchShortcut);
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     _wideScroll.dispose();
     _narrowScroll.dispose();
     super.dispose();
   }
 
+  /// Ctrl+F / Cmd+F, from anywhere on the page. A [HardwareKeyboard] handler
+  /// for the same reason as the To-Do page's: it has to fire whatever holds
+  /// focus, including nothing.
+  bool _handleSearchShortcut(KeyEvent event) {
+    if (!mounted) return false;
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.keyF) return false;
+    final keyboard = HardwareKeyboard.instance;
+    if (!keyboard.isControlPressed && !keyboard.isMetaPressed) return false;
+    // Only while this branch is the visible one and nothing is open over it.
+    if (!TickerMode.getValuesNotifier(context).value.enabled) return false;
+    if (Navigator.maybeOf(context, rootNavigator: true)?.canPop() ?? false) {
+      return false;
+    }
+    _openSearch();
+    return true;
+  }
+
+  KeyEventResult _handleSearchKey(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
+      _closeSearch();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// Opens the bar on the Ledger tab - the only one it filters - or, when it
+  /// is already up, selects the query so the next keystroke replaces it.
+  void _openSearch() {
+    ref
+        .read(financeUiPrefsProvider.notifier)
+        .setViewMode(FinanceViewMode.ledger);
+    setState(() {
+      _searchOpen = true;
+      // A jump's placeholder day isn't a match, so it doesn't belong among
+      // the results.
+      _emptyJumpDay = null;
+    });
+    _searchController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _searchController.text.length,
+    );
+    _searchFocusNode.requestFocus();
+  }
+
+  void _closeSearch() {
+    if (!_searchOpen) return;
+    setState(_resetSearch);
+  }
+
+  /// Clears every trace of the filter. Callers outside a build wrap this in
+  /// [setState]; [didChangeDependencies] calls it bare.
+  void _resetSearch() {
+    _searchDebounce?.cancel();
+    _searchDebounce = null;
+    _searchOpen = false;
+    _searchTokens = const [];
+    if (_searchController.text.isNotEmpty) {
+      // Deferred: clearing notifies the field's listeners, and this can run
+      // from didChangeDependencies, where that is a build-phase setState.
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchController.clear();
+      });
+    }
+    if (_searchFocusNode.hasFocus) _searchFocusNode.unfocus();
+  }
+
+  void _onSearchChanged(String _) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(_searchDebounceDelay, () {
+      if (!mounted) return;
+      setState(
+        () => _searchTokens = financeSearchTokens(_searchController.text),
+      );
+      _scrollSearchToTop();
+    });
+  }
+
+  /// Results start from the newest match, wherever the ledger was scrolled
+  /// when the search began.
+  void _scrollSearchToTop() {
+    if (_searchTokens.isEmpty) return;
+    final controller = _wideScroll.hasClients
+        ? _wideScroll
+        : _narrowScroll.hasClients
+        ? _narrowScroll
+        : null;
+    if (controller == null) return;
+    final position = controller.position;
+    if (position.pixels <= 0) return;
+    position.animateTo(
+      0,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
+  }
+
   void _jumpToDay(DateTime day, {Future<void>? ready}) {
+    // A jump asks for a day, which the search may be hiding.
+    _closeSearch();
     final hasRows = widget.transactions.any(
       (t) =>
           t.occurredAt.year == day.year &&
@@ -405,7 +542,12 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
   }) {
     final entries = ledger.entries;
     if (entries.isEmpty) {
-      return SliverToBoxAdapter(child: _EmptyLedger(tagFilter: tagFilter));
+      return SliverToBoxAdapter(
+        child: _EmptyLedger(
+          tagFilter: tagFilter,
+          searching: _searchTokens.isNotEmpty,
+        ),
+      );
     }
     return SliverList(
       delegate: SliverChildBuilderDelegate(
@@ -451,6 +593,8 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
         if (next != FinanceViewMode.ledger && _emptyJumpDay != null) {
           setState(() => _emptyJumpDay = null);
         }
+        // The search only filters the ledger, so it doesn't outlive it.
+        if (next != FinanceViewMode.ledger) _closeSearch();
       },
     );
 
@@ -462,19 +606,21 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
     // whole month: it answers "how am I doing", which a filter applied to one
     // tag would turn into a different and much less useful number without
     // saying so.
-    final ledger = _ledgerModel(
-      tagFilter == null
-          ? transactions
-          : transactions
-                .where(
-                  (t) =>
-                      t.type == TransactionType.expense &&
-                      t.tags.contains(tagFilter),
-                )
-                .toList(),
-      now,
-      emptyDay: _emptyJumpDay,
-    );
+    //
+    // The search narrows it the same way, on top of any tag filter.
+    final searchTokens = _searchTokens;
+    final filtered = tagFilter == null && searchTokens.isEmpty
+        ? transactions
+        : transactions
+              .where(
+                (t) =>
+                    (tagFilter == null ||
+                        (t.type == TransactionType.expense &&
+                            t.tags.contains(tagFilter))) &&
+                    financeTransactionMatches(t, searchTokens),
+              )
+              .toList();
+    final ledger = _ledgerModel(filtered, now, emptyDay: _emptyJumpDay);
     _ledger = ledger;
     final ledgerDays = {
       for (final entry in ledger.entries)
@@ -545,6 +691,19 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
                                 .state =
                             null,
                   ),
+                ),
+              ],
+              if (mode == FinanceViewMode.ledger && _searchOpen) ...[
+                const SizedBox(height: 8),
+                TodoListSearchBar(
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  accentColor: Theme.of(context).colorScheme.primary,
+                  matchCount: filtered.length,
+                  showMatchCount: searchTokens.isNotEmpty,
+                  hintText: 'Search store, note, #tag or amount',
+                  onChanged: _onSearchChanged,
+                  onClose: _closeSearch,
                 ),
               ],
             ],
@@ -1127,11 +1286,14 @@ class _LedgerFilterChip extends StatelessWidget {
 }
 
 class _EmptyLedger extends StatelessWidget {
-  const _EmptyLedger({this.tagFilter});
+  const _EmptyLedger({this.tagFilter, this.searching = false});
 
   /// The tag the ledger is filtered to, so an empty result says which question
   /// came back with nothing rather than claiming the ledger is bare.
   final String? tagFilter;
+
+  /// Whether the Ctrl+F search is narrowing the ledger.
+  final bool searching;
 
   @override
   Widget build(BuildContext context) {
@@ -1149,7 +1311,9 @@ class _EmptyLedger extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            filter != null
+            searching
+                ? 'No transactions match your search.'
+                : filter != null
                 ? 'No expenses tagged #$filter.'
                 : 'No transactions yet.\nTap + to log your first one.',
             textAlign: TextAlign.center,

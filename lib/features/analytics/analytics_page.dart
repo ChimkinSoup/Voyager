@@ -943,48 +943,46 @@ class _SparklineRow extends ConsumerWidget {
                 child: valuesAsync.when(
                   data: (values) {
                     final now = DateTime.now();
-                    final nowLocal = DateTime(now.year, now.month, now.day);
-                    // Calendar days throughout, so the window starts on local
+                    final todayPeriod = promptService.trackerPeriodStartFor(
+                      now,
+                      tracker.cadence,
+                    );
+                    // Start of the period [i] periods before the current one.
+                    // Calendar days throughout, so every start is local
                     // midnight of a real date rather than 23:00 the evening
-                    // before — everything below measures x as an offset from
-                    // it. See [addCalendarDays].
-                    final from = switch (tracker.cadence) {
-                      TrackerCadence.daily => addCalendarDays(nowLocal, -29),
+                    // before. See [addCalendarDays].
+                    DateTime periodsBack(int i) => switch (tracker.cadence) {
+                      TrackerCadence.daily => addCalendarDays(todayPeriod, -i),
                       TrackerCadence.weekly => addCalendarDays(
-                        nowLocal,
-                        -29 * 7,
+                        todayPeriod,
+                        -i * 7,
                       ),
                       TrackerCadence.monthly => DateTime(
-                        nowLocal.year,
-                        nowLocal.month - 29,
+                        todayPeriod.year,
+                        todayPeriod.month - i,
                         1,
                       ),
                       TrackerCadence.yearly => DateTime(
-                        nowLocal.year - 29,
+                        todayPeriod.year - i,
                         1,
                         1,
                       ),
                     };
-                    final bottomTitleInterval = switch (tracker.cadence) {
-                      TrackerCadence.daily => 10.0,
-                      TrackerCadence.weekly => 70.0,
-                      TrackerCadence.monthly => 300.0,
-                      TrackerCadence.yearly => 3650.0,
-                    };
-                    final verticalGridInterval = switch (tracker.cadence) {
-                      TrackerCadence.daily => 5.0,
-                      TrackerCadence.weekly => 35.0,
-                      TrackerCadence.monthly => 150.0,
-                      TrackerCadence.yearly => 1825.0,
-                    };
+                    // The window runs from the start of the period
+                    // [_sparklinePeriods] back to the start of the current one
+                    // — the day a reading for it is plotted on — so both edges
+                    // are period starts and carry a label. Everything below
+                    // measures x as a day offset from [from].
+                    final from = periodsBack(_sparklinePeriods);
+                    final totalDays = calendarDaysBetween(from, todayPeriod);
                     final spots = analytics.interpolateConsecutive(
                       values: values,
                       from: from,
-                      to: now,
+                      to: todayPeriod,
                       // Cover the whole window, not just the default first 365
                       // days — otherwise the longer monthly/yearly spans draw only
                       // their first year of data, squished onto the left edge.
-                      maxDays: calendarDaysBetween(from, now),
+                      maxDays: totalDays,
                       upperBound: tracker.integerCap,
                     );
                     // Period-start anchors across the window, drawn as an
@@ -992,41 +990,40 @@ class _SparklineRow extends ConsumerWidget {
                     // bar's spots, so these let the user tap the sparkline to enter
                     // data even when it has no values yet — the chart renders (axes
                     // + gridlines) instead of a dead "No data" label.
-                    final todayPeriod = promptService.trackerPeriodStartFor(
-                      now,
-                      tracker.cadence,
-                    );
                     final anchors = <FlSpot>[];
                     // Every period boundary the window touches, including the
                     // one period that opens before it: the window's leading
                     // days belong to that period, and [sparklinePeriodAnchorX]
                     // splits hover zones on these boundaries.
                     final periodStarts = <double>[];
+                    // Labels every [_sparklineLabelStep] periods, gridlines
+                    // halfway between them, both on period starts: months and
+                    // years aren't a fixed number of days, so a fixed-interval
+                    // axis drifted off the periods it named — a "Nov 29" tick
+                    // whose hover read December.
+                    final axisLabels = <({double x, String text})>[];
+                    final gridXs = <double>[];
                     for (var i = 0; ; i++) {
-                      final periodStart = switch (tracker.cadence) {
-                        TrackerCadence.daily => addCalendarDays(
-                          todayPeriod,
-                          -i,
-                        ),
-                        TrackerCadence.weekly => addCalendarDays(
-                          todayPeriod,
-                          -i * 7,
-                        ),
-                        TrackerCadence.monthly => DateTime(
-                          todayPeriod.year,
-                          todayPeriod.month - i,
-                          1,
-                        ),
-                        TrackerCadence.yearly => DateTime(
-                          todayPeriod.year - i,
-                          1,
-                          1,
-                        ),
-                      };
+                      final periodStart = periodsBack(i);
                       final x = calendarDaysBetween(from, periodStart);
                       periodStarts.add(x.toDouble());
                       if (x < 0) break;
                       anchors.add(FlSpot(x.toDouble(), 0));
+                      if (i % _sparklineLabelStep == 0) {
+                        axisLabels.add((
+                          x: x.toDouble(),
+                          text: _sparklineAxisDate(
+                            periodStart,
+                            tracker.cadence,
+                          ),
+                        ));
+                      }
+                      // The edges have the axis border, or nothing, already.
+                      if (i % (_sparklineLabelStep ~/ 2) == 0 &&
+                          i != 0 &&
+                          i != _sparklinePeriods) {
+                        gridXs.add(x.toDouble());
+                      }
                     }
                     final anchorSpots = anchors.reversed.toList();
                     final ascendingPeriodStarts = periodStarts.reversed
@@ -1050,15 +1047,12 @@ class _SparklineRow extends ConsumerWidget {
                     // chart drew with.
                     final leftReserved = axisReservedSize(maxY, 9, 8);
                     const bottomReserved = 26.0;
-                    // Pinned rather than left to fl_chart to infer from the data,
-                    // for the same reason: an inferred domain the bubble had to
-                    // guess at is one the bubble could guess wrong.
-                    final xs = [
-                      for (final s in spots) s.x,
-                      for (final s in anchorSpots) s.x,
-                    ];
-                    final minX = xs.isEmpty ? 0.0 : xs.reduce(math.min);
-                    final maxX = xs.isEmpty ? 1.0 : xs.reduce(math.max);
+                    // Pinned to the window rather than left to fl_chart to infer
+                    // from the data, for the same reason: an inferred domain the
+                    // bubble (or the axis labels) had to guess at is one they
+                    // could guess wrong.
+                    const minX = 0.0;
+                    final maxX = totalDays.toDouble();
                     // One reading per period, not one per day — see
                     // [sparklinePeriodAnchorX].
                     double snapX(double rawX) => sparklinePeriodAnchorX(
@@ -1138,17 +1132,24 @@ class _SparklineRow extends ConsumerWidget {
                             maxX: maxX,
                             minY: 0,
                             maxY: maxY,
+                            // Vertical gridlines sit on period starts, which
+                            // fl_chart's fixed-interval grid can't place.
+                            extraLinesData: ExtraLinesData(
+                              extraLinesOnTop: false,
+                              verticalLines: [
+                                for (final x in gridXs)
+                                  VerticalLine(
+                                    x: x,
+                                    color: theme.colorScheme.outline
+                                        .withValues(alpha: 0.1),
+                                    strokeWidth: 1,
+                                  ),
+                              ],
+                            ),
                             gridData: FlGridData(
                               show: true,
-                              drawVerticalLine: true,
-                              verticalInterval: verticalGridInterval,
+                              drawVerticalLine: false,
                               horizontalInterval: yStep,
-                              getDrawingVerticalLine: (_) => FlLine(
-                                color: theme.colorScheme.outline.withValues(
-                                  alpha: 0.1,
-                                ),
-                                strokeWidth: 1,
-                              ),
                               getDrawingHorizontalLine: (_) => FlLine(
                                 color: theme.colorScheme.outline.withValues(
                                   alpha: 0.1,
@@ -1185,26 +1186,17 @@ class _SparklineRow extends ConsumerWidget {
                                   ),
                                 ),
                               ),
+                              // Only reserves the strip: the dates in it are
+                              // drawn by [_sparklineAxisLabels], on period
+                              // starts. The interval just keeps fl_chart from
+                              // asking for a title per day.
                               bottomTitles: AxisTitles(
                                 sideTitles: SideTitles(
                                   showTitles: true,
                                   reservedSize: bottomReserved,
-                                  interval: bottomTitleInterval,
-                                  getTitlesWidget: (v, meta) {
-                                    final date = addCalendarDays(
-                                      from,
-                                      v.toInt(),
-                                    );
-                                    return SideTitleWidget(
-                                      meta: meta,
-                                      space: 8,
-                                      child: Text(
-                                        DateFormat('MMM d').format(date),
-                                        style: theme.textTheme.labelSmall
-                                            ?.copyWith(fontSize: 8),
-                                      ),
-                                    );
-                                  },
+                                  interval: maxX,
+                                  getTitlesWidget: (_, _) =>
+                                      const SizedBox.shrink(),
                                 ),
                               ),
                             ),
@@ -1239,7 +1231,18 @@ class _SparklineRow extends ConsumerWidget {
                           ),
                         );
                         return _sparklineHoverBubble(
-                          chart: chart,
+                          chart: _sparklineAxisLabels(
+                            chart: chart,
+                            labels: axisLabels,
+                            minX: minX,
+                            maxX: maxX,
+                            leftReserved: leftReserved,
+                            bottomReserved: bottomReserved,
+                            space: 8,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              fontSize: 8,
+                            ),
+                          ),
                           touch: touch,
                           spots: spots,
                           minX: minX,
@@ -1322,8 +1325,8 @@ int _compareTrackerOrder(StatisticTracker a, StatisticTracker b) {
 /// year that peaked higher than the recent window rendered uniformly maxed
 /// (every reading clamping at full alpha) and one that peaked lower rendered
 /// washed out. [_HeatmapRow] already derives its window from what it draws.
-int _maxIntInYears(List<TrackerValue> values, int fromYear, int toYear) {
-  var max = 1;
+double _maxIntInYears(List<TrackerValue> values, int fromYear, int toYear) {
+  var max = 1.0;
   for (final value in values) {
     final year = value.periodStart.year;
     if (year < fromYear || year > toYear) continue;
@@ -1751,8 +1754,9 @@ class _HeatmapRow extends ConsumerWidget {
 
     return valuesAsync.when(
       data: (values) {
-        // Build the last 30 period dates for this cadence
-        final periods = _lastNPeriods(30);
+        // Build the last 31 period dates for this cadence: six label steps
+        // back from today, so the oldest square carries a label too.
+        final periods = _lastNPeriods(31);
 
         // Compute rolling max over the exact window being displayed, so
         // normalisation doesn't miss values that fall outside a fixed
@@ -1893,9 +1897,14 @@ class _HeatmapRow extends ConsumerWidget {
                       1,
                       (constraints.maxWidth / (minSquare + gap)).floor(),
                     );
-                    final shown = periods.sublist(
-                      math.max(0, periods.length - fits),
+                    // Trimmed to a whole number of label steps past the
+                    // newest square, so the oldest one shown is labelled; the
+                    // squares grow to take up the width that frees.
+                    final count = math.min(
+                      periods.length,
+                      (fits - 1) ~/ 5 * 5 + 1,
                     );
+                    final shown = periods.sublist(periods.length - count);
                     final squareSize =
                         ((constraints.maxWidth - gap * shown.length) /
                                 shown.length)
@@ -1929,10 +1938,15 @@ class _HeatmapRow extends ConsumerWidget {
                                     // wider than a narrow square, and letting
                                     // it widen its column pushed the row past
                                     // its edge. It spills over the unlabelled
-                                    // neighbours instead.
+                                    // neighbours instead — rightward only for
+                                    // the oldest square, whose left side is
+                                    // the tile's edge.
                                     SizedBox(
                                       width: squareSize,
                                       child: OverflowBox(
+                                        alignment: i == 0
+                                            ? Alignment.centerLeft
+                                            : Alignment.center,
                                         maxWidth: double.infinity,
                                         fit: OverflowBoxFit.deferToChild,
                                         child: IgnorePointer(
@@ -1986,7 +2000,7 @@ class _HeatmapRow extends ConsumerWidget {
     return switch (cadence) {
       TrackerCadence.daily => DateFormat('MMM d').format(date),
       TrackerCadence.weekly => DateFormat('MMM d').format(date),
-      TrackerCadence.monthly => DateFormat('MMM yy').format(date),
+      TrackerCadence.monthly => DateFormat("MMM ''yy").format(date),
       TrackerCadence.yearly => DateFormat('yyyy').format(date),
     };
   }
@@ -2506,6 +2520,82 @@ const _sparklineDataBarIndex = 1;
 const _sparklineGridLines = 3;
 const _sparklineDetailGridLines = 6;
 
+/// Periods the grid tile's sparkline spans, and how many periods apart its
+/// dated labels sit — whatever the cadence, so a monthly tile covers 30 months
+/// labelled every 10. The span is a whole number of label steps so both edges
+/// carry one.
+const _sparklinePeriods = 30;
+const _sparklineLabelStep = 10;
+
+/// A sparkline axis label for the period starting on [date]: the day for the
+/// cadences whose periods are days or weeks, otherwise just the month or year
+/// the label stands for.
+String _sparklineAxisDate(DateTime date, TrackerCadence cadence) =>
+    switch (cadence) {
+      TrackerCadence.daily || TrackerCadence.weekly => DateFormat(
+        'MMM d',
+      ).format(date),
+      // "Sep '26", not "Sep 26": the bare year reads as a day of the month.
+      TrackerCadence.monthly => DateFormat("MMM ''yy").format(date),
+      TrackerCadence.yearly => DateFormat('yyyy').format(date),
+    };
+
+/// [chart] with dated labels under its X axis, each centred on its own x
+/// except one at [maxX], which ends there.
+///
+/// Drawn here rather than as fl_chart bottom titles because fl_chart can only
+/// space those at a fixed interval, and period starts aren't one — months and
+/// years run to different numbers of days. The chart still reserves
+/// [bottomReserved] for its titles; the labels go into that strip, mapped to
+/// pixels exactly as [_sparklineHoverBubble] maps a spot, so each label sits
+/// directly under the point a hover beside it resolves to.
+Widget _sparklineAxisLabels({
+  required Widget chart,
+  required List<({double x, String text})> labels,
+  required double minX,
+  required double maxX,
+  required double leftReserved,
+  required double bottomReserved,
+  required double space,
+  required TextStyle? style,
+}) {
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      final plotWidth = math.max(0.0, constraints.maxWidth - leftReserved);
+      final plotHeight = math.max(0.0, constraints.maxHeight - bottomReserved);
+      final spanX = maxX - minX;
+      return Stack(
+        fit: StackFit.expand,
+        clipBehavior: Clip.none,
+        children: [
+          chart,
+          for (final label in labels)
+            Positioned(
+              left:
+                  leftReserved +
+                  (spanX == 0 ? 0.0 : (label.x - minX) / spanX * plotWidth),
+              top: plotHeight + space,
+              child: IgnorePointer(
+                child: FractionalTranslation(
+                  // The label at the right edge ends there rather than
+                  // centring on it, which would hang half of it past the
+                  // chart. The left edge has the Y axis's strip to spill into.
+                  translation: Offset(label.x == maxX ? -1 : -0.5, 0),
+                  child: Text(
+                    label.text,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: style,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    },
+  );
+}
+
 /// The gradient wash under a sparkline: the tracker's colour at 30% where it
 /// meets the line, fading to fully transparent at the baseline, so the series
 /// carries visual weight without competing with the line itself.
@@ -2714,10 +2804,16 @@ LineBarSpot? _sparklineDataBarSpot(List<LineBarSpot>? hits) {
   return null;
 }
 
+/// A decimal tracker's stat, exact below 1,000 — [compactNumberLabel] rounds
+/// to a whole number, which would show a 7.5 high as 8.
+String _trackerStatLabel(double value) =>
+    value.abs() < 1000 ? formatTrackerNumber(value) : compactNumberLabel(value);
+
 String? _tooltipValueLabel(TrackerType type, TrackerValue? value) {
   if (value == null) return null;
   return switch (type) {
-    TrackerType.integer => value.intValue?.toString(),
+    TrackerType.integer =>
+      value.intValue == null ? null : formatTrackerNumber(value.intValue!),
     TrackerType.boolean =>
       value.boolValue == true ? 'Completed' : 'Not completed',
     TrackerType.enumType =>
@@ -3263,7 +3359,9 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
   void initState() {
     super.initState();
     _intController = TextEditingController(
-      text: widget.initialValue?.intValue?.toString() ?? '',
+      text: widget.initialValue?.intValue == null
+          ? ''
+          : formatTrackerNumber(widget.initialValue!.intValue!),
     );
     _intController.selection = TextSelection(
       baseOffset: 0,
@@ -3667,21 +3765,27 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
               Slider(
                 min: minVal.toDouble(),
                 max: cap.toDouble(),
-                divisions: (cap - minVal) <= 0 ? null : (cap - minVal),
+                // Continuous, not whole-number divisions: snapping would round
+                // away a decimal reading the moment the thumb is touched.
                 activeColor: accent,
                 inactiveColor: accent.withValues(alpha: 0.24),
-                value: (int.tryParse(_intController.text) ?? minVal)
+                value: (double.tryParse(_intController.text) ?? minVal)
                     .clamp(minVal, cap)
                     .toDouble(),
-                onChanged: (v) =>
-                    setState(() => _intController.text = v.round().toString()),
+                onChanged: (v) => setState(
+                  () => _intController.text = formatTrackerNumber(v),
+                ),
               ),
             ],
             VoyagerTextField(
               controller: _intController,
               autofocus: true,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+              ],
               accentColor: accent,
               onSubmitted: (_) => _save(),
               decoration: const InputDecoration(
@@ -3812,7 +3916,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
     // period with no record at all merely doesn't extend it.
     final now = utcNow();
     final current = widget.initialValue;
-    int? intVal;
+    double? intVal;
     bool? boolVal;
     String? enumVal;
 
@@ -3829,7 +3933,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
           if (mounted) Navigator.of(context).pop();
           return;
         }
-        final raw = int.tryParse(text);
+        final raw = double.tryParse(text);
         if (raw == null) {
           Navigator.of(context).pop();
           return;
@@ -3918,7 +4022,7 @@ class _HeatmapSquare extends ConsumerStatefulWidget {
   /// [AnalyticsService.heatmapIntensity] for every square in the row.
   final bool hasSingleIntValue;
   final DateTime periodDate;
-  final int maxInPeriod;
+  final double maxInPeriod;
   final AnalyticsService analytics;
   final double size;
 
@@ -4231,15 +4335,15 @@ class _DetailStatisticsSection extends ConsumerWidget {
             (values.map((v) => dateOnly(v.periodStart)).toSet().toList())
               ..sort();
         streak = _streakStats(periods, tracker.cadence);
-        final ints = values.map((v) => v.intValue).whereType<int>().toList();
+        final ints = values.map((v) => v.intValue).whereType<double>().toList();
         if (ints.isNotEmpty) {
           final average = ints.reduce((a, b) => a + b) / ints.length;
           final highest = ints.reduce((a, b) => a > b ? a : b);
           final lowest = ints.reduce((a, b) => a < b ? a : b);
           rows.addAll([
-            _row(context, 'Average', average.toStringAsFixed(1)),
-            _row(context, 'Highest', compactNumberLabel(highest)),
-            _row(context, 'Lowest', compactNumberLabel(lowest)),
+            _row(context, 'Average', formatTrackerNumber(average)),
+            _row(context, 'Highest', _trackerStatLabel(highest)),
+            _row(context, 'Lowest', _trackerStatLabel(lowest)),
           ]);
         }
       case TrackerType.boolean:
@@ -4440,15 +4544,15 @@ class _TrackerStatisticsDialog extends ConsumerWidget {
 
     switch (tracker.type) {
       case TrackerType.integer:
-        final ints = values.map((v) => v.intValue).whereType<int>().toList();
+        final ints = values.map((v) => v.intValue).whereType<double>().toList();
         if (ints.isNotEmpty) {
           final total = ints.reduce((a, b) => a + b);
           final highest = ints.reduce((a, b) => a > b ? a : b);
           final average = total / ints.length;
           rows.addAll([
-            _row(context, 'Total', compactNumberLabel(total)),
-            _row(context, 'Average', average.toStringAsFixed(1)),
-            _row(context, 'Highest', compactNumberLabel(highest)),
+            _row(context, 'Total', _trackerStatLabel(total)),
+            _row(context, 'Average', formatTrackerNumber(average)),
+            _row(context, 'Highest', _trackerStatLabel(highest)),
           ]);
         }
       case TrackerType.boolean:
@@ -4693,28 +4797,35 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
     // which can outlive the row. See [trackerCacheInvalidatorProvider].
     final invalidateTrackerCache = ref.read(trackerCacheInvalidatorProvider);
 
-    // The chart spans a fixed number of periods per cadence — roughly 180
-    // days / 50 weeks / 24 months / 15 years. The window is sized so the day
-    // count is an exact multiple of the tick spacing, which is what keeps
-    // every bottom-axis label evenly spaced *and* lands the current period
-    // squarely on the final tick (instead of a stray, closer "today" label at
-    // the right edge — the old 1, 6, 11, 16, 17 problem).
+    // The chart spans a fixed number of periods per cadence — 180 days / 49
+    // weeks / 24 months / 15 years — labelled every [labelStep] periods. The
+    // span is a whole number of label steps, which lands the current period
+    // squarely on the final label (instead of a stray, closer "today" label at
+    // the right edge — the old 1, 6, 11, 16, 17 problem), and every label sits
+    // on a period start, the point a hover beside it resolves to.
     final now = DateTime.now();
     final todayPeriod = promptService.trackerPeriodStartFor(
       now,
       tracker.cadence,
     );
-    final (
-      int totalDays,
-      double tickInterval,
-      String dateFmt,
-    ) = switch (tracker.cadence) {
-      TrackerCadence.daily => (180, 30.0, 'MMM d'),
-      TrackerCadence.weekly => (343, 49.0, 'MMM d'),
-      TrackerCadence.monthly => (720, 120.0, 'MMM yy'),
-      TrackerCadence.yearly => (5475, 1095.0, 'yyyy'),
+    final (int periods, int labelStep) = switch (tracker.cadence) {
+      TrackerCadence.daily => (180, 30),
+      TrackerCadence.weekly => (49, 7),
+      TrackerCadence.monthly => (24, 4),
+      TrackerCadence.yearly => (15, 3),
     };
-    final from = addCalendarDays(todayPeriod, -totalDays);
+    DateTime periodsBack(int i) => switch (tracker.cadence) {
+      TrackerCadence.daily => addCalendarDays(todayPeriod, -i),
+      TrackerCadence.weekly => addCalendarDays(todayPeriod, -i * 7),
+      TrackerCadence.monthly => DateTime(
+        todayPeriod.year,
+        todayPeriod.month - i,
+        1,
+      ),
+      TrackerCadence.yearly => DateTime(todayPeriod.year - i, 1, 1),
+    };
+    final from = periodsBack(periods);
+    final totalDays = calendarDaysBetween(from, todayPeriod);
 
     return valuesAsync.when(
       data: (values) {
@@ -4736,21 +4847,19 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
         // that opens before it: the window's leading days belong to that
         // period, and [sparklinePeriodAnchorX] splits hover zones on these.
         final periodStarts = <double>[];
+        final axisLabels = <({double x, String text})>[];
         for (var i = 0; ; i++) {
-          final periodStart = switch (tracker.cadence) {
-            TrackerCadence.daily => addCalendarDays(todayPeriod, -i),
-            TrackerCadence.weekly => addCalendarDays(todayPeriod, -i * 7),
-            TrackerCadence.monthly => DateTime(
-              todayPeriod.year,
-              todayPeriod.month - i,
-              1,
-            ),
-            TrackerCadence.yearly => DateTime(todayPeriod.year - i, 1, 1),
-          };
+          final periodStart = periodsBack(i);
           final x = calendarDaysBetween(from, periodStart);
           periodStarts.add(x.toDouble());
           if (x < 0) break;
           anchors.add(FlSpot(x.toDouble(), 0));
+          if (i % labelStep == 0) {
+            axisLabels.add((
+              x: x.toDouble(),
+              text: _sparklineAxisDate(periodStart, tracker.cadence),
+            ));
+          }
         }
         final anchorSpots = anchors.reversed.toList();
         final ascendingPeriodStarts = periodStarts.reversed.toList();
@@ -4881,22 +4990,13 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
                         ),
                       ),
                     ),
+                    // Only reserves the strip — see the grid sparkline's.
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
                         reservedSize: bottomReserved,
-                        interval: tickInterval,
-                        getTitlesWidget: (v, meta) {
-                          final date = addCalendarDays(from, v.round());
-                          return SideTitleWidget(
-                            meta: meta,
-                            space: 10,
-                            child: Text(
-                              DateFormat(dateFmt).format(date),
-                              style: theme.textTheme.labelSmall,
-                            ),
-                          );
-                        },
+                        interval: totalDays.toDouble(),
+                        getTitlesWidget: (_, _) => const SizedBox.shrink(),
                       ),
                     ),
                   ),
@@ -4915,7 +5015,16 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
                 ),
               );
               return _sparklineHoverBubble(
-                chart: chart,
+                chart: _sparklineAxisLabels(
+                  chart: chart,
+                  labels: axisLabels,
+                  minX: 0,
+                  maxX: totalDays.toDouble(),
+                  leftReserved: leftReserved,
+                  bottomReserved: bottomReserved,
+                  space: 10,
+                  style: theme.textTheme.labelSmall,
+                ),
                 touch: touch,
                 spots: spots,
                 minX: 0,
@@ -5056,7 +5165,7 @@ class _HeatmapMonthTile extends StatelessWidget {
   final DateTime month;
   final StatisticTracker tracker;
   final _TrackerValueIndex index;
-  final int maxInPeriod;
+  final double maxInPeriod;
   final AnalyticsService analytics;
   final bool weekStartsMonday;
 
@@ -5190,7 +5299,7 @@ class _HeatmapDayCell extends ConsumerStatefulWidget {
   final DateTime date;
   final DateTime month;
   final _TrackerValueIndex index;
-  final int maxInPeriod;
+  final double maxInPeriod;
   final AnalyticsService analytics;
 
   @override
@@ -5292,7 +5401,7 @@ class _HeatmapWeekBlock extends ConsumerStatefulWidget {
   final List<DateTime> rowCells;
   final DateTime month;
   final _TrackerValueIndex index;
-  final int maxInPeriod;
+  final double maxInPeriod;
   final AnalyticsService analytics;
 
   @override
@@ -5503,7 +5612,7 @@ class _MonthGridBox extends ConsumerStatefulWidget {
   final StatisticTracker tracker;
   final DateTime periodDate;
   final _TrackerValueIndex index;
-  final int maxInPeriod;
+  final double maxInPeriod;
   final AnalyticsService analytics;
 
   @override
@@ -5692,7 +5801,7 @@ class _YearGridBox extends ConsumerStatefulWidget {
   final StatisticTracker tracker;
   final DateTime periodDate;
   final _TrackerValueIndex index;
-  final int maxInPeriod;
+  final double maxInPeriod;
   final AnalyticsService analytics;
 
   @override
@@ -6404,7 +6513,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
 
 String _typeLabel(TrackerType type) {
   return switch (type) {
-    TrackerType.integer => 'Integer',
+    TrackerType.integer => 'Number',
     TrackerType.boolean => 'Boolean',
     TrackerType.enumType => 'Dropdown',
   };

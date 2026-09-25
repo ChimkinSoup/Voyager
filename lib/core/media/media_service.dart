@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:voyager/core/dev/error_logger.dart';
 import 'package:voyager/core/soft_delete/restore_contract.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/services/media_file_store.dart';
@@ -317,8 +318,13 @@ class MediaService extends ChangeNotifier {
         asset.uploadState == MediaUploadState.uploaded) {
       try {
         await storage.delete(asset.remotePath(uid));
-      } catch (error) {
+      } catch (error, stackTrace) {
         debugPrint('[media] remote delete failed for ${asset.id}: $error');
+        ErrorLogger.instance.record(
+          error,
+          stackTrace,
+          context: 'media: remote delete for ${asset.id}',
+        );
       }
     }
 
@@ -611,8 +617,13 @@ class MediaService extends ChangeNotifier {
           asset.uploadState == MediaUploadState.uploaded) {
         try {
           await storage.delete(asset.remotePath(uid));
-        } catch (error) {
+        } catch (error, stackTrace) {
           debugPrint('[media] remote purge failed for ${asset.id}: $error');
+          ErrorLogger.instance.record(
+            error,
+            stackTrace,
+            context: 'media: remote purge for ${asset.id}',
+          );
         }
       }
     }

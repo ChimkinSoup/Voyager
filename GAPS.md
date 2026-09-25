@@ -36,7 +36,12 @@ today/this week" count, completion history, a done list, and the "tasks complete
 statistic PLAN.md asks for in Analytics. Settings shows only a lifetime total. The
 column is cheap to add now; the history lost before it exists can't be recovered.
 
-### Errors in a release build vanish
+### ~~Errors in a release build vanish~~
+**Done (2026-09-25):** `lib/core/dev/error_logger.dart` writes every uncaught or
+reported error, with its stack and build, to `Documents/voyager_errors.log` (Dev page
+→ Error log), and key swallowed failures in sync, media, undo and session checkpoints
+record there too.
+
 The only `FlutterError.onError` hook is the keyboard workaround
 (`lib/core/platform/windows_keyboard_workaround.dart:18`), and there is no
 `PlatformDispatcher.instance.onError` or `runZonedGuarded`. In a release build with no
@@ -115,8 +120,10 @@ The planner, live session and exercise detail work well together. Gaps:
 - Study has no retention or forecast stats
 
 ### Settings
-- About has no version number (`settings_page.dart:639`), and `pubspec.yaml` is still
-  `0.1.0+1`. You'll want the version in bug reports.
+- ~~About has no version number (`settings_page.dart:639`), and `pubspec.yaml` is still
+  `0.1.0+1`. You'll want the version in bug reports.~~ **Done (2026-09-25):** About
+  shows version, commit and build date (tap to copy), set by
+  `scripts/build_release.ps1`; backups record it too.
 - The signed-in account isn't shown anywhere, only "Sign out".
 - A "Statistics" block (total journals, tasks) sits inside Settings. It probably
   belongs in Analytics.
@@ -171,7 +178,7 @@ The planner, live session and exercise detail work well together. Gaps:
 ---
 
 ## Suggested order before the bug hunt
-1. Error log (P1). It makes the bug hunt productive.
+1. ~~Error log (P1). It makes the bug hunt productive.~~ Done.
 2. Turn off `dev_disable_cache`.
 3. `completedAt` on tasks (P1). Starts collecting history now.
 4. Trash view or honest delete copy (P1).

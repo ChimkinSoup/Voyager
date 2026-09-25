@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -409,7 +410,15 @@ class _RailDestinationListState extends State<_RailDestinationList> {
 
     final list = NotificationListener<ScrollNotification>(
       onNotification: (_) {
-        _syncFades();
+        // The rail growing under a scrolled list settles the position back
+        // from inside layout, which notifies here mid-frame — too late to
+        // setState, so that one waits for the frame to finish.
+        if (SchedulerBinding.instance.schedulerPhase ==
+            SchedulerPhase.persistentCallbacks) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _syncFades());
+        } else {
+          _syncFades();
+        }
         return false;
       },
       child: VoyagerScrollView(controller: _controller, child: widget.child),

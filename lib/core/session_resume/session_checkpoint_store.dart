@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:voyager/core/dev/error_logger.dart';
 import 'package:voyager/core/session_resume/session_checkpoint.dart';
 
 /// Every unfinished Study or Cram run this device is holding, one slot per
@@ -73,9 +74,14 @@ class FileSessionCheckpointStore implements SessionCheckpointStore {
       return SessionCheckpoint.fromJson(
         Map<String, dynamic>.from(jsonDecode(raw) as Map),
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
       // Unreadable or from another schema — drop it and open a clean session.
       debugPrint('Session checkpoint could not be read: $error');
+      ErrorLogger.instance.record(
+        error,
+        stackTrace,
+        context: 'session checkpoint read',
+      );
       await _deleteQuietly(kind, scopeKey);
       return null;
     }
@@ -86,10 +92,15 @@ class FileSessionCheckpointStore implements SessionCheckpointStore {
     try {
       final file = await _file(checkpoint.kind, checkpoint.scopeKey);
       await file.writeAsString(jsonEncode(checkpoint.toJson()), flush: true);
-    } catch (error) {
+    } catch (error, stackTrace) {
       // A checkpoint that cannot be written is a resume lost, never an error
       // worth interrupting a review session for.
       debugPrint('Session checkpoint could not be saved: $error');
+      ErrorLogger.instance.record(
+        error,
+        stackTrace,
+        context: 'session checkpoint save',
+      );
     }
   });
 

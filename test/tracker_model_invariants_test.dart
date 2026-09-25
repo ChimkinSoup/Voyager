@@ -33,7 +33,7 @@ TrackerValue _value({int? intValue, bool? boolValue, String? enumValue}) {
     id: 'value-1',
     trackerId: 'tracker-1',
     periodStart: epoch,
-    intValue: intValue,
+    intValue: intValue?.toDouble(),
     boolValue: boolValue,
     enumValue: enumValue,
     createdAt: epoch,

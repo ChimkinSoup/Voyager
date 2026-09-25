@@ -81,7 +81,7 @@ void main() {
         updatedAt: now,
         trackerId: 't',
         periodStart: periodStart,
-        intValue: intValue,
+        intValue: intValue.toDouble(),
       );
     }
 

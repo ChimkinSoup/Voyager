@@ -150,11 +150,19 @@ class StatisticTracker extends SoftDeletable {
 /// focus loss (the notification popover's entry row) and on save — so an
 /// unordered clamp turns a bad pair of limits into a subtree that throws every
 /// frame rather than a value that reads oddly.
-int clampToTrackerRange(int raw, StatisticTracker tracker) {
+double clampToTrackerRange(double raw, StatisticTracker tracker) {
   final cap = tracker.integerCap;
   if (cap == null) return raw;
   final lower = tracker.defaultInt;
-  return raw.clamp(math.min(lower, cap), math.max(lower, cap)).toInt();
+  return raw.clamp(math.min(lower, cap), math.max(lower, cap)).toDouble();
+}
+
+/// [value] as the analytics page shows it: whole numbers without a trailing
+/// `.0`, fractions to at most two decimal places. A negative that rounds to
+/// zero reads "0", not "-0".
+String formatTrackerNumber(double value) {
+  final text = value.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+  return text == '-0' ? '0' : text;
 }
 
 /// Builds the virtual "Journal Entries" default tracker: a daily boolean stat
@@ -312,7 +320,11 @@ class TrackerValue extends SoftDeletable {
 
   final String trackerId;
   final DateTime periodStart;
-  final int? intValue;
+
+  /// An integer tracker's reading — a decimal since schema 127. The name
+  /// predates that and is kept because it is also the Firestore field and the
+  /// SQLite column (`int_value`); renaming it would orphan synced data.
+  final double? intValue;
   final bool? boolValue;
   final String? enumValue;
 
@@ -337,7 +349,11 @@ class TrackerValue extends SoftDeletable {
           : deletedAt as DateTime?,
       trackerId: trackerId,
       periodStart: periodStart,
-      intValue: identical(intValue, _unset) ? this.intValue : intValue as int?,
+      // `num`, not `double`: a whole-number literal passes the `Object?`
+      // parameter's type check and would otherwise fail this cast at runtime.
+      intValue: identical(intValue, _unset)
+          ? this.intValue
+          : (intValue as num?)?.toDouble(),
       boolValue: identical(boolValue, _unset)
           ? this.boolValue
           : boolValue as bool?,
@@ -425,7 +441,7 @@ List<TrackerValue> streakTrackerValues(List<JournalEntry> entries) {
         id: '$kStreakTrackerId:${day.year}-${day.month}-${day.day}',
         trackerId: kStreakTrackerId,
         periodStart: day,
-        intValue: run,
+        intValue: run.toDouble(),
         createdAt: epoch,
         updatedAt: epoch,
       ),
@@ -458,7 +474,7 @@ List<TrackerValue> wordCountTrackerValues(
         id: '$kWordCountTrackerId:${day.year}-${day.month}-${day.day}',
         trackerId: kWordCountTrackerId,
         periodStart: day,
-        intValue: wordsByDay[day] ?? 0,
+        intValue: (wordsByDay[day] ?? 0).toDouble(),
         createdAt: epoch,
         updatedAt: epoch,
       ),

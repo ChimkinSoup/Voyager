@@ -13,6 +13,7 @@ import 'package:voyager/features/dev/dev_cache_status_tile.dart';
 import 'package:voyager/features/dev/dev_fps_counter_tile.dart';
 import 'package:voyager/features/dev/dev_calendar_debug_tile.dart';
 import 'package:voyager/features/dev/dev_out_of_sync_purge_tile.dart';
+import 'package:voyager/features/dev/dev_error_log_tile.dart';
 import 'package:voyager/features/dev/dev_perf_stall_log_tile.dart';
 import 'package:voyager/features/dev/dev_remote_purge_tile.dart';
 import 'package:voyager/features/dev/dev_sync_backlog_tile.dart';
@@ -206,6 +207,8 @@ class DevPage extends ConsumerWidget {
         const DevFpsCounterSection(),
         const Divider(height: 32),
         const DevBackupFailureSection(),
+        const Divider(height: 32),
+        const DevErrorLogSection(),
         const Divider(height: 32),
         const DevPerfStallLogSection(),
         const Divider(height: 32),

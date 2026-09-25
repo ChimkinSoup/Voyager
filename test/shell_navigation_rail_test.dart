@@ -91,6 +91,58 @@ void main() {
   );
 
   testWidgets(
+    'rail survives the window growing while its list is scrolled down',
+    (tester) async {
+      tester.view.physicalSize = const Size(1000, 400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            authRepositoryProvider.overrideWithValue(InMemoryAuthRepository()),
+            syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
+            weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+            settingsProvider.overrideWith(_FixedSettings.new),
+          ],
+          child: MaterialApp(home: AppShell(child: _FakeNavigationShell())),
+        ),
+      );
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+
+      final rail = tester.state<ScrollableState>(
+        find
+            .ancestor(
+              of: find.byIcon(shellDestinations.last.icon).first,
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      // Partway down, far enough from the end that the bottom fade is on —
+      // the resize has to change a fade for the listener to setState.
+      expect(rail.position.maxScrollExtent, greaterThan(40));
+      rail.position.jumpTo(rail.position.maxScrollExtent - 20);
+      await tester.pump();
+
+      // Taller than the list: the old offset is now past the end, so the
+      // position settles back from inside layout and notifies the listener
+      // there — where a setState is an assertion.
+      tester.view.physicalSize = const Size(1000, 1400);
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'rail carries an offline badge only once the backend stops answering',
     (tester) async {
       tester.view.physicalSize = const Size(1000, 800);

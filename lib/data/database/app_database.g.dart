@@ -6511,11 +6511,11 @@ class $TrackerValuesTableTable extends TrackerValuesTable
     'intValue',
   );
   @override
-  late final GeneratedColumn<int> intValue = GeneratedColumn<int>(
+  late final GeneratedColumn<double> intValue = GeneratedColumn<double>(
     'int_value',
     aliasedName,
     true,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: false,
   );
   static const VerificationMeta _boolValueMeta = const VerificationMeta(
@@ -6705,7 +6705,7 @@ class $TrackerValuesTableTable extends TrackerValuesTable
         data['${effectivePrefix}period_start'],
       )!,
       intValue: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}int_value'],
       ),
       boolValue: attachedDatabase.typeMapping.read(
@@ -6746,7 +6746,7 @@ class TrackerValuesTableData extends DataClass
   final String id;
   final String trackerId;
   final DateTime periodStart;
-  final int? intValue;
+  final double? intValue;
   final bool? boolValue;
   final String? enumValue;
   final DateTime createdAt;
@@ -6772,7 +6772,7 @@ class TrackerValuesTableData extends DataClass
     map['tracker_id'] = Variable<String>(trackerId);
     map['period_start'] = Variable<DateTime>(periodStart);
     if (!nullToAbsent || intValue != null) {
-      map['int_value'] = Variable<int>(intValue);
+      map['int_value'] = Variable<double>(intValue);
     }
     if (!nullToAbsent || boolValue != null) {
       map['bool_value'] = Variable<bool>(boolValue);
@@ -6821,7 +6821,7 @@ class TrackerValuesTableData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       trackerId: serializer.fromJson<String>(json['trackerId']),
       periodStart: serializer.fromJson<DateTime>(json['periodStart']),
-      intValue: serializer.fromJson<int?>(json['intValue']),
+      intValue: serializer.fromJson<double?>(json['intValue']),
       boolValue: serializer.fromJson<bool?>(json['boolValue']),
       enumValue: serializer.fromJson<String?>(json['enumValue']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -6837,7 +6837,7 @@ class TrackerValuesTableData extends DataClass
       'id': serializer.toJson<String>(id),
       'trackerId': serializer.toJson<String>(trackerId),
       'periodStart': serializer.toJson<DateTime>(periodStart),
-      'intValue': serializer.toJson<int?>(intValue),
+      'intValue': serializer.toJson<double?>(intValue),
       'boolValue': serializer.toJson<bool?>(boolValue),
       'enumValue': serializer.toJson<String?>(enumValue),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -6851,7 +6851,7 @@ class TrackerValuesTableData extends DataClass
     String? id,
     String? trackerId,
     DateTime? periodStart,
-    Value<int?> intValue = const Value.absent(),
+    Value<double?> intValue = const Value.absent(),
     Value<bool?> boolValue = const Value.absent(),
     Value<String?> enumValue = const Value.absent(),
     DateTime? createdAt,
@@ -6938,7 +6938,7 @@ class TrackerValuesTableCompanion
   final Value<String> id;
   final Value<String> trackerId;
   final Value<DateTime> periodStart;
-  final Value<int?> intValue;
+  final Value<double?> intValue;
   final Value<bool?> boolValue;
   final Value<String?> enumValue;
   final Value<DateTime> createdAt;
@@ -6980,7 +6980,7 @@ class TrackerValuesTableCompanion
     Expression<String>? id,
     Expression<String>? trackerId,
     Expression<DateTime>? periodStart,
-    Expression<int>? intValue,
+    Expression<double>? intValue,
     Expression<bool>? boolValue,
     Expression<String>? enumValue,
     Expression<DateTime>? createdAt,
@@ -7008,7 +7008,7 @@ class TrackerValuesTableCompanion
     Value<String>? id,
     Value<String>? trackerId,
     Value<DateTime>? periodStart,
-    Value<int?>? intValue,
+    Value<double?>? intValue,
     Value<bool?>? boolValue,
     Value<String?>? enumValue,
     Value<DateTime>? createdAt,
@@ -7045,7 +7045,7 @@ class TrackerValuesTableCompanion
       map['period_start'] = Variable<DateTime>(periodStart.value);
     }
     if (intValue.present) {
-      map['int_value'] = Variable<int>(intValue.value);
+      map['int_value'] = Variable<double>(intValue.value);
     }
     if (boolValue.present) {
       map['bool_value'] = Variable<bool>(boolValue.value);
@@ -48254,7 +48254,7 @@ class SyncWatermarksTableData extends DataClass
   final String userId;
   final String collection;
 
-  /// The next pull asks only for documents the server wrote at or after this.
+  /// The next pull asks only for documents the server wrote after this.
   final DateTime changedSince;
 
   /// When this collection was last pulled whole.
@@ -51780,7 +51780,7 @@ typedef $$TrackerValuesTableTableCreateCompanionBuilder =
       required String id,
       required String trackerId,
       required DateTime periodStart,
-      Value<int?> intValue,
+      Value<double?> intValue,
       Value<bool?> boolValue,
       Value<String?> enumValue,
       required DateTime createdAt,
@@ -51794,7 +51794,7 @@ typedef $$TrackerValuesTableTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> trackerId,
       Value<DateTime> periodStart,
-      Value<int?> intValue,
+      Value<double?> intValue,
       Value<bool?> boolValue,
       Value<String?> enumValue,
       Value<DateTime> createdAt,
@@ -51828,7 +51828,7 @@ class $$TrackerValuesTableTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get intValue => $composableBuilder(
+  ColumnFilters<double> get intValue => $composableBuilder(
     column: $table.intValue,
     builder: (column) => ColumnFilters(column),
   );
@@ -51888,7 +51888,7 @@ class $$TrackerValuesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get intValue => $composableBuilder(
+  ColumnOrderings<double> get intValue => $composableBuilder(
     column: $table.intValue,
     builder: (column) => ColumnOrderings(column),
   );
@@ -51944,7 +51944,7 @@ class $$TrackerValuesTableTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<int> get intValue =>
+  GeneratedColumn<double> get intValue =>
       $composableBuilder(column: $table.intValue, builder: (column) => column);
 
   GeneratedColumn<bool> get boolValue =>
@@ -52009,7 +52009,7 @@ class $$TrackerValuesTableTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> trackerId = const Value.absent(),
                 Value<DateTime> periodStart = const Value.absent(),
-                Value<int?> intValue = const Value.absent(),
+                Value<double?> intValue = const Value.absent(),
                 Value<bool?> boolValue = const Value.absent(),
                 Value<String?> enumValue = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -52035,7 +52035,7 @@ class $$TrackerValuesTableTableTableManager
                 required String id,
                 required String trackerId,
                 required DateTime periodStart,
-                Value<int?> intValue = const Value.absent(),
+                Value<double?> intValue = const Value.absent(),
                 Value<bool?> boolValue = const Value.absent(),
                 Value<String?> enumValue = const Value.absent(),
                 required DateTime createdAt,

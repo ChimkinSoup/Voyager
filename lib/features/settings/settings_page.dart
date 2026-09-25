@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
@@ -9,6 +10,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/constants/build_info.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/utils/key_binding.dart';
@@ -615,9 +617,20 @@ class SettingsPage extends ConsumerWidget {
               }
             },
           ),
-          const ListTile(
-            title: Text('About'),
-            subtitle: Text('Voyager — local-first journal and productivity'),
+          ListTile(
+            title: const Text('About'),
+            subtitle: Text(
+              'Voyager — local-first journal and productivity\n'
+              'Build $buildLabel',
+            ),
+            trailing: const Icon(PhosphorIconsRegular.copy, size: 18),
+            onTap: () async {
+              await Clipboard.setData(ClipboardData(text: buildLabel));
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Build info copied')),
+              );
+            },
           ),
           ListTile(
             title: const Text('Weather data'),

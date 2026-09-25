@@ -66,6 +66,13 @@ List<ShortcutHelpSection> shortcutHelpSections(AppSettings settings) {
       ],
     ),
     (
+      title: 'Finance',
+      entries: [
+        (keys: 'Ctrl+F', action: 'Search transactions'),
+        (keys: 'Esc', action: 'Close search'),
+      ],
+    ),
+    (
       title: 'Study & LeetCode sessions',
       entries: [
         (keys: 'Space', action: 'Flip the card'),

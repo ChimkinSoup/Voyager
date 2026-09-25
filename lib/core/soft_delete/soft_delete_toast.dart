@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/core/dev/error_logger.dart';
 import 'package:voyager/core/soft_delete/restore_contract.dart';
 import 'package:voyager/core/text/prose_markup.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
@@ -280,5 +281,6 @@ Future<void> _guarded(
     );
   } catch (error, stackTrace) {
     debugPrint('[soft-delete] undo failed: $error\n$stackTrace');
+    ErrorLogger.instance.record(error, stackTrace, context: 'soft-delete undo');
   }
 }

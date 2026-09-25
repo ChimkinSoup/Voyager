@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
@@ -97,7 +98,7 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
     TrackerValue? existing,
     DateTime date,
   ) async {
-    final raw = int.tryParse(_intController.text.trim());
+    final raw = double.tryParse(_intController.text.trim());
     if (raw == null) return;
     final val = _clampInt(raw);
     final now = utcNow();
@@ -145,9 +146,9 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
   /// waiting for a save/Enter that may not come.
   void _handleIntFocusChange() {
     if (_intFocusNode.hasFocus) return;
-    final raw = int.tryParse(_intController.text.trim());
+    final raw = double.tryParse(_intController.text.trim());
     if (raw == null) return;
-    final clamped = _clampInt(raw).toString();
+    final clamped = formatTrackerNumber(_clampInt(raw));
     if (_intController.text != clamped) {
       _intController.text = clamped;
     }
@@ -156,7 +157,7 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
   /// Ordered, not trusted — a tracker can carry a lower limit above its upper
   /// one and `num.clamp` throws on an inverted range, which this reaches from
   /// [_handleIntFocusChange] on plain focus loss. See [clampToTrackerRange].
-  int _clampInt(int raw) => clampToTrackerRange(raw, widget.tracker);
+  double _clampInt(double raw) => clampToTrackerRange(raw, widget.tracker);
 
   @override
   Widget build(BuildContext context) {
@@ -181,9 +182,11 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
         // wrote, or the user has an unsaved integer edit pending.
         if (!_saved && !_dirty) {
           if (widget.tracker.type == TrackerType.integer) {
-            final val = existing?.intValue ?? widget.tracker.defaultInt;
-            if (_intController.text != val.toString()) {
-              _intController.text = val.toString();
+            final val = formatTrackerNumber(
+              existing?.intValue ?? widget.tracker.defaultInt.toDouble(),
+            );
+            if (_intController.text != val) {
+              _intController.text = val;
               _intController.selection = TextSelection(
                 baseOffset: 0,
                 extentOffset: _intController.text.length,
@@ -269,7 +272,15 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
                   controller: _intController,
                   focusNode: _intFocusNode,
                   autofocus: false,
-                  keyboardType: TextInputType.number,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    signed: true,
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'^-?\d*\.?\d{0,2}'),
+                    ),
+                  ],
                   textAlign: TextAlign.left,
                   textAlignVertical: TextAlignVertical.center,
                   scrollPadding: kVoyagerFieldScrollPadding,
@@ -374,18 +385,18 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
       a.year == b.year && a.month == b.month && a.day == b.day;
 
   Future<void> _saveInt(TrackerValue? existing) async {
-    final raw = int.tryParse(_intController.text.trim());
+    final raw = double.tryParse(_intController.text.trim());
     if (raw == null) return;
     final val = _clampInt(raw);
-    if (_intController.text != val.toString()) {
-      _intController.text = val.toString();
+    if (_intController.text != formatTrackerNumber(val)) {
+      _intController.text = formatTrackerNumber(val);
     }
     await _saveValue(existing, intValue: val);
   }
 
   Future<void> _saveValue(
     TrackerValue? current, {
-    int? intValue,
+    double? intValue,
     bool? boolValue,
     String? enumValue,
   }) async {
