@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +14,7 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/features/workout/exercise_detail_view.dart';
+import 'package:voyager/features/workout/workout_exercise_picker.dart';
 import 'package:voyager/features/workout/workout_session_controller.dart';
 import 'package:voyager/features/workout/workout_units.dart';
 import 'package:voyager/features/workout/workout_wheel_pair.dart';
@@ -20,6 +23,46 @@ import 'package:voyager/features/workout/workout_wheel_pair.dart';
 /// rows to three — the body's natural height with five-row wheels and a
 /// single-segment set, measured in the real fonts.
 const double _roomyWheelsMinHeight = 722;
+
+/// Every completed set of [exerciseId] from the last finished session that
+/// had any, one list per placement in planned order — see
+/// [lastPerformedSets].
+final _lastTimeSetsProvider = Provider.autoDispose
+    .family<List<List<WorkoutSetLog>>, String>((ref, exerciseId) {
+      final logs = ref.watch(exerciseSetLogsProvider(exerciseId)).valueOrNull;
+      final sessions = ref.watch(workoutSessionsProvider).valueOrNull;
+      if (logs == null || sessions == null) return const [];
+      return lastPerformedSets(logs, sessions);
+    });
+
+/// Last time's sets for the placement of [set]: the nth placement of a
+/// movement today matches its nth placement then, or the last one when it was
+/// placed fewer times.
+List<WorkoutSetLog> _lastTimeForPlacement(
+  List<List<WorkoutSetLog>> placements,
+  List<WorkoutSetLog> logs,
+  WorkoutSetLog set,
+) {
+  if (placements.isEmpty) return const [];
+  final earlier = {
+    for (final l in logs)
+      if (l.exerciseId == set.exerciseId && l.exerciseOrder < set.exerciseOrder)
+        l.exerciseOrder,
+  };
+  return placements[math.min(earlier.length, placements.length - 1)];
+}
+
+/// What was lifted last time in the same position as the set at [position]
+/// of its exercise — the last set when there were fewer then — or null when
+/// the movement has no finished history.
+WorkoutSetLog? _lastTimeFor(List<WorkoutSetLog> lastTime, int position) {
+  if (lastTime.isEmpty || position < 0) return null;
+  return lastTime[position.clamp(0, lastTime.length - 1)];
+}
+
+String _formatLastTime(WorkoutSetLog set, WeightUnit unit) =>
+    '${unit.formatKilograms(set.weightKg)} × ${set.reps}'
+    '${set.hasDrops ? ' ↓' : ''}';
 
 /// The expanded live workout: two wheels, the set list for the current
 /// movement, and the controls to log it.
@@ -36,6 +79,19 @@ class ActiveWorkoutView extends ConsumerWidget {
 
     final set = state.currentSet;
     final exercise = state.currentExercise;
+    final lastTime = set == null
+        ? const <WorkoutSetLog>[]
+        : _lastTimeForPlacement(
+            ref.watch(_lastTimeSetsProvider(set.exerciseId)),
+            state.logs,
+            set,
+          );
+    final lastForCurrent = set == null
+        ? null
+        : _lastTimeFor(
+            lastTime,
+            state.currentExerciseSets.indexWhere((s) => s.id == set.id),
+          );
 
     return Material(
       color: theme.colorScheme.surface,
@@ -48,9 +104,17 @@ class ActiveWorkoutView extends ConsumerWidget {
           children: [
             _Header(state: state, controller: controller),
             if (set == null || exercise == null)
-              const Padding(
-                padding: EdgeInsets.all(VoyagerSpacing.xl),
-                child: Text('Every set is done — finish when you are ready.'),
+              Padding(
+                padding: const EdgeInsets.all(VoyagerSpacing.xl),
+                child: Column(
+                  children: [
+                    const Text(
+                      'Every set is done — finish when you are ready.',
+                    ),
+                    const SizedBox(height: VoyagerSpacing.md),
+                    _AddExerciseButton(controller: controller),
+                  ],
+                ),
               )
             else
               // Never scrolls: the whole set has to be in view mid-lift. When
@@ -112,6 +176,19 @@ class ActiveWorkoutView extends ConsumerWidget {
                                   ),
                                 ),
                               ),
+                            if (lastForCurrent != null)
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  top: VoyagerSpacing.xs,
+                                ),
+                                child: Text(
+                                  'Last ${_formatLastTime(lastForCurrent, unit)}',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.55),
+                                  ),
+                                ),
+                              ),
                             const SizedBox(height: VoyagerSpacing.md),
                             _DropSegmentsPanel(
                               set: set,
@@ -130,8 +207,24 @@ class ActiveWorkoutView extends ConsumerWidget {
                               state: state,
                               unit: unit,
                               controller: controller,
+                              lastTime: lastTime,
                             ),
-                            const SizedBox(height: VoyagerSpacing.lg),
+                            TextButton.icon(
+                              onPressed:
+                                  state.currentExerciseSets.every(
+                                    (s) => s.completed,
+                                  )
+                                  ? null
+                                  : () => controller.skipExercise(
+                                      set.exerciseOrder,
+                                    ),
+                              icon: const Icon(
+                                PhosphorIconsRegular.skipForward,
+                                size: 14,
+                              ),
+                              label: const Text('Skip exercise'),
+                            ),
+                            const SizedBox(height: VoyagerSpacing.sm),
                             GlassButton(
                               icon: const Icon(
                                 PhosphorIconsFill.check,
@@ -141,13 +234,11 @@ class ActiveWorkoutView extends ConsumerWidget {
                               color: theme.colorScheme.primary,
                               onPressed: controller.completeCurrentSet,
                             ),
-                            if (state.sessionExercises.length > 1) ...[
-                              const SizedBox(height: VoyagerSpacing.lg),
-                              _ExerciseStrip(
-                                state: state,
-                                controller: controller,
-                              ),
-                            ],
+                            const SizedBox(height: VoyagerSpacing.lg),
+                            _ExerciseStrip(
+                              state: state,
+                              controller: controller,
+                            ),
                           ],
                         ),
                       ),
@@ -364,11 +455,15 @@ class _SetRow extends StatelessWidget {
     required this.state,
     required this.unit,
     required this.controller,
+    required this.lastTime,
   });
 
   final ActiveWorkoutState state;
   final WeightUnit unit;
   final WorkoutSessionController controller;
+
+  /// Last session's sets of this movement, for the hint on sets still to do.
+  final List<WorkoutSetLog> lastTime;
 
   @override
   Widget build(BuildContext context) {
@@ -434,6 +529,15 @@ class _SetRow extends StatelessWidget {
                           : theme.colorScheme.onSurface,
                     ),
                   ),
+                  if (!set.completed && _lastTimeFor(lastTime, index) != null)
+                    Text(
+                      ' · last ${_formatLastTime(_lastTimeFor(lastTime, index)!, unit)}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(
+                          alpha: 0.55,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -529,7 +633,8 @@ class _DropSegmentsPanel extends StatelessWidget {
   }
 }
 
-/// Jump between the movements planned for this session.
+/// Jump between this session's movements, drag one to reorder them, or add
+/// one that wasn't planned. Reordering and adding change today only.
 class _ExerciseStrip extends StatelessWidget {
   const _ExerciseStrip({required this.state, required this.controller});
 
@@ -541,57 +646,89 @@ class _ExerciseStrip extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = VoyagerColors.of(context);
     final currentOrder = state.currentSet?.exerciseOrder;
+    final placements = state.sessionExercises;
 
     return SizedBox(
       height: 36,
-      child: ListView(
+      child: ReorderableListView(
         scrollDirection: Axis.horizontal,
+        // A press is a jump, so a drag has to be held for first.
+        buildDefaultDragHandles: false,
+        onReorderItem: controller.moveExercise,
+        footer: _AddExerciseButton(controller: controller),
         children: [
-          for (final (:order, :exercise) in state.sessionExercises)
-            Padding(
-              padding: const EdgeInsets.only(right: VoyagerSpacing.sm),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
-                onTap: () {
-                  // Land on the first set of that exercise still to be done,
-                  // falling back to its first set once it's all logged.
-                  final sets = state.logs.where(
-                    (l) => l.exerciseOrder == order,
-                  );
-                  if (sets.isEmpty) return;
-                  final target = sets.firstWhere(
-                    (l) => !l.completed,
-                    orElse: () => sets.first,
-                  );
-                  controller.focusSet(target.id);
-                },
-                child: Container(
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: VoyagerSpacing.md,
-                  ),
-                  decoration: BoxDecoration(
-                    color: order == currentOrder
-                        ? theme.colorScheme.primary.withValues(alpha: 0.14)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(
-                      VoyagerTheme.fieldRadius,
+          for (final (index, (:order, :exercise)) in placements.indexed)
+            ReorderableDelayedDragStartListener(
+              key: ValueKey(order),
+              index: index,
+              child: Padding(
+                padding: const EdgeInsets.only(right: VoyagerSpacing.sm),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+                  onTap: () {
+                    // Land on the first set of that exercise still to be done,
+                    // falling back to its first set once it's all logged.
+                    final sets = state.logs.where(
+                      (l) => l.exerciseOrder == order,
+                    );
+                    if (sets.isEmpty) return;
+                    final target = sets.firstWhere(
+                      (l) => !l.completed,
+                      orElse: () => sets.first,
+                    );
+                    controller.focusSet(target.id);
+                  },
+                  child: Tooltip(
+                    message: 'Hold and drag to reorder',
+                    waitDuration: const Duration(milliseconds: 800),
+                    child: Container(
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: VoyagerSpacing.md,
+                      ),
+                      decoration: BoxDecoration(
+                        color: order == currentOrder
+                            ? theme.colorScheme.primary.withValues(alpha: 0.14)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(
+                          VoyagerTheme.fieldRadius,
+                        ),
+                        border: Border.all(
+                          color: order == currentOrder
+                              ? theme.colorScheme.primary.withValues(alpha: 0.6)
+                              : colors.hairline,
+                        ),
+                      ),
+                      child: Text(
+                        exercise.name,
+                        style: theme.textTheme.labelMedium,
+                      ),
                     ),
-                    border: Border.all(
-                      color: order == currentOrder
-                          ? theme.colorScheme.primary.withValues(alpha: 0.6)
-                          : colors.hairline,
-                    ),
-                  ),
-                  child: Text(
-                    exercise.name,
-                    style: theme.textTheme.labelMedium,
                   ),
                 ),
               ),
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Adds a movement from the library to today's session only.
+class _AddExerciseButton extends StatelessWidget {
+  const _AddExerciseButton({required this.controller});
+
+  final WorkoutSessionController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      onPressed: () async {
+        final exercise = await showExercisePicker(context);
+        if (exercise != null) await controller.addExercise(exercise);
+      },
+      icon: const Icon(PhosphorIconsRegular.plus, size: 14),
+      label: const Text('Exercise'),
     );
   }
 }

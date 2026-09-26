@@ -280,23 +280,12 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
     required int dayIndex,
     required DateTime date,
   }) async {
-    final entries = await _repo.listPlanEntries(plan.id);
-    final exercisesById = {
-      for (final e in await _repo.listExercises()) e.id: e,
-    };
-    // An entry whose movement is gone (deleted on another device before its
-    // tombstone arrived) has no target to materialise from, so it is skipped
-    // rather than logged as an unnamed 0 × 0.
-    final dayEntries =
-        entries
-            .where(
-              (e) =>
-                  e.dayIndex == dayIndex &&
-                  exercisesById.containsKey(e.exerciseId),
-            )
-            .toList()
-          ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
-    if (dayEntries.isEmpty) return false;
+    final planned = await plannedExercisesForDay(
+      _repo,
+      planId: plan.id,
+      dayIndex: dayIndex,
+    );
+    if (planned.isEmpty) return false;
 
     final now = utcNow();
     final session = WorkoutSession(
@@ -308,62 +297,15 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
       createdAt: now,
       updatedAt: now,
     );
-
-    final logs = <WorkoutSetLog>[];
-    for (var order = 0; order < dayEntries.length; order++) {
-      final entry = dayEntries[order];
-      final exercise = exercisesById[entry.exerciseId]!;
-      if (exercise.isCustomPrescription) {
-        for (
-          var setIndex = 0;
-          setIndex < exercise.setPrescriptions.length;
-          setIndex++
-        ) {
-          final prescription = exercise.setPrescriptions[setIndex];
-          final top = prescription.top;
-          final reps = top.reps.clamp(1, kMaxReps);
-          final drops = prescription.drops;
-          logs.add(
-            WorkoutSetLog(
-              id: newId(),
-              sessionId: session.id,
-              exerciseId: entry.exerciseId,
-              exerciseOrder: order,
-              setIndex: setIndex,
-              weightKg: top.weightKg,
-              reps: reps,
-              plannedWeightKg: top.weightKg,
-              plannedReps: reps,
-              dropSegments: drops,
-              plannedDropSegments: drops,
-              createdAt: now,
-              updatedAt: now,
-            ),
-          );
-        }
-      } else {
-        // The reps wheel bottoms out at 1, so a 0 here showed a rep that was
-        // then logged as none.
-        final reps = exercise.targetReps.clamp(1, kMaxReps);
-        for (var setIndex = 0; setIndex < exercise.targetSets; setIndex++) {
-          logs.add(
-            WorkoutSetLog(
-              id: newId(),
-              sessionId: session.id,
-              exerciseId: entry.exerciseId,
-              exerciseOrder: order,
-              setIndex: setIndex,
-              weightKg: exercise.targetWeightKg,
-              reps: reps,
-              plannedWeightKg: exercise.targetWeightKg,
-              plannedReps: reps,
-              createdAt: now,
-              updatedAt: now,
-            ),
-          );
-        }
-      }
-    }
+    final logs = [
+      for (final (order, exercise) in planned.indexed)
+        ...materialiseSetLogs(
+          sessionId: session.id,
+          exercise: exercise,
+          order: order,
+          now: now,
+        ),
+    ];
 
     await _repo.createSessionWithLogs(session, logs);
     _pushSession(session);
@@ -579,15 +521,7 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
           .sublist(target)
           .where((s) => !s.completed)
           .toList();
-      // The tombstones are uploaded too, or every other device — and this
-      // one after a re-pull — brings the removed sets back as incomplete.
-      final tombstones = <WorkoutSetLog>[];
-      for (final set in removable) {
-        await _repo.softDeleteSetLog(set.id);
-        final tombstone = await _repo.getSetLog(set.id);
-        if (tombstone != null) tombstones.add(tombstone);
-      }
-      _pushSetLogs(tombstones);
+      await _removeSets(removable);
       final removedIds = {for (final s in removable) s.id};
       final remaining = [
         for (final l in state.logs)
@@ -614,6 +548,121 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
       );
     }
     _invalidateSets(current.exerciseId);
+  }
+
+  /// Adds [exercise] after everything else in this session, with the sets its
+  /// target prescribes, and moves the wheels onto it. The plan is untouched.
+  Future<void> addExercise(Exercise exercise) async {
+    await _flushPending();
+    final session = state.session;
+    if (session == null) return;
+    final order = state.logs.isEmpty
+        ? 0
+        : state.logs.map((l) => l.exerciseOrder).reduce(math.max) + 1;
+    final added = materialiseSetLogs(
+      sessionId: session.id,
+      exercise: exercise,
+      order: order,
+      now: utcNow(),
+    );
+    if (added.isEmpty) return;
+    await _repo.upsertSetLogsBatch(added);
+    _pushSetLogs(added);
+    _sortIntoLogs(added);
+    state = state.copyWith(
+      exercisesById: {...state.exercisesById, exercise.id: exercise},
+      cursor: state.logs.indexWhere((l) => l.id == added.first.id),
+      segmentIndex: 0,
+    );
+    _invalidateSets(exercise.id);
+  }
+
+  /// Takes the unfinished sets of the placement at [order] out of this
+  /// session. Sets already logged stay, so skipping the rest of an exercise
+  /// part-way through keeps what was lifted. The plan is untouched.
+  Future<void> skipExercise(int order) async {
+    await _flushPending();
+    if (state.session == null) return;
+    final removable = [
+      for (final l in state.logs)
+        if (l.exerciseOrder == order && !l.completed) l,
+    ];
+    if (removable.isEmpty) return;
+    await _removeSets(removable);
+    final removedIds = {for (final s in removable) s.id};
+    final remaining = [
+      for (final l in state.logs)
+        if (!removedIds.contains(l.id)) l,
+    ];
+    final kept = remaining.indexWhere((l) => l.id == state.currentSet?.id);
+    state = state.copyWith(
+      logs: remaining,
+      cursor: kept == -1 ? _firstIncompleteIndex(remaining) : kept,
+      segmentIndex: kept == -1 ? 0 : state.segmentIndex,
+    );
+    _invalidateSets(removable.first.exerciseId);
+  }
+
+  /// Moves the placement at position [from] among this session's exercises to
+  /// position [to], renumbering every placement's order to match. The plan is
+  /// untouched.
+  Future<void> moveExercise(int from, int to) async {
+    await _flushPending();
+    // The positions the exercise strip shows.
+    final shown = [for (final p in state.sessionExercises) p.order];
+    if (from == to ||
+        from < 0 ||
+        to < 0 ||
+        from >= shown.length ||
+        to >= shown.length) {
+      return;
+    }
+    shown.insert(to, shown.removeAt(from));
+    // A placement the strip leaves out (its movement isn't loaded) keeps its
+    // slot, and every placement is renumbered, so no two share an order.
+    final visible = shown.toSet();
+    final moved = shown.iterator;
+    final orders = [
+      for (final order in {for (final l in state.logs) l.exerciseOrder})
+        if (visible.contains(order)) (moved..moveNext()).current else order,
+    ];
+    final renumbered = {
+      for (final (index, order) in orders.indexed) order: index,
+    };
+    final changed = <WorkoutSetLog>[];
+    final logs = <WorkoutSetLog>[];
+    for (final l in state.logs) {
+      final order = renumbered[l.exerciseOrder] ?? l.exerciseOrder;
+      if (order == l.exerciseOrder) {
+        logs.add(l);
+        continue;
+      }
+      final moved = l.copyWith(exerciseOrder: order);
+      changed.add(moved);
+      logs.add(moved);
+    }
+    logs.sort(_bySessionPosition);
+    final currentId = state.currentSet?.id;
+    state = state.copyWith(
+      logs: logs,
+      cursor: logs.indexWhere((l) => l.id == currentId),
+    );
+    await _repo.upsertSetLogsBatch(changed);
+    _pushSetLogs(changed);
+    final sessionId = state.session?.id;
+    if (sessionId != null) _ref.invalidate(workoutSetLogsProvider(sessionId));
+  }
+
+  /// Tombstones [sets] and uploads the tombstones — or every other device,
+  /// and this one after a re-pull, brings them back as incomplete.
+  Future<void> _removeSets(List<WorkoutSetLog> sets) async {
+    final tombstones = <WorkoutSetLog>[];
+    for (final set in sets) {
+      await _repo.softDeleteSetLog(set.id);
+      final tombstone = await _repo.getSetLog(set.id);
+      if (tombstone != null) tombstones.add(tombstone);
+    }
+    _pushSetLogs(tombstones);
   }
 
   void startRest(int seconds) {
@@ -679,6 +728,12 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
     _pendingLogs.clear();
     state = const ActiveWorkoutState();
     try {
+      // Ended as well as deleted, so bringing it back from the trash restores
+      // a finished workout rather than a second live one.
+      final current = await _repo.getSession(session.id);
+      if (current != null && current.isActive) {
+        await _repo.upsertSession(current.copyWith(endedAt: utcNow()));
+      }
       await _repo.softDeleteSession(session.id);
       final deleted = await _repo.getSession(session.id);
       if (deleted != null) _pushSession(deleted);
@@ -708,12 +763,13 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
   }
 
   void _sortIntoLogs(List<WorkoutSetLog> added) {
-    final logs = [...state.logs, ...added]
-      ..sort((a, b) {
-        final byExercise = a.exerciseOrder.compareTo(b.exerciseOrder);
-        return byExercise != 0 ? byExercise : a.setIndex.compareTo(b.setIndex);
-      });
+    final logs = [...state.logs, ...added]..sort(_bySessionPosition);
     state = state.copyWith(logs: logs);
+  }
+
+  static int _bySessionPosition(WorkoutSetLog a, WorkoutSetLog b) {
+    final byExercise = a.exerciseOrder.compareTo(b.exerciseOrder);
+    return byExercise != 0 ? byExercise : a.setIndex.compareTo(b.setIndex);
   }
 
   void _pushSession(WorkoutSession session) {
@@ -748,6 +804,76 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
     _persistTimer?.cancel();
     super.dispose();
   }
+}
+
+/// The movements planned on [dayIndex] of [planId], in planned order.
+///
+/// An entry whose movement is gone (deleted on another device before its
+/// tombstone arrived) has no target to materialise from, so it is skipped
+/// rather than logged as an unnamed 0 × 0.
+Future<List<Exercise>> plannedExercisesForDay(
+  WorkoutRepository repo, {
+  required String planId,
+  required int dayIndex,
+}) async {
+  final entries = await repo.listPlanEntries(planId);
+  final exercisesById = {for (final e in await repo.listExercises()) e.id: e};
+  final dayEntries =
+      entries
+          .where(
+            (e) =>
+                e.dayIndex == dayIndex &&
+                exercisesById.containsKey(e.exerciseId),
+          )
+          .toList()
+        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  return [for (final e in dayEntries) exercisesById[e.exerciseId]!];
+}
+
+/// One set log per set [exercise] prescribes, as placement [order] of
+/// [sessionId], with the planned numbers copied in so the wheels have
+/// something to default to.
+List<WorkoutSetLog> materialiseSetLogs({
+  required String sessionId,
+  required Exercise exercise,
+  required int order,
+  required DateTime now,
+}) {
+  WorkoutSetLog log(int setIndex, SetSegment top, List<SetSegment> drops) {
+    // The reps wheel bottoms out at 1, so a 0 here showed a rep that was
+    // then logged as none.
+    final reps = top.reps.clamp(1, kMaxReps);
+    return WorkoutSetLog(
+      id: newId(),
+      sessionId: sessionId,
+      exerciseId: exercise.id,
+      exerciseOrder: order,
+      setIndex: setIndex,
+      weightKg: top.weightKg,
+      reps: reps,
+      plannedWeightKg: top.weightKg,
+      plannedReps: reps,
+      dropSegments: drops,
+      plannedDropSegments: drops,
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
+  if (exercise.isCustomPrescription) {
+    return [
+      for (final (setIndex, prescription) in exercise.setPrescriptions.indexed)
+        log(setIndex, prescription.top, prescription.drops),
+    ];
+  }
+  final top = SetSegment(
+    weightKg: exercise.targetWeightKg,
+    reps: exercise.targetReps,
+  );
+  return [
+    for (var setIndex = 0; setIndex < exercise.targetSets; setIndex++)
+      log(setIndex, top, const []),
+  ];
 }
 
 final workoutSessionControllerProvider =

@@ -17,6 +17,7 @@ import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/features/workout/workout_actions.dart';
 import 'package:voyager/features/workout/workout_day_column.dart';
 import 'package:voyager/features/workout/workout_exercise_panel.dart';
+import 'package:voyager/features/workout/workout_history.dart';
 import 'package:voyager/features/workout/workout_session_controller.dart';
 
 /// Which plan the planner is showing. Independent of which plan is *active*:
@@ -294,6 +295,7 @@ class _PlannerToolbar extends ConsumerWidget {
           _CycleAnchorControl(plan: plan),
         ],
         const AddExerciseButton(),
+        const WorkoutHistoryButton(),
         _StartTodayButton(plan: plan),
       ],
     );

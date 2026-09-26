@@ -106,47 +106,35 @@ either. Minor; the same three widgets would cover both.
 
 ### Workout (explicitly tested)
 The planner, live session and exercise detail work well together. Gaps:
-- **No session history.** A finished session can't be seen as a whole, edited or
+- ~~**No session history.** A finished session can't be seen as a whole, edited or
   deleted. Only per-exercise history exists (exercise detail sparkline and heatmap).
-  A mis-logged set from last week can't be fixed.
-- **Can't log a past workout.** Every start records today (by design, see AUDIT.md
-  business rules), so a workout done without the app can't be backfilled.
-- **Can't change the session while it's live.** The controller supports
+  A mis-logged set from last week can't be fixed.~~ **Done (2026-09-26):** History
+  in the planner toolbar lists finished workouts, newest day first. Opening one
+  edits its date and each set's weight, reps, drops and done tick, adds or removes
+  sets and exercises, or deletes it to the trash (with Undo).
+- ~~**Can't log a past workout.** Every start records today (by design, see AUDIT.md
+  business rules), so a workout done without the app can't be backfilled.~~
+  **Done (2026-09-26):** History → Log past workout takes a date and a plan day and
+  creates a finished session with that day's sets unticked, open in the editor.
+  Live starts still record today.
+- ~~**Can't change the session while it's live.** The controller supports
   focus/update/complete/uncomplete/set count/drops
   (`workout_session_controller.dart:376-671`), but not adding an unplanned exercise,
-  skipping one, or reordering.
-- **Weight × reps only.** No timed sets (plank), distance/cardio, or "bodyweight +
-  added weight". `WorkoutSetLog` has only `weightKg` and `reps`.
-- **No notes or effort.** No session note, per-set note, or RPE/RIR. `WorkoutSession`
-  has no free-text field.
-- **No PRs.** Nothing flags a new best weight, reps-at-weight or estimated 1RM, and
-  there's no progression suggestion (for example, "all sets hit target, so +2.5 lb
-  next time").
-- **Exactly two plans.** One weekly plan and one split (`workout_page.dart:133-139`).
-  Switching programs means rebuilding the plan. That's fine for now; worth noting.
-- **Sets prefill from the plan target, not from last time.** Showing "last: 185×8"
-  beside each set is the most useful number mid-workout.
+  skipping one, or reordering.~~ **Done (2026-09-26):** the live view adds an
+  exercise from the library, skips the current one (its logged sets stay), and
+  reorders by holding and dragging a chip in the exercise strip. None of it touches
+  the plan.
+- ~~**Sets prefill from the plan target, not from last time.** Showing "last: 185×8"
+  beside each set is the most useful number mid-workout.~~ **Done (2026-09-26):**
+  "Last 185 × 8" sits under the wheels, and each set still to do shows the same set
+  from the last finished session. The wheels still start at the plan target.
 
 ### Todo
 - ~~No completion timestamp (P1 above).~~ Done; a "done this week" count or done
   list can now be built on the completion log.
 
-### Analytics / trackers
-- Tracker types are integer, boolean and enum (`lib/domain/models/enums.dart:1`).
-  There's no **decimal/duration** type, so "hours slept = 7.5" can't be logged, though
-  PLAN.md names hours slept and hours studied.
-- No note per logged value (e.g. *why* energy was 3).
-
-### Finance
-- The ledger filters by tag only, with no text or amount search.
-
-### Journal
-- No export of a journal or entry range to Markdown or PDF. The only export is the full
-  JSON backup.
-
 ### Study / LeetCode
 - ~~No due count in the inbox (above).~~ Done.
-- Study has no retention or forecast stats
 
 ### Settings
 - ~~About has no version number (`settings_page.dart:639`), and `pubspec.yaml` is still
@@ -212,4 +200,4 @@ The planner, live session and exercise detail work well together. Gaps:
 3. ~~`completedAt` on tasks (P1). Starts collecting history now.~~ Done.
 4. ~~Trash view or honest delete copy (P1).~~ Done.
 5. Launch at login, plus auto-backup with a pre-migration snapshot.
-6. Then pick from P2 by taste. My pick: workout session history.
+6. Then pick from P2 by taste. ~~My pick: workout session history.~~ Done.

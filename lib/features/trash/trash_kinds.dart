@@ -1,8 +1,11 @@
+import 'package:intl/intl.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
+import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/text/prose_markup.dart';
+import 'package:voyager/domain/models/workout_models.dart';
 
 /// The page a deleted item came from — the trash's filter chips.
 enum TrashFeature {
@@ -533,6 +536,32 @@ final _kinds = <TrashKind>[
     collection: FirestoreCollections.workoutPlanEntries,
     feature: TrashFeature.workout,
     noun: 'plan entry',
+    listed: false,
+  ),
+  // Titled by the day it counts toward; a workout has no name of its own.
+  TrashKind(
+    collection: FirestoreCollections.workoutSessions,
+    feature: TrashFeature.workout,
+    noun: 'workout',
+    containerLabel: 'Workout',
+    title: (data) {
+      final date = parseFirestoreDate(data['date']);
+      return date == null
+          ? null
+          : DateFormat.yMMMEd().format(workoutCalendarDate(date));
+    },
+    children: const [
+      TrashChild(
+        FirestoreCollections.workoutSetLogs,
+        ['sessionId'],
+        counted: ('set', 'sets'),
+      ),
+    ],
+  ),
+  const TrashKind(
+    collection: FirestoreCollections.workoutSetLogs,
+    feature: TrashFeature.workout,
+    noun: 'set',
     listed: false,
   ),
   TrashKind(

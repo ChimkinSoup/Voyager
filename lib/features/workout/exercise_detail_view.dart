@@ -20,6 +20,7 @@ import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/features/workout/workout_segment_fields.dart';
 import 'package:voyager/features/workout/workout_units.dart';
 
 /// How many performed days the volume heatmap shows. Days the exercise wasn't
@@ -351,7 +352,7 @@ class _SetsSectionState extends State<_SetsSection> {
   /// Matched to the form-cues field below so the card has one save rhythm.
   static const _saveDebounce = Duration(milliseconds: 600);
 
-  late final List<List<_SegmentFields>> _sets = [
+  late final List<List<SegmentFields>> _sets = [
     for (final set
         in widget.exercise.isCustomPrescription
             ? widget.exercise.setPrescriptions
@@ -395,8 +396,8 @@ class _SetsSectionState extends State<_SetsSection> {
     super.dispose();
   }
 
-  _SegmentFields _newFields(SetSegment segment) {
-    final fields = _SegmentFields(segment, widget.unit);
+  SegmentFields _newFields(SetSegment segment) {
+    final fields = SegmentFields(segment, widget.unit);
     // Leaving a field rewrites it to what is stored — a typed 99 reps lands as
     // $kMaxReps, and the field should say so.
     void onBlur() {
@@ -415,7 +416,7 @@ class _SetsSectionState extends State<_SetsSection> {
       SetPrescription(segments: [for (final fields in set) fields.segment]),
   ];
 
-  void _onEdited(_SegmentFields fields) {
+  void _onEdited(SegmentFields fields) {
     fields.parse(widget.unit);
     _saveTimer?.cancel();
     _saveTimer = Timer(_saveDebounce, _flush);
@@ -479,7 +480,7 @@ class _SetsSectionState extends State<_SetsSection> {
 
   /// The removed row's fields are still mounted until the rebuild lands, so
   /// their controllers and focus nodes outlive it by a frame.
-  void _disposeAfterFrame(List<_SegmentFields> removed) {
+  void _disposeAfterFrame(List<SegmentFields> removed) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       for (final fields in removed) {
         fields.dispose();
@@ -511,7 +512,7 @@ class _SetsSectionState extends State<_SetsSection> {
                       style: muted,
                     ),
                   ),
-                  _SegmentNumberField(
+                  SegmentNumberField(
                     controller: _sets[i][seg].weight,
                     focusNode: _sets[i][seg].weightFocus,
                     onChanged: (_) => _onEdited(_sets[i][seg]),
@@ -528,7 +529,7 @@ class _SetsSectionState extends State<_SetsSection> {
                     ),
                     child: Text('×', style: muted),
                   ),
-                  _SegmentNumberField(
+                  SegmentNumberField(
                     controller: _sets[i][seg].reps,
                     focusNode: _sets[i][seg].repsFocus,
                     onChanged: (_) => _onEdited(_sets[i][seg]),
@@ -574,125 +575,6 @@ class _SetsSectionState extends State<_SetsSection> {
           onPressed: _sets.length >= kMaxSets ? null : _addSet,
         ),
       ],
-    );
-  }
-}
-
-/// One weight × reps slice's fields and the numbers they stand for.
-class _SegmentFields {
-  _SegmentFields(SetSegment segment, WeightUnit unit)
-    : weightKg = segment.weightKg,
-      repsValue = segment.reps,
-      weight = TextEditingController(
-        text: segment.weightKg > 0
-            ? unit.formatKilograms(segment.weightKg)
-            : '',
-      ),
-      reps = TextEditingController(text: '${segment.reps}');
-
-  double weightKg;
-  int repsValue;
-  final TextEditingController weight;
-  final TextEditingController reps;
-  final weightFocus = FocusNode();
-  final repsFocus = FocusNode();
-
-  SetSegment get segment => SetSegment(weightKg: weightKg, reps: repsValue);
-
-  /// Reads the fields into the numbers. Empty weight means "no planned load"
-  /// (bodyweight), which is a real answer and stores as zero; unparseable text
-  /// keeps the last good number.
-  ///
-  /// Storage is kilograms but the field shows the user's unit rounded to a
-  /// tenth, so parsing that text back lands a hair off the kilograms it was
-  /// formatted from — 60 kg displays as 132.3 lb and returns as 60.01. If the
-  /// text still reads the same, the stored number is kept exactly, or simply
-  /// tabbing through the card would drift it.
-  void parse(WeightUnit unit) {
-    repsValue = (int.tryParse(reps.text.trim()) ?? repsValue).clamp(
-      1,
-      kMaxReps,
-    );
-    final text = weight.text.trim();
-    final display = text.isEmpty ? 0.0 : double.tryParse(text);
-    if (display == null) return;
-    final parsed = unit.toKilograms(display.clamp(0, unit.max).toDouble());
-    if (unit.formatKilograms(parsed) != unit.formatKilograms(weightKg)) {
-      weightKg = parsed;
-    }
-  }
-
-  /// Rewrites both fields to the numbers they stand for.
-  void normalize(WeightUnit unit) {
-    parse(unit);
-    _setText(weight, weightKg > 0 ? unit.formatKilograms(weightKg) : '');
-    _setText(reps, '$repsValue');
-  }
-
-  static void _setText(TextEditingController controller, String text) {
-    if (controller.text == text) return;
-    controller.value = TextEditingValue(
-      text: text,
-      selection: TextSelection.collapsed(offset: text.length),
-    );
-  }
-
-  void dispose() {
-    weight.dispose();
-    reps.dispose();
-    weightFocus.dispose();
-    repsFocus.dispose();
-  }
-}
-
-class _SegmentNumberField extends StatelessWidget {
-  const _SegmentNumberField({
-    required this.controller,
-    required this.focusNode,
-    required this.onChanged,
-    required this.formatters,
-    required this.width,
-    this.suffixText,
-    this.hintText,
-  });
-
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final ValueChanged<String> onChanged;
-  final List<TextInputFormatter> formatters;
-  final double width;
-  final String? suffixText;
-  final String? hintText;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SizedBox(
-      width: width,
-      child: VoyagerTextField(
-        controller: controller,
-        focusNode: focusNode,
-        onChanged: onChanged,
-        onSubmitted: (_) => focusNode.unfocus(),
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        textInputAction: TextInputAction.next,
-        inputFormatters: formatters,
-        style: theme.textTheme.bodyMedium?.copyWith(
-          fontFeatures: const [FontFeature.tabularFigures()],
-        ),
-        decoration: InputDecoration(
-          isDense: true,
-          hintText: hintText,
-          suffixText: suffixText,
-          suffixStyle: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 10,
-            vertical: 8,
-          ),
-        ),
-      ),
     );
   }
 }

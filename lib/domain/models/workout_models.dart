@@ -682,6 +682,7 @@ class WorkoutSetLog extends SoftDeletable {
       dropSegments.fold<double>(0, (sum, s) => sum + s.weightKg * s.reps);
 
   WorkoutSetLog copyWith({
+    int? exerciseOrder,
     double? weightKg,
     int? reps,
     List<SetSegment>? dropSegments,
@@ -701,7 +702,7 @@ class WorkoutSetLog extends SoftDeletable {
       deletedAt: deletedAt ?? this.deletedAt,
       sessionId: sessionId,
       exerciseId: exerciseId,
-      exerciseOrder: exerciseOrder,
+      exerciseOrder: exerciseOrder ?? this.exerciseOrder,
       setIndex: setIndex,
       weightKg: weightKg ?? this.weightKg,
       reps: reps ?? this.reps,
@@ -841,4 +842,58 @@ List<ExerciseDaySummary> buildExerciseHistory(
         );
       }(),
   ];
+}
+
+/// The completed sets from the most recent finished session among [sessions]
+/// that holds any of [logs] (one movement's sets), one list per placement in
+/// the order they were planned — what "last time" means beside a set being
+/// lifted now. A movement placed twice that day gives two lists, so each
+/// placement can be matched with its own.
+///
+/// Only finished sessions count, so the live one never answers for itself.
+/// Latest is by calendar date, then start time: a backfilled session is
+/// started today but belongs to the day it was logged for.
+List<List<WorkoutSetLog>> lastPerformedSets(
+  List<WorkoutSetLog> logs,
+  List<WorkoutSession> sessions,
+) {
+  final finished = {
+    for (final s in sessions)
+      if (s.endedAt != null && s.deletedAt == null) s.id: s,
+  };
+  bool counts(WorkoutSetLog log) =>
+      log.completed &&
+      log.deletedAt == null &&
+      finished.containsKey(log.sessionId);
+
+  WorkoutSession? latest;
+  for (final log in logs) {
+    if (!counts(log)) continue;
+    final session = finished[log.sessionId]!;
+    if (latest == null) {
+      latest = session;
+      continue;
+    }
+    final byDate = workoutCalendarDate(
+      session.date,
+    ).compareTo(workoutCalendarDate(latest.date));
+    if (byDate > 0 ||
+        (byDate == 0 && session.startedAt.isAfter(latest.startedAt))) {
+      latest = session;
+    }
+  }
+  if (latest == null) return const [];
+  final sets =
+      [
+        for (final log in logs)
+          if (log.sessionId == latest.id && counts(log)) log,
+      ]..sort((a, b) {
+        final byExercise = a.exerciseOrder.compareTo(b.exerciseOrder);
+        return byExercise != 0 ? byExercise : a.setIndex.compareTo(b.setIndex);
+      });
+  final byPlacement = <int, List<WorkoutSetLog>>{};
+  for (final set in sets) {
+    (byPlacement[set.exerciseOrder] ??= []).add(set);
+  }
+  return byPlacement.values.toList();
 }

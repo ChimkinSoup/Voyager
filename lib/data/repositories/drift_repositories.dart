@@ -6232,13 +6232,21 @@ class DriftWorkoutRepository implements WorkoutRepository {
 
   @override
   Future<void> softDeleteSession(String id) async {
-    await _softDeleteRow(_db.workoutSessionsTable, id);
+    // One instant for the session and its sets, so the trash can tell the sets
+    // this delete took from ones removed from the session earlier.
+    final now = utcNow();
+    await _softDeleteRow(_db.workoutSessionsTable, id, at: now);
     final logs = await (_db.select(
       _db.workoutSetLogsTable,
     )..where((t) => t.sessionId.equals(id))).get();
+    var took = false;
     for (final log in logs) {
       if (log.deletedAt != null) continue;
-      await softDeleteSetLog(log.id);
+      await _softDeleteRow(_db.workoutSetLogsTable, log.id, at: now);
+      took = true;
+    }
+    if (took) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.workoutSetLogs);
     }
     _syncActivity?.recordLocalSave(FirestoreCollections.workoutSessions);
   }
