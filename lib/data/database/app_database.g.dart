@@ -3003,6 +3003,17 @@ class $TodoTasksTableTable extends TodoTasksTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _completedAtMeta = const VerificationMeta(
+    'completedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> completedAt = GeneratedColumn<DateTime>(
+    'completed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _starredMeta = const VerificationMeta(
     'starred',
   );
@@ -3119,6 +3130,7 @@ class $TodoTasksTableTable extends TodoTasksTable
     notes,
     dueDate,
     completed,
+    completedAt,
     starred,
     sortOrder,
     dueDateSetAt,
@@ -3187,6 +3199,15 @@ class $TodoTasksTableTable extends TodoTasksTable
       context.handle(
         _completedMeta,
         completed.isAcceptableOrUnknown(data['completed']!, _completedMeta),
+      );
+    }
+    if (data.containsKey('completed_at')) {
+      context.handle(
+        _completedAtMeta,
+        completedAt.isAcceptableOrUnknown(
+          data['completed_at']!,
+          _completedAtMeta,
+        ),
       );
     }
     if (data.containsKey('starred')) {
@@ -3290,6 +3311,10 @@ class $TodoTasksTableTable extends TodoTasksTable
         DriftSqlType.bool,
         data['${effectivePrefix}completed'],
       )!,
+      completedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}completed_at'],
+      ),
       starred: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}starred'],
@@ -3344,6 +3369,9 @@ class TodoTasksTableData extends DataClass
   final String? notes;
   final DateTime? dueDate;
   final bool completed;
+
+  /// See [TodoTask.completedAt].
+  final DateTime? completedAt;
   final bool starred;
   final int sortOrder;
   final DateTime? dueDateSetAt;
@@ -3369,6 +3397,7 @@ class TodoTasksTableData extends DataClass
     this.notes,
     this.dueDate,
     required this.completed,
+    this.completedAt,
     required this.starred,
     required this.sortOrder,
     this.dueDateSetAt,
@@ -3395,6 +3424,9 @@ class TodoTasksTableData extends DataClass
       map['due_date'] = Variable<DateTime>(dueDate);
     }
     map['completed'] = Variable<bool>(completed);
+    if (!nullToAbsent || completedAt != null) {
+      map['completed_at'] = Variable<DateTime>(completedAt);
+    }
     map['starred'] = Variable<bool>(starred);
     map['sort_order'] = Variable<int>(sortOrder);
     if (!nullToAbsent || dueDateSetAt != null) {
@@ -3428,6 +3460,9 @@ class TodoTasksTableData extends DataClass
           ? const Value.absent()
           : Value(dueDate),
       completed: Value(completed),
+      completedAt: completedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(completedAt),
       starred: Value(starred),
       sortOrder: Value(sortOrder),
       dueDateSetAt: dueDateSetAt == null && nullToAbsent
@@ -3459,6 +3494,7 @@ class TodoTasksTableData extends DataClass
       notes: serializer.fromJson<String?>(json['notes']),
       dueDate: serializer.fromJson<DateTime?>(json['dueDate']),
       completed: serializer.fromJson<bool>(json['completed']),
+      completedAt: serializer.fromJson<DateTime?>(json['completedAt']),
       starred: serializer.fromJson<bool>(json['starred']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       dueDateSetAt: serializer.fromJson<DateTime?>(json['dueDateSetAt']),
@@ -3483,6 +3519,7 @@ class TodoTasksTableData extends DataClass
       'notes': serializer.toJson<String?>(notes),
       'dueDate': serializer.toJson<DateTime?>(dueDate),
       'completed': serializer.toJson<bool>(completed),
+      'completedAt': serializer.toJson<DateTime?>(completedAt),
       'starred': serializer.toJson<bool>(starred),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'dueDateSetAt': serializer.toJson<DateTime?>(dueDateSetAt),
@@ -3503,6 +3540,7 @@ class TodoTasksTableData extends DataClass
     Value<String?> notes = const Value.absent(),
     Value<DateTime?> dueDate = const Value.absent(),
     bool? completed,
+    Value<DateTime?> completedAt = const Value.absent(),
     bool? starred,
     int? sortOrder,
     Value<DateTime?> dueDateSetAt = const Value.absent(),
@@ -3520,6 +3558,7 @@ class TodoTasksTableData extends DataClass
     notes: notes.present ? notes.value : this.notes,
     dueDate: dueDate.present ? dueDate.value : this.dueDate,
     completed: completed ?? this.completed,
+    completedAt: completedAt.present ? completedAt.value : this.completedAt,
     starred: starred ?? this.starred,
     sortOrder: sortOrder ?? this.sortOrder,
     dueDateSetAt: dueDateSetAt.present ? dueDateSetAt.value : this.dueDateSetAt,
@@ -3543,6 +3582,9 @@ class TodoTasksTableData extends DataClass
       notes: data.notes.present ? data.notes.value : this.notes,
       dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
       completed: data.completed.present ? data.completed.value : this.completed,
+      completedAt: data.completedAt.present
+          ? data.completedAt.value
+          : this.completedAt,
       starred: data.starred.present ? data.starred.value : this.starred,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       dueDateSetAt: data.dueDateSetAt.present
@@ -3571,6 +3613,7 @@ class TodoTasksTableData extends DataClass
           ..write('notes: $notes, ')
           ..write('dueDate: $dueDate, ')
           ..write('completed: $completed, ')
+          ..write('completedAt: $completedAt, ')
           ..write('starred: $starred, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('dueDateSetAt: $dueDateSetAt, ')
@@ -3593,6 +3636,7 @@ class TodoTasksTableData extends DataClass
     notes,
     dueDate,
     completed,
+    completedAt,
     starred,
     sortOrder,
     dueDateSetAt,
@@ -3614,6 +3658,7 @@ class TodoTasksTableData extends DataClass
           other.notes == this.notes &&
           other.dueDate == this.dueDate &&
           other.completed == this.completed &&
+          other.completedAt == this.completedAt &&
           other.starred == this.starred &&
           other.sortOrder == this.sortOrder &&
           other.dueDateSetAt == this.dueDateSetAt &&
@@ -3633,6 +3678,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
   final Value<String?> notes;
   final Value<DateTime?> dueDate;
   final Value<bool> completed;
+  final Value<DateTime?> completedAt;
   final Value<bool> starred;
   final Value<int> sortOrder;
   final Value<DateTime?> dueDateSetAt;
@@ -3651,6 +3697,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     this.notes = const Value.absent(),
     this.dueDate = const Value.absent(),
     this.completed = const Value.absent(),
+    this.completedAt = const Value.absent(),
     this.starred = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.dueDateSetAt = const Value.absent(),
@@ -3670,6 +3717,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     this.notes = const Value.absent(),
     this.dueDate = const Value.absent(),
     this.completed = const Value.absent(),
+    this.completedAt = const Value.absent(),
     this.starred = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.dueDateSetAt = const Value.absent(),
@@ -3693,6 +3741,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Expression<String>? notes,
     Expression<DateTime>? dueDate,
     Expression<bool>? completed,
+    Expression<DateTime>? completedAt,
     Expression<bool>? starred,
     Expression<int>? sortOrder,
     Expression<DateTime>? dueDateSetAt,
@@ -3712,6 +3761,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       if (notes != null) 'notes': notes,
       if (dueDate != null) 'due_date': dueDate,
       if (completed != null) 'completed': completed,
+      if (completedAt != null) 'completed_at': completedAt,
       if (starred != null) 'starred': starred,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (dueDateSetAt != null) 'due_date_set_at': dueDateSetAt,
@@ -3733,6 +3783,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     Value<String?>? notes,
     Value<DateTime?>? dueDate,
     Value<bool>? completed,
+    Value<DateTime?>? completedAt,
     Value<bool>? starred,
     Value<int>? sortOrder,
     Value<DateTime?>? dueDateSetAt,
@@ -3752,6 +3803,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
       notes: notes ?? this.notes,
       dueDate: dueDate ?? this.dueDate,
       completed: completed ?? this.completed,
+      completedAt: completedAt ?? this.completedAt,
       starred: starred ?? this.starred,
       sortOrder: sortOrder ?? this.sortOrder,
       dueDateSetAt: dueDateSetAt ?? this.dueDateSetAt,
@@ -3788,6 +3840,9 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
     }
     if (completed.present) {
       map['completed'] = Variable<bool>(completed.value);
+    }
+    if (completedAt.present) {
+      map['completed_at'] = Variable<DateTime>(completedAt.value);
     }
     if (starred.present) {
       map['starred'] = Variable<bool>(starred.value);
@@ -3832,6 +3887,7 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
           ..write('notes: $notes, ')
           ..write('dueDate: $dueDate, ')
           ..write('completed: $completed, ')
+          ..write('completedAt: $completedAt, ')
           ..write('starred: $starred, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('dueDateSetAt: $dueDateSetAt, ')
@@ -3839,6 +3895,433 @@ class TodoTasksTableCompanion extends UpdateCompanion<TodoTasksTableData> {
           ..write('recurrenceAnchor: $recurrenceAnchor, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $TodoTaskCompletionsTableTable extends TodoTaskCompletionsTable
+    with
+        TableInfo<
+          $TodoTaskCompletionsTableTable,
+          TodoTaskCompletionsTableData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TodoTaskCompletionsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _taskIdMeta = const VerificationMeta('taskId');
+  @override
+  late final GeneratedColumn<String> taskId = GeneratedColumn<String>(
+    'task_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _completedAtMeta = const VerificationMeta(
+    'completedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> completedAt = GeneratedColumn<DateTime>(
+    'completed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dueDateMeta = const VerificationMeta(
+    'dueDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> dueDate = GeneratedColumn<DateTime>(
+    'due_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    taskId,
+    completedAt,
+    dueDate,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'todo_task_completions_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TodoTaskCompletionsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('task_id')) {
+      context.handle(
+        _taskIdMeta,
+        taskId.isAcceptableOrUnknown(data['task_id']!, _taskIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_taskIdMeta);
+    }
+    if (data.containsKey('completed_at')) {
+      context.handle(
+        _completedAtMeta,
+        completedAt.isAcceptableOrUnknown(
+          data['completed_at']!,
+          _completedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_completedAtMeta);
+    }
+    if (data.containsKey('due_date')) {
+      context.handle(
+        _dueDateMeta,
+        dueDate.isAcceptableOrUnknown(data['due_date']!, _dueDateMeta),
+      );
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TodoTaskCompletionsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TodoTaskCompletionsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      taskId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}task_id'],
+      )!,
+      completedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}completed_at'],
+      )!,
+      dueDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}due_date'],
+      ),
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $TodoTaskCompletionsTableTable createAlias(String alias) {
+    return $TodoTaskCompletionsTableTable(attachedDatabase, alias);
+  }
+}
+
+class TodoTaskCompletionsTableData extends DataClass
+    implements Insertable<TodoTaskCompletionsTableData> {
+  final String id;
+  final String taskId;
+  final DateTime completedAt;
+  final DateTime? dueDate;
+
+  /// Bumped by an un-tick and by a re-tick of the same occurrence. See
+  /// [TodoTaskCompletion].
+  final int version;
+  final DateTime? deletedAt;
+  const TodoTaskCompletionsTableData({
+    required this.id,
+    required this.taskId,
+    required this.completedAt,
+    this.dueDate,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['task_id'] = Variable<String>(taskId);
+    map['completed_at'] = Variable<DateTime>(completedAt);
+    if (!nullToAbsent || dueDate != null) {
+      map['due_date'] = Variable<DateTime>(dueDate);
+    }
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  TodoTaskCompletionsTableCompanion toCompanion(bool nullToAbsent) {
+    return TodoTaskCompletionsTableCompanion(
+      id: Value(id),
+      taskId: Value(taskId),
+      completedAt: Value(completedAt),
+      dueDate: dueDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dueDate),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory TodoTaskCompletionsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TodoTaskCompletionsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      taskId: serializer.fromJson<String>(json['taskId']),
+      completedAt: serializer.fromJson<DateTime>(json['completedAt']),
+      dueDate: serializer.fromJson<DateTime?>(json['dueDate']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'taskId': serializer.toJson<String>(taskId),
+      'completedAt': serializer.toJson<DateTime>(completedAt),
+      'dueDate': serializer.toJson<DateTime?>(dueDate),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  TodoTaskCompletionsTableData copyWith({
+    String? id,
+    String? taskId,
+    DateTime? completedAt,
+    Value<DateTime?> dueDate = const Value.absent(),
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => TodoTaskCompletionsTableData(
+    id: id ?? this.id,
+    taskId: taskId ?? this.taskId,
+    completedAt: completedAt ?? this.completedAt,
+    dueDate: dueDate.present ? dueDate.value : this.dueDate,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  TodoTaskCompletionsTableData copyWithCompanion(
+    TodoTaskCompletionsTableCompanion data,
+  ) {
+    return TodoTaskCompletionsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      taskId: data.taskId.present ? data.taskId.value : this.taskId,
+      completedAt: data.completedAt.present
+          ? data.completedAt.value
+          : this.completedAt,
+      dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TodoTaskCompletionsTableData(')
+          ..write('id: $id, ')
+          ..write('taskId: $taskId, ')
+          ..write('completedAt: $completedAt, ')
+          ..write('dueDate: $dueDate, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, taskId, completedAt, dueDate, version, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TodoTaskCompletionsTableData &&
+          other.id == this.id &&
+          other.taskId == this.taskId &&
+          other.completedAt == this.completedAt &&
+          other.dueDate == this.dueDate &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class TodoTaskCompletionsTableCompanion
+    extends UpdateCompanion<TodoTaskCompletionsTableData> {
+  final Value<String> id;
+  final Value<String> taskId;
+  final Value<DateTime> completedAt;
+  final Value<DateTime?> dueDate;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const TodoTaskCompletionsTableCompanion({
+    this.id = const Value.absent(),
+    this.taskId = const Value.absent(),
+    this.completedAt = const Value.absent(),
+    this.dueDate = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TodoTaskCompletionsTableCompanion.insert({
+    required String id,
+    required String taskId,
+    required DateTime completedAt,
+    this.dueDate = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       taskId = Value(taskId),
+       completedAt = Value(completedAt);
+  static Insertable<TodoTaskCompletionsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? taskId,
+    Expression<DateTime>? completedAt,
+    Expression<DateTime>? dueDate,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (taskId != null) 'task_id': taskId,
+      if (completedAt != null) 'completed_at': completedAt,
+      if (dueDate != null) 'due_date': dueDate,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TodoTaskCompletionsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? taskId,
+    Value<DateTime>? completedAt,
+    Value<DateTime?>? dueDate,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return TodoTaskCompletionsTableCompanion(
+      id: id ?? this.id,
+      taskId: taskId ?? this.taskId,
+      completedAt: completedAt ?? this.completedAt,
+      dueDate: dueDate ?? this.dueDate,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (taskId.present) {
+      map['task_id'] = Variable<String>(taskId.value);
+    }
+    if (completedAt.present) {
+      map['completed_at'] = Variable<DateTime>(completedAt.value);
+    }
+    if (dueDate.present) {
+      map['due_date'] = Variable<DateTime>(dueDate.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TodoTaskCompletionsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('taskId: $taskId, ')
+          ..write('completedAt: $completedAt, ')
+          ..write('dueDate: $dueDate, ')
           ..write('version: $version, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('rowid: $rowid')
@@ -8445,6 +8928,17 @@ class $SettingsTableTable extends SettingsTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _hiddenNavPagesJsonMeta =
+      const VerificationMeta('hiddenNavPagesJson');
+  @override
+  late final GeneratedColumn<String> hiddenNavPagesJson =
+      GeneratedColumn<String>(
+        'hidden_nav_pages_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _startupPageModeMeta = const VerificationMeta(
     'startupPageMode',
   );
@@ -9033,6 +9527,7 @@ class $SettingsTableTable extends SettingsTable
     geometricWaveScatterMode,
     geometricWaveScatterLitAmount,
     navPageOrderJson,
+    hiddenNavPagesJson,
     startupPageMode,
     customStartupPage,
     lastSeenNavPage,
@@ -10013,6 +10508,15 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('hidden_nav_pages_json')) {
+      context.handle(
+        _hiddenNavPagesJsonMeta,
+        hiddenNavPagesJson.isAcceptableOrUnknown(
+          data['hidden_nav_pages_json']!,
+          _hiddenNavPagesJsonMeta,
+        ),
+      );
+    }
     if (data.containsKey('startup_page_mode')) {
       context.handle(
         _startupPageModeMeta,
@@ -10777,6 +11281,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}nav_page_order_json'],
       ),
+      hiddenNavPagesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}hidden_nav_pages_json'],
+      ),
       startupPageMode: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}startup_page_mode'],
@@ -11094,6 +11602,10 @@ class SettingsTableData extends DataClass
   final bool geometricWaveScatterMode;
   final double geometricWaveScatterLitAmount;
   final String? navPageOrderJson;
+
+  /// JSON list of hidden nav page paths. Null only on rows from before v129,
+  /// which read as [defaultHiddenNavPages]; an empty list means none hidden.
+  final String? hiddenNavPagesJson;
   final String startupPageMode;
   final String? customStartupPage;
   final String? lastSeenNavPage;
@@ -11280,6 +11792,7 @@ class SettingsTableData extends DataClass
     required this.geometricWaveScatterMode,
     required this.geometricWaveScatterLitAmount,
     this.navPageOrderJson,
+    this.hiddenNavPagesJson,
     required this.startupPageMode,
     this.customStartupPage,
     this.lastSeenNavPage,
@@ -11564,6 +12077,9 @@ class SettingsTableData extends DataClass
     if (!nullToAbsent || navPageOrderJson != null) {
       map['nav_page_order_json'] = Variable<String>(navPageOrderJson);
     }
+    if (!nullToAbsent || hiddenNavPagesJson != null) {
+      map['hidden_nav_pages_json'] = Variable<String>(hiddenNavPagesJson);
+    }
     map['startup_page_mode'] = Variable<String>(startupPageMode);
     if (!nullToAbsent || customStartupPage != null) {
       map['custom_startup_page'] = Variable<String>(customStartupPage);
@@ -11811,6 +12327,9 @@ class SettingsTableData extends DataClass
       navPageOrderJson: navPageOrderJson == null && nullToAbsent
           ? const Value.absent()
           : Value(navPageOrderJson),
+      hiddenNavPagesJson: hiddenNavPagesJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(hiddenNavPagesJson),
       startupPageMode: Value(startupPageMode),
       customStartupPage: customStartupPage == null && nullToAbsent
           ? const Value.absent()
@@ -12128,6 +12647,9 @@ class SettingsTableData extends DataClass
         json['geometricWaveScatterLitAmount'],
       ),
       navPageOrderJson: serializer.fromJson<String?>(json['navPageOrderJson']),
+      hiddenNavPagesJson: serializer.fromJson<String?>(
+        json['hiddenNavPagesJson'],
+      ),
       startupPageMode: serializer.fromJson<String>(json['startupPageMode']),
       customStartupPage: serializer.fromJson<String?>(
         json['customStartupPage'],
@@ -12406,6 +12928,7 @@ class SettingsTableData extends DataClass
         geometricWaveScatterLitAmount,
       ),
       'navPageOrderJson': serializer.toJson<String?>(navPageOrderJson),
+      'hiddenNavPagesJson': serializer.toJson<String?>(hiddenNavPagesJson),
       'startupPageMode': serializer.toJson<String>(startupPageMode),
       'customStartupPage': serializer.toJson<String?>(customStartupPage),
       'lastSeenNavPage': serializer.toJson<String?>(lastSeenNavPage),
@@ -12576,6 +13099,7 @@ class SettingsTableData extends DataClass
     bool? geometricWaveScatterMode,
     double? geometricWaveScatterLitAmount,
     Value<String?> navPageOrderJson = const Value.absent(),
+    Value<String?> hiddenNavPagesJson = const Value.absent(),
     String? startupPageMode,
     Value<String?> customStartupPage = const Value.absent(),
     Value<String?> lastSeenNavPage = const Value.absent(),
@@ -12802,6 +13326,9 @@ class SettingsTableData extends DataClass
     navPageOrderJson: navPageOrderJson.present
         ? navPageOrderJson.value
         : this.navPageOrderJson,
+    hiddenNavPagesJson: hiddenNavPagesJson.present
+        ? hiddenNavPagesJson.value
+        : this.hiddenNavPagesJson,
     startupPageMode: startupPageMode ?? this.startupPageMode,
     customStartupPage: customStartupPage.present
         ? customStartupPage.value
@@ -13192,6 +13719,9 @@ class SettingsTableData extends DataClass
       navPageOrderJson: data.navPageOrderJson.present
           ? data.navPageOrderJson.value
           : this.navPageOrderJson,
+      hiddenNavPagesJson: data.hiddenNavPagesJson.present
+          ? data.hiddenNavPagesJson.value
+          : this.hiddenNavPagesJson,
       startupPageMode: data.startupPageMode.present
           ? data.startupPageMode.value
           : this.startupPageMode,
@@ -13440,6 +13970,7 @@ class SettingsTableData extends DataClass
             'geometricWaveScatterLitAmount: $geometricWaveScatterLitAmount, ',
           )
           ..write('navPageOrderJson: $navPageOrderJson, ')
+          ..write('hiddenNavPagesJson: $hiddenNavPagesJson, ')
           ..write('startupPageMode: $startupPageMode, ')
           ..write('customStartupPage: $customStartupPage, ')
           ..write('lastSeenNavPage: $lastSeenNavPage, ')
@@ -13596,6 +14127,7 @@ class SettingsTableData extends DataClass
     geometricWaveScatterMode,
     geometricWaveScatterLitAmount,
     navPageOrderJson,
+    hiddenNavPagesJson,
     startupPageMode,
     customStartupPage,
     lastSeenNavPage,
@@ -13765,6 +14297,7 @@ class SettingsTableData extends DataClass
           other.geometricWaveScatterLitAmount ==
               this.geometricWaveScatterLitAmount &&
           other.navPageOrderJson == this.navPageOrderJson &&
+          other.hiddenNavPagesJson == this.hiddenNavPagesJson &&
           other.startupPageMode == this.startupPageMode &&
           other.customStartupPage == this.customStartupPage &&
           other.lastSeenNavPage == this.lastSeenNavPage &&
@@ -13915,6 +14448,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> geometricWaveScatterMode;
   final Value<double> geometricWaveScatterLitAmount;
   final Value<String?> navPageOrderJson;
+  final Value<String?> hiddenNavPagesJson;
   final Value<String> startupPageMode;
   final Value<String?> customStartupPage;
   final Value<String?> lastSeenNavPage;
@@ -14060,6 +14594,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.geometricWaveScatterMode = const Value.absent(),
     this.geometricWaveScatterLitAmount = const Value.absent(),
     this.navPageOrderJson = const Value.absent(),
+    this.hiddenNavPagesJson = const Value.absent(),
     this.startupPageMode = const Value.absent(),
     this.customStartupPage = const Value.absent(),
     this.lastSeenNavPage = const Value.absent(),
@@ -14206,6 +14741,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.geometricWaveScatterMode = const Value.absent(),
     this.geometricWaveScatterLitAmount = const Value.absent(),
     this.navPageOrderJson = const Value.absent(),
+    this.hiddenNavPagesJson = const Value.absent(),
     this.startupPageMode = const Value.absent(),
     this.customStartupPage = const Value.absent(),
     this.lastSeenNavPage = const Value.absent(),
@@ -14352,6 +14888,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? geometricWaveScatterMode,
     Expression<double>? geometricWaveScatterLitAmount,
     Expression<String>? navPageOrderJson,
+    Expression<String>? hiddenNavPagesJson,
     Expression<String>? startupPageMode,
     Expression<String>? customStartupPage,
     Expression<String>? lastSeenNavPage,
@@ -14574,6 +15111,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (geometricWaveScatterLitAmount != null)
         'geometric_wave_scatter_lit_amount': geometricWaveScatterLitAmount,
       if (navPageOrderJson != null) 'nav_page_order_json': navPageOrderJson,
+      if (hiddenNavPagesJson != null)
+        'hidden_nav_pages_json': hiddenNavPagesJson,
       if (startupPageMode != null) 'startup_page_mode': startupPageMode,
       if (customStartupPage != null) 'custom_startup_page': customStartupPage,
       if (lastSeenNavPage != null) 'last_seen_nav_page': lastSeenNavPage,
@@ -14745,6 +15284,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? geometricWaveScatterMode,
     Value<double>? geometricWaveScatterLitAmount,
     Value<String?>? navPageOrderJson,
+    Value<String?>? hiddenNavPagesJson,
     Value<String>? startupPageMode,
     Value<String?>? customStartupPage,
     Value<String?>? lastSeenNavPage,
@@ -14944,6 +15484,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       geometricWaveScatterLitAmount:
           geometricWaveScatterLitAmount ?? this.geometricWaveScatterLitAmount,
       navPageOrderJson: navPageOrderJson ?? this.navPageOrderJson,
+      hiddenNavPagesJson: hiddenNavPagesJson ?? this.hiddenNavPagesJson,
       startupPageMode: startupPageMode ?? this.startupPageMode,
       customStartupPage: customStartupPage ?? this.customStartupPage,
       lastSeenNavPage: lastSeenNavPage ?? this.lastSeenNavPage,
@@ -15446,6 +15987,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     if (navPageOrderJson.present) {
       map['nav_page_order_json'] = Variable<String>(navPageOrderJson.value);
     }
+    if (hiddenNavPagesJson.present) {
+      map['hidden_nav_pages_json'] = Variable<String>(hiddenNavPagesJson.value);
+    }
     if (startupPageMode.present) {
       map['startup_page_mode'] = Variable<String>(startupPageMode.value);
     }
@@ -15730,6 +16274,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
             'geometricWaveScatterLitAmount: $geometricWaveScatterLitAmount, ',
           )
           ..write('navPageOrderJson: $navPageOrderJson, ')
+          ..write('hiddenNavPagesJson: $hiddenNavPagesJson, ')
           ..write('startupPageMode: $startupPageMode, ')
           ..write('customStartupPage: $customStartupPage, ')
           ..write('lastSeenNavPage: $lastSeenNavPage, ')
@@ -48457,6 +49002,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $DreamEntriesTableTable(this);
   late final $TodoListsTableTable todoListsTable = $TodoListsTableTable(this);
   late final $TodoTasksTableTable todoTasksTable = $TodoTasksTableTable(this);
+  late final $TodoTaskCompletionsTableTable todoTaskCompletionsTable =
+      $TodoTaskCompletionsTableTable(this);
   late final $CalendarsTableTable calendarsTable = $CalendarsTableTable(this);
   late final $CalendarEventsTableTable calendarEventsTable =
       $CalendarEventsTableTable(this);
@@ -48628,6 +49175,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     dreamEntriesTable,
     todoListsTable,
     todoTasksTable,
+    todoTaskCompletionsTable,
     calendarsTable,
     calendarEventsTable,
     trackersTable,
@@ -50129,6 +50677,7 @@ typedef $$TodoTasksTableTableCreateCompanionBuilder =
       Value<String?> notes,
       Value<DateTime?> dueDate,
       Value<bool> completed,
+      Value<DateTime?> completedAt,
       Value<bool> starred,
       Value<int> sortOrder,
       Value<DateTime?> dueDateSetAt,
@@ -50149,6 +50698,7 @@ typedef $$TodoTasksTableTableUpdateCompanionBuilder =
       Value<String?> notes,
       Value<DateTime?> dueDate,
       Value<bool> completed,
+      Value<DateTime?> completedAt,
       Value<bool> starred,
       Value<int> sortOrder,
       Value<DateTime?> dueDateSetAt,
@@ -50202,6 +50752,11 @@ class $$TodoTasksTableTableFilterComposer
 
   ColumnFilters<bool> get completed => $composableBuilder(
     column: $table.completed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -50295,6 +50850,11 @@ class $$TodoTasksTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get starred => $composableBuilder(
     column: $table.starred,
     builder: (column) => ColumnOrderings(column),
@@ -50372,6 +50932,11 @@ class $$TodoTasksTableTableAnnotationComposer
 
   GeneratedColumn<bool> get completed =>
       $composableBuilder(column: $table.completed, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<bool> get starred =>
       $composableBuilder(column: $table.starred, builder: (column) => column);
@@ -50451,6 +51016,7 @@ class $$TodoTasksTableTableTableManager
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime?> dueDate = const Value.absent(),
                 Value<bool> completed = const Value.absent(),
+                Value<DateTime?> completedAt = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<DateTime?> dueDateSetAt = const Value.absent(),
@@ -50469,6 +51035,7 @@ class $$TodoTasksTableTableTableManager
                 notes: notes,
                 dueDate: dueDate,
                 completed: completed,
+                completedAt: completedAt,
                 starred: starred,
                 sortOrder: sortOrder,
                 dueDateSetAt: dueDateSetAt,
@@ -50489,6 +51056,7 @@ class $$TodoTasksTableTableTableManager
                 Value<String?> notes = const Value.absent(),
                 Value<DateTime?> dueDate = const Value.absent(),
                 Value<bool> completed = const Value.absent(),
+                Value<DateTime?> completedAt = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<DateTime?> dueDateSetAt = const Value.absent(),
@@ -50507,6 +51075,7 @@ class $$TodoTasksTableTableTableManager
                 notes: notes,
                 dueDate: dueDate,
                 completed: completed,
+                completedAt: completedAt,
                 starred: starred,
                 sortOrder: sortOrder,
                 dueDateSetAt: dueDateSetAt,
@@ -50541,6 +51110,246 @@ typedef $$TodoTasksTableTableProcessedTableManager =
         BaseReferences<_$AppDatabase, $TodoTasksTableTable, TodoTasksTableData>,
       ),
       TodoTasksTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$TodoTaskCompletionsTableTableCreateCompanionBuilder =
+    TodoTaskCompletionsTableCompanion Function({
+      required String id,
+      required String taskId,
+      required DateTime completedAt,
+      Value<DateTime?> dueDate,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$TodoTaskCompletionsTableTableUpdateCompanionBuilder =
+    TodoTaskCompletionsTableCompanion Function({
+      Value<String> id,
+      Value<String> taskId,
+      Value<DateTime> completedAt,
+      Value<DateTime?> dueDate,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$TodoTaskCompletionsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $TodoTaskCompletionsTableTable> {
+  $$TodoTaskCompletionsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get taskId => $composableBuilder(
+    column: $table.taskId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get dueDate => $composableBuilder(
+    column: $table.dueDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$TodoTaskCompletionsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $TodoTaskCompletionsTableTable> {
+  $$TodoTaskCompletionsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get taskId => $composableBuilder(
+    column: $table.taskId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get dueDate => $composableBuilder(
+    column: $table.dueDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$TodoTaskCompletionsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TodoTaskCompletionsTableTable> {
+  $$TodoTaskCompletionsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get taskId =>
+      $composableBuilder(column: $table.taskId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get dueDate =>
+      $composableBuilder(column: $table.dueDate, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$TodoTaskCompletionsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TodoTaskCompletionsTableTable,
+          TodoTaskCompletionsTableData,
+          $$TodoTaskCompletionsTableTableFilterComposer,
+          $$TodoTaskCompletionsTableTableOrderingComposer,
+          $$TodoTaskCompletionsTableTableAnnotationComposer,
+          $$TodoTaskCompletionsTableTableCreateCompanionBuilder,
+          $$TodoTaskCompletionsTableTableUpdateCompanionBuilder,
+          (
+            TodoTaskCompletionsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $TodoTaskCompletionsTableTable,
+              TodoTaskCompletionsTableData
+            >,
+          ),
+          TodoTaskCompletionsTableData,
+          PrefetchHooks Function()
+        > {
+  $$TodoTaskCompletionsTableTableTableManager(
+    _$AppDatabase db,
+    $TodoTaskCompletionsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TodoTaskCompletionsTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$TodoTaskCompletionsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$TodoTaskCompletionsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> taskId = const Value.absent(),
+                Value<DateTime> completedAt = const Value.absent(),
+                Value<DateTime?> dueDate = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TodoTaskCompletionsTableCompanion(
+                id: id,
+                taskId: taskId,
+                completedAt: completedAt,
+                dueDate: dueDate,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String taskId,
+                required DateTime completedAt,
+                Value<DateTime?> dueDate = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => TodoTaskCompletionsTableCompanion.insert(
+                id: id,
+                taskId: taskId,
+                completedAt: completedAt,
+                dueDate: dueDate,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$TodoTaskCompletionsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TodoTaskCompletionsTableTable,
+      TodoTaskCompletionsTableData,
+      $$TodoTaskCompletionsTableTableFilterComposer,
+      $$TodoTaskCompletionsTableTableOrderingComposer,
+      $$TodoTaskCompletionsTableTableAnnotationComposer,
+      $$TodoTaskCompletionsTableTableCreateCompanionBuilder,
+      $$TodoTaskCompletionsTableTableUpdateCompanionBuilder,
+      (
+        TodoTaskCompletionsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $TodoTaskCompletionsTableTable,
+          TodoTaskCompletionsTableData
+        >,
+      ),
+      TodoTaskCompletionsTableData,
       PrefetchHooks Function()
     >;
 typedef $$CalendarsTableTableCreateCompanionBuilder =
@@ -52194,6 +53003,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> geometricWaveScatterMode,
       Value<double> geometricWaveScatterLitAmount,
       Value<String?> navPageOrderJson,
+      Value<String?> hiddenNavPagesJson,
       Value<String> startupPageMode,
       Value<String?> customStartupPage,
       Value<String?> lastSeenNavPage,
@@ -52341,6 +53151,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> geometricWaveScatterMode,
       Value<double> geometricWaveScatterLitAmount,
       Value<String?> navPageOrderJson,
+      Value<String?> hiddenNavPagesJson,
       Value<String> startupPageMode,
       Value<String?> customStartupPage,
       Value<String?> lastSeenNavPage,
@@ -52926,6 +53737,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<String> get navPageOrderJson => $composableBuilder(
     column: $table.navPageOrderJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get hiddenNavPagesJson => $composableBuilder(
+    column: $table.hiddenNavPagesJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -53671,6 +54487,11 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get hiddenNavPagesJson => $composableBuilder(
+    column: $table.hiddenNavPagesJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get startupPageMode => $composableBuilder(
     column: $table.startupPageMode,
     builder: (column) => ColumnOrderings(column),
@@ -54404,6 +55225,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get hiddenNavPagesJson => $composableBuilder(
+    column: $table.hiddenNavPagesJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get startupPageMode => $composableBuilder(
     column: $table.startupPageMode,
     builder: (column) => column,
@@ -54752,6 +55578,7 @@ class $$SettingsTableTableTableManager
                 Value<double> geometricWaveScatterLitAmount =
                     const Value.absent(),
                 Value<String?> navPageOrderJson = const Value.absent(),
+                Value<String?> hiddenNavPagesJson = const Value.absent(),
                 Value<String> startupPageMode = const Value.absent(),
                 Value<String?> customStartupPage = const Value.absent(),
                 Value<String?> lastSeenNavPage = const Value.absent(),
@@ -54903,6 +55730,7 @@ class $$SettingsTableTableTableManager
                 geometricWaveScatterMode: geometricWaveScatterMode,
                 geometricWaveScatterLitAmount: geometricWaveScatterLitAmount,
                 navPageOrderJson: navPageOrderJson,
+                hiddenNavPagesJson: hiddenNavPagesJson,
                 startupPageMode: startupPageMode,
                 customStartupPage: customStartupPage,
                 lastSeenNavPage: lastSeenNavPage,
@@ -55071,6 +55899,7 @@ class $$SettingsTableTableTableManager
                 Value<double> geometricWaveScatterLitAmount =
                     const Value.absent(),
                 Value<String?> navPageOrderJson = const Value.absent(),
+                Value<String?> hiddenNavPagesJson = const Value.absent(),
                 Value<String> startupPageMode = const Value.absent(),
                 Value<String?> customStartupPage = const Value.absent(),
                 Value<String?> lastSeenNavPage = const Value.absent(),
@@ -55222,6 +56051,7 @@ class $$SettingsTableTableTableManager
                 geometricWaveScatterMode: geometricWaveScatterMode,
                 geometricWaveScatterLitAmount: geometricWaveScatterLitAmount,
                 navPageOrderJson: navPageOrderJson,
+                hiddenNavPagesJson: hiddenNavPagesJson,
                 startupPageMode: startupPageMode,
                 customStartupPage: customStartupPage,
                 lastSeenNavPage: lastSeenNavPage,
@@ -71841,6 +72671,11 @@ class $AppDatabaseManager {
       $$TodoListsTableTableTableManager(_db, _db.todoListsTable);
   $$TodoTasksTableTableTableManager get todoTasksTable =>
       $$TodoTasksTableTableTableManager(_db, _db.todoTasksTable);
+  $$TodoTaskCompletionsTableTableTableManager get todoTaskCompletionsTable =>
+      $$TodoTaskCompletionsTableTableTableManager(
+        _db,
+        _db.todoTaskCompletionsTable,
+      );
   $$CalendarsTableTableTableManager get calendarsTable =>
       $$CalendarsTableTableTableManager(_db, _db.calendarsTable);
   $$CalendarEventsTableTableTableManager get calendarEventsTable =>

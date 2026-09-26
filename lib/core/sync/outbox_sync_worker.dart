@@ -431,6 +431,11 @@ class OutboxSyncWorker {
         );
       case FirestoreCollections.todoTasks:
         return byId(DriftTodoRepository(_db).getTask, todoTaskToFirestore);
+      case FirestoreCollections.todoTaskCompletions:
+        return byId(
+          DriftTodoRepository(_db).getCompletion,
+          todoTaskCompletionToFirestore,
+        );
       case FirestoreCollections.leetcodeProblems:
         return byId(
           DriftLeetCodeRepository(_db).getProblem,

@@ -1362,9 +1362,11 @@ class _TodoPageState extends ConsumerState<TodoPage>
     // only the completion. A missing row means the task was hard-deleted in the
     // meantime — writing would resurrect it.
     final resolved = <TodoTask>[];
+    final onDisk = <String, TodoTask>{};
     for (final task in pending) {
       final latest = await repo.getTask(task.id);
       if (latest == null) continue;
+      onDisk[latest.id] = latest;
       resolved.add(latest.copyWith(completed: task.completed));
     }
     if (resolved.isEmpty) return const {};
@@ -1459,6 +1461,15 @@ class _TodoPageState extends ConsumerState<TodoPage>
 
     if (cascadeRows.isNotEmpty) {
       unawaited(remoteSync.pushTodoTasksBatch(cascadeRows));
+    }
+
+    for (final task in resolved) {
+      await recordTodoCompletionChange(
+        repo: repo,
+        sync: remoteSync,
+        before: onDisk[task.id]!,
+        after: task,
+      );
     }
 
     return touchedLists;

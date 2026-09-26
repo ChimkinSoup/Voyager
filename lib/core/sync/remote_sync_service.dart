@@ -1430,6 +1430,15 @@ class RemoteSyncService {
   /// whose listing came from the local cache rather than the server.
   static const _servedFromCacheKey = #remoteSyncServedFromCache;
 
+  /// Zone key under which [_pullCollection] hands the document being applied
+  /// its already-fetched operation log, so [_listRemoteCharOps] does not ask
+  /// for it a second time. Taken on first use: a later read in the same apply
+  /// (a rebase after an upload) must see the live log.
+  static const _fetchedOperationLogKey = #remoteSyncFetchedOperationLog;
+
+  /// How many operation logs a pull has in flight at once.
+  static const _operationLogConcurrency = 16;
+
   Future<void> pullAll() async {
     if (forceConflictUi) {
       _forceNextDownloadConflict = true;
@@ -1474,6 +1483,38 @@ class RemoteSyncService {
         'Slowest: $top';
   }
 
+  /// Each of [documentIds]' operation logs, fetched at most
+  /// [_operationLogConcurrency] at a time.
+  Map<String, Future<List<SyncOperation>>> _fetchOperationLogs(
+    List<String> documentIds,
+  ) {
+    final completers = {
+      for (final id in documentIds) id: Completer<List<SyncOperation>>(),
+    };
+    final queue = completers.keys.toList();
+    var next = 0;
+    Future<void> worker() async {
+      while (next < queue.length) {
+        final id = queue[next++];
+        try {
+          completers[id]!.complete(await _syncRepository.listOperations(id));
+        } catch (error, stackTrace) {
+          completers[id]!.completeError(error, stackTrace);
+        }
+      }
+    }
+
+    for (var i = 0; i < _operationLogConcurrency; i++) {
+      unawaited(worker());
+    }
+    return {
+      for (final entry in completers.entries)
+        // A pull that throws partway never awaits the rest; their failures
+        // must not surface as unhandled errors.
+        entry.key: entry.value.future..ignore(),
+    };
+  }
+
   /// Runs [pulls] one after another. [pullAll] runs chains of these side by
   /// side; inside one, parents land before children, so the orphan filter in
   /// a read query never hides a row whose parent simply has not landed yet.
@@ -1487,7 +1528,7 @@ class RemoteSyncService {
     await Future.wait<void>([
       _inOrder([pullJournals, pullJournalEntries]),
       pullDreamEntries(),
-      _inOrder([pullTodoLists, pullTodoTasks]),
+      _inOrder([pullTodoLists, pullTodoTasks, pullTodoTaskCompletions]),
       _inOrder([pullLeetCodeProblems, pullLeetCodeReviewLog]),
       _inOrder([
         pullLeetCodeCheatTabs,
@@ -1551,6 +1592,11 @@ class RemoteSyncService {
         );
       case FirestoreCollections.todoTasks:
         return pullTodoTasks(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
+      case FirestoreCollections.todoTaskCompletions:
+        return pullTodoTaskCompletions(
           documentIds: documentIds,
           documentData: documentData,
         );
@@ -1883,6 +1929,33 @@ class RemoteSyncService {
         final local = await _leetCodeRepository.getProblem(id);
         final merged = mergeLeetCodeProblemFromRemote(data, id, local: local);
         await _leetCodeRepository.upsertProblem(
+          merged,
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  Future<bool> pullTodoTaskCompletions({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.todoTaskCompletions,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        // Resolved against the local row, as the LeetCode review log is: an
+        // un-tick tombstones a row, and a stale remote revision would
+        // otherwise bring it back.
+        final local = await _todoRepository.getCompletion(id);
+        final merged = mergeTodoTaskCompletionFromRemote(
+          data,
+          id,
+          local: local,
+        );
+        await _todoRepository.logCompletion(
           merged,
           recordLocalActivity: false,
         );
@@ -2836,6 +2909,7 @@ class RemoteSyncService {
                 notes: owed.isEmpty ? null : owed,
                 dueDate: merged.dueDate,
                 completed: merged.completed,
+                completedAt: merged.completedAt,
                 starred: merged.starred,
                 sortOrder: merged.sortOrder,
                 dueDateSetAt: merged.dueDateSetAt,
@@ -2907,23 +2981,46 @@ class RemoteSyncService {
       full = listed.full;
     }
 
+    String operationLogId(({String id, Map<String, dynamic> data}) doc) =>
+        _firestoreDocumentId(
+          collection,
+          _localDocumentId(collection, doc.data['id'] as String? ?? doc.id),
+        );
+    // Snapshot-only collections never wrote an operation log, so resolving
+    // one would spend an indexed query per document to learn nothing. The
+    // rest are all requested up front, [_operationLogConcurrency] at a time:
+    // one round trip per document, back to back, was nearly all of a full
+    // pull (456 todo tasks took 81 s). The apply loop below still runs in
+    // order; only the waiting overlaps.
+    final operationLogs = resolveCrdt
+        ? _fetchOperationLogs([for (final doc in docs) operationLogId(doc)])
+        : const <String, Future<List<SyncOperation>>>{};
+
     final pulled = <String, Map<String, dynamic>>{};
     for (final doc in docs) {
       final firestoreDocId = doc.data['id'] as String? ?? doc.id;
       final localDocId = _localDocumentId(collection, firestoreDocId);
-      // Snapshot-only collections never wrote an operation log, so resolving
-      // one would spend an indexed query per document to learn nothing.
-      final crdtPayload = resolveCrdt
+      final logId = operationLogId(doc);
+      final operationLog = resolveCrdt ? await operationLogs[logId]! : null;
+      final crdtPayload = operationLog != null
           ? await _crdtResolver.resolvePayload(
               _syncRepository,
-              _firestoreDocumentId(collection, localDocId),
+              logId,
+              remoteOperations: operationLog,
             )
           : null;
       final remote = _normalizeRemoteDocument(
         collection,
         crdtPayload ?? doc.data,
       );
-      await apply(localDocId, remote, fromCrdt: crdtPayload != null);
+      await runZoned(
+        () => apply(localDocId, remote, fromCrdt: crdtPayload != null),
+        zoneValues: {
+          _fetchedOperationLogKey: <String, List<SyncOperation>>{
+            logId: ?operationLog,
+          },
+        },
+      );
       pulled[localDocId] = remote;
     }
     await _repushWinningTombstones(collection, pulled);
@@ -3175,6 +3272,17 @@ class RemoteSyncService {
         FirestoreCollections.leetcodeProblems,
         problem.id,
         () => _uploadLeetCodeProblemNow(problem),
+      ),
+    );
+  }
+
+  void pushTodoTaskCompletion(TodoTaskCompletion completion) {
+    cancelDocument(FirestoreCollections.todoTaskCompletions, completion.id);
+    unawaited(
+      _runRemoteSave(
+        FirestoreCollections.todoTaskCompletions,
+        completion.id,
+        () => _uploadTodoTaskCompletionNow(completion),
       ),
     );
   }
@@ -4366,6 +4474,14 @@ class RemoteSyncService {
     );
   }
 
+  Future<void> _uploadTodoTaskCompletionNow(TodoTaskCompletion completion) {
+    return _uploadRecordNow(
+      collection: FirestoreCollections.todoTaskCompletions,
+      localId: completion.id,
+      payload: todoTaskCompletionToFirestore(completion),
+    );
+  }
+
   Future<void> _uploadLeetCodeReviewLogNow(LeetCodeReviewLog log) {
     return _uploadRecordNow(
       collection: FirestoreCollections.leetcodeReviewLog,
@@ -4507,7 +4623,11 @@ class RemoteSyncService {
   }
 
   Future<List<CharacterOperation>> _listRemoteCharOps(String documentId) async {
-    final ops = await _syncRepository.listOperations(documentId);
+    final fetched =
+        Zone.current[_fetchedOperationLogKey] as Map<String, List<SyncOperation>>?;
+    final ops =
+        fetched?.remove(documentId) ??
+        await _syncRepository.listOperations(documentId);
     return _charMerger.mergeOperations(const [], ops);
   }
 
@@ -4959,6 +5079,9 @@ class RemoteSyncService {
       case FirestoreCollections.todoTasks:
         if (record is! TodoTask) return null;
         return (id: record.id, payload: todoTaskToFirestore(record));
+      case FirestoreCollections.todoTaskCompletions:
+        if (record is! TodoTaskCompletion) return null;
+        return (id: record.id, payload: todoTaskCompletionToFirestore(record));
       case FirestoreCollections.leetcodeProblems:
         if (record is! LeetCodeProblem) return null;
         return (id: record.id, payload: leetCodeProblemToFirestore(record));
@@ -6101,6 +6224,7 @@ class LiveSyncController {
     FirestoreCollections.dreamEntries,
     FirestoreCollections.todoLists,
     FirestoreCollections.todoTasks,
+    FirestoreCollections.todoTaskCompletions,
     FirestoreCollections.leetcodeProblems,
     FirestoreCollections.leetcodeReviewLog,
     FirestoreCollections.leetcodeCheatTabs,

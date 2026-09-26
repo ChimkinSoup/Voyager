@@ -106,6 +106,11 @@ Future<AppDatabase> _pumpWithRepeatingTask(
 Future<TodoTask> _reload(AppDatabase db) async =>
     (await DriftTodoRepository(db).getTask(_taskId))!;
 
+Future<List<TodoTaskCompletion>> _liveCompletions(AppDatabase db) async => [
+  for (final c in await DriftTodoRepository(db).getAllCompletions())
+    if (c.deletedAt == null) c,
+];
+
 /// Taps the repeating row's checkbox.
 ///
 /// Found by widget, not by position: the checkbox is a [GestureDetector] nested
@@ -180,6 +185,11 @@ void main() {
     // The rule and its anchor survive, so the next tick rolls again.
     expect(rolled.recurrence.frequency, EventRecurrence.weekly);
     expect(rolled.recurrenceAnchor, isNotNull);
+
+    // The tick is still on record, against the occurrence it finished.
+    final logged = await _liveCompletions(db);
+    expect(logged, hasLength(1));
+    expect(logged.single.dueDate, before.dueDate);
   });
 
   testWidgets('a custom every-3-days task advances by three days', (
@@ -313,5 +323,34 @@ void main() {
 
     expect(done.completed, isTrue);
     expect(done.dueDate, before.dueDate);
+    expect(done.completedAt, isNotNull);
+    final logged = await _liveCompletions(db);
+    expect(logged, hasLength(1));
+    expect(logged.single.completedAt, done.completedAt);
+  });
+
+  testWidgets('un-ticking a completed task takes its logged tick back', (
+    tester,
+  ) async {
+    final db = await _pumpWithRepeatingTask(
+      tester,
+      rule: RecurrenceRule.none,
+      dueLocal: DateTime.now().copyWith(
+        hour: 9,
+        minute: 30,
+        second: 0,
+        millisecond: 0,
+        microsecond: 0,
+      ),
+    );
+
+    await _tickIt(tester);
+    expect(await _liveCompletions(db), hasLength(1));
+
+    await _tickIt(tester);
+    final reopened = await _reload(db);
+    expect(reopened.completed, isFalse);
+    expect(reopened.completedAt, isNull);
+    expect(await _liveCompletions(db), isEmpty);
   });
 }

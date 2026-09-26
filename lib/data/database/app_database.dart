@@ -186,6 +186,9 @@ class TodoTasksTable extends Table {
   TextColumn get notes => text().nullable()();
   DateTimeColumn get dueDate => dateTime().nullable()();
   BoolColumn get completed => boolean().withDefault(const Constant(false))();
+
+  /// See [TodoTask.completedAt].
+  DateTimeColumn get completedAt => dateTime().nullable()();
   BoolColumn get starred => boolean().withDefault(const Constant(false))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
 
@@ -202,6 +205,23 @@ class TodoTasksTable extends Table {
   DateTimeColumn get recurrenceAnchor => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One tick of a task's checkbox. See [TodoTaskCompletion], and
+/// [LeetCodeReviewLogTable], which this mirrors.
+class TodoTaskCompletionsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get taskId => text()();
+  DateTimeColumn get completedAt => dateTime()();
+  DateTimeColumn get dueDate => dateTime().nullable()();
+
+  /// Bumped by an un-tick and by a re-tick of the same occurrence. See
+  /// [TodoTaskCompletion].
   IntColumn get version => integer().withDefault(const Constant(0))();
   DateTimeColumn get deletedAt => dateTime().nullable()();
 
@@ -891,6 +911,10 @@ class SettingsTable extends Table {
   RealColumn get geometricWaveScatterLitAmount =>
       real().withDefault(const Constant(0.12))();
   TextColumn get navPageOrderJson => text().nullable()();
+
+  /// JSON list of hidden nav page paths. Null only on rows from before v129,
+  /// which read as [defaultHiddenNavPages]; an empty list means none hidden.
+  TextColumn get hiddenNavPagesJson => text().nullable()();
   TextColumn get startupPageMode =>
       text().withDefault(const Constant('first'))();
   TextColumn get customStartupPage => text().nullable()();
@@ -1810,6 +1834,7 @@ class LeetCodeCheatEntriesTable extends Table {
     DreamEntriesTable,
     TodoListsTable,
     TodoTasksTable,
+    TodoTaskCompletionsTable,
     CalendarsTable,
     CalendarEventsTable,
     TrackersTable,
@@ -1874,7 +1899,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 127;
+  int get schemaVersion => 129;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3315,6 +3340,24 @@ class AppDatabase extends _$AppDatabase {
       if (from < 127) {
         await migrator.alterTable(TableMigration(trackerValuesTable));
       }
+      // Nothing to backfill: when an already-completed task was ticked was
+      // never recorded, so its completedAt stays null and the history starts
+      // here.
+      if (from < 128) {
+        await _addColumnIfNotExists(
+          migrator,
+          'todo_tasks_table',
+          todoTasksTable,
+          todoTasksTable.completedAt,
+        );
+        await migrator.createTable(todoTaskCompletionsTable);
+      }
+      if (from < 129) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.hiddenNavPagesJson,
+        );
+      }
     },
   );
 
@@ -4083,6 +4126,13 @@ LazyDatabase _openConnection() {
     // instance, fires several writes plus a re-read of every list right while
     // the row is animating. In the background the UI isolate only pays for the
     // message hop.
-    return NativeDatabase.createInBackground(file);
+    return NativeDatabase.createInBackground(
+      file,
+      // Wait out another connection's lock instead of failing the write at
+      // once. Without it, anything else reading the file — a DB browser, a
+      // backup tool — holding a shared lock at the wrong moment threw
+      // "database is locked" straight out of a sync pull.
+      setup: (db) => db.execute('PRAGMA busy_timeout = 5000;'),
+    );
   });
 }

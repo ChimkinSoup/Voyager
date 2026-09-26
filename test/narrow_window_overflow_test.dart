@@ -115,7 +115,7 @@ const _dialogTaps = <String, List<String>>{
     'Birth date',
     'Job application profile',
     'LeetCode username',
-    'Reorder navigation pages',
+    'Navigation pages',
     'Startup page',
   ],
 };

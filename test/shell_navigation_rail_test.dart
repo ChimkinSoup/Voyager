@@ -198,6 +198,8 @@ void main() {
 /// the longest list the rail can be asked to lay out.
 class _FixedSettings extends SettingsNotifier {
   @override
-  Future<AppSettings> build() async =>
-      AppSettings(navPageOrder: shellDestinations.map((d) => d.path).toList());
+  Future<AppSettings> build() async => AppSettings(
+    navPageOrder: shellDestinations.map((d) => d.path).toList(),
+    hiddenNavPages: const [],
+  );
 }

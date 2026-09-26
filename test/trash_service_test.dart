@@ -470,6 +470,53 @@ void main() {
       expect(await journals.getEntry('erased'), isNotNull);
     });
 
+    test('a task takes its completions, and its subtasks\', when erased — '
+        'not when deleted', () async {
+      for (final (id, parent) in [('t', null), ('s', 't'), ('other', null)]) {
+        await todos.upsertTask(
+          TodoTask(
+            id: id,
+            listId: 'l',
+            title: id,
+            parentTaskId: parent,
+            completed: true,
+            createdAt: created,
+            updatedAt: created,
+          ),
+        );
+        await todos.logCompletion(
+          TodoTaskCompletion(
+            id: todoTaskCompletionId(id, null),
+            taskId: id,
+            completedAt: created,
+          ),
+        );
+      }
+      final at = utcNow();
+      for (final id in ['s', 't']) {
+        final task = (await todos.getTask(id))!;
+        await todos.upsertTask(task.copyWith(deletedAt: at));
+      }
+      Future<List<String>> counted() async => [
+        for (final c in await todos.getAllCompletions())
+          if (c.deletedAt == null) c.taskId,
+      ]..sort();
+
+      expect(await counted(), ['other', 's', 't']);
+
+      await trash.erase(await trash.list());
+
+      expect(await counted(), ['other']);
+      final erased = await todos.getCompletion(todoTaskCompletionId('t', null));
+      expect(isErasedAt(erased!.deletedAt), isTrue);
+      expect(erased.version, kEraseVersionStep);
+      await trash.uploads;
+      expect(
+        uploader.records[FirestoreCollections.todoTaskCompletions],
+        hasLength(2),
+      );
+    });
+
     test('an erased row is not listed or erased again', () async {
       await addEntry('e', legacyJournalId, 'Gone');
       await journals.softDeleteEntry('e');

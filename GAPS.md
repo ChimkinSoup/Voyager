@@ -33,7 +33,15 @@ After that the tombstone sits in SQLite with no UI to reach it. Either add a Tra
 view (per-feature or global: list `deletedAt != null`, Restore / Delete forever), or
 change the copy to "Deleted (Undo for 8 s)".
 
-### Todo tasks don't record when they were completed
+### ~~Todo tasks don't record when they were completed~~
+**Done (2026-09-25):** tasks carry `completedAt` (stamped and cleared with `completed`),
+and every tick, repeats and subtasks included, records a synced `todo_task_completions`
+row (task, time, due date ticked). There's one row per task and due date, so an
+un-tick takes it back and a re-tick brings it back, on any device. A task's
+completions keep counting while it's in the trash, and go when it's deleted forever
+or purged. It's recorded only for now, with no UI. Tasks completed before v128 have
+no timestamp.
+
 `TodoTasksTable` has `completed` but no `completedAt` (`lib/data/database/app_database.dart:178-202`),
 and a recurring task re-arms without leaving any trace. That rules out a "completed
 today/this week" count, completion history, a done list, and the "tasks completed"
@@ -57,7 +65,12 @@ session will surface symptoms without stack traces.
 
 ## P2: Cross-cutting
 
-### Can't hide nav pages
+### ~~Can't hide nav pages~~
+**Done (2026-09-25):** Settings → Navigation pages has an eye toggle per page (all but
+Settings). Hidden pages leave the rail, Ctrl+Tab and the startup choices, keep their
+place in the order, and sync like the order does. Dev starts hidden (the error log is
+one toggle away). Demo isn't in release builds at all.
+
 There are 16 destinations and "Reorder navigation pages" can't hide any. Dev and Demo
 ship in every build with no `kReleaseMode` gate (`shell_destinations.dart:128,134`). For
 you: hide pages you're not using this season (e.g. Jobs). For a second user: Dev and
@@ -104,7 +117,8 @@ The planner, live session and exercise detail work well together. Gaps:
   beside each set is the most useful number mid-workout.
 
 ### Todo
-- No completion timestamp (P1 above).
+- ~~No completion timestamp (P1 above).~~ Done; a "done this week" count or done
+  list can now be built on the completion log.
 
 ### Analytics / trackers
 - Tracker types are integer, boolean and enum (`lib/domain/models/enums.dart:1`).
@@ -184,7 +198,7 @@ The planner, live session and exercise detail work well together. Gaps:
 ## Suggested order before the bug hunt
 1. ~~Error log (P1). It makes the bug hunt productive.~~ Done.
 2. Turn off `dev_disable_cache`.
-3. `completedAt` on tasks (P1). Starts collecting history now.
+3. ~~`completedAt` on tasks (P1). Starts collecting history now.~~ Done.
 4. ~~Trash view or honest delete copy (P1).~~ Done.
 5. Launch at login, plus auto-backup with a pre-migration snapshot.
 6. Then pick from P2 by taste. My pick: workout session history.

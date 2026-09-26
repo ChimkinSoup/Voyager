@@ -247,10 +247,20 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       title: 'Buy stamps',
       notes: 'post office',
       dueDate: now,
+      completed: true,
+      completedAt: now,
       starred: true,
       sortOrder: 7,
       createdAt: now,
       updatedAt: now,
+    ),
+  );
+  await todoRepo.logCompletion(
+    TodoTaskCompletion(
+      id: 'task-completion-1',
+      taskId: 'task-1',
+      completedAt: now,
+      dueDate: now,
     ),
   );
   await leetCodeRepo.upsertProblem(
@@ -1086,6 +1096,7 @@ void main() {
         'dream_entries_table',
         'todo_lists_table',
         'todo_tasks_table',
+        'todo_task_completions_table',
         'leet_code_problems_table',
         'leet_code_review_log_table',
         'leet_code_cheat_tabs_table',

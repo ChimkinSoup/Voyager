@@ -18,8 +18,9 @@ class CrdtDocumentResolver {
     SyncRepository repository,
     String documentId, {
     List<SyncOperation> localOperations = const [],
+    List<SyncOperation>? remoteOperations,
   }) async {
-    final remoteOperations = await repository.listOperations(documentId);
+    remoteOperations ??= await repository.listOperations(documentId);
     if (remoteOperations.isEmpty && localOperations.isEmpty) {
       return null;
     }

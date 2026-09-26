@@ -229,7 +229,11 @@ class TrashService {
       final root = rows[item.kind.collection]?[item.id];
       if (root == null || root.deletedAt == null) continue;
       if (isErasedAt(root.deletedAt)) continue;
-      for (final row in [root, ..._membersOf(root, rows)]) {
+      final members = [root, ..._membersOf(root, rows)];
+      for (final row in [
+        ...members,
+        for (final member in members) ..._erasedWith(member, rows),
+      ]) {
         if (!seen.add(_key(row))) continue;
         writes.add((
           row,
@@ -293,6 +297,20 @@ class TrashService {
       }
     }
     return found.values.toList();
+  }
+
+  /// The rows [TrashKind.erasedWith] names for [owner], not erased already.
+  Iterable<TrashRow> _erasedWith(
+    TrashRow owner,
+    Map<String, Map<String, TrashRow>> rows,
+  ) sync* {
+    for (final dependent in owner.kind.erasedWith) {
+      for (final row
+          in rows[dependent.collection]?.values ?? const <TrashRow>[]) {
+        if (isErasedAt(row.deletedAt)) continue;
+        if (dependent.keys.any((key) => row.data[key] == owner.id)) yield row;
+      }
+    }
   }
 
   Future<Map<String, Map<String, TrashRow>>> _readAll() async {

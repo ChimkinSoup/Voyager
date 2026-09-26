@@ -520,7 +520,10 @@ class SettingsPage extends ConsumerWidget {
           Text('Navigation', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
           ListTile(
-            title: const Text('Reorder navigation pages'),
+            title: const Text('Navigation pages'),
+            subtitle: const Text(
+              "Reorder pages, or hide the ones you don't use",
+            ),
             trailing: const Icon(PhosphorIconsRegular.caretRight),
             onTap: () => _showReorderNavDialog(context, ref, settings),
           ),
@@ -744,6 +747,7 @@ class SettingsPage extends ConsumerWidget {
     AppSettings settings,
   ) async {
     final items = getOrderedDestinations(settings, shellDestinations).toList();
+    final hidden = settings.hiddenNavPages.toSet();
 
     await showDialog(
       context: context,
@@ -751,7 +755,7 @@ class SettingsPage extends ConsumerWidget {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: const Text('Reorder navigation pages'),
+              title: const Text('Navigation pages'),
               content: SizedBox(
                 width: 320,
                 child: ReorderableListView(
@@ -774,10 +778,16 @@ class SettingsPage extends ConsumerWidget {
                       ReorderableDragStartListener(
                         key: ValueKey(items[i].dest.path),
                         index: i,
-                        child: ListTile(
-                          leading: Icon(items[i].dest.icon),
-                          title: Text(items[i].dest.label),
-                          trailing: const Icon(Icons.drag_handle),
+                        child: _NavPageRow(
+                          dest: items[i].dest,
+                          hidden: hidden.contains(items[i].dest.path),
+                          // Settings stays: it's the only way back to here.
+                          onToggleHidden: items[i].dest.path == '/settings'
+                              ? null
+                              : () => setState(() {
+                                  final path = items[i].dest.path;
+                                  if (!hidden.remove(path)) hidden.add(path);
+                                }),
                         ),
                       ),
                   ],
@@ -792,7 +802,13 @@ class SettingsPage extends ConsumerWidget {
                 GlassButton(
                   onPressed: () {
                     final newOrder = items.map((e) => e.dest.path).toList();
-                    _save(ref, settings.copyWith(navPageOrder: newOrder));
+                    _save(
+                      ref,
+                      settings.copyWith(
+                        navPageOrder: newOrder,
+                        hiddenNavPages: hidden.toList(),
+                      ),
+                    );
                     Navigator.of(context).pop();
                   },
                   label: 'Save',
@@ -875,9 +891,13 @@ class SettingsPage extends ConsumerWidget {
     WidgetRef ref,
     AppSettings settings,
   ) async {
-    final ordered = getOrderedDestinations(settings, shellDestinations);
+    final ordered = getVisibleDestinations(settings);
     StartupPageMode mode = settings.startupPageMode;
-    String? customPath = settings.customStartupPage;
+    // Only pages in the rail are offered, so one picked before it was hidden
+    // shows as the rail's first page instead.
+    String? customPath = settings.customStartupPage == null
+        ? null
+        : startupPathFor(settings, settings.customStartupPage);
 
     await showDialog(
       context: context,
@@ -918,14 +938,14 @@ class SettingsPage extends ConsumerWidget {
                       child: DropdownButtonFormField<String>(
                         value: customPath,
                         items: [
-                          for (final d in shellDestinations)
+                          for (final d in ordered)
                             DropdownMenuItem(
-                              value: d.path,
+                              value: d.dest.path,
                               child: Row(
                                 children: [
-                                  Icon(d.icon, size: 16),
+                                  Icon(d.dest.icon, size: 16),
                                   const SizedBox(width: 8),
-                                  Text(d.label),
+                                  Text(d.dest.label),
                                 ],
                               ),
                             ),
@@ -976,6 +996,46 @@ class SettingsPage extends ConsumerWidget {
 /// cache size — which walks the media directory — rebuilds only this tile and
 /// not the whole settings page.
 /// The automatic-backups switch and its status row — AUTO_BACKUP_HLD.md §9.
+/// One page in the navigation pages dialog: drag to reorder, eye to hide.
+class _NavPageRow extends StatelessWidget {
+  const _NavPageRow({
+    required this.dest,
+    required this.hidden,
+    required this.onToggleHidden,
+  });
+
+  final ShellDestination dest;
+  final bool hidden;
+
+  /// Null for a page that can't be hidden.
+  final VoidCallback? onToggleHidden;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).disabledColor;
+    return ListTile(
+      leading: Icon(dest.icon, color: hidden ? muted : null),
+      title: Text(dest.label, style: hidden ? TextStyle(color: muted) : null),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (onToggleHidden != null)
+            IconButton(
+              tooltip: hidden ? 'Show in navigation' : 'Hide from navigation',
+              icon: Icon(
+                hidden
+                    ? PhosphorIconsRegular.eyeSlash
+                    : PhosphorIconsRegular.eye,
+              ),
+              onPressed: onToggleHidden,
+            ),
+          const Icon(Icons.drag_handle),
+        ],
+      ),
+    );
+  }
+}
+
 class _AutoBackupTiles extends ConsumerStatefulWidget {
   const _AutoBackupTiles();
 

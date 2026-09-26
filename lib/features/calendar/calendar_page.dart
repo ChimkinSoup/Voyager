@@ -687,6 +687,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       writes = [next];
     }
 
+    // The completion log is kept against disk, not the popup's snapshot: the
+    // task may have been ticked elsewhere while the popup was open.
+    final onDisk = await repo.getTask(next.id) ?? before;
     await repo.upsertTasksBatch(writes);
     // The edited row carries title/notes changes, so it goes up on its own to
     // keep its char-ops; the rest of the batch is sort-order shuffling only.
@@ -698,6 +701,12 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     }
     await remoteSync.pushTodoTasksBatch(
       writes.where((t) => t.id != next.id).toList(),
+    );
+    await recordTodoCompletionChange(
+      repo: repo,
+      sync: remoteSync,
+      before: onDisk,
+      after: next,
     );
 
     // Ticking a repeating task here means the same thing it means on the

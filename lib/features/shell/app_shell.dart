@@ -55,10 +55,7 @@ class AppShell extends ConsumerWidget {
       unawaited(showScheduledReminderEditor(context));
     });
     final settings = ref.watch(settingsProvider).value ?? const AppSettings();
-    final orderedDestinations = getOrderedDestinations(
-      settings,
-      shellDestinations,
-    );
+    final orderedDestinations = getVisibleDestinations(settings);
     final navigationShell = _navigationShell;
     final index = navigationShell.currentIndex;
     final accent = Color(settings.accentColor);

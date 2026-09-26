@@ -22,7 +22,7 @@ void main() {
   late DriftTodoRepository todoRepo;
   late DriftLeetCodeRepository leetCodeRepo;
   late DriftStudyRepository studyRepo;
-  late InMemorySyncRepository syncRepo;
+  late _CountingSyncRepository syncRepo;
   late RemoteSyncService deviceA;
   late RemoteSyncService deviceB;
   late SyncEngine engineA;
@@ -34,7 +34,7 @@ void main() {
     todoRepo = DriftTodoRepository(db);
     leetCodeRepo = DriftLeetCodeRepository(db);
     studyRepo = DriftStudyRepository(db);
-    syncRepo = InMemorySyncRepository();
+    syncRepo = _CountingSyncRepository();
 
     engineA = SyncEngine(
       syncRepository: syncRepo,
@@ -199,6 +199,56 @@ void main() {
 
     final tasks = await todoRepo.listTasks('list-1');
     expect(tasks.single.title, 'CRDT title');
+  });
+
+  test('pull reads each operation log once, several at a time', () async {
+    final now = utcNow();
+    await todoRepo.upsertList(
+      TodoListModel(
+        id: 'list-1',
+        name: 'Inbox',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    for (var i = 0; i < 20; i++) {
+      final stale = TodoTask(
+        id: 'task-$i',
+        listId: 'list-1',
+        title: 'Stale $i',
+        createdAt: now,
+        updatedAt: now,
+      );
+      await syncRepo.upsertDocument(
+        FirestoreCollections.todoTasks,
+        stale.id,
+        todoTaskToFirestore(stale),
+      );
+      await syncRepo.appendOperation(
+        SyncOperation(
+          id: 'device-a_task-${i}_1',
+          documentId: stale.id,
+          sequence: 1,
+          payload: jsonEncode(
+            todoTaskToFirestore(stale.copyWith(title: 'CRDT $i')),
+          ),
+          deviceId: 'device-a',
+          timestamp: now,
+        ),
+      );
+    }
+    syncRepo.operationReads.clear();
+
+    await deviceB.pullTodoTasks();
+
+    final tasks = await todoRepo.listTasks('list-1');
+    expect(tasks.map((t) => t.title), containsAll(['CRDT 0', 'CRDT 19']));
+    expect(tasks, hasLength(20));
+    // Once per task, where resolving and conflict detection used to ask
+    // separately — and not one after another.
+    expect(syncRepo.operationReads, hasLength(20));
+    expect(syncRepo.operationReads.toSet(), hasLength(20));
+    expect(syncRepo.maxOperationReadsInFlight, greaterThan(1));
   });
 
   test('push then pull propagates journal entry updates and deletes', () async {
@@ -562,4 +612,26 @@ void main() {
       expect(await journalRepo.getEntry(entry.id), isNotNull);
     },
   );
+}
+
+/// Records every operation-log read, and how many were waiting at once.
+class _CountingSyncRepository extends InMemorySyncRepository {
+  final operationReads = <String>[];
+  var _inFlight = 0;
+  var maxOperationReadsInFlight = 0;
+
+  @override
+  Future<List<SyncOperation>> listOperations(String documentId) async {
+    operationReads.add(documentId);
+    _inFlight++;
+    if (_inFlight > maxOperationReadsInFlight) {
+      maxOperationReadsInFlight = _inFlight;
+    }
+    try {
+      await Future<void>.delayed(Duration.zero);
+      return await super.listOperations(documentId);
+    } finally {
+      _inFlight--;
+    }
+  }
 }

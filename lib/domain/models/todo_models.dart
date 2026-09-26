@@ -1,3 +1,4 @@
+import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/recurrence_rule.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
 
@@ -53,6 +54,7 @@ class TodoTask extends SoftDeletable {
     this.notes,
     this.dueDate,
     this.completed = false,
+    this.completedAt,
     this.starred = false,
     this.sortOrder = 0,
     this.dueDateSetAt,
@@ -66,6 +68,11 @@ class TodoTask extends SoftDeletable {
   final String? notes;
   final DateTime? dueDate;
   final bool completed;
+
+  /// When [completed] last went true; null while the task is open, and on
+  /// tasks completed before the field existed. A repeating task never holds
+  /// one — its ticks are [TodoTaskCompletion] rows.
+  final DateTime? completedAt;
   final bool starred;
   final int sortOrder;
   final DateTime? dueDateSetAt;
@@ -119,6 +126,12 @@ class TodoTask extends SoftDeletable {
       notes: clearNotes ? null : (notes ?? this.notes),
       dueDate: clearDueDate ? null : (dueDate ?? this.dueDate),
       completed: completed ?? this.completed,
+      // Follows [completed]: stamped when it turns true, cleared when it turns
+      // false, and left alone otherwise — so every path that ticks a task
+      // records the moment without having to remember to.
+      completedAt: completed == null || completed == this.completed
+          ? completedAt
+          : (completed ? DateTime.now().toUtc() : null),
       starred: starred ?? this.starred,
       sortOrder: sortOrder ?? this.sortOrder,
       dueDateSetAt: clearDueDateSetAt
@@ -145,6 +158,7 @@ class TodoTask extends SoftDeletable {
     'notes': notes,
     'dueDate': dueDate?.toUtc().toIso8601String(),
     'completed': completed,
+    'completedAt': completedAt?.toUtc().toIso8601String(),
     'starred': starred,
     'sortOrder': sortOrder,
     'dueDateSetAt': dueDateSetAt?.toUtc().toIso8601String(),
@@ -169,6 +183,9 @@ class TodoTask extends SoftDeletable {
           ? DateTime.parse(json['dueDate'] as String).toUtc()
           : null,
       completed: json['completed'] as bool? ?? false,
+      completedAt: json['completedAt'] != null
+          ? DateTime.parse(json['completedAt'] as String).toUtc()
+          : null,
       starred: json['starred'] as bool? ?? false,
       sortOrder: json['sortOrder'] as int? ?? 0,
       dueDateSetAt: json['dueDateSetAt'] != null
@@ -181,4 +198,56 @@ class TodoTask extends SoftDeletable {
           : null,
     );
   }
+}
+
+/// The id of [taskId]'s completion against [dueDate]: one row per occurrence.
+///
+/// Derived rather than random so every device addresses the same row. Two
+/// devices ticking the same task offline write one row, not two, and an
+/// un-tick can tombstone the row before the tick itself has synced in.
+String todoTaskCompletionId(String taskId, DateTime? dueDate) =>
+    '${taskId}_${dueDate?.microsecondsSinceEpoch ?? 'undated'}';
+
+/// One tick of a task's checkbox — the history [TodoTask.completedAt] can't
+/// hold, since a repeating task moves on to its next occurrence instead of
+/// staying completed.
+///
+/// One row per occurrence (see [todoTaskCompletionId]). Un-ticking
+/// soft-deletes the row, so a tick taken back stops being counted, and
+/// ticking the same occurrence again brings it back with a new
+/// [completedAt]. [version] is what carries both across devices — conflict
+/// resolution is version-first, and each write goes one version above the
+/// row it replaces.
+class TodoTaskCompletion {
+  const TodoTaskCompletion({
+    required this.id,
+    required this.taskId,
+    required this.completedAt,
+    this.dueDate,
+    this.version = 0,
+    this.deletedAt,
+  });
+
+  final String id;
+  final String taskId;
+
+  /// UTC. Equal to the task's [TodoTask.completedAt] for a one-off, which is
+  /// how an un-tick finds the row after the task's due date has changed.
+  final DateTime completedAt;
+
+  /// The due date the tick was against — for a repeating task, the occurrence
+  /// that was done, which its row forgets as soon as it rolls forward.
+  final DateTime? dueDate;
+  final int version;
+  final DateTime? deletedAt;
+
+  /// The tombstone for this row, one version above it.
+  TodoTaskCompletion deleted() => TodoTaskCompletion(
+    id: id,
+    taskId: taskId,
+    completedAt: completedAt,
+    dueDate: dueDate,
+    version: version + 1,
+    deletedAt: utcNow(),
+  );
 }

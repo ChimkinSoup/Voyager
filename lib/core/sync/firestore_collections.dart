@@ -5,6 +5,12 @@ abstract final class FirestoreCollections {
   static const dreamEntries = 'dream_entries';
   static const todoLists = 'todo_lists';
   static const todoTasks = 'todo_tasks';
+
+  /// One record per tick of a task's checkbox. Its own collection rather than
+  /// a list on the task, for the reason [entityReminders] gives: a task is
+  /// CRDT-backed, and a tick on one device must not ride through a notes merge
+  /// on another.
+  static const todoTaskCompletions = 'todo_task_completions';
   static const leetcodeProblems = 'leetcode_problems';
   static const leetcodeReviewLog = 'leetcode_review_log';
 
@@ -103,6 +109,7 @@ abstract final class FirestoreCollections {
     dreamEntries,
     todoLists,
     todoTasks,
+    todoTaskCompletions,
     leetcodeProblems,
     leetcodeReviewLog,
     leetcodeCheatTabs,

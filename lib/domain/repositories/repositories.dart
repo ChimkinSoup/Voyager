@@ -219,6 +219,24 @@ abstract class TodoRepository {
   Future<void> purgeExpiredDeleted(DateTime now);
   Future<List<TodoTask>> getAllTasks({bool includeDeleted = true});
   Future<TodoTask?> getTask(String id);
+
+  /// Appends one tick of a task, or rewrites an existing row when a remote
+  /// revision of it arrives. See [TodoTaskCompletion].
+  Future<void> logCompletion(
+    TodoTaskCompletion completion, {
+    bool recordLocalActivity = true,
+  });
+  Future<TodoTaskCompletion?> getCompletion(String id);
+
+  /// The live row [taskId] logged at [completedAt] — what an un-tick takes
+  /// back.
+  Future<TodoTaskCompletion?> findCompletion(
+    String taskId,
+    DateTime completedAt,
+  );
+
+  /// Every logged tick, tombstones included — what the backup registry wants.
+  Future<List<TodoTaskCompletion>> getAllCompletions();
 }
 
 abstract class CalendarRepository {

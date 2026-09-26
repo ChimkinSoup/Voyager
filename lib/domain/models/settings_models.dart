@@ -15,6 +15,10 @@ export 'package:voyager/domain/models/snippet.dart' show Snippet;
 /// highlight color.
 const int defaultPetalColor = 0xFFE6A4B4;
 
+/// Dev starts out of the rail: it's for debugging, not everyday use, but it
+/// stays one toggle away because the error log lives there.
+const defaultHiddenNavPages = <String>['/dev'];
+
 class AppSettings {
   const AppSettings({
     this.accentColor = 0xFF7C9EFF,
@@ -126,6 +130,7 @@ class AppSettings {
     this.journalEntryListWidth,
     this.editSidePanelWidth,
     this.navPageOrder,
+    this.hiddenNavPages = defaultHiddenNavPages,
     this.startupPageMode = StartupPageMode.first,
     this.customStartupPage,
     this.lastSeenNavPage,
@@ -376,6 +381,10 @@ class AppSettings {
   /// Device-local (like [journalEntryListWidth]): sized for this screen.
   final double? editSidePanelWidth;
   final List<String>? navPageOrder;
+
+  /// Nav pages taken out of the rail, by path. Hidden pages keep their place
+  /// in [navPageOrder], so showing one again puts it back where it was.
+  final List<String> hiddenNavPages;
   final StartupPageMode startupPageMode;
   final String? customStartupPage;
   final String? lastSeenNavPage;
@@ -606,6 +615,7 @@ class AppSettings {
     double? journalEntryListWidth,
     double? editSidePanelWidth,
     List<String>? navPageOrder,
+    List<String>? hiddenNavPages,
     StartupPageMode? startupPageMode,
     String? customStartupPage,
     String? lastSeenNavPage,
@@ -867,6 +877,7 @@ class AppSettings {
       navPageOrder: clearNavPageOrder
           ? null
           : (navPageOrder ?? this.navPageOrder),
+      hiddenNavPages: hiddenNavPages ?? this.hiddenNavPages,
       startupPageMode: startupPageMode ?? this.startupPageMode,
       customStartupPage: clearCustomStartupPage
           ? null

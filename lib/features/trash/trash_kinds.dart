@@ -83,6 +83,7 @@ class TrashKind {
     this.wipe = const [],
     this.children = const [],
     this.parents = const [],
+    this.erasedWith = const [],
     this.mediaOwner,
     this.listed = true,
   });
@@ -104,6 +105,12 @@ class TrashKind {
 
   final List<TrashChild> children;
   final List<TrashParent> parents;
+
+  /// Rows that point at this one and go when it is deleted forever, whatever
+  /// their own state. Unlike [children], a delete doesn't take them, so a
+  /// restore has nothing to bring back — a task's completions keep counting
+  /// while it sits in the trash, and stop only when it is erased.
+  final List<TrashChild> erasedWith;
 
   /// The collection media references name this row's documents under, for
   /// the images a delete detached from it.
@@ -217,7 +224,16 @@ final _kinds = <TrashKind>[
       ),
       TrashParent(FirestoreCollections.todoTasks, 'parentTaskId'),
     ],
+    erasedWith: const [
+      TrashChild(FirestoreCollections.todoTaskCompletions, ['taskId']),
+    ],
     mediaOwner: FirestoreCollections.todoTasks,
+  ),
+  const TrashKind(
+    collection: FirestoreCollections.todoTaskCompletions,
+    feature: TrashFeature.todo,
+    noun: 'completion',
+    listed: false,
   ),
   const TrashKind(
     collection: FirestoreCollections.calendars,

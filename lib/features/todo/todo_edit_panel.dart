@@ -22,6 +22,7 @@ import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/time_format.dart';
+import 'package:voyager/domain/todo/todo_recurring_completion.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
@@ -895,11 +896,21 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
         _subtasks[index] = subtask.copyWith(completed: completed);
       }
     });
-    final written = await _writeSubtask(
-      subtask,
-      (current) => current.copyWith(completed: completed),
+    final repo = ref.read(todoRepositoryProvider);
+    final remoteSync = ref.read(remoteSyncServiceProvider);
+    TodoTask? before;
+    final written = await _writeSubtask(subtask, (current) {
+      before = current;
+      return current.copyWith(completed: completed);
+    });
+    if (written == null) return;
+    await recordTodoCompletionChange(
+      repo: repo,
+      sync: remoteSync,
+      before: before!,
+      after: written,
     );
-    if (written != null && mounted) widget.onChanged();
+    if (mounted) widget.onChanged();
   }
 
   Future<void> _renameSubtask(TodoTask subtask, String title) async {
@@ -975,6 +986,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       notes: subtask.notes,
       dueDate: subtask.dueDate,
       completed: subtask.completed,
+      completedAt: subtask.completedAt,
       starred: subtask.starred,
       sortOrder: subtask.sortOrder,
       dueDateSetAt: subtask.dueDateSetAt,
@@ -1045,6 +1057,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       listId: widget.task.listId,
       title: subtask.title,
       completed: subtask.completed,
+      completedAt: subtask.completedAt,
       createdAt: now,
       updatedAt: now,
     );
@@ -1054,6 +1067,23 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     for (final updated in batch.tasks) {
       await repo.upsertTask(updated);
       remoteSync.pushTodoTaskInBackground(updated);
+    }
+    // The tick moves to the new task, which is what an un-tick of it will
+    // look for. A tick from before the log existed has nothing to move.
+    final onDisk = await repo.getTask(subtask.id);
+    if (onDisk != null && onDisk.completed && onDisk.completedAt != null) {
+      await recordTodoCompletionChange(
+        repo: repo,
+        sync: remoteSync,
+        before: onDisk,
+        after: onDisk.copyWith(completed: false),
+      );
+      await recordTodoCompletionChange(
+        repo: repo,
+        sync: remoteSync,
+        before: task.copyWith(completed: false),
+        after: task,
+      );
     }
     await _deleteSubtask(subtask);
     widget.onChanged();

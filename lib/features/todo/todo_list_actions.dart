@@ -158,6 +158,7 @@ Future<void> restoreTaskWithSubtasks(
         notes: task.notes,
         dueDate: task.dueDate,
         completed: task.completed,
+        completedAt: task.completedAt,
         starred: task.starred,
         sortOrder: task.sortOrder,
         dueDateSetAt: task.dueDateSetAt,

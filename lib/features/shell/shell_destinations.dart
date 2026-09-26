@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/icons/voyager_icons.dart';
@@ -124,12 +125,14 @@ const shellDestinations = <ShellDestination>[
     label: 'Workout',
     page: WorkoutPage(),
   ),
-  ShellDestination(
-    path: '/demo',
-    icon: PhosphorIconsRegular.flower,
-    label: 'Demo',
-    page: DemoPage(),
-  ),
+  // A playground, so release builds leave it out altogether.
+  if (!kReleaseMode)
+    ShellDestination(
+      path: '/demo',
+      icon: PhosphorIconsRegular.flower,
+      label: 'Demo',
+      page: DemoPage(),
+    ),
   ShellDestination(
     path: '/dev',
     icon: VoyagerIcons.debug,
@@ -181,4 +184,20 @@ List<OrderedDestination> getOrderedDestinations(
   }
 
   return result;
+}
+
+/// The rail's destinations: [getOrderedDestinations] less the pages hidden in
+/// settings. Settings itself can't be hidden, so this is never empty.
+List<OrderedDestination> getVisibleDestinations(AppSettings settings) => [
+  for (final item in getOrderedDestinations(settings, shellDestinations))
+    if (!settings.hiddenNavPages.contains(item.dest.path)) item,
+];
+
+/// Where a fresh login lands: [preferred] when it is a page in the rail,
+/// otherwise the rail's first page.
+String startupPathFor(AppSettings settings, String? preferred) {
+  final visible = getVisibleDestinations(settings);
+  return visible.any((d) => d.dest.path == preferred)
+      ? preferred!
+      : visible.first.dest.path;
 }

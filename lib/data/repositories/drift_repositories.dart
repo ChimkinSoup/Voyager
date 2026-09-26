@@ -1362,6 +1362,7 @@ class DriftTodoRepository implements TodoRepository {
     notes: r.notes,
     dueDate: r.dueDate,
     completed: r.completed,
+    completedAt: r.completedAt,
     starred: r.starred,
     sortOrder: r.sortOrder,
     dueDateSetAt: r.dueDateSetAt,
@@ -1390,6 +1391,7 @@ class DriftTodoRepository implements TodoRepository {
             notes: Value(task.notes),
             dueDate: Value(task.dueDate),
             completed: Value(task.completed),
+            completedAt: Value(task.completedAt),
             starred: Value(task.starred),
             sortOrder: Value(task.sortOrder),
             dueDateSetAt: Value(task.dueDateSetAt),
@@ -1423,6 +1425,7 @@ class DriftTodoRepository implements TodoRepository {
             notes: Value(task.notes),
             dueDate: Value(task.dueDate),
             completed: Value(task.completed),
+            completedAt: Value(task.completedAt),
             starred: Value(task.starred),
             sortOrder: Value(task.sortOrder),
             dueDateSetAt: Value(task.dueDateSetAt),
@@ -1456,10 +1459,33 @@ class DriftTodoRepository implements TodoRepository {
               _notOwedUpload(_db, FirestoreCollections.todoLists, t.id),
         ))
         .go();
+    // A task's ticks go with it, before it: once the task row is gone nothing
+    // could tell which ones those were. Every device purges the task on the
+    // same clock, so each drops its own copies and nothing needs to sync.
+    final tasks = _db.todoTasksTable;
+    final purgedTaskIds = _db.selectOnly(tasks)
+      ..addColumns([tasks.id])
+      ..where(
+        _expired(tasks.deletedAt, cutoff) &
+            _notOwedUpload(_db, FirestoreCollections.todoTasks, tasks.id),
+      );
+    await (_db.delete(
+      _db.todoTaskCompletionsTable,
+    )..where((t) => t.taskId.isInQuery(purgedTaskIds))).go();
     await (_db.delete(_db.todoTasksTable)..where(
           (t) =>
               _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.todoTasks, t.id),
+        ))
+        .go();
+    await (_db.delete(_db.todoTaskCompletionsTable)..where(
+          (t) =>
+              _expired(t.deletedAt, cutoff) &
+              _notOwedUpload(
+                _db,
+                FirestoreCollections.todoTaskCompletions,
+                t.id,
+              ),
         ))
         .go();
   }
@@ -1480,6 +1506,68 @@ class DriftTodoRepository implements TodoRepository {
     )..where((t) => t.id.equals(id))).getSingleOrNull();
     return row == null ? null : _mapTask(row);
   }
+
+  @override
+  Future<void> logCompletion(
+    TodoTaskCompletion completion, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.todoTaskCompletionsTable)
+        .insertOnConflictUpdate(
+          TodoTaskCompletionsTableCompanion(
+            id: Value(completion.id),
+            taskId: Value(completion.taskId),
+            completedAt: Value(completion.completedAt),
+            dueDate: Value(completion.dueDate),
+            version: Value(completion.version),
+            deletedAt: Value(completion.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.todoTaskCompletions);
+    }
+  }
+
+  @override
+  Future<TodoTaskCompletion?> getCompletion(String id) async {
+    final row = await (_db.select(
+      _db.todoTaskCompletionsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapCompletion(row);
+  }
+
+  @override
+  Future<TodoTaskCompletion?> findCompletion(
+    String taskId,
+    DateTime completedAt,
+  ) async {
+    final rows =
+        await (_db.select(_db.todoTaskCompletionsTable)..where(
+              (t) =>
+                  t.taskId.equals(taskId) &
+                  t.completedAt.equals(completedAt) &
+                  t.deletedAt.isNull(),
+            ))
+            .get();
+    return rows.isEmpty ? null : _mapCompletion(rows.first);
+  }
+
+  @override
+  Future<List<TodoTaskCompletion>> getAllCompletions() async {
+    final rows = await _db.select(_db.todoTaskCompletionsTable).get();
+    return rows.map(_mapCompletion).toList();
+  }
+
+  TodoTaskCompletion _mapCompletion(TodoTaskCompletionsTableData row) =>
+      TodoTaskCompletion(
+        id: row.id,
+        taskId: row.taskId,
+        completedAt: row.completedAt,
+        dueDate: row.dueDate,
+        version: row.version,
+        deletedAt: row.deletedAt,
+      );
 }
 
 class DriftCalendarRepository implements CalendarRepository {
@@ -4103,6 +4191,9 @@ class DriftSettingsRepository implements SettingsRepository {
       navPageOrder: row.navPageOrderJson == null
           ? null
           : List<String>.from(jsonDecode(row.navPageOrderJson!) as List),
+      hiddenNavPages: row.hiddenNavPagesJson == null
+          ? defaultHiddenNavPages
+          : List<String>.from(jsonDecode(row.hiddenNavPagesJson!) as List),
       minorPetalColors: row.minorPetalColorsJson == null
           ? const []
           : List<int>.from(jsonDecode(row.minorPetalColorsJson!) as List),
@@ -4386,6 +4477,7 @@ class DriftSettingsRepository implements SettingsRepository {
                   ? null
                   : jsonEncode(settings.navPageOrder),
             ),
+            hiddenNavPagesJson: Value(jsonEncode(settings.hiddenNavPages)),
             jobsHiddenColumnsJson: Value(
               settings.jobsHiddenColumns.isEmpty
                   ? null

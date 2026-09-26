@@ -1948,6 +1948,7 @@ Map<String, dynamic> todoTaskToFirestore(TodoTask task) => {
   'notes': task.notes,
   'dueDate': _dateToFirestore(task.dueDate),
   'completed': task.completed,
+  'completedAt': _dateToFirestore(task.completedAt),
   'starred': task.starred,
   'sortOrder': task.sortOrder,
   'dueDateSetAt': _dateToFirestore(task.dueDateSetAt),
@@ -2015,6 +2016,11 @@ TodoTask mergeTodoTaskFromRemote(
     completed: metadataRemoteWins
         ? (data['completed'] as bool? ?? local?.completed ?? false)
         : local!.completed,
+    completedAt: metadataRemoteWins
+        ? (data.containsKey('completedAt')
+              ? parseFirestoreDate(data['completedAt'])
+              : local?.completedAt)
+        : local!.completedAt,
     starred: metadataRemoteWins
         ? (data['starred'] as bool? ?? local?.starred ?? false)
         : local!.starred,
@@ -2052,6 +2058,44 @@ TodoTask mergeTodoTaskFromRemote(
       local?.deletedAt,
       remoteWins: metadataRemoteWins,
     ),
+  );
+}
+
+Map<String, dynamic> todoTaskCompletionToFirestore(
+  TodoTaskCompletion completion,
+) => {
+  'id': completion.id,
+  'taskId': completion.taskId,
+  'completedAt': _dateToFirestoreRequired(completion.completedAt),
+  'dueDate': _dateToFirestore(completion.dueDate),
+  'version': completion.version,
+  'deletedAt': _dateToFirestore(completion.deletedAt),
+};
+
+/// Version-first with no `updatedAt` tie-break, as
+/// [mergeLeetCodeReviewLogFromRemote] resolves its rows: every rewrite goes
+/// one version up, so the higher version is the later revision. Two devices
+/// ticking the same occurrence offline both write version 0 and keep their
+/// own [TodoTaskCompletion.completedAt], which still counts as one tick.
+TodoTaskCompletion mergeTodoTaskCompletionFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  TodoTaskCompletion? local,
+}) {
+  final remoteVersion = parseVersion(data);
+  if (local != null && remoteVersion <= local.version) return local;
+  return TodoTaskCompletion(
+    id: id,
+    taskId: data['taskId'] as String? ?? local?.taskId ?? '',
+    completedAt:
+        parseFirestoreDate(data['completedAt']) ??
+        local?.completedAt ??
+        utcNow(),
+    dueDate: data.containsKey('dueDate')
+        ? parseFirestoreDate(data['dueDate'])
+        : local?.dueDate,
+    version: remoteVersion,
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
   );
 }
 
@@ -3577,6 +3621,7 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'weatherChartCurveTension': s.weatherChartCurveTension,
   'colorPalette': s.colorPalette,
   'navPageOrder': s.navPageOrder,
+  'hiddenNavPages': s.hiddenNavPages,
   'jobsHiddenColumns': s.jobsHiddenColumns,
   'jobsIncludeArchived': s.jobsIncludeArchived,
   'rankingsCollapsedQueueCategories': s.rankingsCollapsedQueueCategories,
@@ -3776,6 +3821,7 @@ AppSettings mergeSettingsFromRemote(
     colorPalette: _remoteIntList(data, 'colorPalette'),
     navPageOrder: _stringListOrNull(data['navPageOrder']),
     clearNavPageOrder: _remoteClears(data, 'navPageOrder'),
+    hiddenNavPages: _stringListOrNull(data['hiddenNavPages']),
     jobsHiddenColumns: _stringListOrNull(data['jobsHiddenColumns']),
     jobsIncludeArchived: data['jobsIncludeArchived'] as bool?,
     rankingsCollapsedQueueCategories: _stringListOrNull(

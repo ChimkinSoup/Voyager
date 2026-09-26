@@ -191,6 +191,21 @@ List<BackupCollection> buildBackupCollections({
       },
     ),
     BackupCollection(
+      name: FirestoreCollections.todoTaskCompletions,
+      read: () async => [
+        for (final completion in await todoRepository.getAllCompletions())
+          BackupRecord(
+            id: completion.id,
+            data: todoTaskCompletionToFirestore(completion),
+          ),
+      ],
+      restore: (id, data) async {
+        final completion = mergeTodoTaskCompletionFromRemote(data, id);
+        await todoRepository.logCompletion(completion);
+        return completion;
+      },
+    ),
+    BackupCollection(
       name: FirestoreCollections.leetcodeProblems,
       read: () async => [
         for (final problem in await leetCodeRepository.getAllProblems(
