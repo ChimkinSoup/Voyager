@@ -30,6 +30,7 @@ class LabeledTextField extends StatefulWidget {
     this.obscureText = false,
     this.onChanged,
     this.onSubmitted,
+    this.onEditingComplete,
     this.enabled = true,
     this.autofocus = false,
     this.focusNode,
@@ -61,6 +62,9 @@ class LabeledTextField extends StatefulWidget {
   final bool obscureText;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
+
+  /// Replaces the field's own Enter handling, which lets go of the keyboard.
+  final VoidCallback? onEditingComplete;
   final bool enabled;
   final bool autofocus;
   final FocusNode? focusNode;
@@ -306,6 +310,7 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
         textInputAction: widget.textInputAction,
         onChanged: widget.onChanged,
         onSubmitted: widget.onSubmitted,
+        onEditingComplete: widget.onEditingComplete,
         textAlignVertical: widget.expands || (widget.maxLines ?? 1) > 1
             ? TextAlignVertical.top
             : TextAlignVertical.center,

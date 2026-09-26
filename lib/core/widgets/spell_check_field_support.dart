@@ -274,6 +274,11 @@ void bringCursorIntoView({required GlobalKey<State<TextField>> fieldKey}) {
 /// selection is what "Add snippet" prefills its trigger from (see
 /// [resolveSnippetTrigger]), and every desktop editor keeps a selection you
 /// right-click into rather than collapsing it to one word.
+///
+/// Any menu already open is hidden first. On desktop Flutter ends a
+/// right-click with `toggleToolbar`, which *closes* a visible menu — so a
+/// second right-click while one was up flashed the menu for the new word and
+/// then took it away. Hidden here, the toggle always opens a fresh one.
 Widget wrapWithSecondaryTapWordSelect({
   required GlobalKey<State<TextField>> fieldKey,
   required Widget child,
@@ -283,6 +288,7 @@ Widget wrapWithSecondaryTapWordSelect({
       if (event.buttons & kSecondaryMouseButton == 0) return;
       final editableState = editableTextStateOf(fieldKey);
       if (editableState == null) return;
+      editableState.hideToolbar();
       final renderEditable = editableState.renderEditable;
       renderEditable.handleSecondaryTapDown(
         TapDownDetails(globalPosition: event.position, kind: event.kind),
@@ -339,6 +345,13 @@ String? resolveSnippetTrigger(EditableTextState editableTextState) {
 /// [autocorrectSession] is the field's live session, needed so "Replace this
 /// one" goes through the apply path that flashes (§5.4). Null on a field that
 /// runs none, where the offer is simply not made.
+///
+/// Returns the *same* function for the same configuration on every call.
+/// `EditableText.didUpdateWidget` compares `contextMenuBuilder` by identity
+/// and, on any change, disposes an open menu and re-shows it a frame later —
+/// so a fresh closure per build made an open right-click menu blink whenever
+/// its field happened to rebuild (a journal autosave landing, a debounced
+/// highlight repaint).
 EditableTextContextMenuBuilder voyagerTextContextMenuBuilder(
   BuildContext context, {
   bool snippetsAllowed = true,
@@ -347,6 +360,29 @@ EditableTextContextMenuBuilder voyagerTextContextMenuBuilder(
 }) {
   final canAddSnippet =
       snippetsAllowed && SnippetEnabledScope.of(context).enabled;
+  final cache = autocorrectSession == null
+      ? _sessionlessMenuBuilders
+      : (_sessionMenuBuilders[autocorrectSession] ??= {});
+  return cache[(canAddSnippet, spellcheckAllowed)] ??= _buildContextMenuBuilder(
+    canAddSnippet: canAddSnippet,
+    spellcheckAllowed: spellcheckAllowed,
+    autocorrectSession: autocorrectSession,
+  );
+}
+
+/// [voyagerTextContextMenuBuilder]'s memo, keyed by
+/// `(canAddSnippet, spellcheckAllowed)`. Per-session builders hang off an
+/// [Expando] so a disposed field's session is not kept alive by the cache.
+final _sessionlessMenuBuilders =
+    <(bool, bool), EditableTextContextMenuBuilder>{};
+final _sessionMenuBuilders =
+    Expando<Map<(bool, bool), EditableTextContextMenuBuilder>>();
+
+EditableTextContextMenuBuilder _buildContextMenuBuilder({
+  required bool canAddSnippet,
+  required bool spellcheckAllowed,
+  required AutocorrectSession? autocorrectSession,
+}) {
   return (menuContext, editableTextState) {
     final value = editableTextState.textEditingValue;
     final hydrated = misspellingAtCursor(

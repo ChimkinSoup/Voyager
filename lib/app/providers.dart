@@ -2093,8 +2093,10 @@ final notificationDismissalsProvider = FutureProvider<Set<String>>((ref) {
   return ref.watch(notificationRepositoryProvider).listDismissals();
 });
 
-/// Every task/event/bill currently urgent enough to notify about, sorted
-/// soonest-due first, before dismissals are applied.
+/// Every task/event/bill currently urgent enough to notify about, plus a row
+/// per review queue with cards due, sorted soonest-due first, before
+/// dismissals are applied. A queue whose page is hidden from the rail gets no
+/// row: the page was put away on purpose, and the row would open it.
 final notificationFeedProvider = FutureProvider<List<NotificationFeedItem>>((
   ref,
 ) async {
@@ -2102,10 +2104,17 @@ final notificationFeedProvider = FutureProvider<List<NotificationFeedItem>>((
   final tasks = await ref.watch(allTodoTasksProvider.future);
   final events = await ref.watch(calendarEventsProvider(null).future);
   final bills = await ref.watch(subscriptionsProvider.future);
+  final hiddenPages = (await ref.watch(settingsProvider.future)).hiddenNavPages;
   return buildNotificationFeed(
     tasks: tasks,
     events: events,
     bills: bills,
+    studyCards: hiddenPages.contains('/study')
+        ? const []
+        : await ref.watch(studyAllCardsProvider.future),
+    leetCodeProblems: hiddenPages.contains('/leetcode')
+        ? const []
+        : await ref.watch(leetcodeProblemsProvider.future),
     now: DateTime.now(),
   );
 });
@@ -2131,11 +2140,15 @@ final hiddenNotificationFeedProvider =
 /// Idle/semi/important state driving the nav-rail bell's dot. A pending daily
 /// tracker entry counts as semi-important even though it has no row of its
 /// own in the feed (it's surfaced via the popover's embedded Analytics
-/// section instead).
+/// section instead). Review rows never light it: a study backlog is there
+/// most days, and a bell that is always lit stops saying anything.
 final notificationBadgeStateProvider = Provider<NotificationUrgency?>((ref) {
-  final feed =
-      ref.watch(visibleNotificationFeedProvider).valueOrNull ??
-      const <NotificationFeedItem>[];
+  final feed = [
+    for (final item
+        in ref.watch(visibleNotificationFeedProvider).valueOrNull ??
+            const <NotificationFeedItem>[])
+      if (item.type != NotificationItemType.review) item,
+  ];
   final pendingStats = ref.watch(pendingStatEntriesProvider).valueOrNull ?? 0;
   final backupsFailing = ref.watch(
     autoBackupServiceProvider.select((s) => s.status?.failing ?? false),

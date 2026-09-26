@@ -2722,6 +2722,18 @@ class _MorphWeekdayColumn extends StatelessWidget {
   }
 }
 
+/// The weeks [MonthDayGrid] last packed from each events list, and the month
+/// and layout they were packed for.
+///
+/// The grid is rebuilt for more than its events — a to-do ticked on another
+/// page moves its markers, and Calendar applies that when it comes back into
+/// sight — and packing was 16ms of that 34ms rebuild, measured in a profile
+/// build. Keyed on the list itself: the event providers replace their lists,
+/// never mutate them, so the same list means the same events.
+final _packedMonths = Expando<(Object, List<List<List<CalendarEvent?>>>)>(
+  'packedMonths',
+);
+
 /// Shared 6×7 day grid for year mini-months and the month view.
 class MonthDayGrid extends StatelessWidget {
   const MonthDayGrid({
@@ -2815,13 +2827,20 @@ class MonthDayGrid extends StatelessWidget {
         });
       });
     } else {
-      packedWeeks = List.generate(6, (row) {
-        if (hiddenWeekRow == row) return <List<CalendarEvent?>>[];
-        return calendarPackWeekEvents(
-          cells.sublist(row * 7, row * 7 + 7),
-          events,
-        );
-      });
+      final packedFor = (month, weekStartsMonday, hiddenWeekRow);
+      final cached = _packedMonths[events];
+      if (cached != null && cached.$1 == packedFor) {
+        packedWeeks = cached.$2;
+      } else {
+        packedWeeks = List.generate(6, (row) {
+          if (hiddenWeekRow == row) return <List<CalendarEvent?>>[];
+          return calendarPackWeekEvents(
+            cells.sublist(row * 7, row * 7 + 7),
+            events,
+          );
+        });
+        _packedMonths[events] = (packedFor, packedWeeks);
+      }
     }
 
     return Column(

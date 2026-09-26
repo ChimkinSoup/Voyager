@@ -8,6 +8,7 @@ import 'package:voyager/core/snippets/snippet_index.dart';
 import 'package:voyager/core/spellcheck/autocorrect_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
+import 'package:voyager/core/widgets/text_field_context_menu.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/enums.dart';
@@ -131,6 +132,40 @@ void main() {
   }
 
   group('the menu item', () {
+    testWidgets('an open menu survives its field rebuilding', (tester) async {
+      await pumpField(tester, text: 'helo mind');
+      await rightClick(tester);
+      expect(find.text('Add to dictionary'), findsOneWidget);
+      final menu = tester.state(find.byType(TextFieldContextMenu));
+
+      // What an autosave landing does: the field rebuilds while the menu is
+      // up. A new contextMenuBuilder would make EditableText tear the menu
+      // down and re-show a new one a frame later — the blink.
+      tester.element(find.byType(LabeledTextField)).markNeedsBuild();
+      await tester.pumpAndSettle();
+      expect(tester.state(find.byType(TextFieldContextMenu)), same(menu));
+    });
+
+    testWidgets('right-clicking another word while the menu is open reopens it '
+        'for that word', (tester) async {
+      // `helo` second: the menu opens rightward from the click, so the next
+      // right-click lands on `mind` rather than on the menu.
+      await pumpField(tester, text: 'mind helo');
+      final editable = tester
+          .state<EditableTextState>(find.byType(EditableText))
+          .renderEditable;
+      final helo = editable.getLocalRectForCaret(const TextPosition(offset: 6));
+      await rightClick(tester, dx: helo.left);
+      expect(find.text('Add to dictionary'), findsOneWidget);
+
+      // Flutter ends a desktop right-click with toggleToolbar, which closes a
+      // menu that is still up unless the pointer-down already hid it.
+      await rightClick(tester);
+
+      expect(find.text('Add to dictionary'), findsNothing);
+      expect(find.text('Flag as misspelling…'), findsOneWidget);
+    });
+
     testWidgets('a word the checker accepts offers Flag', (tester) async {
       await pumpField(tester);
       await rightClick(tester);

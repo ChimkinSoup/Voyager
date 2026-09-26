@@ -19,7 +19,7 @@ void main() {
             shell = navigationShell;
             return navigationShell;
           },
-          navigatorContainerBuilder: shellBranchContainerBuilder,
+          navigatorContainerBuilder: shellBranchContainerBuilder(),
           branches: [
             StatefulShellBranch(
               routes: [

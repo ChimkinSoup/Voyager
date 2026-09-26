@@ -6,6 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/media/widgets/media_drop_target.dart';
+import 'package:voyager/core/media/widgets/media_fan_stack.dart';
+import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
@@ -388,6 +391,20 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     return true;
   }
 
+  /// Writes a held "New dream" before an image is attached to it, queued like
+  /// the saves so none of them reaches the coordinator before the row exists.
+  ///
+  /// Pushed as well: a text save pushes through the coordinator, but a dream
+  /// given only images has no text save, and would otherwise stay on this
+  /// device while its images reach every other.
+  Future<void> _promoteForImage(String entryId) => _queueWrite(() async {
+    final pending = _pendingEntry;
+    final held =
+        pending != null && pending.id == entryId && !_pendingEntryOnDisk;
+    await _promotePendingEntry(entryId, hasContent: true);
+    if (held && _pendingEntryOnDisk) _syncOrNull()?.pushDreamEntryNow(pending);
+  });
+
   /// Discards an unpromoted "New dream" that was never given content.
   void _dropPendingEntryIfEmpty() {
     if (_pendingEntry == null || _pendingEntryOnDisk) return;
@@ -689,11 +706,16 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
       _syncOrNull()?.pushDreamEntryNow(tombstone);
     }
     if (mounted) ref.invalidate(allDreamEntriesProvider);
+    // The dream's images go onto its 30-day clock, as a journal entry's do
+    // (see `softDeleteJournalEntry`).
+    final mediaDeletedAt = await container
+        .read(mediaServiceProvider)
+        .removeReferencesForOwner(FirestoreCollections.dreamEntries, entry.id);
 
     showSoftDeleteUndoToast(
       overlay: overlay,
       message: deletedMessage(snapshot.title, fallback: 'dream'),
-      restore: () => _undoEntryDelete(container, snapshot),
+      restore: () => _undoEntryDelete(container, snapshot, mediaDeletedAt),
     );
   }
 
@@ -714,6 +736,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   Future<void> _undoEntryDelete(
     ProviderContainer container,
     DreamEntry snapshot,
+    DateTime? mediaDeletedAt,
   ) async {
     final repository = container.read(dreamRepositoryProvider);
     // Resolved against disk rather than the snapshot: an eight-second offer is
@@ -741,6 +764,15 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     try {
       await repository.upsertEntry(restored);
       container.read(remoteSyncServiceProvider).pushDreamEntryNow(restored);
+      if (mediaDeletedAt != null) {
+        await container
+            .read(mediaServiceProvider)
+            .restoreReferencesForOwner(
+              FirestoreCollections.dreamEntries,
+              restored.id,
+              mediaDeletedAt,
+            );
+      }
     } finally {
       // Unconditional: the hide is what stands in for the row until the
       // provider catches up, and a throw out of the write would otherwise
@@ -1306,12 +1338,26 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: _DreamBodyEditor(
-              key: _bodyEditorKey,
-              entry: entry,
-              focusNode: _bodyFocusNode,
-              accentColor: accent,
-              onScheduleBodySave: _scheduleBodySave,
+            // The journal body's paste and drop (see `_withImages` in
+            // journal_page.dart). An image is content, so it writes a held
+            // "New dream" to disk before attaching to it.
+            child: MediaPasteScope(
+              collection: FirestoreCollections.dreamEntries,
+              documentId: entry.id,
+              fieldTakesBoth: true,
+              onBeforeAttach: () => _promoteForImage(entry.id),
+              child: MediaDropTarget(
+                collection: FirestoreCollections.dreamEntries,
+                documentId: entry.id,
+                onBeforeAttach: () => _promoteForImage(entry.id),
+                child: _DreamBodyEditor(
+                  key: _bodyEditorKey,
+                  entry: entry,
+                  focusNode: _bodyFocusNode,
+                  accentColor: accent,
+                  onScheduleBodySave: _scheduleBodySave,
+                ),
+              ),
             ),
           ),
         ],
@@ -1321,6 +1367,16 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     return Stack(
       children: [
         editorColumn,
+        // Beside the collapsed note, and under it once it is opened.
+        Positioned(
+          right: DreamStickyNote.besideInset,
+          bottom: DreamStickyNote.edgeInset,
+          child: MediaFanStack(
+            collection: FirestoreCollections.dreamEntries,
+            documentId: entry.id,
+            accentColor: accent,
+          ),
+        ),
         DreamStickyNote(
           controller: _notesController,
           focusNode: _notesFocusNode,

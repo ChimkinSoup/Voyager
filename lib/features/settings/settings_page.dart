@@ -37,18 +37,22 @@ import 'package:voyager/features/settings/key_binding_dialog.dart';
 import 'package:voyager/features/settings/settings_color_palette_section.dart';
 import 'package:voyager/features/settings/snippets_dialog.dart';
 import 'package:voyager/features/settings/weather_location_tile.dart';
+import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
-class SettingsPage extends ConsumerWidget {
-  const SettingsPage({super.key});
+/// The Statistics counts, watched here rather than by [SettingsPage].
+///
+/// Every to-do tick and journal change moves them, and Settings stays mounted
+/// behind every other page, so watching them at the page level rebuilt the
+/// whole of Settings — every section, since its list keeps them all laid out
+/// — twice per tick, while To-Do was the page in use.
+class _StatisticsTiles extends ConsumerWidget {
+  const _StatisticsTiles();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settingsAsync = ref.watch(settingsProvider);
-    final journalsAsync = ref.watch(journalsProvider);
-    final todoStatsAsync = ref.watch(todoListStatsProvider);
-    final journalCount = journalsAsync.valueOrNull?.length;
-    final todoStats = todoStatsAsync.valueOrNull;
+    final journalCount = ref.watch(journalsProvider).valueOrNull?.length;
+    final todoStats = ref.watch(todoListStatsProvider).valueOrNull;
     final openTaskCount = todoStats?.values.fold<int>(
       0,
       (sum, stat) => sum + stat.active,
@@ -57,6 +61,36 @@ class SettingsPage extends ConsumerWidget {
       0,
       (sum, stat) => sum + stat.completed,
     );
+    return Column(
+      children: [
+        ListTile(
+          title: const Text('Total journals'),
+          trailing: Text(_statCountLabel(journalCount)),
+        ),
+        ListTile(
+          title: const Text('Non-completed tasks'),
+          trailing: Text(_statCountLabel(openTaskCount)),
+        ),
+        ListTile(
+          title: const Text('Completed tasks'),
+          trailing: Text(_statCountLabel(completedTaskCount)),
+        ),
+      ],
+    );
+  }
+
+  String _statCountLabel(int? count) {
+    if (count == null) return '—';
+    return count.toString();
+  }
+}
+
+class SettingsPage extends ConsumerWidget {
+  const SettingsPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settingsAsync = ref.watch(settingsProvider);
 
     return settingsAsync.when(
       data: (settings) => KeepAliveScrollView(
@@ -134,18 +168,7 @@ class SettingsPage extends ConsumerWidget {
           const SizedBox(height: 16),
           Text('Statistics', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
-          ListTile(
-            title: const Text('Total journals'),
-            trailing: Text(_statCountLabel(journalCount)),
-          ),
-          ListTile(
-            title: const Text('Non-completed tasks'),
-            trailing: Text(_statCountLabel(openTaskCount)),
-          ),
-          ListTile(
-            title: const Text('Completed tasks'),
-            trailing: Text(_statCountLabel(completedTaskCount)),
-          ),
+          const _StatisticsTiles(),
           // The old companion toggle for the analytics *calendar* view is
           // gone with that view itself — a statistic's calendar now opens as
           // a popup from its grid tile, so this one switch governs whether
@@ -702,11 +725,6 @@ class SettingsPage extends ConsumerWidget {
     return ref.read(settingsProvider.notifier).saveSettings(settings);
   }
 
-  String _statCountLabel(int? count) {
-    if (count == null) return '—';
-    return count.toString();
-  }
-
   Future<void> _pickCalendarKey(
     BuildContext context,
     WidgetRef ref,
@@ -1049,10 +1067,29 @@ class _AutoBackupTilesState extends ConsumerState<_AutoBackupTiles> {
     super.initState();
     // Fresh each time Settings opens (§9.2).
     ref.read(autoBackupServiceProvider).refreshStatus();
+    if (ref.read(revealAutoBackupRequestProvider)) _reveal();
+  }
+
+  /// Answers the inbox's "Backups failing" row. After the frame: the
+  /// request can't be cleared mid-build, and there is nothing to scroll to
+  /// before layout.
+  void _reveal() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(revealAutoBackupRequestProvider.notifier).state = false;
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+      );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<bool>(revealAutoBackupRequestProvider, (_, next) {
+      if (next) _reveal();
+    });
     final service = ref.watch(autoBackupServiceProvider);
     final status = service.status;
     final theme = Theme.of(context);

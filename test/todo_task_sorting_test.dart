@@ -1,13 +1,16 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voyager/core/constants/todo_sort_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/todo/todo_task_sorting.dart';
 
+/// Where the dense numbering started unstarred tasks. The fixtures here carry
+/// it, as lists written before sort keys went sparse still do.
+const _denseUnstarredBase = 1000;
+
 TodoTask _task({
   required String id,
   bool starred = false,
-  int sortOrder = unstarredSortOrderBase,
+  int sortOrder = _denseUnstarredBase,
   DateTime? dueDate,
   DateTime? dueDateSetAt,
   DateTime? createdAt,
@@ -41,7 +44,7 @@ void main() {
     final active = [
       _task(id: 'a', starred: true, sortOrder: 0, dueDate: dueEarly),
       _task(id: 'b', starred: true, sortOrder: 1, dueDate: dueLate),
-      _task(id: 'c', sortOrder: unstarredSortOrderBase),
+      _task(id: 'c', sortOrder: _denseUnstarredBase),
     ];
 
     final batch = applyStarToggle(active[2], active);
@@ -60,7 +63,7 @@ void main() {
       _task(id: 'b', starred: true, sortOrder: 1, dueDate: dueLate),
       _task(
         id: 'c',
-        sortOrder: unstarredSortOrderBase,
+        sortOrder: _denseUnstarredBase,
         dueDate: dueMiddle,
         dueDateSetAt: utcNow(),
       ),
@@ -79,8 +82,8 @@ void main() {
       final dueLate = DateTime.utc(2026, 6, 3, 9);
       final dueMiddle = DateTime.utc(2026, 6, 2, 9);
       final active = [
-        _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: dueEarly),
-        _task(id: 'b', sortOrder: unstarredSortOrderBase + 1, dueDate: dueLate),
+        _task(id: 'a', sortOrder: _denseUnstarredBase, dueDate: dueEarly),
+        _task(id: 'b', sortOrder: _denseUnstarredBase + 1, dueDate: dueLate),
         _task(
           id: 'c',
           starred: true,
@@ -101,8 +104,8 @@ void main() {
     final due = DateTime.utc(2026, 6, 1, 9);
     final active = [
       _task(id: 'a', starred: true, sortOrder: 0),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase, dueDate: due),
-      _task(id: 'c', sortOrder: unstarredSortOrderBase + 1),
+      _task(id: 'b', sortOrder: _denseUnstarredBase, dueDate: due),
+      _task(id: 'c', sortOrder: _denseUnstarredBase + 1),
     ];
 
     final batch = applyStarToggle(active[0].copyWith(starred: true), active);
@@ -118,8 +121,8 @@ void main() {
   test('unstarring undated task stays below all dated tasks', () {
     final due = DateTime.utc(2026, 6, 1, 9);
     final active = [
-      _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: due),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase + 5),
+      _task(id: 'a', sortOrder: _denseUnstarredBase, dueDate: due),
+      _task(id: 'b', sortOrder: _denseUnstarredBase + 5),
       _task(id: 'c', starred: true, sortOrder: 0),
     ];
 
@@ -136,8 +139,8 @@ void main() {
       final dueLate = DateTime.utc(2026, 6, 3, 9);
       final active = [
         _task(id: 'a', starred: true, sortOrder: 0),
-        _task(id: 'b', sortOrder: unstarredSortOrderBase, dueDate: dueEarly),
-        _task(id: 'c', sortOrder: unstarredSortOrderBase + 1, dueDate: dueLate),
+        _task(id: 'b', sortOrder: _denseUnstarredBase, dueDate: dueEarly),
+        _task(id: 'c', sortOrder: _denseUnstarredBase + 1, dueDate: dueLate),
       ];
 
       final batch = applyReorder(active, 2, 0);
@@ -153,13 +156,15 @@ void main() {
       final due = DateTime.utc(2026, 6, 1, 9);
       final active = [
         _task(id: 'a', starred: true, sortOrder: 0),
-        _task(id: 'b', sortOrder: unstarredSortOrderBase, dueDate: due),
-        _task(id: 'c', sortOrder: unstarredSortOrderBase + 2),
+        _task(id: 'b', sortOrder: _denseUnstarredBase, dueDate: due),
+        _task(id: 'c', sortOrder: _denseUnstarredBase + 2),
       ];
 
+      // Snapped back to the top of the undated section, which is where it
+      // already was: with sparse keys there is nothing to write.
       final batch = applyReorder(active, 2, 0);
-      expect(batch, isNotNull);
-      final sorted = _sortedAfterBatch(active, batch!);
+      expect(batch, isNull);
+      final sorted = sortTodoTasks(active);
 
       final unstarred = sorted.where((t) => !t.starred).toList();
       expect(unstarred.map((t) => t.id).toList(), ['b', 'c']);
@@ -172,9 +177,9 @@ void main() {
     () {
       final due = DateTime.utc(2026, 6, 1, 9);
       final active = [
-        _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: due),
-        _task(id: 'b', sortOrder: unstarredSortOrderBase + 1),
-        _task(id: 'c', sortOrder: unstarredSortOrderBase + 2),
+        _task(id: 'a', sortOrder: _denseUnstarredBase, dueDate: due),
+        _task(id: 'b', sortOrder: _denseUnstarredBase + 1),
+        _task(id: 'c', sortOrder: _denseUnstarredBase + 2),
       ];
 
       final batch = applyReorder(active, 2, 0);
@@ -189,7 +194,7 @@ void main() {
     final active = [
       _task(id: 'a', starred: true, sortOrder: 0),
       _task(id: 'b', starred: true, sortOrder: 1),
-      _task(id: 'c', sortOrder: unstarredSortOrderBase),
+      _task(id: 'c', sortOrder: _denseUnstarredBase),
     ];
 
     final batch = applyReorder(active, 0, 2);
@@ -205,9 +210,9 @@ void main() {
       final dueLate = DateTime.utc(2026, 6, 3, 9);
       final dueMiddle = DateTime.utc(2026, 6, 2, 9);
       final active = [
-        _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: dueEarly),
-        _task(id: 'b', sortOrder: unstarredSortOrderBase + 1, dueDate: dueLate),
-        _task(id: 'c', sortOrder: unstarredSortOrderBase + 2),
+        _task(id: 'a', sortOrder: _denseUnstarredBase, dueDate: dueEarly),
+        _task(id: 'b', sortOrder: _denseUnstarredBase + 1, dueDate: dueLate),
+        _task(id: 'c', sortOrder: _denseUnstarredBase + 2),
       ];
 
       final batch = applyDueDateChange(
@@ -229,11 +234,11 @@ void main() {
     final active = [
       _task(
         id: 'a',
-        sortOrder: unstarredSortOrderBase,
+        sortOrder: _denseUnstarredBase,
         dueDate: due,
         dueDateSetAt: older,
       ),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase + 1),
+      _task(id: 'b', sortOrder: _denseUnstarredBase + 1),
     ];
 
     final batch = applyDueDateChange(
@@ -250,9 +255,9 @@ void main() {
   test('clearing due date moves task to top of undated section', () {
     final due = DateTime.utc(2026, 6, 1, 9);
     final active = [
-      _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: due),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase + 1, dueDate: due),
-      _task(id: 'c', sortOrder: unstarredSortOrderBase + 2),
+      _task(id: 'a', sortOrder: _denseUnstarredBase, dueDate: due),
+      _task(id: 'b', sortOrder: _denseUnstarredBase + 1, dueDate: due),
+      _task(id: 'c', sortOrder: _denseUnstarredBase + 2),
     ];
 
     final batch = applyDueDateChange(
@@ -270,8 +275,8 @@ void main() {
   test('new undated task stays below dated tasks', () {
     final due = DateTime.utc(2026, 6, 1, 9);
     final active = [
-      _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: due),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase + 5),
+      _task(id: 'a', sortOrder: _denseUnstarredBase, dueDate: due),
+      _task(id: 'b', sortOrder: _denseUnstarredBase + 5),
     ];
     final batch = applyNewUndatedTask(_task(id: 'new'), active);
     final sorted = _sortedAfterBatch(active, batch);
@@ -281,19 +286,19 @@ void main() {
   test('nextNewTaskSortOrder matches applyNewUndatedTask placement', () {
     final due = DateTime.utc(2026, 6, 1, 9);
     final active = [
-      _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: due),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase + 2),
+      _task(id: 'a', sortOrder: _denseUnstarredBase, dueDate: due),
+      _task(id: 'b', sortOrder: _denseUnstarredBase + 2),
     ];
 
-    expect(nextNewTaskSortOrder(active), unstarredSortOrderBase + 1);
+    expect(nextNewTaskSortOrder(active), _denseUnstarredBase + 1);
   });
 
   test('dragging dated below undated normalizes back into dated section', () {
     final due = DateTime.utc(2026, 6, 1, 9);
     final active = sortTodoTasks([
-      _task(id: 'b', sortOrder: unstarredSortOrderBase),
-      _task(id: 'c', sortOrder: unstarredSortOrderBase + 1),
-      _task(id: 'a', sortOrder: unstarredSortOrderBase + 2, dueDate: due),
+      _task(id: 'b', sortOrder: _denseUnstarredBase),
+      _task(id: 'c', sortOrder: _denseUnstarredBase + 1),
+      _task(id: 'a', sortOrder: _denseUnstarredBase + 2, dueDate: due),
     ]);
 
     final batch = applyReorder(active, 2, 0);
@@ -305,8 +310,8 @@ void main() {
   test('normalize fixes legacy undated sort orders above dated tasks', () {
     final due = DateTime.utc(2026, 6, 1, 9);
     final active = [
-      _task(id: 'a', sortOrder: unstarredSortOrderBase),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase + 1, dueDate: due),
+      _task(id: 'a', sortOrder: _denseUnstarredBase),
+      _task(id: 'b', sortOrder: _denseUnstarredBase + 1, dueDate: due),
     ];
 
     expect(unstarredSectionNeedsNormalize(active), isTrue);
@@ -321,12 +326,12 @@ void main() {
     final dueLate = DateTime.utc(2026, 6, 3, 9);
     final dueMiddle = DateTime.utc(2026, 6, 2, 9);
     final active = [
-      _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: dueEarly),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase + 1, dueDate: dueLate),
+      _task(id: 'a', sortOrder: _denseUnstarredBase, dueDate: dueEarly),
+      _task(id: 'b', sortOrder: _denseUnstarredBase + 1, dueDate: dueLate),
     ];
     final restored = _task(
       id: 'c',
-      sortOrder: unstarredSortOrderBase + 99,
+      sortOrder: _denseUnstarredBase + 99,
       dueDate: dueMiddle,
       dueDateSetAt: utcNow(),
     );
@@ -339,10 +344,10 @@ void main() {
   test('uncompleting undated task goes to top of undated section', () {
     final due = DateTime.utc(2026, 6, 1, 9);
     final active = [
-      _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: due),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase + 2),
+      _task(id: 'a', sortOrder: _denseUnstarredBase, dueDate: due),
+      _task(id: 'b', sortOrder: _denseUnstarredBase + 2),
     ];
-    final restored = _task(id: 'c', sortOrder: unstarredSortOrderBase + 99);
+    final restored = _task(id: 'c', sortOrder: _denseUnstarredBase + 99);
 
     final batch = applyTaskUncomplete(restored, active);
     final sorted = _sortedAfterBatch([...active, restored], batch);
@@ -354,8 +359,8 @@ void main() {
     final dueLate = DateTime.utc(2026, 6, 3, 9);
     final dueMiddle = DateTime.utc(2026, 6, 2, 9);
     final dest = [
-      _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: dueEarly),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase + 1, dueDate: dueLate),
+      _task(id: 'a', sortOrder: _denseUnstarredBase, dueDate: dueEarly),
+      _task(id: 'b', sortOrder: _denseUnstarredBase + 1, dueDate: dueLate),
     ];
     final moved = _task(
       id: 'c',
@@ -374,8 +379,8 @@ void main() {
     () {
       final due = DateTime.utc(2026, 6, 1, 9);
       final dest = [
-        _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: due),
-        _task(id: 'b', sortOrder: unstarredSortOrderBase + 2),
+        _task(id: 'a', sortOrder: _denseUnstarredBase, dueDate: due),
+        _task(id: 'b', sortOrder: _denseUnstarredBase + 2),
       ];
       final moved = _task(id: 'c', sortOrder: 0);
 
@@ -388,9 +393,9 @@ void main() {
   test('move to bottom sends unstarred undated task below its siblings', () {
     final due = DateTime.utc(2026, 6, 1, 9);
     final active = [
-      _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: due),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase + 1),
-      _task(id: 'c', sortOrder: unstarredSortOrderBase + 2),
+      _task(id: 'a', sortOrder: _denseUnstarredBase, dueDate: due),
+      _task(id: 'b', sortOrder: _denseUnstarredBase + 1),
+      _task(id: 'c', sortOrder: _denseUnstarredBase + 2),
     ];
 
     final batch = applyMoveToBottomOfCategory(active[1], active);
@@ -402,9 +407,9 @@ void main() {
     final dueEarly = DateTime.utc(2026, 6, 1, 9);
     final dueLate = DateTime.utc(2026, 6, 3, 9);
     final active = [
-      _task(id: 'a', sortOrder: unstarredSortOrderBase, dueDate: dueEarly),
-      _task(id: 'b', sortOrder: unstarredSortOrderBase + 1, dueDate: dueLate),
-      _task(id: 'c', sortOrder: unstarredSortOrderBase + 2),
+      _task(id: 'a', sortOrder: _denseUnstarredBase, dueDate: dueEarly),
+      _task(id: 'b', sortOrder: _denseUnstarredBase + 1, dueDate: dueLate),
+      _task(id: 'c', sortOrder: _denseUnstarredBase + 2),
     ];
 
     final batch = applyMoveToBottomOfCategory(active[0], active);
@@ -416,7 +421,7 @@ void main() {
     final active = [
       _task(id: 'a', starred: true, sortOrder: 0),
       _task(id: 'b', starred: true, sortOrder: 1),
-      _task(id: 'c', sortOrder: unstarredSortOrderBase),
+      _task(id: 'c', sortOrder: _denseUnstarredBase),
     ];
 
     final batch = applyMoveToBottomOfCategory(active[0], active);
@@ -431,7 +436,7 @@ void main() {
       _task(id: 'a', starred: true, sortOrder: 0, dueDate: dueEarly),
       _task(id: 'e', starred: true, sortOrder: 1, dueDate: dueLate),
       _task(id: 'b', starred: true, sortOrder: 2),
-      _task(id: 'c', sortOrder: unstarredSortOrderBase),
+      _task(id: 'c', sortOrder: _denseUnstarredBase),
     ];
 
     final batch = applyMoveToBottomOfCategory(active[0], active);
@@ -443,7 +448,7 @@ void main() {
     final due = DateTime.utc(2026, 6, 1, 9);
     final task = _task(
       id: 'a',
-      sortOrder: unstarredSortOrderBase,
+      sortOrder: _denseUnstarredBase,
       dueDate: due,
       dueDateSetAt: utcNow(),
     );
@@ -461,7 +466,7 @@ void main() {
       String listId, {
       required String id,
       bool starred = false,
-      int sortOrder = unstarredSortOrderBase,
+      int sortOrder = _denseUnstarredBase,
       DateTime? dueDate,
       DateTime? createdAt,
     }) {
@@ -487,21 +492,21 @@ void main() {
         fromList(
           'a',
           id: 'a-dated-1',
-          sortOrder: unstarredSortOrderBase,
+          sortOrder: _denseUnstarredBase,
           dueDate: DateTime.utc(2026, 6, 1),
         ),
-        fromList('a', id: 'a-undated', sortOrder: unstarredSortOrderBase + 1),
+        fromList('a', id: 'a-undated', sortOrder: _denseUnstarredBase + 1),
         fromList(
           'b',
           id: 'b-dated',
-          sortOrder: unstarredSortOrderBase,
+          sortOrder: _denseUnstarredBase,
           dueDate: DateTime.utc(2026, 6, 2),
         ),
-        fromList('b', id: 'b-undated', sortOrder: unstarredSortOrderBase + 1),
+        fromList('b', id: 'b-undated', sortOrder: _denseUnstarredBase + 1),
         fromList(
           'a',
           id: 'a-dated-2',
-          sortOrder: unstarredSortOrderBase + 2,
+          sortOrder: _denseUnstarredBase + 2,
           dueDate: DateTime.utc(2026, 6, 3),
         ),
       ];
@@ -603,19 +608,19 @@ void main() {
         fromList(
           'a',
           id: 'a1',
-          sortOrder: unstarredSortOrderBase,
+          sortOrder: _denseUnstarredBase,
           createdAt: DateTime.utc(2026, 1, 5),
         ),
         fromList(
           'a',
           id: 'a2',
-          sortOrder: unstarredSortOrderBase + 1,
+          sortOrder: _denseUnstarredBase + 1,
           createdAt: DateTime.utc(2026, 1, 9),
         ),
         fromList(
           'b',
           id: 'b1',
-          sortOrder: unstarredSortOrderBase,
+          sortOrder: _denseUnstarredBase,
           createdAt: DateTime.utc(2026, 1, 7),
         ),
       ];

@@ -186,6 +186,7 @@ final _kinds = <TrashKind>[
     noun: 'dream',
     title: _titleOrBody,
     wipe: ['title', 'body', 'notes', 'tags'],
+    mediaOwner: FirestoreCollections.dreamEntries,
   ),
   const TrashKind(
     collection: FirestoreCollections.todoLists,

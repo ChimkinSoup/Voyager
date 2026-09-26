@@ -81,6 +81,7 @@ class MediaPasteScope extends ConsumerStatefulWidget {
     this.facet = MediaFacet.gallery,
     this.fieldTakesBoth = false,
     this.requireFocusedField = false,
+    this.onBeforeAttach,
     this.clipboard = const MediaClipboard(),
     required this.child,
   });
@@ -109,6 +110,11 @@ class MediaPasteScope extends ConsumerStatefulWidget {
   /// field says which gallery a pasted image belongs to — see
   /// [routeMediaPaste].
   final bool requireFocusedField;
+
+  /// Runs once there is an image to attach, before it is attached — for an
+  /// owner held in memory until it has content, like a "New dream", to write
+  /// its row first.
+  final Future<void> Function()? onBeforeAttach;
 
   /// Injectable only so a test can drive the routing without a platform
   /// clipboard behind it.
@@ -228,6 +234,8 @@ class _MediaPasteScopeState extends ConsumerState<MediaPasteScope> {
     try {
       final bytes = (await widget.clipboard.read()).imageBytes;
       if (bytes == null || !mounted) return;
+      await widget.onBeforeAttach?.call();
+      if (!mounted) return;
       await attachImagesForOwner(
         ref,
         messenger: messenger,

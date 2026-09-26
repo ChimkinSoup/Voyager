@@ -1372,6 +1372,26 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _metadataDirty = false;
   }
 
+  /// Takes the row a save of the selected entry just wrote.
+  ///
+  /// Rebuilds only when that row differs in something [build] draws from
+  /// [_selectedEntry]. A save writes back what the editor, title field and
+  /// metadata row already show, so on an autosave nothing on screen changes —
+  /// and a `setState` here rebuilt the whole page anyway, a 100ms+ frame in a
+  /// debug build after every save while typing. The fields below can still
+  /// differ when the saved row merged in a remote edit.
+  void _adoptSavedEntry(JournalEntry updated) {
+    final previous = _selectedEntry;
+    _selectedEntry = updated;
+    _metadataDirty = false;
+    if (previous == null ||
+        previous.entryDate != updated.entryDate ||
+        previous.journalId != updated.journalId ||
+        previous.customQuote != updated.customQuote) {
+      setState(() {});
+    }
+  }
+
   /// The inverse of [_selectEntryFields]: nothing is selected, and every field
   /// the metadata row shows goes back to what a brand-new entry would carry.
   ///
@@ -1504,10 +1524,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
           if (_selectedEntryId == entry.id && mounted) {
             _listTitlePreview.value = updated.title;
             _listBodyPreview.value = updated.body;
-            setState(() {
-              _selectedEntry = updated;
-              _metadataDirty = false;
-            });
+            _adoptSavedEntry(updated);
           }
         },
       );
@@ -1601,10 +1618,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
           // the notifiers are disposed before the teardown flush runs.
           if (_selectedEntryId == entryId && mounted) {
             _listTitlePreview.value = updated.title;
-            setState(() {
-              _selectedEntry = updated;
-              _metadataDirty = false;
-            });
+            _adoptSavedEntry(updated);
           }
         },
       );

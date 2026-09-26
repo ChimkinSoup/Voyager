@@ -6,6 +6,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/dev/perf_stall_logger.dart';
 import 'package:voyager/core/sync/char_ops_encoder.dart';
 import 'package:voyager/core/sync/crdt_document_resolver.dart';
 import 'package:voyager/core/sync/debouncer.dart';
@@ -151,6 +152,7 @@ class SyncEngine {
     ];
 
     await ScrollActivityGate.instance.waitUntilIdle();
+    PerfStallLogger.instance.breadcrumb('upload started: $collection');
     final callStart = DevFlags.verboseSync ? DateTime.now() : null;
     if (operations.isNotEmpty) {
       await _retryPolicy.run(
@@ -267,6 +269,7 @@ class SyncEngine {
     // [FirestoreCollections.snapshotOnly].
     if (!logOperation) {
       await ScrollActivityGate.instance.waitUntilIdle();
+      PerfStallLogger.instance.breadcrumb('upload started: $collection');
       await _retryPolicy.run(
         () => _syncRepository.upsertDocument(collection, documentId, payload),
       );
@@ -332,6 +335,7 @@ class SyncEngine {
     // together) keeps a retry of the document write from re-appending an
     // already-succeeded operation entry.
     await ScrollActivityGate.instance.waitUntilIdle();
+    PerfStallLogger.instance.breadcrumb('upload started: $collection');
     final callStart = DevFlags.verboseSync ? DateTime.now() : null;
     await _retryPolicy.run(
       () => _syncRepository.appendOperationGroup(operations),

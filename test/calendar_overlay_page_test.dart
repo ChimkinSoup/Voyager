@@ -4,6 +4,7 @@
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
@@ -433,6 +434,46 @@ void main() {
 
       expect(find.text('All calendars'), findsOneWidget);
       expect(find.byType(CalendarEventPanel), findsOneWidget);
+    });
+
+    testWidgets('opens beside the revealed event, not the last one clicked', (
+      tester,
+    ) async {
+      _desktopWindow(tester);
+      final (db, repo) = await _seed(homeOverlays: ['h']);
+      final today = DateTime.now();
+      final now = utcNow();
+      await repo.upsertEvent(
+        CalendarEvent(
+          id: 'gym',
+          calendarId: 'h',
+          title: 'Gym',
+          start: DateTime(today.year, today.month, 25),
+          end: DateTime(today.year, today.month, 25, 23, 59),
+          colorValue: 0xFF00AA00,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      final container = _container(db);
+      await _pumpPage(tester, db, container);
+
+      await tester.tap(_eventBar('hol'));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(CalendarEventPanel), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(CalendarEventPanel), findsNothing);
+
+      container.read(revealRequestProvider.notifier).state =
+          RevealRequest.event((await repo.getEvent('gym'))!);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      // The popover lines its edge up with the bar it is anchored to.
+      final panel = tester.getRect(find.byType(CalendarEventPanel));
+      final gym = tester.getRect(_eventBar('gym'));
+      expect(panel.left, moreOrLessEquals(gym.left, epsilon: 8));
     });
   });
 }

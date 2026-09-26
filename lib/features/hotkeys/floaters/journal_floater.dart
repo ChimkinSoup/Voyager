@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/media/widgets/media_drop_target.dart';
+import 'package:voyager/core/media/widgets/media_fan_stack.dart';
+import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
@@ -263,17 +266,43 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
             padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
             child: entry == null
                 ? const Center(child: CircularProgressIndicator())
-                : VoyagerTextField(
-                    controller: _controller,
-                    focusNode: _focus,
-                    accentColor: accent,
-                    maxLines: null,
-                    expands: true,
-                    keyboardType: TextInputType.multiline,
-                    decoration: const InputDecoration(
-                      hintText: 'Write something…',
+                // The journal body's images (see `_withImages` in
+                // journal_page.dart): this is the same entry.
+                : MediaPasteScope(
+                    collection: FirestoreCollections.journalEntries,
+                    documentId: entry.id,
+                    fieldTakesBoth: true,
+                    child: MediaDropTarget(
+                      collection: FirestoreCollections.journalEntries,
+                      documentId: entry.id,
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: VoyagerTextField(
+                              controller: _controller,
+                              focusNode: _focus,
+                              accentColor: accent,
+                              maxLines: null,
+                              expands: true,
+                              keyboardType: TextInputType.multiline,
+                              decoration: const InputDecoration(
+                                hintText: 'Write something…',
+                              ),
+                              onChanged: _handleChanged,
+                            ),
+                          ),
+                          Positioned(
+                            right: 8,
+                            bottom: 8,
+                            child: MediaFanStack(
+                              collection: FirestoreCollections.journalEntries,
+                              documentId: entry.id,
+                              accentColor: accent,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    onChanged: _handleChanged,
                   ),
           ),
         ),

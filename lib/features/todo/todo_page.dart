@@ -1089,22 +1089,26 @@ class _TodoPageState extends ConsumerState<TodoPage>
     });
   }
 
-  /// Guards against a second entry while the first is still awaiting. The
-  /// composer wires this to both onSubmitted and the Add button, neither
-  /// debounced, and the field was previously only cleared *after* three awaits
-  /// — so Enter twice in quick succession read the same title into two tasks
-  /// and reindexed the undated section twice from the same sibling snapshot,
-  /// leaving two rows sharing a sortOrder.
-  bool _addingTask = false;
+  /// The add still being written, which the next one waits for. The composer
+  /// wires [_addTask] to both onSubmitted and the Add button, neither
+  /// debounced, and two adds running at once reindexed the undated section
+  /// from the same sibling snapshot, leaving two rows sharing a sortOrder.
+  /// Queued rather than dropped: the composer keeps focus, so a quick second
+  /// Enter is a second task.
+  Future<void> _pendingAdd = Future.value();
 
-  Future<void> _addTask() async {
-    if (_addingTask) return;
+  Future<void> _addTask() {
     final title = _taskController.text.trim();
-    if (title.isEmpty) return;
-    _addingTask = true;
-    // Before the awaits, not after: this is what makes the guard visible to
-    // the user rather than just to the second invocation.
+    if (title.isEmpty) return Future.value();
+    // Before the awaits, so a quick second Enter can't read the same title.
     _taskController.clear();
+    // A failed add still reports to its own caller; the queue carries on.
+    return _pendingAdd = _pendingAdd
+        .catchError((Object _) {})
+        .then((_) => _insertTask(title));
+  }
+
+  Future<void> _insertTask(String title) async {
     try {
       final lists = await _ensureDefaultList();
       final repo = ref.read(todoRepositoryProvider);
@@ -1141,7 +1145,6 @@ class _TodoPageState extends ConsumerState<TodoPage>
       ref.invalidate(todoTasksProvider(task.listId));
       _invalidateTodoListData();
     } finally {
-      _addingTask = false;
       if (mounted) _taskFocusNode.requestFocus();
     }
   }
@@ -2274,6 +2277,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
             focusNode: _taskFocusNode,
             accentColor: accent,
             onSubmitted: (_) => _addTask(),
+            // Keep the keyboard on Enter: tasks are entered back to back, and
+            // letting go until the write lands dropped whatever was typed
+            // meanwhile.
+            onEditingComplete: () {},
           ),
         ),
         const SizedBox(width: 8),

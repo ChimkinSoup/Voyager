@@ -504,15 +504,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   Rect _cursorAnchorRect() {
     final p = _lastPointerDown;
     if (p != null) return Rect.fromCenter(center: p, width: 1, height: 1);
-    final box =
-        _calendarAreaKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box != null) {
-      final centre =
-          box.localToGlobal(Offset.zero) +
-          Offset(box.size.width / 2, box.size.height / 2);
-      return Rect.fromCenter(center: centre, width: 1, height: 1);
-    }
-    return const Rect.fromLTWH(200, 200, 1, 1);
+    return _calendarAreaCentreRect();
   }
 
   /// Opens the add/edit event popup.
@@ -1169,8 +1161,48 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _openEventSidebar(event: event, day: target, focusTitle: false);
+      // Anchored explicitly: left to itself the popup would sit on
+      // [_eventTapState]'s rect, which is whatever bar was last clicked.
+      _openEventSidebar(
+        event: event,
+        day: target,
+        focusTitle: false,
+        anchorRect:
+            _eventBarRect(calendarEventTapKey(event, target)) ??
+            _calendarAreaCentreRect(),
+      );
     });
+  }
+
+  /// The on-screen rect of the grid bar drawn for [tapKey], or null when that
+  /// occurrence is not drawn (hidden behind a cell's overflow, say).
+  Rect? _eventBarRect(String tapKey) {
+    Rect? found;
+    void visit(Element element) {
+      if (found != null) return;
+      final widget = element.widget;
+      if (widget is CalendarInteractiveEventTap && widget.eventId == tapKey) {
+        final box = element.renderObject;
+        if (box is RenderBox && box.attached && box.hasSize) {
+          found = box.localToGlobal(Offset.zero) & box.size;
+          return;
+        }
+      }
+      element.visitChildren(visit);
+    }
+
+    _calendarAreaKey.currentContext?.visitChildElements(visit);
+    return found;
+  }
+
+  Rect _calendarAreaCentreRect() {
+    final box =
+        _calendarAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return const Rect.fromLTWH(200, 200, 1, 1);
+    final centre =
+        box.localToGlobal(Offset.zero) +
+        Offset(box.size.width / 2, box.size.height / 2);
+    return Rect.fromCenter(center: centre, width: 1, height: 1);
   }
 
   Widget _buildGoToTodayButton(bool weekStartsMonday) {

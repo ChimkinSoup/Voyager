@@ -32,6 +32,7 @@ import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/todo/todo_recurring_completion.dart';
 import 'package:voyager/features/analytics/tracker_entry_row.dart';
 import 'package:voyager/features/calendar/calendar_event_delete.dart';
+import 'package:voyager/features/finance/finance_bill_radar.dart';
 import 'package:voyager/features/finance/finance_subscription_modal.dart';
 import 'package:voyager/features/notifications/scheduled_reminders_section.dart';
 import 'package:voyager/features/settings/services/auto_backup_service.dart';
@@ -117,6 +118,9 @@ class _NotificationInboxPopoverState
     for (final item in visible) {
       await repo.dismiss(item.dismissalKey);
     }
+    if (visible.any((item) => item.type == NotificationItemType.review)) {
+      await _retireStaleReviewDismissals(container);
+    }
     container.invalidate(notificationDismissalsProvider);
     _offerHideUndo(overlay: overlay, container: container, items: visible);
   }
@@ -127,7 +131,34 @@ String _feedTitle(NotificationFeedItem item) => switch (item.type) {
   NotificationItemType.task => item.task!.title,
   NotificationItemType.event => item.event!.title,
   NotificationItemType.bill => item.bill!.name,
+  NotificationItemType.review => _reviewPage(item.reviewSource!).label,
 };
+
+/// The page a review row stands for: its name, rail icon and route.
+({String label, IconData icon, String path}) _reviewPage(ReviewSource source) =>
+    switch (source) {
+      ReviewSource.study => (
+        label: 'Study',
+        icon: PhosphorIconsRegular.cardsThree,
+        path: '/study',
+      ),
+      ReviewSource.leetcode => (
+        label: 'LeetCode',
+        icon: PhosphorIconsRegular.code,
+        path: '/leetcode',
+      ),
+    };
+
+/// Tombstones the review dismissals left from earlier days, run whenever a
+/// review row is hidden. Each day's hide has a key of its own, so without this
+/// a queue hidden daily kept one live dismissal per day, forever.
+Future<void> _retireStaleReviewDismissals(ProviderContainer container) async {
+  final repo = container.read(notificationRepositoryProvider);
+  final now = DateTime.now();
+  for (final key in await repo.listDismissals()) {
+    if (isStaleReviewDismissal(key, now)) await repo.undismiss(key);
+  }
+}
 
 /// Offers Undo for [items], whose dismissals have already been written.
 ///
@@ -1018,6 +1049,9 @@ const double _kFeedLeadingSlot = 40;
 ///
 /// Device-local and derived, like the backups themselves, so it has no
 /// dismissal: it goes away when a backup succeeds or backups are turned off.
+///
+/// A click opens Settings at the automatic-backup tiles, where the status
+/// says why; Retry claims its own taps first.
 class _BackupAlertSection extends ConsumerWidget {
   const _BackupAlertSection();
 
@@ -1028,36 +1062,45 @@ class _BackupAlertSection extends ConsumerWidget {
     if (status == null || !status.failing) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final running = status.health == AutoBackupHealth.backingUp;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Row(
-        children: [
-          const Icon(
-            PhosphorIconsRegular.warningCircle,
-            size: 20,
-            color: Colors.amber,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Backups failing', style: theme.textTheme.bodyMedium),
-                Text(
-                  status.detail,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        final router = GoRouter.of(context);
+        ref.read(revealAutoBackupRequestProvider.notifier).state = true;
+        Navigator.of(context).pop();
+        router.go('/settings');
+      },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Row(
+          children: [
+            const Icon(
+              PhosphorIconsRegular.warningCircle,
+              size: 20,
+              color: Colors.amber,
             ),
-          ),
-          GlassButton(
-            dense: true,
-            label: running ? 'Retrying…' : 'Retry',
-            onPressed: running ? null : service.runIfDue,
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Backups failing', style: theme.textTheme.bodyMedium),
+                  Text(
+                    status.detail,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            GlassButton(
+              dense: true,
+              label: running ? 'Retrying…' : 'Retry',
+              onPressed: running ? null : service.runIfDue,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1192,6 +1235,9 @@ class _FeedRowState extends ConsumerState<_FeedRow>
     await container
         .read(notificationRepositoryProvider)
         .dismiss(item.dismissalKey);
+    if (item.type == NotificationItemType.review) {
+      await _retireStaleReviewDismissals(container);
+    }
     container.invalidate(notificationDismissalsProvider);
     _offerHideUndo(overlay: overlay, container: container, items: [item]);
     if (mounted) await _exit.forward();
@@ -1368,6 +1414,10 @@ class _FeedRowState extends ConsumerState<_FeedRow>
     await showSubscriptionModal(context, ref, existing: widget.item.bill);
   }
 
+  Future<void> _logBillPayment() async {
+    await logSubscriptionPayment(context, ref, widget.item.bill!);
+  }
+
   void _revealTask() {
     final task = widget.item.task!;
     final router = GoRouter.of(context);
@@ -1379,9 +1429,20 @@ class _FeedRowState extends ConsumerState<_FeedRow>
   void _revealEvent() {
     final event = widget.item.event!;
     final router = GoRouter.of(context);
-    ref.read(revealRequestProvider.notifier).state = RevealRequest.event(event);
+    // The occurrence this row stands for, so a repeating event opens on
+    // tonight's month rather than the series anchor's.
+    ref.read(revealRequestProvider.notifier).state = RevealRequest.event(
+      event,
+      day: widget.item.occurrenceDate,
+    );
     Navigator.of(context).pop();
     router.go('/calendar');
+  }
+
+  void _openReviewPage() {
+    final router = GoRouter.of(context);
+    Navigator.of(context).pop();
+    router.go(_reviewPage(widget.item.reviewSource!).path);
   }
 
   List<ContextMenuItem> _menuItems() {
@@ -1438,6 +1499,14 @@ class _FeedRowState extends ConsumerState<_FeedRow>
             onTap: () => unawaited(_deleteBill()),
           ),
         ];
+      case NotificationItemType.review:
+        return [
+          ContextMenuItem(
+            label: 'Open ${_reviewPage(widget.item.reviewSource!).label}',
+            icon: PhosphorIconsRegular.arrowSquareOut,
+            onTap: _openReviewPage,
+          ),
+        ];
     }
   }
 
@@ -1462,52 +1531,72 @@ class _FeedRowState extends ConsumerState<_FeedRow>
             onExit: (_) {
               if (_hovered) setState(() => _hovered = false);
             },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 1),
-              // Hover highlight matching the todo/calendar row treatment
-              // elsewhere in the app (same `theme.hoverColor` fill).
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                decoration: BoxDecoration(
-                  color: _hovered ? theme.hoverColor : Colors.transparent,
-                  borderRadius: BorderRadius.circular(_kInboxRowRadius),
+            // A click opens the thing the row stands for: a task or event in
+            // its editor, a bill's Log payment sheet, a review queue on its
+            // page. The checkbox and the dismiss button claim their own taps
+            // first.
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: switch (widget.item.type) {
+                NotificationItemType.task => _revealTask,
+                NotificationItemType.event => _revealEvent,
+                NotificationItemType.review => _openReviewPage,
+                NotificationItemType.bill => () => unawaited(_logBillPayment()),
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 1,
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 5,
+                // Hover highlight matching the todo/calendar row treatment
+                // elsewhere in the app (same `theme.hoverColor` fill).
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
+                  decoration: BoxDecoration(
+                    color: _hovered ? theme.hoverColor : Colors.transparent,
+                    borderRadius: BorderRadius.circular(_kInboxRowRadius),
                   ),
-                  child: Row(
-                    children: [
-                      // No gap after it: the leading slot is wider than what
-                      // it holds, so the spacing is already inside the box.
-                      _leading(theme),
-                      Expanded(child: _FeedItemText(item: widget.item)),
-                      const SizedBox(width: 6),
-                      // Fixed-width slot, same as the tracker rows below —
-                      // keeps the row's width constant whether or not the
-                      // badge for this item's urgency is showing.
-                      SizedBox(
-                        width: 18,
-                        child: Center(
-                          child: NotificationUrgencyDot(
-                            important:
-                                widget.item.urgency ==
-                                NotificationUrgency.important,
-                            accent: theme.colorScheme.primary,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 5,
+                    ),
+                    child: Row(
+                      children: [
+                        // No gap after it: the leading slot is wider than what
+                        // it holds, so the spacing is already inside the box.
+                        _leading(theme),
+                        Expanded(child: _FeedItemText(item: widget.item)),
+                        const SizedBox(width: 6),
+                        // Fixed-width slot, same as the tracker rows below —
+                        // keeps the row's width constant whether or not the
+                        // badge for this item's urgency is showing.
+                        SizedBox(
+                          width: 18,
+                          child: Center(
+                            child:
+                                widget.item.type == NotificationItemType.review
+                                // It never lights the bell, so no dot here.
+                                ? null
+                                : NotificationUrgencyDot(
+                                    important:
+                                        widget.item.urgency ==
+                                        NotificationUrgency.important,
+                                    accent: theme.colorScheme.primary,
+                                  ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Fades in on hover, but stays a real target on touch,
-                      // where hover never fires: an invisible-yet-tappable
-                      // dismiss in the corner of every notification is worse
-                      // than a visible one.
-                      _HoverRevealed(
-                        revealed: _hovered,
-                        child: _InboxDismissButton(onPressed: _dismiss),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        // Fades in on hover, but stays a real target on touch,
+                        // where hover never fires: an invisible-yet-tappable
+                        // dismiss in the corner of every notification is worse
+                        // than a visible one.
+                        _HoverRevealed(
+                          revealed: _hovered,
+                          child: _InboxDismissButton(onPressed: _dismiss),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1537,6 +1626,11 @@ class _FeedRowState extends ConsumerState<_FeedRow>
         color: Color(
           resolvePaletteColor(widget.item.bill!.colorValue, theme.brightness),
         ),
+      ),
+      NotificationItemType.review => Icon(
+        _reviewPage(widget.item.reviewSource!).icon,
+        size: 18,
+        color: theme.colorScheme.primary,
       ),
     };
     return SizedBox(
@@ -1597,6 +1691,12 @@ class _FeedItemText extends StatelessWidget {
         return '${_dateLabel(item.dueAt)} · ${_timeLabel(item.dueAt)}';
       case NotificationItemType.bill:
         return '${formatCents(item.bill!.amountCents)} · ${_dueLabel(item.dueAt)}';
+      case NotificationItemType.review:
+        final count = item.reviewCount;
+        return switch (item.reviewSource!) {
+          ReviewSource.study => '$count card${count == 1 ? '' : 's'} due',
+          ReviewSource.leetcode => '$count problem${count == 1 ? '' : 's'} due',
+        };
     }
   }
 }
@@ -1933,6 +2033,10 @@ class _HiddenRow extends StatelessWidget {
       NotificationItemType.bill => (
         PhosphorIconsRegular.currencyDollar,
         Color(resolvePaletteColor(item.bill!.colorValue, theme.brightness)),
+      ),
+      NotificationItemType.review => (
+        _reviewPage(item.reviewSource!).icon,
+        theme.colorScheme.primary,
       ),
     };
     return InkWell(

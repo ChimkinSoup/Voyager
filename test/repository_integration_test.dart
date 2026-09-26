@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:voyager/core/constants/todo_sort_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
@@ -322,13 +321,13 @@ void main() {
         id: newId(),
         listId: list.id,
         title: 'Unstarred',
-        sortOrder: unstarredSortOrderBase,
+        sortOrder: 1000,
         createdAt: now,
         updatedAt: now,
       ),
     );
 
-    expect(await todoRepo.nextSortOrder(list.id), unstarredSortOrderBase);
+    expect(await todoRepo.nextSortOrder(list.id), lessThan(1000));
   });
 
   test(
@@ -348,13 +347,13 @@ void main() {
           id: newId(),
           listId: list.id,
           title: 'Existing',
-          sortOrder: unstarredSortOrderBase,
+          sortOrder: 1000,
           createdAt: now,
           updatedAt: now,
         ),
       );
 
-      expect(await todoRepo.nextSortOrder(list.id), unstarredSortOrderBase);
+      expect(await todoRepo.nextSortOrder(list.id), lessThan(1000));
     },
   );
 
@@ -381,7 +380,7 @@ void main() {
         ),
       );
 
-      expect(await todoRepo.nextSortOrder(list.id), unstarredSortOrderBase);
+      expect(await todoRepo.nextSortOrder(list.id), lessThan(0));
     },
   );
 

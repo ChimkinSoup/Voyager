@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/motion/modal_scrim_observer.dart';
 import 'package:voyager/core/widgets/desktop_window_frame.dart';
 import 'package:voyager/features/auth/login_page.dart';
@@ -9,6 +11,9 @@ import 'package:voyager/features/shell/app_shell.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/shell/shell_page_transition.dart';
 
+/// Pages built with the shell. The rest are built by the shell's warm-up a
+/// few seconds later, or on first visit if that comes sooner — see
+/// [ShellBranchContainer.mountLater].
 const _preloadedShellPaths = {
   '/journal',
   '/dream-journal',
@@ -37,15 +42,33 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
           StatefulShellRoute(
             builder: (_, _, child) => AppShell(child: child),
-            navigatorContainerBuilder: shellBranchContainerBuilder,
+            navigatorContainerBuilder: shellBranchContainerBuilder(
+              mountLater: {
+                for (var i = 0; i < shellDestinations.length; i++)
+                  if (!_preloadedShellPaths.contains(shellDestinations[i].path))
+                    i,
+              },
+              // Like the login warm-ups, off while the dev cache flag is. Off
+              // in debug builds too, where page builds cost far more: there
+              // the warm-up took the first 40s' stalls from ~10s to 46s in
+              // the perf stall log, against no change in a profile build.
+              shouldWarm: kDebugMode || DevFlags.disableCache
+                  ? null
+                  : (i) =>
+                        !(ref
+                                .read(settingsProvider)
+                                .valueOrNull
+                                ?.hiddenNavPages
+                                .contains(shellDestinations[i].path) ??
+                            false),
+            ),
             branches: [
               for (final dest in shellDestinations)
                 StatefulShellBranch(
-                  // Eagerly build these branches' first-visit-heavy pages
-                  // (large widget trees, fl_chart) right when the shell
-                  // mounts, instead of on first nav switch, so switching to
-                  // them never has to pay that build cost mid-interaction.
-                  preload: _preloadedShellPaths.contains(dest.path),
+                  // Every branch gets its navigator up front, so the shell
+                  // container can build it when it chooses: with the shell
+                  // for [_preloadedShellPaths], a few seconds on for the rest.
+                  preload: true,
                   routes: [
                     GoRoute(path: dest.path, builder: (_, _) => dest.page),
                   ],

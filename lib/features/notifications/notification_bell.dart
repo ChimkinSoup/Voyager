@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -27,6 +28,27 @@ class NotificationBell extends ConsumerStatefulWidget {
 class _NotificationBellState extends ConsumerState<NotificationBell> {
   final GlobalKey _anchorKey = GlobalKey();
   bool _hovered = false;
+
+  /// Has the feed judged again once a minute. Nothing it watches changes when
+  /// a task turns due at midnight, an event comes within the hour or a study
+  /// card falls due, so without it the bell and the inbox kept whatever they
+  /// last worked out. Owned here because the bell is always on screen.
+  late final Timer _feedTick;
+
+  @override
+  void initState() {
+    super.initState();
+    _feedTick = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => ref.invalidate(notificationFeedProvider),
+    );
+  }
+
+  @override
+  void dispose() {
+    _feedTick.cancel();
+    super.dispose();
+  }
 
   void _openPopover() {
     final box = _anchorKey.currentContext?.findRenderObject() as RenderBox?;

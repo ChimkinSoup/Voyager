@@ -29,3 +29,9 @@ class RevealRequest {
 }
 
 final revealRequestProvider = StateProvider<RevealRequest?>((ref) => null);
+
+/// A one-shot request to bring Settings' automatic-backup tiles on screen, set
+/// by the inbox's "Backups failing" row. Settings isn't preloaded, so the
+/// tiles look for it when they first mount as well as when it changes, and
+/// set it back to false once they have scrolled into view.
+final revealAutoBackupRequestProvider = StateProvider<bool>((ref) => false);

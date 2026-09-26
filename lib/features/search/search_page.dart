@@ -481,6 +481,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       );
       return;
     }
+    // After the delete and outside its `try`, as `softDeleteJournalEntry`
+    // does: the dream going must not depend on its images.
+    final mediaDeletedAt = await container
+        .read(mediaServiceProvider)
+        .removeReferencesForOwner(FirestoreCollections.dreamEntries, entry.id);
     if (!mounted) return;
     setState(() {
       _deletedDreamIds.add(entry.id);
@@ -491,7 +496,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     showSoftDeleteUndoToast(
       overlay: overlay,
       message: deletedMessage(snapshot.title, fallback: 'dream'),
-      restore: () => _undoDreamDelete(container, snapshot),
+      restore: () => _undoDreamDelete(container, snapshot, mediaDeletedAt),
     );
   }
 
@@ -502,6 +507,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   Future<void> _undoDreamDelete(
     ProviderContainer container,
     DreamEntry snapshot,
+    DateTime? mediaDeletedAt,
   ) async {
     final repository = container.read(dreamRepositoryProvider);
     // Resolved against disk rather than the snapshot: an eight-second offer is
@@ -529,6 +535,15 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     try {
       await repository.upsertEntry(restored);
       container.read(remoteSyncServiceProvider).pushDreamEntryNow(restored);
+      if (mediaDeletedAt != null) {
+        await container
+            .read(mediaServiceProvider)
+            .restoreReferencesForOwner(
+              FirestoreCollections.dreamEntries,
+              restored.id,
+              mediaDeletedAt,
+            );
+      }
     } finally {
       // In a `finally` because the hide has to go however the restore ended:
       // the results re-derive either way — back if the write landed, still
@@ -1466,7 +1481,7 @@ class _EntryBaseline {
 }
 
 /// [_SearchEntryDialog] for a dream: the same popup editor, without the
-/// journal, mood, weather and image rows a dream does not have, and with the
+/// journal, mood and weather rows a dream does not have, and with the
 /// Dream Journal page's corner scratchpad so the dream's notes are editable
 /// from here too.
 class _SearchDreamDialog extends ConsumerStatefulWidget {
@@ -1812,21 +1827,41 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
                     // [Positioned], so it needs this Stack to sit in.
                     child: Stack(
                       children: [
+                        // The same images the Dream Journal page shows for
+                        // this dream, attached the same way.
                         Positioned.fill(
-                          child: TagHighlightedTextField(
-                            controller: _bodyController,
-                            focusNode: _bodyFocusNode,
-                            tagScope: TagScope.dream,
-                            onKeyEvent: _handleBodyKey,
-                            cursorColor: accent,
-                            expands: true,
-                            hintText: 'Describe your dream...',
-                            decoration: const InputDecoration(
-                              filled: false,
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
+                          child: MediaPasteScope(
+                            collection: FirestoreCollections.dreamEntries,
+                            documentId: _entry.id,
+                            fieldTakesBoth: true,
+                            child: MediaDropTarget(
+                              collection: FirestoreCollections.dreamEntries,
+                              documentId: _entry.id,
+                              child: TagHighlightedTextField(
+                                controller: _bodyController,
+                                focusNode: _bodyFocusNode,
+                                tagScope: TagScope.dream,
+                                onKeyEvent: _handleBodyKey,
+                                cursorColor: accent,
+                                expands: true,
+                                hintText: 'Describe your dream...',
+                                decoration: const InputDecoration(
+                                  filled: false,
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                ),
+                              ),
                             ),
+                          ),
+                        ),
+                        Positioned(
+                          right: DreamStickyNote.besideInset,
+                          bottom: DreamStickyNote.edgeInset,
+                          child: MediaFanStack(
+                            collection: FirestoreCollections.dreamEntries,
+                            documentId: _entry.id,
+                            accentColor: accent,
                           ),
                         ),
                         DreamStickyNote(

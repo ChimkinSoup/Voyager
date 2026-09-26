@@ -40,9 +40,8 @@ bool _isDatedGroup(int group) => group == 0 || group == 2;
 /// themselves, with nothing persisted and nothing remembered.
 ///
 /// [compareTodoTasks] cannot do this job, because `sortOrder` is only ever
-/// assigned *within* one list (see [_reindex], which restarts every list from
-/// the same `unstarredSortOrderBase`), so two lists both number their tasks
-/// from zero. Merging them and sorting on that field interleaves the two lists'
+/// assigned *within* one list (see [_reindex]), so two lists' keys say nothing
+/// about each other. Merging them and sorting on that field interleaves the two lists'
 /// dated and undated sections arbitrarily — dated, then undated, then dated
 /// again. The single-list case looks fine only because there is nothing to
 /// interleave with, which is why a one-undated-task list survived the merge
@@ -463,17 +462,31 @@ TodoSortBatch _batchFromOrder(
   return TodoSortBatch(tasks: updates);
 }
 
+/// Gives [ordered] — one segment, starred or unstarred, in the order it should
+/// show — sort keys, and returns the tasks whose row has to be written.
+///
+/// Keys are sparse, so placing one task writes one row: see [_sparseKeys].
+/// Numbering the segment densely instead rewrote, and pushed, every task in
+/// the list whenever one was added, dragged or un-ticked.
 List<TodoTask> _reindex(
   List<TodoTask> ordered, {
   required bool starred,
   required List<TodoTask> activeTasks,
 }) {
-  final base = starred ? 0 : unstarredSortOrderBase;
   final previousById = {for (final task in activeTasks) task.id: task};
+  final keys = _sparseKeys([
+    for (final task in ordered)
+      // A task arriving from the other segment brings a key that means
+      // nothing here.
+      switch (previousById[task.id]) {
+        final previous? when previous.starred == starred => previous.sortOrder,
+        _ => null,
+      },
+  ]);
   final updates = <TodoTask>[];
 
   for (var i = 0; i < ordered.length; i++) {
-    final next = ordered[i].copyWith(sortOrder: base + i);
+    final next = ordered[i].copyWith(sortOrder: keys[i]);
     final previous = previousById[next.id];
     if (previous == null ||
         previous.sortOrder != next.sortOrder ||
@@ -485,6 +498,91 @@ List<TodoTask> _reindex(
   }
 
   return updates;
+}
+
+/// Keys stay within ±2^52, where every one is also exact as a double.
+const _maxSortKey = 1 << 52;
+
+/// Keys for one segment in display order, given the key each task already
+/// holds in it (null for one arriving from elsewhere).
+///
+/// Keeps as many existing keys as can stay — the longest run of them already
+/// in increasing order — and places only the rest, in the gaps their kept
+/// neighbours leave. The whole segment is renumbered only when a gap has run
+/// out, which a list still carrying the dense numbering older builds wrote
+/// does on its first placement between two neighbours.
+List<int> _sparseKeys(List<int?> existing) {
+  final kept = _longestIncreasing(existing);
+  final keys = [
+    for (var i = 0; i < existing.length; i++)
+      kept.contains(i) ? existing[i] : null,
+  ];
+  var i = 0;
+  while (i < keys.length) {
+    if (keys[i] != null) {
+      i++;
+      continue;
+    }
+    final start = i;
+    while (i < keys.length && keys[i] == null) {
+      i++;
+    }
+    final placed = _keysBetween(
+      start > 0 ? keys[start - 1] : null,
+      i < keys.length ? keys[i] : null,
+      i - start,
+    );
+    if (placed == null) {
+      return [for (var k = 0; k < keys.length; k++) (k + 1) * todoSortKeyGap];
+    }
+    keys.setRange(start, i, placed);
+  }
+  return keys.cast<int>();
+}
+
+/// [count] increasing keys strictly between [lower] and [upper] (either open),
+/// or null when there is no room.
+List<int>? _keysBetween(int? lower, int? upper, int count) {
+  if (lower == null && upper == null) {
+    return [for (var k = 0; k < count; k++) (k + 1) * todoSortKeyGap];
+  }
+  if (upper == null) {
+    if (lower! + count * todoSortKeyGap > _maxSortKey) return null;
+    return [for (var k = 0; k < count; k++) lower + (k + 1) * todoSortKeyGap];
+  }
+  if (lower == null) {
+    final first = upper - count * todoSortKeyGap;
+    if (first < -_maxSortKey) return null;
+    return [for (var k = 0; k < count; k++) first + k * todoSortKeyGap];
+  }
+  final step = (upper - lower) ~/ (count + 1);
+  if (step == 0) return null;
+  return [for (var k = 0; k < count; k++) lower + (k + 1) * step];
+}
+
+/// Indexes of the longest strictly increasing run of non-null [keys].
+///
+/// Quadratic, which is fine at the size of one list's active tasks. Two keys
+/// tied — two devices having placed tasks into the same gap — can't both stay,
+/// so one of them is placed afresh.
+Set<int> _longestIncreasing(List<int?> keys) {
+  final length = List<int>.filled(keys.length, 0);
+  final previous = List<int>.filled(keys.length, -1);
+  var best = -1;
+  for (var i = 0; i < keys.length; i++) {
+    final key = keys[i];
+    if (key == null) continue;
+    length[i] = 1;
+    for (var j = 0; j < i; j++) {
+      final other = keys[j];
+      if (other != null && other < key && length[j] + 1 > length[i]) {
+        length[i] = length[j] + 1;
+        previous[i] = j;
+      }
+    }
+    if (best == -1 || length[i] > length[best]) best = i;
+  }
+  return {for (var i = best; i != -1; i = previous[i]) i};
 }
 
 List<TodoTask> _uniqueUpdates(List<TodoTask> updates) {

@@ -116,7 +116,7 @@ class SyncActivityController extends ChangeNotifier {
   }
 
   void recordUpload(String collection) {
-    PerfStallLogger.instance.breadcrumb('upload: $collection');
+    PerfStallLogger.instance.breadcrumb('upload finished: $collection');
     if (!showUploads) return;
     _record(SyncActivityDirection.upload, collection);
   }

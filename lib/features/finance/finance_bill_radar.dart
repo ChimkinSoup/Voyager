@@ -121,6 +121,54 @@ class BillRadarPanel extends ConsumerWidget {
   }
 }
 
+/// Logs the bill as an expense and, only if that save lands, rolls its due
+/// date on to the next cycle.
+///
+/// The advance is tied to the save rather than to the press so a
+/// cancelled sheet leaves the radar exactly as it was — the bill is still
+/// due, because nothing was paid.
+Future<void> logSubscriptionPayment(
+  BuildContext context,
+  WidgetRef ref,
+  Subscription sub,
+) async {
+  final repo = ref.read(financeRepositoryProvider);
+  final container = ProviderScope.containerOf(ref.context, listen: false);
+
+  await showFinanceTransactionModal(
+    context,
+    ref,
+    draft: FinanceTransactionDraft(
+      type: TransactionType.expense,
+      amountCents: sub.amountCents,
+      // No tags invented from the name: a bill is not a tag, and a guessed
+      // one would quietly land in every budget and breakdown built on tags.
+      // The bill is who got paid, so it is the store; the note is left for
+      // the user.
+      origin: sub.name,
+      occurredAt: DateTime.now(),
+    ),
+    onSaved: () async {
+      // The settled occurrence is recorded; the anchor is left alone. Moving
+      // the anchor onto the paid date instead would clamp a bill due the
+      // 31st onto Feb 28 the first February it was paid, permanently.
+      //
+      // Always the upcoming occurrence, whatever date the user put on the
+      // expense: the press is what says "this bill is paid", and
+      // reading the cycle off an editable field would make Log payment
+      // silently do nothing whenever the expense was backdated.
+      await repo.upsertSubscription(
+        sub.copyWith(
+          paidThroughDate: sub.nextDue(DateTime.now()),
+          updatedAt: utcNow(),
+          version: sub.version + 1,
+        ),
+      );
+      container.invalidate(subscriptionsProvider);
+    },
+  );
+}
+
 class _SubscriptionTile extends ConsumerWidget {
   const _SubscriptionTile({
     required this.subscription,
@@ -169,51 +217,6 @@ class _SubscriptionTile extends ConsumerWidget {
     container.invalidate(subscriptionsProvider);
   }
 
-  /// Logs the bill as an expense and, only if that save lands, rolls its due
-  /// date on to the next cycle.
-  ///
-  /// The advance is tied to the save rather than to the menu press so a
-  /// cancelled sheet leaves the radar exactly as it was — the bill is still
-  /// due, because nothing was paid.
-  Future<void> _logPayment(BuildContext context, WidgetRef ref) async {
-    final repo = ref.read(financeRepositoryProvider);
-    final container = ProviderScope.containerOf(ref.context, listen: false);
-    final sub = subscription;
-
-    await showFinanceTransactionModal(
-      context,
-      ref,
-      draft: FinanceTransactionDraft(
-        type: TransactionType.expense,
-        amountCents: sub.amountCents,
-        // No tags invented from the name: a bill is not a tag, and a guessed
-        // one would quietly land in every budget and breakdown built on tags.
-        // The bill is who got paid, so it is the store; the note is left for
-        // the user.
-        origin: sub.name,
-        occurredAt: DateTime.now(),
-      ),
-      onSaved: () async {
-        // The settled occurrence is recorded; the anchor is left alone. Moving
-        // the anchor onto the paid date instead would clamp a bill due the
-        // 31st onto Feb 28 the first February it was paid, permanently.
-        //
-        // Always the upcoming occurrence, whatever date the user put on the
-        // expense: the menu press is what says "this bill is paid", and
-        // reading the cycle off an editable field would make Log payment
-        // silently do nothing whenever the expense was backdated.
-        await repo.upsertSubscription(
-          sub.copyWith(
-            paidThroughDate: sub.nextDue(DateTime.now()),
-            updatedAt: utcNow(),
-            version: sub.version + 1,
-          ),
-        );
-        container.invalidate(subscriptionsProvider);
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -234,7 +237,7 @@ class _SubscriptionTile extends ConsumerWidget {
         ContextMenuItem(
           label: 'Log payment',
           icon: PhosphorIconsRegular.receipt,
-          onTap: () => _logPayment(context, ref),
+          onTap: () => logSubscriptionPayment(context, ref, subscription),
         ),
         ContextMenuItem(
           label: 'Duplicate',

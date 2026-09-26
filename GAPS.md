@@ -76,13 +76,24 @@ ship in every build with no `kReleaseMode` gate (`shell_destinations.dart:128,13
 you: hide pages you're not using this season (e.g. Jobs). For a second user: Dev and
 Demo shouldn't be visible.
 
-### Inbox doesn't know about spaced repetition
+### ~~Inbox doesn't know about spaced repetition~~
+**Done (2026-09-25):** the inbox shows a "Study · N cards due" and a "LeetCode · N
+problems due" row whenever anything is due. They're counted the way the Study button
+and the Review Deck count them. Clicking a row opens its page. Hiding one lasts until
+tomorrow. They don't light the bell, and a page hidden from the rail gets no row.
+
 The inbox covers `task`, `event` and `bill` only (`lib/domain/models/notification_models.dart:10`).
 Due study cards and due LeetCode reviews never surface. Those are the SRS features
 that most need a daily nudge. A "N cards due" row in the inbox, or a badge on the nav
 icon, would cover it.
 
-### Dream entries can't hold images
+### ~~Dream entries can't hold images~~
+**Done (2026-09-26):** dreams take images by paste and drop on the Dream Journal
+page and in Search's dream popup. The fan sits just left of the sticky note. An image
+dropped on a blank "New dream" saves it. Deleting a dream takes its images with it
+into the trash, and Undo or Trash → Restore brings them back. The quick-journal
+floater takes images for today's quick entry the same way.
+
 Journal entries take images by paste and drop, shown as a fan stack
 (`_withImages`, `journal_page.dart:3580` and `search_page.dart:1413`). Dream entries
 don't: the dream editor has no `MediaPasteScope` / `MediaDropTarget` / `MediaFanStack`.
@@ -134,7 +145,7 @@ The planner, live session and exercise detail work well together. Gaps:
   JSON backup.
 
 ### Study / LeetCode
-- No due count in the inbox (above).
+- ~~No due count in the inbox (above).~~ Done.
 - Study has no retention or forecast stats
 
 ### Settings

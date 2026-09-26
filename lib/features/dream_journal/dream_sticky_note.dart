@@ -41,6 +41,11 @@ class DreamStickyNote extends StatefulWidget {
   final FocusNode? focusNode;
   final Color? accentColor;
 
+  /// Where the note sits in its [Stack], so a dream's image fan can sit just
+  /// left of the collapsed note rather than under it.
+  static const edgeInset = 20.0;
+  static const besideInset = edgeInset + _DreamStickyNoteState._peekSize + 8;
+
   @override
   State<DreamStickyNote> createState() => _DreamStickyNoteState();
 }
@@ -84,8 +89,8 @@ class _DreamStickyNoteState extends State<DreamStickyNote>
     );
 
     return Positioned(
-      right: 20,
-      bottom: 20,
+      right: DreamStickyNote.edgeInset,
+      bottom: DreamStickyNote.edgeInset,
       child: AnimatedBuilder(
         animation: curved,
         builder: (context, _) {

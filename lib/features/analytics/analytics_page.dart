@@ -108,6 +108,15 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   Widget? _page;
   Object? _builtFrom;
 
+  /// The tracker grid as last built, and what it was built from. Kept across
+  /// page rebuilds so a journal save — the usual reason this page is stale
+  /// when it comes back into sight — doesn't rebuild and lay out every
+  /// heatmap square again: that was most of a 60ms frame on arrival. Each row
+  /// watches its own values, the journal-derived ones included, and rebuilds
+  /// itself when they move.
+  Widget? _grid;
+  Object? _gridBuiltFrom;
+
   /// Rebuilds only in sight, and only when what it shows has changed.
   ///
   /// It is a preloaded shell branch, so it stays mounted behind every other
@@ -230,7 +239,18 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   if (gridTrackers.isEmpty)
                     const _EmptyTrackersCard()
                   else
-                    _GridView(trackers: gridTrackers, analytics: analytics),
+                    _gridFor(
+                      gridTrackers,
+                      // The day too: the rows reckon "today" as they build,
+                      // so a grid kept past midnight still ends on yesterday.
+                      builtFrom: (
+                        trackers,
+                        showDefaultsInGrid,
+                        accent,
+                        DateUtils.dateOnly(today),
+                      ),
+                      analytics: analytics,
+                    ),
                 ],
               ),
               const SizedBox(height: 32),
@@ -243,6 +263,18 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('$e')),
     );
+  }
+
+  Widget _gridFor(
+    List<StatisticTracker> trackers, {
+    required Object builtFrom,
+    required AnalyticsService analytics,
+  }) {
+    final key = (builtFrom, analytics);
+    final grid = _grid;
+    if (grid != null && key == _gridBuiltFrom) return grid;
+    _gridBuiltFrom = key;
+    return _grid = _GridView(trackers: trackers, analytics: analytics);
   }
 
   Future<void> _createTracker(BuildContext context, WidgetRef ref) async {

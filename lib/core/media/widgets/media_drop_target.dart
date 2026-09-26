@@ -20,6 +20,7 @@ class MediaDropTarget extends ConsumerWidget {
     required this.collection,
     required this.documentId,
     this.facet = MediaFacet.gallery,
+    this.onBeforeAttach,
     required this.child,
   });
 
@@ -33,6 +34,10 @@ class MediaDropTarget extends ConsumerWidget {
   final String? documentId;
 
   final MediaFacet facet;
+
+  /// See [MediaPasteScope.onBeforeAttach].
+  final Future<void> Function()? onBeforeAttach;
+
   final Widget child;
 
   static const _formats = [
@@ -65,6 +70,8 @@ class MediaDropTarget extends ConsumerWidget {
           final bytes = await MediaClipboard.readImageFrom(reader);
           if (bytes != null) images.add(bytes);
         }
+        if (images.isEmpty) return;
+        await onBeforeAttach?.call();
         await attachImagesForOwner(
           ref,
           messenger: messenger,

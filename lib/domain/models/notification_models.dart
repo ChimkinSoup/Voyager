@@ -1,5 +1,7 @@
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
 
@@ -7,11 +9,15 @@ import 'package:voyager/domain/services/calendar_recurrence.dart';
 /// nav-rail bell's dot color/animation and the feed's sort order.
 enum NotificationUrgency { semi, important }
 
-enum NotificationItemType { task, event, bill }
+enum NotificationItemType { task, event, bill, review }
+
+/// Which spaced-repetition queue a [NotificationItemType.review] row counts.
+enum ReviewSource { study, leetcode }
 
 /// A single row in the unified notification feed, derived from a real task,
-/// event, or bill rather than being its own persisted record. [id] is the
-/// source object's id (used as the dismissal key alongside [urgency]).
+/// event, or bill — or, for a review row, from a whole spaced-repetition
+/// queue — rather than being its own persisted record. [id] is the source
+/// object's id (used as the dismissal key alongside [urgency]).
 class NotificationFeedItem {
   const NotificationFeedItem({
     required this.id,
@@ -21,6 +27,8 @@ class NotificationFeedItem {
     this.task,
     this.event,
     this.bill,
+    this.reviewSource,
+    this.reviewCount = 0,
     this.occurrenceDate,
   });
 
@@ -32,6 +40,10 @@ class NotificationFeedItem {
   final TodoTask? task;
   final CalendarEvent? event;
   final Subscription? bill;
+
+  /// Set on a review row: which queue it counts, and how much of it is due.
+  final ReviewSource? reviewSource;
+  final int reviewCount;
 
   /// For something that happens more than once — an occurrence of a repeating
   /// event, a month's instance of a bill — the local date-only day this row
@@ -116,6 +128,12 @@ class DismissedNotification {
   bool get isDismissed => deletedAt == null;
 }
 
+/// Whether [key] hides a review row from a day before [now]'s. That row never
+/// comes back — the next day's backlog is a row of its own — so the dismissal
+/// can be tombstoned, and purged with the other tombstones.
+bool isStaleReviewDismissal(String key, DateTime now) =>
+    key.startsWith('review:') && !key.contains('@${_dayKey(now)}|');
+
 /// `yyyy-MM-dd` for a local date, the occurrence half of a [dismissalKey].
 String _dayKey(DateTime date) =>
     '${date.year.toString().padLeft(4, '0')}-'
@@ -185,10 +203,17 @@ NotificationUrgency? evaluateBillUrgency(Subscription bill, DateTime now) {
 
 /// Folds tasks/events/bills into a single feed sorted by soonest-due,
 /// mixing item types together rather than grouping by category.
+///
+/// Due study cards and LeetCode problems add one row per queue rather than
+/// one per card, dated today so they sort among today's items. Hiding one
+/// lasts the day: the key carries today's date, so tomorrow's backlog comes
+/// back as a new row.
 List<NotificationFeedItem> buildNotificationFeed({
   required List<TodoTask> tasks,
   required List<CalendarEvent> events,
   required List<Subscription> bills,
+  List<StudyCard> studyCards = const [],
+  List<LeetCodeProblem> leetCodeProblems = const [],
   required DateTime now,
 }) {
   final items = <NotificationFeedItem>[];
@@ -244,6 +269,33 @@ List<NotificationFeedItem> buildNotificationFeed({
       ),
     );
   }
+
+  final today = DateTime(now.year, now.month, now.day);
+  final nowUtc = now.toUtc();
+  void addReview(ReviewSource source, int count) {
+    if (count == 0) return;
+    items.add(
+      NotificationFeedItem(
+        id: 'review:${source.name}',
+        type: NotificationItemType.review,
+        urgency: NotificationUrgency.semi,
+        dueAt: today,
+        reviewSource: source,
+        reviewCount: count,
+        occurrenceDate: today,
+      ),
+    );
+  }
+
+  // The same tests the Study button and the Review Deck count with.
+  addReview(
+    ReviewSource.study,
+    studyCards.where((c) => !c.dueAt.isAfter(nowUtc)).length,
+  );
+  addReview(
+    ReviewSource.leetcode,
+    leetCodeProblems.where((p) => p.isDue(now: nowUtc)).length,
+  );
 
   items.sort((a, b) => a.dueAt.compareTo(b.dueAt));
   return items;
