@@ -27,8 +27,11 @@ abstract class JournalRepository {
     Journal journal, {
     bool recordLocalActivity = true,
   });
-  Future<void> softDeleteJournal(String id);
-  Future<void> softDeleteEntriesInJournal(String journalId);
+
+  /// [at] stamps the tombstone; a cascade passes one instant to the container
+  /// and its children so the trash can tell what was deleted together.
+  Future<void> softDeleteJournal(String id, {DateTime? at});
+  Future<void> softDeleteEntriesInJournal(String journalId, {DateTime? at});
   Future<void> deleteAllJournals();
   Future<void> deleteAllEntries();
   Future<void> reassignEntriesJournal(String fromJournalId, String toJournalId);
@@ -192,11 +195,13 @@ abstract class TodoRepository {
     TodoListModel list, {
     bool recordLocalActivity = true,
   });
-  Future<void> softDeleteList(String id);
+
+  /// [at] as on [JournalRepository.softDeleteJournal].
+  Future<void> softDeleteList(String id, {DateTime? at});
 
   /// Soft-deletes every task in [listId], subtasks included, and returns the
   /// rows as written so the caller can push exactly those to the remote.
-  Future<List<TodoTask>> softDeleteTasksInList(String listId);
+  Future<List<TodoTask>> softDeleteTasksInList(String listId, {DateTime? at});
 
   Future<List<TodoTask>> listTasks(
     String listId, {
@@ -227,8 +232,10 @@ abstract class CalendarRepository {
     Calendar calendar, {
     bool recordLocalActivity = true,
   });
-  Future<void> softDeleteCalendar(String id);
-  Future<void> softDeleteEventsInCalendar(String calendarId);
+
+  /// [at] as on [JournalRepository.softDeleteJournal].
+  Future<void> softDeleteCalendar(String id, {DateTime? at});
+  Future<void> softDeleteEventsInCalendar(String calendarId, {DateTime? at});
   Future<void> reassignEventsCalendar(
     String fromCalendarId,
     String toCalendarId,
@@ -483,7 +490,10 @@ abstract class StudyRepository {
     StudyFolder folder, {
     bool recordLocalActivity = true,
   });
-  Future<void> softDeleteFolder(String id);
+
+  /// [at] as on [JournalRepository.softDeleteJournal] — shared by a deck or
+  /// folder delete and everything it cascades into.
+  Future<void> softDeleteFolder(String id, {DateTime? at});
 
   /// True if moving [folderId] under [targetParentFolderId] would create a
   /// cycle (the target is the folder itself or one of its own descendants).
@@ -497,7 +507,7 @@ abstract class StudyRepository {
   });
   Future<StudyDeck?> getDeck(String id);
   Future<void> upsertDeck(StudyDeck deck, {bool recordLocalActivity = true});
-  Future<void> softDeleteDeck(String id);
+  Future<void> softDeleteDeck(String id, {DateTime? at});
   Future<void> moveDeck(String deckId, String? newParentFolderId);
 
   Future<List<StudyCard>> listCards(
@@ -506,7 +516,7 @@ abstract class StudyRepository {
   });
   Future<StudyCard?> getCard(String id);
   Future<void> upsertCard(StudyCard card, {bool recordLocalActivity = true});
-  Future<void> softDeleteCard(String id);
+  Future<void> softDeleteCard(String id, {DateTime? at});
   Future<void> moveCards(List<String> cardIds, String targetDeckId);
 
   /// Copies each card in [cardIds] into its own deck, returning the source
@@ -525,7 +535,7 @@ abstract class StudyRepository {
     StudyDeckLink link, {
     bool recordLocalActivity = true,
   });
-  Future<void> softDeleteDeckLink(String id);
+  Future<void> softDeleteDeckLink(String id, {DateTime? at});
 
   Future<void> logReview(StudyReviewLog log, {bool recordLocalActivity = true});
 

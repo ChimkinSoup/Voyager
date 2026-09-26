@@ -52,3 +52,36 @@ Rejected alternatives: a literal row delete plus `permanentlyDeleteFromRemote`
 - Jobs adds no new sync path. All six of its collections are snapshot-only, so
   they inherit version-then-`updatedAt` conflict resolution and write no
   operation log.
+
+## Amendment: Trash erase and tombstone repair (2026-09-25)
+
+### Context
+The trash (`TRASH_HLD.md`) adds "Delete forever". A row still can't be removed,
+for the reason above, and Firestore writes are unconditional `set(merge: true)`.
+So a device that saved an item before hearing of its deletion overwrote the
+tombstone in the cloud, and nothing corrected it.
+
+### Decision
+- **Erase** is a final tombstone: content blanked, `deletedAt` set to the epoch
+  (`kErasedAt`), and version advanced by `kEraseVersionStep` (2^20) so no
+  concurrent edit outranks it. For the collections with an operation log, the
+  log is wiped too, since a pull resolves their text from it.
+- **Purge** skips erased rows: they stay on every device for good and keep
+  rejecting stale copies however late those arrive. They hold no content, and
+  the Firestore tombstone was never removed anyway. Ordinary tombstones are
+  unaffected.
+- **Field-level merges** (Rankings, Jobs) keep an erased local row whole, so
+  a field edited offline after the erase can't come back.
+- **Repair:** after every pull, a local tombstone that beat the pulled copy is
+  queued for upload, so the cloud copy converges back to the deletion. This
+  applies to every tombstone, not just erased ones.
+- Saves onto an erased row are dropped, and an incoming erase is adopted
+  before conflict detection.
+
+### Consequences
+- Each erased item costs one id-and-timestamps row per device, permanently.
+- A device whose last full pull is older than the retention window pulls
+  before its outbox drains (`catchUpIfAway`), so offline edits meet the cloud
+  tombstone of an item deleted meanwhile instead of overwriting it, although
+  every other device has purged that row.
+- Every pull does one extra local read per document it applied.

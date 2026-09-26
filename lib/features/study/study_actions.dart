@@ -474,14 +474,17 @@ Future<void> deleteStudyDeck(
   if (!confirmed) return;
 
   final remoteSync = ref.read(remoteSyncServiceProvider);
+  // One instant for the deck and everything it takes with it, so the trash
+  // can restore exactly this delete.
+  final deletedAt = utcNow();
   for (final card in cards) {
-    await repo.softDeleteCard(card.id);
+    await repo.softDeleteCard(card.id, at: deletedAt);
   }
   await detachStudyCardMedia(ref, [for (final card in cards) card.id]);
-  await repo.softDeleteDeck(deck.id);
+  await repo.softDeleteDeck(deck.id, at: deletedAt);
   final deleted = await repo.getDeck(deck.id);
   if (deleted != null) remoteSync.pushStudyDeck(deleted);
-  await softDeleteStudyDeckLinksTouching(container, {deck.id});
+  await softDeleteStudyDeckLinksTouching(container, {deck.id}, at: deletedAt);
   final deletedCards = <StudyCard>[];
   for (final card in cards) {
     final c = await repo.getCard(card.id);
@@ -537,14 +540,16 @@ Future<void> deleteStudyFolder(
   if (!confirmed) return;
 
   final remoteSync = ref.read(remoteSyncServiceProvider);
+  // One instant for the whole tree — see [deleteStudyDeck].
+  final deletedAt = utcNow();
 
   for (final deck in contents.decks) {
     final cards = await repo.listCards(deck.id);
     for (final card in cards) {
-      await repo.softDeleteCard(card.id);
+      await repo.softDeleteCard(card.id, at: deletedAt);
     }
     await detachStudyCardMedia(ref, [for (final card in cards) card.id]);
-    await repo.softDeleteDeck(deck.id);
+    await repo.softDeleteDeck(deck.id, at: deletedAt);
     final deleted = await repo.getDeck(deck.id);
     if (deleted != null) remoteSync.pushStudyDeck(deleted);
     final deletedCards = <StudyCard>[];
@@ -555,14 +560,14 @@ Future<void> deleteStudyFolder(
     await remoteSync.pushStudyCardsBatch(deletedCards);
   }
   for (final subfolder in contents.folders.reversed) {
-    await repo.softDeleteFolder(subfolder.id);
+    await repo.softDeleteFolder(subfolder.id, at: deletedAt);
     final deleted = await repo.getFolder(subfolder.id);
     if (deleted != null) remoteSync.pushStudyFolder(deleted);
   }
-  await repo.softDeleteFolder(folder.id);
+  await repo.softDeleteFolder(folder.id, at: deletedAt);
   final deletedFolder = await repo.getFolder(folder.id);
   if (deletedFolder != null) remoteSync.pushStudyFolder(deletedFolder);
-  await softDeleteStudyDeckLinksTouching(container, deckIds);
+  await softDeleteStudyDeckLinksTouching(container, deckIds, at: deletedAt);
 
   invalidateStudyCards(ref);
   _invalidateStudyLibrary(ref);

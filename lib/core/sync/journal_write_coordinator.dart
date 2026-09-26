@@ -1,3 +1,4 @@
+import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/domain/models/dream_models.dart';
@@ -47,6 +48,9 @@ class JournalWriteCoordinator {
         if (baseline == null) {
           throw StateError('Journal entry $entryId not found in SQLite');
         }
+        // Erased from the trash while an editor still had it open: applying
+        // the edit would write its text back into the emptied row.
+        if (isErasedAt(baseline.deletedAt)) return;
         final updated = applyDelta(baseline).copyWith(bumpVersion: bumpVersion);
         await _journalRepository.upsertEntry(updated);
         if (refreshCaches) onEntrySaved?.call();
@@ -82,6 +86,8 @@ class DreamWriteCoordinator {
         if (baseline == null) {
           throw StateError('Dream entry $entryId not found in SQLite');
         }
+        // See [JournalWriteCoordinator.saveEntry].
+        if (isErasedAt(baseline.deletedAt)) return;
         final updated = applyDelta(baseline).copyWith(bumpVersion: bumpVersion);
         await _dreamRepository.upsertEntry(updated);
         onEntrySaved?.call();
@@ -116,6 +122,8 @@ class TodoWriteCoordinator {
         if (baseline == null) {
           throw StateError('Todo task $taskId not found in SQLite');
         }
+        // See [JournalWriteCoordinator.saveEntry].
+        if (isErasedAt(baseline.deletedAt)) return;
         final updated = await applyDelta(baseline);
         if (updated == null) return;
         final toSave = updated.copyWith(bumpVersion: bumpVersion);
@@ -124,7 +132,7 @@ class TodoWriteCoordinator {
       },
       saveRemote: () async {
         final latest = await _findTask(taskId);
-        if (latest != null) {
+        if (latest != null && !isErasedAt(latest.deletedAt)) {
           await _remoteSync.pushTodoTaskNow(latest);
         }
       },

@@ -397,7 +397,21 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       'PAGE_DISPOSE',
       details: 'Flushing active edits before dispose.',
     );
-    unawaited(_flushActiveEntryEdits(refreshList: false));
+    // Reported rather than left to escape: nothing awaits this, so a failure
+    // (the database already closed under a whole-tree teardown, most often)
+    // would otherwise surface as an uncaught error with no context.
+    unawaited(
+      _flushActiveEntryEdits(refreshList: false).catchError(
+        (Object error, StackTrace stack) => FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stack,
+            library: 'JournalPage',
+            context: ErrorDescription('while flushing edits on dispose'),
+          ),
+        ),
+      ),
+    );
     _titleController.dispose();
     _titleFocusNode.dispose();
     _bodyFocusNode.dispose();

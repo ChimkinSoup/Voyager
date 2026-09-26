@@ -176,8 +176,11 @@ Future<bool> deleteCalendarList(
   final repo = ref.read(calendarRepositoryProvider);
 
   try {
+    // One instant for the calendar and the events it takes with it — see
+    // [deleteJournalList].
+    final deletedAt = utcNow();
     if (choice == DeleteContainerChoice.deleteAll && eventCount > 0) {
-      await repo.softDeleteEventsInCalendar(calendar.id);
+      await repo.softDeleteEventsInCalendar(calendar.id, at: deletedAt);
     } else if (choice == DeleteContainerChoice.moveToDefault &&
         eventCount > 0) {
       final fallback = allCalendars.firstWhere(
@@ -199,7 +202,7 @@ Future<bool> deleteCalendarList(
       await repo.reassignEventsCalendar(calendar.id, legacyCalendarId);
     }
 
-    await repo.softDeleteCalendar(calendar.id);
+    await repo.softDeleteCalendar(calendar.id, at: deletedAt);
   } catch (error, stackTrace) {
     onLocalDeleteFailed?.call();
     FlutterError.reportError(

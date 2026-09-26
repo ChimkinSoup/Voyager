@@ -155,9 +155,13 @@ Future<void> _restoreLink(
   invalidateStudyDeckLinksIn(container);
 }
 
-Future<void> _softDeleteLink(ProviderContainer container, String id) async {
+Future<void> _softDeleteLink(
+  ProviderContainer container,
+  String id, {
+  DateTime? at,
+}) async {
   final repo = container.read(studyRepositoryProvider);
-  await repo.softDeleteDeckLink(id);
+  await repo.softDeleteDeckLink(id, at: at);
   final tombstone = await repo.getDeckLink(id);
   if (tombstone != null) {
     container.read(remoteSyncServiceProvider).pushStudyDeckLink(tombstone);
@@ -167,15 +171,19 @@ Future<void> _softDeleteLink(ProviderContainer container, String id) async {
 
 /// Tombstones every live link with an end in [deckIds], for a deck delete:
 /// a link to or from a deleted deck is an orphan nothing would ever clean up.
+///
+/// [at] is the deck delete's own stamp, so restoring the deck from the trash
+/// brings back exactly the links this delete took.
 Future<void> softDeleteStudyDeckLinksTouching(
   ProviderContainer container,
-  Set<String> deckIds,
-) async {
+  Set<String> deckIds, {
+  DateTime? at,
+}) async {
   final repo = container.read(studyRepositoryProvider);
   for (final link in await repo.listDeckLinks()) {
     if (deckIds.contains(link.parentDeckId) ||
         deckIds.contains(link.childDeckId)) {
-      await _softDeleteLink(container, link.id);
+      await _softDeleteLink(container, link.id, at: at);
     }
   }
 }

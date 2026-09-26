@@ -8,6 +8,8 @@ import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/features/calendar/calendar_list_actions.dart';
+import 'package:voyager/features/trash/trash_dialog.dart';
+import 'package:voyager/features/trash/trash_kinds.dart';
 
 /// Create, rename, recolour, overlay and delete calendars, behind the header
 /// gear.
@@ -196,6 +198,15 @@ class _CalendarManageDialogState extends ConsumerState<_CalendarManageDialog> {
               ),
       ),
       actions: [
+        GlassButton(
+          dense: true,
+          onPressed: () async {
+            await showTrashDialog(context, feature: TrashFeature.calendar);
+            if (mounted) await _reload();
+          },
+          icon: const Icon(PhosphorIconsRegular.trash),
+          label: 'Recently deleted',
+        ),
         GlassButton(
           dense: true,
           onPressed: () => Navigator.pop(context, _createdCalendarId),

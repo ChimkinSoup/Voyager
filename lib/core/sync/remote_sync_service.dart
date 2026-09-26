@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:voyager/core/dev/error_logger.dart';
 import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/char_ops_encoder.dart';
 import 'package:voyager/core/sync/crdt_document_resolver.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
@@ -17,6 +18,7 @@ import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/sync/pending_text_merge.dart';
 import 'package:voyager/core/sync/scroll_activity_gate.dart';
+import 'package:voyager/core/sync/soft_delete_policy.dart';
 import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
 import 'package:voyager/core/sync/sync_conflict_detector.dart';
@@ -687,6 +689,8 @@ class RemoteSyncService {
     bool queueOnFailure = true,
   }) async {
     const collection = FirestoreCollections.journalEntries;
+    // Not chained like the ordinary saves, so held here — see [catchUpIfAway].
+    if (_heldForCatchUp case final held?) await held;
 
     // Another surface — the journal editor — owns this document's chain and
     // holds operations it has not uploaded yet. `resetSession` replaces a
@@ -809,6 +813,8 @@ class RemoteSyncService {
     bool queueOnFailure = true,
   }) async {
     const collection = FirestoreCollections.dreamEntries;
+    // See [forceOverwriteJournalEntryText].
+    if (_heldForCatchUp case final held?) await held;
 
     if (_charOpRegistry.session(collection, entry.id) != null) {
       final published = await _persistPublishedDreamRevision(entry);
@@ -989,7 +995,9 @@ class RemoteSyncService {
       saveLocal: saveLocal,
       saveRemote: () async {
         final latest = await _journalRepository.getEntry(entryId);
-        if (latest != null) {
+        // An erased entry has nothing left to upload: its erase went out on
+        // its own path, and re-sending it here would wipe the log again.
+        if (latest != null && !isErasedAt(latest.deletedAt)) {
           await _uploadJournalEntryNow(latest);
         }
       },
@@ -1006,7 +1014,8 @@ class RemoteSyncService {
       saveLocal: saveLocal,
       saveRemote: () async {
         final latest = await _dreamRepository.getEntry(entryId);
-        if (latest != null) {
+        // See [saveJournalEntryThenScheduleUpload].
+        if (latest != null && !isErasedAt(latest.deletedAt)) {
           await _uploadDreamEntryNow(latest);
         }
       },
@@ -1017,10 +1026,17 @@ class RemoteSyncService {
     return saveLocalThenScheduleUpload(
       collection: FirestoreCollections.todoTasks,
       documentId: task.id,
-      saveLocal: () => _todoRepository.upsertTask(task),
+      saveLocal: () async {
+        // A save from a panel still open on a task the trash has erased would
+        // write its text back into the emptied row.
+        final current = await _findTodoTask(task.id);
+        if (isErasedAt(current?.deletedAt)) return;
+        await _todoRepository.upsertTask(task);
+      },
       saveRemote: () async {
         final latest = await _findTodoTask(task.id);
-        if (latest != null) {
+        // See [saveJournalEntryThenScheduleUpload].
+        if (latest != null && !isErasedAt(latest.deletedAt)) {
           await _uploadTodoTaskNow(latest);
         }
       },
@@ -1346,6 +1362,73 @@ class RemoteSyncService {
     );
     return merged;
   }
+
+  /// Pulls everything first when this device has been out of touch for longer
+  /// than tombstones are kept — see [OutboxSyncWorker.beforeDrain].
+  ///
+  /// The other devices purge a deleted row 30 days after the delete. What
+  /// still records the deletion after that is its tombstone in Firestore, and
+  /// a device coming back after longer than that would otherwise upload its
+  /// offline edits straight over it: Firestore writes don't compare versions,
+  /// and no device is left holding the tombstone to put it back. Pulling first
+  /// lets the tombstone meet those edits on this device, under the usual
+  /// version rule, before anything is sent.
+  ///
+  /// "Out of touch" is read off the full pulls: a device that syncs at all
+  /// pulls every collection whole at least every [_fullPullInterval].
+  ///
+  /// Every other upload waits while this runs (see [_runInDocumentChains]),
+  /// so an edit made in the first moments after such a device reconnects
+  /// can't slip out ahead of the pull either.
+  Future<void> catchUpIfAway() {
+    final running = _catchUp;
+    if (running != null) return running;
+    final run = runZoned(_catchUpIfAway, zoneValues: {_catchingUpKey: true});
+    _catchUp = run;
+    return run.whenComplete(() {
+      if (identical(_catchUp, run)) _catchUp = null;
+    });
+  }
+
+  Future<void> _catchUpIfAway() async {
+    final cutoff = const SoftDeletePolicy().purgeCutoff(DateTime.now().toUtc());
+    for (final collection in FirestoreCollections.records) {
+      final mark = await _watermarkStore.read(collection);
+      if (mark != null && mark.lastFullPullAt.isBefore(cutoff)) {
+        final fromCache = <String>[];
+        await runZoned(pullAll, zoneValues: {_servedFromCacheKey: fromCache});
+        // Firestore answers from its cache without complaint while the
+        // connection is still coming back; such a pull never saw the
+        // tombstones it is here for.
+        if (fromCache.isNotEmpty) {
+          throw StateError(
+            'catch-up pull served from the cache: ${fromCache.join(', ')}',
+          );
+        }
+        return;
+      }
+    }
+  }
+
+  /// The [catchUpIfAway] in progress, if any.
+  Future<void>? _catchUp;
+
+  /// What an upload starting now has to wait for: the [catchUpIfAway] in
+  /// progress, unless the upload is that catch-up's own. A failed catch-up
+  /// lets it through; the outbox drain stays held instead.
+  Future<void>? get _heldForCatchUp {
+    final catchUp = _catchUp;
+    if (catchUp == null || Zone.current[_catchingUpKey] == true) return null;
+    return catchUp.catchError((Object _) {});
+  }
+
+  /// Marks the zone [catchUpIfAway] runs in. The uploads its own pull makes —
+  /// the backfill — must not wait for it to finish.
+  static const _catchingUpKey = #remoteSyncCatchingUp;
+
+  /// Zone key under which [catchUpIfAway]'s pull collects the collections
+  /// whose listing came from the local cache rather than the server.
+  static const _servedFromCacheKey = #remoteSyncServedFromCache;
 
   Future<void> pullAll() async {
     if (forceConflictUi) {
@@ -2340,6 +2423,18 @@ class RemoteSyncService {
       documentData: documentData,
       apply: (id, data, {required fromCrdt}) async {
         final local = await _journalRepository.getEntry(id);
+        if (await _applyErasure(
+          FirestoreCollections.journalEntries,
+          id,
+          data,
+          localDeletedAt: local?.deletedAt,
+          adopt: () => _journalRepository.upsertEntry(
+            mergeJournalEntryFromRemote(data, id, local: local),
+            recordLocalActivity: false,
+          ),
+        )) {
+          return;
+        }
         final remoteCharOps = await _listRemoteCharOps(id);
         _charOpRegistry.absorbRemote(
           FirestoreCollections.journalEntries,
@@ -2477,6 +2572,18 @@ class RemoteSyncService {
       documentData: documentData,
       apply: (id, data, {required fromCrdt}) async {
         final local = await _dreamRepository.getEntry(id);
+        if (await _applyErasure(
+          FirestoreCollections.dreamEntries,
+          id,
+          data,
+          localDeletedAt: local?.deletedAt,
+          adopt: () => _dreamRepository.upsertEntry(
+            mergeDreamEntryFromRemote(data, id, local: local),
+            recordLocalActivity: false,
+          ),
+        )) {
+          return;
+        }
         final remoteCharOps = await _listRemoteCharOps(id);
         _charOpRegistry.absorbRemote(
           FirestoreCollections.dreamEntries,
@@ -2628,6 +2735,22 @@ class RemoteSyncService {
           final local = localTasks != null
               ? localTasks[id]
               : await _todoRepository.getTask(id);
+          if (await _applyErasure(
+            FirestoreCollections.todoTasks,
+            id,
+            data,
+            localDeletedAt: local?.deletedAt,
+            adopt: () async {
+              final merged = mergeTodoTaskFromRemote(data, id, local: local);
+              await _todoRepository.upsertTask(
+                merged,
+                recordLocalActivity: false,
+              );
+              localTasks?[id] = merged;
+            },
+          )) {
+            return;
+          }
           final remoteCharOps = await _listRemoteCharOps(id);
           _charOpRegistry.absorbRemote(
             FirestoreCollections.todoTasks,
@@ -2784,6 +2907,7 @@ class RemoteSyncService {
       full = listed.full;
     }
 
+    final pulled = <String, Map<String, dynamic>>{};
     for (final doc in docs) {
       final firestoreDocId = doc.data['id'] as String? ?? doc.id;
       final localDocId = _localDocumentId(collection, firestoreDocId);
@@ -2795,20 +2919,14 @@ class RemoteSyncService {
               _firestoreDocumentId(collection, localDocId),
             )
           : null;
-      if (crdtPayload != null) {
-        await apply(
-          localDocId,
-          _normalizeRemoteDocument(collection, crdtPayload),
-          fromCrdt: true,
-        );
-      } else {
-        await apply(
-          localDocId,
-          _normalizeRemoteDocument(collection, doc.data),
-          fromCrdt: false,
-        );
-      }
+      final remote = _normalizeRemoteDocument(
+        collection,
+        crdtPayload ?? doc.data,
+      );
+      await apply(localDocId, remote, fromCrdt: crdtPayload != null);
+      pulled[localDocId] = remote;
     }
+    await _repushWinningTombstones(collection, pulled);
     // Only once every document has been applied: a pull that threw partway
     // must be asked for the same documents again.
     if (advance != null) {
@@ -2851,6 +2969,7 @@ class RemoteSyncService {
       since: full ? null : mark.changedSince,
     );
     if (!listed.fromServer) {
+      (Zone.current[_servedFromCacheKey] as List<String>?)?.add(collection);
       return (documents: listed.documents, advance: null, full: full);
     }
     // The newest write seen is safe on any clock: whatever the server writes
@@ -3711,7 +3830,12 @@ class RemoteSyncService {
   /// page's cascade attaches its own `catchError` to re-queue the rows it was
   /// pushing. Call sites that cannot await it want
   /// [pushTodoTaskInBackground] instead.
-  Future<void> pushTodoTaskNow(TodoTask task) {
+  ///
+  /// Not chained itself, so held here while [catchUpIfAway] pulls. Called from
+  /// inside a [_runRemoteSave], it finds the catch-up already over: that save
+  /// was held at the chain's entry.
+  Future<void> pushTodoTaskNow(TodoTask task) async {
+    if (_heldForCatchUp case final held?) await held;
     cancelDocument(FirestoreCollections.todoTasks, task.id);
     return _uploadTodoTaskNow(task);
   }
@@ -3805,6 +3929,14 @@ class RemoteSyncService {
       case FirestoreCollections.journalEntries:
         final entry = await _journalRepository.getEntry(documentId);
         if (entry == null) return;
+        if (isErasedAt(entry.deletedAt)) {
+          await _publishErasure(
+            collection,
+            documentId,
+            journalEntryToFirestore(entry),
+          );
+          return;
+        }
         if (forceCrdtOverwrite) {
           // A rewrite the Search popup could not publish when it was made —
           // see [forceOverwriteJournalEntryText]. Failures propagate so the
@@ -3825,6 +3957,14 @@ class RemoteSyncService {
       case FirestoreCollections.dreamEntries:
         final entry = await _dreamRepository.getEntry(documentId);
         if (entry == null) return;
+        if (isErasedAt(entry.deletedAt)) {
+          await _publishErasure(
+            collection,
+            documentId,
+            dreamEntryToFirestore(entry),
+          );
+          return;
+        }
         if (forceCrdtOverwrite) {
           // A rewrite the Search popup's dream dialog could not publish when
           // it was made — see [forceOverwriteDreamEntryText].
@@ -3844,6 +3984,14 @@ class RemoteSyncService {
       case FirestoreCollections.todoTasks:
         final task = await _findTodoTask(documentId);
         if (task == null) return;
+        if (isErasedAt(task.deletedAt)) {
+          await _publishErasure(
+            collection,
+            documentId,
+            todoTaskToFirestore(task),
+          );
+          return;
+        }
         if (!await _recoverLostOperations(
           collection,
           documentId,
@@ -3995,6 +4143,14 @@ class RemoteSyncService {
     Iterable<String> documentIds,
     Future<void> Function() upload,
   ) {
+    // Held *before* joining the chains: a held upload sitting in a document's
+    // chain would make the catch-up's own upload of that document wait for it,
+    // and each would wait forever.
+    if (_heldForCatchUp case final catchUp?) {
+      return catchUp.then(
+        (_) => _runInDocumentChains(collection, documentIds, upload),
+      );
+    }
     final keys = {
       for (final documentId in documentIds) documentKey(collection, documentId),
     };
@@ -4132,6 +4288,13 @@ class RemoteSyncService {
     required String documentId,
     required Map<String, dynamic> payload,
   }) async {
+    // An erased row goes out through the one path that also clears its log.
+    // Uploading it here would append this device's pending operations — the
+    // text the erase exists to remove — to the log it is about to lose.
+    if (isErasedPayload(payload)) {
+      await _publishErasure(collection, documentId, payload);
+      return;
+    }
     final charOps = _charOpRegistry.takePendingOps(collection, documentId);
     _markSelfEcho(collection, documentId, payload);
     try {
@@ -4567,6 +4730,155 @@ class RemoteSyncService {
           error: error,
         );
       }
+    }
+  }
+
+  /// Uploads rows the trash just restored or erased (`TRASH_HLD.md`).
+  ///
+  /// The collections with a character-operation log can't go out as a bare
+  /// mirror write: a pull takes their text from the log, which still holds the
+  /// tombstone. A restore goes through the collection's own upload, which
+  /// writes a log entry, and an erase through [_publishErasure], which clears
+  /// the log. Everything else is a plain record push.
+  Future<void> pushTrashRecords(String collection, List<Object> records) async {
+    if (!FirestoreCollections.crdtBacked.contains(collection)) {
+      await pushRecords(collection, records);
+      return;
+    }
+    for (final record in records) {
+      final document = _recordDocument(collection, record);
+      if (document == null) continue;
+      if (isErasedPayload(document.payload)) {
+        await _runRemoteSave(
+          collection,
+          document.id,
+          () => _publishErasure(collection, document.id, document.payload),
+        );
+        continue;
+      }
+      switch (record) {
+        case JournalEntry():
+          pushJournalEntryNow(record);
+        case DreamEntry():
+          pushDreamEntryNow(record);
+        case TodoTask():
+          pushTodoTaskInBackground(record);
+      }
+    }
+  }
+
+  /// Publishes an erased row of a collection that keeps an operation log:
+  /// clears the log, then uploads the emptied document on its own.
+  ///
+  /// A pull prefers the text the log resolves to over the document, so the
+  /// wipe is what actually erases the text on the other devices; the document
+  /// is written without a log entry so the empty log stays empty. This
+  /// device's session and buffered text for the document go first, or the next
+  /// upload would put their characters straight back.
+  ///
+  /// The wipe needs a reachable server and throws otherwise. The caller's
+  /// outbox handling then retries, and the replay comes back here through
+  /// [pushOutboxDocument].
+  Future<void> _publishErasure(
+    String collection,
+    String documentId,
+    Map<String, dynamic> payload,
+  ) async {
+    cancelDocument(collection, documentId);
+    _charOpRegistry.removeSession(collection, documentId);
+    _pendingTextMergeBuffer.clearDocument(collection, documentId);
+    final firestoreId = _firestoreDocumentId(collection, documentId);
+    await _syncRepository.deleteOperationsForDocument(firestoreId);
+    _markSelfEcho(collection, documentId, payload);
+    await _syncEngine.syncDocumentImmediately(
+      collection: collection,
+      documentId: firestoreId,
+      payload: payload,
+      logOperation: false,
+    );
+  }
+
+  /// Handles a pulled document on either side of an erase, for the
+  /// collections that keep an operation log. Returns true when it did.
+  ///
+  /// An incoming erase is adopted as it stands: it already outranks any copy
+  /// here, and an open editor's session and buffered text go with it rather
+  /// than being run through conflict detection against text that no longer
+  /// exists. A copy arriving for a row this device has already erased is not
+  /// applied at all — [_repushWinningTombstones] puts the erase back on the
+  /// server instead.
+  Future<bool> _applyErasure(
+    String collection,
+    String id,
+    Map<String, dynamic> data, {
+    required DateTime? localDeletedAt,
+    required Future<void> Function() adopt,
+  }) async {
+    if (isErasedAt(localDeletedAt)) return true;
+    if (!isErasedPayload(data)) return false;
+    cancelDocument(collection, id);
+    _charOpRegistry.removeSession(collection, id);
+    _pendingTextMergeBuffer.clearDocument(collection, id);
+    await adopt();
+    return true;
+  }
+
+  /// Puts this device's tombstones back on the server where a pull brought a
+  /// copy that lost to them.
+  ///
+  /// Firestore writes are unconditional, so a device that saved an item
+  /// before it heard of the deletion overwrites the tombstone in the cloud with
+  /// a live copy. The devices that still hold the tombstone keep it — the copy
+  /// loses on version — but nothing used to correct the cloud, and a device
+  /// that no longer had the row (a fresh install, or one past its purge)
+  /// adopted the live copy and brought the item back. Queued rather than
+  /// uploaded here: the outbox already knows how to send any collection, and
+  /// for the ones with an operation log its replay is the path that handles
+  /// both a lost text and an erase.
+  Future<void> _repushWinningTombstones(
+    String collection,
+    Map<String, Map<String, dynamic>> pulled,
+  ) async {
+    if (pulled.isEmpty || !OutboxSyncWorker.isInitialized) return;
+    try {
+      final local = await OutboxSyncWorker.instance.localPayloadsFor(
+        collection,
+        pulled.keys.toSet(),
+      );
+      var queued = false;
+      for (final entry in local.entries) {
+        final localDeletedAt = parseFirestoreDate(entry.value['deletedAt']);
+        if (localDeletedAt == null) continue;
+        final remote = pulled[entry.key]!;
+        final localVersion = parseVersion(entry.value);
+        final remoteVersion = parseVersion(remote);
+        // The pull just applied the remote copy wherever it won, so a local
+        // row that still differs from it is one the remote copy lost to. One
+        // that is *behind* it was kept for another reason — a quarantined
+        // conflict — and is left to that.
+        if (localVersion < remoteVersion) continue;
+        final remoteDeletedAt = parseFirestoreDate(remote['deletedAt']);
+        if (localVersion == remoteVersion &&
+            remoteDeletedAt != null &&
+            remoteDeletedAt.isAtSameMomentAs(localDeletedAt)) {
+          continue;
+        }
+        await OutboxSyncWorker.recordOwedUpload(
+          collection: collection,
+          documentId: entry.key,
+        );
+        queued = true;
+      }
+      if (queued) unawaited(OutboxSyncWorker.instance.startDraining());
+    } catch (error, stackTrace) {
+      // A pull has already applied everything it brought; failing it here
+      // would only make it fetch the same documents again.
+      debugPrint('[sync] tombstone check for $collection failed: $error');
+      ErrorLogger.instance.record(
+        error,
+        stackTrace,
+        context: 'sync: tombstone check after pulling $collection',
+      );
     }
   }
 

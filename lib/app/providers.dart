@@ -83,6 +83,7 @@ import 'package:voyager/features/settings/services/backup_collections.dart';
 import 'package:voyager/features/settings/services/color_replacement_service.dart';
 import 'package:voyager/features/settings/services/data_export_service.dart';
 import 'package:voyager/features/settings/services/data_import_service.dart';
+import 'package:voyager/features/trash/trash_service.dart';
 import 'package:voyager/domain/repositories/media_storage.dart';
 import 'package:voyager/domain/repositories/weather_api_client.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
@@ -367,6 +368,29 @@ final colorReplacementServiceProvider = Provider<ColorReplacementService>((
     pushRecords: (collection, records) =>
         ref.read(remoteSyncServiceProvider).pushRecords(collection, records),
   );
+});
+
+final trashServiceProvider = Provider<TrashService>((ref) {
+  return TrashService(
+    db: ref.watch(databaseProvider),
+    collections: ref.watch(backupCollectionsProvider),
+    // Read lazily, as the import service does: nothing uploads until a
+    // restore or an erase has committed.
+    push: (collection, records) => ref
+        .read(remoteSyncServiceProvider)
+        .pushTrashRecords(collection, records),
+    restoreMedia: (owner, documentId, parentDeletedAt) => ref
+        .read(mediaServiceProvider)
+        .restoreReferencesDetachedSince(owner, documentId, parentDeletedAt),
+  );
+});
+
+/// Everything in the trash, newest deletion first.
+///
+/// One of the data providers a sync tick invalidates, so a delete, restore or
+/// erase made on another device shows up while the trash is open.
+final trashItemsProvider = FutureProvider.autoDispose<List<TrashItem>>((ref) {
+  return ref.watch(trashServiceProvider).list();
 });
 
 final dataExportServiceProvider = Provider<DataExportService>((ref) {
@@ -1676,6 +1700,7 @@ final _secondaryDataProviders = <ProviderOrFamily>[
   ..._jobDataProviders,
   ..._rankingDataProviders,
   settingsProvider,
+  trashItemsProvider,
 ];
 
 void invalidateSecondaryDataProviders(Ref ref) {

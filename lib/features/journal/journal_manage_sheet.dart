@@ -9,6 +9,8 @@ import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/features/journal/journal_list_actions.dart';
 import 'package:voyager/features/journal/journal_settings_dialog.dart';
+import 'package:voyager/features/trash/trash_dialog.dart';
+import 'package:voyager/features/trash/trash_kinds.dart';
 
 /// Create, rename, recolour, configure and delete journals — everything the
 /// switcher's nested ⋮ used to carry, in one dialog behind the header gear.
@@ -159,6 +161,15 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
               ),
       ),
       actions: [
+        GlassButton(
+          dense: true,
+          onPressed: () async {
+            await showTrashDialog(context, feature: TrashFeature.journal);
+            if (mounted) await _reload();
+          },
+          icon: const Icon(PhosphorIconsRegular.trash),
+          label: 'Recently deleted',
+        ),
         GlassButton(
           dense: true,
           onPressed: () => Navigator.pop(context, _createdJournalId),

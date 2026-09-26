@@ -281,6 +281,9 @@ Future<bool> deleteTodoList(
   );
   if (!context.mounted || choice == DeleteContainerChoice.cancel) return false;
 
+  // One instant for the list and the tasks it takes with it — see
+  // [deleteJournalList].
+  final deletedAt = utcNow();
   if (choice == DeleteContainerChoice.moveToDefault && tasks.isNotEmpty) {
     final fallback = allLists.firstWhere(
       (item) => item.id == legacyTodoListId,
@@ -305,12 +308,12 @@ Future<bool> deleteTodoList(
     // snapshots instead — which is what this used to do — sent the remote a
     // version the local row never reached, leaving the two permanently out of
     // step on every deleted task.
-    final deleted = await repo.softDeleteTasksInList(list.id);
+    final deleted = await repo.softDeleteTasksInList(list.id, at: deletedAt);
     await remoteSync.pushTodoTasksBatch(deleted);
     await detachMediaForTasks(container, deleted);
   }
 
-  await repo.softDeleteList(list.id);
+  await repo.softDeleteList(list.id, at: deletedAt);
   // A deleted list can't stay the one the page opens into; leaving the id
   // behind would make the todo page fall back silently and look as if the
   // setting had been forgotten.

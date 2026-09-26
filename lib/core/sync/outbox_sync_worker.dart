@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:voyager/core/dev/error_logger.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/firestore_write_gate.dart';
@@ -32,6 +33,7 @@ class OutboxSyncWorker {
     this._authRepo, {
     this.yieldDelay = const Duration(seconds: 2),
     this.pushDocument,
+    this.beforeDrain,
     FirestoreWriteGate? writeGate,
   }) : _writeGate =
            writeGate ??
@@ -72,6 +74,13 @@ class OutboxSyncWorker {
   /// documents fall back to the plain batched write. That recovers the mirror
   /// but not the ordering guarantee, so production always wires this.
   final OutboxDocumentPusher? pushDocument;
+
+  /// Runs before each drain sends anything — `RemoteSyncService.catchUpIfAway`
+  /// in the app, which pulls first when this device has been away long enough
+  /// that its queued edits could land on a deletion the other devices no
+  /// longer hold. When it throws, the drain waits for the next one rather than
+  /// sending edits that have not met the server's state.
+  final Future<void> Function()? beforeDrain;
 
   bool _isDraining = false;
 
@@ -125,6 +134,7 @@ class OutboxSyncWorker {
     AuthRepository authRepo, {
     Duration yieldDelay = const Duration(seconds: 2),
     OutboxDocumentPusher? pushDocument,
+    Future<void> Function()? beforeDrain,
     FirestoreWriteGate? writeGate,
   }) {
     _instance = OutboxSyncWorker(
@@ -133,6 +143,7 @@ class OutboxSyncWorker {
       authRepo,
       yieldDelay: yieldDelay,
       pushDocument: pushDocument,
+      beforeDrain: beforeDrain,
       writeGate: writeGate,
     );
     final early = List.of(_beforeInitialize);
@@ -164,6 +175,19 @@ class OutboxSyncWorker {
     _isDraining = true;
 
     try {
+      if (_authRepo.currentUserId != null) {
+        try {
+          await beforeDrain?.call();
+        } catch (error, stackTrace) {
+          debugPrint('[sync] outbox held back, catch-up pull failed: $error');
+          ErrorLogger.instance.record(
+            error,
+            stackTrace,
+            context: 'sync: catch-up pull before draining the outbox',
+          );
+          return;
+        }
+      }
       while (true) {
         final userId = _authRepo.currentUserId;
         if (userId == null) {
@@ -340,6 +364,13 @@ class OutboxSyncWorker {
       _isDraining = false;
     }
   }
+
+  /// [_payloadsFor], for a pull checking what it brought against this device's
+  /// rows — see `RemoteSyncService._repushWinningTombstones`.
+  Future<Map<String, Map<String, dynamic>>> localPayloadsFor(
+    String collection,
+    Set<String> documentIds,
+  ) => _payloadsFor(collection, documentIds);
 
   /// The write each of [documentIds] stands for in [collection], keyed by
   /// local id. Ids whose entity is gone locally are simply absent.

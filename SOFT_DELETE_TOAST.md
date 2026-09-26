@@ -24,7 +24,7 @@ Most soft deletes in Voyager end silently after a confirm dialog (where one exis
 
 ## 3. Non-goals (v1)
 
-- Container / cascade deletes (journal list, todo list, calendar list, study deck/folder).
+- Container / cascade deletes (journal list, todo list, calendar list, study deck/folder). These are restorable from the trash instead (`TRASH_HLD.md`).
 - Study workbench **multi-select** batch delete.
 - Finance modal deletes (category, budget, goal, subscription, asset).
 - Settings mutations (snippets, quotes, dictionary, petal colors).

@@ -4,6 +4,7 @@ import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
+import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
@@ -1440,6 +1441,11 @@ RankingMergeResult<JobApplication> resolveJobApplicationFromRemote(
   String id, {
   JobApplication? local,
 }) {
+  // An erase is final. A copy that lost to one keeps none of its fields, however
+  // recently it edited them; the pull puts the erase back on the server.
+  if (local != null && isErasedAt(local.deletedAt)) {
+    return (merged: local, localWon: false);
+  }
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
   final remoteVersion = parseVersion(data);
   final remoteStamps = _fieldStampsFromRemote(data);
@@ -1480,7 +1486,9 @@ RankingMergeResult<JobApplication> resolveJobApplicationFromRemote(
     deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
     fieldUpdatedAt: remoteStamps ?? const {},
   );
-  if (local == null || remoteStamps == null) {
+  // An incoming erase is taken whole. Its wipe left the field stamps as they
+  // were, so a field edited here since would outrank it and keep its text.
+  if (local == null || remoteStamps == null || isErasedPayload(data)) {
     return (merged: remote, localWon: false);
   }
 
@@ -4146,6 +4154,11 @@ RankingMergeResult<RankingParent> resolveRankingParentFromRemote(
   String id, {
   RankingParent? local,
 }) {
+  // An erase is final. A copy that lost to one keeps none of its fields, however
+  // recently it edited them; the pull puts the erase back on the server.
+  if (local != null && isErasedAt(local.deletedAt)) {
+    return (merged: local, localWon: false);
+  }
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
   final remoteVersion = parseVersion(data);
   final remoteStamps = _fieldStampsFromRemote(data);
@@ -4195,7 +4208,9 @@ RankingMergeResult<RankingParent> resolveRankingParentFromRemote(
     deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
     fieldUpdatedAt: remoteStamps ?? const {},
   );
-  if (local == null || remoteStamps == null) {
+  // An incoming erase is taken whole. Its wipe left the field stamps as they
+  // were, so a field edited here since would outrank it and keep its text.
+  if (local == null || remoteStamps == null || isErasedPayload(data)) {
     return (merged: remote, localWon: false);
   }
 
@@ -4262,6 +4277,11 @@ RankingMergeResult<RankingChild> resolveRankingChildFromRemote(
   String id, {
   RankingChild? local,
 }) {
+  // An erase is final. A copy that lost to one keeps none of its fields, however
+  // recently it edited them; the pull puts the erase back on the server.
+  if (local != null && isErasedAt(local.deletedAt)) {
+    return (merged: local, localWon: false);
+  }
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
   final remoteVersion = parseVersion(data);
   final remoteStamps = _fieldStampsFromRemote(data);
@@ -4298,7 +4318,9 @@ RankingMergeResult<RankingChild> resolveRankingChildFromRemote(
     deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
     fieldUpdatedAt: remoteStamps ?? const {},
   );
-  if (local == null || remoteStamps == null) {
+  // An incoming erase is taken whole. Its wipe left the field stamps as they
+  // were, so a field edited here since would outrank it and keep its text.
+  if (local == null || remoteStamps == null || isErasedPayload(data)) {
     return (merged: remote, localWon: false);
   }
 

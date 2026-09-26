@@ -17,6 +17,8 @@ import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/features/jobs/jobs_actions.dart';
 import 'package:voyager/features/jobs/jobs_stage_colors.dart';
 import 'package:voyager/core/widgets/scroll_offset_isolate.dart';
+import 'package:voyager/features/trash/trash_dialog.dart';
+import 'package:voyager/features/trash/trash_kinds.dart';
 
 /// One popup for everything the Jobs page configures: pipeline stages,
 /// company category colours, and archive seasons.
@@ -97,6 +99,12 @@ class _JobsManageDialogState extends ConsumerState<_JobsManageDialog> {
         ),
       ),
       actions: [
+        GlassButton(
+          dense: true,
+          onPressed: () => showTrashDialog(context, feature: TrashFeature.jobs),
+          icon: const Icon(PhosphorIconsRegular.trash),
+          label: 'Recently deleted',
+        ),
         GlassButton(
           dense: true,
           onPressed: () => Navigator.pop(context),

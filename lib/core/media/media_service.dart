@@ -395,6 +395,34 @@ class MediaService extends ChangeNotifier {
     return stamps;
   }
 
+  /// [restoreReferencesForOwner] for a parent restored from the trash, long
+  /// after the delete that stamped its detach.
+  ///
+  /// The trash has no record of that stamp, only of when the parent itself was
+  /// deleted. A deleted parent can't be edited, so every image taken off it at
+  /// or after [parentDeletedAt] went with the delete; one removed before it was
+  /// the user's own doing and stays removed.
+  Future<void> restoreReferencesDetachedSince(
+    String collection,
+    String documentId,
+    DateTime parentDeletedAt,
+  ) async {
+    final references = await _repository.listReferencesForOwner(
+      collection,
+      documentId,
+      includeDeleted: true,
+    );
+    final stamps = <DateTime>{
+      for (final reference in references)
+        if (reference.deletedAt case final stamp?
+            when !stamp.isBefore(parentDeletedAt))
+          stamp,
+    };
+    for (final stamp in stamps) {
+      await restoreReferencesForOwner(collection, documentId, stamp);
+    }
+  }
+
   /// Undoes [removeReferencesForOwner] for a parent whose deletion was undone.
   ///
   /// [deletedAt] is the instant that detach stamped, which is what separates

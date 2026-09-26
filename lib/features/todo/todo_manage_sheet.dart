@@ -14,6 +14,8 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
 import 'package:voyager/features/todo/todo_settings_dialog.dart';
+import 'package:voyager/features/trash/trash_dialog.dart';
+import 'package:voyager/features/trash/trash_kinds.dart';
 
 Future<String?> showTodoListManageSheet(
   BuildContext context,
@@ -211,6 +213,15 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
               ),
       ),
       actions: [
+        GlassButton(
+          dense: true,
+          onPressed: () async {
+            await showTrashDialog(context, feature: TrashFeature.todo);
+            if (mounted) await _reload();
+          },
+          icon: const Icon(PhosphorIconsRegular.trash),
+          label: 'Recently deleted',
+        ),
         GlassButton(
           dense: true,
           onPressed: () => Navigator.pop(context, _createdListId),

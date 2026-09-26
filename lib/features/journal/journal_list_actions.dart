@@ -201,8 +201,11 @@ Future<bool> deleteJournalList(
       affectedEntryIds = [for (final entry in entries) entry.id];
     }
 
+    // One instant for the journal and the entries it takes with it: the trash
+    // groups them by matching stamps, so it can restore exactly this delete.
+    final deletedAt = utcNow();
     if (choice == DeleteContainerChoice.deleteAll && entryCount > 0) {
-      await repo.softDeleteEntriesInJournal(journal.id);
+      await repo.softDeleteEntriesInJournal(journal.id, at: deletedAt);
     } else if (choice == DeleteContainerChoice.moveToDefault &&
         entryCount > 0) {
       final fallback = allJournals.firstWhere(
@@ -225,7 +228,7 @@ Future<bool> deleteJournalList(
       await repo.reassignEntriesJournal(journal.id, legacyJournalId);
     }
 
-    await repo.softDeleteJournal(journal.id);
+    await repo.softDeleteJournal(journal.id, at: deletedAt);
 
     // A deleted journal can't stay the one the page opens into; leaving the id
     // behind would make the journal page fall back silently and look as if the

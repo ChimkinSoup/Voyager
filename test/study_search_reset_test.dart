@@ -61,7 +61,8 @@ class _FakeStudyRepository implements StudyRepository {
   }) async => cardsByDeck[deckId] ?? const [];
 
   @override
-  Future<void> softDeleteCard(String id) async => deletedIds.add(id);
+  Future<void> softDeleteCard(String id, {DateTime? at}) async =>
+      deletedIds.add(id);
 
   @override
   Future<StudyCard?> getCard(String id) async {

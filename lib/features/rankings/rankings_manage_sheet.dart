@@ -20,6 +20,8 @@ import 'package:voyager/features/rankings/rankings_category_dialog.dart';
 import 'package:voyager/features/rankings/rankings_icons.dart';
 import 'package:voyager/features/rankings/rankings_providers.dart';
 import 'package:voyager/core/widgets/scroll_offset_isolate.dart';
+import 'package:voyager/features/trash/trash_dialog.dart';
+import 'package:voyager/features/trash/trash_kinds.dart';
 
 /// Everything the page configures: the categories themselves, their scales and
 /// switches, and their two field templates.
@@ -105,6 +107,13 @@ class _RankingsManageDialogState extends ConsumerState<_RankingsManageDialog> {
         ),
       ),
       actions: [
+        GlassButton(
+          dense: true,
+          onPressed: () =>
+              showTrashDialog(context, feature: TrashFeature.rankings),
+          icon: const Icon(PhosphorIconsRegular.trash),
+          label: 'Recently deleted',
+        ),
         GlassButton(
           onPressed: () => Navigator.pop(context),
           label: 'Done',

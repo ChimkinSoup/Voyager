@@ -176,6 +176,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
                 documentId,
                 forceCrdtOverwrite: forceCrdtOverwrite,
               ),
+      beforeDrain: () => ref.read(remoteSyncServiceProvider).catchUpIfAway(),
     );
 
     final settingsRepo = ref.read(settingsRepositoryProvider);

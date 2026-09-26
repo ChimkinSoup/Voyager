@@ -5,6 +5,7 @@ import 'package:voyager/core/constants/job_constants.dart';
 import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/core/soft_delete/restore_contract.dart';
 import 'package:voyager/core/spellcheck/word_token.dart';
+import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/soft_delete_policy.dart';
@@ -39,6 +40,12 @@ import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/domain/services/ordered_list_edit.dart';
+
+/// A tombstone the purge may drop: deleted before [cutoff], and not erased —
+/// see [SoftDeletePolicy.isExpired].
+Expression<bool> _expired(Expression<DateTime> deletedAt, DateTime cutoff) =>
+    deletedAt.isSmallerOrEqualValue(cutoff) &
+    deletedAt.isBiggerThanValue(kErasedAt);
 
 /// Keeps a tombstone this device still owes the server out of the purge.
 ///
@@ -119,8 +126,8 @@ class DriftJournalRepository implements JournalRepository {
   /// [version] is bumped with the tombstone, as [softDeleteEntriesInJournal]
   /// does: left alone, the deletion won only on the `updatedAt` tie-break, so
   /// clock skew or a concurrent rename on another device resurrected it.
-  Future<void> softDeleteJournal(String id) async {
-    final now = utcNow();
+  Future<void> softDeleteJournal(String id, {DateTime? at}) async {
+    final now = at ?? utcNow();
     await _db.customUpdate(
       'UPDATE journals_table '
       'SET deleted_at = ?, updated_at = ?, version = version + 1 '
@@ -139,13 +146,20 @@ class DriftJournalRepository implements JournalRepository {
   /// [softDeleteEntry], which these rows are pushed the same way as. Written
   /// as raw SQL because a drift companion can only carry literal values, and
   /// `version + 1` is an expression over the existing row.
+  ///
+  /// Entries already in the trash are left alone. Re-stamping them moved their
+  /// 30-day clock and made them look deleted *with* the journal, so restoring
+  /// the journal from the trash would have brought them back too.
   @override
-  Future<void> softDeleteEntriesInJournal(String journalId) async {
-    final now = utcNow();
+  Future<void> softDeleteEntriesInJournal(
+    String journalId, {
+    DateTime? at,
+  }) async {
+    final now = at ?? utcNow();
     await _db.customUpdate(
       'UPDATE journal_entries_table '
       'SET deleted_at = ?, updated_at = ?, version = version + 1 '
-      'WHERE journal_id = ?',
+      'WHERE journal_id = ? AND deleted_at IS NULL',
       variables: [
         Variable.withDateTime(now),
         Variable.withDateTime(now),
@@ -315,13 +329,13 @@ class DriftJournalRepository implements JournalRepository {
     final cutoff = _policy.purgeCutoff(now);
     await (_db.delete(_db.journalEntriesTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.journalEntries, t.id),
         ))
         .go();
     await (_db.delete(_db.journalsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.journals, t.id),
         ))
         .go();
@@ -468,7 +482,7 @@ class DriftDreamRepository implements DreamRepository {
   Future<void> purgeExpiredDeleted(DateTime now) async {
     await (_db.delete(_db.dreamEntriesTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(_policy.purgeCutoff(now)) &
+              _expired(t.deletedAt, _policy.purgeCutoff(now)) &
               _notOwedUpload(_db, FirestoreCollections.dreamEntries, t.id),
         ))
         .go();
@@ -602,13 +616,13 @@ class DriftLeetCodeRepository implements LeetCodeRepository {
     final cutoff = _policy.purgeCutoff(now);
     await (_db.delete(_db.leetCodeProblemsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.leetcodeProblems, t.id),
         ))
         .go();
     await (_db.delete(_db.leetCodeReviewLogTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.leetcodeReviewLog, t.id),
         ))
         .go();
@@ -1280,21 +1294,24 @@ class DriftTodoRepository implements TodoRepository {
   // Going through copyWith/upsert also records the local sync activity that a
   // direct write skipped entirely.
   @override
-  Future<void> softDeleteList(String id) async {
+  Future<void> softDeleteList(String id, {DateTime? at}) async {
     final list = (await listLists(includeDeleted: true))
         .cast<TodoListModel?>()
         .firstWhere((l) => l!.id == id, orElse: () => null);
     if (list == null || list.deletedAt != null) return;
-    await upsertList(list.copyWith(deletedAt: utcNow()));
+    await upsertList(list.copyWith(deletedAt: at ?? utcNow()));
   }
 
   @override
-  Future<List<TodoTask>> softDeleteTasksInList(String listId) async {
+  Future<List<TodoTask>> softDeleteTasksInList(
+    String listId, {
+    DateTime? at,
+  }) async {
     // topLevelOnly: false — subtasks carry the same listId, and leaving them
     // behind would strand them with deletedAt == null and no reachable parent.
     final tasks = await listTasks(listId, topLevelOnly: false);
     if (tasks.isEmpty) return const [];
-    final now = utcNow();
+    final now = at ?? utcNow();
     final deleted = [for (final task in tasks) task.copyWith(deletedAt: now)];
     await upsertTasksBatch(deleted);
     return deleted;
@@ -1435,13 +1452,13 @@ class DriftTodoRepository implements TodoRepository {
     final cutoff = _policy.purgeCutoff(now);
     await (_db.delete(_db.todoListsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.todoLists, t.id),
         ))
         .go();
     await (_db.delete(_db.todoTasksTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.todoTasks, t.id),
         ))
         .go();
@@ -1530,10 +1547,10 @@ class DriftCalendarRepository implements CalendarRepository {
   // versioned write so the cleanup syncs. A restore does not bring the links
   // back.
   @override
-  Future<void> softDeleteCalendar(String id) async {
+  Future<void> softDeleteCalendar(String id, {DateTime? at}) async {
     final calendar = await getCalendar(id);
     if (calendar == null) return;
-    await upsertCalendar(calendar.copyWith(deletedAt: utcNow()));
+    await upsertCalendar(calendar.copyWith(deletedAt: at ?? utcNow()));
     for (final host in await listCalendars()) {
       if (!host.overlayCalendarIds.contains(id)) continue;
       await upsertCalendar(
@@ -1548,9 +1565,12 @@ class DriftCalendarRepository implements CalendarRepository {
   }
 
   @override
-  Future<void> softDeleteEventsInCalendar(String calendarId) async {
+  Future<void> softDeleteEventsInCalendar(
+    String calendarId, {
+    DateTime? at,
+  }) async {
     final events = await listEvents(calendarId: calendarId);
-    final now = utcNow();
+    final now = at ?? utcNow();
     for (final event in events) {
       await upsertEvent(event.copyWith(deletedAt: now));
     }
@@ -1669,13 +1689,13 @@ class DriftCalendarRepository implements CalendarRepository {
     final cutoff = _policy.purgeCutoff(now);
     await (_db.delete(_db.calendarEventsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.calendarEvents, t.id),
         ))
         .go();
     await (_db.delete(_db.calendarsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.calendars, t.id),
         ))
         .go();
@@ -1846,13 +1866,13 @@ class DriftTrackerRepository implements TrackerRepository {
     final cutoff = _policy.purgeCutoff(now);
     await (_db.delete(_db.trackersTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.trackers, t.id),
         ))
         .go();
     await (_db.delete(_db.trackerValuesTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.trackerValues, t.id),
         ))
         .go();
@@ -2040,13 +2060,13 @@ class DriftNotificationRepository implements NotificationRepository {
     final cutoff = _policy.purgeCutoff(now);
     await (_db.delete(_db.pinnedNotesTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.pinnedNotes, t.id),
         ))
         .go();
     await (_db.delete(_db.dismissedNotificationsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(
                 _db,
                 FirestoreCollections.dismissedNotifications,
@@ -2489,7 +2509,7 @@ class DriftReminderRepository implements ReminderRepository {
     final cutoff = _policy.purgeCutoff(now);
     await (_db.delete(_db.deviceRegistrationsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(
                 _db,
                 FirestoreCollections.deviceRegistrations,
@@ -2499,7 +2519,7 @@ class DriftReminderRepository implements ReminderRepository {
         .go();
     await (_db.delete(_db.scheduledReminderRulesTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(
                 _db,
                 FirestoreCollections.scheduledReminderRules,
@@ -2509,13 +2529,13 @@ class DriftReminderRepository implements ReminderRepository {
         .go();
     await (_db.delete(_db.entityRemindersTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.entityReminders, t.id),
         ))
         .go();
     await (_db.delete(_db.reminderDeliveryLogsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(
                 _db,
                 FirestoreCollections.reminderDeliveryLogs,
@@ -2602,7 +2622,7 @@ class DriftBucketListRepository implements BucketListRepository {
   Future<void> purgeExpiredDeleted(DateTime now) async {
     await (_db.delete(_db.bucketListItemsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(_policy.purgeCutoff(now)) &
+              _expired(t.deletedAt, _policy.purgeCutoff(now)) &
               _notOwedUpload(_db, FirestoreCollections.bucketListItems, t.id),
         ))
         .go();
@@ -2924,11 +2944,14 @@ class DriftFinanceRepository implements FinanceRepository {
     )..where((t) => t.id.equals(id))).getSingleOrNull();
     if (row == null) return;
     final asset = _mapAsset(row);
+    // One instant for the asset and its valuations, so the trash can tell the
+    // valuations this delete took from ones removed earlier on their own.
+    final now = utcNow();
     await upsertAsset(
       asset.copyWith(
-        updatedAt: utcNow(),
+        updatedAt: now,
         version: asset.version + 1,
-        deletedAt: utcNow(),
+        deletedAt: now,
       ),
     );
     // Tombstone the asset's valuations too, so a deleted asset stops
@@ -2938,9 +2961,9 @@ class DriftFinanceRepository implements FinanceRepository {
     for (final valuation in await listAssetValuations(assetId: id)) {
       await upsertAssetValuation(
         valuation.copyWith(
-          updatedAt: utcNow(),
+          updatedAt: now,
           version: valuation.version + 1,
-          deletedAt: utcNow(),
+          deletedAt: now,
         ),
       );
     }
@@ -3259,11 +3282,13 @@ class DriftFinanceRepository implements FinanceRepository {
     )..where((t) => t.id.equals(id))).getSingleOrNull();
     if (row == null) return;
     final savingsGoal = _mapGoal(row);
+    // One instant for the goal and its allocations — see [softDeleteAsset].
+    final now = utcNow();
     await upsertSavingsGoal(
       savingsGoal.copyWith(
-        updatedAt: utcNow(),
+        updatedAt: now,
         version: savingsGoal.version + 1,
-        deletedAt: utcNow(),
+        deletedAt: now,
       ),
     );
     // Tombstone the goal's allocations so they stop counting toward progress.
@@ -3271,9 +3296,9 @@ class DriftFinanceRepository implements FinanceRepository {
     for (final allocation in await listGoalAllocations(goalId: id)) {
       await upsertGoalAllocation(
         allocation.copyWith(
-          updatedAt: utcNow(),
+          updatedAt: now,
           version: allocation.version + 1,
-          deletedAt: utcNow(),
+          deletedAt: now,
         ),
       );
     }
@@ -3438,61 +3463,61 @@ class DriftFinanceRepository implements FinanceRepository {
     // version did: the child rows reference the parent.
     await (_db.delete(_db.transactionsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.transactions, t.id),
         ))
         .go();
     await (_db.delete(_db.subscriptionsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.subscriptions, t.id),
         ))
         .go();
     await (_db.delete(_db.budgetsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.budgets, t.id),
         ))
         .go();
     await (_db.delete(_db.financeCategoriesTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.financeCategories, t.id),
         ))
         .go();
     await (_db.delete(_db.assetValuationsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.assetValuations, t.id),
         ))
         .go();
     await (_db.delete(_db.assetsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.assets, t.id),
         ))
         .go();
     await (_db.delete(_db.assetRoomEventsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.assetRoomEvents, t.id),
         ))
         .go();
     await (_db.delete(_db.contributionRoomsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.contributionRooms, t.id),
         ))
         .go();
     await (_db.delete(_db.goalAllocationsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.goalAllocations, t.id),
         ))
         .go();
     await (_db.delete(_db.savingsGoalsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.savingsGoals, t.id),
         ))
         .go();
@@ -3844,7 +3869,7 @@ class DriftMediaRepository implements MediaRepository {
     // surviving until the next launch.
     await (_db.delete(_db.mediaReferencesTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.mediaReferences, t.id),
         ))
         .go();
@@ -4751,25 +4776,25 @@ class DriftSettingsRepository implements SettingsRepository {
     final cutoff = _policy.purgeCutoff(now);
     await (_db.delete(_db.customWordsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.customWords, t.word),
         ))
         .go();
     await (_db.delete(_db.flaggedWordsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.flaggedWords, t.word),
         ))
         .go();
     await (_db.delete(_db.snippetsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.snippets, t.id),
         ))
         .go();
     await (_db.delete(_db.jobExperienceSnippetsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(
                 _db,
                 FirestoreCollections.jobExperienceSnippets,
@@ -5294,7 +5319,7 @@ class DriftStudyRepository implements StudyRepository {
   }
 
   @override
-  Future<void> softDeleteFolder(String id) async {
+  Future<void> softDeleteFolder(String id, {DateTime? at}) async {
     // Read-bump-upsert rather than a raw column write, matching every sibling
     // repository. Conflict resolution is version-first, so a tombstone left at
     // the live row's version loses outright to any device holding a later
@@ -5304,7 +5329,7 @@ class DriftStudyRepository implements StudyRepository {
     if (current == null || current.deletedAt != null) return;
     // copyWith bumps version and stamps updatedAt; upsertFolder records the
     // local save.
-    await upsertFolder(current.copyWith(deletedAt: utcNow()));
+    await upsertFolder(current.copyWith(deletedAt: at ?? utcNow()));
   }
 
   @override
@@ -5407,11 +5432,11 @@ class DriftStudyRepository implements StudyRepository {
   }
 
   @override
-  Future<void> softDeleteDeck(String id) async {
+  Future<void> softDeleteDeck(String id, {DateTime? at}) async {
     // Version-bumped — see softDeleteFolder.
     final current = await getDeck(id);
     if (current == null || current.deletedAt != null) return;
-    await upsertDeck(current.copyWith(deletedAt: utcNow()));
+    await upsertDeck(current.copyWith(deletedAt: at ?? utcNow()));
   }
 
   @override
@@ -5478,11 +5503,11 @@ class DriftStudyRepository implements StudyRepository {
   }
 
   @override
-  Future<void> softDeleteCard(String id) async {
+  Future<void> softDeleteCard(String id, {DateTime? at}) async {
     // Version-bumped — see softDeleteFolder.
     final current = await getCard(id);
     if (current == null || current.deletedAt != null) return;
-    await upsertCard(current.copyWith(deletedAt: utcNow()));
+    await upsertCard(current.copyWith(deletedAt: at ?? utcNow()));
   }
 
   @override
@@ -5575,11 +5600,11 @@ class DriftStudyRepository implements StudyRepository {
   }
 
   @override
-  Future<void> softDeleteDeckLink(String id) async {
+  Future<void> softDeleteDeckLink(String id, {DateTime? at}) async {
     // Version-bumped — see softDeleteFolder.
     final current = await getDeckLink(id);
     if (current == null || current.deletedAt != null) return;
-    await upsertDeckLink(current.copyWith(deletedAt: utcNow()));
+    await upsertDeckLink(current.copyWith(deletedAt: at ?? utcNow()));
   }
 
   @override
@@ -5661,31 +5686,31 @@ class DriftStudyRepository implements StudyRepository {
     final cutoff = _policy.purgeCutoff(now);
     await (_db.delete(_db.studyCardsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.studyCards, t.id),
         ))
         .go();
     await (_db.delete(_db.studyDecksTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.studyDecks, t.id),
         ))
         .go();
     await (_db.delete(_db.studyFoldersTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.studyFolders, t.id),
         ))
         .go();
     await (_db.delete(_db.studyReviewLogTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.studyReviewLog, t.id),
         ))
         .go();
     await (_db.delete(_db.studyDeckLinksTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.studyDeckLinks, t.id),
         ))
         .go();
@@ -5908,7 +5933,10 @@ class DriftWorkoutRepository implements WorkoutRepository {
 
   @override
   Future<void> softDeleteExercise(String id) async {
-    await _softDeleteRow(_db.exercisesTable, id);
+    // One instant for the exercise and its plan entries, so the trash can tell
+    // the entries this delete took from ones removed from a day earlier.
+    final now = utcNow();
+    await _softDeleteRow(_db.exercisesTable, id, at: now);
     // Plan entries pointing at a deleted exercise would render as blank cards,
     // so they go with it. Logged sets deliberately do not: they are history,
     // and the detail view still needs them to explain past volume.
@@ -5917,7 +5945,10 @@ class DriftWorkoutRepository implements WorkoutRepository {
     )..where((t) => t.exerciseId.equals(id))).get();
     for (final entry in entries) {
       if (entry.deletedAt != null) continue;
-      await softDeletePlanEntry(entry.id);
+      await _softDeleteRow(_db.workoutPlanEntriesTable, entry.id, at: now);
+    }
+    if (entries.isNotEmpty) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.workoutPlanEntries);
     }
     _syncActivity?.recordLocalSave(FirestoreCollections.exercises);
   }
@@ -6211,8 +6242,12 @@ class DriftWorkoutRepository implements WorkoutRepository {
   /// version-first, so a tombstone left at the old version lost to any edit
   /// another device made from the same base — however much later the delete
   /// happened — and the row came back.
-  Future<void> _softDeleteRow(TableInfo<Table, dynamic> table, String id) {
-    final now = utcNow();
+  Future<void> _softDeleteRow(
+    TableInfo<Table, dynamic> table,
+    String id, {
+    DateTime? at,
+  }) {
+    final now = at ?? utcNow();
     return _db.customUpdate(
       'UPDATE ${table.actualTableName} '
       'SET deleted_at = ?, updated_at = ?, version = version + 1 '
@@ -6233,19 +6268,19 @@ class DriftWorkoutRepository implements WorkoutRepository {
     final cutoff = _policy.purgeCutoff(now);
     await (_db.delete(_db.workoutSetLogsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.workoutSetLogs, t.id),
         ))
         .go();
     await (_db.delete(_db.workoutSessionsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.workoutSessions, t.id),
         ))
         .go();
     await (_db.delete(_db.workoutPlanEntriesTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(
                 _db,
                 FirestoreCollections.workoutPlanEntries,
@@ -6255,7 +6290,7 @@ class DriftWorkoutRepository implements WorkoutRepository {
         .go();
     await (_db.delete(_db.exercisesTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.exercises, t.id),
         ))
         .go();
@@ -6845,13 +6880,13 @@ class DriftJobRepository implements JobRepository {
     final cutoff = _policy.purgeCutoff(now);
     await (_db.delete(_db.jobStatusEventsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.jobStatusEvents, t.id),
         ))
         .go();
     await (_db.delete(_db.jobApplicationsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.jobApplications, t.id),
         ))
         .go();
@@ -6859,27 +6894,27 @@ class DriftJobRepository implements JobRepository {
     // ensureSeeded that the seed was deleted rather than never added.
     await (_db.delete(_db.jobStagesTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.jobStages, t.id) &
               t.id.like('seed-%').not(),
         ))
         .go();
     await (_db.delete(_db.jobCompaniesTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.jobCompanies, t.id) &
               t.id.like('seed-%').not(),
         ))
         .go();
     await (_db.delete(_db.jobCategoriesTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.jobCategories, t.id),
         ))
         .go();
     await (_db.delete(_db.jobSeasonsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.jobSeasons, t.id),
         ))
         .go();
@@ -7674,19 +7709,19 @@ class DriftRankingRepository implements RankingRepository {
     final cutoff = _policy.purgeCutoff(now);
     await (_db.delete(_db.rankingChildrenTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.rankingChildren, t.id),
         ))
         .go();
     await (_db.delete(_db.rankingParentsTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.rankingParents, t.id),
         ))
         .go();
     await (_db.delete(_db.rankingCategoriesTable)..where(
           (t) =>
-              t.deletedAt.isSmallerOrEqualValue(cutoff) &
+              _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.rankingCategories, t.id),
         ))
         .go();

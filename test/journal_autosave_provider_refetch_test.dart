@@ -113,11 +113,12 @@ class _CountingJournalRepository implements JournalRepository {
   );
 
   @override
-  Future<void> softDeleteJournal(String id) => _delegate.softDeleteJournal(id);
+  Future<void> softDeleteJournal(String id, {DateTime? at}) =>
+      _delegate.softDeleteJournal(id, at: at);
 
   @override
-  Future<void> softDeleteEntriesInJournal(String journalId) =>
-      _delegate.softDeleteEntriesInJournal(journalId);
+  Future<void> softDeleteEntriesInJournal(String journalId, {DateTime? at}) =>
+      _delegate.softDeleteEntriesInJournal(journalId, at: at);
 
   @override
   Future<void> deleteAllJournals() => _delegate.deleteAllJournals();

@@ -21,7 +21,11 @@ never built.
 
 ## P1
 
-### No trash, but 18 delete dialogs promise one
+### ~~No trash, but 18 delete dialogs promise one~~
+**Done (2026-09-25):** Settings → Trash lists everything deleted in the last 30 days,
+with Restore, Delete forever and Empty trash; the Journal, To-Do, Calendar, Jobs and
+Rankings manage sheets open it filtered to their page. See `TRASH_HLD.md`.
+
 Delete confirmations say "This entry will be moved to trash." (journal, dreams, todo,
 study, finance, bills, …), and PLAN.md asks for a 30-day recycle bin. The only
 recovery path is the Undo toast, which lasts 8 s (`lib/core/soft_delete/soft_delete_toast.dart:16`).
@@ -181,6 +185,6 @@ The planner, live session and exercise detail work well together. Gaps:
 1. ~~Error log (P1). It makes the bug hunt productive.~~ Done.
 2. Turn off `dev_disable_cache`.
 3. `completedAt` on tasks (P1). Starts collecting history now.
-4. Trash view or honest delete copy (P1).
+4. ~~Trash view or honest delete copy (P1).~~ Done.
 5. Launch at login, plus auto-backup with a pre-migration snapshot.
 6. Then pick from P2 by taste. My pick: workout session history.

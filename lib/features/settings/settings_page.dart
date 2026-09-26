@@ -26,6 +26,7 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/settings/backup_list_dialog.dart';
+import 'package:voyager/features/trash/trash_dialog.dart';
 import 'package:voyager/features/settings/custom_quotes_dialog.dart';
 import 'package:voyager/features/settings/services/auto_backup_service.dart';
 import 'package:voyager/features/settings/devices_section.dart';
@@ -535,6 +536,16 @@ class SettingsPage extends ConsumerWidget {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 4),
+          ListTile(
+            title: const Text('Trash'),
+            subtitle: const Text(
+              'Restore anything deleted in the last 30 days, or delete it '
+              'for good',
+            ),
+            leading: const Icon(PhosphorIconsRegular.trash),
+            trailing: const Icon(PhosphorIconsRegular.caretRight),
+            onTap: () => showTrashDialog(context),
+          ),
           const _AutoBackupTiles(),
           ListTile(
             title: const Text('Export Backup'),
