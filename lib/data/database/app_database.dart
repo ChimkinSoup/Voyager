@@ -45,6 +45,8 @@ class JournalsTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Covers `lastQuoteUseByJournal`, which runs on the startup path.
+@TableIndex.sql(kJournalQuoteUseIndexSql)
 class JournalEntriesTable extends Table {
   TextColumn get id => text()();
   TextColumn get journalId => text()();
@@ -1314,6 +1316,17 @@ SET mood = $kDefaultMood, version = version + 1
 WHERE mood IS NULL AND deleted_at IS NULL
 ''';
 
+/// Partial and covering: `lastQuoteUseByJournal` filters on exactly this
+/// `WHERE` and reads only these columns, so it never touches the table.
+/// `deleted_at` is always null here but still has to be listed — SQLite
+/// won't treat the index as covering for a column the query names but the
+/// index lacks.
+const String kJournalQuoteUseIndexSql = '''
+CREATE INDEX IF NOT EXISTS idx_journal_entries_quote_use
+ON journal_entries_table (journal_id, quote_id, created_at, deleted_at)
+WHERE deleted_at IS NULL AND quote_id IS NOT NULL
+''';
+
 /// Lifts the pre-v68 per-placement targets up onto the movement they belong
 /// to, so an existing split doesn't reset to 3 × 8 the moment targets go
 /// global.
@@ -1899,7 +1912,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 129;
+  int get schemaVersion => 130;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3357,6 +3370,11 @@ class AppDatabase extends _$AppDatabase {
           migrator,
           settingsTable.hiddenNavPagesJson,
         );
+      }
+      // Declared via @TableIndex, so createAll() covers fresh databases;
+      // existing ones need it made here.
+      if (from < 130) {
+        await customStatement(kJournalQuoteUseIndexSql);
       }
     },
   );

@@ -49117,6 +49117,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $LeetCodeCheatEntriesTableTable(this);
   late final $SyncWatermarksTableTable syncWatermarksTable =
       $SyncWatermarksTableTable(this);
+  late final Index idxJournalEntriesQuoteUse = Index(
+    'idx_journal_entries_quote_use',
+    'CREATE INDEX IF NOT EXISTS idx_journal_entries_quote_use ON journal_entries_table (journal_id, quote_id, created_at, deleted_at) WHERE deleted_at IS NULL AND quote_id IS NOT NULL',
+  );
   late final Index idxTodoTasksListId = Index(
     'idx_todo_tasks_list_id',
     'CREATE INDEX idx_todo_tasks_list_id ON todo_tasks_table (list_id)',
@@ -49234,6 +49238,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     leetCodeCheatSectionsTable,
     leetCodeCheatEntriesTable,
     syncWatermarksTable,
+    idxJournalEntriesQuoteUse,
     idxTodoTasksListId,
     idxTodoTasksParentTaskId,
     idxReminderDeliveryLogsStateId,

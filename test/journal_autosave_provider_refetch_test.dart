@@ -75,6 +75,10 @@ class _CountingJournalRepository implements JournalRepository {
     return _delegate.countEntriesByJournal(includeDeleted: includeDeleted);
   }
 
+  @override
+  Future<Map<String, Map<String, DateTime>>> lastQuoteUseByJournal() =>
+      _delegate.lastQuoteUseByJournal();
+
   // Single-row and journal-level operations are untouched by this test — an
   // autosave is expected to read and write its own row.
   @override

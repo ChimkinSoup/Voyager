@@ -162,7 +162,7 @@ Future<JournalEntry> _resolve(ProviderContainer container, String? id) async {
   Quote? quote;
   try {
     await container.read(quotesLoadedProvider.future);
-    quote = container.read(quoteBankProvider).nextQuote();
+    quote = container.read(quoteBankProvider).nextQuote(journalId);
   } catch (error) {
     debugPrint('Quick journal quote could not be drawn: $error');
   }

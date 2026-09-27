@@ -860,7 +860,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     // the editor stretched over the space it would take, and then jumped as
     // the quote landed. The async pass below still covers the cold case.
     final quote = ref.read(quotesLoadedProvider).hasValue
-        ? ref.read(quoteBankProvider).nextQuote()
+        ? ref.read(quoteBankProvider).nextQuote(journalId)
         : null;
 
     final entry = JournalEntry(
@@ -932,8 +932,13 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     // quote at creation, so the entry never paints without it.
     Quote? assignedQuote;
     if (entry.customQuote == null) {
-      await ref.read(quotesLoadedProvider.future);
-      assignedQuote = ref.read(quoteBankProvider).nextQuote();
+      // Caught so a failed load costs only the quote, not the save below.
+      try {
+        await ref.read(quotesLoadedProvider.future);
+        assignedQuote = ref.read(quoteBankProvider).nextQuote(entry.journalId);
+      } catch (error) {
+        debugPrint('Journal entry quote could not be drawn: $error');
+      }
     }
     // Runs even with nothing to change. The seeding write in
     // [_createEntryOptimistic] goes straight at the repository, which neither
@@ -2152,8 +2157,13 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     await _writeCoordinatorOrNull()?.saveEntry(
       entryId: entry.id,
       bumpVersion: true,
-      applyDelta: (base) =>
-          base.copyWith(customQuote: quote.trim(), bumpVersion: false),
+      // Rewritten text is no longer the drawn quote, so it drops the id and
+      // stops holding that quote back in [QuoteBank]'s history.
+      applyDelta: (base) => base.copyWith(
+        customQuote: quote.trim(),
+        clearQuoteId: quote.trim() != base.customQuote,
+        bumpVersion: false,
+      ),
       onSuccess: (updated) {
         if (mounted) setState(() => _selectedEntry = updated);
       },

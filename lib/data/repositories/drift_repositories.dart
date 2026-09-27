@@ -256,6 +256,26 @@ class DriftJournalRepository implements JournalRepository {
   }
 
   @override
+  Future<Map<String, Map<String, DateTime>>> lastQuoteUseByJournal() async {
+    final t = _db.journalEntriesTable;
+    final latest = t.createdAt.max();
+    final query = _db.selectOnly(t)
+      ..addColumns([t.journalId, t.quoteId, latest])
+      ..where(t.deletedAt.isNull() & t.quoteId.isNotNull())
+      ..groupBy([t.journalId, t.quoteId]);
+
+    final result = <String, Map<String, DateTime>>{};
+    for (final row in await query.get()) {
+      result.putIfAbsent(row.read(t.journalId)!, () => {})[row.read(
+        t.quoteId,
+      )!] = row.read(
+        latest,
+      )!;
+    }
+    return result;
+  }
+
+  @override
   Future<JournalEntry?> getEntry(String id) async {
     final row = await (_db.select(
       _db.journalEntriesTable,

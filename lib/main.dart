@@ -316,6 +316,8 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
           await remoteSync.pullAll();
           if (!mounted) return;
           _startupPullDone = true;
+          // Loaded before the pull, so it has only this device's draws.
+          ref.invalidate(quoteHistoryProvider);
           unawaited(_registerThisDevice());
           liveSync.start();
           // The controller is rebuilt with the sync service — signing out and

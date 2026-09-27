@@ -674,7 +674,12 @@ final liveSyncProvider = Provider<LiveSyncController>((ref) {
   final controller = LiveSyncController(
     remoteSync: ref.watch(remoteSyncServiceProvider),
     syncRepository: ref.watch(syncRepositoryProvider),
-    onChanged: () => invalidateAllDataProviders(ref),
+    onChanged: () {
+      invalidateAllDataProviders(ref);
+      // An entry another device just wrote may carry a quote this journal
+      // should now hold back.
+      ref.invalidate(quoteHistoryProvider);
+    },
   );
   ref.onDispose(controller.dispose);
   return controller;
@@ -733,7 +738,8 @@ final quotePoolProvider = FutureProvider<List<Quote>>((ref) async {
   // `selectAsync`, not a plain watch: it waits for settings to actually load
   // rather than reading the loading state as false and rebuilding a moment
   // later, and it leaves the pool alone when some *other* setting changes —
-  // a rebuild there would reset [QuoteBank]'s drawn-already set.
+  // a rebuild there would needlessly rebuild [QuoteBank] and re-query its
+  // history.
   final customOnly = await ref.watch(
     settingsProvider.selectAsync((s) => s.customQuotesOnly),
   );
@@ -749,12 +755,33 @@ final bundledQuotesProvider = FutureProvider<List<Quote>>((ref) {
   return loadQuotesFromAssets();
 });
 
-/// Rebuilds [quoteBankProvider] whenever the pool changes, so a quote the user
-/// just added is immediately eligible to be drawn.
+/// When each journal last drew each quote, from the local entries. Kept in
+/// step with this device's draws by [QuoteBank] itself; invalidated after the
+/// startup pull and each live-sync change, which bring in draws made on other
+/// devices.
+final quoteHistoryProvider =
+    FutureProvider<Map<String, Map<String, DateTime>>>((ref) {
+      ref.keepAlive();
+      return ref.read(journalRepositoryProvider).lastQuoteUseByJournal();
+    });
+
+/// Rebuilds [quoteBankProvider] whenever the pool or the history changes, so a
+/// quote the user just added is immediately eligible to be drawn.
 final quotesLoadedProvider = FutureProvider<void>((ref) async {
   ref.keepAlive();
-  final quotes = await ref.watch(quotePoolProvider.future);
-  ref.read(quoteBankProvider.notifier).state = QuoteBank(quotes);
+  // A rebuild that starts while this one is still waiting must win even if
+  // this one finishes last; otherwise it installs a bank over the old pool.
+  var superseded = false;
+  ref.onDispose(() => superseded = true);
+  final (quotes, lastUsed) = await (
+    ref.watch(quotePoolProvider.future),
+    ref.watch(quoteHistoryProvider.future),
+  ).wait;
+  if (superseded) return;
+  ref.read(quoteBankProvider.notifier).state = QuoteBank(
+    quotes,
+    lastUsed: lastUsed,
+  );
 });
 
 Future<String> ensureDeviceId(SettingsRepository settingsRepository) async {

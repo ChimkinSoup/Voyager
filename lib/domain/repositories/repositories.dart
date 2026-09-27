@@ -44,6 +44,10 @@ abstract class JournalRepository {
     bool includeDeleted = false,
   });
   Future<Map<String, int>> countEntriesByJournal({bool includeDeleted = false});
+
+  /// journalId → quoteId → the latest `createdAt` of a live entry in that
+  /// journal carrying that quote.
+  Future<Map<String, Map<String, DateTime>>> lastQuoteUseByJournal();
   Future<JournalEntry?> getEntry(String id);
   Future<void> upsertEntry(
     JournalEntry entry, {
