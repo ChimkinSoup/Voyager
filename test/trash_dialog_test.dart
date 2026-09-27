@@ -7,9 +7,11 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
 import 'package:voyager/features/trash/trash_dialog.dart';
 import 'package:voyager/features/trash/trash_kinds.dart';
+import 'package:voyager/features/trash/trash_labels.dart';
 import 'package:voyager/features/trash/trash_service.dart';
 
 List<BackupCollection> _collectionsFor(AppDatabase db) =>
@@ -137,6 +139,98 @@ void main() {
     expect(journal!.deletedAt, isNull);
     expect(entry!.deletedAt, isNull);
     expect(find.text('Journal "Work"'), findsNothing);
+  });
+
+  testWidgets('clicking a row shows the deleted item in full', (tester) async {
+    await openTrash(tester);
+
+    await tester.tap(find.text('"Flying"'));
+    await tester.pumpAndSettle();
+    expect(find.text('Over the sea'), findsOneWidget);
+
+    await tester.tap(find.text('Close').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Over the sea'), findsNothing);
+
+    // A container lists what went with it, and each of those opens too.
+    await tester.tap(find.text('Journal "Work"'));
+    await tester.pumpAndSettle();
+    expect(find.text('Deleted with it'), findsOneWidget);
+    await tester.tap(find.text('"Standup"'));
+    await tester.pumpAndSettle();
+    expect(find.text('Notes'), findsOneWidget);
+    // Only the item the trash lists restores on its own.
+    expect(find.text('Restore'), findsNWidgets(3));
+
+    // The entry points back at the delete it went with, and that opens it.
+    expect(find.text('Deleted as part of'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('trash-detail-j')));
+    await tester.pumpAndSettle();
+    expect(find.text('Deleted as part of'), findsNothing);
+    expect(find.text('Deleted with it'), findsOneWidget);
+
+    await tester.tap(find.text('Restore').last);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    final journal = await tester.runAsync(() => journals.getJournal('j'));
+    expect(journal!.deletedAt, isNull);
+  });
+
+  testWidgets('restore from the detail brings the row back', (tester) async {
+    await openTrash(tester, feature: TrashFeature.dreams);
+
+    await tester.tap(find.text('"Flying"'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Restore').last);
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+
+    final dream = await tester.runAsync(
+      () => DriftDreamRepository(db).getEntry('d'),
+    );
+    expect(dream!.deletedAt, isNull);
+    expect(find.text('"Flying"'), findsNothing);
+  });
+
+  testWidgets('a subtask is listed once, under its task', (tester) async {
+    final todos = DriftTodoRepository(db);
+    await todos.upsertList(
+      TodoListModel(
+        id: 'l',
+        name: 'Groceries',
+        createdAt: created,
+        updatedAt: created,
+      ),
+    );
+    for (final (id, parent) in [('Milk', null), ('Oat', 'Milk')]) {
+      await todos.upsertTask(
+        TodoTask(
+          id: id,
+          listId: 'l',
+          title: id,
+          parentTaskId: parent,
+          createdAt: created,
+          updatedAt: created,
+        ),
+      );
+    }
+    final at = utcNow();
+    await todos.softDeleteTasksInList('l', at: at);
+    await todos.softDeleteList('l', at: at);
+    await openTrash(tester, feature: TrashFeature.todo);
+
+    await tester.tap(find.text('To-do list "Groceries"'));
+    await tester.pumpAndSettle();
+    expect(find.text('"Milk"'), findsOneWidget);
+    expect(find.text('"Oat"'), findsNothing);
+
+    await tester.tap(find.text('"Milk"'));
+    await tester.pumpAndSettle();
+    expect(find.text('"Oat"'), findsOneWidget);
   });
 
   test('a row says where it came from, what went with it, and how long is '

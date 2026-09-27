@@ -12,7 +12,7 @@ import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
-import 'package:voyager/features/trash/trash_dialog.dart';
+import 'package:voyager/features/trash/trash_labels.dart';
 import 'package:voyager/features/trash/trash_kinds.dart';
 import 'package:voyager/features/trash/trash_service.dart';
 
