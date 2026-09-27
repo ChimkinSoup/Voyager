@@ -79,8 +79,8 @@ class RoomEventHistory extends ConsumerWidget {
     final theme = Theme.of(context);
     final now = DateTime.now();
     final allEvents =
-        ref.watch(assetRoomEventsProvider).valueOrNull ?? const [];
-    final assets = ref.watch(assetsProvider).valueOrNull ?? const [];
+        ref.watch(assetRoomEventsProvider.settled).valueOrNull ?? const [];
+    final assets = ref.watch(assetsProvider.settled).valueOrNull ?? const [];
     final events = [
       for (final e in allEvents)
         if (e.assetId == asset.id && e.occurredAt.year >= now.year) e,

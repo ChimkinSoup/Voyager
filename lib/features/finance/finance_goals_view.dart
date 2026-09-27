@@ -21,9 +21,10 @@ class FinanceGoalsView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final goals = ref.watch(savingsGoalsProvider).valueOrNull ?? const [];
+    final goals =
+        ref.watch(savingsGoalsProvider.settled).valueOrNull ?? const [];
     final allocations =
-        ref.watch(goalAllocationsProvider).valueOrNull ?? const [];
+        ref.watch(goalAllocationsProvider.settled).valueOrNull ?? const [];
 
     // Folded once here rather than calling goalAllocatedCents per goal: that
     // is a full scan of every allocation, and it was being run three times

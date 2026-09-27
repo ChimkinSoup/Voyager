@@ -54,7 +54,8 @@ class AppShell extends ConsumerWidget {
       if (request?.kind != QuickCaptureKind.reminder) return;
       unawaited(showScheduledReminderEditor(context));
     });
-    final settings = ref.watch(settingsProvider).value ?? const AppSettings();
+    final settings =
+        ref.watch(settingsProvider.settled).value ?? const AppSettings();
     final orderedDestinations = getVisibleDestinations(settings);
     final navigationShell = _navigationShell;
     final index = navigationShell.currentIndex;
@@ -795,7 +796,7 @@ class _WeatherButtonState extends ConsumerState<_WeatherButton> {
 
   @override
   Widget build(BuildContext context) {
-    final weatherAsync = ref.watch(currentWeatherProvider);
+    final weatherAsync = ref.watch(currentWeatherProvider.settled);
     final cachedWeather = ref.watch(cachedCurrentWeatherProvider);
     final weather = weatherAsync.valueOrNull ?? cachedWeather;
     final icon = weather?.icon;

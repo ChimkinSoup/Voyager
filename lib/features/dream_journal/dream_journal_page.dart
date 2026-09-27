@@ -993,8 +993,8 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
 
   @override
   Widget build(BuildContext context) {
-    final entriesAsync = ref.watch(allDreamEntriesProvider);
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final entriesAsync = ref.watch(allDreamEntriesProvider.settled);
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     if (!_appliedSavedWidth && settings != null) {
       _splitWidth = settings.dreamSplitWidth;
       _appliedSavedWidth = true;

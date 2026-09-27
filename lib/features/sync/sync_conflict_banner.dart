@@ -19,7 +19,7 @@ class SyncConflictBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final conflictsAsync = ref.watch(syncConflictsProvider);
+    final conflictsAsync = ref.watch(syncConflictsProvider.settled);
     return conflictsAsync.when(
       data: (conflicts) {
         if (conflicts.isEmpty) return const SizedBox.shrink();
@@ -183,7 +183,7 @@ class _SyncConflictResolutionDialogState
 
   @override
   Widget build(BuildContext context) {
-    final conflictsAsync = ref.watch(syncConflictsProvider);
+    final conflictsAsync = ref.watch(syncConflictsProvider.settled);
     final showDocumentIds = ref
         .watch(devSettingsProvider)
         .showConflictDocumentIds;

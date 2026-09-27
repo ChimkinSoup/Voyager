@@ -5,7 +5,13 @@ import 'package:voyager/core/motion/motion_prefs.dart';
 /// Duration of the full-motion Hub-style crossfade.
 const Duration kVoyagerCrossfadeDuration = Duration(milliseconds: 400);
 
-/// Keeps every child mounted and crossfades between them by [index].
+/// Keeps every child mounted once shown and crossfades between them by
+/// [index].
+///
+/// A child is built the first time it is shown, not with its siblings. Hidden
+/// children still rebuild and lay out whenever their data changes, so a view
+/// never opened — the LeetCode review deck's grid of flashcards, say — was
+/// paid for on every save of the page it sat behind.
 ///
 /// With [fadeIncoming] true (default), both sides fade — the Finance recipe.
 /// With [fadeIncoming] false, the arriving child stays at full opacity (so
@@ -28,8 +34,9 @@ class VoyagerCrossfadeIndex extends StatefulWidget {
   /// Which child is the settled (or destination) view.
   final int index;
 
-  /// All pages stay in the tree so scroll position and local state survive
-  /// round-trips. Only the active pair is painted during a transition.
+  /// Every page shown so far stays in the tree so scroll position and local
+  /// state survive round-trips. Only the active pair is painted during a
+  /// transition.
   final List<Widget> children;
 
   final Duration duration;
@@ -55,6 +62,9 @@ class _VoyagerCrossfadeIndexState extends State<VoyagerCrossfadeIndex>
 
   /// View that is fading in (and the settled index once [ _progress ] is 1).
   late int _toIndex = widget.index;
+
+  /// Children that have been shown, and so are built.
+  late final Set<int> _shown = {_toIndex};
 
   @override
   void didChangeDependencies() {
@@ -86,6 +96,7 @@ class _VoyagerCrossfadeIndexState extends State<VoyagerCrossfadeIndex>
       _fromIndex = _toIndex;
     }
     _toIndex = next;
+    _shown.add(next);
     _progress.duration = VoyagerMotion.reduced(context)
         ? VoyagerMotion.crossfade
         : widget.duration;
@@ -180,7 +191,11 @@ class _VoyagerCrossfadeIndexState extends State<VoyagerCrossfadeIndex>
                 opacity: opacity,
                 // The fade repaints every frame; this keeps that to
                 // re-compositing the page instead of re-recording it.
-                child: RepaintBoundary(child: child),
+                child: RepaintBoundary(
+                  child: _shown.contains(index)
+                      ? child
+                      : const SizedBox.shrink(),
+                ),
               ),
             ),
           ),

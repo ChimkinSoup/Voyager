@@ -402,8 +402,9 @@ class _TagSuggestionPortalState extends ConsumerState<TagSuggestionPortal> {
   Widget build(BuildContext context) {
     // Watched (not read) so the pool stays warm and an open list refreshes
     // when a tag is added elsewhere on the page.
-    ref.watch(tagPoolProvider(widget.scope));
-    final tagColors = ref.watch(tagColorsProvider).valueOrNull ?? const {};
+    ref.watch(tagPoolProvider(widget.scope).settled);
+    final tagColors =
+        ref.watch(tagColorsProvider.settled).valueOrNull ?? const {};
     final theme = Theme.of(context);
     final accent = widget.accentColor ?? theme.colorScheme.primary;
 

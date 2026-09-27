@@ -107,7 +107,7 @@ class _QuickAddSnippetPanelState extends ConsumerState<_QuickAddSnippetPanel> {
   Widget build(BuildContext context) {
     // Watched, not read: the provider may still be loading when the popover
     // opens, and the form has nothing to validate against until it lands.
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     if (settings == null) {
       return const SizedBox(
         height: 120,

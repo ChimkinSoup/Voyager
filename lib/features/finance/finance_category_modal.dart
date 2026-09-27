@@ -82,7 +82,7 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
   /// being edited must not silently drop a tag that is simply unused today.
   List<String> _knownTags() {
     final transactions =
-        ref.watch(transactionsProvider).valueOrNull ?? const [];
+        ref.watch(transactionsProvider.settled).valueOrNull ?? const [];
     final tags = <String>{
       for (final t in transactions) ...t.tags,
       ..._selectedTags,

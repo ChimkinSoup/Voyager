@@ -29,8 +29,10 @@ const double _roomyWheelsMinHeight = 722;
 /// [lastPerformedSets].
 final _lastTimeSetsProvider = Provider.autoDispose
     .family<List<List<WorkoutSetLog>>, String>((ref, exerciseId) {
-      final logs = ref.watch(exerciseSetLogsProvider(exerciseId)).valueOrNull;
-      final sessions = ref.watch(workoutSessionsProvider).valueOrNull;
+      final logs = ref
+          .watch(exerciseSetLogsProvider(exerciseId).settled)
+          .valueOrNull;
+      final sessions = ref.watch(workoutSessionsProvider.settled).valueOrNull;
       if (logs == null || sessions == null) return const [];
       return lastPerformedSets(logs, sessions);
     });
@@ -73,7 +75,7 @@ class ActiveWorkoutView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(workoutSessionControllerProvider);
     final controller = ref.read(workoutSessionControllerProvider.notifier);
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     final unit = settings?.weightUnit ?? WeightUnit.lb;
     final theme = Theme.of(context);
 

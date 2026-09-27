@@ -82,7 +82,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     ref.listen<bool>(revealAutoBackupRequestProvider, (_, next) {
       if (next) _tabs.animateTo(_dataTab);
     });
-    final settingsAsync = ref.watch(settingsProvider);
+    final settingsAsync = ref.watch(settingsProvider.settled);
 
     return settingsAsync.when(
       data: (settings) => Column(
@@ -1414,8 +1414,9 @@ class _MediaStorageTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final usage = ref.watch(mediaStorageUsageProvider).valueOrNull;
-    final diskLow = ref.watch(mediaDiskLowProvider).valueOrNull ?? false;
+    final usage = ref.watch(mediaStorageUsageProvider.settled).valueOrNull;
+    final diskLow =
+        ref.watch(mediaDiskLowProvider.settled).valueOrNull ?? false;
     final theme = Theme.of(context);
 
     final pending = usage == null
@@ -1456,8 +1457,10 @@ class _DictionaryTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final count = ref.watch(customWordsProvider).valueOrNull?.length ?? 0;
-    final flagged = ref.watch(flaggedWordsProvider).valueOrNull?.length ?? 0;
+    final count =
+        ref.watch(customWordsProvider.settled).valueOrNull?.length ?? 0;
+    final flagged =
+        ref.watch(flaggedWordsProvider.settled).valueOrNull?.length ?? 0;
     // Both numbers once either is non-zero: "custom words" alone stopped
     // describing this list when flags arrived (`FLAGGED_WORDS.md` §7).
     return ListTile(

@@ -2289,13 +2289,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         unawaited(opened.whenComplete(() => request!.handled?.complete()));
       }
     });
-    final journalsAsync = ref.watch(journalsProvider);
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final journalsAsync = ref.watch(journalsProvider.settled);
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     final entryListScope = _entryListScope(journalsAsync.valueOrNull);
     final entriesScope = _viewAllJournals
         ? allJournalEntriesScope
         : entryListScope;
-    final entriesAsync = ref.watch(journalListEntriesProvider(entriesScope));
+    final entriesAsync = ref.watch(
+      journalListEntriesProvider(entriesScope).settled,
+    );
 
     // The second of the page's two paths from the provider into the open
     // editor. [_reconcileSelectedEntryFromProvider] covers the same provider
@@ -2377,8 +2379,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     required String entryListScope,
     required String entriesScope,
   }) {
-    final entryCountsAsync = ref.watch(journalEntryCountsProvider);
-    final allEntryIdsAsync = ref.watch(journalAllEntryIdsProvider);
+    final entryCountsAsync = ref.watch(journalEntryCountsProvider.settled);
+    final allEntryIdsAsync = ref.watch(journalAllEntryIdsProvider.settled);
     _reconcilePendingEntries(allEntryIdsAsync.valueOrNull ?? const {});
     final displayEntries = _buildDisplayEntries(entries);
     _reconcileSelectedEntryFromProvider(entries);
@@ -3088,7 +3090,7 @@ class _BrowseQuotesDialogState extends ConsumerState<_BrowseQuotesDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final poolAsync = ref.watch(quotePoolProvider);
+    final poolAsync = ref.watch(quotePoolProvider.settled);
     final needle = _query.trim().toLowerCase();
 
     return AlertDialog(

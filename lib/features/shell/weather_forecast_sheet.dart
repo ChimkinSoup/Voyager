@@ -26,7 +26,7 @@ class _WeatherForecastDialog extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final forecastAsync = ref.watch(weatherForecastProvider);
+    final forecastAsync = ref.watch(weatherForecastProvider.settled);
     final cachedForecast = forecastAsync.value;
 
     return Dialog(

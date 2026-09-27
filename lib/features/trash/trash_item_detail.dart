@@ -870,7 +870,8 @@ class _TrashItemDetail extends ConsumerWidget {
     final unit = _weightUnit(ref);
     final live = {
       for (final exercise
-          in ref.watch(exercisesProvider).valueOrNull ?? const <Exercise>[])
+          in ref.watch(exercisesProvider.settled).valueOrNull ??
+              const <Exercise>[])
         exercise.id: exercise.name,
     };
     // An exercise deleted since is still named by its row in the trash.
@@ -958,7 +959,8 @@ class _TrashItemDetail extends ConsumerWidget {
   TrashRow? _findDeleted(WidgetRef ref, String collection, String id) {
     if (group.find(collection, id) case final row?) return row;
     for (final other
-        in ref.watch(trashItemsProvider).valueOrNull ?? const <TrashItem>[]) {
+        in ref.watch(trashItemsProvider.settled).valueOrNull ??
+            const <TrashItem>[]) {
       for (final row in other.members.followedBy([other.row])) {
         if (row.kind.collection == collection && row.id == id) return row;
       }
@@ -967,7 +969,8 @@ class _TrashItemDetail extends ConsumerWidget {
   }
 
   WeightUnit _weightUnit(WidgetRef ref) =>
-      ref.watch(settingsProvider).valueOrNull?.weightUnit ?? WeightUnit.lb;
+      ref.watch(settingsProvider.settled).valueOrNull?.weightUnit ??
+      WeightUnit.lb;
 
   TextStyle? _labelStyle(BuildContext context) {
     final theme = Theme.of(context);

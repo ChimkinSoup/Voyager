@@ -239,11 +239,12 @@ class _CashFlowCard extends ConsumerWidget {
       financeUiPrefsProvider.select((prefs) => prefs.cashFlowGranularity),
     );
     final transactions = settledTransactions(
-      ref.watch(transactionsProvider).valueOrNull ?? const [],
+      ref.watch(transactionsProvider.settled).valueOrNull ?? const [],
       DateTime.now(),
     );
     final weekStartsMonday =
-        ref.watch(settingsProvider).valueOrNull?.weekStartsOnMonday ?? true;
+        ref.watch(settingsProvider.settled).valueOrNull?.weekStartsOnMonday ??
+        true;
 
     final series = cashFlowSeries(
       transactions,
@@ -748,12 +749,13 @@ class _BreakdownCard extends ConsumerWidget {
     final focus = ref.watch(_breakdownFocusProvider);
     final now = DateTime.now();
     final transactions = settledTransactions(
-      ref.watch(transactionsProvider).valueOrNull ?? const [],
+      ref.watch(transactionsProvider.settled).valueOrNull ?? const [],
       now,
     );
     final categories =
-        ref.watch(financeCategoriesProvider).valueOrNull ?? const [];
-    final tagColors = ref.watch(tagColorsProvider).valueOrNull ?? const {};
+        ref.watch(financeCategoriesProvider.settled).valueOrNull ?? const [];
+    final tagColors =
+        ref.watch(tagColorsProvider.settled).valueOrNull ?? const {};
 
     final from = DateTime(now.year, now.month, 1);
     final to = DateTime(now.year, now.month + 1, 1);
@@ -988,7 +990,7 @@ class _BreakdownCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final now = DateTime.now();
     final transactions = settledTransactions(
-      ref.watch(transactionsProvider).valueOrNull ?? const [],
+      ref.watch(transactionsProvider.settled).valueOrNull ?? const [],
       now,
     );
 
@@ -1500,7 +1502,7 @@ class _CategoryManager extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final categories =
-        ref.watch(financeCategoriesProvider).valueOrNull ?? const [];
+        ref.watch(financeCategoriesProvider.settled).valueOrNull ?? const [];
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
@@ -1586,15 +1588,16 @@ class _NetWorthCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     final transactions = settledTransactions(
-      ref.watch(transactionsProvider).valueOrNull ?? const [],
+      ref.watch(transactionsProvider.settled).valueOrNull ?? const [],
       DateTime.now(),
     );
-    final assets = ref.watch(assetsProvider).valueOrNull ?? const [];
+    final assets = ref.watch(assetsProvider.settled).valueOrNull ?? const [];
     final valuations =
-        ref.watch(assetValuationsProvider).valueOrNull ?? const [];
-    final rooms = ref.watch(contributionRoomsProvider).valueOrNull ?? const [];
+        ref.watch(assetValuationsProvider.settled).valueOrNull ?? const [];
+    final rooms =
+        ref.watch(contributionRoomsProvider.settled).valueOrNull ?? const [];
     final roomEvents =
-        ref.watch(assetRoomEventsProvider).valueOrNull ?? const [];
+        ref.watch(assetRoomEventsProvider.settled).valueOrNull ?? const [];
     final now = DateTime.now();
     // One summary per room, shared by every asset in it.
     final roomSummaries = {

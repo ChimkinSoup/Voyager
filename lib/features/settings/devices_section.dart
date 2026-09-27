@@ -108,9 +108,11 @@ class DevicesSettingsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final devices =
-        ref.watch(deviceRegistrationsProvider).valueOrNull ??
+        ref.watch(deviceRegistrationsProvider.settled).valueOrNull ??
         const <DeviceRegistration>[];
-    final thisDevice = ref.watch(thisDeviceRegistrationProvider).valueOrNull;
+    final thisDevice = ref
+        .watch(thisDeviceRegistrationProvider.settled)
+        .valueOrNull;
     final thisDeviceId = ref.watch(deviceIdProvider);
     final now = DateTime.now();
 

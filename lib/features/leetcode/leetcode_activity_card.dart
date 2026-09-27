@@ -58,8 +58,9 @@ class _LeetCodeActivityCardState extends ConsumerState<LeetCodeActivityCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final problems =
-        ref.watch(leetcodeProblemsProvider).valueOrNull ?? const [];
-    final logs = ref.watch(leetcodeReviewLogProvider).valueOrNull ?? const [];
+        ref.watch(leetcodeProblemsProvider.settled).valueOrNull ?? const [];
+    final logs =
+        ref.watch(leetcodeReviewLogProvider.settled).valueOrNull ?? const [];
     final window = leetCodeActivityWindow(
       byDay: leetCodeActivityByDay(problems: problems, logs: logs),
       today: DateTime.now(),
@@ -303,8 +304,9 @@ class _ActivityDetailCardState extends ConsumerState<_ActivityDetailCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final problems =
-        ref.watch(leetcodeProblemsProvider).valueOrNull ?? const [];
-    final logs = ref.watch(leetcodeReviewLogProvider).valueOrNull ?? const [];
+        ref.watch(leetcodeProblemsProvider.settled).valueOrNull ?? const [];
+    final logs =
+        ref.watch(leetcodeReviewLogProvider.settled).valueOrNull ?? const [];
     final byDay = leetCodeActivityByDay(problems: problems, logs: logs);
     final window = leetCodeActivityWindow(byDay: byDay, today: DateTime.now());
 

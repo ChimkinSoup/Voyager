@@ -63,7 +63,7 @@ class _ScheduledRemindersSectionState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final rules =
-        ref.watch(scheduledReminderRulesProvider).valueOrNull ??
+        ref.watch(scheduledReminderRulesProvider.settled).valueOrNull ??
         const <ScheduledReminderRule>[];
     final engine = ref.watch(reminderEngineProvider);
     // Soonest first, so the fold below keeps the reminders that are next.
@@ -797,7 +797,7 @@ class _ScheduledReminderEditorState
     final theme = Theme.of(context);
     final existing = widget.existing;
     final devices =
-        ref.watch(deviceRegistrationsProvider).valueOrNull ??
+        ref.watch(deviceRegistrationsProvider.settled).valueOrNull ??
         const <DeviceRegistration>[];
     final thisDeviceId = ref.watch(deviceIdProvider);
 
@@ -1128,10 +1128,10 @@ class _ReminderHistoryDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final logs = ref.watch(reminderLogsProvider(sourceKey));
+    final logs = ref.watch(reminderLogsProvider(sourceKey).settled);
     final devices = {
       for (final device
-          in ref.watch(deviceRegistrationsProvider).valueOrNull ??
+          in ref.watch(deviceRegistrationsProvider.settled).valueOrNull ??
               const <DeviceRegistration>[])
         device.id: device.displayName,
     };

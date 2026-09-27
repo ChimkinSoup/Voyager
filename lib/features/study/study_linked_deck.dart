@@ -215,12 +215,14 @@ class _StudyLinkedDeckSheetState extends ConsumerState<_StudyLinkedDeckSheet> {
       }
     });
     final name =
-        ref.watch(studyDeckByIdProvider(deckId)).valueOrNull?.name ?? '';
+        ref.watch(studyDeckByIdProvider(deckId).settled).valueOrNull?.name ??
+        '';
     final cards = sortStudyCardsByMastery(
-      ref.watch(studyCardsProvider(deckId)).valueOrNull ?? const <StudyCard>[],
+      ref.watch(studyCardsProvider(deckId).settled).valueOrNull ??
+          const <StudyCard>[],
     );
     final cardImages =
-        ref.watch(studyCardImagesProvider).valueOrNull ?? const {};
+        ref.watch(studyCardImagesProvider.settled).valueOrNull ?? const {};
     // The deck's own cards only — what the grid below lists, and what its
     // Study and Cram draw on. What it links in turn stays out of the sheet.
     final now = DateTime.now().toUtc();

@@ -480,8 +480,10 @@ class _RoomCashEventModalState extends ConsumerState<_RoomCashEventModal> {
     // Listened so the proposal catches up once valuations load or a sync
     // lands while the sheet is open.
     ref.listen(assetValuationsProvider, (_, _) => _onChanged());
-    final rooms = ref.watch(contributionRoomsProvider).valueOrNull ?? const [];
-    final events = ref.watch(assetRoomEventsProvider).valueOrNull ?? const [];
+    final rooms =
+        ref.watch(contributionRoomsProvider.settled).valueOrNull ?? const [];
+    final events =
+        ref.watch(assetRoomEventsProvider.settled).valueOrNull ?? const [];
     final roomId = widget.existing?.roomId ?? widget.asset.contributionRoomId;
     final room = rooms.where((r) => r.id == roomId).firstOrNull;
     final now = DateTime.now();

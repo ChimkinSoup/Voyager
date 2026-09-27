@@ -81,13 +81,16 @@ class _StudyLinkDeckModalState extends ConsumerState<_StudyLinkDeckModal> {
     final theme = Theme.of(context);
     final parentId = _stack.isEmpty ? null : _stack.last;
     final graph =
-        ref.watch(studyDeckGraphProvider).valueOrNull ?? StudyDeckGraph.empty;
+        ref.watch(studyDeckGraphProvider.settled).valueOrNull ??
+        StudyDeckGraph.empty;
     final folders = [
-      ...ref.watch(studyFoldersProvider(parentId)).valueOrNull ?? const [],
+      ...ref.watch(studyFoldersProvider(parentId).settled).valueOrNull ??
+          const [],
     ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     final decks = [
       for (final deck
-          in ref.watch(studyDecksProvider(parentId)).valueOrNull ?? const [])
+          in ref.watch(studyDecksProvider(parentId).settled).valueOrNull ??
+              const [])
         if (deck.id != widget.parentDeckId) deck,
     ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     final muted = theme.colorScheme.onSurface.withValues(alpha: 0.5);

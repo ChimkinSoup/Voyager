@@ -130,7 +130,8 @@ class _LeetCodeActivityCalendarState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final weekStartsMonday =
-        ref.watch(settingsProvider).valueOrNull?.weekStartsOnMonday ?? true;
+        ref.watch(settingsProvider.settled).valueOrNull?.weekStartsOnMonday ??
+        true;
     final busiest = leetCodeBusiestDayInYear(
       widget.byDay,
       _year,

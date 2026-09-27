@@ -2696,7 +2696,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
         unawaited(_takeQuickCaptureDraft());
       }
     });
-    final settingsAsync = ref.watch(settingsProvider);
+    final settingsAsync = ref.watch(settingsProvider.settled);
     final settings = settingsAsync.valueOrNull;
     _applySavedViewPreferences(settings);
     final hideCompleted = settingsAsync.maybeWhen(
@@ -2708,7 +2708,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
         _completedExpandedOverride ??
         settings?.todoCompletedSectionExpanded ??
         true;
-    final listsAsync = ref.watch(todoListsProvider);
+    final listsAsync = ref.watch(todoListsProvider.settled);
     // Watched so attaching or removing an image in the edit panel adds or
     // drops the row's image icon without anything else having to invalidate.
     _tasksWithImages =

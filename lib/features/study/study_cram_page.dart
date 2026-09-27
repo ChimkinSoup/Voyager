@@ -527,7 +527,7 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final cardsAsync = ref.watch(studyAllCardsProvider);
+    final cardsAsync = ref.watch(studyAllCardsProvider.settled);
     final cards = cardsAsync.valueOrNull;
     if (cards != null) _syncCards(_pool(cards));
 
@@ -695,13 +695,15 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
     final vc = VoyagerColors.of(context);
     // Rebuilt off the media module, so an image arriving mid-run lands on the
     // card it belongs to.
-    final images = ref.watch(studyCardImagesProvider).valueOrNull?[card.id];
+    final images = ref
+        .watch(studyCardImagesProvider.settled)
+        .valueOrNull?[card.id];
     final source = studyCardSourceName(
       card,
       frameDeckId: widget.deckId,
       decksById: {
         for (final deck
-            in ref.watch(studyAllDecksProvider).valueOrNull ??
+            in ref.watch(studyAllDecksProvider.settled).valueOrNull ??
                 const <StudyDeck>[])
           deck.id: deck,
       },

@@ -195,7 +195,7 @@ class _CardFront extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     final description = problem.description?.trim();
     final hasDescription =
         description != null &&
@@ -266,7 +266,7 @@ class _CardFront extends ConsumerWidget {
       theme: theme,
       vc: VoyagerColors.of(context),
       nearSolid: MediaQuery.maybeOf(context)?.highContrast ?? false,
-      paperProgram: ref.watch(paperShaderProvider).valueOrNull,
+      paperProgram: ref.watch(paperShaderProvider.settled).valueOrNull,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -329,12 +329,12 @@ class _CardBack extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     return _glassContainer(
       theme: theme,
       vc: VoyagerColors.of(context),
       nearSolid: MediaQuery.maybeOf(context)?.highContrast ?? false,
-      paperProgram: ref.watch(paperShaderProvider).valueOrNull,
+      paperProgram: ref.watch(paperShaderProvider.settled).valueOrNull,
       child: VoyagerScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

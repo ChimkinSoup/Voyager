@@ -54,12 +54,12 @@ class _TodoListSettingsDialog extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final lists = ref.watch(todoListsProvider).valueOrNull;
+    final lists = ref.watch(todoListsProvider.settled).valueOrNull;
     final list = lists?.cast<TodoListModel?>().firstWhere(
       (l) => l!.id == listId,
       orElse: () => null,
     );
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     final theme = Theme.of(context);
 
     if (list == null) {

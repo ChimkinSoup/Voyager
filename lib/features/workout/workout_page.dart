@@ -45,8 +45,8 @@ class WorkoutPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final plansAsync = ref.watch(workoutPlansProvider);
-    final exercisesAsync = ref.watch(exercisesProvider);
+    final plansAsync = ref.watch(workoutPlansProvider.settled);
+    final exercisesAsync = ref.watch(exercisesProvider.settled);
 
     return plansAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -144,17 +144,21 @@ class _PlannerState extends ConsumerState<_Planner> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     final unit = settings?.weightUnit ?? WeightUnit.lb;
     // Adopted once, the first time settings resolve: after that the local
     // value is the live one, and re-reading would undo a drag in flight.
     _libraryWidth ??= settings?.workoutLibraryWidth;
     final weekStartsOnMonday = settings?.weekStartsOnMonday ?? true;
     final weeklyEntries =
-        ref.watch(workoutPlanEntriesProvider(weeklyPlan.id)).valueOrNull ??
+        ref
+            .watch(workoutPlanEntriesProvider(weeklyPlan.id).settled)
+            .valueOrNull ??
         const <WorkoutPlanEntry>[];
     final cycleEntries =
-        ref.watch(workoutPlanEntriesProvider(cyclePlan.id)).valueOrNull ??
+        ref
+            .watch(workoutPlanEntriesProvider(cyclePlan.id).settled)
+            .valueOrNull ??
         const <WorkoutPlanEntry>[];
     final exercisesById = {for (final e in exercises) e.id: e};
     final compact = context.isCompactWidth;
@@ -323,7 +327,8 @@ class _ActivePlanButton extends ConsumerWidget {
     // Two offline devices can each activate a different plan, leaving both
     // flagged active after sync. Only a plan that is the *sole* active one is
     // locked, so pressing either resolves the tie.
-    final plans = ref.watch(workoutPlansProvider).valueOrNull ?? const [];
+    final plans =
+        ref.watch(workoutPlansProvider.settled).valueOrNull ?? const [];
     final soleActive = active && plans.where((p) => p.isActive).length == 1;
     // What GlassButton gives a plain `label`. Restated here because holding
     // the width takes a `child`, and a child brings its own styling.

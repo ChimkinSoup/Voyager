@@ -264,7 +264,7 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
     // from the latest figure — and keep it current while the field still
     // shows the seed: a contribution edited from this sheet can revalue the
     // asset, and saving a stale seed would write the old figure back over it.
-    final valuations = ref.watch(assetValuationsProvider).valueOrNull;
+    final valuations = ref.watch(assetValuationsProvider.settled).valueOrNull;
     final latest = existing == null || valuations == null
         ? null
         : latestValuation(valuations, existing.id);
@@ -456,12 +456,15 @@ class _RoomSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final asset = (ref.watch(assetsProvider).valueOrNull ?? const <Asset>[])
-        .where((a) => a.id == assetId)
-        .firstOrNull;
+    final asset =
+        (ref.watch(assetsProvider.settled).valueOrNull ?? const <Asset>[])
+            .where((a) => a.id == assetId)
+            .firstOrNull;
     if (asset == null) return const SizedBox.shrink();
-    final rooms = ref.watch(contributionRoomsProvider).valueOrNull ?? const [];
-    final events = ref.watch(assetRoomEventsProvider).valueOrNull ?? const [];
+    final rooms =
+        ref.watch(contributionRoomsProvider.settled).valueOrNull ?? const [];
+    final events =
+        ref.watch(assetRoomEventsProvider.settled).valueOrNull ?? const [];
     final room = rooms
         .where((r) => r.id == asset.contributionRoomId)
         .firstOrNull;

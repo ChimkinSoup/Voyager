@@ -584,16 +584,17 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
 
   @override
   Widget build(BuildContext context) {
-    final cardsAsync = ref.watch(studyAllCardsProvider);
+    final cardsAsync = ref.watch(studyAllCardsProvider.settled);
     final cards = cardsAsync.valueOrNull;
     if (cards != null) _syncQueue(cards);
     final queue = _queue;
     // Rebuilt whenever the media module changes, so an image that finishes
     // downloading mid-session appears on the card it belongs to.
-    final images = ref.watch(studyCardImagesProvider).valueOrNull ?? const {};
+    final images =
+        ref.watch(studyCardImagesProvider.settled).valueOrNull ?? const {};
     final decksById = {
       for (final deck
-          in ref.watch(studyAllDecksProvider).valueOrNull ??
+          in ref.watch(studyAllDecksProvider.settled).valueOrNull ??
               const <StudyDeck>[])
         deck.id: deck,
     };

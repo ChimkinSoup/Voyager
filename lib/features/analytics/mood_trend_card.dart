@@ -67,8 +67,8 @@ class _MoodTrendCardState extends ConsumerState<MoodTrendCard> {
 
   @override
   Widget build(BuildContext context) {
-    final entries = ref.watch(allJournalEntriesProvider).valueOrNull;
-    final journals = ref.watch(journalsProvider).valueOrNull;
+    final entries = ref.watch(allJournalEntriesProvider.settled).valueOrNull;
+    final journals = ref.watch(journalsProvider.settled).valueOrNull;
     if (entries == null || journals == null) return const SizedBox.shrink();
     final days = recentMoodDays(
       entries,

@@ -139,8 +139,8 @@ class _CustomQuotesDialogState extends ConsumerState<_CustomQuotesDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final quotesAsync = ref.watch(customQuotesProvider);
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final quotesAsync = ref.watch(customQuotesProvider.settled);
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     final customOnly = settings?.customQuotesOnly ?? false;
 
     return AlertDialog(

@@ -5,7 +5,7 @@ import 'package:voyager/domain/jobs/job_queries.dart';
 /// [jobRecentCompanyKeys] over every application, worked out once per change
 /// to the list rather than on every build of whatever shows a company field.
 final jobRecentCompanyKeysProvider = Provider<List<String>>((ref) {
-  final applications = ref.watch(jobApplicationsProvider).valueOrNull;
+  final applications = ref.watch(jobApplicationsProvider.settled).valueOrNull;
   return applications == null ? const [] : jobRecentCompanyKeys(applications);
 });
 

@@ -174,7 +174,7 @@ class _CategoryMenu extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final counts =
-        ref.watch(rankingParentCountsProvider).valueOrNull ??
+        ref.watch(rankingParentCountsProvider.settled).valueOrNull ??
         const <String, int>{};
     return ConstrainedBox(
       constraints: const BoxConstraints(maxHeight: 320),

@@ -152,8 +152,8 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
     final grass = isDark ? _nightGrassColor : _grassColor;
 
     final geometry = ref.watch(lifeTreeGeometryProvider);
-    final settings = ref.watch(settingsProvider).valueOrNull;
-    final statsAsync = ref.watch(lifeTrackerStatsProvider);
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
+    final statsAsync = ref.watch(lifeTrackerStatsProvider.settled);
     final grounded =
         ref.watch(lifeTreeGroundedLeavesProvider) ??
         _groundedLeavesFor(geometry, settings?.birthDate);

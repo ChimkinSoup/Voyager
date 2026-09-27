@@ -116,7 +116,7 @@ class _TrashDialogState extends ConsumerState<_TrashDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final all = ref.watch(trashItemsProvider).valueOrNull;
+    final all = ref.watch(trashItemsProvider.settled).valueOrNull;
     final feature = _feature;
     final shown = all == null
         ? null

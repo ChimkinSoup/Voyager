@@ -163,7 +163,7 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
     final theme = Theme.of(context);
     final accent = paletteColor(widget.goal.colorValue, context);
     final allocations =
-        ref.watch(goalAllocationsProvider).valueOrNull ?? const [];
+        ref.watch(goalAllocationsProvider.settled).valueOrNull ?? const [];
     final allocated = goalAllocatedCents(allocations, widget.goal.id);
     final remaining = widget.goal.targetCents - allocated;
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;

@@ -2053,7 +2053,7 @@ class CalendarDayTodoPopover extends ConsumerWidget {
     // route, so the list it was opened with would otherwise stand for as long
     // as it is up. Deleting a task from its own right-click menu left the
     // deleted row sitting in the menu until it was closed and reopened.
-    final live = ref.watch(calendarTodoMarkersProvider).valueOrNull;
+    final live = ref.watch(calendarTodoMarkersProvider.settled).valueOrNull;
     final dayTodos = live == null
         ? todos
         : calendarTodoMarkersForDay(live, day);

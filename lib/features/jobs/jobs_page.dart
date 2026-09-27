@@ -102,16 +102,19 @@ class _JobsPageState extends ConsumerState<JobsPage>
 
   @override
   Widget build(BuildContext context) {
-    final applicationsAsync = ref.watch(jobApplicationsProvider);
+    final applicationsAsync = ref.watch(jobApplicationsProvider.settled);
     final stages =
-        ref.watch(jobStagesProvider).valueOrNull ?? const <JobStage>[];
+        ref.watch(jobStagesProvider.settled).valueOrNull ?? const <JobStage>[];
     final companies =
-        ref.watch(jobCompaniesProvider).valueOrNull ?? const <JobCompany>[];
+        ref.watch(jobCompaniesProvider.settled).valueOrNull ??
+        const <JobCompany>[];
     final categories =
-        ref.watch(jobCategoriesProvider).valueOrNull ?? const <JobCategory>[];
+        ref.watch(jobCategoriesProvider.settled).valueOrNull ??
+        const <JobCategory>[];
     final seasons =
-        ref.watch(jobSeasonsProvider).valueOrNull ?? const <JobSeason>[];
-    final settings = ref.watch(settingsProvider).valueOrNull;
+        ref.watch(jobSeasonsProvider.settled).valueOrNull ??
+        const <JobSeason>[];
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
 
     final includeArchived = settings?.jobsIncludeArchived ?? false;
     final hiddenColumns =

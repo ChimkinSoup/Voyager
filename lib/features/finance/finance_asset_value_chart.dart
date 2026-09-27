@@ -53,7 +53,7 @@ class _AssetValueChartState extends ConsumerState<AssetValueChart> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final valuations =
-        (ref.watch(assetValuationsProvider).valueOrNull ?? const [])
+        (ref.watch(assetValuationsProvider.settled).valueOrNull ?? const [])
             .where((v) => v.assetId == widget.assetId)
             .toList()
           ..sort((a, b) => a.asOf.compareTo(b.asOf));

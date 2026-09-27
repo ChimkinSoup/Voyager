@@ -68,7 +68,7 @@ class _RankingsManageDialogState extends ConsumerState<_RankingsManageDialog> {
   @override
   Widget build(BuildContext context) {
     final categories =
-        ref.watch(rankingCategoriesProvider).valueOrNull ??
+        ref.watch(rankingCategoriesProvider.settled).valueOrNull ??
         const <RankingCategory>[];
     final selected =
         categories

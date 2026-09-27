@@ -207,7 +207,7 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
-    final lists = ref.watch(todoListsProvider).valueOrNull ?? const [];
+    final lists = ref.watch(todoListsProvider.settled).valueOrNull ?? const [];
     final draft = ref.watch(todoCaptureDraftProvider);
     final targetId = _targetListId(lists, _lastTouchedId, draft);
     final targetName = lists

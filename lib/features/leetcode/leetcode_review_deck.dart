@@ -51,7 +51,7 @@ class _LeetCodeReviewDeckState extends ConsumerState<LeetCodeReviewDeck> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final problemsAsync = ref.watch(leetcodeProblemsProvider);
+    final problemsAsync = ref.watch(leetcodeProblemsProvider.settled);
     final problems = problemsAsync.valueOrNull ?? const <LeetCodeProblem>[];
     // Distinct from "tracked nothing yet": before the query resolves the deck
     // knows nothing about the library, and saying it is empty is a claim it
@@ -493,7 +493,7 @@ class _SessionDisplayButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     final hiding =
         settings != null && _hideToggles(settings).any((t) => t.value);
 
@@ -522,7 +522,7 @@ class _SessionDisplayList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     if (settings == null) return const SizedBox.shrink();
 
     Widget row(_HideToggle toggle) => InkWell(

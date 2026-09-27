@@ -38,7 +38,8 @@ class PerfStallLogger extends ChangeNotifier {
 
   static final instance = PerfStallLogger._();
 
-  static const stallThreshold = Duration(milliseconds: 100);
+  /// Two dropped frames at 60Hz — about where a hitch becomes visible.
+  static const stallThreshold = Duration(milliseconds: 34);
   static const _heartbeat = Duration(milliseconds: 50);
   static const _incidentWindow = Duration(seconds: 1);
   static const _inputWindow = Duration(seconds: 10);

@@ -118,7 +118,8 @@ class _FinanceNetFlowCalendarState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final weekStartsMonday =
-        ref.watch(settingsProvider).valueOrNull?.weekStartsOnMonday ?? true;
+        ref.watch(settingsProvider.settled).valueOrNull?.weekStartsOnMonday ??
+        true;
 
     // The window stops at today: nothing after it has happened yet.
     final yearStart = DateTime(_year, 1, 1);

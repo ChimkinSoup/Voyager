@@ -39,7 +39,8 @@ class _ExercisePickerState extends ConsumerState<_ExercisePicker> {
     final query = _filter.text.trim().toLowerCase();
     final exercises = [
       for (final e
-          in ref.watch(exercisesProvider).valueOrNull ?? const <Exercise>[])
+          in ref.watch(exercisesProvider.settled).valueOrNull ??
+              const <Exercise>[])
         if (e.name.toLowerCase().contains(query)) e,
     ];
 

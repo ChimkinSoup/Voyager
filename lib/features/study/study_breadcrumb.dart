@@ -61,7 +61,9 @@ class StudyBreadcrumbRow extends ConsumerWidget {
     ];
     for (var i = 0; i < folderStack.length; i++) {
       segments.add(Icon(Icons.chevron_right, size: 16, color: vc.hairline));
-      final folderAsync = ref.watch(studyFolderByIdProvider(folderStack[i]));
+      final folderAsync = ref.watch(
+        studyFolderByIdProvider(folderStack[i]).settled,
+      );
       final isLast = i == folderStack.length - 1;
       segments.add(
         pill(

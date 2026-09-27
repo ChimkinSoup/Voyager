@@ -18,7 +18,7 @@ final rankingSelectedCategoryProvider = StateProvider<String?>((ref) => null);
 /// keeps an open menu honest about the sort it just changed (§4.2).
 final rankingActiveCategoryProvider = Provider<RankingCategory?>((ref) {
   final categories =
-      ref.watch(rankingCategoriesProvider).valueOrNull ??
+      ref.watch(rankingCategoriesProvider.settled).valueOrNull ??
       const <RankingCategory>[];
   final selectedId = ref.watch(rankingSelectedCategoryProvider);
   return categories.where((c) => c.id == selectedId).firstOrNull ??

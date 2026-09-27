@@ -2801,11 +2801,14 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           ),
         )
         .calendars;
-    final settings = ref.watch(settingsProvider).value ?? const AppSettings();
-    _applySavedCalendarPreferences(ref.watch(settingsProvider).valueOrNull);
+    final settings =
+        ref.watch(settingsProvider.settled).value ?? const AppSettings();
+    _applySavedCalendarPreferences(
+      ref.watch(settingsProvider.settled).valueOrNull,
+    );
     final weekStartsMonday = settings.weekStartsOnMonday;
     _workoutDays = settings.showWorkoutsOnCalendar
-        ? (ref.watch(workoutDaysProvider).valueOrNull ?? const {})
+        ? (ref.watch(workoutDaysProvider.settled).valueOrNull ?? const {})
         : const {};
 
     final selectedCalendar = _selectedCalendarId == null

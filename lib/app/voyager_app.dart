@@ -323,7 +323,7 @@ class _GeometricBackground extends ConsumerWidget {
         settingsProvider.select((s) => s.value?.accentColor ?? 0xFF7C9EFF),
       ),
     );
-    final program = ref.watch(geometricShaderProvider).valueOrNull;
+    final program = ref.watch(geometricShaderProvider.settled).valueOrNull;
     final params = ref.watch(geometricTextureParamsProvider);
     final waveParams = ref.watch(geometricWaveParamsProvider);
     final debugRowFade = ref.watch(geometricDebugRowFadeProvider);
@@ -349,7 +349,7 @@ class _PaperBackground extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final program = ref.watch(paperShaderProvider).valueOrNull;
+    final program = ref.watch(paperShaderProvider.settled).valueOrNull;
     final petalParams = ref.watch(petalFieldParamsProvider);
     final baseColor = Theme.of(context).scaffoldBackgroundColor;
     // A warm gray a few shades down from the ground: dark enough for the specks

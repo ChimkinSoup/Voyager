@@ -570,7 +570,8 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                 // Watched, so a row deleted or restored while the sheet is
                 // open reaches the list without reopening it.
                 origins: recentTransactionOrigins(
-                  ref.watch(transactionsProvider).valueOrNull ?? const [],
+                  ref.watch(transactionsProvider.settled).valueOrNull ??
+                      const [],
                   _type,
                   DateTime.now(),
                 ),

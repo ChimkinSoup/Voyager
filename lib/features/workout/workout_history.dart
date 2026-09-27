@@ -84,7 +84,7 @@ final _historyProvider = FutureProvider.autoDispose<List<WorkoutSession>>((
 /// the list.
 final _historyLogsProvider = FutureProvider.autoDispose
     .family<List<WorkoutSetLog>, String>((ref, sessionId) {
-      ref.watch(workoutSessionsProvider);
+      ref.watch(workoutSessionsProvider.settled);
       return ref
           .watch(workoutRepositoryProvider)
           .listSetLogs(sessionId: sessionId);
@@ -94,7 +94,7 @@ final _historyLogsProvider = FutureProvider.autoDispose
 /// should still read.
 final _allExercisesProvider = FutureProvider.autoDispose<Map<String, Exercise>>(
   (ref) async {
-    ref.watch(exercisesProvider);
+    ref.watch(exercisesProvider.settled);
     final all = await ref
         .watch(workoutRepositoryProvider)
         .listExercises(includeDeleted: true);
@@ -185,10 +185,11 @@ class _SessionList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final unit =
-        ref.watch(settingsProvider).valueOrNull?.weightUnit ?? WeightUnit.lb;
-    final sessions = ref.watch(_historyProvider).valueOrNull;
+        ref.watch(settingsProvider.settled).valueOrNull?.weightUnit ??
+        WeightUnit.lb;
+    final sessions = ref.watch(_historyProvider.settled).valueOrNull;
     final exercises =
-        ref.watch(_allExercisesProvider).valueOrNull ??
+        ref.watch(_allExercisesProvider.settled).valueOrNull ??
         const <String, Exercise>{};
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
@@ -265,7 +266,9 @@ class _SessionRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final logs = ref.watch(_historyLogsProvider(session.id)).valueOrNull;
+    final logs = ref
+        .watch(_historyLogsProvider(session.id).settled)
+        .valueOrNull;
     final done = logs?.where((l) => l.completed).toList() ?? const [];
     final volume = done.fold<double>(0, (sum, l) => sum + l.volumeKg);
     final names = <String>[];
@@ -400,21 +403,24 @@ class _LogPastWorkoutState extends ConsumerState<_LogPastWorkout> {
     final muted = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
     );
-    final plans = ref.watch(workoutPlansProvider).valueOrNull ?? const [];
+    final plans =
+        ref.watch(workoutPlansProvider.settled).valueOrNull ?? const [];
     final active = ref.watch(activeWorkoutPlanProvider);
     final mode = _mode ?? active?.mode ?? WorkoutPlanMode.weekly;
     final plan = plans.where((p) => p.mode == mode).firstOrNull;
     final weekStartsOnMonday =
-        ref.watch(settingsProvider).valueOrNull?.weekStartsOnMonday ?? true;
+        ref.watch(settingsProvider.settled).valueOrNull?.weekStartsOnMonday ??
+        true;
     final dayIndex = plan == null
         ? null
         : (_dayIndex ?? plan.dayIndexForDate(_date) ?? 0);
     final entries = plan == null
         ? const <WorkoutPlanEntry>[]
-        : ref.watch(workoutPlanEntriesProvider(plan.id)).valueOrNull ??
+        : ref.watch(workoutPlanEntriesProvider(plan.id).settled).valueOrNull ??
               const <WorkoutPlanEntry>[];
     final exercises = {
-      for (final e in ref.watch(exercisesProvider).valueOrNull ?? const [])
+      for (final e
+          in ref.watch(exercisesProvider.settled).valueOrNull ?? const [])
         e.id: e,
     };
     final planned = [

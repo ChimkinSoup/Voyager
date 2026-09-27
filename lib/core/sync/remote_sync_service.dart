@@ -4,6 +4,7 @@ import 'dart:convert';
 // ignore_for_file: prefer_initializing_formals
 import 'package:flutter/foundation.dart';
 import 'package:voyager/core/dev/error_logger.dart';
+import 'package:voyager/core/dev/perf_stall_logger.dart';
 import 'package:voyager/core/constants/app_constants.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/soft_delete/erasure.dart';
@@ -220,6 +221,7 @@ class RemoteSyncService {
       at: now,
       keys: payload.keys.toList(growable: false),
       fingerprint: _payloadFingerprint(payload),
+      payload: payload,
     );
   }
 
@@ -231,7 +233,13 @@ class RemoteSyncService {
   ) {
     final key = documentKey(collection, localDocumentId);
     final echo = _selfEchoes[key];
-    if (echo == null) return false;
+    if (echo == null) {
+      PerfStallLogger.instance.breadcrumb(
+        'remote change with no echo mark (another device, or an unmarked '
+        'write): $key',
+      );
+      return false;
+    }
 
     if (remote == null ||
         DateTime.now().difference(echo.at) >= _selfEchoWindow) {
@@ -248,11 +256,41 @@ class RemoteSyncService {
         if (remote.containsKey(key)) key: remote[key],
     };
     final matches = _payloadFingerprint(pushed) == echo.fingerprint;
+    if (!matches && PerfStallLogger.instance.enabled) {
+      _breadcrumbEchoMismatch(key, echo, remote);
+    }
     // Kept on a match: one write is delivered twice — from the local cache,
     // then again once the server fills in its write time — and both are ours.
     // Only identical content can match, so keeping it can't swallow an edit.
     if (!matches) _selfEchoes.remove(key);
     return matches;
+  }
+
+  /// Names the fields that kept [remote] from matching what was pushed, so the
+  /// perf stall log can say why an echo of our own write reloaded the app.
+  void _breadcrumbEchoMismatch(
+    String key,
+    _SelfEcho echo,
+    Map<String, dynamic> remote,
+  ) {
+    String show(Object? value) {
+      final text = '${jsonEncode(_sortedKeys(value))} (${value.runtimeType})';
+      return text.length > 120 ? '${text.substring(0, 120)}...' : text;
+    }
+
+    final differing = [
+      for (final field in echo.keys)
+        if (!remote.containsKey(field))
+          '$field: missing remotely'
+        else if (jsonEncode(_sortedKeys(remote[field])) !=
+            jsonEncode(_sortedKeys(echo.payload[field])))
+          '$field: pushed ${show(echo.payload[field])}, '
+              'got ${show(remote[field])}',
+    ];
+    PerfStallLogger.instance.breadcrumb(
+      'echo MISMATCH (treated as a foreign edit): $key -- '
+      '${differing.join('; ')}',
+    );
   }
 
   /// A payload rendered so two of them compare equal when their contents are.
@@ -5979,8 +6017,14 @@ class RemoteSyncService {
         pullSettings,
         pullTagColors,
         pullCustomWords,
+        pullFlaggedWords,
         pullSnippets,
         pullJobExperienceSnippets,
+      ]),
+      _inOrder([
+        pullRankingCategories,
+        pullRankingParents,
+        pullRankingChildren,
       ]),
       _inOrder([pullCalendars, pullCalendarEvents]),
       _inOrder([pullTrackers, pullTrackerValues]),
@@ -6168,6 +6212,7 @@ class _SelfEcho {
     required this.at,
     required this.keys,
     required this.fingerprint,
+    required this.payload,
   });
 
   final DateTime at;
@@ -6177,6 +6222,9 @@ class _SelfEcho {
   final List<String> keys;
 
   final String fingerprint;
+
+  /// What was pushed, kept only to name the differing fields when logging.
+  final Map<String, dynamic> payload;
 }
 
 class _PullTiming {
@@ -6352,6 +6400,10 @@ class LiveSyncController {
             // triggered the write (e.g. the todo page's completion batch)
             // already do their own narrower, coalesced refresh.
             if (applied) {
+              PerfStallLogger.instance.breadcrumb(
+                'live sync reloaded EVERY data provider: ${entry.key} '
+                '(${entry.value.length} id(s))',
+              );
               if (DevFlags.verboseSync) {
                 debugPrint(
                   '[sync] live-sync onChanged fired for ${entry.key} '

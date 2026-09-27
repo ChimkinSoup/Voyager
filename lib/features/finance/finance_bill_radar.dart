@@ -21,7 +21,7 @@ class BillRadarPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final subscriptionsAsync = ref.watch(subscriptionsProvider);
+    final subscriptionsAsync = ref.watch(subscriptionsProvider.settled);
     final showAnnual =
         ref
             .watch(settingsProvider)

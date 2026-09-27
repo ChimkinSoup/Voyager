@@ -231,7 +231,7 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
     final theme = Theme.of(context);
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
     final images =
-        ref.watch(studyCardImagesProvider).valueOrNull?[_cardId] ??
+        ref.watch(studyCardImagesProvider.settled).valueOrNull?[_cardId] ??
         (front: const <MediaAsset>[], back: const <MediaAsset>[]);
     // Read live rather than captured at build time: the Save button below is
     // the only thing the typed text drives, and it watches the controllers

@@ -234,8 +234,8 @@ class _ContributionRoomModalState
     final theme = Theme.of(context);
     final accent = paletteColor(widget.asset.colorValue, context);
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
-    final rooms = ref.watch(contributionRoomsProvider).valueOrNull;
-    final events = ref.watch(assetRoomEventsProvider).valueOrNull;
+    final rooms = ref.watch(contributionRoomsProvider.settled).valueOrNull;
+    final events = ref.watch(assetRoomEventsProvider.settled).valueOrNull;
     final now = DateTime.now();
 
     if (_editing && _seededRoom == null && rooms != null && events != null) {

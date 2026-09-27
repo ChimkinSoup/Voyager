@@ -79,7 +79,7 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
 
   @override
   Widget build(BuildContext context) {
-    final listsAsync = ref.watch(todoListsProvider);
+    final listsAsync = ref.watch(todoListsProvider.settled);
     final logger = ref.watch(syncCompareLoggerProvider);
 
     final lists = listsAsync.valueOrNull ?? const [];

@@ -585,10 +585,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final entriesAsync = ref.watch(
       journalListEntriesProvider(allJournalEntriesScope),
     );
-    final journalsAsync = ref.watch(journalsProvider);
+    final journalsAsync = ref.watch(journalsProvider.settled);
     final search = ref.watch(searchServiceProvider);
     final theme = Theme.of(context);
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     final accentColor = Color(
       settings?.accentColor ?? theme.colorScheme.primary.toARGB32(),
     );
@@ -771,7 +771,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   /// user who never types [dreamSearchCommand] never pays for reading every
   /// dream row off disk.
   Widget _dreamResults(ThemeData theme, Color accentColor) {
-    final dreamsAsync = ref.watch(allDreamEntriesProvider);
+    final dreamsAsync = ref.watch(allDreamEntriesProvider.settled);
     return dreamsAsync.when(
       skipLoadingOnReload: true,
       data: (dreams) {

@@ -17,7 +17,7 @@ const _defaultRainColor = 0xFFFF9800;
 const _defaultAccentColor = 0xFF7C9EFF;
 
 ({Color temp, Color rain}) weatherChartColors(WidgetRef ref) {
-  final settings = ref.watch(settingsProvider).valueOrNull;
+  final settings = ref.watch(settingsProvider.settled).valueOrNull;
   final cached = ref.watch(weatherChartColorsProvider);
   return (
     temp: Color(

@@ -681,13 +681,13 @@ final liveSyncProvider = Provider<LiveSyncController>((ref) {
 });
 
 final cachedCurrentWeatherProvider = Provider<WeatherSnapshot?>((ref) {
-  final settings = ref.watch(settingsProvider).valueOrNull;
+  final settings = ref.watch(settingsProvider.settled).valueOrNull;
   if (settings == null) return null;
   return ref.read(weatherServiceProvider).readCachedSnapshot(settings);
 });
 
 final currentWeatherProvider = FutureProvider<WeatherSnapshot?>((ref) async {
-  ref.watch(settingsProvider);
+  ref.watch(settingsProvider.settled);
   return ref.read(weatherServiceProvider).refreshIfNeeded();
 });
 
@@ -891,7 +891,7 @@ final settingsProvider = AsyncNotifierProvider<SettingsNotifier, AppSettings>(
 );
 
 final colorPaletteProvider = Provider<List<int>>((ref) {
-  return ref.watch(settingsProvider).valueOrNull?.colorPalette ??
+  return ref.watch(settingsProvider.settled).valueOrNull?.colorPalette ??
       defaultColorPalette;
 });
 
@@ -964,7 +964,7 @@ final themeModeProvider = Provider<AppThemeMode>((ref) {
 /// params there is no debounced write-back notifier here — the petal settings
 /// are only ever changed from the settings page, which saves directly.
 final petalFieldParamsProvider = Provider<PetalFieldParams>((ref) {
-  final s = ref.watch(settingsProvider).valueOrNull;
+  final s = ref.watch(settingsProvider.settled).valueOrNull;
   if (s == null) return PetalFieldParams.defaults;
   return PetalFieldParams(
     color: Color(s.petalColor),
@@ -1153,7 +1153,8 @@ final calendarTodoMarkersProvider = FutureProvider<List<CalendarTodoMarker>>((
   ref.keepAlive();
   final tasks = await ref.watch(allTodoTasksProvider.future);
   final lists = await ref.watch(todoListsProvider.future);
-  final settings = ref.watch(settingsProvider).value ?? const AppSettings();
+  final settings =
+      ref.watch(settingsProvider.settled).value ?? const AppSettings();
   final listColors = {for (final list in lists) list.id: list.colorValue};
   return buildCalendarTodoMarkers(
     tasks,
@@ -1391,7 +1392,7 @@ final workoutPlansProvider = FutureProvider<List<WorkoutPlan>>((ref) async {
 /// of sync flagged active. The most recently changed one wins, so every
 /// device resolves the tie the same way instead of by SQLite row order.
 final activeWorkoutPlanProvider = Provider<WorkoutPlan?>((ref) {
-  final plans = ref.watch(workoutPlansProvider).valueOrNull;
+  final plans = ref.watch(workoutPlansProvider.settled).valueOrNull;
   if (plans == null || plans.isEmpty) return null;
   WorkoutPlan? newest;
   for (final plan in plans) {
@@ -1740,6 +1741,22 @@ void invalidateAllDataProviders(Ref ref) {
   }
   invalidateWorkoutProviders(ref);
   invalidateSecondaryDataProviders(ref);
+}
+
+/// An async provider as its watchers need it: an invalidate's refresh reads the
+/// same as the value it is refreshing.
+///
+/// Invalidating a provider first publishes "loading, previous value kept", then
+/// the new value. A watcher reading `.valueOrNull` or `.when` renders the same
+/// thing for the first as for what it already showed, but still rebuilds for
+/// it — every save rebuilt each page watching the data twice. Mapped back to
+/// plain data, the first notice compares equal and is dropped.
+extension SettledAsyncValue<T> on ProviderListenable<AsyncValue<T>> {
+  ProviderListenable<AsyncValue<T>> get settled => select(
+    (value) => value.isLoading && value.hasValue
+        ? AsyncData<T>(value.requireValue)
+        : value,
+  );
 }
 
 /// Widget-side counterpart of [invalidateAllDataProviders].
@@ -2145,11 +2162,12 @@ final hiddenNotificationFeedProvider =
 final notificationBadgeStateProvider = Provider<NotificationUrgency?>((ref) {
   final feed = [
     for (final item
-        in ref.watch(visibleNotificationFeedProvider).valueOrNull ??
+        in ref.watch(visibleNotificationFeedProvider.settled).valueOrNull ??
             const <NotificationFeedItem>[])
       if (item.type != NotificationItemType.review) item,
   ];
-  final pendingStats = ref.watch(pendingStatEntriesProvider).valueOrNull ?? 0;
+  final pendingStats =
+      ref.watch(pendingStatEntriesProvider.settled).valueOrNull ?? 0;
   final backupsFailing = ref.watch(
     autoBackupServiceProvider.select((s) => s.status?.failing ?? false),
   );
@@ -2485,7 +2503,7 @@ final cacheStatusSnapshotProvider = Provider<CacheStatusSnapshot>((ref) {
     cacheStatusFromAsync('Shell warmup', ref.watch(shellDataWarmupProvider)),
   ];
 
-  final listsAsync = ref.watch(todoListsProvider);
+  final listsAsync = ref.watch(todoListsProvider.settled);
   items.add(cacheStatusFromAsync('Todo lists', listsAsync));
 
   final lists = listsAsync.valueOrNull;

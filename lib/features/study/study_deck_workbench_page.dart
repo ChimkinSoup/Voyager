@@ -79,17 +79,18 @@ class _StudyDeckWorkbenchPageState
         widget.onBack();
       }
     });
-    final deckAsync = ref.watch(studyDeckByIdProvider(deckId));
-    final cardsAsync = ref.watch(studyCardsProvider(deckId));
-    final dueAsync = ref.watch(studyDeckStatsProvider(deckId));
+    final deckAsync = ref.watch(studyDeckByIdProvider(deckId).settled);
+    final cardsAsync = ref.watch(studyCardsProvider(deckId).settled);
+    final dueAsync = ref.watch(studyDeckStatsProvider(deckId).settled);
     final multiSelect = ref.watch(studyMultiSelectEnabledProvider);
     final selected = ref.watch(studySelectedCardIdsProvider);
     final query = ref.watch(studySearchQueryProvider);
     final cardImages =
-        ref.watch(studyCardImagesProvider).valueOrNull ?? const {};
+        ref.watch(studyCardImagesProvider.settled).valueOrNull ?? const {};
 
     final graph =
-        ref.watch(studyDeckGraphProvider).valueOrNull ?? StudyDeckGraph.empty;
+        ref.watch(studyDeckGraphProvider.settled).valueOrNull ??
+        StudyDeckGraph.empty;
 
     final deckName = deckAsync.valueOrNull?.name ?? widget.deckNameHint ?? '';
     final cards = cardsAsync.valueOrNull ?? const <StudyCard>[];

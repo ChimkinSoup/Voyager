@@ -87,7 +87,7 @@ class _StudyMoveDestinationModalState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final parentId = _stack.isEmpty ? null : _stack.last;
-    final foldersAsync = ref.watch(studyFoldersProvider(parentId));
+    final foldersAsync = ref.watch(studyFoldersProvider(parentId).settled);
     final folders = [...foldersAsync.valueOrNull ?? const []]
       ..removeWhere((f) => widget.excludeFolderIds.contains(f.id))
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));

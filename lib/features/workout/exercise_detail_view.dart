@@ -197,9 +197,11 @@ class _ExerciseDetailCardState extends ConsumerState<_ExerciseDetailCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     final unit = settings?.weightUnit ?? WeightUnit.lb;
-    final logsAsync = ref.watch(exerciseSetLogsProvider(widget.exercise.id));
+    final logsAsync = ref.watch(
+      exerciseSetLogsProvider(widget.exercise.id).settled,
+    );
     final name =
         ref
             .watch(exercisesProvider)
@@ -208,7 +210,7 @@ class _ExerciseDetailCardState extends ConsumerState<_ExerciseDetailCard> {
             .firstOrNull
             ?.name ??
         _exercise.name;
-    final sessionsAsync = ref.watch(workoutSessionsProvider);
+    final sessionsAsync = ref.watch(workoutSessionsProvider.settled);
 
     final history = () {
       final logs = logsAsync.valueOrNull;

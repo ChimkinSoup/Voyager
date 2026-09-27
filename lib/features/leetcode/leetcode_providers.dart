@@ -29,6 +29,6 @@ final leetCodeDeckTagFilterProvider = StateProvider<Set<String>>(
 final leetCodeDeckSearchIndexProvider =
     Provider<Map<String, LeetCodeSearchText>>((ref) {
       final problems =
-          ref.watch(leetcodeProblemsProvider).valueOrNull ?? const [];
+          ref.watch(leetcodeProblemsProvider.settled).valueOrNull ?? const [];
       return {for (final p in problems) p.id: leetCodeSearchTextFor(p)};
     });

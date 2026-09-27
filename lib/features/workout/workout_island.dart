@@ -87,7 +87,7 @@ class _WorkoutIslandState extends ConsumerState<WorkoutIsland>
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(workoutSessionControllerProvider);
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     final unit = settings?.weightUnit ?? WeightUnit.lb;
     _syncRest(state.restEndsAt, state.restTotalSeconds);
 

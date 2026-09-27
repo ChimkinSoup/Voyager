@@ -30,8 +30,8 @@ class BlossomStatPopup extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(settingsProvider).valueOrNull;
-    final statsAsync = ref.watch(lifeTrackerStatsProvider);
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
+    final statsAsync = ref.watch(lifeTrackerStatsProvider.settled);
 
     final resolved = resolveLifeStat(
       stat: stat,

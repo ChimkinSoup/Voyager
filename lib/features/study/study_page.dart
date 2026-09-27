@@ -391,8 +391,8 @@ class _HubContentState extends ConsumerState<_HubContent> {
     final parentId = widget.folderStack.isEmpty
         ? null
         : widget.folderStack.last;
-    final foldersAsync = ref.watch(studyFoldersProvider(parentId));
-    final decksAsync = ref.watch(studyDecksProvider(parentId));
+    final foldersAsync = ref.watch(studyFoldersProvider(parentId).settled);
+    final decksAsync = ref.watch(studyDecksProvider(parentId).settled);
     final reducedMotion = VoyagerMotion.reduced(context);
 
     return SafeArea(
@@ -550,8 +550,8 @@ class _StudyStatsHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final statsAsync = ref.watch(studyStatsProvider);
-    final cardsAsync = ref.watch(studyAllCardsProvider);
+    final statsAsync = ref.watch(studyStatsProvider.settled);
+    final cardsAsync = ref.watch(studyAllCardsProvider.settled);
     final stats = statsAsync.valueOrNull;
 
     // Due ids and the due count come from the same list, so the button can
@@ -1035,7 +1035,7 @@ class _DeckTileState extends ConsumerState<_DeckTile> {
     final theme = Theme.of(context);
     final vc = VoyagerColors.of(context);
     final deck = widget.deck;
-    final statsAsync = ref.watch(studyDeckStatsProvider(deck.id));
+    final statsAsync = ref.watch(studyDeckStatsProvider(deck.id).settled);
     final due = statsAsync.valueOrNull?.due;
 
     return ContextMenuRegion(

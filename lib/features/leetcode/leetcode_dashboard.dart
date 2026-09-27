@@ -71,7 +71,7 @@ class LeetCodeDashboard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final problemsAsync = ref.watch(leetcodeProblemsProvider);
+    final problemsAsync = ref.watch(leetcodeProblemsProvider.settled);
     final problems = problemsAsync.valueOrNull ?? const [];
 
     return Column(

@@ -132,7 +132,7 @@ class _RankingsPageState extends ConsumerState<RankingsPage>
         if (mounted) _resetOnCategoryChange();
       });
     });
-    final categoriesAsync = ref.watch(rankingCategoriesProvider);
+    final categoriesAsync = ref.watch(rankingCategoriesProvider.settled);
     final categories = categoriesAsync.valueOrNull ?? const <RankingCategory>[];
     final active = [
       for (final category in categories)
@@ -293,12 +293,12 @@ class _CategoryBody extends ConsumerWidget {
         ) ??
         const <String, List<RankingChild>>{};
     final withImages =
-        ref.watch(rankingDocumentIdsWithImagesProvider).valueOrNull ??
+        ref.watch(rankingDocumentIdsWithImagesProvider.settled).valueOrNull ??
         const <String>{};
     final query = ref.watch(rankingSearchQueryProvider);
     final filters = ref.watch(rankingFiltersProvider);
     final selectedParentId = ref.watch(rankingSelectedParentProvider);
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
 
     // The pool the band's numbers are measured against: the search box and the
     // filter popover, but *not* the chips (§5.2). A chip that counted itself

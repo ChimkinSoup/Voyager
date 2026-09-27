@@ -121,7 +121,7 @@ mixin LeetCodeScratchHost<T extends ConsumerStatefulWidget>
   /// Call at the top of `build`.
   void syncScratch() {
     if (_scratchSettingLatched != null) return;
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     if (settings == null) return;
 
     final enabled = settings.leetCodeEnableScratchCode;

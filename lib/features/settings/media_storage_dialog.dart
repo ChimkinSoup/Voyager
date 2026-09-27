@@ -144,7 +144,7 @@ class _MediaStorageDialogState extends ConsumerState<_MediaStorageDialog> {
     ref.listen(mediaServiceProvider, (_, _) => _reload());
 
     final theme = Theme.of(context);
-    final usage = ref.watch(mediaStorageUsageProvider).valueOrNull;
+    final usage = ref.watch(mediaStorageUsageProvider.settled).valueOrNull;
     final summary = usage == null
         ? 'Measuring…'
         : '${usage.assetCount} ${usage.assetCount == 1 ? 'image' : 'images'}'

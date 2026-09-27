@@ -290,7 +290,7 @@ class _CheatSheetOverlayState extends ConsumerState<_CheatSheetOverlay>
 
   @override
   Widget build(BuildContext context) {
-    final sheet = ref.watch(leetCodeCheatSheetProvider);
+    final sheet = ref.watch(leetCodeCheatSheetProvider.settled);
     final data = sheet.valueOrNull ?? const LeetCodeCheatSheetData.empty();
     _seedFromSettings(data);
 
@@ -370,7 +370,7 @@ class _CheatSheetOverlayState extends ConsumerState<_CheatSheetOverlay>
       }
       return;
     }
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     if (settings == null) return;
     _seeded = true;
     _tabId = data.resolveTab(settings.leetCodeCheatLastTabId)?.id;

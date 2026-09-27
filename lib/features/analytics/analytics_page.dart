@@ -133,18 +133,18 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   @override
   Widget build(BuildContext context) {
     final inSight = TickerMode.valuesOf(context).enabled;
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     final inputs = (
-      ref.watch(allJournalEntriesProvider),
-      ref.watch(trackersProvider),
+      ref.watch(allJournalEntriesProvider.settled),
+      ref.watch(trackersProvider.settled),
       ref.watch(analyticsServiceProvider),
       ref.watch(periodicPromptServiceProvider),
       settings,
       (settings?.showDreamStatistics ?? false)
-          ? ref.watch(allDreamEntriesProvider)
+          ? ref.watch(allDreamEntriesProvider.settled)
           : null,
       (settings?.showWorkoutStatistics ?? false)
-          ? ref.watch(workoutDaysProvider)
+          ? ref.watch(workoutDaysProvider.settled)
           : null,
       Theme.of(context),
     );
@@ -155,8 +155,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   Widget _buildPage(BuildContext context) {
-    final entriesAsync = ref.watch(allJournalEntriesProvider);
-    final trackersAsync = ref.watch(trackersProvider);
+    final entriesAsync = ref.watch(allJournalEntriesProvider.settled);
+    final trackersAsync = ref.watch(trackersProvider.settled);
     final analytics = ref.watch(analyticsServiceProvider);
     final prompt = ref.watch(periodicPromptServiceProvider);
 
@@ -171,7 +171,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           // Prepend built-in default trackers (e.g. Journal Entries) when the
           // per-view setting is on. These are virtual — see
           // [buildJournalEntriesTracker] — and each view has its own toggle.
-          final settings = ref.watch(settingsProvider).valueOrNull;
+          final settings = ref.watch(settingsProvider.settled).valueOrNull;
           final showDefaultsInGrid =
               settings?.showDefaultTrackersInGrid ?? true;
           final accent = Theme.of(context).colorScheme.primary.toARGB32();
@@ -182,7 +182,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           ];
           final showDreamStats = settings?.showDreamStatistics ?? false;
           final dreamEntriesAsync = showDreamStats
-              ? ref.watch(allDreamEntriesProvider)
+              ? ref.watch(allDreamEntriesProvider.settled)
               : null;
           final today = DateTime.now();
           final dreamLoggedToday =
@@ -195,7 +195,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               false;
           final showWorkoutStats = settings?.showWorkoutStatistics ?? false;
           final workoutDays = showWorkoutStats
-              ? ref.watch(workoutDaysProvider).valueOrNull
+              ? ref.watch(workoutDaysProvider.settled).valueOrNull
               : null;
           final workedOutToday =
               workoutDays?.contains(
@@ -418,7 +418,7 @@ class _TasksChip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stats = ref.watch(todoListStatsProvider).valueOrNull;
+    final stats = ref.watch(todoListStatsProvider.settled).valueOrNull;
     final open = stats?.values.fold<int>(0, (sum, stat) => sum + stat.active);
     return _StatChip(
       label: 'Tasks',
@@ -438,7 +438,7 @@ class _TasksDialog extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stats = ref.watch(todoListStatsProvider).valueOrNull;
+    final stats = ref.watch(todoListStatsProvider.settled).valueOrNull;
     final open = stats?.values.fold<int>(0, (sum, stat) => sum + stat.active);
     final completed = stats?.values.fold<int>(
       0,
@@ -978,7 +978,7 @@ class _SparklineRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
+    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id).settled);
     final theme = Theme.of(context);
     final color = paletteColor(tracker.colorValue, context);
     final promptService = ref.watch(periodicPromptServiceProvider);
@@ -1871,7 +1871,7 @@ class _HeatmapRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
+    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id).settled);
     final theme = Theme.of(context);
     final color = paletteColor(tracker.colorValue, context);
 
@@ -3848,7 +3848,6 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
                   GlassButton(
                     onPressed: Navigator.of(context).pop,
                     label: 'Cancel',
-                    textColor: accent,
                     dense: true,
                   ),
                 ],
@@ -4415,10 +4414,10 @@ class _DetailStatisticsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
+    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id).settled);
     // The journal count has no chip of its own; it rides along here.
     final journalCount = tracker.id == kJournalEntriesTrackerId
-        ? ref.watch(journalsProvider).valueOrNull?.length
+        ? ref.watch(journalsProvider.settled).valueOrNull?.length
         : null;
     return valuesAsync.when(
       data: (values) => _buildStats(context, values, journalCount),
@@ -4584,7 +4583,7 @@ class _TrackerStatisticsDialog extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final color = paletteColor(tracker.colorValue, context);
-    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
+    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id).settled);
 
     return AlertDialog(
       title: Row(
@@ -4762,7 +4761,7 @@ class _StatisticDetailPopup extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final settings = ref.watch(settingsProvider).value ?? const AppSettings();
+    final settings = ref.watch(settingsProvider.settled).value ?? const AppSettings();
     final color = paletteColor(tracker.colorValue, context);
 
     // The same widget the Calendar page uses for its own period navigation, so
@@ -4921,7 +4920,7 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
+    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id).settled);
     final theme = Theme.of(context);
     final color = paletteColor(tracker.colorValue, context);
     final promptService = ref.watch(periodicPromptServiceProvider);
@@ -5198,11 +5197,11 @@ class _YearHeatmapCalendar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
+    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id).settled);
     final theme = Theme.of(context);
     final year = ref.watch(_calendarViewYearProvider(tracker.id));
     final weekStartsMonday =
-        ref.watch(settingsProvider).value?.weekStartsOnMonday ?? true;
+        ref.watch(settingsProvider.settled).value?.weekStartsOnMonday ?? true;
 
     void previousYear() {
       ref
@@ -5639,7 +5638,7 @@ class _MonthGridCalendar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
+    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id).settled);
     final theme = Theme.of(context);
     final baseYear = ref.watch(
       _calendarViewMonthlyBaseYearProvider(tracker.id),
@@ -5839,7 +5838,7 @@ class _YearGridCalendar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
+    final valuesAsync = ref.watch(trackerValuesProvider(tracker.id).settled);
     final theme = Theme.of(context);
     final baseYear = ref.watch(_calendarViewYearlyBaseYearProvider(tracker.id));
 
@@ -6496,7 +6495,6 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
         GlassButton(
           onPressed: () => Navigator.pop(context),
           label: 'Cancel',
-          textColor: accent,
           dense: true,
         ),
         GlassButton(

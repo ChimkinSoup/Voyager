@@ -52,7 +52,8 @@ class DevPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final verboseSync = ref.watch(devVerboseSyncProvider);
     final syncActivity = ref.watch(syncActivityProvider);
-    final settings = ref.watch(settingsProvider).value ?? const AppSettings();
+    final settings =
+        ref.watch(settingsProvider.settled).value ?? const AppSettings();
 
     return KeepAliveScrollView(
       storageKey: ShellPageStorageKeys.devList,

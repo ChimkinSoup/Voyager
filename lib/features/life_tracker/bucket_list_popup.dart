@@ -253,7 +253,7 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
 
   @override
   Widget build(BuildContext context) {
-    final itemsAsync = ref.watch(bucketListItemsProvider);
+    final itemsAsync = ref.watch(bucketListItemsProvider.settled);
     final theme = Theme.of(context);
     final items = itemsAsync.valueOrNull ?? const <BucketListItem>[];
     final done = items.where((i) => i.completed).length;

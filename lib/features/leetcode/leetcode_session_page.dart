@@ -467,7 +467,7 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
   @override
   Widget build(BuildContext context) {
     syncScratch();
-    final problems = ref.watch(leetcodeProblemsProvider).valueOrNull;
+    final problems = ref.watch(leetcodeProblemsProvider.settled).valueOrNull;
     if (problems != null) _syncQueue(problems);
     final queue = _queue;
 

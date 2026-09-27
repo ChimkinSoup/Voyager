@@ -498,7 +498,9 @@ class _StatusTimeline extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final eventsAsync = ref.watch(jobStatusEventsProvider(applicationId));
+    final eventsAsync = ref.watch(
+      jobStatusEventsProvider(applicationId).settled,
+    );
     final events = eventsAsync.valueOrNull ?? const <JobStatusEvent>[];
     if (events.isEmpty && trailing == null) return const SizedBox.shrink();
 

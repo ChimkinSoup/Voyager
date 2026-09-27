@@ -86,8 +86,8 @@ class _StudyMoveModalState extends ConsumerState<_StudyMoveModal> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final parentId = _stack.isEmpty ? null : _stack.last;
-    final foldersAsync = ref.watch(studyFoldersProvider(parentId));
-    final decksAsync = ref.watch(studyDecksProvider(parentId));
+    final foldersAsync = ref.watch(studyFoldersProvider(parentId).settled);
+    final decksAsync = ref.watch(studyDecksProvider(parentId).settled);
     final folders = [...foldersAsync.valueOrNull ?? const []]
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     final decks = [...decksAsync.valueOrNull ?? const []]

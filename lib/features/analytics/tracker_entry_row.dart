@@ -161,7 +161,9 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
 
   @override
   Widget build(BuildContext context) {
-    final valuesAsync = ref.watch(trackerValuesProvider(widget.tracker.id));
+    final valuesAsync = ref.watch(
+      trackerValuesProvider(widget.tracker.id).settled,
+    );
     final theme = Theme.of(context);
     final accent = paletteColor(widget.tracker.colorValue, context);
 

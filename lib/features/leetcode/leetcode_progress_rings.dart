@@ -19,10 +19,11 @@ class LeetCodeProgressRings extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
-    final problemsAsync = ref.watch(leetcodeProblemsProvider);
-    final countsAsync = ref.watch(leetcodeQuestionCountsProvider);
+    final problemsAsync = ref.watch(leetcodeProblemsProvider.settled);
+    final countsAsync = ref.watch(leetcodeQuestionCountsProvider.settled);
     final showNeetCode =
-        ref.watch(settingsProvider).valueOrNull?.showNeetCode150 ?? true;
+        ref.watch(settingsProvider.settled).valueOrNull?.showNeetCode150 ??
+        true;
 
     final problems = problemsAsync.valueOrNull ?? const [];
     final counts = countsAsync.valueOrNull;

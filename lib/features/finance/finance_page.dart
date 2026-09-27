@@ -55,8 +55,8 @@ class FinancePage extends ConsumerWidget {
         onDraft: (draft) => storeFinanceCaptureDraft(container, draft),
       );
     });
-    final transactionsAsync = ref.watch(transactionsProvider);
-    final tagColorsAsync = ref.watch(tagColorsProvider);
+    final transactionsAsync = ref.watch(transactionsProvider.settled);
+    final tagColorsAsync = ref.watch(tagColorsProvider.settled);
     final tagColors = tagColorsAsync.valueOrNull ?? const <String, int>{};
 
     return Scaffold(
@@ -583,7 +583,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
     // Only a category filter needs them; watching them otherwise rebuilt the
     // whole ledger on every category edit.
     final categories = ledgerFilter?.kind == FinanceLedgerFilterKind.category
-        ? ref.watch(financeCategoriesProvider).valueOrNull ??
+        ? ref.watch(financeCategoriesProvider.settled).valueOrNull ??
               const <FinanceCategory>[]
         : const <FinanceCategory>[];
     final now = DateTime.now();

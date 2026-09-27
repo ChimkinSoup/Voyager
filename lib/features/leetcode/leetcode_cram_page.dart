@@ -483,7 +483,7 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     syncScratch();
-    final problems = ref.watch(leetcodeProblemsProvider).valueOrNull;
+    final problems = ref.watch(leetcodeProblemsProvider.settled).valueOrNull;
     if (problems != null) _syncProblems(problems);
 
     return Scaffold(

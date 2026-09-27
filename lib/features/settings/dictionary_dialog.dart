@@ -343,9 +343,9 @@ class _DictionaryDialogState extends ConsumerState<_DictionaryDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final bundledAsync = ref.watch(dictionaryProvider);
-    final customAsync = ref.watch(customWordsProvider);
-    final flaggedAsync = ref.watch(flaggedWordsProvider);
+    final bundledAsync = ref.watch(dictionaryProvider.settled);
+    final customAsync = ref.watch(customWordsProvider.settled);
+    final flaggedAsync = ref.watch(flaggedWordsProvider.settled);
     final bundled = bundledAsync.valueOrNull ?? const <String>{};
     final custom = customAsync.valueOrNull ?? const <String>{};
     final flaggedPairs = flaggedAsync.valueOrNull ?? const <String, String?>{};

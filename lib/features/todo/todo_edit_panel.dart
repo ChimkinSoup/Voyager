@@ -1406,7 +1406,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                   ),
                   ReminderBellButton(
                     offsetMinutes: entityReminderOffset(
-                      ref.watch(entityRemindersProvider).valueOrNull ??
+                      ref.watch(entityRemindersProvider.settled).valueOrNull ??
                           const [],
                       ReminderSourceKind.todo,
                       widget.task.id,
@@ -1427,7 +1427,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                 dense: true,
                 onPressed: _clearDueDate,
                 label: 'Reset due date',
-                textColor: listColor,
+                color: listColor,
               ),
             ],
           ],
@@ -1486,7 +1486,6 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                 dense: true,
                 onPressed: _addSubtask,
                 color: listColor,
-                iconColor: listColor,
                 icon: const Icon(PhosphorIconsRegular.plus),
                 tooltip: 'Add subtask',
               ),

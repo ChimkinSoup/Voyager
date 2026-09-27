@@ -385,9 +385,9 @@ class _NetFlowDetailCardState extends ConsumerState<_NetFlowDetailCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final transactions =
-        ref.watch(transactionsProvider).valueOrNull ?? const [];
+        ref.watch(transactionsProvider.settled).valueOrNull ?? const [];
     final categories =
-        ref.watch(financeCategoriesProvider).valueOrNull ?? const [];
+        ref.watch(financeCategoriesProvider.settled).valueOrNull ?? const [];
     final range = ref.watch(
       financeUiPrefsProvider.select((prefs) => prefs.heroExpandRange),
     );

@@ -194,7 +194,7 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
   /// its own as the tag is typed.
   List<String> _usedTags() {
     final transactions =
-        ref.watch(transactionsProvider).valueOrNull ?? const [];
+        ref.watch(transactionsProvider.settled).valueOrNull ?? const [];
     return rankTagsByUsage(transactions.map((t) => t.tags));
   }
 

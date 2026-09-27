@@ -55,7 +55,7 @@ class _GeometricTextureWarmupState
       }
     });
 
-    final shaderAsync = ref.watch(geometricShaderProvider);
+    final shaderAsync = ref.watch(geometricShaderProvider.settled);
     if (!_warmupStarted && !_done && shaderAsync.hasValue) {
       if (shaderAsync.value == null) {
         _done = true;

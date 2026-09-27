@@ -212,8 +212,8 @@ class _FlagWordPanelState extends ConsumerState<_FlagWordPanel> {
     final service = ref.watch(voyagerSpellCheckServiceProvider);
     // Watched so the form never validates against a half-loaded set. Both are
     // warmed by the shell, so this is a first-launch sliver.
-    final bundledAsync = ref.watch(dictionaryProvider);
-    final flaggedAsync = ref.watch(flaggedWordsProvider);
+    final bundledAsync = ref.watch(dictionaryProvider.settled);
+    final flaggedAsync = ref.watch(flaggedWordsProvider.settled);
     if (!bundledAsync.hasValue || !flaggedAsync.hasValue) {
       return const SizedBox(
         height: 120,

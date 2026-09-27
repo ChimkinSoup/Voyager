@@ -197,10 +197,10 @@ class _Header extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final visible =
-        ref.watch(visibleNotificationFeedProvider).valueOrNull ??
+        ref.watch(visibleNotificationFeedProvider.settled).valueOrNull ??
         const <NotificationFeedItem>[];
     final hidden =
-        ref.watch(hiddenNotificationFeedProvider).valueOrNull ??
+        ref.watch(hiddenNotificationFeedProvider.settled).valueOrNull ??
         const <NotificationFeedItem>[];
     // Nothing to count when the feed is clear — the empty state below already
     // says so, and a "0 items" line under the title would be the popover
@@ -384,7 +384,7 @@ class _PinnedNotesSectionState extends ConsumerState<_PinnedNotesSection> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final notesAsync = ref.watch(pinnedNotesProvider);
+    final notesAsync = ref.watch(pinnedNotesProvider.settled);
     final notes = notesAsync.valueOrNull ?? const [];
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
@@ -1112,10 +1112,11 @@ class _FeedSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final feedAsync = ref.watch(visibleNotificationFeedProvider);
+    final feedAsync = ref.watch(visibleNotificationFeedProvider.settled);
     final items = feedAsync.valueOrNull ?? const <NotificationFeedItem>[];
     final hasNotes =
-        (ref.watch(pinnedNotesProvider).valueOrNull ?? const []).isNotEmpty;
+        (ref.watch(pinnedNotesProvider.settled).valueOrNull ?? const [])
+            .isNotEmpty;
     if (items.isEmpty) return _FeedEmptyState(showPinHint: !hasNotes);
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1930,7 +1931,7 @@ class _HiddenSectionState extends ConsumerState<_HiddenSection>
 
   @override
   Widget build(BuildContext context) {
-    final hiddenAsync = ref.watch(hiddenNotificationFeedProvider);
+    final hiddenAsync = ref.watch(hiddenNotificationFeedProvider.settled);
     final hidden = hiddenAsync.valueOrNull ?? const <NotificationFeedItem>[];
     if (hidden.isEmpty) return const SizedBox.shrink();
     // Drop selections for items that are no longer hidden (e.g. restored
@@ -2224,7 +2225,7 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
 
   Widget _body(BuildContext context) {
     final theme = Theme.of(context);
-    final trackersAsync = ref.watch(trackersProvider);
+    final trackersAsync = ref.watch(trackersProvider.settled);
     final body = PopScope(
       canPop: _dirtyTrackerIds.isEmpty,
       onPopInvokedWithResult: (didPop, result) {

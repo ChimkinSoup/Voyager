@@ -75,7 +75,7 @@ class _JournalSettingsDialog extends ConsumerWidget {
         .valueOrNull
         ?.cast<Journal?>()
         .firstWhere((j) => j!.id == journalId, orElse: () => null);
-    final settings = ref.watch(settingsProvider).valueOrNull;
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
     final theme = Theme.of(context);
 
     if (journal == null) {

@@ -181,9 +181,9 @@ class _StagesTabState extends ConsumerState<_StagesTab> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final loaded = ref.watch(jobStagesProvider).valueOrNull;
+    final loaded = ref.watch(jobStagesProvider.settled).valueOrNull;
     final applications =
-        ref.watch(jobApplicationsProvider).valueOrNull ??
+        ref.watch(jobApplicationsProvider.settled).valueOrNull ??
         const <JobApplication>[];
     if (loaded == null) {
       return const Center(child: CircularProgressIndicator());
@@ -436,9 +436,10 @@ class _CategoriesTabState extends ConsumerState<_CategoriesTab> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final categories = ref.watch(jobCategoriesProvider).valueOrNull;
+    final categories = ref.watch(jobCategoriesProvider.settled).valueOrNull;
     final companies =
-        ref.watch(jobCompaniesProvider).valueOrNull ?? const <JobCompany>[];
+        ref.watch(jobCompaniesProvider.settled).valueOrNull ??
+        const <JobCompany>[];
     if (categories == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -843,9 +844,9 @@ class _SeasonsTabState extends ConsumerState<_SeasonsTab> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final loaded = ref.watch(jobSeasonsProvider).valueOrNull;
+    final loaded = ref.watch(jobSeasonsProvider.settled).valueOrNull;
     final applications =
-        ref.watch(jobApplicationsProvider).valueOrNull ??
+        ref.watch(jobApplicationsProvider.settled).valueOrNull ??
         const <JobApplication>[];
     if (loaded == null) {
       return const Center(child: CircularProgressIndicator());

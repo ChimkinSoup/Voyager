@@ -550,12 +550,13 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
-    final stagesAsync = ref.watch(jobStagesProvider);
+    final stagesAsync = ref.watch(jobStagesProvider.settled);
     final stages = stagesAsync.valueOrNull ?? const <JobStage>[];
     final companies =
-        ref.watch(jobCompaniesProvider).valueOrNull ?? const <JobCompany>[];
+        ref.watch(jobCompaniesProvider.settled).valueOrNull ??
+        const <JobCompany>[];
     final applications =
-        ref.watch(jobApplicationsProvider).valueOrNull ??
+        ref.watch(jobApplicationsProvider.settled).valueOrNull ??
         const <JobApplication>[];
 
     // The same for the stage a draft was left on: renamed or deleted since, it
@@ -567,7 +568,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
         !stages.any((stage) => stage.name == _status)) {
       _status = '';
     }
-    final seasonsAsync = ref.watch(jobSeasonsProvider);
+    final seasonsAsync = ref.watch(jobSeasonsProvider.settled);
     final seasons = seasonsAsync.valueOrNull ?? const <JobSeason>[];
     final selectableSeasons = jobSelectableSeasons(seasons);
 
