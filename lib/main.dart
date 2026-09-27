@@ -8,6 +8,7 @@ import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/app/voyager_app.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
+import 'package:voyager/core/platform/launch_at_login.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/reminders/device_registration.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
@@ -21,7 +22,7 @@ import 'package:voyager/features/hotkeys/hotkey_service.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/firebase_options.dart';
 
-Future<void> main() async {
+Future<void> main([List<String> args = const []]) async {
   WidgetsFlutterBinding.ensureInitialized();
   // Before the keyboard workaround, which wraps it and so keeps the known
   // debug-only desync out of the log.
@@ -29,7 +30,7 @@ Future<void> main() async {
   // First, so a stall anywhere in startup is on the record too.
   unawaited(PerfStallLogger.instance.restore());
   installWindowsKeyboardWorkaround();
-  await configureDesktopWindow();
+  await configureDesktopWindow(startHidden: args.contains(kStartHiddenArg));
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   try {
     await hotKeyManager.unregisterAll();

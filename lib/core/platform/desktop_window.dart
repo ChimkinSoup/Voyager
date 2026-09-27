@@ -14,10 +14,16 @@ const kMainWindowMinimumSize = Size(720, 520);
 /// both — a hidden window reports no lifecycle change on Windows.
 final mainContentOnScreen = ValueNotifier<bool>(true);
 
+/// Set by a start hidden in the tray, where the window has never been shown:
+/// its first reveal maximizes it, as a normal launch does.
+var maximizeOnFirstShow = false;
+
 /// True when frameless chrome is active (Windows + [configureDesktopWindow] succeeded).
 bool get desktopWindowChromeActive => isWindows && _desktopWindowConfigured;
 
-Future<void> configureDesktopWindow() async {
+/// [startHidden] leaves the window hidden in the tray (see [kStartHiddenArg]).
+/// The runner skips its first-frame show for the same argument.
+Future<void> configureDesktopWindow({required bool startHidden}) async {
   if (!isWindows) return;
 
   try {
@@ -31,10 +37,16 @@ Future<void> configureDesktopWindow() async {
       titleBarStyle: TitleBarStyle.hidden,
     );
 
+    if (startHidden) {
+      mainContentOnScreen.value = false;
+      maximizeOnFirstShow = true;
+    }
     windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.maximize();
-      await windowManager.focus();
+      if (!startHidden) {
+        await windowManager.show();
+        await windowManager.maximize();
+        await windowManager.focus();
+      }
       await windowManager.setPreventClose(true);
     });
 

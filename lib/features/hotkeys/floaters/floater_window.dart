@@ -271,6 +271,7 @@ class FloaterWindow {
     onRestore();
 
     if (showMain) {
+      _maximizeIfFirstShow(saved);
       _applyPlacement(hwnd, saved, activate: true);
       free(saved);
       return;
@@ -397,16 +398,29 @@ class FloaterWindow {
     final owed = _owedPlacement;
     if (hwnd != 0 && owed != null) {
       _owedPlacement = null;
+      _maximizeIfFirstShow(owed);
       // Still at the floater's size, and last painted as the floater.
       await _cloaked(hwnd, () async {
         _applyPlacement(hwnd, owed, activate: true);
         free(owed);
       });
+    } else if (hwnd != 0 && maximizeOnFirstShow) {
+      maximizeOnFirstShow = false;
+      // Never shown before: kept out of sight until painted maximized.
+      await _cloaked(hwnd, () async => ShowWindow(hwnd, SW_SHOWMAXIMIZED));
     } else {
       await windowManager.show();
       if (await windowManager.isMinimized()) await windowManager.restore();
     }
     await windowManager.focus();
+  }
+
+  /// A window started hidden has never been maximized, and a floater may have
+  /// saved it unmaximized: its first reveal maximizes, as a normal launch does.
+  void _maximizeIfFirstShow(Pointer<WINDOWPLACEMENT> placement) {
+    if (!maximizeOnFirstShow) return;
+    maximizeOnFirstShow = false;
+    placement.ref.showCmd = SW_SHOWMAXIMIZED;
   }
 
   void _applyPlacement(

@@ -153,10 +153,13 @@ The planner, live session and exercise detail work well together. Gaps:
 
 ## P2: Ship readiness (desktop)
 
-- **No launch-at-login.** Global hotkeys only work while Voyager is running (it closes
+- ~~**No launch-at-login.** Global hotkeys only work while Voyager is running (it closes
   to the tray, `lib/core/platform/desktop_window.dart:38`). After a reboot they're dead
   until you open the app by hand. Add a "Start with Windows" toggle (Run key or
-  `launch_at_startup`) that starts hidden in the tray.
+  `launch_at_startup`) that starts hidden in the tray.~~ **Done (2026-09-26):**
+  Settings → Editing → Start with Windows adds a Run entry that launches this exe with
+  `--hidden`. That starts it in the tray with the hotkeys live, and the first time the
+  window opens it's maximized, as a normal launch would be.
 - **No installer or update path.** There's no MSIX or Inno config and no updater.
   Even for yourself, a repeatable release build plus installer beats copying
   `build/…/Release`.

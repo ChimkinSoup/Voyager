@@ -6,8 +6,9 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
-FlutterWindow::FlutterWindow(const flutter::DartProject& project)
-    : project_(project) {}
+FlutterWindow::FlutterWindow(const flutter::DartProject& project,
+                             bool start_hidden)
+    : project_(project), start_hidden_(start_hidden) {}
 
 FlutterWindow::~FlutterWindow() {}
 
@@ -33,6 +34,10 @@ bool FlutterWindow::OnCreate() {
           &flutter::StandardMethodCodec::GetInstance());
   show_main_window_message_ = ::RegisterWindowMessage(kShowMainWindowMessage);
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+
+  if (start_hidden_) {
+    return true;
+  }
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
