@@ -20,7 +20,7 @@
     "semantic_hash": "a863fe03494de2fec7fd09f623ca7607"
   },
   "android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java": {
-    "mtime": 1790376647.377134,
+    "mtime": 1790470213.7139547,
     "ast_hash": "0c14357f39ee679b0147b570552b5fe7",
     "semantic_hash": ""
   },
@@ -230,8 +230,8 @@
     "semantic_hash": "fd59f0212c5bd5ec90cde34bf8a3288a"
   },
   "lib/core/platform/desktop_window.dart": {
-    "mtime": 1789662778.7555454,
-    "ast_hash": "57d22baf803a04924b8aca8172246f7c",
+    "mtime": 1790468402.4964497,
+    "ast_hash": "4a47b9d11e09b8b96dc3496efd16d5e0",
     "semantic_hash": ""
   },
   "lib/core/platform/platform_adaptive.dart": {
@@ -885,8 +885,8 @@
     "semantic_hash": ""
   },
   "lib/features/settings/settings_page.dart": {
-    "mtime": 1790467823.5276937,
-    "ast_hash": "d9f8fdb86de6cad8f83b182be41d2507",
+    "mtime": 1790472521.8529053,
+    "ast_hash": "14aa10dd5c3548f01cd9a4ae65695307",
     "semantic_hash": ""
   },
   "lib/features/settings/weather_location_tile.dart": {
@@ -980,8 +980,8 @@
     "semantic_hash": "efaafc0d8c8656345d1b773f6f30809d"
   },
   "lib/main.dart": {
-    "mtime": 1790400497.1714394,
-    "ast_hash": "2f91e46a0f8b74a510eaa031de14bbe7",
+    "mtime": 1790472027.4779663,
+    "ast_hash": "5d08b1bee4234990574cbe9fe9486c7e",
     "semantic_hash": ""
   },
   "lib/routing/app_router.dart": {
@@ -1175,18 +1175,18 @@
     "semantic_hash": "0ea33875f9f8e118f9c2ded03e2e2835"
   },
   "windows/runner/flutter_window.cpp": {
-    "mtime": 1789701923.325494,
-    "ast_hash": "cff5de3f0d4520906dfb5d32f2e3a176",
+    "mtime": 1790468464.4401753,
+    "ast_hash": "bbd6c6aeb625353dbc0becf37cf1de59",
     "semantic_hash": ""
   },
   "windows/runner/flutter_window.h": {
-    "mtime": 1789662778.7915976,
-    "ast_hash": "1a42c8871b78d64f17236aa9b0b5457b",
+    "mtime": 1790468464.4401753,
+    "ast_hash": "08620a75ad35ca84e0c6eff1a7f6e3b5",
     "semantic_hash": ""
   },
   "windows/runner/main.cpp": {
-    "mtime": 1789688601.9527345,
-    "ast_hash": "ba11c55cca54ab361c64399fc2426897",
+    "mtime": 1790468464.4401753,
+    "ast_hash": "64b0c2ff322e2e40fc0931506a20b341",
     "semantic_hash": ""
   },
   "windows/runner/resource.h": {
@@ -1310,8 +1310,8 @@
     "semantic_hash": "181274ec58f2cb8da3e6738ca04cb652"
   },
   "pubspec.yaml": {
-    "mtime": 1790455828.858704,
-    "ast_hash": "348d9584fa3f386bb84eb9e2e32fbeb9",
+    "mtime": 1790468402.1970582,
+    "ast_hash": "524e30ca1b906f6e0c62f4287abb57e6",
     "semantic_hash": ""
   },
   "run_log.txt": {
@@ -5395,8 +5395,8 @@
     "semantic_hash": ""
   },
   "lib/features/hotkeys/floaters/floater_window.dart": {
-    "mtime": 1789970589.875043,
-    "ast_hash": "4116604af4f5f2eb35cd66a39663b5a7",
+    "mtime": 1790472027.3350708,
+    "ast_hash": "3f1c0c3129c9cafcb906ccb00a532635",
     "semantic_hash": ""
   },
   "lib/features/hotkeys/floaters/journal_floater.dart": {
@@ -5880,8 +5880,8 @@
     "semantic_hash": ""
   },
   "GAPS.md": {
-    "mtime": 1790467831.6349573,
-    "ast_hash": "f6395d0839775be25ff3391776fecc28",
+    "mtime": 1790470224.824209,
+    "ast_hash": "6a4021ebfdfdc6509c14f58ef2d707ff",
     "semantic_hash": ""
   },
   "ON_THIS_DAY_HLD.md": {
@@ -6117,6 +6117,11 @@
   "test/analytics_count_stats_rebuild_test.dart": {
     "mtime": 1790456706.6277196,
     "ast_hash": "7e24b8da66ebcb03a7710f7a5b5968be",
+    "semantic_hash": ""
+  },
+  "lib/core/platform/launch_at_login.dart": {
+    "mtime": 1790472011.5695558,
+    "ast_hash": "5206336b25c0e2a96c2628ed45ec2e0f",
     "semantic_hash": ""
   }
 }

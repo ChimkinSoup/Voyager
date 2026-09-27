@@ -30,9 +30,26 @@ class WeatherService {
   final String _deviceId;
   final bool mergeForecastLocally;
 
+  // Callers that arrive while a fetch is running join it. The Firestore lock
+  // can't dedupe them: this device already holds it, so every re-claim
+  // succeeds, and the cache stays stale until the first fetch lands — launch
+  // used to fire ~10 refreshes in parallel.
+  Future<WeatherSnapshot?>? _refreshInFlight;
+  Future<WeatherForecast?>? _forecastInFlight;
+
   int get _timeZoneOffsetMinutes => DateTime.now().timeZoneOffset.inMinutes;
 
-  Future<WeatherSnapshot?> refreshIfNeeded({bool force = false}) async {
+  Future<WeatherSnapshot?> refreshIfNeeded({bool force = false}) {
+    final inFlight = _refreshInFlight;
+    if (!force && inFlight != null) return inFlight;
+    late final Future<WeatherSnapshot?> future;
+    future = _refresh(force: force).whenComplete(() {
+      if (identical(_refreshInFlight, future)) _refreshInFlight = null;
+    });
+    return _refreshInFlight = future;
+  }
+
+  Future<WeatherSnapshot?> _refresh({required bool force}) async {
     final settings = await _settingsRepository.getSettings();
     if (!settings.hasWeatherLocation) return null;
 
@@ -190,6 +207,20 @@ class WeatherService {
   Future<WeatherForecast?> fetchForecastIfNeeded({
     bool force = false,
     bool resetArchive = false,
+  }) {
+    final inFlight = _forecastInFlight;
+    if (!force && inFlight != null) return inFlight;
+    late final Future<WeatherForecast?> future;
+    future = _fetchForecast(force: force, resetArchive: resetArchive)
+        .whenComplete(() {
+          if (identical(_forecastInFlight, future)) _forecastInFlight = null;
+        });
+    return _forecastInFlight = future;
+  }
+
+  Future<WeatherForecast?> _fetchForecast({
+    required bool force,
+    required bool resetArchive,
   }) async {
     var settings = await _settingsRepository.getSettings();
     if (!settings.hasWeatherLocation) return null;

@@ -80,6 +80,7 @@ class FloaterWindow {
     FloaterAnchor anchor, {
     required void Function() onShow,
   }) async {
+    await desktopWindowReady;
     final hwnd = _window;
     if (hwnd == 0) {
       onShow();
@@ -268,15 +269,22 @@ class FloaterWindow {
       SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
     );
     await windowManager.setMinimumSize(kMainWindowMinimumSize);
-    onRestore();
 
     if (showMain) {
       _maximizeIfFirstShow(saved);
       _applyPlacement(hwnd, saved, activate: true);
       free(saved);
+      // The app comes back once the engine has the size the window returned
+      // to. Before then FloaterHost lays it out at the size it last had at
+      // the main placement, and a first reveal after starting hidden changes
+      // that size: the app would paint in a corner of the maximized window.
+      await _paintedAt(_clientSize(_flutterView(hwnd)), resized: true);
+      _releasing = false;
+      onRestore();
       return;
     }
 
+    onRestore();
     if (!_savedVisible) {
       ShowWindow(hwnd, SW_HIDE);
       _owedPlacement = saved;
@@ -394,6 +402,7 @@ class FloaterWindow {
   /// Shows and focuses the main window — from the tray, or after a hide to
   /// tray — restoring a placement a floater still owes it.
   Future<void> showMain() async {
+    await desktopWindowReady;
     final hwnd = _window;
     final owed = _owedPlacement;
     if (hwnd != 0 && owed != null) {

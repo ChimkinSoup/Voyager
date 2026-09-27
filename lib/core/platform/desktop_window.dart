@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/platform/platform_info.dart';
@@ -17,6 +19,13 @@ final mainContentOnScreen = ValueNotifier<bool>(true);
 /// Set by a start hidden in the tray, where the window has never been shown:
 /// its first reveal maximizes it, as a normal launch does.
 var maximizeOnFirstShow = false;
+
+final _windowReady = Completer<void>();
+
+/// Completes once [configureDesktopWindow] has applied the window's options.
+/// They are set a call at a time after startup, and would resize and recenter
+/// a floater shown before they finish.
+Future<void> get desktopWindowReady => _windowReady.future;
 
 /// True when frameless chrome is active (Windows + [configureDesktopWindow] succeeded).
 bool get desktopWindowChromeActive => isWindows && _desktopWindowConfigured;
@@ -48,11 +57,13 @@ Future<void> configureDesktopWindow({required bool startHidden}) async {
         await windowManager.focus();
       }
       await windowManager.setPreventClose(true);
+      _windowReady.complete();
     });
 
     _desktopWindowConfigured = true;
   } on MissingPluginException catch (error, stackTrace) {
     _desktopWindowConfigured = false;
+    _windowReady.complete();
     FlutterError.reportError(
       FlutterErrorDetails(
         exception: error,

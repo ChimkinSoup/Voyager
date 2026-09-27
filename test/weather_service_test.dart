@@ -84,6 +84,24 @@ void main() {
     expect(weatherClient.refreshCalls, 1);
   });
 
+  test('concurrent stale refreshes share one API call', () async {
+    final stale = DateTime.now().toUtc().subtract(const Duration(minutes: 20));
+    await settingsRepo.saveSettings(
+      (await settingsRepo.getSettings()).copyWith(
+        weatherIcon: 'sunny',
+        weatherFetchedAt: stale,
+        weatherConditionCode: 800,
+      ),
+    );
+
+    final weather = service();
+    final results = await Future.wait(
+      List.generate(5, (_) => weather.refreshIfNeeded()),
+    );
+    expect(results.map((r) => r?.icon), everyElement('rain'));
+    expect(weatherClient.refreshCalls, 1);
+  });
+
   test('isCacheStale is false for fresh cache', () async {
     await settingsRepo.saveSettings(
       (await settingsRepo.getSettings()).copyWith(
@@ -163,6 +181,20 @@ void main() {
 
     final result = await service().fetchForecastIfNeeded();
     expect(result?.periods, isNotEmpty);
+    expect(weatherClient.forecastCalls, 1);
+  });
+
+  test('concurrent stale forecast fetches share one API call', () async {
+    final stale = DateTime.now().toUtc().subtract(const Duration(minutes: 20));
+    await settingsRepo.saveSettings(
+      (await settingsRepo.getSettings()).copyWith(
+        weatherForecastJson:
+            '{"fetchedAt":"${stale.toIso8601String()}","locationLabel":"Chicago, US","periods":[]}',
+      ),
+    );
+
+    final weather = service();
+    await Future.wait(List.generate(5, (_) => weather.fetchForecastIfNeeded()));
     expect(weatherClient.forecastCalls, 1);
   });
 }

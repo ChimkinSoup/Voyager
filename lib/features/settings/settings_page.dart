@@ -1251,6 +1251,24 @@ class _LaunchAtLoginTile extends StatefulWidget {
 class _LaunchAtLoginTileState extends State<_LaunchAtLoginTile> {
   var _state = launchAtLoginState();
 
+  // Startup apps can turn the entry off while this tile is alive; returning
+  // to the window re-reads it.
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(
+      onResume: () => setState(() => _state = launchAtLoginState()),
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return SwitchListTile(
