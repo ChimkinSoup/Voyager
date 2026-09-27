@@ -2,9 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
-import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
-import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/core/widgets/suggestion_list.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
 
@@ -187,22 +186,17 @@ class _JobsCompanyFieldState extends State<JobsCompanyField> {
           targetAnchor: Alignment.bottomLeft,
           followerAnchor: Alignment.topLeft,
           offset: const Offset(0, 4),
-          // Same tap group as the field's own [EditableText], so clicking a
-          // suggestion doesn't read as a tap *outside* the field.
-          //
-          // [TextField]'s default `onTapOutside` unfocuses on desktop, and it
-          // fires on pointer-down — which tore this overlay down a frame
-          // before the click's pointer-up could land on it, so a suggestion
-          // could only ever be chosen with the keyboard.
-          child: TapRegion(
-            groupId: EditableText,
-            child: _SuggestionList(
-              matches: _matches,
+          child: SuggestionGlassSurface(
+            child: SuggestionList<JobCompany>(
+              items: _matches,
+              labelOf: (company) => company.name,
+              dotColorOf: widget.categoryColorFor,
               selectedIndex: _selected,
               accentColor: accent,
-              categoryColorFor: widget.categoryColorFor,
-              onHover: _highlight,
-              onSelected: _select,
+              textStyle: Theme.of(context).textTheme.bodySmall,
+              maxHeight: 220,
+              onHighlight: _highlight,
+              onSelect: _select,
             ),
           ),
         ),
@@ -284,89 +278,6 @@ class _JobsCompanyFieldState extends State<JobsCompanyField> {
           widget.onChanged(value);
           _refreshMatches();
         },
-      ),
-    );
-  }
-}
-
-class _SuggestionList extends StatelessWidget {
-  const _SuggestionList({
-    required this.matches,
-    required this.selectedIndex,
-    required this.accentColor,
-    required this.categoryColorFor,
-    required this.onHover,
-    required this.onSelected,
-  });
-
-  final List<JobCompany> matches;
-  final int selectedIndex;
-  final Color accentColor;
-  final Color? Function(JobCompany company)? categoryColorFor;
-  final ValueChanged<int> onHover;
-  final ValueChanged<JobCompany> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return GlassSurface(
-      borderRadius: BorderRadius.circular(10),
-      child: Material(
-        type: MaterialType.transparency,
-        borderRadius: BorderRadius.circular(10),
-        clipBehavior: Clip.antiAlias,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 220),
-          child: VoyagerScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (var i = 0; i < matches.length; i++)
-                  MouseRegion(
-                    onEnter: (_) => onHover(i),
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTap: () => onSelected(matches[i]),
-                      behavior: HitTestBehavior.opaque,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        color: i == selectedIndex
-                            ? accentColor.withValues(alpha: 0.16)
-                            : Colors.transparent,
-                        child: Row(
-                          children: [
-                            if (categoryColorFor?.call(matches[i])
-                                case final color?)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    color: color,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                              ),
-                            Expanded(
-                              child: Text(
-                                matches[i].name,
-                                style: theme.textTheme.bodySmall,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

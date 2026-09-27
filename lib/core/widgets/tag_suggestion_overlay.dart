@@ -9,6 +9,7 @@ import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/spell_check_field_support.dart';
+import 'package:voyager/core/widgets/suggestion_list.dart';
 
 /// Wraps a text field so typing `#` opens a completion list of tags already
 /// used on [scope]'s own page, most-used first.
@@ -73,8 +74,6 @@ class TagSuggestionPortal extends ConsumerStatefulWidget {
 
 class _TagSuggestionPortalState extends ConsumerState<TagSuggestionPortal> {
   static const double _width = 200;
-  static const double _itemHeight = 32;
-  static const double _verticalPadding = 0;
   static const double _caretGap = 4;
   static const double _screenMargin = 8;
 
@@ -84,13 +83,12 @@ class _TagSuggestionPortalState extends ConsumerState<TagSuggestionPortal> {
   List<String> _suggestions = const [];
   int _selected = 0;
 
-  /// Where to hang the popup: the caret slot at the token's `#`, plus the box
-  /// it has to stay inside. Both in the enclosing [Overlay]'s coordinate
-  /// space, which is what [Positioned] measures against — and which is *not*
-  /// the screen: each go_router branch has its own Navigator, so this app's
+  /// Where to hang the popup: the caret slot at the token's `#`, in the
+  /// enclosing [Overlay]'s coordinate space, which is what [_PopupLayout]
+  /// places it in — and which is *not* the screen: each go_router branch has its own Navigator, so this app's
   /// overlay starts to the right of the shell's navigation rail. Null before
   /// the first post-frame measurement.
-  ({Rect caret, Size bounds})? _anchor;
+  Rect? _anchor;
   bool _measureScheduled = false;
 
   /// The value the last completion pass ran against, so the controller's
@@ -258,14 +256,14 @@ class _TagSuggestionPortalState extends ConsumerState<TagSuggestionPortal> {
   }
 
   /// Measures the caret slot at the token's `#` in the enclosing [Overlay]'s
-  /// coordinate space — the space the popup is later [Positioned] in.
+  /// coordinate space — the space the popup is later placed in.
   ///
   /// Passing the overlay as `ancestor` rather than converting from global
   /// coordinates is what keeps the popup on the `#`: this app nests a
   /// Navigator (and so an Overlay) per go_router branch, inset from the screen
   /// by the shell's navigation rail. Same conversion `showContextualPopoverAt`
   /// makes for the app's other anchored popovers.
-  ({Rect caret, Size bounds})? _measureAnchor() {
+  Rect? _measureAnchor() {
     final token = _token;
     if (token == null) return null;
     final editable = editableTextStateOf(widget.fieldKey);
@@ -286,7 +284,7 @@ class _TagSuggestionPortalState extends ConsumerState<TagSuggestionPortal> {
       local.topLeft,
       ancestor: overlayBox,
     );
-    return (caret: origin & local.size, bounds: overlayBox.size);
+    return origin & local.size;
   }
 
   void _close() {
@@ -386,7 +384,7 @@ class _TagSuggestionPortalState extends ConsumerState<TagSuggestionPortal> {
 
   /// Sits the popup under the caret, flipping above the current line when the
   /// bottom edge is closer than the list is tall.
-  Offset _position(Rect caret, Size bounds, double height) {
+  static Offset _position(Rect caret, Size bounds, double height) {
     final below = caret.bottom + _caretGap;
     final top = below + height <= bounds.height - _screenMargin
         ? below
@@ -417,12 +415,12 @@ class _TagSuggestionPortalState extends ConsumerState<TagSuggestionPortal> {
           return const SizedBox.shrink();
         }
 
-        final height = _suggestions.length * _itemHeight + _verticalPadding * 2;
-        final origin = _position(anchor.caret, anchor.bounds, height);
-
-        return Positioned(
-          left: origin.dx,
-          top: origin.dy,
+        // Placed from the list's laid-out height rather than a row count
+        // times a row height: rows grow with the text scale, and a list
+        // taller than the count predicts would flip too late and run off
+        // the bottom.
+        return CustomSingleChildLayout(
+          delegate: _PopupLayout(anchor),
           child: _SuggestionList(
             suggestions: _suggestions,
             selectedIndex: _selected,
@@ -430,9 +428,6 @@ class _TagSuggestionPortalState extends ConsumerState<TagSuggestionPortal> {
             tagColors: tagColors,
             textStyle: theme.textTheme.bodyMedium,
             width: _width,
-            height: height,
-            itemHeight: _itemHeight,
-            verticalPadding: _verticalPadding,
             onHover: (index) => setState(() => _selected = index),
             onTap: _accept,
           ),
@@ -451,9 +446,6 @@ class _SuggestionList extends StatelessWidget {
     required this.tagColors,
     required this.textStyle,
     required this.width,
-    required this.height,
-    required this.itemHeight,
-    required this.verticalPadding,
     required this.onHover,
     required this.onTap,
   });
@@ -464,9 +456,6 @@ class _SuggestionList extends StatelessWidget {
   final Map<String, int> tagColors;
   final TextStyle? textStyle;
   final double width;
-  final double height;
-  final double itemHeight;
-  final double verticalPadding;
   final ValueChanged<int> onHover;
   final ValueChanged<String> onTap;
 
@@ -476,35 +465,22 @@ class _SuggestionList extends StatelessWidget {
 
     final list = ContextualPopover(
       width: width,
-      height: height,
       accentColor: accentColor,
-      child: Padding(
-        padding: EdgeInsets.symmetric(vertical: verticalPadding),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var i = 0; i < suggestions.length; i++)
-              _SuggestionRow(
-                tag: suggestions[i],
-                height: itemHeight,
-                selected: i == selectedIndex,
-                accentColor: accentColor,
-                // Resolved for a tag with no stored row yet — which is most
-                // of them here, since this list is what you complete a brand
-                // new tag from. `tagColors` arrives already themed.
-                color: Color(
-                  tagColors[suggestions[i]] ??
-                      resolveTagColor(
-                        colorForTag(suggestions[i]),
-                        Theme.of(context).brightness,
-                      ),
-                ),
-                textStyle: textStyle,
-                onHover: () => onHover(i),
-                onTap: () => onTap(suggestions[i]),
-              ),
-          ],
-        ),
+      child: SuggestionList<String>(
+        items: suggestions,
+        labelOf: (tag) => '#$tag',
+        // Resolved for a tag with no stored row yet — which is most of them
+        // here, since this list is what you complete a brand new tag from.
+        // `tagColors` arrives already themed.
+        dotColorOf: (tag) => Color(
+          tagColors[tag] ??
+              resolveTagColor(colorForTag(tag), Theme.of(context).brightness),
+        ).withValues(alpha: 0.85),
+        selectedIndex: selectedIndex,
+        accentColor: accentColor,
+        textStyle: textStyle,
+        onHighlight: onHover,
+        onSelect: onTap,
       ),
     );
 
@@ -530,65 +506,22 @@ class _SuggestionList extends StatelessWidget {
   }
 }
 
-class _SuggestionRow extends StatelessWidget {
-  const _SuggestionRow({
-    required this.tag,
-    required this.height,
-    required this.selected,
-    required this.accentColor,
-    required this.color,
-    required this.textStyle,
-    required this.onHover,
-    required this.onTap,
-  });
+/// Hangs the popup off [caret] (in the overlay's coordinates, which is the
+/// space this fills) using [_TagSuggestionPortalState._position], once the
+/// popup's own size is known.
+class _PopupLayout extends SingleChildLayoutDelegate {
+  const _PopupLayout(this.caret);
 
-  final String tag;
-  final double height;
-  final bool selected;
-  final Color accentColor;
-  final Color color;
-  final TextStyle? textStyle;
-  final VoidCallback onHover;
-  final VoidCallback onTap;
+  final Rect caret;
 
   @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => onHover(),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          height: height,
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          color: selected
-              ? accentColor.withValues(alpha: 0.16)
-              : Colors.transparent,
-          child: Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.85),
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '#$tag',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: textStyle,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      constraints.loosen();
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) =>
+      _TagSuggestionPortalState._position(caret, size, childSize.height);
+
+  @override
+  bool shouldRelayout(_PopupLayout oldDelegate) => caret != oldDelegate.caret;
 }

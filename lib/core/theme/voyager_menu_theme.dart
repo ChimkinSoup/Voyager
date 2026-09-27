@@ -47,6 +47,26 @@ abstract final class VoyagerMenuTheme {
     }
   }
 
+  /// Padding for row [index] of [count] in a menu: [horizontal] and
+  /// [vertical] all round, plus [endExtra] above the first row and below the
+  /// last.
+  ///
+  /// The extra goes inside the end rows rather than around the list, so their
+  /// highlight still reaches the menu's edge instead of leaving a band of bare
+  /// surface above the first row and below the last.
+  static EdgeInsets endRowPadding(
+    int index,
+    int count, {
+    required double horizontal,
+    required double vertical,
+    required double endExtra,
+  }) => EdgeInsets.only(
+    left: horizontal,
+    right: horizontal,
+    top: vertical + (index == 0 ? endExtra : 0),
+    bottom: vertical + (index == count - 1 ? endExtra : 0),
+  );
+
   static EdgeInsets itemPadding(ThemeData theme) => theme.useMaterial3
       ? const EdgeInsets.symmetric(horizontal: 12)
       : const EdgeInsets.symmetric(horizontal: 16);

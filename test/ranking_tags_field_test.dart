@@ -2,6 +2,7 @@
 // way `#` completion does in the journal body, and it never offers a tag the
 // entry has just gained or keeps back one it has just lost.
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -89,4 +90,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(_offered('test'), findsOneWidget);
   });
+
+  // On desktop a mouse press outside the field unfocuses it on pointer-down,
+  // which used to hide the list (and commit the half-typed `t`) before the
+  // click could land.
+  testWidgets(
+    'clicking a suggestion with the mouse on desktop adds it',
+    (tester) async {
+      await _pumpField(tester, suggestions: ['test', 'arst']);
+
+      await tester.showKeyboard(find.byType(TextField));
+      await tester.enterText(find.byType(TextField), 't');
+      await tester.pumpAndSettle();
+      await tester.tap(_offered('test'), kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+
+      // A chip, not a stray `t` tag.
+      expect(find.text('test'), findsOneWidget);
+      expect(find.text('t'), findsNothing);
+    },
+    variant: TargetPlatformVariant.desktop(),
+  );
 }

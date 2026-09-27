@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -179,6 +180,23 @@ void main() {
 
     expect(controller.text, '#CC');
   });
+
+  // On desktop a mouse press outside the field unfocuses it on pointer-down,
+  // which used to close the popup before the click could land.
+  testWidgets(
+    'clicking a suggestion with the mouse on desktop accepts it',
+    (tester) async {
+      await pumpField(tester);
+
+      await tester.enterText(find.byType(TextField), '#');
+      await tester.pumpAndSettle();
+      await tester.tap(suggestion('CC'), kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+
+      expect(controller.text, '#CC');
+    },
+    variant: TargetPlatformVariant.desktop(),
+  );
 
   testWidgets('accepting replaces the whole tag from mid-token', (
     tester,

@@ -499,11 +499,12 @@ class ContextMenuPanel extends StatelessWidget {
                   item: items[i],
                   isHovered: isHovered(i),
                   borderRadius: itemRadius(i, items.length),
-                  padding: EdgeInsets.only(
-                    left: 14,
-                    right: 14,
-                    top: i == 0 ? 10 + verticalPadding : 10,
-                    bottom: i == items.length - 1 ? 10 + verticalPadding : 10,
+                  padding: VoyagerMenuTheme.endRowPadding(
+                    i,
+                    items.length,
+                    horizontal: 14,
+                    vertical: 10,
+                    endExtra: verticalPadding,
                   ),
                   onHover: (v) => onHover(i, v),
                   onTap: () => onTap(items[i]),

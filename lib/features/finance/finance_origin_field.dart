@@ -2,8 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
-import 'package:voyager/core/widgets/glass_surface.dart';
-import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/core/widgets/suggestion_list.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/services/finance_origins.dart';
 
@@ -153,17 +152,16 @@ class _FinanceOriginFieldState extends State<FinanceOriginField> {
           targetAnchor: Alignment.bottomLeft,
           followerAnchor: Alignment.topLeft,
           offset: const Offset(0, 4),
-          // Same tap group as the field's [EditableText], so a click on a
-          // suggestion isn't a tap outside the field — which unfocuses on
-          // pointer-down and would tear the list away before the click lands.
-          child: TapRegion(
-            groupId: EditableText,
-            child: _SuggestionList(
-              matches: _matches,
+          child: SuggestionGlassSurface(
+            child: SuggestionList<String>(
+              items: _matches,
+              labelOf: (origin) => origin,
               selectedIndex: _selected,
               accentColor: accent,
-              onHover: _highlight,
-              onSelected: _select,
+              textStyle: Theme.of(context).textTheme.bodySmall,
+              maxHeight: 220,
+              onHighlight: _highlight,
+              onSelect: _select,
             ),
           ),
         ),
@@ -241,70 +239,6 @@ class _FinanceOriginFieldState extends State<FinanceOriginField> {
         ),
         onSubmitted: widget.onSubmitted,
         onChanged: (_) => _refreshMatches(),
-      ),
-    );
-  }
-}
-
-class _SuggestionList extends StatelessWidget {
-  const _SuggestionList({
-    required this.matches,
-    required this.selectedIndex,
-    required this.accentColor,
-    required this.onHover,
-    required this.onSelected,
-  });
-
-  final List<String> matches;
-  final int selectedIndex;
-  final Color accentColor;
-  final ValueChanged<int> onHover;
-  final ValueChanged<String> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return GlassSurface(
-      borderRadius: BorderRadius.circular(10),
-      child: Material(
-        type: MaterialType.transparency,
-        borderRadius: BorderRadius.circular(10),
-        clipBehavior: Clip.antiAlias,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 220),
-          child: VoyagerScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < matches.length; i++)
-                  MouseRegion(
-                    onEnter: (_) => onHover(i),
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTap: () => onSelected(matches[i]),
-                      behavior: HitTestBehavior.opaque,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        color: i == selectedIndex
-                            ? accentColor.withValues(alpha: 0.16)
-                            : Colors.transparent,
-                        child: Text(
-                          matches[i],
-                          style: theme.textTheme.bodySmall,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

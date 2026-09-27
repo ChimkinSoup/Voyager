@@ -9,6 +9,7 @@ import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/field_hint_style.dart';
 import 'package:voyager/core/widgets/notched_field_border.dart';
+import 'package:voyager/core/widgets/suggestion_list.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 
 /// The editor panel's structured-tag control (`RANKINGS_PARENT_TAGS_HLD` §5.2).
@@ -53,7 +54,6 @@ class RankingTagsField extends StatefulWidget {
 
 class _RankingTagsFieldState extends State<RankingTagsField> {
   static const _suggestionWidth = 200.0;
-  static const _suggestionHeight = 32.0;
   static const _maxSuggestions = 6;
 
   final _controller = TextEditingController();
@@ -317,7 +317,6 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
   );
 
   Widget _buildSuggestions(BuildContext context) {
-    final theme = Theme.of(context);
     return Positioned(
       width: _suggestionWidth,
       child: CompositedTransformFollower(
@@ -327,22 +326,15 @@ class _RankingTagsFieldState extends State<RankingTagsField> {
         offset: const Offset(0, 4),
         child: ContextualPopover(
           width: _suggestionWidth,
-          height: _suggestions.length * _suggestionHeight,
           accentColor: widget.accentColor,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < _suggestions.length; i++)
-                _SuggestionRow(
-                  tag: _suggestions[i],
-                  height: _suggestionHeight,
-                  selected: i == _selected,
-                  accent: widget.accentColor,
-                  textStyle: theme.textTheme.bodySmall,
-                  onHover: () => setState(() => _selected = i),
-                  onTap: () => _commit(_suggestions[i]),
-                ),
-            ],
+          child: SuggestionList<String>(
+            items: _suggestions,
+            labelOf: (tag) => tag,
+            selectedIndex: _selected,
+            accentColor: widget.accentColor,
+            textStyle: Theme.of(context).textTheme.bodySmall,
+            onHighlight: (i) => setState(() => _selected = i),
+            onSelect: _commit,
           ),
         ),
       ),
@@ -398,50 +390,6 @@ class _EditableTagChip extends StatelessWidget {
               painter.dispose();
               return cut ? Tooltip(message: tag, child: text) : text;
             },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SuggestionRow extends StatelessWidget {
-  const _SuggestionRow({
-    required this.tag,
-    required this.height,
-    required this.selected,
-    required this.accent,
-    required this.textStyle,
-    required this.onHover,
-    required this.onTap,
-  });
-
-  final String tag;
-  final double height;
-  final bool selected;
-  final Color accent;
-  final TextStyle? textStyle;
-  final VoidCallback onHover;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => onHover(),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          height: height,
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          color: selected ? accent.withValues(alpha: 0.16) : Colors.transparent,
-          child: Text(
-            tag,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: textStyle,
           ),
         ),
       ),

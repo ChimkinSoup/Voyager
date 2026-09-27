@@ -245,4 +245,36 @@ void main() {
     expect(find.text('Temu'), findsOneWidget, reason: 'refreshed, not stale');
     expect(find.text('Tesla'), findsOneWidget);
   });
+
+  testWidgets('the arrows scroll the highlight into view in a long list', (
+    tester,
+  ) async {
+    final names = [for (var i = 0; i < 8; i++) 'Company $i'];
+    await pumpField(
+      tester,
+      companies: [for (final name in names) company(name)],
+      recentKeys: [for (final name in names) name.toLowerCase()],
+    );
+    await focusField(tester);
+
+    final viewport = tester.getRect(find.byType(Scrollable).last);
+    bool shown(String name) {
+      final row = tester.getRect(find.text(name));
+      return row.top >= viewport.top && row.bottom <= viewport.bottom;
+    }
+
+    // Eight rows run past the list's cap, so the last starts out of sight.
+    expect(shown('Company 7'), isFalse);
+
+    for (var i = 0; i < 7; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+    }
+    expect(shown('Company 7'), isTrue);
+
+    // Wrapping back to the top brings the first row back too.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(shown('Company 0'), isTrue);
+  });
 }
