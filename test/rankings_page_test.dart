@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/data/database/app_database.dart';
@@ -177,6 +178,22 @@ class _SlowRankingRepository extends DriftRankingRepository {
   }) async {
     await Future<void>.delayed(delay);
     return super.upsertParent(parent, recordLocalActivity: recordLocalActivity);
+  }
+}
+
+/// Holds category re-reads back once [slow] is set, so a sheet still holds
+/// the copy it drew from while a write has already reached the disk.
+class _SlowCategoryReadsRepository extends DriftRankingRepository {
+  _SlowCategoryReadsRepository(super.db);
+
+  var slow = false;
+
+  @override
+  Future<List<RankingCategory>> listCategories({
+    bool includeDeleted = false,
+  }) async {
+    if (slow) await Future<void>.delayed(const Duration(milliseconds: 100));
+    return super.listCategories(includeDeleted: includeDeleted);
   }
 }
 
@@ -567,6 +584,85 @@ void main() {
     final saved = (await repo.listParents(categories.single.id)).single;
     expect(saved.overallScore, 4);
     expect(saved.fieldValues['plot']?.score, 4);
+  });
+
+  testWidgets('the row keeps pace with the panel before the save lands', (
+    tester,
+  ) async {
+    final harness = await pumpRankingsPage(
+      tester,
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(categoryId: category.id, title: 'Andor', score: 2),
+        );
+      },
+    );
+    await tester.tap(find.text('Andor'));
+    await tester.pumpAndSettle();
+
+    Finder inRow(Finder matching) =>
+        find.descendant(of: find.byType(RankingsRow), matching: matching);
+    String numberIn(Type surface) => tester
+        .widget<Text>(
+          find
+              .descendant(
+                of: find.descendant(
+                  of: find.byType(surface),
+                  matching: find.byType(RankingScoreNumber),
+                ),
+                matching: find.byType(Text),
+              )
+              .first,
+        )
+        .data!;
+
+    // Typing: the title saves 400ms after the last key, the row does not wait.
+    await tester.enterText(
+      find
+          .descendant(
+            of: find.byType(RankingsEditPanel),
+            matching: find.byType(TextField),
+          )
+          .first,
+      'Andor S2',
+    );
+    await tester.pump();
+    expect(inRow(find.text('Andor S2')), findsOneWidget);
+
+    // The wheel: written once it rests, shown on the row from the first notch.
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(
+      pointer.hover(
+        tester.getCenter(
+          find
+              .descendant(
+                of: find.byType(RankingOverallRow),
+                matching: find.byType(RankingScoreNumber),
+              )
+              .first,
+        ),
+      ),
+    );
+    await tester.sendEventToBinding(pointer.scroll(const Offset(0, -50)));
+    await tester.pump();
+    final drafted = numberIn(RankingOverallRow);
+    expect(drafted, isNot('2'));
+    expect(numberIn(RankingQuickRate), drafted);
+
+    // Once both have landed the row reads the same off the stored entry.
+    await tester.sendEventToBinding(pointer.hover(Offset.zero));
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    final repo = DriftRankingRepository(harness.db);
+    final saved = (await repo.listParents(
+      (await repo.listCategories()).single.id,
+    )).single;
+    expect(saved.title, 'Andor S2');
+    expect(formatRankingScore(saved.overallScore!), drafted);
+    expect(inRow(find.text('Andor S2')), findsOneWidget);
+    expect(numberIn(RankingQuickRate), drafted);
   });
 
   testWidgets('the star strip is decoration and sets nothing', (tester) async {
@@ -1641,6 +1737,157 @@ void main() {
 
     await select(longId);
     expect(sectionsPosition().pixels, 400);
+  });
+
+  testWidgets('a unit name blurred by a toggle click survives the toggle', (
+    tester,
+  ) async {
+    late String categoryId;
+    late _SlowCategoryReadsRepository repository;
+    final harness = await pumpRankingsPage(
+      tester,
+      repository: (db) => repository = _SlowCategoryReadsRepository(db),
+      seed: (repo) async {
+        final category = makeCategory();
+        categoryId = category.id;
+        await repo.upsertCategory(category);
+      },
+    );
+
+    await tester.tap(find.byTooltip('Manage categories and templates'));
+    await tester.pumpAndSettle();
+    final unitBox = find.descendant(
+      of: find.widgetWithText(LabeledTextField, 'Unit name'),
+      matching: find.byType(EditableText),
+    );
+    await tester.enterText(unitBox, 'Dish');
+
+    // The press blurs the box, whose rename reaches the disk before the
+    // release flips the toggle — from the sheet's copy, not yet re-read.
+    repository.slow = true;
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.text('Images on entries')),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+    repository.slow = false;
+
+    final stored = await harness.container
+        .read(rankingRepositoryProvider)
+        .getCategory(categoryId);
+    expect(stored!.childUnitLabel, 'Dish');
+    expect(stored.imagesOnParent, isNot(makeCategory().imagesOnParent));
+  });
+
+  testWidgets('a unit name blurred on the way to the category dialog survives '
+      'its save', (tester) async {
+    late String categoryId;
+    late _SlowCategoryReadsRepository repository;
+    final harness = await pumpRankingsPage(
+      tester,
+      repository: (db) => repository = _SlowCategoryReadsRepository(db),
+      seed: (repo) async {
+        final category = makeCategory();
+        categoryId = category.id;
+        await repo.upsertCategory(category);
+      },
+    );
+
+    await tester.tap(find.byTooltip('Manage categories and templates'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(
+        of: find.widgetWithText(LabeledTextField, 'Unit name'),
+        matching: find.byType(EditableText),
+      ),
+      'Dish',
+    );
+
+    // The press blurs the box and its rename lands; the dialog opens on the
+    // release with the sheet's copy, not yet re-read, and holds it open.
+    repository.slow = true;
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.text('Name, colour, icon')),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+    repository.slow = false;
+
+    await tester.enterText(
+      find.descendant(
+        of: find.widgetWithText(LabeledTextField, 'Name'),
+        matching: find.byType(EditableText),
+      ),
+      'Series',
+    );
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    final stored = await harness.container
+        .read(rankingRepositoryProvider)
+        .getCategory(categoryId);
+    expect(stored!.name, 'Series');
+    expect(stored.childUnitLabel, 'Dish');
+  });
+
+  testWidgets('template edits apply to the stored fields', (tester) async {
+    late String categoryId;
+    final harness = await pumpRankingsPage(
+      tester,
+      seed: (repo) async {
+        final category = makeCategory();
+        categoryId = category.id;
+        await repo.upsertCategory(category);
+      },
+    );
+    Future<List<RankingTemplateField>> template() async =>
+        (await harness.container
+                .read(rankingRepositoryProvider)
+                .getCategory(categoryId))!
+            .parentTemplate;
+    Future<void> answer(String text) async {
+      await tester.enterText(
+        find.descendant(
+          of: find.widgetWithText(LabeledTextField, 'Field name'),
+          matching: find.byType(EditableText),
+        ),
+        text,
+      );
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+    }
+
+    await tester.tap(find.byTooltip('Manage categories and templates'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Entry fields'));
+    await tester.pumpAndSettle();
+
+    for (final label in ['Plot', 'Pace']) {
+      await tester.tap(find.text('Add field'));
+      await tester.pumpAndSettle();
+      await answer(label);
+    }
+    expect([for (final f in await template()) f.label], ['Plot', 'Pace']);
+
+    await tester.tap(find.byTooltip('Rename').first);
+    await tester.pumpAndSettle();
+    await answer('Story');
+    await tester.tap(find.byTooltip('Remove from template').last);
+    await tester.pumpAndSettle();
+    var fields = await template();
+    expect([for (final f in fields) f.label], ['Story', 'Pace']);
+    expect([for (final f in fields) f.isRemoved], [false, true]);
+
+    await tester.tap(find.text('Restore'));
+    await tester.pumpAndSettle();
+    fields = await template();
+    expect([for (final f in fields) f.label], ['Story', 'Pace']);
+    expect([for (final f in fields) f.isRemoved], [false, false]);
+    expect([for (final f in fields) f.sortOrder], [0, 1]);
   });
 
   group('audit regressions', () {

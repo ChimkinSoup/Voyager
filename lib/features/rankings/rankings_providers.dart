@@ -38,6 +38,16 @@ final rankingFiltersProvider = StateProvider<RankingFilters>(
 /// The entry whose editor panel is open, by id. Null closes the panel.
 final rankingSelectedParentProvider = StateProvider<String?>((ref) => null);
 
+/// What the editor panel shows for the open entry's title and overall score,
+/// for its row in the list to show too.
+///
+/// The panel saves the title 400ms after typing stops and a wheeled score once
+/// the wheel rests, and the list only learns of either from the re-read after
+/// the save. Its row reads this instead, so it keeps pace with the panel while
+/// only that row rebuilds; the order and the averages still wait for the save.
+final rankingPanelDraftProvider =
+    StateProvider<({String id, String title, double? score})?>((ref) => null);
+
 /// How the open entry's child list is being looked at. A view only — it never
 /// writes the saved order back (§6.4).
 final rankingChildSortProvider =

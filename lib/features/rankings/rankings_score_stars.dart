@@ -215,6 +215,7 @@ class RankingOverallRow extends StatefulWidget {
     required this.accentColor,
     required this.label,
     this.onChanged,
+    this.onDraftChanged,
     this.semanticLabel,
   });
 
@@ -226,6 +227,10 @@ class RankingOverallRow extends StatefulWidget {
 
   /// Null makes the whole row read-only.
   final ValueChanged<double?>? onChanged;
+
+  /// [RankingScoreNumber.onDraftChanged], passed on after the row has held
+  /// the draft itself.
+  final ValueChanged<double?>? onDraftChanged;
 
   final String? semanticLabel;
 
@@ -265,7 +270,10 @@ class _RankingOverallRowState extends State<RankingOverallRow>
           precision: widget.precision,
           label: widget.label,
           onChanged: holdingWrites(widget.onChanged),
-          onDraftChanged: holdDraft,
+          onDraftChanged: (draft) {
+            holdDraft(draft);
+            widget.onDraftChanged?.call(draft);
+          },
           accentColor: widget.accentColor,
           width: RankingOverallRow._numberWidth,
           // Right-aligned inside a fixed slot: the strip stays in the same

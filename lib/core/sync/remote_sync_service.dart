@@ -258,11 +258,21 @@ class RemoteSyncService {
   /// A payload rendered so two of them compare equal when their contents are.
   ///
   /// Keys are sorted because a document coming back from Firestore carries no
-  /// promise about the order its fields arrive in.
-  String _payloadFingerprint(Map<String, dynamic> payload) {
-    final keys = payload.keys.toList()..sort();
-    return jsonEncode({for (final key in keys) key: payload[key]});
-  }
+  /// promise about the order its fields arrive in — nested maps' included:
+  /// a ranking's field values and stamps are written in the order they were
+  /// set and come back sorted, and sorting only the top level made every
+  /// ranking echo look like another device's edit.
+  String _payloadFingerprint(Map<String, dynamic> payload) =>
+      jsonEncode(_sortedKeys(payload));
+
+  static Object? _sortedKeys(Object? value) => switch (value) {
+    Map() => {
+      for (final key in value.keys.cast<String>().toList()..sort())
+        key: _sortedKeys(value[key]),
+    },
+    List() => [for (final item in value) _sortedKeys(item)],
+    _ => value,
+  };
 
   CharacterOpRegistry get charOpRegistry => _charOpRegistry;
 

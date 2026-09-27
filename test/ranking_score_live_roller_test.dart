@@ -167,12 +167,15 @@ void main() {
       );
     }
 
+    // First, because a pointer resting on the number raises its tooltip.
     String number(WidgetTester tester) => tester
         .widget<Text>(
-          find.descendant(
-            of: find.byType(RankingScoreNumber),
-            matching: find.byType(Text),
-          ),
+          find
+              .descendant(
+                of: find.byType(RankingScoreNumber),
+                matching: find.byType(Text),
+              )
+              .first,
         )
         .data!;
 
@@ -232,11 +235,15 @@ void main() {
       );
       await tester.sendEventToBinding(pointer.scroll(const Offset(0, -50)));
       await tester.pump();
-      // The second notch arrives before the first save has landed.
+      expect(number(tester), '5.1');
       await tester.sendEventToBinding(pointer.scroll(const Offset(0, -50)));
+      await tester.pump();
+      expect(number(tester), '5.2');
 
+      // Written once the wheel rests, and held from there until it lands.
+      await tester.pump(const Duration(milliseconds: 600));
       final frames = await framesUntilSaved(tester);
-      expect(writes, [5.1, 5.2]);
+      expect(writes, [5.2]);
       expect(frames, everyElement('5.2'));
     });
   });

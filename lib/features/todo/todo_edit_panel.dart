@@ -1216,79 +1216,93 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
         // without leaving the editor is routed through the page rather than
         // saved here, so it is the same action the row's own checkbox is —
         // including the deferred write and, on a repeating task, the roll
-        // forward to the next occurrence.
-        Row(
-          children: [
-            VoyagerCheckbox(
-              value: widget.task.completed,
-              accentColor: listColor,
-              onChanged: widget.onToggleCompleted,
-            ),
-            Expanded(
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  LabeledTextField(
-                    label: 'Title',
-                    controller: _titleController,
-                    focusNode: _titleFocusNode,
-                    textInputAction: TextInputAction.next,
-                    onSubmitted: _onTitleSubmitted,
-                    onChanged: _scheduleTitleSave,
+        // forward to the next occurrence. The box is scaled up to a square
+        // as tall as the title field, with the same 16px gap either side.
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AspectRatio(
+                aspectRatio: 1,
+                child: FittedBox(
+                  child: VoyagerCheckbox(
+                    value: widget.task.completed,
                     accentColor: listColor,
-                    dense: true,
-                    allowShortHeight: true,
-                    // The shared metric, except on the right, where the list flag
-                    // is pinned to the field's corner and the title has to stop
-                    // short of it.
-                    contentPadding: EdgeInsets.fromLTRB(
-                      14,
-                      14,
-                      widget.lists.isEmpty ? 14 : 40,
-                      14,
-                    ),
+                    onChanged: widget.onToggleCompleted,
+                    padding: EdgeInsets.zero,
                   ),
-                  if (widget.lists.isNotEmpty)
-                    Positioned(
-                      top: 0,
-                      right: 10,
-                      child: JournalTitleCornerFlag(
-                        colorValue:
-                            widget.listColor ??
-                            theme.colorScheme.primary.toARGB32(),
-                        onSelected: _moveToList,
-                        menuEntries: (_) => [
-                          for (var i = 0; i < widget.lists.length; i++)
-                            VoyagerPopupMenuItem<String>(
-                              value: widget.lists[i].id,
-                              position: VoyagerMenuTheme.positionFor(
-                                i,
-                                widget.lists.length,
-                              ),
-                              child: Row(
-                                children: [
-                                  JournalBookmarkFlag(
-                                    colorValue: _listFlagColor(widget.lists[i]),
-                                    size: 12,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(child: Text(widget.lists[i].name)),
-                                  if (widget.lists[i].id == widget.task.listId)
-                                    Icon(
-                                      PhosphorIconsRegular.check,
-                                      size: 18,
-                                      color: theme.colorScheme.primary,
-                                    ),
-                                ],
-                              ),
-                            ),
-                        ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    LabeledTextField(
+                      label: 'Title',
+                      controller: _titleController,
+                      focusNode: _titleFocusNode,
+                      textInputAction: TextInputAction.next,
+                      onSubmitted: _onTitleSubmitted,
+                      onChanged: _scheduleTitleSave,
+                      accentColor: listColor,
+                      dense: true,
+                      allowShortHeight: true,
+                      // The shared metric, except on the right, where the list flag
+                      // is pinned to the field's corner and the title has to stop
+                      // short of it.
+                      contentPadding: EdgeInsets.fromLTRB(
+                        14,
+                        14,
+                        widget.lists.isEmpty ? 14 : 40,
+                        14,
                       ),
                     ),
-                ],
+                    if (widget.lists.isNotEmpty)
+                      Positioned(
+                        top: 0,
+                        right: 10,
+                        child: JournalTitleCornerFlag(
+                          colorValue:
+                              widget.listColor ??
+                              theme.colorScheme.primary.toARGB32(),
+                          onSelected: _moveToList,
+                          menuEntries: (_) => [
+                            for (var i = 0; i < widget.lists.length; i++)
+                              VoyagerPopupMenuItem<String>(
+                                value: widget.lists[i].id,
+                                position: VoyagerMenuTheme.positionFor(
+                                  i,
+                                  widget.lists.length,
+                                ),
+                                child: Row(
+                                  children: [
+                                    JournalBookmarkFlag(
+                                      colorValue: _listFlagColor(
+                                        widget.lists[i],
+                                      ),
+                                      size: 12,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(child: Text(widget.lists[i].name)),
+                                    if (widget.lists[i].id ==
+                                        widget.task.listId)
+                                      Icon(
+                                        PhosphorIconsRegular.check,
+                                        size: 18,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 16),
         // The pill and the repeat toggle group on the left; "Reset due

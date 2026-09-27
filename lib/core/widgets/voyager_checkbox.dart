@@ -17,11 +17,15 @@ class VoyagerCheckbox extends StatefulWidget {
     required this.onChanged,
     this.accentColor,
     this.celebrateOnComplete = true,
+    this.padding = const EdgeInsets.all(10),
   });
 
   final bool value;
   final ValueChanged<bool> onChanged;
   final Color? accentColor;
+
+  /// Space around the box, which is also part of the tap target.
+  final EdgeInsetsGeometry padding;
 
   /// Fires a confetti burst from the checkbox when tapping completes it
   /// (false → true).
@@ -138,7 +142,7 @@ class _VoyagerCheckboxState extends State<VoyagerCheckbox>
         onTap: _handleTap,
         child: Padding(
           key: _boxKey,
-          padding: const EdgeInsets.all(10),
+          padding: widget.padding,
           child: AnimatedBuilder(
             animation: _controller,
             builder: (context, _) => Transform.scale(

@@ -95,6 +95,23 @@ class RankingsActions {
     _refresh();
   }
 
+  /// Applies [patch] to [categoryId] as stored rather than to a copy held on
+  /// screen.
+  ///
+  /// The manage sheet's boxes commit on blur and as they unmount, so their
+  /// writes land alongside whatever the click went to — and a dialog holds its
+  /// copy of the category for as long as it is open. Each side's copy predates
+  /// the other's write, and saving either whole turned the other straight
+  /// back.
+  Future<void> patchCategory(
+    String categoryId,
+    RankingCategory Function(RankingCategory) patch,
+  ) async {
+    final category = await _repository.getCategory(categoryId);
+    if (category == null) return;
+    await saveCategory(patch(category));
+  }
+
   Future<void> reorderCategories(List<String> orderedIds) async {
     final sync = _sync;
     final written = await _repository.reorderCategories(orderedIds);
@@ -103,13 +120,14 @@ class RankingsActions {
   }
 
   Future<void> setCategoryArchived(
-    RankingCategory category, {
+    String categoryId, {
     required bool archived,
   }) {
-    return saveCategory(
-      archived
-          ? category.copyWith(archivedAt: utcNow())
-          : category.copyWith(clearArchivedAt: true),
+    return patchCategory(
+      categoryId,
+      (stored) => archived
+          ? stored.copyWith(archivedAt: utcNow())
+          : stored.copyWith(clearArchivedAt: true),
     );
   }
 
@@ -420,16 +438,25 @@ class RankingsActions {
   /// Writes a whole template back onto its category — the one path add,
   /// rename, reorder, remove and restore all take, so none of them can forget
   /// to renumber `sortOrder`.
+  ///
+  /// [edit] is handed the template as stored, not the sheet's copy: a field
+  /// renamed on blur lands alongside the click that caused the blur, and a
+  /// list built from the older copy put the old name back — see
+  /// [patchCategory].
   Future<void> saveTemplate(
-    RankingCategory category, {
+    String categoryId, {
     required bool isParentTemplate,
-    required List<RankingTemplateField> fields,
+    required List<RankingTemplateField> Function(
+      List<RankingTemplateField> stored,
+    )
+    edit,
   }) {
-    return saveCategory(
-      _withTemplate(
-        category,
+    return patchCategory(
+      categoryId,
+      (stored) => _withTemplate(
+        stored,
         isParentTemplate: isParentTemplate,
-        fields: fields,
+        fields: edit(_templateOf(stored, isParentTemplate)),
       ),
     );
   }

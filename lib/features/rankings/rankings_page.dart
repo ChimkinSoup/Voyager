@@ -661,8 +661,29 @@ class _Row extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Selected down to this entry, and to a draft that says something the
+    // stored entry does not, so the panel's edits rebuild this row and no
+    // other — and a save the row has already caught up with rebuilds nothing.
+    final draft = ref.watch(
+      rankingPanelDraftProvider.select(
+        (d) =>
+            d != null &&
+                d.id == parent.id &&
+                (d.title != parent.title || d.score != parent.overallScore)
+            ? d
+            : null,
+      ),
+    );
     return RankingsRow(
-      parent: parent,
+      parent: draft == null
+          ? parent
+          : parent.copyWith(
+              title: draft.title,
+              overallScore: draft.score,
+              clearOverallScore: draft.score == null,
+              bumpVersion: false,
+              touch: false,
+            ),
       category: category,
       children: children,
       isSelected: isSelected,

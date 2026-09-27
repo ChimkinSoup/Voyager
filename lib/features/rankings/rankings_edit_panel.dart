@@ -1,9 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/media/widgets/media_gallery_strip.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
@@ -20,6 +23,7 @@ import 'package:voyager/domain/rankings/ranking_queries.dart';
 import 'package:voyager/features/rankings/rankings_actions.dart';
 import 'package:voyager/features/rankings/rankings_child_list.dart';
 import 'package:voyager/features/rankings/rankings_field_editor.dart';
+import 'package:voyager/features/rankings/rankings_providers.dart';
 import 'package:voyager/features/rankings/rankings_score_stars.dart';
 import 'package:voyager/features/rankings/rankings_tags_field.dart';
 
@@ -86,12 +90,38 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
   /// still on their way to disk — see [didUpdateWidget].
   var _savesInFlight = 0;
 
+  late final ProviderContainer _container;
+
+  /// The overall score an open popover or a turning wheel is showing, before
+  /// it is written. A record so a drafted clear — a null score — counts.
+  ({double? score})? _draftScore;
+
+  /// The sections a save leaves alone, by slot, with what each was built from.
+  final _sections = <String, ({List<Object?> inputs, Widget built})>{};
+
+  /// [build] run only when [inputs] differ from the slot's last ones, else the
+  /// same widget handed back.
+  ///
+  /// Every save re-reads the category and hands the panel a new copy of the
+  /// entry, and Flutter skips a subtree only when its widget is the very one
+  /// it already has — so a score change rebuilt the title, notes, tags, images
+  /// and every unit along with the number that moved. The list's rows are
+  /// kept the same way (see `_SectionsState._row`).
+  Widget _section(String slot, List<Object?> inputs, Widget Function() build) {
+    final cached = _sections[slot];
+    if (cached != null && listEquals(cached.inputs, inputs)) {
+      return cached.built;
+    }
+    final built = build();
+    _sections[slot] = (inputs: inputs, built: built);
+    return built;
+  }
+
   @override
   void initState() {
     super.initState();
-    _actions = RankingsActions.detached(
-      ProviderScope.containerOf(context, listen: false),
-    );
+    _container = ProviderScope.containerOf(context, listen: false);
+    _actions = RankingsActions.detached(_container);
     _current = widget.parent;
     _titleController = TextEditingController(text: _current.title);
     _notesController = TextEditingController(text: _current.notes);
@@ -106,7 +136,25 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
       // list or the quick-rate may have changed underneath — unless a save is
       // still out and this copy predates it.
       if (_savesInFlight == 0 || widget.parent.version >= _current.version) {
+        final previous = _current;
         _current = widget.parent;
+        // A box still holding what was stored follows the stored text when it
+        // moves — another device's rename — rather than showing the old text
+        // and writing it back over the new one on close.
+        if (_current.title != previous.title &&
+            _titleController.text.trim() == previous.title) {
+          _titleController.text = _current.title;
+        }
+        if (_current.notes != previous.notes &&
+            _notesController.text == previous.notes) {
+          _notesController.text = _current.notes;
+        }
+        // Only when the row would change: every page rebuild lands here, and a
+        // write each time re-ran every row's select.
+        if (_current.title != previous.title ||
+            _current.overallScore != previous.overallScore) {
+          _publishDraft();
+        }
       }
       return;
     }
@@ -124,11 +172,55 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
     _saveTimer?.cancel();
     // Fire-and-forget: dispose cannot be async, and the repository write does
     // not need this widget to still exist.
-    unawaited(_commitText());
+    final committing = _commitText();
+    // Dropped once the list has re-read the entry rather than as the panel
+    // goes: a title still saving showed the old one on its row until the
+    // re-read landed. Always after this frame, as a provider cannot be written
+    // while the tree is being built. Left alone if the next entry's panel has
+    // already put up its own.
+    final id = _current.id;
+    final categoryId = _current.categoryId;
+    final container = _container;
+    unawaited(() async {
+      try {
+        await committing;
+        await container.read(rankingParentsProvider(categoryId).future);
+      } finally {
+        final draft = container.read(rankingPanelDraftProvider.notifier);
+        if (draft.state?.id == id) draft.state = null;
+      }
+    }());
     _titleController.dispose();
     _notesController.dispose();
     _notesFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Puts what the panel shows for the title and the overall score where the
+  /// entry's list row reads it — see [rankingPanelDraftProvider].
+  void _publishDraft() {
+    // Reached from [didUpdateWidget] and from saves flushed while the tree is
+    // building, where a provider write throws.
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _publishDraft();
+      });
+      return;
+    }
+    final title = _titleController.text.trim();
+    final draftScore = _draftScore;
+    final next = (
+      id: _current.id,
+      // Blank is refused on save (see [_commitText]), so the row keeps the
+      // title that will survive.
+      title: title.isEmpty ? _current.title : title,
+      score: draftScore == null ? _current.overallScore : draftScore.score,
+    );
+    final draft = _container.read(rankingPanelDraftProvider.notifier);
+    // Records compare by value but notify by identity, so an unchanged draft
+    // would still re-run every row's select.
+    if (draft.state != next) draft.state = next;
   }
 
   void _scheduleTextSave() {
@@ -159,6 +251,7 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
   Future<void> _save(RankingParent next, {bool rebuild = true}) async {
     final previous = _current;
     _current = next;
+    _publishDraft();
     _savesInFlight++;
     final RankingParent? saved;
     try {
@@ -169,11 +262,9 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
     // Only the last save's result is adopted: an earlier one finishing while a
     // later is still out would put back the row without the later edit.
     if (!mounted || saved == null || _savesInFlight > 0) return;
-    if (!rebuild) {
-      _current = saved;
-      return;
-    }
-    setState(() => _current = saved!);
+    _current = saved;
+    _publishDraft();
+    if (rebuild) setState(() {});
   }
 
   Future<void> _pickCreatedAt(BuildContext pillContext) async {
@@ -239,23 +330,30 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  LabeledTextField(
-                    label: 'Title',
-                    controller: _titleController,
-                    enabled: !widget.readOnly,
-                    accentColor: accent,
-                    // Shorter than the 18 a field defaults to: the panel opens
-                    // on this box, and the slack above and below one line of
-                    // title was the tallest thing in the editor. The box drops
-                    // under Material's 48px minimum doing it, so it also has
-                    // to opt out of the stretch that would otherwise re-centre
-                    // its text away from the padding — see [allowShortHeight].
-                    allowShortHeight: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
+                  _section(
+                    'title',
+                    [accent, widget.readOnly],
+                    () => LabeledTextField(
+                      label: 'Title',
+                      controller: _titleController,
+                      enabled: !widget.readOnly,
+                      accentColor: accent,
+                      // Shorter than the 18 a field defaults to: the panel opens
+                      // on this box, and the slack above and below one line of
+                      // title was the tallest thing in the editor. The box drops
+                      // under Material's 48px minimum doing it, so it also has
+                      // to opt out of the stretch that would otherwise re-centre
+                      // its text away from the padding — see [allowShortHeight].
+                      allowShortHeight: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      onChanged: (_) {
+                        _scheduleTextSave();
+                        _publishDraft();
+                      },
                     ),
-                    onChanged: (_) => _scheduleTextSave(),
                   ),
                   const SizedBox(height: 12),
                   RankingOverallRow(
@@ -268,28 +366,46 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                         ? 'Not scored'
                         : 'Overall '
                               '${formatRankingScore(_current.overallScore!)}',
+                    // The row holds what it wrote until the re-read lands.
                     onChanged: widget.readOnly
                         ? null
-                        : (score) => _save(
-                            score == null
-                                ? _current.copyWith(clearOverallScore: true)
-                                : _current.copyWith(overallScore: score),
-                          ),
+                        : (score) {
+                            _draftScore = null;
+                            _save(
+                              score == null
+                                  ? _current.copyWith(clearOverallScore: true)
+                                  : _current.copyWith(overallScore: score),
+                              rebuild: false,
+                            );
+                          },
+                    onDraftChanged: (draft) {
+                      _draftScore = draft == null ? null : (score: draft);
+                      _publishDraft();
+                    },
                   ),
                   const SizedBox(height: 12),
-                  RankingTagsField(
-                    tags: _current.tags,
-                    suggestions: widget.tagSuggestions,
-                    accentColor: accent,
-                    enabled: !widget.readOnly,
-                    onChanged: (tags) =>
-                        _save(_current.copyWith(tags: tags), rebuild: false),
-                    onChipRemoved: (tag, index) => offerRankingTagUndo(
-                      context,
-                      ref,
-                      parentId: _current.id,
-                      tag: tag,
-                      index: index,
+                  _section(
+                    'tags',
+                    [
+                      accent,
+                      widget.readOnly,
+                      _current.tags.join('\n'),
+                      widget.tagSuggestions.join('\n'),
+                    ],
+                    () => RankingTagsField(
+                      tags: _current.tags,
+                      suggestions: widget.tagSuggestions,
+                      accentColor: accent,
+                      enabled: !widget.readOnly,
+                      onChanged: (tags) =>
+                          _save(_current.copyWith(tags: tags), rebuild: false),
+                      onChipRemoved: (tag, index) => offerRankingTagUndo(
+                        context,
+                        ref,
+                        parentId: _current.id,
+                        tag: tag,
+                        index: index,
+                      ),
                     ),
                   ),
                   if (!_current.isRanked) ...[
@@ -346,6 +462,7 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                                     field.id: value,
                                   },
                                 ),
+                                rebuild: false,
                               ),
                             ),
                         ],
@@ -358,62 +475,86 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                     // overall row's stars. Keep the same breathing room
                     // either way.
                     const SizedBox(height: 20),
-                  TagHighlightedTextField(
-                    controller: _notesController,
-                    focusNode: _notesFocusNode,
-                    onChanged: (_) => _scheduleTextSave(),
-                    label: 'Notes',
-                    accentColor: accent,
-                    readOnly: widget.readOnly,
-                    style: theme.textTheme.bodySmall,
-                    minLines: 4,
-                    maxLines: 14,
+                  _section(
+                    'notes',
+                    [accent, widget.readOnly, theme.textTheme.bodySmall],
+                    () => TagHighlightedTextField(
+                      controller: _notesController,
+                      focusNode: _notesFocusNode,
+                      onChanged: (_) => _scheduleTextSave(),
+                      label: 'Notes',
+                      accentColor: accent,
+                      readOnly: widget.readOnly,
+                      style: theme.textTheme.bodySmall,
+                      minLines: 4,
+                      maxLines: 14,
+                    ),
                   ),
                   if (category.imagesOnParent) ...[
                     const SizedBox(height: 16),
-                    MediaGalleryStrip(
-                      collection: FirestoreCollections.rankings,
-                      documentId: _current.id,
-                      accentColor: accent,
+                    _section(
+                      'images',
+                      [accent, _current.id],
+                      () => MediaGalleryStrip(
+                        collection: FirestoreCollections.rankings,
+                        documentId: _current.id,
+                        accentColor: accent,
+                      ),
                     ),
                   ],
                   if (category.childUnitsEnabled) ...[
                     const SizedBox(height: 20),
                     const Divider(height: 1),
                     const SizedBox(height: 12),
-                    RankingsChildList(
-                      parent: _current,
-                      category: category,
-                      children: widget.children,
-                      readOnly: widget.readOnly,
-                      scoredChildren: scoredChildren,
-                      onAverageFromChildren: () async {
-                        final average = rankingAverageFromChildren(
-                          widget.children,
-                          scoreMax: category.parentScoreMax,
-                          precision: category.parentScorePrecision,
-                        );
-                        if (average == null) return;
-                        await _save(_current.copyWith(overallScore: average));
-                      },
+                    // Kept across a change to the entry's own fields: the list
+                    // reads only the entry's id and category off it.
+                    _section(
+                      'units',
+                      [
+                        _current.id,
+                        category,
+                        widget.children,
+                        widget.readOnly,
+                        scoredChildren,
+                      ],
+                      () => RankingsChildList(
+                        parent: _current,
+                        category: category,
+                        children: widget.children,
+                        readOnly: widget.readOnly,
+                        scoredChildren: scoredChildren,
+                        onAverageFromChildren: () async {
+                          final average = rankingAverageFromChildren(
+                            widget.children,
+                            scoreMax: category.parentScoreMax,
+                            precision: category.parentScorePrecision,
+                          );
+                          if (average == null) return;
+                          await _save(_current.copyWith(overallScore: average));
+                        },
+                      ),
                     ),
                   ],
                   // Last thing in the panel, and unlabelled: the date an entry
                   // was started is the least of what this screen holds, and a
                   // lone date capsule needs no word in front of it.
                   const SizedBox(height: 20),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Builder(
-                      builder: (pillContext) => SelectorPill(
-                        label: DateFormat.yMMMd().format(
-                          _current.createdAt.toLocal(),
+                  _section(
+                    'created',
+                    [accent, widget.readOnly, _current.createdAt],
+                    () => Align(
+                      alignment: Alignment.centerLeft,
+                      child: Builder(
+                        builder: (pillContext) => SelectorPill(
+                          label: DateFormat.yMMMd().format(
+                            _current.createdAt.toLocal(),
+                          ),
+                          dense: true,
+                          accentColor: accent,
+                          onTap: widget.readOnly
+                              ? () {}
+                              : () => _pickCreatedAt(pillContext),
                         ),
-                        dense: true,
-                        accentColor: accent,
-                        onTap: widget.readOnly
-                            ? () {}
-                            : () => _pickCreatedAt(pillContext),
                       ),
                     ),
                   ),

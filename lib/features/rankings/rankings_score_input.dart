@@ -584,7 +584,7 @@ class _RankingScorePopoverState extends State<RankingScorePopover> {
 ///
 /// The stars beside it are decoration — this is the whole control, and it is
 /// the same one on a list row, an overall row and a template field.
-class RankingScoreNumber extends StatelessWidget {
+class RankingScoreNumber extends StatefulWidget {
   const RankingScoreNumber({
     super.key,
     required this.value,
@@ -614,6 +614,7 @@ class RankingScoreNumber extends StatelessWidget {
 
   /// The score the open popover is currently sitting on, reported on every
   /// tick of a roller, and null once the popover has closed without writing.
+  /// The wheel reports each notch here too, until it rests and writes.
   ///
   /// A popover that writes reports the score through [onChanged] instead, and
   /// sends no null after it: the surface keeps showing what was written until
@@ -626,62 +627,106 @@ class RankingScoreNumber extends StatelessWidget {
   final Color? accentColor;
   final Color? unscoredColor;
 
-  bool get _isInteractive => onChanged != null;
+  @override
+  State<RankingScoreNumber> createState() => _RankingScoreNumberState();
+}
 
-  Future<void> _open(BuildContext context) async {
+class _RankingScoreNumberState extends State<RankingScoreNumber> {
+  /// How long the wheel has to rest before its notches are written. The same
+  /// gap the sync layer's scroll gate allows between the notches of one spin.
+  static const _wheelIdle = Duration(milliseconds: 600);
+
+  /// The score the wheel has reached and not yet written.
+  double? _pending;
+  Timer? _wheelTimer;
+
+  bool get _isInteractive => widget.onChanged != null;
+
+  @override
+  void dispose() {
+    // onExit does not fire when the region is unmounted, so a control taken
+    // away under the pointer — a keyboard shortcut closing the panel — writes
+    // the wheel's score here instead of dropping it.
+    _flushWheel();
+    super.dispose();
+  }
+
+  Future<void> _open() async {
+    _flushWheel();
     final outcome = await showRankingScorePopover(
       context: context,
       anchorContext: context,
-      value: value,
-      scoreMax: scoreMax,
-      precision: precision,
-      label: label,
-      accentColor: accentColor,
-      onDraftChanged: onDraftChanged?.call,
+      value: widget.value,
+      scoreMax: widget.scoreMax,
+      precision: widget.precision,
+      label: widget.label,
+      accentColor: widget.accentColor,
+      onDraftChanged: widget.onDraftChanged?.call,
     );
     // A write keeps the draft on screen: the save lands a few frames after the
     // popover closes, and dropping the draft here showed the old score for
     // those frames.
     if (outcome == null || outcome.cancelled) {
-      onDraftChanged?.call(null);
+      widget.onDraftChanged?.call(null);
     } else {
-      onChanged!(outcome.score);
+      widget.onChanged!(outcome.score);
     }
   }
 
-  /// One step in the direction of the wheel, committed on the spot (§6.2). An
-  /// unscored surface starts from the midpoint, so the first notch lands one
-  /// step either side of it.
+  /// One step in the direction of the wheel (§6.2). An unscored surface starts
+  /// from the midpoint, so the first notch lands one step either side of it.
+  ///
+  /// Shown as a draft at once and written once the wheel rests: a write per
+  /// notch re-read and rebuilt the whole category, and a spin of the wheel
+  /// dropped the page to a handful of frames a second.
   void _nudge(int direction) {
-    final base = value ?? rankingFieldMidpoint(scoreMax, precision: precision);
-    onChanged!(
-      roundRankingScore(
-        base + direction * rankingScoreStep(precision),
-        scoreMax: scoreMax,
-        precision: precision,
-      ),
+    final base =
+        _pending ??
+        widget.value ??
+        rankingFieldMidpoint(widget.scoreMax, precision: widget.precision);
+    final next = roundRankingScore(
+      base + direction * rankingScoreStep(widget.precision),
+      scoreMax: widget.scoreMax,
+      precision: widget.precision,
     );
+    // A notch past either end of the scale.
+    if (next == (_pending ?? widget.value)) return;
+    _wheelTimer?.cancel();
+    _wheelTimer = Timer(_wheelIdle, _flushWheel);
+    _pending = next;
+    widget.onDraftChanged?.call(next);
+  }
+
+  void _flushWheel() {
+    _wheelTimer?.cancel();
+    final score = _pending;
+    if (score == null) return;
+    _pending = null;
+    widget.onChanged?.call(score);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final value = widget.value;
+    final label = widget.label;
     final scored = value != null;
     final text = Text(
-      scored ? formatRankingScore(value!) : rankingUnscoredLabel,
-      textAlign: textAlign,
+      scored ? formatRankingScore(value) : rankingUnscoredLabel,
+      textAlign: widget.textAlign,
       maxLines: 1,
-      style: (style ?? theme.textTheme.labelLarge)?.copyWith(
+      style: (widget.style ?? theme.textTheme.labelLarge)?.copyWith(
         color: scored
-            ? (accentColor ?? theme.colorScheme.primary)
-            : (unscoredColor ??
+            ? (widget.accentColor ?? theme.colorScheme.primary)
+            : (widget.unscoredColor ??
                   theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
       ),
     );
 
+    final width = widget.width;
     final sized = width == null ? text : SizedBox(width: width, child: text);
     final semanticLabel = scored
-        ? '$label ${formatRankingScore(value!)} of $scoreMax'
+        ? '$label ${formatRankingScore(value)} of ${widget.scoreMax}'
         : '$label unscored';
 
     if (!_isInteractive) {
@@ -693,6 +738,10 @@ class RankingScoreNumber extends StatelessWidget {
       label: semanticLabel,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
+        // Leaving is how the pointer gets to anything that could take this
+        // control away — the panel's close, another category — so the wheel's
+        // score is written before it can be dropped with it.
+        onExit: (_) => _flushWheel(),
         child: Listener(
           onPointerSignal: (event) {
             if (event is! PointerScrollEvent) return;
@@ -708,8 +757,14 @@ class RankingScoreNumber extends StatelessWidget {
           },
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => _open(context),
-            onLongPress: scored ? () => onChanged!(null) : null,
+            onTap: _open,
+            onLongPress: scored
+                ? () {
+                    _wheelTimer?.cancel();
+                    _pending = null;
+                    widget.onChanged!(null);
+                  }
+                : null,
             child: Tooltip(
               message: scored ? 'Edit score' : 'Set score',
               waitDuration: const Duration(milliseconds: 600),

@@ -12,6 +12,7 @@ import 'package:voyager/core/widgets/prompt_name_dialog.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_checkbox.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
+import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/rankings/ranking_queries.dart';
@@ -342,8 +343,9 @@ class _CategorySettings extends ConsumerWidget {
                       initialIconKey: category.iconKey,
                     );
                     if (result == null) return;
-                    await actions.saveCategory(
-                      category.copyWith(
+                    await actions.patchCategory(
+                      category.id,
+                      (stored) => stored.copyWith(
                         name: result.name,
                         colorValue: result.color,
                         iconKey: result.iconKey,
@@ -361,8 +363,9 @@ class _CategorySettings extends ConsumerWidget {
               help: 'Episodes under a show, dishes at a restaurant.',
               value: category.childUnitsEnabled,
               accent: accent,
-              onChanged: (value) => actions.saveCategory(
-                category.copyWith(childUnitsEnabled: value),
+              onChanged: (value) => actions.patchCategory(
+                category.id,
+                (stored) => stored.copyWith(childUnitsEnabled: value),
               ),
             ),
             if (category.childUnitsEnabled) ...[
@@ -380,8 +383,9 @@ class _CategorySettings extends ConsumerWidget {
               label: 'Images on entries',
               value: category.imagesOnParent,
               accent: accent,
-              onChanged: (value) => actions.saveCategory(
-                category.copyWith(imagesOnParent: value),
+              onChanged: (value) => actions.patchCategory(
+                category.id,
+                (stored) => stored.copyWith(imagesOnParent: value),
               ),
             ),
             if (category.childUnitsEnabled)
@@ -389,8 +393,9 @@ class _CategorySettings extends ConsumerWidget {
                 label: 'Images on ${category.childUnitLabel.toLowerCase()}s',
                 value: category.imagesOnChild,
                 accent: accent,
-                onChanged: (value) => actions.saveCategory(
-                  category.copyWith(imagesOnChild: value),
+                onChanged: (value) => actions.patchCategory(
+                  category.id,
+                  (stored) => stored.copyWith(imagesOnChild: value),
                 ),
               ),
             const Divider(height: 24),
@@ -456,7 +461,7 @@ class _CategorySettings extends ConsumerWidget {
                 GlassButton(
                   dense: true,
                   onPressed: () => actions.setCategoryArchived(
-                    category,
+                    category.id,
                     archived: !category.isArchived,
                   ),
                   icon: Icon(
@@ -519,15 +524,41 @@ class _UnitLabelField extends ConsumerStatefulWidget {
 
 class _UnitLabelFieldState extends ConsumerState<_UnitLabelField> {
   late final TextEditingController _controller;
+  final _focusNode = FocusNode();
+
+  /// Resolved up front so the commit in [dispose] — switching tab or closing
+  /// the sheet with the box still focused — doesn't touch a dead [ref].
+  late final RankingsActions _actions;
+
+  /// The label last written from here, so Enter followed by the blur it
+  /// causes saves once rather than twice.
+  late String _committed;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.category.childUnitLabel);
+    _committed = widget.category.childUnitLabel;
+    _actions = RankingsActions(ref);
+    _focusNode.addListener(() {
+      if (!_focusNode.hasFocus) _commit(_controller.text);
+    });
+  }
+
+  /// A stored label that moves — another device renaming it — is the new
+  /// baseline, so the one typed here can be written over it again.
+  @override
+  void didUpdateWidget(_UnitLabelField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.category.childUnitLabel != oldWidget.category.childUnitLabel) {
+      _committed = widget.category.childUnitLabel;
+    }
   }
 
   @override
   void dispose() {
+    _commit(_controller.text);
+    _focusNode.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -537,6 +568,7 @@ class _UnitLabelFieldState extends ConsumerState<_UnitLabelField> {
     final field = LabeledTextField(
       label: 'Unit name',
       controller: _controller,
+      focusNode: _focusNode,
       dense: true,
       // Taller than the dense default: this box sits alone under a toggle
       // rather than in a stack of compact fields, and 8px of vertical padding
@@ -546,8 +578,8 @@ class _UnitLabelFieldState extends ConsumerState<_UnitLabelField> {
       onSubmitted: _commit,
       onChanged: (_) {},
     );
-    // Ctrl+Enter is Done, flushed: this box only commits on Enter, so closing
-    // straight from it would drop the label being typed. Nearer than the
+    // Ctrl+Enter is Done, flushed: commits here rather than waiting on the
+    // unmount, so the save starts before the route pops. Nearer than the
     // dialog's own scope, so it wins while the box has focus.
     return CtrlEnterToSubmitScope(
       onSubmit: () {
@@ -560,10 +592,16 @@ class _UnitLabelFieldState extends ConsumerState<_UnitLabelField> {
 
   void _commit(String value) {
     final label = value.trim();
-    if (label.isEmpty || label == widget.category.childUnitLabel) return;
-    RankingsActions(
-      ref,
-    ).saveCategory(widget.category.copyWith(childUnitLabel: label));
+    if (label.isEmpty ||
+        label == widget.category.childUnitLabel ||
+        label == _committed) {
+      return;
+    }
+    _committed = label;
+    _actions.patchCategory(
+      widget.category.id,
+      (stored) => stored.copyWith(childUnitLabel: label),
+    );
   }
 }
 
@@ -690,12 +728,24 @@ class _TemplateEditor extends ConsumerWidget {
   /// The template is always written whole — active fields in their new order,
   /// then the orphans — so `sortOrder` is renumbered from the list itself and
   /// a removed field can never take a position in it.
-  Future<void> _write(WidgetRef ref, List<RankingTemplateField> active) =>
-      RankingsActions(ref).saveTemplate(
-        category,
-        isParentTemplate: isParentTemplate,
-        fields: [...active, ..._orphans],
-      );
+  ///
+  /// [edit] is handed the stored template's active fields rather than these —
+  /// see [RankingsActions.saveTemplate].
+  Future<void> _write(
+    WidgetRef ref,
+    List<RankingTemplateField> Function(List<RankingTemplateField> active) edit,
+  ) => RankingsActions(ref).saveTemplate(
+    category.id,
+    isParentTemplate: isParentTemplate,
+    edit: (stored) => [
+      ...edit([
+        for (final field in stored)
+          if (!field.isRemoved) field,
+      ]),
+      for (final field in stored)
+        if (field.isRemoved) field,
+    ],
+  );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -747,9 +797,18 @@ class _TemplateEditor extends ConsumerWidget {
                   buildDefaultDragHandles: false,
                   itemCount: active.length,
                   onReorderItem: (oldIndex, newIndex) {
-                    final next = [...active];
-                    next.insert(newIndex, next.removeAt(oldIndex));
-                    _write(ref, next);
+                    final order = [for (final field in active) field.id];
+                    order.insert(newIndex, order.removeAt(oldIndex));
+                    // By id, onto the stored fields: one added since this list
+                    // was drawn keeps its place at the end.
+                    _write(
+                      ref,
+                      (stored) => [
+                        for (final id in order)
+                          ...stored.where((field) => field.id == id),
+                        ...stored.where((field) => !order.contains(field.id)),
+                      ],
+                    );
                   },
                   itemBuilder: (context, index) => _FieldRow(
                     key: ValueKey(active[index].id),
@@ -767,20 +826,26 @@ class _TemplateEditor extends ConsumerWidget {
                       inherit: inherit,
                       precision: precision,
                     ),
-                    onRename: (label) => _write(ref, [
-                      for (final field in active)
-                        if (field.id == active[index].id)
-                          field.copyWith(label: label)
-                        else
-                          field,
-                    ]),
-                    onToggleNotes: () => _write(ref, [
-                      for (final field in active)
-                        if (field.id == active[index].id)
-                          field.copyWith(notesEnabled: !field.notesEnabled)
-                        else
-                          field,
-                    ]),
+                    onRename: (label) => _write(
+                      ref,
+                      (stored) => [
+                        for (final field in stored)
+                          if (field.id == active[index].id)
+                            field.copyWith(label: label)
+                          else
+                            field,
+                      ],
+                    ),
+                    onToggleNotes: () => _write(
+                      ref,
+                      (stored) => [
+                        for (final field in stored)
+                          if (field.id == active[index].id)
+                            field.copyWith(notesEnabled: !field.notesEnabled)
+                          else
+                            field,
+                      ],
+                    ),
                     rescaling: rescaling.contains(
                       rankingRescaleKey(category.id, fieldId: active[index].id),
                     ),
@@ -790,13 +855,16 @@ class _TemplateEditor extends ConsumerWidget {
                     // list and joins the orphans, which is what keeps the values
                     // entries already hold restorable.
                     onRemove: () => RankingsActions(ref).saveTemplate(
-                      category,
+                      category.id,
                       isParentTemplate: isParentTemplate,
-                      fields: [
-                        for (final field in active)
+                      edit: (stored) => [
+                        for (final field in stored)
                           if (field.id != active[index].id) field,
-                        ...orphans,
-                        active[index].copyWith(removedAt: utcNow()),
+                        for (final field in stored)
+                          if (field.id == active[index].id)
+                            field.isRemoved
+                                ? field
+                                : field.copyWith(removedAt: utcNow()),
                       ],
                     ),
                   ),
@@ -815,17 +883,20 @@ class _TemplateEditor extends ConsumerWidget {
                     label: 'Field name',
                   );
                   if (label == null || label.trim().isEmpty) return;
-                  await _write(ref, [
-                    ...active,
-                    RankingTemplateField(
-                      id: newId(),
-                      label: label.trim(),
-                      sortOrder: active.length,
-                      scoreMax: isParentTemplate
-                          ? category.parentScoreMax
-                          : category.childScoreMax,
-                    ),
-                  ]);
+                  await _write(
+                    ref,
+                    (stored) => [
+                      ...stored,
+                      RankingTemplateField(
+                        id: newId(),
+                        label: label.trim(),
+                        sortOrder: stored.length,
+                        scoreMax: isParentTemplate
+                            ? category.parentScoreMax
+                            : category.childScoreMax,
+                      ),
+                    ],
+                  );
                 },
                 icon: const Icon(PhosphorIconsRegular.plus, size: 13),
                 label: 'Add field',
@@ -857,13 +928,17 @@ class _TemplateEditor extends ConsumerWidget {
                       GlassButton(
                         dense: true,
                         onPressed: () => RankingsActions(ref).saveTemplate(
-                          category,
+                          category.id,
                           isParentTemplate: isParentTemplate,
-                          fields: [
-                            ...active,
-                            orphan.copyWith(clearRemovedAt: true),
-                            for (final other in orphans)
-                              if (other.id != orphan.id) other,
+                          edit: (stored) => [
+                            for (final field in stored)
+                              if (!field.isRemoved) field,
+                            for (final field in stored)
+                              if (field.id == orphan.id && field.isRemoved)
+                                field.copyWith(clearRemovedAt: true),
+                            for (final field in stored)
+                              if (field.isRemoved && field.id != orphan.id)
+                                field,
                           ],
                         ),
                         label: 'Restore',
@@ -1179,39 +1254,74 @@ class _FieldPrecisionButton extends StatelessWidget {
       field,
       overallPrecision: overallPrecision,
     );
-    return PopupMenuButton<RankingScorePrecision?>(
-      tooltip: 'Step',
-      // Null is the inherit case, which is why the value type is nullable —
-      // "same as overall" is not one of the three modes, it is the absence of
-      // a choice between them.
-      onSelected: (value) => onPrecision(value == null, value),
-      itemBuilder: (context) => [
-        CheckedPopupMenuItem<RankingScorePrecision?>(
-          value: null,
-          checked: field.inheritPrecision,
-          child: Text(inheritLabel),
-        ),
-        const PopupMenuDivider(),
-        for (final option in RankingScorePrecision.values)
-          CheckedPopupMenuItem<RankingScorePrecision?>(
-            value: option,
-            checked: !field.inheritPrecision && field.scorePrecision == option,
-            child: Text(option.label),
-          ),
-      ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: Text(
-          effective.label,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: field.inheritPrecision
-                ? theme.colorScheme.onSurfaceVariant
-                : accent,
-            fontWeight: field.inheritPrecision ? null : FontWeight.w700,
+    return Tooltip(
+      message: 'Step',
+      child: InkWell(
+        onTap: () => _openMenu(context),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Text(
+            effective.label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: field.inheritPrecision
+                  ? theme.colorScheme.onSurfaceVariant
+                  : accent,
+              fontWeight: field.inheritPrecision ? null : FontWeight.w700,
+            ),
           ),
         ),
       ),
     );
+  }
+
+  /// Opens the steps as a Voyager menu rather than a Material popup, which
+  /// draws its own unthemed card.
+  ///
+  /// Entries are keyed by `inherit` as well as the precision: "same as
+  /// overall" is not one of the three modes, it is the absence of a choice
+  /// between them — and a bare null would be indistinguishable from the menu
+  /// being dismissed.
+  Future<void> _openMenu(BuildContext context) async {
+    final button = context.findRenderObject() as RenderBox?;
+    if (button == null) return;
+    final overlay =
+        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+    final topLeft = button.localToGlobal(Offset.zero, ancestor: overlay);
+    final buttonRect = topLeft & button.size;
+
+    final entries =
+        voyagerSelectMenuEntries<
+          ({bool inherit, RankingScorePrecision? precision})
+        >(
+          context: context,
+          items: [
+            (value: (inherit: true, precision: null), label: inheritLabel),
+            for (final option in RankingScorePrecision.values)
+              (value: (inherit: false, precision: option), label: option.label),
+          ],
+          selected: field.inheritPrecision
+              ? (inherit: true, precision: null)
+              : (inherit: false, precision: field.scorePrecision),
+        );
+    final picked =
+        await showVoyagerMenu<
+          ({bool inherit, RankingScorePrecision? precision})
+        >(
+          context: context,
+          position: RelativeRect.fromRect(
+            Rect.fromLTWH(
+              buttonRect.left,
+              buttonRect.bottom,
+              buttonRect.width,
+              0,
+            ),
+            Offset.zero & overlay.size,
+          ),
+          accentColor: accent,
+          items: [entries.first, const PopupMenuDivider(), ...entries.skip(1)],
+        );
+    if (picked != null) onPrecision(picked.inherit, picked.precision);
   }
 }
 

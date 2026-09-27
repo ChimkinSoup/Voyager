@@ -17,6 +17,7 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/character_op_session.dart';
 
@@ -231,6 +232,49 @@ void main() {
         );
         expect(applied, isFalse, reason: 'the $delivery delivery');
       }
+    });
+
+    test('an echo is ours whatever order its nested keys come back in', () async {
+      // Firestore returns every map sorted by key. A ranking entry nests two —
+      // its field values, and field stamps kept in the order they were set —
+      // so its echo never matched, and every score save reloaded the app twice.
+      final parent = RankingParent(
+        id: 'parent-1',
+        categoryId: 'category-1',
+        title: 'Show',
+        overallScore: 8,
+        fieldValues: const {'field-1': RankingFieldValue(score: 3, notes: 'x')},
+        fieldUpdatedAt: {
+          'title': now,
+          'overallScore': now,
+          'fv:field-1:score': now,
+        },
+        createdAt: now,
+        updatedAt: now,
+      );
+      await DriftRankingRepository(device.db).upsertParent(parent);
+      device.sync.pushRankingParent(parent);
+      await pumpEventQueue();
+      final stored = (await server.getDocument(
+        FirestoreCollections.rankingParents,
+        'parent-1',
+      ))!;
+
+      Object? sortedKeys(Object? value) => switch (value) {
+        Map() => {
+          for (final key in value.keys.cast<String>().toList()..sort())
+            key: sortedKeys(value[key]),
+        },
+        List() => [for (final item in value) sortedKeys(item)],
+        _ => value,
+      };
+
+      final applied = await device.sync.pullForCollection(
+        FirestoreCollections.rankingParents,
+        documentIds: {'parent-1'},
+        documentData: {'parent-1': sortedKeys(stored)! as Map<String, dynamic>},
+      );
+      expect(applied, isFalse);
     });
 
     test('a mark is consumed once, not left to eat the next change', () async {
