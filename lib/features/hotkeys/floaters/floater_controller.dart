@@ -149,13 +149,29 @@ class FloaterController extends ChangeNotifier with WindowListener {
 
   /// The floater's icon: closes the floater and takes its capture into the
   /// main window. The page switch happens first, while the app is still
-  /// hidden behind the floater, so the window comes back already on it.
+  /// hidden behind the floater, so the window comes back already on it. The
+  /// journal's entry is created and opened then too, after the notepad's flush
+  /// so it opens with what was typed there.
   Future<void> openApp() => _serial(() async {
     final kind = _active;
     if (kind == null) return;
     final closing = await _navigateTo(kind);
+    final journal = kind == QuickCaptureKind.journal;
+    if (journal) {
+      await _runFlush();
+      final request = QuickCaptureRequest.fromNotepad(offscreen: true);
+      _ref.read(quickCaptureRequestProvider.notifier).state = request;
+      await _bounded(request.handled!.future);
+    }
+    // Its flush is the notepad's last save, taking anything typed since the
+    // one above; the follow-up request has the page take that text up.
     await _dismiss(showMain: true);
-    await _request(kind, closing);
+    await _request(
+      journal
+          ? QuickCaptureRequest.fromNotepad(offscreen: false)
+          : QuickCaptureRequest(kind),
+      closing,
+    );
   });
 
   /// Shows [message] briefly, then dismisses.
@@ -250,7 +266,7 @@ class FloaterController extends ChangeNotifier with WindowListener {
   void _releaseFloaterFocus() => FocusManager.instance.primaryFocus?.unfocus();
 
   Future<void> _openInApp(QuickCaptureKind kind) async =>
-      _request(kind, await _navigateTo(kind));
+      _request(QuickCaptureRequest(kind), await _navigateTo(kind));
 
   /// Closes any sheets and dialogs over the app — they would otherwise stay on
   /// top of the page the hotkey opens — and switches to [kind]'s page without
@@ -296,19 +312,17 @@ class FloaterController extends ChangeNotifier with WindowListener {
     return closing;
   }
 
-  /// Hands [kind]'s page its request, once the modals [_navigateTo] closed
-  /// have unmounted, since a transaction sheet hands its draft back from
+  /// Hands [request] to its page, once the modals [_navigateTo] closed have
+  /// unmounted, since a transaction sheet hands its draft back from
   /// `dispose`, and once the shell has switched to the page, since that
   /// switch unfocuses whatever the page focused before it.
   Future<void> _request(
-    QuickCaptureKind kind,
+    QuickCaptureRequest request,
     List<Future<Object?>> closing,
   ) async {
     await _bounded(Future.wait(closing));
     await _bounded(WidgetsBinding.instance.endOfFrame);
-    _ref.read(quickCaptureRequestProvider.notifier).state = QuickCaptureRequest(
-      kind,
-    );
+    _ref.read(quickCaptureRequestProvider.notifier).state = request;
   }
 
   /// Caps a wait on route animations and frames, which stall while the

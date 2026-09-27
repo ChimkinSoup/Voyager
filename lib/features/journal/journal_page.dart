@@ -140,6 +140,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   Timer? _metadataSaveTimer;
   Timer? _bodySaveTimer;
   Future<void>? _flushInProgress;
+  Future<void> _quickEntryOpen = Future.value();
   var _metadataDirty = false;
   var _suppressAutoSelect = false;
   var _appliedSavedPreferences = false;
@@ -1239,7 +1240,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
   /// The journal hotkey's in-app path: today's Quick Journal Entry — the same
   /// one the notepad floater binds to — opened for editing, in its journal.
-  Future<void> _openQuickJournalEntry() async {
+  ///
+  /// [fromNotepad] when the notepad hands over to the app: the notepad has
+  /// just saved this entry, so what is on disk is newer than anything the page
+  /// holds for it. Without [focus] while the app is still hidden behind it,
+  /// where the body can't take focus.
+  Future<void> _openQuickJournalEntry({
+    bool fromNotepad = false,
+    bool focus = true,
+  }) async {
     final entry = await resolveQuickJournalEntry(
       ProviderScope.containerOf(context, listen: false),
     );
@@ -1255,8 +1264,25 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       if (!mounted) return;
       setState(() => _journalFilter = entry.journalId);
     }
+    if (fromNotepad) _entryBodyDrafts.remove(entry.id);
     await _openEntry(entry.id);
     if (!mounted) return;
+    if (fromNotepad) {
+      // An editor already on this entry isn't reseeded by [_loadEntry], and
+      // the pending hold above keeps the provider listener from pushing the
+      // notepad's text in, so the page's next flush wrote its stale copy back
+      // over it. Only into an editor holding this entry: one mid-switch still
+      // has the outgoing entry's text, and reseeds from disk itself.
+      final editor = _editorKey.currentState;
+      final selected = _selectedEntry;
+      if (editor != null &&
+          selected != null &&
+          selected.id == entry.id &&
+          editor.holdsBodyOf(entry.id)) {
+        editor.setBodyText(selected.body, recordAsEdit: true);
+      }
+    }
+    if (!focus) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _bodyFocusNode.requestFocus();
     });
@@ -2240,7 +2266,27 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _journalDebugLogger = ref.read(journalDebugLoggerProvider);
     ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
       if (request?.kind == QuickCaptureKind.journal) {
-        unawaited(_openQuickJournalEntry());
+        // One after another: the notepad's offscreen open can outlast the
+        // floater's wait for it, and finishing after the follow-up would put
+        // its older text over what the follow-up loaded.
+        final opened = _quickEntryOpen = _quickEntryOpen
+            .then(
+              (_) => _openQuickJournalEntry(
+                fromNotepad: request!.fromNotepad,
+                focus: request.handled == null,
+              ),
+            )
+            .catchError(
+              (Object error, StackTrace stack) => FlutterError.reportError(
+                FlutterErrorDetails(
+                  exception: error,
+                  stack: stack,
+                  library: 'JournalPage',
+                  context: ErrorDescription('while opening the quick entry'),
+                ),
+              ),
+            );
+        unawaited(opened.whenComplete(() => request!.handled?.complete()));
       }
     });
     final journalsAsync = ref.watch(journalsProvider);
@@ -3510,6 +3556,10 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     if (!mounted) return;
     _setEditingFlag(widget.entry, widget.focusNode.hasFocus);
   }
+
+  /// Whether the controller holds [entryId]'s text: [bodyTextFor] without
+  /// logging the mismatch, for callers that expect one mid-switch.
+  bool holdsBodyOf(String entryId) => _bodyEntryId == entryId;
 
   /// The live body text, but only when it is [entryId]'s.
   ///

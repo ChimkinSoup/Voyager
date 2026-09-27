@@ -80,9 +80,25 @@ void storeFinanceCaptureDraft(
 /// Deliberately not const and without `==`: pressing the same hotkey twice is
 /// two requests, and the provider only notifies on a change.
 class QuickCaptureRequest {
-  QuickCaptureRequest(this.kind);
+  QuickCaptureRequest(this.kind) : fromNotepad = false, handled = null;
+
+  /// The journal notepad's app icon handing today's entry over to the app.
+  /// Sent twice: [offscreen] first, while the app is still hidden behind the
+  /// notepad, so the page has the entry in place before the window comes
+  /// back; then again after the notepad's last save, for the page to take up
+  /// that text and focus the body.
+  QuickCaptureRequest.fromNotepad({required bool offscreen})
+    : kind = QuickCaptureKind.journal,
+      fromNotepad = true,
+      handled = offscreen ? Completer<void>() : null;
 
   final QuickCaptureKind kind;
+
+  final bool fromNotepad;
+
+  /// For an offscreen notepad request, completed once the page has acted on
+  /// it. Null on every other request.
+  final Completer<void>? handled;
 }
 
 final quickCaptureRequestProvider = StateProvider<QuickCaptureRequest?>(
