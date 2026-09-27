@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/domain/services/finance_analytics.dart';
+import 'package:voyager/features/finance/finance_search.dart';
 
 /// Which section of the finance page is showing: the day-to-day ledger
 /// dashboard, the macro analytics suite, or the savings goals.
@@ -262,12 +263,15 @@ final financeUiPrefsProvider =
       (ref) => FinanceUiPrefsNotifier(ref.watch(financeUiPrefsStoreProvider)),
     );
 
-/// The tag the ledger is currently filtered to, or null for the whole ledger.
+/// What the ledger is currently filtered to, or null for the whole ledger.
 ///
 /// Session-only, and deliberately not in [FinanceUiPrefs]: it is set by a
-/// budget's "View expenses" as a way of asking a question, and a question that
-/// survived a restart would just be a ledger mysteriously missing rows.
-final financeLedgerTagFilterProvider = StateProvider<String?>((_) => null);
+/// budget's "View expenses" or a breakdown slice's "View transactions" as a
+/// way of asking a question, and a question that survived a restart would
+/// just be a ledger mysteriously missing rows.
+final financeLedgerFilterProvider = StateProvider<FinanceLedgerFilter?>(
+  (_) => null,
+);
 
 /// A request, from the hero's expanded view, to scroll the ledger to [day].
 ///

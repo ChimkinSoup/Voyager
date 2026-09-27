@@ -1,4 +1,6 @@
+import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/services/finance_analytics.dart';
 
 /// The in-page filter behind the finance ledger's Ctrl+F search bar. Pure so
 /// the matching rules can be tested without pumping the page.
@@ -55,4 +57,62 @@ bool financeTransactionMatches(
         .replaceFirst(RegExp(r'^[+-]'), '');
     return _amountPattern.hasMatch(number) && amount.startsWith(number);
   });
+}
+
+/// What a [FinanceLedgerFilter] narrows the ledger by.
+enum FinanceLedgerFilterKind { tag, category, store }
+
+/// A standing question the ledger is narrowed to: the expenses carrying a tag,
+/// filed under a spending-breakdown category, or bought at a store.
+///
+/// A category or store [value] is a breakdown slice label, so it can also be
+/// [kUntaggedLabel], [kUncategorizedLabel] or [kNoStoreLabel], and it matches
+/// by the same rule the breakdown used to put an expense in that slice.
+class FinanceLedgerFilter {
+  const FinanceLedgerFilter.tag(this.value)
+    : kind = FinanceLedgerFilterKind.tag;
+  const FinanceLedgerFilter.category(this.value)
+    : kind = FinanceLedgerFilterKind.category;
+  const FinanceLedgerFilter.store(this.value)
+    : kind = FinanceLedgerFilterKind.store;
+
+  final FinanceLedgerFilterKind kind;
+  final String value;
+
+  /// Lowercase, to sit after "No " in the empty ledger; the chip capitalises
+  /// it.
+  String get description => switch (kind) {
+    FinanceLedgerFilterKind.tag => 'expenses tagged #$value',
+    FinanceLedgerFilterKind.category when value == kUntaggedLabel =>
+      'untagged expenses',
+    FinanceLedgerFilterKind.category when value == kUncategorizedLabel =>
+      'uncategorized expenses',
+    FinanceLedgerFilterKind.category => 'expenses in $value',
+    FinanceLedgerFilterKind.store when value == kNoStoreLabel =>
+      'expenses with no store',
+    FinanceLedgerFilterKind.store => 'expenses at $value',
+  };
+
+  bool matches(
+    FinancialTransaction transaction,
+    List<FinanceCategory> categories,
+  ) {
+    if (transaction.type != TransactionType.expense) return false;
+    switch (kind) {
+      case FinanceLedgerFilterKind.tag:
+        return transaction.tags.contains(value);
+      case FinanceLedgerFilterKind.category:
+        if (transaction.tags.isEmpty) return value == kUntaggedLabel;
+        final primaryTag = transaction.tags.first;
+        final category = categories.cast<FinanceCategory?>().firstWhere(
+          (c) => c!.containsTag(primaryTag),
+          orElse: () => null,
+        );
+        return (category?.name ?? kUncategorizedLabel) == value;
+      case FinanceLedgerFilterKind.store:
+        final origin = transaction.origin?.trim();
+        return (origin == null || origin.isEmpty ? kNoStoreLabel : origin) ==
+            value;
+    }
+  }
 }

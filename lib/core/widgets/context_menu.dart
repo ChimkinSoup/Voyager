@@ -84,6 +84,7 @@ class ContextMenuRegion extends StatefulWidget {
     this.items,
     this.itemsBuilder,
     this.dismissDistance = 220.0,
+    this.onClosed,
   }) : assert(
          (items == null) != (itemsBuilder == null),
          'Provide exactly one of items or itemsBuilder',
@@ -103,6 +104,10 @@ class ContextMenuRegion extends StatefulWidget {
   final ValueGetter<List<ContextMenuItem>>? itemsBuilder;
 
   final double dismissDistance;
+
+  /// Called when an open menu goes away — dismissed, or an item picked — but
+  /// not when the region is disposed with it open.
+  final VoidCallback? onClosed;
 
   @override
   ContextMenuRegionState createState() => ContextMenuRegionState();
@@ -140,13 +145,16 @@ class ContextMenuRegionState extends State<ContextMenuRegion> {
 
   void _closeMenu() {
     final entry = _menuEntry;
+    if (entry == null) return;
     _menuEntry = null;
-    entry?.remove();
+    entry.remove();
+    widget.onClosed?.call();
   }
 
   @override
   void dispose() {
-    _closeMenu();
+    _menuEntry?.remove();
+    _menuEntry = null;
     super.dispose();
   }
 

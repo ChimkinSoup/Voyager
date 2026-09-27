@@ -14,6 +14,7 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/features/finance/finance_page.dart';
+import 'package:voyager/features/finance/finance_search.dart';
 import 'package:voyager/features/finance/finance_ui_prefs.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
@@ -141,7 +142,8 @@ void main() {
     tester,
   ) async {
     final container = await pumpFinance(tester);
-    container.read(financeLedgerTagFilterProvider.notifier).state = 'food';
+    container.read(financeLedgerFilterProvider.notifier).state =
+        const FinanceLedgerFilter.tag('food');
     container
         .read(financeUiPrefsProvider.notifier)
         .setViewMode(FinanceViewMode.analytics);
@@ -164,7 +166,7 @@ void main() {
       container.read(financeUiPrefsProvider).viewMode,
       FinanceViewMode.ledger,
     );
-    expect(container.read(financeLedgerTagFilterProvider), isNull);
+    expect(container.read(financeLedgerFilterProvider), isNull);
     expect(find.text('No transactions'), findsOneWidget);
     expect(atLedgerTop(tester, find.text(headerFor(emptyDay))), isTrue);
   });

@@ -8,6 +8,7 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/features/finance/finance_budget_modal.dart';
 import 'package:voyager/features/finance/finance_soft_delete.dart';
+import 'package:voyager/features/finance/finance_search.dart';
 import 'package:voyager/features/finance/finance_ui_prefs.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart'
     show kIncomeGreen;
@@ -126,7 +127,8 @@ class _BudgetRow extends ConsumerWidget {
   /// "how am I doing this month", so the question left over is the one the
   /// bar can't show — what the spending on this tag actually looks like.
   void _viewExpenses(WidgetRef ref) {
-    ref.read(financeLedgerTagFilterProvider.notifier).state = budget.tag;
+    ref.read(financeLedgerFilterProvider.notifier).state =
+        FinanceLedgerFilter.tag(budget.tag);
     ref
         .read(financeUiPrefsProvider.notifier)
         .setViewMode(FinanceViewMode.ledger);

@@ -6,7 +6,9 @@ import 'dart:math' as math;
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
@@ -182,16 +184,19 @@ Future<void> pumpDeepBreakdown(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-/// Taps the middle of slice [index]'s wedge.
+/// Taps the middle of slice [index]'s wedge — or, when [secondary], hovers it
+/// with a mouse and right-clicks it, returning the mouse still attached.
 ///
 /// fl_chart sweeps its sections clockwise from three o'clock, in screen
 /// coordinates, so walking the preceding sweeps and stopping halfway into
 /// this one lands on the ring.
-Future<void> tapSlice(
+Future<TestGesture?> tapSlice(
   WidgetTester tester,
   List<int> centsBySlice,
-  int index,
-) async {
+  int index, {
+  bool secondary = false,
+  bool settle = true,
+}) async {
   final total = centsBySlice.fold<int>(0, (s, x) => s + x).toDouble();
   var swept = 0.0;
   for (var i = 0; i < index; i++) {
@@ -200,10 +205,24 @@ Future<void> tapSlice(
   final mid = swept + math.pi * centsBySlice[index] / total;
   const radius = 44 + 18 / 2;
   final centre = tester.getCenter(find.byType(PieChart));
+  final point = centre + Offset(math.cos(mid) * radius, math.sin(mid) * radius);
+  if (!secondary) {
+    await tester.tapAt(point);
+    if (settle) await tester.pumpAndSettle();
+    return null;
+  }
+  final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+  addTearDown(mouse.removePointer);
+  await mouse.addPointer(location: point);
+  await mouse.moveTo(point);
+  await tester.pump();
   await tester.tapAt(
-    centre + Offset(math.cos(mid) * radius, math.sin(mid) * radius),
+    point,
+    buttons: kSecondaryButton,
+    kind: PointerDeviceKind.mouse,
   );
   await tester.pumpAndSettle();
+  return mouse;
 }
 
 /// [testWidgets] on [platform].
@@ -466,11 +485,165 @@ void main() {
 
       expect(find.text('Filtering: a'), findsOneWidget);
       // Slice 2 of three, whose own bucket holds a single slice.
-      await tapSlice(tester, const [30000, 20000, 10000], 2);
+      await tapSlice(tester, const [30000, 20000, 10000], 2, secondary: true);
+      await tester.tap(find.text('View breakdown'));
+      await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
       expect(find.text('Filtering: b'), findsOneWidget);
       expect(find.text(r'$10.00'), findsWidgets);
+    },
+  );
+
+  testWidgets('right-clicking a category row opens its ledger', (tester) async {
+    await pumpBreakdown(tester);
+
+    await tester.tap(find.text('Eating out'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('View transactions'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Expenses in Eating out'), findsOneWidget);
+    expect(find.text('plain-food'), findsOneWidget);
+    expect(find.text('food-and-thai'), findsOneWidget);
+    expect(find.text('rent-only'), findsNothing);
+  });
+
+  testWidgets('right-clicking a store row opens its ledger', (tester) async {
+    await pumpBreakdown(tester, withIncome: true);
+    await tester.tap(find.text('Store'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(kNoStoreLabel), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('View transactions'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Expenses with no store'), findsOneWidget);
+    expect(find.text('rent-only'), findsOneWidget);
+    expect(find.text('Employer'), findsNothing);
+  });
+
+  _platformWidgets(
+    'clicking a pie slice opens its tag ledger',
+    TargetPlatform.windows,
+    (tester) async {
+      await pumpDeepBreakdown(tester);
+
+      // Focused on a: slice 0 is the co-tag d.
+      await tapSlice(tester, const [30000, 20000, 10000], 0);
+
+      expect(find.text('Expenses tagged #d'), findsOneWidget);
+    },
+  );
+
+  _platformWidgets(
+    'opening the ledger from a slice leaves the fading analytics in place',
+    TargetPlatform.windows,
+    (tester) async {
+      await pumpDeepBreakdown(tester);
+      final title = find.text('Spending Breakdown');
+      final top = tester.getTopLeft(title).dy;
+
+      await tapSlice(tester, const [30000, 20000, 10000], 0, settle: false);
+      // The frame right after the click, while the analytics are still
+      // fading out rather than gone.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+
+      expect(tester.getTopLeft(title).dy, top);
+    },
+  );
+
+  testWidgets('Ctrl+F from the analytics leaves them in place as they fade', (
+    tester,
+  ) async {
+    await pumpBreakdown(tester);
+    final title = find.text('Spending Breakdown');
+    final top = tester.getTopLeft(title).dy;
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+
+    expect(tester.getTopLeft(title).dy, top);
+    await tester.pumpAndSettle();
+  });
+
+  _platformWidgets(
+    'a Store-mode slice has no right-click menu',
+    TargetPlatform.windows,
+    (tester) async {
+      await pumpBreakdown(tester);
+      await tester.tap(find.text('Store'));
+      await tester.pumpAndSettle();
+
+      // One slice, No store, holding the whole ring.
+      await tapSlice(tester, const [9000], 0, secondary: true);
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('View breakdown'), findsNothing);
+    },
+  );
+
+  _platformWidgets(
+    'clearing the ledger filter keeps the open search field',
+    TargetPlatform.windows,
+    (tester) async {
+      await pumpDeepBreakdown(tester);
+      await tapSlice(tester, const [30000, 20000, 10000], 0);
+      expect(find.text('Expenses tagged #d'), findsOneWidget);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+      final field = tester.state<EditableTextState>(find.byType(EditableText));
+
+      await tester.tap(find.text('Expenses tagged #d'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Expenses tagged #d'), findsNothing);
+      expect(
+        tester.state<EditableTextState>(find.byType(EditableText)),
+        same(field),
+      );
+    },
+  );
+
+  _platformWidgets(
+    'a right-clicked slice stays raised while its menu is open',
+    TargetPlatform.windows,
+    (tester) async {
+      await pumpDeepBreakdown(tester);
+      double radius() => tester
+          .widget<PieChart>(find.byType(PieChart))
+          .data
+          .sections
+          .first
+          .radius;
+
+      final mouse = await tapSlice(
+        tester,
+        const [30000, 20000, 10000],
+        0,
+        secondary: true,
+      );
+      final raised = radius();
+      expect(raised, greaterThan(18));
+
+      // Off the ring and onto the menu, which takes the chart's hover away.
+      await mouse!.moveTo(tester.getCenter(find.text('View breakdown')));
+      await tester.pumpAndSettle();
+      expect(radius(), raised);
+
+      // Dismissed, it drops back.
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(find.text('View breakdown'), findsNothing);
+      expect(radius(), 18);
     },
   );
 
@@ -484,7 +657,7 @@ void main() {
 
       await tapSlice(tester, const [30000, 20000, 10000], 0);
 
-      expect(find.text('Filtering: d'), findsOneWidget);
+      expect(find.text('Expenses tagged #d'), findsOneWidget);
     },
   );
 }

@@ -538,13 +538,13 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
   Widget _ledgerSliver(
     _LedgerModel ledger,
     Map<String, int> tagColors, {
-    String? tagFilter,
+    FinanceLedgerFilter? filter,
   }) {
     final entries = ledger.entries;
     if (entries.isEmpty) {
       return SliverToBoxAdapter(
         child: _EmptyLedger(
-          tagFilter: tagFilter,
+          filter: filter,
           searching: _searchTokens.isNotEmpty,
         ),
       );
@@ -579,7 +579,13 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
       financeUiPrefsProvider.select((prefs) => prefs.viewMode),
     );
     _builtMode = mode;
-    final tagFilter = ref.watch(financeLedgerTagFilterProvider);
+    final ledgerFilter = ref.watch(financeLedgerFilterProvider);
+    // Only a category filter needs them; watching them otherwise rebuilt the
+    // whole ledger on every category edit.
+    final categories = ledgerFilter?.kind == FinanceLedgerFilterKind.category
+        ? ref.watch(financeCategoriesProvider).valueOrNull ??
+              const <FinanceCategory>[]
+        : const <FinanceCategory>[];
     final now = DateTime.now();
 
     ref.listen<FinanceLedgerJump?>(financeLedgerJumpProvider, (_, jump) {
@@ -607,16 +613,15 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
     // tag would turn into a different and much less useful number without
     // saying so.
     //
-    // The search narrows it the same way, on top of any tag filter.
+    // The search narrows it the same way, on top of any filter.
     final searchTokens = _searchTokens;
-    final filtered = tagFilter == null && searchTokens.isEmpty
+    final filtered = ledgerFilter == null && searchTokens.isEmpty
         ? transactions
         : transactions
               .where(
                 (t) =>
-                    (tagFilter == null ||
-                        (t.type == TransactionType.expense &&
-                            t.tags.contains(tagFilter))) &&
+                    (ledgerFilter == null ||
+                        ledgerFilter.matches(t, categories)) &&
                     financeTransactionMatches(t, searchTokens),
               )
               .toList();
@@ -679,33 +684,6 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
                   },
                 ),
               ),
-              if (mode == FinanceViewMode.ledger && tagFilter != null) ...[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: _LedgerFilterChip(
-                    tag: tagFilter,
-                    onClear: () =>
-                        ref
-                                .read(financeLedgerTagFilterProvider.notifier)
-                                .state =
-                            null,
-                  ),
-                ),
-              ],
-              if (mode == FinanceViewMode.ledger && _searchOpen) ...[
-                const SizedBox(height: 8),
-                TodoListSearchBar(
-                  controller: _searchController,
-                  focusNode: _searchFocusNode,
-                  accentColor: Theme.of(context).colorScheme.primary,
-                  matchCount: filtered.length,
-                  showMatchCount: searchTokens.isNotEmpty,
-                  hintText: 'Search store, note, #tag or amount',
-                  onChanged: _onSearchChanged,
-                  onClose: _closeSearch,
-                ),
-              ],
             ],
           ),
         );
@@ -726,7 +704,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
                       sliver: _ledgerSliver(
                         ledger,
                         tagColors,
-                        tagFilter: tagFilter,
+                        filter: ledgerFilter,
                       ),
                     ),
                   ],
@@ -743,7 +721,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
             slivers: [
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(horizontal, 4, horizontal, 0),
-                sliver: _ledgerSliver(ledger, tagColors, tagFilter: tagFilter),
+                sliver: _ledgerSliver(ledger, tagColors, filter: ledgerFilter),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
               SliverPadding(
@@ -772,7 +750,73 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
                 children: [
                   KeyedSubtree(
                     key: ValueKey(wide ? 'ledger-wide' : 'ledger-narrow'),
-                    child: ledgerBody,
+                    // The filter chip and the search bar live in the ledger's
+                    // own page rather than the shared header: both are opened
+                    // on the way into the ledger, and a header that grew by
+                    // one as the tab switched shoved the analytics fading out
+                    // beneath it down the screen.
+                    //
+                    // Always a Column, so opening or closing either only adds
+                    // or drops a row above the ledger instead of rebuilding
+                    // the ledger's scroll view under a new parent.
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Keyed, so clearing the chip while the search is open
+                        // can't hand the chip's row to the search bar and
+                        // rebuild its field from scratch.
+                        if (ledgerFilter != null)
+                          Padding(
+                            key: const ValueKey('ledger-filter-chip'),
+                            padding: EdgeInsets.fromLTRB(
+                              horizontal,
+                              0,
+                              horizontal,
+                              8,
+                            ),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: _LedgerFilterChip(
+                                filter: ledgerFilter,
+                                onClear: () =>
+                                    ref
+                                            .read(
+                                              financeLedgerFilterProvider
+                                                  .notifier,
+                                            )
+                                            .state =
+                                        null,
+                              ),
+                            ),
+                          ),
+                        if (_searchOpen)
+                          Padding(
+                            key: const ValueKey('ledger-search'),
+                            padding: EdgeInsets.fromLTRB(
+                              horizontal,
+                              0,
+                              horizontal,
+                              8,
+                            ),
+                            child: TodoListSearchBar(
+                              controller: _searchController,
+                              focusNode: _searchFocusNode,
+                              accentColor: Theme.of(
+                                context,
+                              ).colorScheme.primary,
+                              matchCount: filtered.length,
+                              showMatchCount: searchTokens.isNotEmpty,
+                              hintText: 'Search store, note, #tag or amount',
+                              onChanged: _onSearchChanged,
+                              onClose: _closeSearch,
+                            ),
+                          ),
+                        Expanded(
+                          key: const ValueKey('ledger-body'),
+                          child: ledgerBody,
+                        ),
+                      ],
+                    ),
                   ),
                   const FinanceAnalyticsView(),
                   const FinanceGoalsView(),
@@ -1252,16 +1296,16 @@ class _LedgerError extends StatelessWidget {
   }
 }
 
-/// The tag the ledger is narrowed to, with the only way back out.
+/// What the ledger is narrowed to, with the only way back out.
 ///
 /// Always on screen while the filter stands: a ledger quietly missing most of
 /// its rows is a bug report waiting to happen, so the reason it looks that way
 /// has to be visible from the same place the rows aren't. The whole chip is
 /// the clear target — no separate ✕.
 class _LedgerFilterChip extends StatelessWidget {
-  const _LedgerFilterChip({required this.tag, required this.onClear});
+  const _LedgerFilterChip({required this.filter, required this.onClear});
 
-  final String tag;
+  final FinanceLedgerFilter filter;
   final VoidCallback onClear;
 
   @override
@@ -1276,7 +1320,11 @@ class _LedgerFilterChip extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: Text(
-            'Expenses tagged #$tag',
+            filter.description.replaceRange(
+              0,
+              1,
+              filter.description[0].toUpperCase(),
+            ),
             style: theme.textTheme.labelMedium?.copyWith(color: accent),
           ),
         ),
@@ -1286,11 +1334,11 @@ class _LedgerFilterChip extends StatelessWidget {
 }
 
 class _EmptyLedger extends StatelessWidget {
-  const _EmptyLedger({this.tagFilter, this.searching = false});
+  const _EmptyLedger({this.filter, this.searching = false});
 
-  /// The tag the ledger is filtered to, so an empty result says which question
+  /// What the ledger is filtered to, so an empty result says which question
   /// came back with nothing rather than claiming the ledger is bare.
-  final String? tagFilter;
+  final FinanceLedgerFilter? filter;
 
   /// Whether the Ctrl+F search is narrowing the ledger.
   final bool searching;
@@ -1298,7 +1346,7 @@ class _EmptyLedger extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final filter = tagFilter;
+    final filter = this.filter;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 48),
       child: Column(
@@ -1314,7 +1362,7 @@ class _EmptyLedger extends StatelessWidget {
             searching
                 ? 'No transactions match your search.'
                 : filter != null
-                ? 'No expenses tagged #$filter.'
+                ? 'No ${filter.description}.'
                 : 'No transactions yet.\nTap + to log your first one.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyMedium?.copyWith(

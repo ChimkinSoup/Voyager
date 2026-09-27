@@ -13,6 +13,7 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/services/finance_analytics.dart';
 import 'package:voyager/features/finance/finance_page.dart';
 import 'package:voyager/features/finance/finance_search.dart';
 import 'package:voyager/features/todo/todo_list_search_bar.dart';
@@ -105,6 +106,54 @@ void main() {
       final gum = _tx('g', amountCents: 5, origin: 'Kiosk');
       expect(_matches(gum, '0.05'), isTrue);
       expect(_matches(gum, '0.5'), isFalse);
+    });
+  });
+
+  group('FinanceLedgerFilter', () {
+    final now = utcNow();
+    final categories = [
+      FinanceCategory(
+        id: 'c',
+        createdAt: now,
+        updatedAt: now,
+        name: 'Eating out',
+        tags: const ['food'],
+      ),
+    ];
+    final foodThai = _tx('a', origin: ' Costco ', tags: ['food', 'thai']);
+    final thaiFood = _tx('b', tags: ['thai', 'food']);
+    final untagged = _tx('c');
+    final deposit = FinancialTransaction(
+      id: 'd',
+      createdAt: now,
+      updatedAt: now,
+      type: TransactionType.deposit,
+      amountCents: 100,
+      occurredAt: DateTime(2026, 8, 20),
+      origin: 'Costco',
+      tags: const ['food'],
+    );
+
+    List<String> ids(FinanceLedgerFilter filter) => [
+      for (final t in [foodThai, thaiFood, untagged, deposit])
+        if (filter.matches(t, categories)) t.id,
+    ];
+
+    test('a tag matches any expense carrying it', () {
+      expect(ids(const FinanceLedgerFilter.tag('food')), ['a', 'b']);
+    });
+
+    test('a category matches by primary tag, like the breakdown', () {
+      expect(ids(const FinanceLedgerFilter.category('Eating out')), ['a']);
+      expect(ids(const FinanceLedgerFilter.category(kUncategorizedLabel)), [
+        'b',
+      ]);
+      expect(ids(const FinanceLedgerFilter.category(kUntaggedLabel)), ['c']);
+    });
+
+    test('a store matches the trimmed origin, or none', () {
+      expect(ids(const FinanceLedgerFilter.store('Costco')), ['a']);
+      expect(ids(const FinanceLedgerFilter.store(kNoStoreLabel)), ['b', 'c']);
     });
   });
 

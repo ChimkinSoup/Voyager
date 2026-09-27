@@ -251,7 +251,7 @@ class _NetFlowOverlayState extends State<_NetFlowOverlay>
     if (_closing) return;
     final container = ProviderScope.containerOf(context, listen: false);
     final closed = _close();
-    container.read(financeLedgerTagFilterProvider.notifier).state = null;
+    container.read(financeLedgerFilterProvider.notifier).state = null;
     container.read(financeLedgerJumpProvider.notifier).state =
         FinanceLedgerJump(day, ready: closed);
     await closed;

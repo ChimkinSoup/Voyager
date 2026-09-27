@@ -22,6 +22,7 @@ import 'package:voyager/features/finance/finance_category_modal.dart';
 import 'package:voyager/features/finance/finance_contribution_room_modal.dart';
 import 'package:voyager/features/finance/finance_room_bar.dart';
 import 'package:voyager/features/finance/finance_room_event_modal.dart';
+import 'package:voyager/features/finance/finance_search.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart'
     show kIncomeGreen;
@@ -923,8 +924,12 @@ class _BreakdownCard extends ConsumerWidget {
               child: _BreakdownPie(
                 slices: slices,
                 total: total,
+                onSliceTap: (index) => _viewTransactions(
+                  ref,
+                  _ledgerFilterFor(focus, mode, slices[index]),
+                ),
                 // Store slices don't drill down (v1).
-                onSliceTap: mode == FinanceBreakdownMode.store
+                onSliceFocus: mode == FinanceBreakdownMode.store
                     ? null
                     : (index) => _focusSlice(ref, focus, mode, slices[index]),
               ),
@@ -937,6 +942,10 @@ class _BreakdownCard extends ConsumerWidget {
                 onTap: mode == FinanceBreakdownMode.store
                     ? null
                     : () => _focusSlice(ref, focus, mode, slice),
+                onViewTransactions: () => _viewTransactions(
+                  ref,
+                  _ledgerFilterFor(focus, mode, slice),
+                ),
               ),
             if (tail.isNotEmpty)
               Padding(
@@ -1080,6 +1089,37 @@ class _BreakdownCard extends ConsumerWidget {
     }
   }
 
+  /// The ledger filter that shows the expenses behind [slice].
+  ///
+  /// Every slice under a focus is a tag — bar Untagged, which is only ever
+  /// the category-path bucket — so only the unfocused chart's grouping
+  /// decides anything else.
+  FinanceLedgerFilter _ledgerFilterFor(
+    BreakdownFocus focus,
+    FinanceBreakdownMode mode,
+    BreakdownSlice slice,
+  ) {
+    if (mode == FinanceBreakdownMode.store) {
+      return FinanceLedgerFilter.store(slice.label);
+    }
+    if (slice.label == kUntaggedLabel ||
+        (focus is BreakdownFocusNone &&
+            mode == FinanceBreakdownMode.category)) {
+      return FinanceLedgerFilter.category(slice.label);
+    }
+    return FinanceLedgerFilter.tag(slice.label);
+  }
+
+  /// Sends the user to the ledger, filtered to [filter]. All-time rather than
+  /// this month, like a budget's "View expenses": the ledger is newest-first,
+  /// so this month's rows lead either way.
+  void _viewTransactions(WidgetRef ref, FinanceLedgerFilter filter) {
+    ref.read(financeLedgerFilterProvider.notifier).state = filter;
+    ref
+        .read(financeUiPrefsProvider.notifier)
+        .setViewMode(FinanceViewMode.ledger);
+  }
+
   Future<void> _showCategoryManager(BuildContext context, WidgetRef ref) async {
     await showVoyagerModal<void>(
       context: context,
@@ -1133,6 +1173,7 @@ class _BreakdownLegendRow extends StatelessWidget {
     required this.slice,
     required this.total,
     required this.onTap,
+    this.onViewTransactions,
   });
 
   final BreakdownSlice slice;
@@ -1140,6 +1181,9 @@ class _BreakdownLegendRow extends StatelessWidget {
 
   /// Null for a chart whose slices don't drill down.
   final VoidCallback? onTap;
+
+  /// The right-click menu's "View transactions". Null for no menu.
+  final VoidCallback? onViewTransactions;
 
   @override
   Widget build(BuildContext context) {
@@ -1195,13 +1239,25 @@ class _BreakdownLegendRow extends StatelessWidget {
         ],
       ),
     );
-    return Material(
+    final tile = Material(
       type: MaterialType.transparency,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: onTap,
         child: row,
       ),
+    );
+    final view = onViewTransactions;
+    if (view == null) return tile;
+    return ContextMenuRegion(
+      itemsBuilder: () => [
+        ContextMenuItem(
+          label: 'View transactions',
+          icon: PhosphorIconsRegular.receipt,
+          onTap: view,
+        ),
+      ],
+      child: tile,
     );
   }
 }
@@ -1217,6 +1273,7 @@ class _BreakdownPie extends StatefulWidget {
     required this.slices,
     required this.total,
     this.onSliceTap,
+    this.onSliceFocus,
   });
 
   final List<BreakdownSlice> slices;
@@ -1224,6 +1281,10 @@ class _BreakdownPie extends StatefulWidget {
 
   /// Called with the index of the slice a click landed on.
   final ValueChanged<int>? onSliceTap;
+
+  /// The right-click menu's "View breakdown", with the index of the slice
+  /// under the pointer. Null for no menu.
+  final ValueChanged<int>? onSliceFocus;
 
   @override
   State<_BreakdownPie> createState() => _BreakdownPieState();
@@ -1235,6 +1296,30 @@ class _BreakdownPieState extends State<_BreakdownPie> {
 
   int? _touchedIndex;
 
+  /// The slice the open right-click menu is about. It stays raised, bubble and
+  /// all, while the menu is up: the menu's overlay takes the hover away from
+  /// the chart, and a slice that dropped back as its menu opened would leave
+  /// the menu pointing at nothing.
+  int? _menuIndex;
+
+  /// The slice the menu being built is for. Kept apart from [_menuIndex],
+  /// which the close of a menu already up clears while the next one opens.
+  late int _menuTarget;
+
+  final _menuKey = GlobalKey<ContextMenuRegionState>();
+
+  /// The menu for the slice the pointer is on — the hover already resolved
+  /// which one that is, so a right-click off the ring opens nothing.
+  void _openMenu(TapUpDetails details) {
+    final index = _touchedIndex;
+    if (index == null) return;
+    _menuTarget = index;
+    // Opened before [_menuIndex] is set: opening closes any menu already up,
+    // and that close clears it.
+    _menuKey.currentState?.openMenuAt(details.globalPosition);
+    setState(() => _menuIndex = index);
+  }
+
   /// A drill-down replaces the slice list under a State that is kept — the
   /// filter line is already on screen, so the children line up and the
   /// element is reused — and an index taken against the old list then points
@@ -1242,12 +1327,12 @@ class _BreakdownPieState extends State<_BreakdownPie> {
   @override
   void didUpdateWidget(covariant _BreakdownPie oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final touched = _touchedIndex;
-    if (touched == null) return;
-    if (touched >= widget.slices.length ||
-        widget.slices[touched].label != oldWidget.slices[touched].label) {
-      _touchedIndex = null;
-    }
+    bool stale(int? index) =>
+        index != null &&
+        (index >= widget.slices.length ||
+            widget.slices[index].label != oldWidget.slices[index].label);
+    if (stale(_touchedIndex)) _touchedIndex = null;
+    if (stale(_menuIndex)) _menuIndex = null;
   }
 
   void _handleTouch(FlTouchEvent event, PieTouchResponse? response) {
@@ -1255,7 +1340,7 @@ class _BreakdownPieState extends State<_BreakdownPie> {
     final onSlice = index != null && index >= 0 && index < widget.slices.length;
 
     // A click, not the hover that precedes it: the callback fires for every
-    // pointer event the chart sees, and drilling in on hover would make the
+    // pointer event the chart sees, and acting on hover would make the
     // chart impossible to merely read.
     //
     // Resolved from the raw response rather than from the highlight below,
@@ -1296,7 +1381,9 @@ class _BreakdownPieState extends State<_BreakdownPie> {
     final theme = Theme.of(context);
     final slices = widget.slices;
     final total = widget.total;
-    final touched = _touchedIndex;
+    // While a menu is open its slice wins, and the hover the pointer drags
+    // across the ring on its way to the menu raises nothing else.
+    final touched = _menuIndex ?? _touchedIndex;
     // A bucket that cost nothing still gets a ring: fl_chart draws no sections
     // at all when every value is zero, and an empty square under a "$0.00"
     // reads as a chart that failed rather than as an answer.
@@ -1306,24 +1393,52 @@ class _BreakdownPieState extends State<_BreakdownPie> {
       clipBehavior: Clip.none,
       alignment: Alignment.center,
       children: [
-        PieChart(
-          PieChartData(
-            sectionsSpace: 2,
-            centerSpaceRadius: _centerRadius,
-            pieTouchData: PieTouchData(touchCallback: _handleTouch),
-            sections: [
-              for (var i = 0; i < slices.length; i++)
-                PieChartSectionData(
-                  value: allZero ? 1 : slices[i].amountCents.toDouble(),
-                  color: paletteColor(slices[i].colorValue, context),
-                  // The hovered slice thickens outward a little, so the bubble
-                  // and the wedge it describes are tied together without a
-                  // second colour or a border to read.
-                  radius: i == touched ? _sliceRadius + 4 : _sliceRadius,
-                  showTitle: false,
-                ),
-            ],
+        // No secondary-tap handler on a pie without a menu, so its right-clicks
+        // stay free for anything around it.
+        GestureDetector(
+          onSecondaryTapUp: widget.onSliceFocus == null ? null : _openMenu,
+          child: PieChart(
+            PieChartData(
+              sectionsSpace: 2,
+              centerSpaceRadius: _centerRadius,
+              pieTouchData: PieTouchData(touchCallback: _handleTouch),
+              sections: [
+                for (var i = 0; i < slices.length; i++)
+                  PieChartSectionData(
+                    value: allZero ? 1 : slices[i].amountCents.toDouble(),
+                    color: paletteColor(slices[i].colorValue, context),
+                    // The hovered slice thickens outward a little, so the bubble
+                    // and the wedge it describes are tied together without a
+                    // second colour or a border to read.
+                    radius: i == touched ? _sliceRadius + 4 : _sliceRadius,
+                    showTitle: false,
+                  ),
+              ],
+            ),
           ),
+        ),
+        // Opened only by [_openMenu], never by a click of its own: a sibling
+        // with nothing to hit rather than a wrapper around the chart, so the
+        // chart's place in the tree is the same with or without a menu, and
+        // the slices still morph between Store or Income and the others.
+        ContextMenuRegion(
+          key: _menuKey,
+          onClosed: () {
+            if (mounted) setState(() => _menuIndex = null);
+          },
+          itemsBuilder: () {
+            // Captured now: the hover clears as the pointer moves onto the
+            // menu, long before an item is picked.
+            final index = _menuTarget;
+            return [
+              ContextMenuItem(
+                label: 'View breakdown',
+                icon: PhosphorIconsRegular.chartPieSlice,
+                onTap: () => widget.onSliceFocus?.call(index),
+              ),
+            ];
+          },
+          child: const SizedBox.shrink(),
         ),
         Column(
           mainAxisSize: MainAxisSize.min,
