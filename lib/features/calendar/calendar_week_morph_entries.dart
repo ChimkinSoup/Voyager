@@ -28,8 +28,7 @@ class CalendarWeekMorphPill {
 /// One day's segment of an event (or a todo bar) that the month↔week morph
 /// drags between its month-cell pill and its week-view block.
 ///
-/// An entry missing one end — past a cell's "+N", on an adjacent-month day,
-/// or a todo, which the month cell draws as an icon — fades in place at the
+/// An entry missing one end — past a cell's "+N", or a todo, which the month cell draws as an icon — fades in place at the
 /// end it has.
 class CalendarWeekMorphEntry {
   const CalendarWeekMorphEntry({
@@ -41,6 +40,7 @@ class CalendarWeekMorphEntry {
     this.month,
     this.week,
     this.monthFontSize = 0,
+    this.monthOpacity = 1,
   });
 
   final String id;
@@ -54,6 +54,9 @@ class CalendarWeekMorphEntry {
   final CalendarWeekMorphPill? month;
   final CalendarWeekMorphPill? week;
   final double monthFontSize;
+
+  /// Opacity at the month end — faded on adjacent-month days.
+  final double monthOpacity;
 }
 
 /// Content clip of the month cell at [monthCellRect] — what hides the parts
@@ -92,7 +95,7 @@ List<CalendarWeekMorphEntry> calendarWeekMorphEntries({
   const radius = Radius.circular(calendarEventCornerRadius);
   final monthStyle = MonthDayCellStyle.full;
   final weekMargin = weekViewDayCellStyle.cellMargin.left;
-  final monthPills = <String, (CalendarWeekMorphPill, double)>{};
+  final monthPills = <String, (CalendarWeekMorphPill, double, double)>{};
   final weekPills = <String, (CalendarWeekMorphPill, bool)>{};
   final entries = <CalendarWeekMorphEntry>[];
 
@@ -100,7 +103,9 @@ List<CalendarWeekMorphEntry> calendarWeekMorphEntries({
   final packed = calendarPackWeekEvents(weekDates, events);
   for (var c = 0; c < 7; c++) {
     final date = weekDates[c];
-    if (date.month != month.month) continue;
+    final monthOpacity = date.month == month.month
+        ? 1.0
+        : calendarAdjacentMonthEventOpacity;
     final dayEvents = packed[c];
     final hasIndicators = indicators.any((i) => calendarSameDay(i.day, date));
     final clip = calendarWeekMorphMonthClip(monthRowRects[c]).outerRect;
@@ -155,6 +160,7 @@ List<CalendarWeekMorphEntry> calendarWeekMorphEntries({
           showTitle: isStart,
         ),
         fontSize,
+        monthOpacity,
       );
     }
   }
@@ -261,6 +267,7 @@ List<CalendarWeekMorphEntry> calendarWeekMorphEntries({
         month: monthPill?.$1,
         week: weekPill?.$1,
         monthFontSize: monthPill?.$2 ?? 0,
+        monthOpacity: monthPill?.$3 ?? 1,
       ),
     );
   }
@@ -281,6 +288,7 @@ class CalendarWeekMorphEntriesLayer extends StatelessWidget {
     required this.scrollOffset,
     required this.monthRowRects,
     required this.weekColumnRects,
+    this.fadeAtMonth = false,
   });
 
   final List<CalendarWeekMorphEntry> entries;
@@ -288,6 +296,10 @@ class CalendarWeekMorphEntriesLayer extends StatelessWidget {
   final double scrollOffset;
   final List<Rect> monthRowRects;
   final List<Rect> weekColumnRects;
+
+  /// Entries fade out as they reach the month end — for the chained
+  /// week↔year morph, whose month cells show no bars.
+  final bool fadeAtMonth;
 
   @override
   Widget build(BuildContext context) {
@@ -314,12 +326,12 @@ class CalendarWeekMorphEntriesLayer extends StatelessWidget {
     // that end, clear of the other view's layout still moving through.
     final Rect rect;
     final BorderRadius radius;
-    final double opacity;
+    double opacity;
     final double styleT;
     if (month != null && week != null) {
       rect = Rect.lerp(month.rect, week.rect, t)!;
       radius = BorderRadius.lerp(month.radius, week.radius, t)!;
-      opacity = 1;
+      opacity = entry.monthOpacity + (1 - entry.monthOpacity) * t;
       styleT = t;
     } else if (week != null) {
       rect = week.rect;
@@ -329,9 +341,11 @@ class CalendarWeekMorphEntriesLayer extends StatelessWidget {
     } else {
       rect = month!.rect;
       radius = month.radius;
-      opacity = (1 - t * 2).clamp(0.0, 1.0);
+      opacity = (1 - t * 2).clamp(0.0, 1.0) * entry.monthOpacity;
       styleT = 0;
     }
+    // The bare month cells never show a month-only entry at all.
+    if (fadeAtMonth) opacity = week == null ? 0 : opacity * t;
     if (opacity <= 0) return const SizedBox.shrink();
 
     // Clip from the month cell to the timed viewport, or — for the shelf,

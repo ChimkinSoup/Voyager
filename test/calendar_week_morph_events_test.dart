@@ -468,22 +468,64 @@ void main() {
     expect(entryFade().opacity.value, 1.0);
   });
 
-  testWidgets('week → year keeps the week grid\'s own events fading out, '
-      'since that chained morph carries none', (tester) async {
+  testWidgets('week ↔ year carries events with their day columns, fading '
+      'at the month end', (tester) async {
     await _pumpCalendar(tester);
     await tester.tap(find.text('Week'));
     await _settle(tester);
-    await tester.tap(find.text('Year'));
-    var morphFrames = 0;
-    for (var frame = 0; frame < 20; frame++) {
-      await tester.pump(const Duration(milliseconds: 16));
-      if (find.byKey(ValueKey(_week[0])).evaluate().isEmpty) continue;
-      morphFrames++;
-      expect(find.byType(CalendarWeekEventBlock), findsWidgets);
-      expect(_morphPill(_key('allday', 1)), findsNothing);
+    for (final label in ['Year', 'Week']) {
+      await tester.tap(find.text(label));
+      final fade = <double>[];
+      for (var frame = 0; frame < 120; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        final cell = find.byKey(ValueKey(_week[1]));
+        if (cell.evaluate().isEmpty) {
+          // Once handed off, the week view must not fade its entries in again.
+          if (label == 'Week' &&
+              fade.isNotEmpty &&
+              find.byType(CalendarWeekTimeline).evaluate().isNotEmpty) {
+            final entryFade = tester.widget<FadeTransition>(
+              find
+                  .descendant(
+                    of: find.byType(CalendarWeekTimeline),
+                    matching: find.byType(FadeTransition),
+                  )
+                  .first,
+            );
+            expect(entryFade.opacity.value, 1.0, reason: 'frame $frame');
+          }
+          continue;
+        }
+        final pill = _morphPill(_key('allday', 1));
+        // Fully faded out only right at the month end.
+        if (pill.evaluate().isEmpty) {
+          expect(
+            label == 'Year' ? fade.isNotEmpty && fade.last < 0.1 : fade.isEmpty,
+            isTrue,
+            reason: '$label frame $frame: $fade',
+          );
+          continue;
+        }
+        // The live week grid behind draws no copy of its own.
+        if (label == 'Year') {
+          expect(find.byType(CalendarWeekEventBlock), findsNothing);
+        }
+        final pillRect = tester.getRect(pill);
+        final cellRect = tester.getRect(cell);
+        expect(pillRect.left, greaterThanOrEqualTo(cellRect.left - 4));
+        expect(pillRect.right, lessThanOrEqualTo(cellRect.right + 4));
+        fade.add(_pillOpacity(tester, _key('allday', 1)));
+      }
+      expect(fade.length, greaterThan(10), reason: label);
+      for (var i = 1; i < fade.length; i++) {
+        expect(
+          label == 'Week' ? fade[i] >= fade[i - 1] : fade[i] <= fade[i - 1],
+          isTrue,
+          reason: '$label fade: $fade',
+        );
+      }
+      await _settle(tester);
     }
-    expect(morphFrames, greaterThan(0));
-    await _settle(tester);
   });
 
   testWidgets('a timed event headed off-screen is clipped to its column', (

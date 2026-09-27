@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/domain/services/finance_analytics.dart';
 
 /// Which section of the finance page is showing: the day-to-day ledger
@@ -145,10 +145,10 @@ abstract class FinanceUiPrefsStore {
 const _prefsFileName = 'finance_ui_prefs.json';
 
 class FileFinanceUiPrefsStore implements FinanceUiPrefsStore {
-  /// [directory] defaults to the app's documents directory — the same place
+  /// [directory] defaults to [appDataDirectory] — the same place
   /// the database lives. Tests point it somewhere temporary.
   FileFinanceUiPrefsStore({Future<Directory> Function()? directory})
-    : _directory = directory ?? getApplicationDocumentsDirectory;
+    : _directory = directory ?? appDataDirectory;
 
   final Future<Directory> Function() _directory;
 

@@ -80,10 +80,13 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       );
       _tray = tray;
       unawaited(tray.install());
-      // A second launch, which exits after asking for this (see main.cpp).
+      // A second launch, which exits after asking for this (see main.cpp),
+      // or the release script closing this copy to replace it.
       _instanceChannel.setMethodCallHandler((call) async {
         if (call.method == 'showMainWindow') {
           await ref.read(floaterControllerProvider).showMainWindow();
+        } else if (call.method == 'quit') {
+          await _quit();
         }
       });
       unawaited(_warmUpFinanceSheet());

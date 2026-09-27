@@ -230,8 +230,8 @@
     "semantic_hash": "fd59f0212c5bd5ec90cde34bf8a3288a"
   },
   "lib/core/platform/desktop_window.dart": {
-    "mtime": 1790468402.4964497,
-    "ast_hash": "4a47b9d11e09b8b96dc3496efd16d5e0",
+    "mtime": 1790473820.1083715,
+    "ast_hash": "e39484e43874d718b316603789a133b3",
     "semantic_hash": ""
   },
   "lib/core/platform/platform_adaptive.dart": {
@@ -705,8 +705,8 @@
     "semantic_hash": ""
   },
   "lib/domain/services/weather_service.dart": {
-    "mtime": 1790301158.7221537,
-    "ast_hash": "3b6300ca05572a9aa37b527a6df9aa21",
+    "mtime": 1790474117.0720675,
+    "ast_hash": "bef476f37586458640568f34b54c81f8",
     "semantic_hash": ""
   },
   "lib/domain/todo/todo_task_sorting.dart": {
@@ -885,8 +885,8 @@
     "semantic_hash": ""
   },
   "lib/features/settings/settings_page.dart": {
-    "mtime": 1790472521.8529053,
-    "ast_hash": "14aa10dd5c3548f01cd9a4ae65695307",
+    "mtime": 1790473243.0314474,
+    "ast_hash": "b89bcd3afdc123ce44addbc6f6dc2947",
     "semantic_hash": ""
   },
   "lib/features/settings/weather_location_tile.dart": {
@@ -1155,8 +1155,8 @@
     "semantic_hash": "5e97f7a19db1777bc5e2dda2989053ca"
   },
   "test/weather_service_test.dart": {
-    "mtime": 1789972029.7669072,
-    "ast_hash": "424c7f2661091531e1e93a6241449452",
+    "mtime": 1790474099.269323,
+    "ast_hash": "ab8e559d11c46a2d6d4f9d9b7d6ff031",
     "semantic_hash": ""
   },
   "test/widget_test.dart": {
@@ -5395,8 +5395,8 @@
     "semantic_hash": ""
   },
   "lib/features/hotkeys/floaters/floater_window.dart": {
-    "mtime": 1790472027.3350708,
-    "ast_hash": "3f1c0c3129c9cafcb906ccb00a532635",
+    "mtime": 1790473831.400292,
+    "ast_hash": "2eec001feec6c1d5a4633083e9a8f22f",
     "semantic_hash": ""
   },
   "lib/features/hotkeys/floaters/journal_floater.dart": {
@@ -5880,8 +5880,8 @@
     "semantic_hash": ""
   },
   "GAPS.md": {
-    "mtime": 1790470224.824209,
-    "ast_hash": "6a4021ebfdfdc6509c14f58ef2d707ff",
+    "mtime": 1790474467.9551427,
+    "ast_hash": "a998a6844adcf051eb7af70c12b35ce6",
     "semantic_hash": ""
   },
   "ON_THIS_DAY_HLD.md": {

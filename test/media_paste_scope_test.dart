@@ -194,6 +194,7 @@ void main() {
       MediaClipboard clipboard, {
       bool vim = false,
       bool fieldTakesBoth = false,
+      Future<String> Function()? onBeforeAttach,
     }) async {
       await tester.pumpWidget(
         ProviderScope(
@@ -212,6 +213,7 @@ void main() {
                   documentId: 'task-1',
                   clipboard: clipboard,
                   fieldTakesBoth: fieldTakesBoth,
+                  onBeforeAttach: onBeforeAttach,
                   // The app's field, so a Vim session sits under the scope.
                   child: vim
                       ? LabeledTextField(label: 'Notes', controller: controller)
@@ -272,13 +274,28 @@ void main() {
             ?.findAncestorWidgetOfExactType<EditableText>() !=
         null;
 
-    Future<int> referenceCount() async {
+    Future<int> referenceCount([String documentId = 'task-1']) async {
       final references = await service.referencesFor(
         FirestoreCollections.todoTasks,
-        'task-1',
+        documentId,
       );
       return references.length;
     }
+
+    testWidgets('attaches to the row onBeforeAttach names', (tester) async {
+      await pumpScope(
+        tester,
+        _FakeClipboard(image: pngOf(8, 8)),
+        onBeforeAttach: () async => 'task-2',
+      );
+
+      await pressPaste(
+        tester,
+        until: () async => await referenceCount('task-2') == 1,
+      );
+
+      expect(await referenceCount(), 0);
+    });
 
     testWidgets('attaches an image pasted with nothing focused', (
       tester,

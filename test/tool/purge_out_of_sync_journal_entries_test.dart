@@ -20,11 +20,10 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('purge out-of-sync journal entries locally', () async {
-    final home =
-        Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'];
-    expect(home, isNotNull, reason: 'Could not resolve home directory');
+    final appData = Platform.environment['APPDATA'];
+    expect(appData, isNotNull, reason: 'Could not resolve %APPDATA%');
 
-    final dbPath = p.join(home!, 'Documents', 'voyager.sqlite');
+    final dbPath = p.join(appData!, 'Voyager', 'voyager', 'voyager.sqlite');
     expect(
       File(dbPath).existsSync(),
       isTrue,

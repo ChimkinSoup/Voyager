@@ -4,9 +4,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
+import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/utils/all_view_destination.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/journal_models.dart';
@@ -25,7 +25,7 @@ abstract class QuickJournalPointerStore {
 
 class FileQuickJournalPointerStore implements QuickJournalPointerStore {
   FileQuickJournalPointerStore({Future<Directory> Function()? directory})
-    : _directory = directory ?? getApplicationDocumentsDirectory;
+    : _directory = directory ?? appDataDirectory;
 
   final Future<Directory> Function() _directory;
 
@@ -83,33 +83,47 @@ String _localDayKey(DateTime now) =>
 
 Future<JournalEntry>? _resolving;
 
-/// Today's Quick Journal Entry, created on the spot when there is none — or
-/// when the one there was has since been deleted, from anywhere, or re-dated
-/// to another day (one started after midnight and moved back to the day it
-/// is about).
+/// Today's Quick Journal Entry if there is one, without creating it — for the
+/// notepad, which only creates it once something is written. Gone when the
+/// entry has since been deleted, from anywhere, or re-dated to another day
+/// (one started after midnight and moved back to the day it is about).
+Future<JournalEntry?> findQuickJournalEntry(ProviderContainer container) async {
+  final pointer = await container.read(quickJournalPointerStoreProvider).load();
+  final today = _localDayKey(DateTime.now());
+  if (pointer == null || pointer.day != today) return null;
+  final existing = await container
+      .read(journalRepositoryProvider)
+      .getEntry(pointer.entryId);
+  if (existing != null &&
+      existing.deletedAt == null &&
+      _localDayKey(existing.entryDate.toLocal()) == today) {
+    return existing;
+  }
+  return null;
+}
+
+/// Today's Quick Journal Entry, created on the spot when
+/// [findQuickJournalEntry] has none — as [id] when given, so the notepad can
+/// hand its image targets an id before the entry exists.
 ///
 /// Serialized, so the notepad and the in-app hotkey can never both create one.
-Future<JournalEntry> resolveQuickJournalEntry(ProviderContainer container) {
+Future<JournalEntry> resolveQuickJournalEntry(
+  ProviderContainer container, {
+  String? id,
+}) {
   return _resolving ??= _resolve(
     container,
+    id,
   ).whenComplete(() => _resolving = null);
 }
 
-Future<JournalEntry> _resolve(ProviderContainer container) async {
+Future<JournalEntry> _resolve(ProviderContainer container, String? id) async {
+  final existing = await findQuickJournalEntry(container);
+  if (existing != null) return existing;
+
   final store = container.read(quickJournalPointerStoreProvider);
   final repo = container.read(journalRepositoryProvider);
   final today = _localDayKey(DateTime.now());
-
-  final pointer = await store.load();
-  if (pointer != null && pointer.day == today) {
-    final existing = await repo.getEntry(pointer.entryId);
-    if (existing != null &&
-        existing.deletedAt == null &&
-        _localDayKey(existing.entryDate.toLocal()) == today) {
-      return existing;
-    }
-  }
-
   final settingsRepo = container.read(settingsRepositoryProvider);
   final settings = await settingsRepo.getSettings();
   var journals = await repo.listJournals();
@@ -154,7 +168,7 @@ Future<JournalEntry> _resolve(ProviderContainer container) async {
   }
   final now = utcNow();
   final entry = JournalEntry(
-    id: newId(),
+    id: id ?? newId(),
     journalId: journalId,
     title: '',
     body: '',

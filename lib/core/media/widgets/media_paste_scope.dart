@@ -113,8 +113,9 @@ class MediaPasteScope extends ConsumerStatefulWidget {
 
   /// Runs once there is an image to attach, before it is attached — for an
   /// owner held in memory until it has content, like a "New dream", to write
-  /// its row first.
-  final Future<void> Function()? onBeforeAttach;
+  /// its row first. Returns the row to attach to, which can turn out not to
+  /// be [documentId]; throws to attach nothing.
+  final Future<String> Function()? onBeforeAttach;
 
   /// Injectable only so a test can drive the routing without a platform
   /// clipboard behind it.
@@ -226,7 +227,7 @@ class _MediaPasteScopeState extends ConsumerState<MediaPasteScope> {
     ScaffoldMessengerState messenger,
     OverlayState overlay,
   ) async {
-    final documentId = widget.documentId;
+    var documentId = widget.documentId;
     // Unreachable: an ownerless scope routes every paste away from the
     // gallery above, so this is only ever called with a row to attach to.
     if (documentId == null) return;
@@ -234,7 +235,7 @@ class _MediaPasteScopeState extends ConsumerState<MediaPasteScope> {
     try {
       final bytes = (await widget.clipboard.read()).imageBytes;
       if (bytes == null || !mounted) return;
-      await widget.onBeforeAttach?.call();
+      documentId = await widget.onBeforeAttach?.call() ?? documentId;
       if (!mounted) return;
       await attachImagesForOwner(
         ref,

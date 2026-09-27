@@ -4,11 +4,11 @@ import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/core/constants/job_constants.dart';
+import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart' show jobCalendarDay;
@@ -4118,7 +4118,7 @@ LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     // Resolve the path on this isolate — path_provider needs the platform
     // channel, which only exists here.
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await appDataDirectory();
     final file = File(p.join(dir.path, 'voyager.sqlite'));
     // Run sqlite on its own isolate. NativeDatabase's FFI calls are
     // synchronous under their Futures, so on the UI isolate every read and

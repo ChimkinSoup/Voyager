@@ -160,14 +160,28 @@ The planner, live session and exercise detail work well together. Gaps:
   Settings → Editing → Start with Windows adds a Run entry that launches this exe with
   `--hidden`. That starts it in the tray with the hotkeys live, and the first time the
   window opens it's maximized, as a normal launch would be.
-- **No installer or update path.** There's no MSIX or Inno config and no updater.
+- ~~**No installer or update path.** There's no MSIX or Inno config and no updater.
   Even for yourself, a repeatable release build plus installer beats copying
-  `build/…/Release`.
-- **Database lives in `Documents`** (`app_database.dart:4037`). Documents is often
+  `build/…/Release`.~~ **Done (2026-09-26):** `scripts/build_release.ps1` installs
+  the build to `%LOCALAPPDATA%\Programs\Voyager` with a Start Menu shortcut. It
+  quits the installed copy first, restarts it in the tray after, and points an
+  existing Start with Windows entry at it. Rerunning it is the update path. There's
+  no updater and no uninstall: removing it means deleting that folder, the Start Menu
+  `Voyager.lnk` and the `Voyager` value under `HKCU\…\CurrentVersion\Run`. Before
+  handing it to anyone, use Inno Setup (MSIX ignores the Run key that Start with
+  Windows writes) and move the database first.
+- ~~**Database lives in `Documents`** (`app_database.dart:4037`). Documents is often
   OneDrive-redirected on other people's machines, and cloud-syncing a live SQLite file
-  corrupts it. `%APPDATA%\Voyager` is safer. It's fine on your machine today.
-- **`dev_disable_cache = 1` on your live DB** skips the startup pull and live sync
-  entirely. Turn it off before the bug-hunting session, or sync bugs will be invisible.
+  corrupts it. `%APPDATA%\Voyager` is safer. It's fine on your machine today.~~
+  **Done (2026-09-26):** the database, media, session checkpoints and state files
+  live in `%APPDATA%\Voyager\voyager` (`lib/core/platform/app_data_directory.dart`),
+  with the backups. The first launch moves them out of Documents, and moves the backups
+  out of the old `com.example\voyager` folder. If another Voyager has the database
+  open, that launch stays in Documents and tries again next time. Logs stay in
+  Documents.
+- ~~**`dev_disable_cache = 1` on your live DB** skips the startup pull and live sync
+  entirely. Turn it off before the bug-hunting session, or sync bugs will be invisible.~~
+  **Done:** it's 0 in the live DB (checked 2026-09-26).
 
 ---
 
@@ -202,8 +216,8 @@ The planner, live session and exercise detail work well together. Gaps:
 
 ## Suggested order before the bug hunt
 1. ~~Error log (P1). It makes the bug hunt productive.~~ Done.
-2. Turn off `dev_disable_cache`.
+2. ~~Turn off `dev_disable_cache`.~~ Done.
 3. ~~`completedAt` on tasks (P1). Starts collecting history now.~~ Done.
 4. ~~Trash view or honest delete copy (P1).~~ Done.
-5. Launch at login, plus auto-backup with a pre-migration snapshot.
+5. ~~Launch at login, plus auto-backup with a pre-migration snapshot.~~ Done.
 6. Then pick from P2 by taste. ~~My pick: workout session history.~~ Done.

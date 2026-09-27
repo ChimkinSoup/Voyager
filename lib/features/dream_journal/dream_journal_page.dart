@@ -397,13 +397,18 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   /// Pushed as well: a text save pushes through the coordinator, but a dream
   /// given only images has no text save, and would otherwise stay on this
   /// device while its images reach every other.
-  Future<void> _promoteForImage(String entryId) => _queueWrite(() async {
-    final pending = _pendingEntry;
-    final held =
-        pending != null && pending.id == entryId && !_pendingEntryOnDisk;
-    await _promotePendingEntry(entryId, hasContent: true);
-    if (held && _pendingEntryOnDisk) _syncOrNull()?.pushDreamEntryNow(pending);
-  });
+  Future<String> _promoteForImage(String entryId) async {
+    await _queueWrite(() async {
+      final pending = _pendingEntry;
+      final held =
+          pending != null && pending.id == entryId && !_pendingEntryOnDisk;
+      await _promotePendingEntry(entryId, hasContent: true);
+      if (held && _pendingEntryOnDisk) {
+        _syncOrNull()?.pushDreamEntryNow(pending);
+      }
+    });
+    return entryId;
+  }
 
   /// Discards an unpromoted "New dream" that was never given content.
   void _dropPendingEntryIfEmpty() {

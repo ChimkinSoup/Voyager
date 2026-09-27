@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/features/leetcode/leetcode_track_draft.dart';
 
 /// The one unsaved create-Track form, kept on this device only.
@@ -26,10 +26,10 @@ abstract class LeetCodeTrackDraftStore {
 const _draftFileName = 'leetcode_track_draft.json';
 
 class FileLeetCodeTrackDraftStore implements LeetCodeTrackDraftStore {
-  /// [directory] defaults to the app's documents directory — the same place
+  /// [directory] defaults to [appDataDirectory] — the same place
   /// the database lives. Tests point it somewhere temporary.
   FileLeetCodeTrackDraftStore({Future<Directory> Function()? directory})
-    : _directory = directory ?? getApplicationDocumentsDirectory;
+    : _directory = directory ?? appDataDirectory;
 
   final Future<Directory> Function() _directory;
 

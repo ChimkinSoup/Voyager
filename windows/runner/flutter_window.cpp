@@ -33,6 +33,7 @@ bool FlutterWindow::OnCreate() {
           flutter_controller_->engine()->messenger(), "voyager/instance",
           &flutter::StandardMethodCodec::GetInstance());
   show_main_window_message_ = ::RegisterWindowMessage(kShowMainWindowMessage);
+  quit_message_ = ::RegisterWindowMessage(kQuitMessage);
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   if (start_hidden_) {
@@ -76,6 +77,10 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
 
   if (message == show_main_window_message_ && instance_channel_) {
     instance_channel_->InvokeMethod("showMainWindow", nullptr);
+    return 0;
+  }
+  if (message == quit_message_ && instance_channel_) {
+    instance_channel_->InvokeMethod("quit", nullptr);
     return 0;
   }
 

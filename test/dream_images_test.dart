@@ -290,20 +290,125 @@ void main() {
     );
     await _settle(tester);
 
-    final entryId = quickJournalNotepadEntryId.value;
-    expect(entryId, isNotNull);
+    // Nothing written yet, so no entry: the targets carry the id it will be
+    // created as.
+    expect(quickJournalNotepadEntryId.value, isNull);
     final paste = tester.widget<MediaPasteScope>(find.byType(MediaPasteScope));
+    final entryId = paste.documentId!;
+    expect(await DriftJournalRepository(db).getEntry(entryId), isNull);
     expect(paste.collection, FirestoreCollections.journalEntries);
-    expect(paste.documentId, entryId);
     expect(paste.fieldTakesBoth, isTrue);
+    expect(paste.onBeforeAttach, isNotNull);
     final drop = tester.widget<MediaDropTarget>(find.byType(MediaDropTarget));
     expect(drop.collection, FirestoreCollections.journalEntries);
     expect(drop.documentId, entryId);
+    expect(drop.onBeforeAttach, isNotNull);
     final fan = tester.widget<MediaFanStack>(find.byType(MediaFanStack));
     expect(fan.documentId, entryId);
 
+    // An image before any text creates the entry, as that id.
+    await tester.runAsync(paste.onBeforeAttach!);
+    await _settle(tester);
+    expect(quickJournalNotepadEntryId.value, entryId);
+    expect(await DriftJournalRepository(db).getEntry(entryId), isNotNull);
+
     await tester.pumpWidget(const SizedBox());
     await _settle(tester);
+  });
+
+  testWidgets(
+    'the quick-journal floater creates its entry only once typed in',
+    (tester) async {
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+      final pointers = _MemoryPointerStore();
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
+          weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+          quickJournalPointerStoreProvider.overrideWithValue(pointers),
+          mediaServiceProvider.overrideWith((ref) => service),
+          mediaFileStoreProvider.overrideWithValue(fileStore),
+        ],
+      );
+      addTearDown(container.dispose);
+      Widget floater() => UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: JournalFloater())),
+      );
+
+      // Opened and dismissed untouched: nothing is created.
+      await tester.pumpWidget(floater());
+      await _settle(tester);
+      await tester.pumpWidget(const SizedBox());
+      await _settle(tester);
+      expect(pointers.pointer, isNull);
+      expect(await DriftJournalRepository(db).listEntries(), isEmpty);
+
+      // Typed in and dismissed: today's entry holds the text.
+      await tester.pumpWidget(floater());
+      await _settle(tester);
+      await tester.enterText(find.byType(TextField), 'hello');
+      // Creating the entry does real I/O that fake time alone never finishes.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
+      await _settle(tester);
+      await tester.pumpWidget(const SizedBox());
+      await _settle(tester);
+      final entryId = pointers.pointer!.entryId;
+      final stored = await DriftJournalRepository(db).getEntry(entryId);
+      expect(stored!.body, 'hello');
+    },
+  );
+
+  testWidgets('the quick-journal floater adds to an entry started elsewhere '
+      'while it was open', (tester) async {
+    final db = AppDatabase.inMemory();
+    addTearDown(db.close);
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
+        weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+        quickJournalPointerStoreProvider.overrideWithValue(
+          _MemoryPointerStore(),
+        ),
+        mediaServiceProvider.overrideWith((ref) => service),
+        mediaFileStoreProvider.overrideWithValue(fileStore),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: JournalFloater())),
+      ),
+    );
+    await _settle(tester);
+
+    // The in-app hotkey starts today's entry, and it is written in there.
+    final repo = DriftJournalRepository(db);
+    final elsewhere = (await tester.runAsync(
+      () => resolveQuickJournalEntry(container),
+    ))!;
+    await tester.runAsync(
+      () => repo.upsertEntry(elsewhere.copyWith(body: 'abc')),
+    );
+
+    await tester.enterText(find.byType(TextField), 'x');
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 300)),
+    );
+    await _settle(tester);
+    // Images follow the entry the text went to.
+    final paste = tester.widget<MediaPasteScope>(find.byType(MediaPasteScope));
+    expect(await tester.runAsync(paste.onBeforeAttach!), elsewhere.id);
+
+    await tester.pumpWidget(const SizedBox());
+    await _settle(tester);
+    expect((await repo.getEntry(elsewhere.id))!.body, 'abc\nx');
   });
 }
 

@@ -14,6 +14,10 @@
 // instance to show its main window.
 inline constexpr wchar_t kShowMainWindowMessage[] = L"Voyager.ShowMainWindow";
 
+// Registered-message name scripts/build_release.ps1 broadcasts to quit the
+// installed copy the way the tray's Quit does, before replacing its files.
+inline constexpr wchar_t kQuitMessage[] = L"Voyager.Quit";
+
 // A window that does nothing but host a Flutter view.
 class FlutterWindow : public Win32Window {
  public:
@@ -43,6 +47,7 @@ class FlutterWindow : public Win32Window {
       instance_channel_;
 
   UINT show_main_window_message_ = 0;
+  UINT quit_message_ = 0;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

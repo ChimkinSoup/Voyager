@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/domain/models/media_models.dart';
 
 /// Fraction of the volume below which the user is warned about disk space.
@@ -19,19 +19,19 @@ class MediaFileStore {
   MediaFileStore({Directory? root}) : _explicitRoot = root;
 
   /// Set by tests to a temp directory; null in the app, which resolves the
-  /// documents directory once and caches it.
+  /// [appDataDirectory] once and caches it.
   final Directory? _explicitRoot;
   Directory? _resolvedRoot;
 
-  /// `<documents>/media`, created on first use.
+  /// `<app data>/media`, created on first use.
   Future<Directory> root() async {
     final cached = _resolvedRoot ?? _explicitRoot;
     if (cached != null) {
       if (!await cached.exists()) await cached.create(recursive: true);
       return cached;
     }
-    final documents = await getApplicationDocumentsDirectory();
-    final dir = Directory(p.join(documents.path, 'media'));
+    final data = await appDataDirectory();
+    final dir = Directory(p.join(data.path, 'media'));
     if (!await dir.exists()) await dir.create(recursive: true);
     return _resolvedRoot = dir;
   }

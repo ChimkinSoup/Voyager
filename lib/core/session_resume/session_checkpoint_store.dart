@@ -5,8 +5,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:voyager/core/dev/error_logger.dart';
+import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/session_resume/session_checkpoint.dart';
 
 /// Every unfinished Study or Cram run this device is holding, one slot per
@@ -28,10 +28,10 @@ abstract class SessionCheckpointStore {
 const _checkpointDirName = 'session_checkpoints';
 
 class FileSessionCheckpointStore implements SessionCheckpointStore {
-  /// [directory] defaults to the app's documents directory — the same place
+  /// [directory] defaults to [appDataDirectory] — the same place
   /// the database lives. Tests point it somewhere temporary.
   FileSessionCheckpointStore({Future<Directory> Function()? directory})
-    : _directory = directory ?? getApplicationDocumentsDirectory;
+    : _directory = directory ?? appDataDirectory;
 
   final Future<Directory> Function() _directory;
 

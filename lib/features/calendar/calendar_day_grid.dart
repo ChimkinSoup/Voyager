@@ -215,6 +215,11 @@ List<DateTime> monthGridDates(
 /// Text opacity for day numbers outside the displayed month (padding weeks).
 const calendarAdjacentMonthTextOpacity = 0.20;
 
+/// Opacity of events, todo icons and workout icons on padding-week days,
+/// faint enough to read as a preview of the adjacent month rather than part
+/// of this one.
+const calendarAdjacentMonthEventOpacity = 0.35;
+
 /// Border opacity for padding-week cells in the full month grid (fainter than text).
 const calendarAdjacentMonthBorderOpacity = 0.10;
 
@@ -706,7 +711,9 @@ class CalendarDayCell extends StatelessWidget {
       maxEventAreaHeight,
     );
 
-    final showTodos = inMonth && showTodoIcons && todoMarkers.isNotEmpty;
+    final showTodos = showTodoIcons && todoMarkers.isNotEmpty;
+    final adjacentFade = inMonth ? 1.0 : calendarAdjacentMonthEventOpacity;
+    final eventOpacity = entryOpacity.clamp(0.0, 1.0) * adjacentFade;
 
     final packedEvents = events.whereType<CalendarEvent>().toList(
       growable: false,
@@ -740,10 +747,13 @@ class CalendarDayCell extends StatelessWidget {
                   adjacentTextT: adjacentTextT,
                   isSelected: isSelected,
                   accentColor: accentColor,
-                  leading: inMonth && hasWorkout
-                      ? CalendarWorkoutIcon(
-                          fontSize: style.fontSize,
-                          color: accentColor,
+                  leading: hasWorkout
+                      ? Opacity(
+                          opacity: adjacentFade,
+                          child: CalendarWorkoutIcon(
+                            fontSize: style.fontSize,
+                            color: accentColor,
+                          ),
                         )
                       : null,
                 ),
@@ -758,10 +768,10 @@ class CalendarDayCell extends StatelessWidget {
                   ),
                 ),
               ],
-              if (inMonth && displayedEventCount > 0 && !hideEntries) ...[
+              if (displayedEventCount > 0 && !hideEntries) ...[
                 const SizedBox(height: 2),
                 Opacity(
-                  opacity: entryOpacity.clamp(0.0, 1.0),
+                  opacity: eventOpacity,
                   child: SizedBox(
                     height: clampedEventAreaHeight,
                     child: OverflowBox(
@@ -837,12 +847,12 @@ class CalendarDayCell extends StatelessWidget {
             ],
           ),
         ),
-        if (inMonth && overflowCount > 0)
+        if (overflowCount > 0)
           Positioned(
             top: 0,
             right: 0,
             child: Opacity(
-              opacity: entryOpacity.clamp(0.0, 1.0),
+              opacity: eventOpacity,
               child: _CalendarDayOverflowBadge(
                 extraCount: overflowCount,
                 onTap: onEntryTap == null
@@ -863,7 +873,7 @@ class CalendarDayCell extends StatelessWidget {
             right: 0,
             bottom: 0,
             child: Opacity(
-              opacity: entryOpacity.clamp(0.0, 1.0),
+              opacity: eventOpacity,
               child: Builder(
                 builder: (todoContext) {
                   return GestureDetector(
@@ -893,6 +903,9 @@ class CalendarDayCell extends StatelessWidget {
   }
 
   Widget _buildCompactCellContent(bool inMonth) {
+    final eventOpacity =
+        entryOpacity.clamp(0.0, 1.0) *
+        (inMonth ? 1.0 : calendarAdjacentMonthEventOpacity);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
@@ -912,7 +925,7 @@ class CalendarDayCell extends StatelessWidget {
             ),
           ),
         ),
-        if (inMonth && events.isNotEmpty) ...[
+        if (events.isNotEmpty) ...[
           const SizedBox(height: 1),
           CalendarFadedEventDots(
             events: events
@@ -921,13 +934,13 @@ class CalendarDayCell extends StatelessWidget {
                 .toList(),
             dotSize: style.eventDotSize,
             maxDots: style.maxEventLines,
-            baseOpacity: entryOpacity,
+            baseOpacity: eventOpacity,
           ),
         ],
-        if (inMonth && showTodoIcons && todoMarkers.isNotEmpty) ...[
+        if (showTodoIcons && todoMarkers.isNotEmpty) ...[
           const SizedBox(height: 1),
           Opacity(
-            opacity: entryOpacity.clamp(0.0, 1.0),
+            opacity: eventOpacity,
             child: Builder(
               builder: (todoContext) {
                 return GestureDetector(
@@ -1253,7 +1266,6 @@ class MorphDayEventStack extends StatefulWidget {
     required this.events,
     required this.date,
     required this.styleT,
-    required this.inMonth,
     required this.maxWidth,
     required this.cellHeight,
     required this.dayLayoutSize,
@@ -1266,7 +1278,6 @@ class MorphDayEventStack extends StatefulWidget {
   final List<CalendarEvent?> events;
   final DateTime date;
   final double styleT;
-  final bool inMonth;
   final double maxWidth;
   final double cellHeight;
   final double dayLayoutSize;
@@ -1359,8 +1370,6 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
       0,
       MorphDayEventStack.maxMonthEvents,
     );
-    if (cappedCount == 0) return 0;
-    if (!widget.inMonth && widget.styleT <= 0) return 0;
     return cappedCount;
   }
 
@@ -1401,9 +1410,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
         );
 
     const yearDotSize = MorphDayEventStack.yearDotSize;
-    final yearDotCount = widget.inMonth
-        ? cappedCount.clamp(0, MorphDayEventStack.maxYearDots)
-        : 0;
+    final yearDotCount = cappedCount.clamp(0, MorphDayEventStack.maxYearDots);
     final yearEventsTop = _compactYearDotsTop(widget.cellHeight);
 
     final slotShrinkEased = List<double>.filled(count, 0);
@@ -1418,7 +1425,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
     }
 
     final yearXOffsets = List<double>.filled(MorphDayEventStack.maxYearDots, 0);
-    if (widget.inMonth && yearDotCount > 1) {
+    if (yearDotCount > 1) {
       for (var i = 0; i < yearDotCount; i++) {
         yearXOffsets[i] = MorphDayEventStack._yearDotXOffset(
           i,
@@ -2814,9 +2821,6 @@ class MonthDayGrid extends StatelessWidget {
         if (hiddenWeekRow == row) return <List<CalendarEvent?>>[];
         return List.generate(7, (col) {
           final date = cells[row * 7 + col];
-          if (date.month != month.month || date.year != month.year) {
-            return const <CalendarEvent?>[];
-          }
           // Use date-only local once per cell; the normalized struct already
           // holds the pre-computed local start/end dates for each event.
           final localDay = DateUtils.dateOnly(date.toLocal());
@@ -2864,18 +2868,15 @@ class MonthDayGrid extends StatelessWidget {
                 child: Row(
                   children: List.generate(7, (col) {
                     final date = cells[row * 7 + col];
-                    final inMonth =
-                        date.month == month.month && date.year == month.year;
-                    final dayEvents = inMonth
-                        ? packedWeeks[row][col]
-                        : const <CalendarEvent?>[];
+                    final dayEvents = packedWeeks[row][col];
                     final dayIndicators = indicators
                         .where((i) => calendarSameDay(i.day, date))
                         .take(3)
                         .toList();
-                    final dayTodos = inMonth
-                        ? calendarTodoMarkersForDay(todoMarkers, date)
-                        : const <CalendarTodoMarker>[];
+                    final dayTodos = calendarTodoMarkersForDay(
+                      todoMarkers,
+                      date,
+                    );
 
                     final isSelected =
                         selectedDay != null &&
@@ -2896,11 +2897,9 @@ class MonthDayGrid extends StatelessWidget {
                         indicators: dayIndicators,
                         todoMarkers: dayTodos,
                         showTodoIcons: showTodoIcons,
-                        hasWorkout:
-                            inMonth &&
-                            workoutDays.contains(
-                              DateUtils.dateOnly(date.toLocal()),
-                            ),
+                        hasWorkout: workoutDays.contains(
+                          DateUtils.dateOnly(date.toLocal()),
+                        ),
                         style: style,
                         isSelected: isSelected,
                         isFirstColumn: col == 0,

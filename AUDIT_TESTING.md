@@ -18,7 +18,7 @@ Companion to [AUDIT.md](AUDIT.md). Records how the branch was exercised, what ha
 - `mark.sh` — prints `=== MARK <label> primary=<focus>` into the flutter log and resets `FlutterError` counting so the next error prints in full.
 - A persistent frame callback installed via eval logs `=== FH active=… media=… mainSize=…` whenever `FloaterHost` state changes (finding 1).
 - `inapp.sh` — calls `FloaterController._openInApp(kind)` inside `Future(...)`, i.e. the in-app hotkey path without the foreground gate.
-- Data checks: read-only SQLite (`~/Documents/voyager.sqlite`, `mode=ro`).
+- Data checks: read-only SQLite (`%APPDATA%\Voyager\voyager\voyager.sqlite`, `mode=ro`).
 
 ## Session 1 — 2026-09-17, Windows session locked
 

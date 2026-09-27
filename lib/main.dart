@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/app/voyager_app.dart';
+import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/launch_at_login.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
@@ -31,6 +32,11 @@ Future<void> main([List<String> args = const []]) async {
   unawaited(PerfStallLogger.instance.restore());
   installWindowsKeyboardWorkaround();
   await configureDesktopWindow(startHidden: args.contains(kStartHiddenArg));
+  // Before anything opens the database or a state file, so a move out of
+  // Documents is finished first. Copying a large media folder across drives
+  // can take a while, so the window says so meanwhile.
+  if (await appDataMovePending()) runApp(const _MovingDataApp());
+  await appDataDirectory();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   try {
     await hotKeyManager.unregisterAll();
@@ -41,6 +47,40 @@ Future<void> main([List<String> args = const []]) async {
   // fails before then is held for it rather than forgotten.
   OutboxSyncWorker.holdRecordsUntilInitialized();
   runApp(const ProviderScope(child: VoyagerBootstrap()));
+}
+
+/// Shown in place of the app while [appDataDirectory] moves data. No
+/// MaterialApp: its navigator would still hold focus in this tree as the
+/// app's tree replaces it, and the app looks up the focused widget as it
+/// starts.
+class _MovingDataApp extends StatelessWidget {
+  const _MovingDataApp();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ThemeData(
+      brightness: MediaQuery.platformBrightnessOf(context),
+    );
+    return Theme(
+      data: theme,
+      child: ColoredBox(
+        color: theme.colorScheme.surface,
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text('Moving your data…', style: theme.textTheme.bodyMedium),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class VoyagerBootstrap extends ConsumerStatefulWidget {

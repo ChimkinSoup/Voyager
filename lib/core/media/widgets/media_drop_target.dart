@@ -36,7 +36,7 @@ class MediaDropTarget extends ConsumerWidget {
   final MediaFacet facet;
 
   /// See [MediaPasteScope.onBeforeAttach].
-  final Future<void> Function()? onBeforeAttach;
+  final Future<String> Function()? onBeforeAttach;
 
   final Widget child;
 
@@ -71,14 +71,14 @@ class MediaDropTarget extends ConsumerWidget {
           if (bytes != null) images.add(bytes);
         }
         if (images.isEmpty) return;
-        await onBeforeAttach?.call();
+        final ownerId = await onBeforeAttach?.call() ?? documentId;
         await attachImagesForOwner(
           ref,
           messenger: messenger,
           overlay: overlay,
           images: images,
           collection: collection,
-          documentId: documentId,
+          documentId: ownerId,
           facet: facet,
         );
       },

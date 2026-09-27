@@ -1828,7 +1828,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           _rememberViewedWeek(weekStart, weekStartsMonday);
           _weekMorphController.duration = _weekMorphDuration;
           _zoomController.duration = _zoomDuration;
+          _skipWeekEntryFade = true;
         });
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _skipWeekEntryFade = false,
+        );
       },
     );
 
@@ -2488,7 +2492,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         ),
       );
       final weekAllDayShelfHeight = calendarWeekAllDayShelfHeightFor(
-        events: morphEvents,
+        events: activeEvents,
         weekDays: weekDates,
       );
       final weekColumnRects = CalendarLayoutCache.weekColumnRectsFor(
@@ -2516,6 +2520,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         events: morphEvents,
         indicators: morphIndicators,
         todoMarkers: morphTodos,
+        // The chained morph's month cells are bare, but its entries still
+        // travel to and from the week view, fading at the month end.
+        entryEvents: activeEvents,
+        entryTodos: activeTodos,
+        entriesFadeAtMonth: chained,
         inactiveMonthRows: _buildInactiveMonthRows(
           context: context,
           events: morphEvents,
@@ -2561,9 +2570,8 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             // The morph row's cells carry today's fill into the month row;
             // painting it here too would double it and leave a copy behind.
             showTodayHighlight: false,
-            // The morph layer carries the entries, except in the chained
-            // week→year morph, which has none to carry.
-            showEntries: chained,
+            // The morph layer carries the entries.
+            showEntries: false,
             entryFadeEnabled: false,
             interactive: false,
             weekdayAccentColor: accentColor,
@@ -3627,22 +3635,14 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
             key: ValueKey(widget.dates[i]),
             date: widget.dates[i],
             month: widget.morphMonth,
-            events:
-                widget.dates[i].month == widget.morphMonth.month &&
-                    widget.dates[i].year == widget.morphMonth.year
-                ? packedWeeks[i ~/ 7][i % 7]
-                : const <CalendarEvent?>[],
-            todoMarkers:
-                widget.dates[i].month == widget.morphMonth.month &&
-                    widget.dates[i].year == widget.morphMonth.year
-                ? calendarTodoMarkersForDay(widget.todoMarkers, widget.dates[i])
-                : const <CalendarTodoMarker>[],
-            hasWorkout:
-                widget.dates[i].month == widget.morphMonth.month &&
-                widget.dates[i].year == widget.morphMonth.year &&
-                widget.workoutDays.contains(
-                  DateUtils.dateOnly(widget.dates[i].toLocal()),
-                ),
+            events: packedWeeks[i ~/ 7][i % 7],
+            todoMarkers: calendarTodoMarkersForDay(
+              widget.todoMarkers,
+              widget.dates[i],
+            ),
+            hasWorkout: widget.workoutDays.contains(
+              DateUtils.dateOnly(widget.dates[i].toLocal()),
+            ),
             weekHighlightAlpha: calendarFocusedWeekHighlightAlpha(
               date: widget.dates[i],
               month: widget.morphMonth,
@@ -3875,7 +3875,7 @@ class _MorphCell extends StatelessWidget {
     required double styleT,
     required bool inMonth,
   }) {
-    if (!inMonth || todoMarkers.isEmpty) {
+    if (todoMarkers.isEmpty) {
       return null;
     }
     final iconProgress = calendarMorphTodoIconProgress(
@@ -3887,7 +3887,8 @@ class _MorphCell extends StatelessWidget {
       right: 0,
       bottom: 0,
       child: Opacity(
-        opacity: iconProgress,
+        opacity:
+            iconProgress * (inMonth ? 1.0 : calendarAdjacentMonthEventOpacity),
         child: Transform.scale(
           scale: iconProgress,
           alignment: Alignment.bottomRight,
@@ -3913,6 +3914,7 @@ class _MorphCell extends StatelessWidget {
             styleT;
 
     final inMonth = date.month == month.month;
+    final adjacentFade = inMonth ? 1.0 : calendarAdjacentMonthEventOpacity;
     final compactBorderAlpha = MonthDayCellStyle.compact.borderOpacity;
     final fullBorderAlpha = inMonth
         ? MonthDayCellStyle.full.borderOpacity
@@ -3952,8 +3954,10 @@ class _MorphCell extends StatelessWidget {
                 dayFontSize,
               ).clamp(0.0, constraints.maxHeight);
               final chained = progress.chainedYearWeekTransition;
-              final dotsOpacity = chained ? progress.yearEventDotsOpacity : 1.0;
-              final showEvents = events.isNotEmpty && inMonth;
+              final dotsOpacity =
+                  (chained ? progress.yearEventDotsOpacity : 1.0) *
+                  adjacentFade;
+              final showEvents = events.isNotEmpty;
               final actualEventCount = events.where((e) => e != null).length;
               final yearDotsSettled = MorphDayEventStack.yearDotsSettled(
                 morphReverse: progress.morphReverse,
@@ -4005,7 +4009,7 @@ class _MorphCell extends StatelessWidget {
                               accentColor: progress.accentColor,
                             ),
                           ),
-                          if (inMonth && events.isNotEmpty) ...[
+                          if (events.isNotEmpty) ...[
                             const SizedBox(height: 1),
                             Opacity(
                               opacity: dotsOpacity.clamp(0.0, 1.0),
@@ -4057,7 +4061,8 @@ class _MorphCell extends StatelessWidget {
                                 widthFactor: styleT,
                                 heightFactor: 1,
                                 child: Opacity(
-                                  opacity: styleT.clamp(0.0, 1.0),
+                                  opacity:
+                                      styleT.clamp(0.0, 1.0) * adjacentFade,
                                   child: CalendarWorkoutIcon(
                                     fontSize: dayFontSize,
                                     color: progress.accentColor,
@@ -4078,7 +4083,6 @@ class _MorphCell extends StatelessWidget {
                         // they fade out. Clamping to 0 keeps them as settled
                         // year dots; opacity (dotsOpacity) handles the fade.
                         styleT: chained ? 0.0 : styleT,
-                        inMonth: inMonth,
                         maxWidth: constraints.maxWidth,
                         cellHeight: constraints.maxHeight,
                         dayLayoutSize: dayLayoutSize,
@@ -4298,6 +4302,9 @@ class _MonthWeekMorphLayer extends StatefulWidget {
     required this.events,
     required this.indicators,
     required this.todoMarkers,
+    required this.entryEvents,
+    required this.entryTodos,
+    required this.entriesFadeAtMonth,
     required this.inactiveMonthRows,
     required this.weekTimelineScrollController,
     required this.weekTimelineScrollOffset,
@@ -4323,6 +4330,12 @@ class _MonthWeekMorphLayer extends StatefulWidget {
   final List<CalendarEvent> events;
   final List<CalendarDayIndicator> indicators;
   final List<CalendarTodoMarker> todoMarkers;
+
+  /// What the entries layer morphs — [events] and [todoMarkers] except in
+  /// the chained week↔year morph.
+  final List<CalendarEvent> entryEvents;
+  final List<CalendarTodoMarker> entryTodos;
+  final bool entriesFadeAtMonth;
   final Widget inactiveMonthRows;
   final ScrollController weekTimelineScrollController;
   final double weekTimelineScrollOffset;
@@ -4367,8 +4380,8 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
     _morphEntries = calendarWeekMorphEntries(
       weekDates: _weekDates,
       month: widget.morphMonth,
-      events: widget.events,
-      todoMarkers: widget.todoMarkers,
+      events: widget.entryEvents,
+      todoMarkers: widget.entryTodos,
       indicators: widget.indicators,
       monthRowRects: widget.monthRowRects,
       weekColumnRects: widget.weekColumnRects,
@@ -4548,6 +4561,7 @@ class _MonthWeekMorphLayerState extends State<_MonthWeekMorphLayer> {
                       ),
                       monthRowRects: widget.monthRowRects,
                       weekColumnRects: widget.weekColumnRects,
+                      fadeAtMonth: widget.entriesFadeAtMonth,
                     ),
                   ),
                   // Hour lines fade in during month→week only.
@@ -4684,14 +4698,12 @@ class _MonthWeekMorphCell extends StatelessWidget {
     // Cell borders fade out as the shared morph border painter takes over.
     final borderAlpha = (1.0 - t) * baseBorderAlpha;
 
-    final dayEvents = inMonth ? packedEvents : const <CalendarEvent?>[];
+    final dayEvents = packedEvents;
     final dayIndicators = indicators
         .where((i) => calendarSameDay(i.day, date))
         .take(3)
         .toList();
-    final dayTodos = inMonth
-        ? calendarTodoMarkersForDay(todoMarkers, date)
-        : const <CalendarTodoMarker>[];
+    final dayTodos = calendarTodoMarkersForDay(todoMarkers, date);
 
     final progress = _WeekMorphProgress.of(context);
     // Month fill → week fill: the rest of the week fades out, but today lerps

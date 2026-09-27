@@ -12,6 +12,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
+import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/journal_models.dart';
@@ -24,7 +25,8 @@ import 'package:voyager/features/journal/journal_entry_delete.dart';
 const _saveDebounce = Duration(milliseconds: 400);
 
 /// The journal hotkey's notepad: a plain-text mirror of today's Quick Journal
-/// Entry body.
+/// Entry body. With no entry yet today, it creates one only once something is
+/// written, so opening it and closing it untouched leaves nothing behind.
 ///
 /// Edits go through the same pipeline as the journal editor — a character-op
 /// session for sync, debounced local saves through the write coordinator, and
@@ -46,8 +48,15 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
   late final Future<void> Function() _flushCallback;
 
   late final void Function() _invalidateJournalCaches;
+  late final ProviderContainer _container;
 
   JournalEntry? _entry;
+
+  /// The id today's entry is created as, handed to the image targets before
+  /// it exists.
+  final _pendingId = newId();
+  var _loaded = false;
+  Future<void>? _creating;
 
   /// The body as last typed or merged. Saves read this rather than the
   /// controller, which is gone by the time the dispose flush gets to write.
@@ -63,6 +72,7 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
     _coordinator = ref.read(journalWriteCoordinatorProvider);
     _repository = ref.read(journalRepositoryProvider);
     _invalidateJournalCaches = ref.read(journalEntryCacheInvalidatorProvider);
+    _container = ProviderScope.containerOf(context, listen: false);
     _flushCallback = _flush;
     _floaters.registerFlush(_flushCallback);
     PendingFlushRegistry.instance.register(_flushCallback);
@@ -70,10 +80,13 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
   }
 
   Future<void> _bind() async {
-    final entry = await resolveQuickJournalEntry(
-      ProviderScope.containerOf(context, listen: false),
-    );
+    final entry = await findQuickJournalEntry(_container);
     if (!mounted) return;
+    setState(() => _loaded = true);
+    if (entry == null) {
+      _focus.requestFocus();
+      return;
+    }
     _controller.value = TextEditingValue(
       text: entry.body,
       selection: TextSelection.collapsed(offset: entry.body.length),
@@ -98,9 +111,69 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
     }
   }
 
+  /// Creates today's entry for what has been written so far. The session is
+  /// prepared before [_entry] is set, so text typed meanwhile only moves
+  /// [_lastText] and lands in the one change recorded after.
+  Future<void> _ensureEntry() => _creating ??= () async {
+    try {
+      final entry = await resolveQuickJournalEntry(_container, id: _pendingId);
+      _remoteSync.setDocumentEditing(
+        collection: FirestoreCollections.journalEntries,
+        documentId: entry.id,
+        isEditing: true,
+      );
+      try {
+        await _remoteSync.prepareEditingSession(
+          collection: FirestoreCollections.journalEntries,
+          documentId: entry.id,
+          initialText: entry.body,
+        );
+      } catch (error, stack) {
+        _report(error, stack, 'while preparing the editing session');
+      }
+      quickJournalNotepadEntryId.value = entry.id;
+      _entry = entry;
+      // Today's entry was started elsewhere meanwhile: what was typed here
+      // goes after its body rather than over it.
+      if (entry.id != _pendingId && entry.body.isNotEmpty) {
+        _lastText = '${entry.body}\n$_lastText';
+        if (mounted) {
+          _controller.value = TextEditingValue(
+            text: _lastText,
+            selection: TextSelection.collapsed(offset: _lastText.length),
+          );
+        }
+      }
+      if (mounted) setState(() {});
+      _remoteSync.recordJournalTextChange(
+        entryId: entry.id,
+        before: entry.body,
+        after: _lastText,
+      );
+      await _save();
+    } catch (error, stack) {
+      _creating = null;
+      _report(error, stack, 'while creating the quick entry');
+    }
+  }();
+
+  /// For the image targets: the entry an image attaches to, created first
+  /// if need be. Throws when it could not be, so no image is left ownerless.
+  Future<String> _entryIdForImage() async {
+    await _ensureEntry();
+    final entry = _entry;
+    if (entry == null) throw StateError('The quick entry could not be created');
+    return entry.id;
+  }
+
   void _handleChanged(String text) {
     final entry = _entry;
-    if (entry == null) return;
+    if (entry == null) {
+      _lastText = text;
+      if (text.trim().isNotEmpty) unawaited(_ensureEntry());
+      setState(() {});
+      return;
+    }
     _remoteSync.recordJournalTextChange(
       entryId: entry.id,
       before: _lastText,
@@ -138,6 +211,7 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
   /// Runs on dismiss, on replacement by another floater, and on app quit.
   Future<void> _flush() async {
     _saveTimer?.cancel();
+    await _creating;
     final entry = _entry;
     if (entry == null || _deleted) return;
     var body = _lastText;
@@ -197,23 +271,26 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
   void dispose() {
     _floaters.unregisterFlush(_flushCallback);
     PendingFlushRegistry.instance.unregister(_flushCallback);
-    final entry = _entry;
-    if (entry != null) {
-      if (!_deleted) {
-        _remoteSync.setDocumentEditing(
-          collection: FirestoreCollections.journalEntries,
-          documentId: entry.id,
-          isEditing: false,
-        );
-      }
-      // Cheap when the dismiss already flushed: the body matches disk.
-      unawaited(
-        _flush().whenComplete(() {
-          if (quickJournalNotepadEntryId.value == entry.id) {
-            quickJournalNotepadEntryId.value = null;
-          }
-        }),
-      );
+    if (_entry != null || _creating != null) {
+      unawaited(() async {
+        // An entry still being created is finished first, so what was typed
+        // before the dismiss is not lost.
+        await _creating;
+        final entry = _entry;
+        if (entry == null) return;
+        if (!_deleted) {
+          _remoteSync.setDocumentEditing(
+            collection: FirestoreCollections.journalEntries,
+            documentId: entry.id,
+            isEditing: false,
+          );
+        }
+        // Cheap when the dismiss already flushed: the body matches disk.
+        await _flush();
+        if (quickJournalNotepadEntryId.value == entry.id) {
+          quickJournalNotepadEntryId.value = null;
+        }
+      }());
     }
     _controller.dispose();
     _focus.dispose();
@@ -221,8 +298,9 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
   }
 
   String _preview(JournalEntry? entry) {
-    if (entry == null) return 'Quick entry';
-    if (entry.title.trim().isNotEmpty) return entry.title.trim();
+    if (!_loaded) return 'Quick entry';
+    final title = entry?.title.trim() ?? '';
+    if (title.isNotEmpty) return title;
     final firstLine = _controller.text
         .split('\n')
         .map((line) => line.trim())
@@ -235,6 +313,7 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     final entry = _entry;
+    final entryId = entry?.id ?? _pendingId;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -264,17 +343,19 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
         Expanded(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-            child: entry == null
+            child: !_loaded
                 ? const Center(child: CircularProgressIndicator())
                 // The journal body's images (see `_withImages` in
                 // journal_page.dart): this is the same entry.
                 : MediaPasteScope(
                     collection: FirestoreCollections.journalEntries,
-                    documentId: entry.id,
+                    documentId: entryId,
                     fieldTakesBoth: true,
+                    onBeforeAttach: _entryIdForImage,
                     child: MediaDropTarget(
                       collection: FirestoreCollections.journalEntries,
-                      documentId: entry.id,
+                      documentId: entryId,
+                      onBeforeAttach: _entryIdForImage,
                       child: Stack(
                         children: [
                           Positioned.fill(
@@ -296,7 +377,7 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
                             bottom: 8,
                             child: MediaFanStack(
                               collection: FirestoreCollections.journalEntries,
-                              documentId: entry.id,
+                              documentId: entryId,
                               accentColor: accent,
                             ),
                           ),
