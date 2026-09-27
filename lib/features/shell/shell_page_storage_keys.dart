@@ -14,7 +14,22 @@ abstract final class ShellPageStorageKeys {
   static const searchDreamResults = PageStorageKey<String>(
     'shell.search.dreamResults',
   );
-  static const settingsList = PageStorageKey<String>('shell.settings.list');
+  static const settingsAccountTab = PageStorageKey<String>(
+    'shell.settings.account',
+  );
+  static const settingsAppearanceTab = PageStorageKey<String>(
+    'shell.settings.appearance',
+  );
+  static const settingsEditingTab = PageStorageKey<String>(
+    'shell.settings.editing',
+  );
+  static const settingsPagesTab = PageStorageKey<String>(
+    'shell.settings.pages',
+  );
+  static const settingsDataTab = PageStorageKey<String>('shell.settings.data');
+  static const settingsAboutTab = PageStorageKey<String>(
+    'shell.settings.about',
+  );
   static const analyticsList = PageStorageKey<String>('shell.analytics.list');
   static const devList = PageStorageKey<String>('shell.dev.list');
   static const financeLedgerWide = PageStorageKey<String>(

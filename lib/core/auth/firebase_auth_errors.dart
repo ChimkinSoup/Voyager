@@ -46,6 +46,19 @@ String firebaseAuthErrorMessage({required String code, String? message}) {
   }
 }
 
+/// [firebaseAuthErrorMessage] for Settings → Change password. Its messages
+/// are worded for the sign-in screen; the two that talk about an email the
+/// user never typed here are reworded.
+String changePasswordErrorMessage({required String code, String? message}) {
+  return switch (firebaseAuthErrorMessage(code: code, message: message)) {
+    'Incorrect email or password.' => 'Current password is incorrect.',
+    final m when m.startsWith('Sign in failed') =>
+      'Could not change password. Check your current password, then try '
+          'again.',
+    final m => m,
+  };
+}
+
 String? _messageFromEmbeddedDetails(String message) {
   if (message.isEmpty) return null;
 

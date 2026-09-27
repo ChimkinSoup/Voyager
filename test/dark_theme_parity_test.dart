@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/data/remote/firebase_auth_repository.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -171,6 +172,7 @@ void main() {
         );
         await tester.pump();
         await tester.pump(const Duration(seconds: 1));
+        await tester.pump();
 
         // The home route has a barrier too; the dialog's is the dismissible one.
         final barrier = tester.widget<ModalBarrier>(
@@ -234,6 +236,7 @@ void main() {
             settingsProvider.overrideWith(() => _ThemedSettings(mode)),
             journalsProvider.overrideWith((ref) async => []),
             todoListStatsProvider.overrideWith((ref) async => {}),
+            authRepositoryProvider.overrideWithValue(InMemoryAuthRepository()),
           ],
           child: MaterialApp(
             theme: VoyagerTheme.forMode(mode),
@@ -243,6 +246,10 @@ void main() {
       );
       await tester.pump();
       await tester.pump();
+      await tester.tap(find.widgetWithText(Tab, 'Appearance'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
     }
 
     testWidgets(
@@ -251,10 +258,13 @@ void main() {
       (tester) async {
         await pumpSettings(tester, AppThemeMode.dark);
 
-        expect(find.text('Grid intensity'), findsOneWidget);
-        expect(find.text('Glow spread'), findsOneWidget);
-        expect(find.text('Wave'), findsOneWidget);
-        expect(find.text('Petal color'), findsNothing);
+        expect(
+          find.text('Grid intensity', skipOffstage: false),
+          findsOneWidget,
+        );
+        expect(find.text('Glow spread', skipOffstage: false), findsOneWidget);
+        expect(find.text('Wave', skipOffstage: false), findsOneWidget);
+        expect(find.text('Petal color', skipOffstage: false), findsNothing);
       },
     );
 
@@ -264,9 +274,9 @@ void main() {
       (tester) async {
         await pumpSettings(tester, AppThemeMode.light);
 
-        expect(find.text('Petal color'), findsOneWidget);
-        expect(find.text('Grid intensity'), findsNothing);
-        expect(find.text('Wave'), findsNothing);
+        expect(find.text('Petal color', skipOffstage: false), findsOneWidget);
+        expect(find.text('Grid intensity', skipOffstage: false), findsNothing);
+        expect(find.text('Wave', skipOffstage: false), findsNothing);
       },
     );
 
@@ -280,7 +290,11 @@ void main() {
         );
         final before = container.read(geometricWaveParamsProvider).enabled;
 
-        final wave = find.widgetWithText(SwitchListTile, 'Wave');
+        final wave = find.widgetWithText(
+          SwitchListTile,
+          'Wave',
+          skipOffstage: false,
+        );
         await tester.ensureVisible(wave);
         await tester.pump();
         await tester.tap(wave);

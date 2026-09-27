@@ -141,10 +141,13 @@ The planner, live session and exercise detail work well together. Gaps:
   `0.1.0+1`. You'll want the version in bug reports.~~ **Done (2026-09-25):** About
   shows version, commit and build date (tap to copy), set by
   `scripts/build_release.ps1`; backups record it too.
-- The signed-in account isn't shown anywhere, only "Sign out".
-- A "Statistics" block (total journals, tasks) sits inside Settings. It probably
-  belongs in Analytics.
-- It's one long scroll of ~15 sections. A section index or filter would help.
+- ~~The signed-in account isn't shown anywhere, only "Sign out".~~
+- ~~A "Statistics" block (total journals, tasks) sits inside Settings. It probably
+  belongs in Analytics.~~ **Done (2026-09-26):** open/completed tasks are a Tasks
+  chip on Analytics; the journal count sits in the Entries popup.
+- ~~It's one long scroll of ~15 sections. A section index or filter would help.~~
+  **Done (2026-09-26):** split into Account, Appearance, Editing, Pages, Data and
+  About tabs.
 
 ---
 

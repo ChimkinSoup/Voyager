@@ -371,6 +371,8 @@ class _MacroStatsRow extends StatelessWidget {
               analytics: analytics,
             ),
           ),
+          const SizedBox(width: 10),
+          const _TasksChip(),
           if (dreamLoggedTracker != null) ...[
             const SizedBox(width: 10),
             _StatChip(
@@ -399,6 +401,95 @@ class _MacroStatsRow extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Open to-do tasks, opening a popup with the completed count too.
+///
+/// Watches the counts itself rather than through [AnalyticsPage]: every to-do
+/// tick moves them, and the page stays mounted behind every other section,
+/// so watching them at the page level would rebuild the whole page —
+/// tracker grid and all — per tick while To-Do was in use.
+class _TasksChip extends ConsumerWidget {
+  const _TasksChip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stats = ref.watch(todoListStatsProvider).valueOrNull;
+    final open = stats?.values.fold<int>(0, (sum, stat) => sum + stat.active);
+    return _StatChip(
+      label: 'Tasks',
+      value: open == null ? '—' : '${compactNumberLabel(open)} open',
+      icon: PhosphorIconsRegular.listChecks,
+      accent: Theme.of(context).colorScheme.primary,
+      onTap: () => showVoyagerDialog<void>(
+        context: context,
+        builder: (_) => const _TasksDialog(),
+      ),
+    );
+  }
+}
+
+class _TasksDialog extends ConsumerWidget {
+  const _TasksDialog();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stats = ref.watch(todoListStatsProvider).valueOrNull;
+    final open = stats?.values.fold<int>(0, (sum, stat) => sum + stat.active);
+    final completed = stats?.values.fold<int>(
+      0,
+      (sum, stat) => sum + stat.completed,
+    );
+    String count(int? n) => n == null ? '—' : compactNumberLabel(n);
+    final total = (open ?? 0) + (completed ?? 0);
+    return AlertDialog(
+      title: const Text('Tasks'),
+      content: SizedBox(
+        width: 340,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _row(context, 'Open tasks', count(open)),
+            _row(context, 'Completed tasks', count(completed)),
+            _row(
+              context,
+              'Completion rate',
+              total == 0
+                  ? '—'
+                  : '${(completed! / total * 100).toStringAsFixed(0)}%',
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        GlassButton(
+          dense: true,
+          onPressed: () => Navigator.pop(context),
+          label: 'Close',
+        ),
+      ],
+    );
+  }
+
+  Widget _row(BuildContext context, String label, String value) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: theme.textTheme.bodyMedium),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.primary,
+            ),
+          ),
         ],
       ),
     );
@@ -4325,18 +4416,29 @@ class _DetailStatisticsSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final valuesAsync = ref.watch(trackerValuesProvider(tracker.id));
+    // The journal count has no chip of its own; it rides along here.
+    final journalCount = tracker.id == kJournalEntriesTrackerId
+        ? ref.watch(journalsProvider).valueOrNull?.length
+        : null;
     return valuesAsync.when(
-      data: (values) => _buildStats(context, values),
+      data: (values) => _buildStats(context, values, journalCount),
       loading: () => const SizedBox.shrink(),
       error: (_, __) => const SizedBox.shrink(),
     );
   }
 
-  Widget _buildStats(BuildContext context, List<TrackerValue> values) {
+  Widget _buildStats(
+    BuildContext context,
+    List<TrackerValue> values,
+    int? journalCount,
+  ) {
     if (values.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
 
-    final rows = <Widget>[];
+    final rows = <Widget>[
+      if (journalCount != null)
+        _row(context, 'Journals', compactNumberLabel(journalCount)),
+    ];
     ({int longest, int current}) streak;
 
     // The virtual Word Count tracker has a value on every day since the first

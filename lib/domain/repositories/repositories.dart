@@ -1135,6 +1135,15 @@ abstract class AuthRepository {
   Future<void> signInWithGoogle();
   Future<void> signOut();
   String? get currentUserId;
+  String? get currentUserEmail;
+
+  /// Whether the signed-in account has an email/password sign-in, as opposed
+  /// to Google alone — only then is there a password to change.
+  bool get hasPasswordSignIn;
+
+  /// Re-verifies [currentPassword] (Firebase refuses a password change
+  /// without a recent sign-in) and then sets [newPassword].
+  Future<void> changePassword(String currentPassword, String newPassword);
 }
 
 abstract class SyncConflictRepository {

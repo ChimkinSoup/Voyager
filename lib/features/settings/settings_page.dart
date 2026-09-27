@@ -25,6 +25,7 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
+import 'package:voyager/features/settings/account_section.dart';
 import 'package:voyager/features/settings/backup_list_dialog.dart';
 import 'package:voyager/features/trash/trash_dialog.dart';
 import 'package:voyager/features/settings/custom_quotes_dialog.dart';
@@ -40,676 +41,832 @@ import 'package:voyager/features/settings/weather_location_tile.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 
-/// The Statistics counts, watched here rather than by [SettingsPage].
-///
-/// Every to-do tick and journal change moves them, and Settings stays mounted
-/// behind every other page, so watching them at the page level rebuilt the
-/// whole of Settings — every section, since its list keeps them all laid out
-/// — twice per tick, while To-Do was the page in use.
-class _StatisticsTiles extends ConsumerWidget {
-  const _StatisticsTiles();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final journalCount = ref.watch(journalsProvider).valueOrNull?.length;
-    final todoStats = ref.watch(todoListStatsProvider).valueOrNull;
-    final openTaskCount = todoStats?.values.fold<int>(
-      0,
-      (sum, stat) => sum + stat.active,
-    );
-    final completedTaskCount = todoStats?.values.fold<int>(
-      0,
-      (sum, stat) => sum + stat.completed,
-    );
-    return Column(
-      children: [
-        ListTile(
-          title: const Text('Total journals'),
-          trailing: Text(_statCountLabel(journalCount)),
-        ),
-        ListTile(
-          title: const Text('Non-completed tasks'),
-          trailing: Text(_statCountLabel(openTaskCount)),
-        ),
-        ListTile(
-          title: const Text('Completed tasks'),
-          trailing: Text(_statCountLabel(completedTaskCount)),
-        ),
-      ],
-    );
-  }
-
-  String _statCountLabel(int? count) {
-    if (count == null) return '—';
-    return count.toString();
-  }
-}
-
-class SettingsPage extends ConsumerWidget {
+class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsPage> createState() => _SettingsPageState();
+}
+
+/// The tab strip's labels, in order. [_dataTab] holds the automatic-backup
+/// tiles the inbox's "Backups failing" row reveals.
+const _settingsTabs = [
+  'Account',
+  'Appearance',
+  'Editing',
+  'Pages',
+  'Data',
+  'About',
+];
+final _dataTab = _settingsTabs.indexOf('Data');
+
+class _SettingsPageState extends ConsumerState<SettingsPage>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs = TabController(
+    length: _settingsTabs.length,
+    vsync: this,
+    // A reveal requested before Settings opened: start on the tab holding
+    // the backup tiles so they mount and answer it themselves.
+    initialIndex: ref.read(revealAutoBackupRequestProvider) ? _dataTab : 0,
+  );
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<bool>(revealAutoBackupRequestProvider, (_, next) {
+      if (next) _tabs.animateTo(_dataTab);
+    });
     final settingsAsync = ref.watch(settingsProvider);
 
     return settingsAsync.when(
-      data: (settings) => KeepAliveScrollView(
-        storageKey: ShellPageStorageKeys.settingsList,
-        padding: const EdgeInsets.all(16),
+      data: (settings) => Column(
         children: [
-          ListTile(
-            title: const Text('App accent color'),
-            subtitle: Text(formatColorHex(settings.accentColor)),
-            leading: CircleAvatar(backgroundColor: Color(settings.accentColor)),
-            onTap: () =>
-                pickAccentColor(context, ref, settings, (s) => _save(ref, s)),
+          TabBar(
+            controller: _tabs,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [for (final label in _settingsTabs) Tab(text: label)],
           ),
-          const SizedBox(height: 8),
-          SettingsColorPaletteSection(
-            settings: settings,
-            onSave: (s) => _save(ref, s),
-          ),
-          const SizedBox(height: 16),
-          Text('Appearance', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          ListTile(
-            title: const Text('Theme'),
-            subtitle: Text(
-              settings.themeMode == AppThemeMode.light
-                  ? 'Light — cream paper with drifting petals'
-                  : 'Dark — geometric night',
-            ),
-            trailing: SegmentedButton<AppThemeMode>(
-              segments: const [
-                ButtonSegment(
-                  value: AppThemeMode.dark,
-                  icon: Icon(PhosphorIconsRegular.moon),
-                  label: Text('Dark'),
+          Expanded(
+            child: TabBarView(
+              controller: _tabs,
+              children: [
+                KeepAliveScrollView(
+                  storageKey: ShellPageStorageKeys.settingsAccountTab,
+                  padding: const EdgeInsets.all(16),
+                  children: const [
+                    AccountSettingsSection(),
+                    SizedBox(height: 16),
+                    DevicesSettingsSection(),
+                  ],
                 ),
-                ButtonSegment(
-                  value: AppThemeMode.light,
-                  icon: Icon(PhosphorIconsRegular.sun),
-                  label: Text('Light'),
-                ),
-              ],
-              selected: {settings.themeMode},
-              showSelectedIcon: false,
-              onSelectionChanged: (sel) =>
-                  _save(ref, settings.copyWith(themeMode: sel.first)),
-            ),
-          ),
-          if (settings.themeMode == AppThemeMode.light)
-            _PetalSettings(settings: settings, onSave: (s) => _save(ref, s))
-          else
-            const _GeometricSettings(),
-          const SizedBox(height: 16),
-          Text('Life Tracker', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          ListTile(
-            title: const Text('Birth date'),
-            subtitle: Text(
-              settings.birthDate == null
-                  ? 'Not set — the Life Tracker tree will show a placeholder'
-                  : DateFormat.yMMMMd().format(settings.birthDate!),
-            ),
-            trailing: const Icon(PhosphorIconsRegular.calendar),
-            onTap: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: settings.birthDate ?? DateTime(1995, 1, 1),
-                firstDate: DateTime(1900),
-                lastDate: DateTime.now(),
-              );
-              if (picked != null) {
-                _save(ref, settings.copyWith(birthDate: picked));
-              }
-            },
-          ),
-          const SizedBox(height: 16),
-          Text('Statistics', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          const _StatisticsTiles(),
-          // The old companion toggle for the analytics *calendar* view is
-          // gone with that view itself — a statistic's calendar now opens as
-          // a popup from its grid tile, so this one switch governs whether
-          // built-in trackers show up at all.
-          SwitchListTile(
-            title: const Text('Default trackers in grid view'),
-            subtitle: const Text(
-              'Show built-in trackers like Journal Entries in the analytics '
-              'grid view',
-            ),
-            value: settings.showDefaultTrackersInGrid,
-            onChanged: (v) =>
-                _save(ref, settings.copyWith(showDefaultTrackersInGrid: v)),
-          ),
-          const SizedBox(height: 16),
-          SwitchListTile(
-            title: const Text('Show quotes on journal entries'),
-            value: settings.showQuotes,
-            onChanged: (v) => _save(ref, settings.copyWith(showQuotes: v)),
-          ),
-          ListTile(
-            title: const Text('Custom quotes'),
-            subtitle: const Text(
-              'Add your own quotes to the pool a new entry picks from',
-            ),
-            trailing: const Icon(PhosphorIconsRegular.quotes),
-            onTap: () => showCustomQuotesDialog(context),
-          ),
-          SwitchListTile(
-            title: const Text('Week starts on Monday'),
-            // Purely a display preference now: weekly tracker values are
-            // always filed under Monday (see
-            // [kTrackerStorageWeekStartsMonday]), so this only decides which
-            // column a calendar draws first. It used to re-anchor every
-            // stored weekly value on each flip, which meant a per-device
-            // setting repartitioned synced data — and rewrote each row's
-            // periodStart while leaving its id derived from the old anchor.
-            onChanged: (v) =>
-                _save(ref, settings.copyWith(weekStartsOnMonday: v)),
-            value: settings.weekStartsOnMonday,
-          ),
-          ListTile(
-            title: const Text('Calendar: previous period'),
-            subtitle: Text(
-              '${formatKeyBinding(settings.calendarNavigateLeftKey)} '
-              '(also Left arrow)',
-            ),
-            onTap: () => _pickCalendarKey(
-              context,
-              ref,
-              settings,
-              title: 'Previous period key',
-              current: settings.calendarNavigateLeftKey,
-              onSelected: (key) =>
-                  settings.copyWith(calendarNavigateLeftKey: key),
-            ),
-          ),
-          ListTile(
-            title: const Text('Calendar: next period'),
-            subtitle: Text(
-              '${formatKeyBinding(settings.calendarNavigateRightKey)} '
-              '(also Right arrow)',
-            ),
-            onTap: () => _pickCalendarKey(
-              context,
-              ref,
-              settings,
-              title: 'Next period key',
-              current: settings.calendarNavigateRightKey,
-              onSelected: (key) =>
-                  settings.copyWith(calendarNavigateRightKey: key),
-            ),
-          ),
-          SwitchListTile(
-            title: const Text('Hide completed tasks'),
-            subtitle: const Text(
-              'Removes completed tasks and the completed section from to-do',
-            ),
-            value: settings.hideCompletedTasks,
-            onChanged: (v) =>
-                _save(ref, settings.copyWith(hideCompletedTasks: v)),
-          ),
-          SwitchListTile(
-            title: const Text('Vim keybindings'),
-            subtitle: const Text(
-              'Press Esc in any text box for Normal mode: motions, operators, '
-              'text objects, visual mode and / search. Fields still start in '
-              'Insert, so typing works as usual until you ask for Vim',
-            ),
-            value: settings.vimModeEnabled,
-            onChanged: (v) => _save(ref, settings.copyWith(vimModeEnabled: v)),
-          ),
-          SwitchListTile(
-            title: const Text('Caps Lock indicator'),
-            subtitle: const Text(
-              'Shows a mark next to the caret while Caps Lock is on and a text '
-              'box has focus. Windows and Linux only — macOS draws its own',
-            ),
-            value: settings.capsLockIndicatorEnabled,
-            onChanged: (v) =>
-                _save(ref, settings.copyWith(capsLockIndicatorEnabled: v)),
-          ),
-          SwitchListTile(
-            title: const Text('Autocorrect'),
-            subtitle: const Text(
-              'Fixes obvious typos in multi-line text boxes as you finish a '
-              'word — only when one dictionary word is a single swapped, '
-              'missing or extra letter away. Backspace right after undoes it '
-              'and stops it happening again for that word',
-            ),
-            value: settings.autocorrectEnabled,
-            onChanged: (v) =>
-                _save(ref, settings.copyWith(autocorrectEnabled: v)),
-          ),
-          ListTile(
-            title: const Text('Text snippets'),
-            subtitle: Text(
-              settings.snippets.isEmpty
-                  ? 'Type a shortcut in any text box and expand it into '
-                        'something longer — none set up yet'
-                  : '${settings.snippets.length} '
-                        '${settings.snippets.length == 1 ? 'snippet' : 'snippets'}'
-                        '${settings.snippetsEnabled ? '' : ' (disabled)'}',
-            ),
-            trailing: const Icon(PhosphorIconsRegular.textAa),
-            onTap: () => showSnippetsDialog(context),
-          ),
-          const _DictionaryTile(),
-          WeatherLocationTile(settings: settings),
-          const SizedBox(height: 16),
-          Text('Finance', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          SwitchListTile(
-            title: const Text('Show annualized subscription cost'),
-            subtitle: const Text(
-              'Displays each recurring bill\'s yearly total in faint text on '
-              'the Bill Radar (e.g. \$180/yr for a \$15/month plan)',
-            ),
-            value: settings.showAnnualizedSubscriptionCost,
-            onChanged: (v) => _save(
-              ref,
-              settings.copyWith(showAnnualizedSubscriptionCost: v),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text('Jobs', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          ListTile(
-            title: const Text('Job application profile'),
-            subtitle: Text(_jobProfileSummary(settings)),
-            trailing: const Icon(PhosphorIconsRegular.caretRight),
-            onTap: () => _showJobProfileDialog(context, ref, settings),
-          ),
-          ListTile(
-            title: const Text('Experience snippets'),
-            subtitle: Text(jobExperienceSnippetsSummary(settings)),
-            trailing: const Icon(PhosphorIconsRegular.caretRight),
-            onTap: () => showJobExperienceSnippetsDialog(context),
-          ),
-          const SizedBox(height: 16),
-          Text('LeetCode', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          ListTile(
-            title: const Text('LeetCode username'),
-            subtitle: Text(
-              settings.leetcodeUsername == null ||
-                      settings.leetcodeUsername!.isEmpty
-                  ? 'Not set — Track will open with blank fields'
-                  : settings.leetcodeUsername!,
-            ),
-            trailing: const Icon(PhosphorIconsRegular.caretRight),
-            onTap: () => _showLeetCodeUsernameDialog(context, ref, settings),
-          ),
-          SwitchListTile(
-            title: const Text('View NeetCode 150'),
-            subtitle: const Text(
-              'Show a progress ring for NeetCode 150 problems on the '
-              'LeetCode dashboard',
-            ),
-            value: settings.showNeetCode150,
-            onChanged: (v) => _save(ref, settings.copyWith(showNeetCode150: v)),
-          ),
-          const SizedBox(height: 16),
-          Text('Study', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          ListTile(
-            title: const Text('Grade: Fail'),
-            subtitle: Text(formatKeyBinding(settings.srsFailKey)),
-            onTap: () => _pickCalendarKey(
-              context,
-              ref,
-              settings,
-              title: 'Fail key',
-              current: settings.srsFailKey,
-              onSelected: (key) => settings.copyWith(srsFailKey: key),
-            ),
-          ),
-          ListTile(
-            title: const Text('Grade: Hard'),
-            subtitle: Text(formatKeyBinding(settings.srsHardKey)),
-            onTap: () => _pickCalendarKey(
-              context,
-              ref,
-              settings,
-              title: 'Hard key',
-              current: settings.srsHardKey,
-              onSelected: (key) => settings.copyWith(srsHardKey: key),
-            ),
-          ),
-          ListTile(
-            title: const Text('Grade: Good'),
-            subtitle: Text(formatKeyBinding(settings.srsGoodKey)),
-            onTap: () => _pickCalendarKey(
-              context,
-              ref,
-              settings,
-              title: 'Good key',
-              current: settings.srsGoodKey,
-              onSelected: (key) => settings.copyWith(srsGoodKey: key),
-            ),
-          ),
-          ListTile(
-            title: const Text('Grade: Easy'),
-            subtitle: Text(formatKeyBinding(settings.srsEasyKey)),
-            onTap: () => _pickCalendarKey(
-              context,
-              ref,
-              settings,
-              title: 'Easy key',
-              current: settings.srsEasyKey,
-              onSelected: (key) => settings.copyWith(srsEasyKey: key),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text('Dream Journal', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          SwitchListTile(
-            title: const Text('Show dream statistics in analytics'),
-            subtitle: const Text(
-              'Adds a stat to the analytics page showing whether you logged '
-              'a dream each day',
-            ),
-            value: settings.showDreamStatistics,
-            onChanged: (v) =>
-                _save(ref, settings.copyWith(showDreamStatistics: v)),
-          ),
-          const SizedBox(height: 16),
-          Text('Workout', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          ListTile(
-            title: const Text('Weight unit'),
-            subtitle: Text(
-              settings.weightUnit == WeightUnit.kg ? 'Kilograms' : 'Pounds',
-            ),
-            trailing: SegmentedButton<WeightUnit>(
-              segments: const [
-                ButtonSegment(value: WeightUnit.lb, label: Text('lb')),
-                ButtonSegment(value: WeightUnit.kg, label: Text('kg')),
-              ],
-              selected: {settings.weightUnit},
-              showSelectedIcon: false,
-              onSelectionChanged: (selection) =>
-                  _save(ref, settings.copyWith(weightUnit: selection.first)),
-            ),
-          ),
-          SwitchListTile(
-            title: const Text('Rest timer between sets'),
-            subtitle: Text(
-              'Starts a ${settings.workoutRestSeconds}s countdown when you '
-              'complete a set',
-            ),
-            value: settings.workoutRestTimerEnabled,
-            onChanged: (v) =>
-                _save(ref, settings.copyWith(workoutRestTimerEnabled: v)),
-          ),
-          if (settings.workoutRestTimerEnabled)
-            ListTile(
-              title: const Text('Rest length'),
-              subtitle: Slider(
-                value: settings.workoutRestSeconds.toDouble().clamp(15, 300),
-                min: 15,
-                max: 300,
-                divisions: 19,
-                label: '${settings.workoutRestSeconds}s',
-                onChanged: (v) => _save(
-                  ref,
-                  settings.copyWith(workoutRestSeconds: v.round()),
-                ),
-              ),
-            ),
-          SwitchListTile(
-            title: const Text('Show workouts on the calendar'),
-            subtitle: const Text(
-              'Adds a small icon to month and week days you worked out on',
-            ),
-            value: settings.showWorkoutsOnCalendar,
-            onChanged: (v) =>
-                _save(ref, settings.copyWith(showWorkoutsOnCalendar: v)),
-          ),
-          SwitchListTile(
-            title: const Text('Show workout statistics in analytics'),
-            subtitle: const Text(
-              'Adds a stat to the analytics page showing whether you worked '
-              'out each day',
-            ),
-            value: settings.showWorkoutStatistics,
-            onChanged: (v) =>
-                _save(ref, settings.copyWith(showWorkoutStatistics: v)),
-          ),
-          const SizedBox(height: 16),
-          Text('Images', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          SwitchListTile(
-            title: const Text('Upload images to the cloud'),
-            subtitle: const Text(
-              'Off keeps attached images on this device forever. Your other '
-              'devices still see that an image exists, but can never get the '
-              'picture itself',
-            ),
-            value: settings.mediaRemoteUploadsEnabled,
-            onChanged: (v) async {
-              await _save(ref, settings.copyWith(mediaRemoteUploadsEnabled: v));
-              // Turning uploads on is the moment everything attached while
-              // they were off can finally leave — without this those images
-              // would stay stranded on one device forever.
-              if (!v) return;
-              final queued = await ref
-                  .read(mediaServiceProvider)
-                  .queueLocalOnlyUploads();
-              if (queued == 0 || !context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Queued $queued image${queued == 1 ? '' : 's'} for upload.',
-                  ),
-                ),
-              );
-            },
-          ),
-          SwitchListTile(
-            title: const Text('Download images from the cloud'),
-            subtitle: const Text(
-              'Off shows "Download disabled" wherever an image is not already '
-              'on this device, instead of a spinner that never finishes',
-            ),
-            value: settings.mediaRemoteDownloadsEnabled,
-            onChanged: (v) =>
-                _save(ref, settings.copyWith(mediaRemoteDownloadsEnabled: v)),
-          ),
-          SwitchListTile(
-            title: const Text('Download images in the background'),
-            subtitle: Text(
-              settings.mediaRemoteDownloadsEnabled
-                  ? 'Fetches every synced image after a sync, so they are '
-                        'there next time you are offline'
-                  : 'Needs "Download images from the cloud" to be on',
-            ),
-            value: settings.mediaBackgroundPrefetchEnabled,
-            // Prefetch is meaningless while downloads are off, so it is
-            // disabled rather than left on as a setting with no effect.
-            onChanged: settings.mediaRemoteDownloadsEnabled
-                ? (v) => _save(
-                    ref,
-                    settings.copyWith(mediaBackgroundPrefetchEnabled: v),
-                  )
-                : null,
-          ),
-          const _MediaStorageTile(),
-          const SizedBox(height: 16),
-          const DevicesSettingsSection(),
-          const SizedBox(height: 16),
-          Text('Navigation', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          ListTile(
-            title: const Text('Navigation pages'),
-            subtitle: const Text(
-              "Reorder pages, or hide the ones you don't use",
-            ),
-            trailing: const Icon(PhosphorIconsRegular.caretRight),
-            onTap: () => _showReorderNavDialog(context, ref, settings),
-          ),
-          ListTile(
-            title: const Text('Startup page'),
-            subtitle: Text(_startupPageLabel(settings)),
-            trailing: const Icon(PhosphorIconsRegular.caretRight),
-            onTap: () => _showStartupPageDialog(context, ref, settings),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Backup & Restore',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 4),
-          ListTile(
-            title: const Text('Trash'),
-            subtitle: const Text(
-              'Restore anything deleted in the last 30 days, or delete it '
-              'for good',
-            ),
-            leading: const Icon(PhosphorIconsRegular.trash),
-            trailing: const Icon(PhosphorIconsRegular.caretRight),
-            onTap: () => showTrashDialog(context),
-          ),
-          const _AutoBackupTiles(),
-          ListTile(
-            title: const Text('Export Backup'),
-            subtitle: const Text(
-              'Export everything — journal, tasks, calendar, trackers, '
-              'finance, study, workouts and settings — to a ZIP file',
-            ),
-            leading: const Icon(PhosphorIconsRegular.downloadSimple),
-            onTap: () async {
-              try {
-                // saveFile, not getDirectoryPath: on Windows every other
-                // file_picker dialog runs on a spawned isolate, but
-                // getDirectoryPath drives COM's IFileOpenDialog inline on the
-                // platform thread and takes the process down with an access
-                // violation before it ever returns a path.
-                final targetPath = await FilePicker.platform.saveFile(
-                  dialogTitle: 'Export Backup',
-                  fileName:
-                      'voyager_backup_${DateTime.now().millisecondsSinceEpoch}.zip',
-                  type: FileType.custom,
-                  allowedExtensions: ['zip'],
-                );
-                if (targetPath == null) return;
-
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Exporting backup...')),
-                  );
-                }
-
-                final file = await ref
-                    .read(dataExportServiceProvider)
-                    .exportDataToZip(File(targetPath));
-
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Backup exported to: ${file.path}'),
-                      duration: const Duration(seconds: 5),
+                KeepAliveScrollView(
+                  storageKey: ShellPageStorageKeys.settingsAppearanceTab,
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Text(
+                      'Colors',
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
-                }
-              }
-            },
-          ),
-          ListTile(
-            title: const Text('Import Backup'),
-            subtitle: const Text(
-              'Restore everything from a ZIP file. Records the backup and this '
-              'device already agree on are left untouched',
-            ),
-            leading: const Icon(PhosphorIconsRegular.uploadSimple),
-            onTap: () async {
-              try {
-                final result = await FilePicker.platform.pickFiles(
-                  type: FileType.custom,
-                  allowedExtensions: ['zip'],
-                );
-                if (result == null || result.files.single.path == null) return;
-                if (!context.mounted) return;
+                    const SizedBox(height: 4),
+                    ListTile(
+                      title: const Text('App accent color'),
+                      subtitle: Text(formatColorHex(settings.accentColor)),
+                      leading: CircleAvatar(
+                        backgroundColor: Color(settings.accentColor),
+                      ),
+                      onTap: () => pickAccentColor(
+                        context,
+                        ref,
+                        settings,
+                        (s) => _save(ref, s),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SettingsColorPaletteSection(
+                      settings: settings,
+                      onSave: (s) => _save(ref, s),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Theme & background',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    ListTile(
+                      title: const Text('Theme'),
+                      subtitle: Text(
+                        settings.themeMode == AppThemeMode.light
+                            ? 'Light — cream paper with drifting petals'
+                            : 'Dark — geometric night',
+                      ),
+                      trailing: SegmentedButton<AppThemeMode>(
+                        segments: const [
+                          ButtonSegment(
+                            value: AppThemeMode.dark,
+                            icon: Icon(PhosphorIconsRegular.moon),
+                            label: Text('Dark'),
+                          ),
+                          ButtonSegment(
+                            value: AppThemeMode.light,
+                            icon: Icon(PhosphorIconsRegular.sun),
+                            label: Text('Light'),
+                          ),
+                        ],
+                        selected: {settings.themeMode},
+                        showSelectedIcon: false,
+                        onSelectionChanged: (sel) =>
+                            _save(ref, settings.copyWith(themeMode: sel.first)),
+                      ),
+                    ),
+                    if (settings.themeMode == AppThemeMode.light)
+                      _PetalSettings(
+                        settings: settings,
+                        onSave: (s) => _save(ref, s),
+                      )
+                    else
+                      const _GeometricSettings(),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Navigation',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    ListTile(
+                      title: const Text('Navigation pages'),
+                      subtitle: const Text(
+                        "Reorder pages, or hide the ones you don't use",
+                      ),
+                      trailing: const Icon(PhosphorIconsRegular.caretRight),
+                      onTap: () =>
+                          _showReorderNavDialog(context, ref, settings),
+                    ),
+                    ListTile(
+                      title: const Text('Startup page'),
+                      subtitle: Text(_startupPageLabel(settings)),
+                      trailing: const Icon(PhosphorIconsRegular.caretRight),
+                      onTap: () =>
+                          _showStartupPageDialog(context, ref, settings),
+                    ),
+                  ],
+                ),
+                KeepAliveScrollView(
+                  storageKey: ShellPageStorageKeys.settingsEditingTab,
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Text(
+                      'Text editing',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    SwitchListTile(
+                      title: const Text('Vim keybindings'),
+                      subtitle: const Text(
+                        'Press Esc in any text box for Normal mode: motions, operators, '
+                        'text objects, visual mode and / search. Fields still start in '
+                        'Insert, so typing works as usual until you ask for Vim',
+                      ),
+                      value: settings.vimModeEnabled,
+                      onChanged: (v) =>
+                          _save(ref, settings.copyWith(vimModeEnabled: v)),
+                    ),
+                    SwitchListTile(
+                      title: const Text('Caps Lock indicator'),
+                      subtitle: const Text(
+                        'Shows a mark next to the caret while Caps Lock is on and a text '
+                        'box has focus. Windows and Linux only — macOS draws its own',
+                      ),
+                      value: settings.capsLockIndicatorEnabled,
+                      onChanged: (v) => _save(
+                        ref,
+                        settings.copyWith(capsLockIndicatorEnabled: v),
+                      ),
+                    ),
+                    SwitchListTile(
+                      title: const Text('Autocorrect'),
+                      subtitle: const Text(
+                        'Fixes obvious typos in multi-line text boxes as you finish a '
+                        'word — only when one dictionary word is a single swapped, '
+                        'missing or extra letter away. Backspace right after undoes it '
+                        'and stops it happening again for that word',
+                      ),
+                      value: settings.autocorrectEnabled,
+                      onChanged: (v) =>
+                          _save(ref, settings.copyWith(autocorrectEnabled: v)),
+                    ),
+                    ListTile(
+                      title: const Text('Text snippets'),
+                      subtitle: Text(
+                        settings.snippets.isEmpty
+                            ? 'Type a shortcut in any text box and expand it into '
+                                  'something longer — none set up yet'
+                            : '${settings.snippets.length} '
+                                  '${settings.snippets.length == 1 ? 'snippet' : 'snippets'}'
+                                  '${settings.snippetsEnabled ? '' : ' (disabled)'}',
+                      ),
+                      trailing: const Icon(PhosphorIconsRegular.textAa),
+                      onTap: () => showSnippetsDialog(context),
+                    ),
+                    const _DictionaryTile(),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Keyboard',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    ListTile(
+                      title: const Text('Calendar: previous period'),
+                      subtitle: Text(
+                        '${formatKeyBinding(settings.calendarNavigateLeftKey)} '
+                        '(also Left arrow)',
+                      ),
+                      onTap: () => _pickCalendarKey(
+                        context,
+                        ref,
+                        settings,
+                        title: 'Previous period key',
+                        current: settings.calendarNavigateLeftKey,
+                        onSelected: (key) =>
+                            settings.copyWith(calendarNavigateLeftKey: key),
+                      ),
+                    ),
+                    ListTile(
+                      title: const Text('Calendar: next period'),
+                      subtitle: Text(
+                        '${formatKeyBinding(settings.calendarNavigateRightKey)} '
+                        '(also Right arrow)',
+                      ),
+                      onTap: () => _pickCalendarKey(
+                        context,
+                        ref,
+                        settings,
+                        title: 'Next period key',
+                        current: settings.calendarNavigateRightKey,
+                        onSelected: (key) =>
+                            settings.copyWith(calendarNavigateRightKey: key),
+                      ),
+                    ),
+                    if (isWindows) ...[
+                      ListTile(
+                        title: const Text('Journal hotkey'),
+                        subtitle: Text(
+                          '${settings.journalHotkey}\n'
+                          'Avoid Ctrl+Shift combos that browsers use (e.g. Chrome DevTools).',
+                        ),
+                      ),
+                      ListTile(
+                        title: const Text('To-do hotkey'),
+                        subtitle: Text(
+                          '${settings.todoHotkey}\n'
+                          'Default is $defaultTodoHotkey so Chrome Ctrl+Shift+T still works.',
+                        ),
+                      ),
+                      ListTile(
+                        title: const Text('Finance hotkey'),
+                        subtitle: Text(settings.financeHotkey),
+                      ),
+                      ListTile(
+                        title: const Text('Reminder hotkey'),
+                        subtitle: Text(settings.reminderHotkey),
+                      ),
+                    ],
+                    if (isAndroid)
+                      const ListTile(
+                        title: Text('Global hotkeys'),
+                        subtitle: Text('Available on Windows only'),
+                      ),
+                  ],
+                ),
+                KeepAliveScrollView(
+                  storageKey: ShellPageStorageKeys.settingsPagesTab,
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Text(
+                      'Journal',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    SwitchListTile(
+                      title: const Text('Show quotes on journal entries'),
+                      value: settings.showQuotes,
+                      onChanged: (v) =>
+                          _save(ref, settings.copyWith(showQuotes: v)),
+                    ),
+                    ListTile(
+                      title: const Text('Custom quotes'),
+                      subtitle: const Text(
+                        'Add your own quotes to the pool a new entry picks from',
+                      ),
+                      trailing: const Icon(PhosphorIconsRegular.quotes),
+                      onTap: () => showCustomQuotesDialog(context),
+                    ),
+                    WeatherLocationTile(settings: settings),
+                    const SizedBox(height: 16),
+                    Text(
+                      'To-Do',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    SwitchListTile(
+                      title: const Text('Hide completed tasks'),
+                      subtitle: const Text(
+                        'Removes completed tasks and the completed section from to-do',
+                      ),
+                      value: settings.hideCompletedTasks,
+                      onChanged: (v) =>
+                          _save(ref, settings.copyWith(hideCompletedTasks: v)),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Calendar',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    SwitchListTile(
+                      title: const Text('Week starts on Monday'),
+                      // Purely a display preference now: weekly tracker values are
+                      // always filed under Monday (see
+                      // [kTrackerStorageWeekStartsMonday]), so this only decides which
+                      // column a calendar draws first. It used to re-anchor every
+                      // stored weekly value on each flip, which meant a per-device
+                      // setting repartitioned synced data — and rewrote each row's
+                      // periodStart while leaving its id derived from the old anchor.
+                      onChanged: (v) =>
+                          _save(ref, settings.copyWith(weekStartsOnMonday: v)),
+                      value: settings.weekStartsOnMonday,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Life Tracker',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    ListTile(
+                      title: const Text('Birth date'),
+                      subtitle: Text(
+                        settings.birthDate == null
+                            ? 'Not set — the Life Tracker tree will show a placeholder'
+                            : DateFormat.yMMMMd().format(settings.birthDate!),
+                      ),
+                      trailing: const Icon(PhosphorIconsRegular.calendar),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate:
+                              settings.birthDate ?? DateTime(1995, 1, 1),
+                          firstDate: DateTime(1900),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          _save(ref, settings.copyWith(birthDate: picked));
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Analytics',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    // The old companion toggle for the analytics *calendar* view is
+                    // gone with that view itself — a statistic's calendar now opens as
+                    // a popup from its grid tile, so this one switch governs whether
+                    // built-in trackers show up at all.
+                    SwitchListTile(
+                      title: const Text('Default trackers in grid view'),
+                      subtitle: const Text(
+                        'Show built-in trackers like Journal Entries in the analytics '
+                        'grid view',
+                      ),
+                      value: settings.showDefaultTrackersInGrid,
+                      onChanged: (v) => _save(
+                        ref,
+                        settings.copyWith(showDefaultTrackersInGrid: v),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Finance',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    SwitchListTile(
+                      title: const Text('Show annualized subscription cost'),
+                      subtitle: const Text(
+                        'Displays each recurring bill\'s yearly total in faint text on '
+                        'the Bill Radar (e.g. \$180/yr for a \$15/month plan)',
+                      ),
+                      value: settings.showAnnualizedSubscriptionCost,
+                      onChanged: (v) => _save(
+                        ref,
+                        settings.copyWith(showAnnualizedSubscriptionCost: v),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Jobs',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    ListTile(
+                      title: const Text('Job application profile'),
+                      subtitle: Text(_jobProfileSummary(settings)),
+                      trailing: const Icon(PhosphorIconsRegular.caretRight),
+                      onTap: () =>
+                          _showJobProfileDialog(context, ref, settings),
+                    ),
+                    ListTile(
+                      title: const Text('Experience snippets'),
+                      subtitle: Text(jobExperienceSnippetsSummary(settings)),
+                      trailing: const Icon(PhosphorIconsRegular.caretRight),
+                      onTap: () => showJobExperienceSnippetsDialog(context),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'LeetCode',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    ListTile(
+                      title: const Text('LeetCode username'),
+                      subtitle: Text(
+                        settings.leetcodeUsername == null ||
+                                settings.leetcodeUsername!.isEmpty
+                            ? 'Not set — Track will open with blank fields'
+                            : settings.leetcodeUsername!,
+                      ),
+                      trailing: const Icon(PhosphorIconsRegular.caretRight),
+                      onTap: () =>
+                          _showLeetCodeUsernameDialog(context, ref, settings),
+                    ),
+                    SwitchListTile(
+                      title: const Text('View NeetCode 150'),
+                      subtitle: const Text(
+                        'Show a progress ring for NeetCode 150 problems on the '
+                        'LeetCode dashboard',
+                      ),
+                      value: settings.showNeetCode150,
+                      onChanged: (v) =>
+                          _save(ref, settings.copyWith(showNeetCode150: v)),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Study',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    ListTile(
+                      title: const Text('Grade: Fail'),
+                      subtitle: Text(formatKeyBinding(settings.srsFailKey)),
+                      onTap: () => _pickCalendarKey(
+                        context,
+                        ref,
+                        settings,
+                        title: 'Fail key',
+                        current: settings.srsFailKey,
+                        onSelected: (key) => settings.copyWith(srsFailKey: key),
+                      ),
+                    ),
+                    ListTile(
+                      title: const Text('Grade: Hard'),
+                      subtitle: Text(formatKeyBinding(settings.srsHardKey)),
+                      onTap: () => _pickCalendarKey(
+                        context,
+                        ref,
+                        settings,
+                        title: 'Hard key',
+                        current: settings.srsHardKey,
+                        onSelected: (key) => settings.copyWith(srsHardKey: key),
+                      ),
+                    ),
+                    ListTile(
+                      title: const Text('Grade: Good'),
+                      subtitle: Text(formatKeyBinding(settings.srsGoodKey)),
+                      onTap: () => _pickCalendarKey(
+                        context,
+                        ref,
+                        settings,
+                        title: 'Good key',
+                        current: settings.srsGoodKey,
+                        onSelected: (key) => settings.copyWith(srsGoodKey: key),
+                      ),
+                    ),
+                    ListTile(
+                      title: const Text('Grade: Easy'),
+                      subtitle: Text(formatKeyBinding(settings.srsEasyKey)),
+                      onTap: () => _pickCalendarKey(
+                        context,
+                        ref,
+                        settings,
+                        title: 'Easy key',
+                        current: settings.srsEasyKey,
+                        onSelected: (key) => settings.copyWith(srsEasyKey: key),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Dream Journal',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    SwitchListTile(
+                      title: const Text('Show dream statistics in analytics'),
+                      subtitle: const Text(
+                        'Adds a stat to the analytics page showing whether you logged '
+                        'a dream each day',
+                      ),
+                      value: settings.showDreamStatistics,
+                      onChanged: (v) =>
+                          _save(ref, settings.copyWith(showDreamStatistics: v)),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Workout',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    ListTile(
+                      title: const Text('Weight unit'),
+                      subtitle: Text(
+                        settings.weightUnit == WeightUnit.kg
+                            ? 'Kilograms'
+                            : 'Pounds',
+                      ),
+                      trailing: SegmentedButton<WeightUnit>(
+                        segments: const [
+                          ButtonSegment(
+                            value: WeightUnit.lb,
+                            label: Text('lb'),
+                          ),
+                          ButtonSegment(
+                            value: WeightUnit.kg,
+                            label: Text('kg'),
+                          ),
+                        ],
+                        selected: {settings.weightUnit},
+                        showSelectedIcon: false,
+                        onSelectionChanged: (selection) => _save(
+                          ref,
+                          settings.copyWith(weightUnit: selection.first),
+                        ),
+                      ),
+                    ),
+                    SwitchListTile(
+                      title: const Text('Rest timer between sets'),
+                      subtitle: Text(
+                        'Starts a ${settings.workoutRestSeconds}s countdown when you '
+                        'complete a set',
+                      ),
+                      value: settings.workoutRestTimerEnabled,
+                      onChanged: (v) => _save(
+                        ref,
+                        settings.copyWith(workoutRestTimerEnabled: v),
+                      ),
+                    ),
+                    if (settings.workoutRestTimerEnabled)
+                      ListTile(
+                        title: const Text('Rest length'),
+                        subtitle: Slider(
+                          value: settings.workoutRestSeconds.toDouble().clamp(
+                            15,
+                            300,
+                          ),
+                          min: 15,
+                          max: 300,
+                          divisions: 19,
+                          label: '${settings.workoutRestSeconds}s',
+                          onChanged: (v) => _save(
+                            ref,
+                            settings.copyWith(workoutRestSeconds: v.round()),
+                          ),
+                        ),
+                      ),
+                    SwitchListTile(
+                      title: const Text('Show workouts on the calendar'),
+                      subtitle: const Text(
+                        'Adds a small icon to month and week days you worked out on',
+                      ),
+                      value: settings.showWorkoutsOnCalendar,
+                      onChanged: (v) => _save(
+                        ref,
+                        settings.copyWith(showWorkoutsOnCalendar: v),
+                      ),
+                    ),
+                    SwitchListTile(
+                      title: const Text('Show workout statistics in analytics'),
+                      subtitle: const Text(
+                        'Adds a stat to the analytics page showing whether you worked '
+                        'out each day',
+                      ),
+                      value: settings.showWorkoutStatistics,
+                      onChanged: (v) => _save(
+                        ref,
+                        settings.copyWith(showWorkoutStatistics: v),
+                      ),
+                    ),
+                  ],
+                ),
+                KeepAliveScrollView(
+                  storageKey: ShellPageStorageKeys.settingsDataTab,
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Text(
+                      'Images',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    SwitchListTile(
+                      title: const Text('Upload images to the cloud'),
+                      subtitle: const Text(
+                        'Off keeps attached images on this device forever. Your other '
+                        'devices still see that an image exists, but can never get the '
+                        'picture itself',
+                      ),
+                      value: settings.mediaRemoteUploadsEnabled,
+                      onChanged: (v) async {
+                        await _save(
+                          ref,
+                          settings.copyWith(mediaRemoteUploadsEnabled: v),
+                        );
+                        // Turning uploads on is the moment everything attached while
+                        // they were off can finally leave — without this those images
+                        // would stay stranded on one device forever.
+                        if (!v) return;
+                        final queued = await ref
+                            .read(mediaServiceProvider)
+                            .queueLocalOnlyUploads();
+                        if (queued == 0 || !context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Queued $queued image${queued == 1 ? '' : 's'} for upload.',
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    SwitchListTile(
+                      title: const Text('Download images from the cloud'),
+                      subtitle: const Text(
+                        'Off shows "Download disabled" wherever an image is not already '
+                        'on this device, instead of a spinner that never finishes',
+                      ),
+                      value: settings.mediaRemoteDownloadsEnabled,
+                      onChanged: (v) => _save(
+                        ref,
+                        settings.copyWith(mediaRemoteDownloadsEnabled: v),
+                      ),
+                    ),
+                    SwitchListTile(
+                      title: const Text('Download images in the background'),
+                      subtitle: Text(
+                        settings.mediaRemoteDownloadsEnabled
+                            ? 'Fetches every synced image after a sync, so they are '
+                                  'there next time you are offline'
+                            : 'Needs "Download images from the cloud" to be on',
+                      ),
+                      value: settings.mediaBackgroundPrefetchEnabled,
+                      // Prefetch is meaningless while downloads are off, so it is
+                      // disabled rather than left on as a setting with no effect.
+                      onChanged: settings.mediaRemoteDownloadsEnabled
+                          ? (v) => _save(
+                              ref,
+                              settings.copyWith(
+                                mediaBackgroundPrefetchEnabled: v,
+                              ),
+                            )
+                          : null,
+                    ),
+                    const _MediaStorageTile(),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Backup & Restore',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    ListTile(
+                      title: const Text('Trash'),
+                      subtitle: const Text(
+                        'Restore anything deleted in the last 30 days, or delete it '
+                        'for good',
+                      ),
+                      leading: const Icon(PhosphorIconsRegular.trash),
+                      trailing: const Icon(PhosphorIconsRegular.caretRight),
+                      onTap: () => showTrashDialog(context),
+                    ),
+                    const _AutoBackupTiles(),
+                    ListTile(
+                      title: const Text('Export Backup'),
+                      subtitle: const Text(
+                        'Export everything — journal, tasks, calendar, trackers, '
+                        'finance, study, workouts and settings — to a ZIP file',
+                      ),
+                      leading: const Icon(PhosphorIconsRegular.downloadSimple),
+                      onTap: () async {
+                        try {
+                          // saveFile, not getDirectoryPath: on Windows every other
+                          // file_picker dialog runs on a spawned isolate, but
+                          // getDirectoryPath drives COM's IFileOpenDialog inline on the
+                          // platform thread and takes the process down with an access
+                          // violation before it ever returns a path.
+                          final targetPath = await FilePicker.platform.saveFile(
+                            dialogTitle: 'Export Backup',
+                            fileName:
+                                'voyager_backup_${DateTime.now().millisecondsSinceEpoch}.zip',
+                            type: FileType.custom,
+                            allowedExtensions: ['zip'],
+                          );
+                          if (targetPath == null) return;
 
-                // Behind a pre-restore snapshot, like any other restore.
-                await confirmAndRestoreBackup(
-                  context,
-                  ref,
-                  File(result.files.single.path!),
-                );
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
-                }
-              }
-            },
-          ),
-          ListTile(
-            title: const Text('About'),
-            subtitle: Text(
-              'Voyager — local-first journal and productivity\n'
-              'Build $buildLabel',
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Exporting backup...'),
+                              ),
+                            );
+                          }
+
+                          final file = await ref
+                              .read(dataExportServiceProvider)
+                              .exportDataToZip(File(targetPath));
+
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Backup exported to: ${file.path}',
+                                ),
+                                duration: const Duration(seconds: 5),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Export failed: $e')),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                    ListTile(
+                      title: const Text('Import Backup'),
+                      subtitle: const Text(
+                        'Restore everything from a ZIP file. Records the backup and this '
+                        'device already agree on are left untouched',
+                      ),
+                      leading: const Icon(PhosphorIconsRegular.uploadSimple),
+                      onTap: () async {
+                        try {
+                          final result = await FilePicker.platform.pickFiles(
+                            type: FileType.custom,
+                            allowedExtensions: ['zip'],
+                          );
+                          if (result == null ||
+                              result.files.single.path == null) {
+                            return;
+                          }
+                          if (!context.mounted) return;
+
+                          // Behind a pre-restore snapshot, like any other restore.
+                          await confirmAndRestoreBackup(
+                            context,
+                            ref,
+                            File(result.files.single.path!),
+                          );
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Import failed: $e')),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                KeepAliveScrollView(
+                  storageKey: ShellPageStorageKeys.settingsAboutTab,
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    ListTile(
+                      title: const Text('About'),
+                      subtitle: Text(
+                        'Voyager — local-first journal and productivity\n'
+                        'Build $buildLabel',
+                      ),
+                      trailing: const Icon(PhosphorIconsRegular.copy, size: 18),
+                      onTap: () async {
+                        await Clipboard.setData(
+                          ClipboardData(text: buildLabel),
+                        );
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Build info copied')),
+                        );
+                      },
+                    ),
+                    ListTile(
+                      title: const Text('Weather data'),
+                      subtitle: const Text('Provided by OpenWeather'),
+                      trailing: const Icon(
+                        PhosphorIconsRegular.arrowSquareOut,
+                        size: 18,
+                      ),
+                      onTap: () => launchUrl(
+                        Uri.parse('https://openweathermap.org/'),
+                        mode: LaunchMode.externalApplication,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            trailing: const Icon(PhosphorIconsRegular.copy, size: 18),
-            onTap: () async {
-              await Clipboard.setData(ClipboardData(text: buildLabel));
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Build info copied')),
-              );
-            },
-          ),
-          ListTile(
-            title: const Text('Weather data'),
-            subtitle: const Text('Provided by OpenWeather'),
-            trailing: const Icon(PhosphorIconsRegular.arrowSquareOut, size: 18),
-            onTap: () => launchUrl(
-              Uri.parse('https://openweathermap.org/'),
-              mode: LaunchMode.externalApplication,
-            ),
-          ),
-          if (isWindows) ...[
-            ListTile(
-              title: const Text('Journal hotkey'),
-              subtitle: Text(
-                '${settings.journalHotkey}\n'
-                'Avoid Ctrl+Shift combos that browsers use (e.g. Chrome DevTools).',
-              ),
-            ),
-            ListTile(
-              title: const Text('To-do hotkey'),
-              subtitle: Text(
-                '${settings.todoHotkey}\n'
-                'Default is $defaultTodoHotkey so Chrome Ctrl+Shift+T still works.',
-              ),
-            ),
-            ListTile(
-              title: const Text('Finance hotkey'),
-              subtitle: Text(settings.financeHotkey),
-            ),
-            ListTile(
-              title: const Text('Reminder hotkey'),
-              subtitle: Text(settings.reminderHotkey),
-            ),
-          ],
-          if (isAndroid)
-            const ListTile(
-              title: Text('Global hotkeys'),
-              subtitle: Text('Available on Windows only'),
-            ),
-          ListTile(
-            title: const Text('Sign out'),
-            onTap: () => ref.read(authRepositoryProvider).signOut(),
           ),
         ],
       ),

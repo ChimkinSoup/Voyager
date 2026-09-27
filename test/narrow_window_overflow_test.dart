@@ -120,6 +120,16 @@ const _dialogTaps = <String, List<String>>{
   ],
 };
 
+/// The Settings tab each of its [_dialogTaps] lives on.
+const _settingsTabOf = {
+  'App accent color': 'Appearance',
+  'Birth date': 'Pages',
+  'Job application profile': 'Pages',
+  'LeetCode username': 'Pages',
+  'Navigation pages': 'Appearance',
+  'Startup page': 'Appearance',
+};
+
 /// Pumps [page] into a [size] surface, visits its views, side panels and
 /// in-page dialogs, and returns every overflow reported on the way.
 Future<Set<String>> _overflowsFor(
@@ -170,7 +180,20 @@ Future<Set<String>> _overflowsFor(
           reason: 'tapping the probe row opens its edit panel',
         );
       }
+      // Every Settings tab gets laid out at this width, not just the ones
+      // holding a dialog below.
+      if (destination.path == '/settings') {
+        for (final tab in tester.widgetList<Tab>(find.byType(Tab)).toList()) {
+          await tester.tap(find.widgetWithText(Tab, tab.text!));
+          await settle(tester);
+        }
+      }
       for (final label in _dialogTaps[destination.path] ?? const <String>[]) {
+        final tab = _settingsTabOf[label];
+        if (tab != null) {
+          await tester.tap(find.widgetWithText(Tab, tab));
+          await settle(tester);
+        }
         // Lists build lazily, so scroll the page until the control exists.
         //
         // Driven through the scroll position rather than `scrollUntilVisible`:
@@ -180,7 +203,17 @@ Future<Set<String>> _overflowsFor(
         // at the centre shifts with any copy change on the page, so the drag
         // is left out of it entirely.
         final position = tester
-            .state<ScrollableState>(find.byType(Scrollable).first)
+            .state<ScrollableState>(
+              // The page's list, not a horizontal strip such as Settings'
+              // tab bar or the pager holding its tabs.
+              find
+                  .byWidgetPredicate(
+                    (widget) =>
+                        widget is Scrollable &&
+                        widget.axisDirection == AxisDirection.down,
+                  )
+                  .first,
+            )
             .position;
         while (find.text(label).evaluate().isEmpty &&
             position.pixels < position.maxScrollExtent) {

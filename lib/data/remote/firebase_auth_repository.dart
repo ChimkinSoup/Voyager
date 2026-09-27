@@ -19,6 +19,38 @@ class FirebaseAuthRepository implements AuthRepository {
   String? get currentUserId => _auth.currentUser?.uid;
 
   @override
+  String? get currentUserEmail => _auth.currentUser?.email;
+
+  @override
+  bool get hasPasswordSignIn =>
+      _auth.currentUser?.providerData.any(
+        (info) => info.providerId == EmailAuthProvider.PROVIDER_ID,
+      ) ??
+      false;
+
+  @override
+  Future<void> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    final user = _auth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null) throw Exception('Not signed in.');
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: currentPassword),
+      );
+      await user.updatePassword(newPassword);
+    } catch (e) {
+      throw Exception(
+        e is FirebaseException && e.plugin == 'firebase_auth'
+            ? changePasswordErrorMessage(code: e.code, message: e.message)
+            : 'Could not change password.',
+      );
+    }
+  }
+
+  @override
   Future<void> signInWithEmail(String email, String password) async {
     try {
       await _auth.signInWithEmailAndPassword(email: email, password: password);
@@ -109,6 +141,19 @@ class InMemoryAuthRepository implements AuthRepository {
 
   @override
   String? get currentUserId => _userId;
+
+  @override
+  String? get currentUserEmail =>
+      _userId?.startsWith('email:') ?? false ? _userId!.substring(6) : null;
+
+  @override
+  bool get hasPasswordSignIn => currentUserEmail != null;
+
+  @override
+  Future<void> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {}
 
   @override
   Future<void> signInWithEmail(String email, String password) async {

@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/data/remote/firebase_auth_repository.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/voyager_checkbox.dart';
@@ -70,6 +71,7 @@ Future<ProviderContainer> _container(
       databaseProvider.overrideWithValue(db),
       syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
       weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+      authRepositoryProvider.overrideWithValue(InMemoryAuthRepository()),
       if (failingBackups)
         autoBackupServiceProvider.overrideWith((ref) => _FailingBackups()),
     ],
@@ -289,9 +291,10 @@ void main() {
     }
 
     bool onScreen(WidgetTester tester) {
-      final rect = tester.getRect(
-        find.text('Automatic backups', skipOffstage: false),
-      );
+      // Unbuilt until Settings switches to the Data tab.
+      final tile = find.text('Automatic backups', skipOffstage: false);
+      if (tile.evaluate().isEmpty) return false;
+      final rect = tester.getRect(tile);
       return rect.top >= 0 && rect.bottom <= 640;
     }
 

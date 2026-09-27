@@ -59,6 +59,15 @@ class FakeAuthRepository implements AuthRepository {
   Future<void> signInWithGoogle() async {}
   @override
   Future<void> signOut() async {}
+  @override
+  String? get currentUserEmail => null;
+  @override
+  bool get hasPasswordSignIn => false;
+  @override
+  Future<void> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {}
 }
 
 class ThrowingJournalRepository extends DriftJournalRepository {
