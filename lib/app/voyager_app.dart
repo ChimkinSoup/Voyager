@@ -79,6 +79,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
         onQuit: _quit,
       );
       _tray = tray;
+      quitApp = _quit;
       unawaited(tray.install());
       // A second launch, which exits after asking for this (see main.cpp),
       // or the release script closing this copy to replace it.
@@ -131,6 +132,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     if (desktopWindowChromeActive) {
       windowManager.removeListener(this);
       _instanceChannel.setMethodCallHandler(null);
+      quitApp = null;
     }
     unawaited(_tray?.dispose());
     WindowsKeyboardReconciler.instance.uninstall();

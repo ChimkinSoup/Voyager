@@ -364,6 +364,13 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
           // blob, and the startup sync should not be held open by a download
           // queue. Both settings are checked inside.
           unawaited(ref.read(mediaTransferWorkerProvider).prefetchMissing());
+          // Parked downloads get the same one retry per launch — see
+          // `requeueFailedDownloads`.
+          unawaited(
+            ref.read(mediaTransferWorkerProvider).requeueFailedDownloads(),
+          );
+          // After the pull, so the references it brought in count.
+          unawaited(ref.read(mediaServiceProvider).reconcileRefcounts());
           ref.invalidate(journalEntriesProvider);
           ref.invalidate(journalsProvider);
           ref.invalidate(settingsProvider);

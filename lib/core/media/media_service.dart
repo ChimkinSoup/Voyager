@@ -135,6 +135,10 @@ class MediaService extends ChangeNotifier {
         result.bytes,
       );
       await _repository.upsertAsset(revived);
+      await _repository.updateAssetTransferState(
+        revived.id,
+        downloadState: MediaDownloadState.present,
+      );
       _publisher?.publishAsset(revived);
       notifyListeners();
       return revived;
@@ -588,17 +592,22 @@ class MediaService extends ChangeNotifier {
   }
 
   /// Marks an asset as wanted and wakes the download queue.
+  ///
+  /// A parked (`failed`) download stays parked: this runs on every render of
+  /// the image, and re-queueing from there retried a missing object each time
+  /// the tile rebuilt. The failed tile's retry button is the way back.
   Future<void> requestDownload(MediaAsset asset) async {
     final settings = await _readSettings();
     if (!settings.mediaRemoteDownloadsEnabled) return;
-    if (asset.downloadState == MediaDownloadState.present) return;
+    if (asset.downloadState == MediaDownloadState.present ||
+        asset.downloadState == MediaDownloadState.failed) {
+      return;
+    }
     if (asset.downloadState != MediaDownloadState.pending) {
-      await _repository.upsertAsset(
-        asset.copyWith(
-          downloadState: MediaDownloadState.pending,
-          clearFailureReason: true,
-        ),
-        recordLocalActivity: false,
+      await _repository.updateAssetTransferState(
+        asset.id,
+        downloadState: MediaDownloadState.pending,
+        clearFailureReason: true,
       );
       notifyListeners();
     }
@@ -618,12 +627,10 @@ class MediaService extends ChangeNotifier {
       MediaUploadState.localOnly,
     });
     for (final asset in stranded) {
-      await _repository.upsertAsset(
-        asset.copyWith(
-          uploadState: MediaUploadState.pending,
-          clearFailureReason: true,
-        ),
-        recordLocalActivity: false,
+      await _repository.updateAssetTransferState(
+        asset.id,
+        uploadState: MediaUploadState.pending,
+        clearFailureReason: true,
       );
     }
     if (stranded.isNotEmpty) {
@@ -685,6 +692,25 @@ class MediaService extends ChangeNotifier {
       }
     }
     if (purged.isNotEmpty || orphans.isNotEmpty) notifyListeners();
+  }
+
+  /// Re-derives every live asset's retention clock from its references.
+  ///
+  /// Repairs clocks a transfer used to overwrite with a stale snapshot (see
+  /// [MediaRepository.updateAssetTransferState]): images still in use marked
+  /// unreferenced, and detached ones whose detach never reached the cloud,
+  /// which then never expire on any device. Run after the startup pull, once
+  /// the references this device knows about are current.
+  Future<void> reconcileRefcounts() async {
+    final referenced = {
+      for (final reference in await _repository.listReferences())
+        reference.mediaId,
+    };
+    for (final asset in await _repository.listAssets()) {
+      final inUse = referenced.contains(asset.id);
+      if (inUse == (asset.unreferencedAt == null)) continue;
+      await _refreshRefcount(asset.id);
+    }
   }
 
   /// Recomputes whether anything still points at [mediaId] and starts or

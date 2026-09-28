@@ -260,7 +260,8 @@ class DataImportService {
       // The name is the hash of the content, so bytes that do not hash to it
       // are not this asset's — and a name that is not a hash at all could
       // point the write outside the cache.
-      if (bytes == null || sha256.convert(bytes).toString() != asset.contentHash) {
+      if (bytes == null ||
+          sha256.convert(bytes).toString() != asset.contentHash) {
         continue;
       }
       final format = MediaImageFormat.fromMimeType(asset.mimeType);
@@ -268,12 +269,10 @@ class DataImportService {
       await store.writeBytes(asset.contentHash, format, bytes);
       written++;
       if (asset.downloadState == MediaDownloadState.present) continue;
-      await repository.upsertAsset(
-        asset.copyWith(
-          downloadState: MediaDownloadState.present,
-          clearFailureReason: true,
-        ),
-        recordLocalActivity: false,
+      await repository.updateAssetTransferState(
+        asset.id,
+        downloadState: MediaDownloadState.present,
+        clearFailureReason: true,
       );
     }
     return written;

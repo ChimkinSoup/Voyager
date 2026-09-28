@@ -49,6 +49,9 @@ class FirestoreSyncRepository implements SyncRepository {
   bool get hasUnsentWriteBacklog =>
       writeGate.hasStartupBacklog || writeGate.isPaused;
 
+  @override
+  Future<void> waitForPendingWrites() => _firestore.waitForPendingWrites();
+
   DocumentReference<Map<String, dynamic>> _doc(String collection, String id) {
     return _firestore.doc('users/$_userId/$collection/$id');
   }
@@ -596,6 +599,9 @@ class FirestoreSyncRepository implements SyncRepository {
 class NoOpSyncRepository implements SyncRepository {
   @override
   bool get hasUnsentWriteBacklog => false;
+
+  @override
+  Future<void> waitForPendingWrites() async {}
 
   @override
   Future<void> appendOperation(SyncOperation operation) async {}

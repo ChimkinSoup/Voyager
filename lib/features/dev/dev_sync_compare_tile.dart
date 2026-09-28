@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/dev/full_sync_check.dart';
 import 'package:voyager/core/dev/remote_sync_compare_service.dart';
+import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -26,6 +28,42 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
     await PendingFlushRegistry.instance.flushAll();
     if (!mounted) return;
     await ref.read(remoteSyncServiceProvider).flushAllPending();
+  }
+
+  /// With [quitAfter], a clean result closes the app straight away, so nothing
+  /// is written between the check and a wipe (`qa/harness/reset.ps1` refuses
+  /// once the database has changed since the report).
+  Future<void> _checkAllCollections({required bool quitAfter}) async {
+    if (_comparing) return;
+    setState(() => _comparing = true);
+    final FullSyncCheckReport report;
+    try {
+      await _flushPendingEdits();
+      if (!mounted) return;
+      // Read before the check rather than after it: a write landing while
+      // the check runs then leaves the database past the report's counter,
+      // and reset.ps1 refuses instead of wiping a record the check never saw.
+      final dbChangeCounter =
+          await FullSyncCheck.currentDatabaseChangeCounter();
+      report = await ref.read(fullSyncCheckProvider).run();
+      await FullSyncCheck.writeReport(report, dbChangeCounter: dbChangeCounter);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Sync check failed: $error')));
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _comparing = false);
+    }
+    if (!mounted) return;
+    final quit = quitApp;
+    if (quitAfter && report.safeToWipe && quit != null) {
+      await quit();
+      return;
+    }
+    await _showFullCheckDialog(context, report);
   }
 
   Future<void> _compareJournalEntries() async {
@@ -105,6 +143,33 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 12),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Check every collection against the cloud'),
+          subtitle: const Text(
+            'Lists records the cloud is missing or holds at an older version',
+          ),
+          trailing: _comparing
+              ? null
+              : const Icon(PhosphorIconsRegular.cloudCheck),
+          onTap: _comparing
+              ? null
+              : () => unawaited(_checkAllCollections(quitAfter: false)),
+        ),
+        if (quitApp != null)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Check, then quit (before a wipe)'),
+            subtitle: const Text(
+              'Quits only if nothing is unsynced. reset.ps1 requires this',
+            ),
+            trailing: _comparing
+                ? null
+                : const Icon(PhosphorIconsRegular.signOut),
+            onTap: _comparing
+                ? null
+                : () => unawaited(_checkAllCollections(quitAfter: true)),
+          ),
         ListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Compare all journal entries'),
@@ -291,6 +356,77 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
             child: SelectableText(
               text.isEmpty ? '(empty)' : text,
               style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+            ),
+          ),
+        ),
+        actions: [
+          GlassButton(
+            onPressed: () => Navigator.pop(context),
+            label: 'Close',
+            dense: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showFullCheckDialog(
+    BuildContext context,
+    FullSyncCheckReport report,
+  ) async {
+    final byCollection = report.gapsByCollection;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          report.safeToWipe
+              ? 'Everything is in the cloud'
+              : '${report.gaps.length} record(s) not in the cloud',
+        ),
+        content: SizedBox(
+          width: 720,
+          child: VoyagerScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (report.safeToWipe)
+                  const Text(
+                    'Every record on this device is in the cloud at the same '
+                    'version or newer.',
+                  ),
+                for (final MapEntry(key: name, value: reason)
+                    in report.unreadable.entries)
+                  Text(
+                    'Could not check $name: $reason',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                for (final MapEntry(key: name, value: gaps)
+                    in byCollection.entries) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '$name: ${gaps.length}',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  for (final gap in gaps.take(10))
+                    Text(
+                      '${gap.id} (${gap.reason})',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  if (gaps.length > 10)
+                    Text(
+                      '… and ${gaps.length - 10} more',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                ],
+                const SizedBox(height: 12),
+                const Text(
+                  'Full result saved to sync_check.json in the app data '
+                  'folder.',
+                  style: TextStyle(fontStyle: FontStyle.italic),
+                ),
+              ],
             ),
           ),
         ),

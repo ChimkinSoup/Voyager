@@ -5,6 +5,26 @@ param([int]$DrainTimeoutSec = 120)
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $db = Join-Path $env:APPDATA 'Voyager\voyager\voyager.sqlite'
+# QA data may be wiped without reset.ps1's sync gate, but only once the running
+# app is confirmed signed into a QA account. Anything else goes through it.
+# The account can only be read from a running app, so one that crashed or was
+# closed is relaunched first (the persisted sign-in survives). If that fails,
+# the gate decides, and refuses without a sync check report.
+$qaAccount = $false
+if ((Test-Path -LiteralPath $db) -and -not (Get-Process voyager -ErrorAction SilentlyContinue)) {
+  "Voyager is not running; relaunching it to confirm which account this data belongs to"
+  try { & (Join-Path $here 'launch.ps1') } catch { "relaunch failed: $_" }
+}
+if (Get-Process voyager -ErrorAction SilentlyContinue) {
+  # A just-launched app may not have restored its sign-in yet; exit 3 (a real
+  # account) is final.
+  for ($i = 0; $i -lt 10; $i++) {
+    & (Join-Path $here 'guard.ps1')
+    if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 3) { break }
+    Start-Sleep -Seconds 3
+  }
+  $qaAccount = $LASTEXITCODE -eq 0
+}
 if ((Get-Process voyager -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $db)) {
   $deadline = (Get-Date).AddSeconds($DrainTimeoutSec)
   do {
@@ -14,5 +34,5 @@ if ((Get-Process voyager -ErrorAction SilentlyContinue) -and (Test-Path -Literal
   } while ((Get-Date) -lt $deadline)
   "outbox rows left before quitting: $n"
 }
-& (Join-Path $here 'reset.ps1')
+& (Join-Path $here 'reset.ps1') -Force:$qaAccount
 & (Join-Path $here 'whoami.ps1')

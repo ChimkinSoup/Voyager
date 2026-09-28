@@ -9,7 +9,6 @@ import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/core/constants/job_constants.dart';
 import 'package:voyager/core/platform/app_data_directory.dart';
-import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart' show jobCalendarDay;
 import 'package:voyager/domain/models/journal_models.dart' show kDefaultMood;
@@ -17,6 +16,8 @@ import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/settings_models.dart'
     show JobExperienceSnippet, Snippet, defaultPetalColor;
 import 'package:voyager/domain/services/color_palette_codec.dart';
+import 'package:voyager/domain/services/periodic_prompt_service.dart'
+    show weeklyTrackerStorageAnchor;
 
 part 'app_database.g.dart';
 
@@ -4086,24 +4087,9 @@ class AppDatabase extends _$AppDatabase {
 
     for (final row in rows) {
       final local = row.periodStart;
-
-      // Nearest local midnight, not the floor: a DST-corrupted row sits an
-      // hour *before* the date it means, and flooring would keep it there.
-      final floor = DateTime(local.year, local.month, local.day);
-      final ceil = addCalendarDays(floor, 1);
-      final day = local.difference(floor).abs() <= ceil.difference(local).abs()
-          ? floor
-          : ceil;
-
-      // Through the following day: that picks the Monday-anchored week holding
-      // six of the old Sunday-anchored week's seven days, which is also the
-      // week each row's id was already derived from. A no-op for a row already
-      // on a Monday, so an up-to-date database pays no sync traffic.
-      final shifted = addCalendarDays(day, 1);
-      final anchored = addCalendarDays(
-        shifted,
-        -(shifted.weekday - DateTime.monday),
-      );
+      // A no-op for a row already on a Monday, so an up-to-date database pays
+      // no sync traffic.
+      final anchored = weeklyTrackerStorageAnchor(local);
       if (anchored == local) continue;
 
       // Written through drift's own mapping rather than a hand-built string:

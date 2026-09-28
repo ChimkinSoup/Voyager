@@ -378,8 +378,9 @@ void main() {
       'an upload of an asset with no local bytes is not a failure',
       () async {
         final asset = await remoteOnlyAsset();
-        await repository.upsertAsset(
-          asset.copyWith(uploadState: MediaUploadState.pending),
+        await repository.updateAssetTransferState(
+          asset.id,
+          uploadState: MediaUploadState.pending,
         );
 
         await worker.drainUploads();

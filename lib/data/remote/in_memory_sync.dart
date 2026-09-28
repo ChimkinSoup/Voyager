@@ -13,6 +13,10 @@ class InMemorySyncRepository implements SyncRepository {
   /// Test seam for [hasUnsentWriteBacklog].
   bool unsentWriteBacklog = false;
 
+  /// Every write lands the moment it is made, so there is never one to wait on.
+  @override
+  Future<void> waitForPendingWrites() async {}
+
   final _documents = <String, Map<String, dynamic>>{};
 
   /// When each document was last written — the server write time Firestore

@@ -687,8 +687,28 @@ abstract class MediaRepository {
   /// user deleted last week cost nothing and resurrect nothing.
   Future<MediaAsset?> findAssetByContentHash(String contentHash);
 
+  /// Inserts or updates an asset. Its transfer state (upload, download,
+  /// failure reason) is written on insert only — see
+  /// [updateAssetTransferState] for why.
   Future<void> upsertAsset(MediaAsset asset, {bool recordLocalActivity = true});
   Future<void> softDeleteAsset(String id);
+
+  /// Moves an asset between transfer states, leaving every other column —
+  /// version, retention clock, tombstone — as it currently is on disk.
+  ///
+  /// A transfer holds its row for as long as the network takes, and the user
+  /// can attach, detach or delete the image meanwhile. Writing the transfer's
+  /// snapshot back whole undid those edits: an image attached while its upload
+  /// was in flight went back to "unreferenced" at its pre-attach version, so
+  /// the purge later deleted it — bytes, Storage object and all — while it was
+  /// still in use, and its detach never reached the cloud.
+  Future<void> updateAssetTransferState(
+    String id, {
+    MediaUploadState? uploadState,
+    MediaDownloadState? downloadState,
+    String? failureReason,
+    bool clearFailureReason = false,
+  });
 
   /// Assets whose bytes this device is meant to be moving, in either
   /// direction. Drives both transfer queues.
@@ -1219,6 +1239,11 @@ abstract class SyncRepository {
   /// backlogged, which is why this defaults to false rather than being
   /// abstract.
   bool get hasUnsentWriteBacklog => false;
+
+  /// Completes once every write handed to the backend so far is confirmed by
+  /// the server. Firestore overlays unconfirmed writes on what it reads, so
+  /// anything comparing local data against a read has to wait on this first.
+  Future<void> waitForPendingWrites() async {}
   Future<GoogleCalendarSyncLock?> getCalendarLock();
   Future<bool> claimCalendarLock(GoogleCalendarSyncLock lock);
   Future<void> releaseCalendarLock(String deviceId);

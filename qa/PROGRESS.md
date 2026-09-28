@@ -36,10 +36,11 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 | `launch.ps1` | `flutter run -d windows --debug` in the background. Log goes to `qa/logs/run-*.log`; waits for the VM service and writes its ws URI to `qa/logs/vm_uri.txt`. ~1 min with a warm build. |
 | `stop.ps1` | Kills every `voyager.exe` (the debug run *and* the installed release) plus the `flutter run` tool process. Leaves the Dart LSP alone. |
 | `reset.ps1` | **Baseline reset**: stop, delete the Firebase sign-in creds (= sign out), delete `%APPDATA%\Voyager\voyager` and the Firestore cache. Verifies each step. |
+| `sync_gate.ps1 -DataDir …` | Called by `reset.ps1` before it stops the app, signs out or deletes anything; `reset.ps1` also refuses while Voyager is still running. Throws unless the app's `sync_check.json` says nothing is unsynced **and** the database hasn't been written since that check. `reset.ps1 -Force` skips it. |
 | `login.ps1 -Email voyager-qa-NNN@example.com [-SignUp] [-Password …]` | Types into the login page (maximized coordinates), then checks the account over the VM service. Refuses any non-QA e-mail. |
 | `guard.ps1` | Exit 0 only if the running app is signed into `voyager-qa-*@example.com`. **Run before any destructive action.** Exit 3 = signed into another account: STOP. |
 | `session_start.ps1 -Email … [-SignUp]` | reset → launch → login → guard |
-| `session_end.ps1` | Waits (≤120 s) for the outbox to drain, then reset → prints `SIGNED-OUT` |
+| `session_end.ps1` | Relaunches Voyager if it crashed or was closed (so the account can be read), runs guard, waits (≤120 s) for the outbox to drain, then reset (with `-Force` only if guard confirmed a QA account) → prints `SIGNED-OUT` |
 | `whoami.ps1` | Offline: is *any* Firebase sign-in persisted? (`SIGNED-OUT` / `SIGNED-IN-UNKNOWN-ACCOUNT`) |
 | `voy.ps1` | Real input + window capture (below) |
 | `vm.ps1 whoami \| shot <png> \| eval <libSuffix> <expr>` | Dart VM service client (wraps `vm.dart`) |
@@ -50,6 +51,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 1. `& "C:\Users\Juno\Code\Voyager\qa\harness\session_start.ps1" -Email voyager-qa-NNN@example.com` (add `-SignUp` for a new account; take the next unused number from the account table below and add it there).
    - This fully quits Voyager (including Juno's installed release), signs out whatever account is persisted (Juno signs the real account back in between sessions), wipes all local app data, launches the debug build and signs the QA account in.
    - **Never type Juno's real credentials, never click "Continue with Google", never modify the real account.**
+   - If Juno's real account was used since the last session, the reset refuses until Juno has run Dev page → **Check, then quit (before a wipe)** in Voyager. Only that check proves nothing would be lost; an empty outbox doesn't (the 2026-09-27 wipe). Don't bypass it with `-Force`: tell Juno.
 2. It must end with `GUARD OK: voyager-qa-NNN@example.com`. Anything else: stop.
 3. Reusing an account: its data comes back from its cloud copy through the startup pull. Wait ~10 s, then check the expected rows in SQLite (read-only) before relying on them.
 4. Check the **standard test configuration** (TEST_PLAN.md): Juno's background settings are the app defaults since 2026-09-28, so a fresh account already has them. Check `settings_table.theme_mode='dark'`, `geometric_wave_scatter_mode=1`, `geometric_wave_enabled=0`, `geometric_texture_scale=15.0`. An account created before that date holds the old defaults: reset them in Dev → Geometric texture / wave tuning → Reset to defaults (petals by hand), or use a fresh account.

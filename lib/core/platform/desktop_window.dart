@@ -20,6 +20,11 @@ final mainContentOnScreen = ValueNotifier<bool>(true);
 /// its first reveal maximizes it, as a normal launch does.
 var maximizeOnFirstShow = false;
 
+/// The tray's Quit, for anything else that has to close the app outright.
+/// Set by the app shell once it has a tray to dispose; null where there is no
+/// desktop window.
+Future<void> Function()? quitApp;
+
 final _windowReady = Completer<void>();
 
 /// Completes once [configureDesktopWindow] has applied the window's options.

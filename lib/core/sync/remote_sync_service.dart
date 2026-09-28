@@ -13,6 +13,7 @@ import 'package:voyager/core/sync/crdt_document_resolver.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/constants/todo_constants.dart';
+import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
@@ -33,6 +34,7 @@ import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/dream_models.dart';
+import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
@@ -45,6 +47,11 @@ import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
 import 'package:voyager/domain/models/study_models.dart';
+import 'package:voyager/domain/services/periodic_prompt_service.dart'
+    show
+        isOnWeeklyTrackerMonday,
+        kTrackerStorageWeekStartsMonday,
+        weeklyTrackerStorageAnchor;
 import 'package:voyager/domain/services/study_deck_graph.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -5538,22 +5545,97 @@ class RemoteSyncService {
     );
   }
 
+  /// Also moves a weekly value the server still holds on a Sunday onto its
+  /// Monday (see [kTrackerStorageWeekStartsMonday]) as it is applied, and
+  /// uploads the move. Schema step 89 did this once, locally, and a migration
+  /// cannot upload — so the server kept the Sunday copies, and a device
+  /// restored from it got them back with nothing left to move them.
   Future<bool> pullTrackerValues({
     Set<String>? documentIds,
     Map<String, Map<String, dynamic>>? documentData,
-  }) {
-    return _pullCollection(
+  }) async {
+    final applied = <TrackerValue>[];
+    final changed = await _pullCollection(
       FirestoreCollections.trackerValues,
       onlyFirestoreDocumentIds: documentIds,
       documentData: documentData,
       resolveCrdt: false,
       apply: (id, data, {required fromCrdt}) async {
         final local = await _trackerRepository.getValue(id);
+        final merged = mergeTrackerValueFromRemote(data, id, local: local);
         await _trackerRepository.upsertValue(
-          mergeTrackerValueFromRemote(data, id, local: local),
+          merged,
           recordLocalActivity: false,
         );
+        applied.add(merged);
       },
+    );
+    // Only once the whole batch is in, so a Monday value arriving in the same
+    // pull as its week's Sunday copy is seen before that copy is moved onto it.
+    // Tombstones are skipped: a deleted value's period no longer matters, and
+    // moving one would only re-upload it.
+    final candidates = [
+      for (final value in applied)
+        if (value.deletedAt == null &&
+            !isOnWeeklyTrackerMonday(value.periodStart))
+          value,
+    ];
+    if (candidates.isEmpty) return changed;
+
+    final weeklyTrackerIds = {
+      for (final tracker in await _trackerRepository.listTrackers(
+        includeDeleted: true,
+      ))
+        if (tracker.cadence == TrackerCadence.weekly) tracker.id,
+    };
+    // Each weekly tracker's live values, read once per pull rather than once
+    // per value, and kept current as values move so two can't land on one
+    // Monday.
+    final valuesByTracker = <String, List<TrackerValue>>{};
+    final reanchored = <TrackerValue>[];
+    for (final value in candidates) {
+      if (!weeklyTrackerIds.contains(value.trackerId)) continue;
+      final siblings = valuesByTracker[value.trackerId] ??= [
+        ...await _trackerRepository.listValues(value.trackerId),
+      ];
+      final moved = _reanchoredWeeklyValue(value, siblings);
+      if (moved == null) continue;
+      await _trackerRepository.upsertValue(moved, recordLocalActivity: false);
+      siblings
+        ..removeWhere((other) => other.id == moved.id)
+        ..add(moved);
+      reanchored.add(moved);
+    }
+    if (reanchored.isNotEmpty) {
+      await pushRecords(FirestoreCollections.trackerValues, reanchored);
+    }
+    return changed;
+  }
+
+  /// [value] moved onto its Monday with a bumped version, so the move outranks
+  /// the server's copy — or null when its Monday already holds another live
+  /// value in [siblings], which moving it would duplicate on every device.
+  TrackerValue? _reanchoredWeeklyValue(
+    TrackerValue value,
+    List<TrackerValue> siblings,
+  ) {
+    final anchored = weeklyTrackerStorageAnchor(value.periodStart);
+    final weekTaken = siblings.any(
+      (other) =>
+          other.id != value.id && other.periodStart.isAtSameMomentAs(anchored),
+    );
+    if (weekTaken) return null;
+    return TrackerValue(
+      id: value.id,
+      createdAt: value.createdAt,
+      updatedAt: utcNow(),
+      version: value.version + 1,
+      deletedAt: value.deletedAt,
+      trackerId: value.trackerId,
+      periodStart: anchored,
+      intValue: value.intValue,
+      boolValue: value.boolValue,
+      enumValue: value.enumValue,
     );
   }
 
@@ -6225,6 +6307,7 @@ class RemoteSyncService {
         pullJobApplications,
         pullJobStatusEvents,
       ]),
+      _inOrder([pullMediaAssets, pullMediaReferences]),
     ]);
   }
 
@@ -6524,6 +6607,8 @@ class LiveSyncController {
     FirestoreCollections.rankingCategories,
     FirestoreCollections.rankingParents,
     FirestoreCollections.rankingChildren,
+    FirestoreCollections.mediaAssets,
+    FirestoreCollections.mediaReferences,
     FirestoreCollections.tagColors,
     FirestoreCollections.customWords,
     FirestoreCollections.flaggedWords,

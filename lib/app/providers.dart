@@ -16,6 +16,7 @@ import 'package:voyager/core/dev/cache_status.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/dev_settings_controller.dart';
 import 'package:voyager/core/dev/fps_monitor_controller.dart';
+import 'package:voyager/core/dev/full_sync_check.dart';
 import 'package:voyager/core/dev/todo_sort_debug_logger.dart';
 import 'package:voyager/core/dev/journal_debug_logger.dart';
 import 'package:voyager/core/dev/remote_sync_compare_service.dart';
@@ -2509,6 +2510,13 @@ final remoteSyncCompareServiceProvider = Provider<RemoteSyncCompareService>((
     todoRepository: ref.watch(todoRepositoryProvider),
     syncRepository: ref.watch(syncRepositoryProvider),
     logger: ref.watch(syncCompareLoggerProvider),
+  );
+});
+
+final fullSyncCheckProvider = Provider<FullSyncCheck>((ref) {
+  return FullSyncCheck(
+    collections: ref.watch(backupCollectionsProvider),
+    syncRepository: ref.watch(syncRepositoryProvider),
   );
 });
 

@@ -154,12 +154,10 @@ class MediaTransferWorker {
       MediaDownloadState.missing,
     });
     for (final asset in missing) {
-      await _repository.upsertAsset(
-        asset.copyWith(
-          downloadState: MediaDownloadState.pending,
-          clearFailureReason: true,
-        ),
-        recordLocalActivity: false,
+      await _repository.updateAssetTransferState(
+        asset.id,
+        downloadState: MediaDownloadState.pending,
+        clearFailureReason: true,
       );
     }
     if (missing.isNotEmpty) await drainDownloads();
@@ -189,17 +187,43 @@ class MediaTransferWorker {
       // The attempt count is what parked it; leaving it in place would park
       // the asset again on its first failure rather than after [maxAttempts].
       _attempts.remove(asset.id);
-      await _repository.upsertAsset(
-        asset.copyWith(
-          uploadState: MediaUploadState.pending,
-          clearFailureReason: true,
-        ),
-        recordLocalActivity: false,
+      await _repository.updateAssetTransferState(
+        asset.id,
+        uploadState: MediaUploadState.pending,
+        clearFailureReason: true,
       );
     }
     if (parked.isEmpty) return 0;
     _service.notifyChanged();
     await drainUploads();
+    return parked.length;
+  }
+
+  /// [requeueFailedUploads] for downloads, on the same once-per-launch terms.
+  ///
+  /// A download parks on its first "object not found", which is also what an
+  /// image looks like while the device that made it is still uploading it.
+  /// Rendering the image no longer retries a parked download, so without
+  /// this such an image would stay failed on this device until someone
+  /// tapped retry.
+  Future<int> requeueFailedDownloads() async {
+    final settings = await _readSettings();
+    if (!settings.mediaRemoteDownloadsEnabled) return 0;
+
+    final parked = await _repository.listAssetsByDownloadState({
+      MediaDownloadState.failed,
+    });
+    for (final asset in parked) {
+      _attempts.remove(asset.id);
+      await _repository.updateAssetTransferState(
+        asset.id,
+        downloadState: MediaDownloadState.pending,
+        clearFailureReason: true,
+      );
+    }
+    if (parked.isEmpty) return 0;
+    _service.notifyChanged();
+    await drainDownloads();
     return parked.length;
   }
 
@@ -209,38 +233,40 @@ class MediaTransferWorker {
       // Nothing to send. This is not a failure — it is an asset another
       // device made whose bytes have not arrived here yet, so the download
       // queue owns it, not this one.
-      await _repository.upsertAsset(
-        asset.copyWith(uploadState: MediaUploadState.localOnly),
-        recordLocalActivity: false,
+      await _repository.updateAssetTransferState(
+        asset.id,
+        uploadState: MediaUploadState.localOnly,
       );
       return;
     }
 
-    await _repository.upsertAsset(
-      asset.copyWith(uploadState: MediaUploadState.uploading),
-      recordLocalActivity: false,
+    await _repository.updateAssetTransferState(
+      asset.id,
+      uploadState: MediaUploadState.uploading,
     );
     _service.notifyChanged();
 
     try {
       await _storage.upload(asset.remotePath(uid), bytes, asset.mimeType);
       _attempts.remove(asset.id);
-      await _repository.upsertAsset(
-        asset.copyWith(
-          uploadState: MediaUploadState.uploaded,
-          clearFailureReason: true,
-        ),
-        recordLocalActivity: false,
+      await _repository.updateAssetTransferState(
+        asset.id,
+        uploadState: MediaUploadState.uploaded,
+        clearFailureReason: true,
       );
     } catch (error) {
       await _recordFailure(
         asset,
         error,
-        park: (message) => asset.copyWith(
+        park: (message) => _repository.updateAssetTransferState(
+          asset.id,
           uploadState: MediaUploadState.failed,
           failureReason: message,
         ),
-        requeue: () => asset.copyWith(uploadState: MediaUploadState.pending),
+        requeue: () => _repository.updateAssetTransferState(
+          asset.id,
+          uploadState: MediaUploadState.pending,
+        ),
       );
     }
     _service.notifyChanged();
@@ -249,19 +275,17 @@ class MediaTransferWorker {
   Future<void> _downloadOne(MediaAsset asset, String uid) async {
     final format = MediaImageFormat.fromMimeType(asset.mimeType);
     if (format == null) {
-      await _repository.upsertAsset(
-        asset.copyWith(
-          downloadState: MediaDownloadState.failed,
-          failureReason: 'Unsupported image type (${asset.mimeType}).',
-        ),
-        recordLocalActivity: false,
+      await _repository.updateAssetTransferState(
+        asset.id,
+        downloadState: MediaDownloadState.failed,
+        failureReason: 'Unsupported image type (${asset.mimeType}).',
       );
       return;
     }
 
-    await _repository.upsertAsset(
-      asset.copyWith(downloadState: MediaDownloadState.downloading),
-      recordLocalActivity: false,
+    await _repository.updateAssetTransferState(
+      asset.id,
+      downloadState: MediaDownloadState.downloading,
     );
     _service.notifyChanged();
 
@@ -277,28 +301,29 @@ class MediaTransferWorker {
       }
       await _service.fileStore.writeBytes(asset.contentHash, format, bytes);
       _attempts.remove(asset.id);
-      await _repository.upsertAsset(
-        asset.copyWith(
-          downloadState: MediaDownloadState.present,
-          // The bytes are here, so this device now has something to offer —
-          // but only if uploads are on, and only as a blob it did not make.
-          // Marking it `uploaded` is the truth: the object exists in Storage,
-          // which is where these bytes just came from.
-          uploadState: MediaUploadState.uploaded,
-          clearFailureReason: true,
-        ),
-        recordLocalActivity: false,
+      await _repository.updateAssetTransferState(
+        asset.id,
+        downloadState: MediaDownloadState.present,
+        // The bytes are here, so this device now has something to offer —
+        // but only if uploads are on, and only as a blob it did not make.
+        // Marking it `uploaded` is the truth: the object exists in Storage,
+        // which is where these bytes just came from.
+        uploadState: MediaUploadState.uploaded,
+        clearFailureReason: true,
       );
     } catch (error) {
       await _recordFailure(
         asset,
         error,
-        park: (message) => asset.copyWith(
+        park: (message) => _repository.updateAssetTransferState(
+          asset.id,
           downloadState: MediaDownloadState.failed,
           failureReason: message,
         ),
-        requeue: () =>
-            asset.copyWith(downloadState: MediaDownloadState.pending),
+        requeue: () => _repository.updateAssetTransferState(
+          asset.id,
+          downloadState: MediaDownloadState.pending,
+        ),
       );
     }
     _service.notifyChanged();
@@ -313,8 +338,8 @@ class MediaTransferWorker {
   Future<void> _recordFailure(
     MediaAsset asset,
     Object error, {
-    required MediaAsset Function(String message) park,
-    required MediaAsset Function() requeue,
+    required Future<void> Function(String message) park,
+    required Future<void> Function() requeue,
   }) async {
     final attempts = (_attempts[asset.id] ?? 0) + 1;
     _attempts[asset.id] = attempts;
@@ -325,30 +350,29 @@ class MediaTransferWorker {
       debugPrint(
         '[media] parking ${asset.id} after $attempts attempt(s): $error',
       );
-      await _repository.upsertAsset(
-        park(error.toString()),
-        recordLocalActivity: false,
-      );
+      await park(error.toString());
       return;
     }
     debugPrint(
       '[media] transfer attempt $attempts failed for ${asset.id}: $error',
     );
-    await _repository.upsertAsset(requeue(), recordLocalActivity: false);
+    await requeue();
   }
 
   /// Puts a parked asset back in its queue, for the retry affordance on a
   /// failed image.
   Future<void> retry(MediaAsset asset) async {
     _attempts.remove(asset.id);
-    var updated = asset.copyWith(clearFailureReason: true);
-    if (asset.uploadState == MediaUploadState.failed) {
-      updated = updated.copyWith(uploadState: MediaUploadState.pending);
-    }
-    if (asset.downloadState == MediaDownloadState.failed) {
-      updated = updated.copyWith(downloadState: MediaDownloadState.pending);
-    }
-    await _repository.upsertAsset(updated, recordLocalActivity: false);
+    await _repository.updateAssetTransferState(
+      asset.id,
+      uploadState: asset.uploadState == MediaUploadState.failed
+          ? MediaUploadState.pending
+          : null,
+      downloadState: asset.downloadState == MediaDownloadState.failed
+          ? MediaDownloadState.pending
+          : null,
+      clearFailureReason: true,
+    );
     _service.notifyChanged();
     await drain();
   }

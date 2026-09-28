@@ -3730,29 +3730,62 @@ class DriftMediaRepository implements MediaRepository {
     MediaAsset asset, {
     bool recordLocalActivity = true,
   }) async {
+    final row = MediaAssetsTableCompanion(
+      id: Value(asset.id),
+      contentHash: Value(asset.contentHash),
+      byteSize: Value(asset.byteSize),
+      mimeType: Value(asset.mimeType),
+      width: Value(asset.width),
+      height: Value(asset.height),
+      unreferencedAt: Value(asset.unreferencedAt),
+      createdAt: Value(asset.createdAt),
+      updatedAt: Value(asset.updatedAt),
+      version: Value(asset.version),
+      deletedAt: Value(asset.deletedAt),
+    );
+    // Transfer state is only set on insert. On an existing row it belongs to
+    // [updateAssetTransferState]: callers here write back a copy they read
+    // earlier, and a transfer may have moved on since.
     await _db
         .into(_db.mediaAssetsTable)
-        .insertOnConflictUpdate(
-          MediaAssetsTableCompanion(
-            id: Value(asset.id),
-            contentHash: Value(asset.contentHash),
-            byteSize: Value(asset.byteSize),
-            mimeType: Value(asset.mimeType),
-            width: Value(asset.width),
-            height: Value(asset.height),
+        .insert(
+          row.copyWith(
             uploadState: Value(asset.uploadState.name),
             downloadState: Value(asset.downloadState.name),
             failureReason: Value(asset.failureReason),
-            unreferencedAt: Value(asset.unreferencedAt),
-            createdAt: Value(asset.createdAt),
-            updatedAt: Value(asset.updatedAt),
-            version: Value(asset.version),
-            deletedAt: Value(asset.deletedAt),
           ),
+          onConflict: DoUpdate((_) => row),
         );
     if (recordLocalActivity) {
       _syncActivity?.recordLocalSave(FirestoreCollections.mediaAssets);
     }
+  }
+
+  @override
+  Future<void> updateAssetTransferState(
+    String id, {
+    MediaUploadState? uploadState,
+    MediaDownloadState? downloadState,
+    String? failureReason,
+    bool clearFailureReason = false,
+  }) async {
+    await (_db.update(
+      _db.mediaAssetsTable,
+    )..where((t) => t.id.equals(id))).write(
+      MediaAssetsTableCompanion(
+        uploadState: uploadState == null
+            ? const Value.absent()
+            : Value(uploadState.name),
+        downloadState: downloadState == null
+            ? const Value.absent()
+            : Value(downloadState.name),
+        failureReason: clearFailureReason
+            ? const Value(null)
+            : (failureReason == null
+                  ? const Value.absent()
+                  : Value(failureReason)),
+      ),
+    );
   }
 
   @override
@@ -3984,11 +4017,22 @@ class DriftMediaRepository implements MediaRepository {
 
     // Both clocks purge on the same rule: an image the user deleted and an
     // image nothing points at any more have each been unwanted for 30 days.
+    // The unreferenced clock is checked against the references themselves
+    // too: a stale stamp on an image still in use must never delete it.
+    final refs = _db.mediaReferencesTable;
     final expired =
         await (_db.select(_db.mediaAssetsTable)..where(
               (t) =>
                   (t.deletedAt.isSmallerOrEqualValue(cutoff) |
-                      t.unreferencedAt.isSmallerOrEqualValue(cutoff)) &
+                      (t.unreferencedAt.isSmallerOrEqualValue(cutoff) &
+                          notExistsQuery(
+                            _db.selectOnly(refs)
+                              ..addColumns([refs.id])
+                              ..where(
+                                refs.mediaId.equalsExp(t.id) &
+                                    refs.deletedAt.isNull(),
+                              ),
+                          ))) &
                   _notOwedUpload(_db, FirestoreCollections.mediaAssets, t.id),
             ))
             .get();

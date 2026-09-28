@@ -18,6 +18,44 @@ import 'package:voyager/domain/models/journal_models.dart';
 /// makes for planner day slots.
 const bool kTrackerStorageWeekStartsMonday = true;
 
+/// The Monday a weekly value is stored under, given the `periodStart` it was
+/// written with — which, from before [kTrackerStorageWeekStartsMonday], may be
+/// a Sunday, or an hour off it across DST. A value already on its Monday comes
+/// back as the same instant.
+DateTime weeklyTrackerStorageAnchor(DateTime periodStart) {
+  final day = _nearestLocalDay(periodStart);
+
+  // Through the following day: that picks the Monday-anchored week holding
+  // six of the old Sunday-anchored week's seven days, which is also the
+  // week each row's id was already derived from.
+  final shifted = addCalendarDays(day, 1);
+  return addCalendarDays(shifted, -(shifted.weekday - DateTime.monday));
+}
+
+/// Whether a weekly value pulled from another device should be left where it
+/// is: its nearest local day is already a Monday.
+///
+/// By calendar date rather than by instant, because Monday midnight is a
+/// different instant in every time zone. Comparing instants had two devices
+/// a zone apart each move the other's values onto their own Monday and
+/// re-upload them, back and forth on every pull. The cost is that a row an
+/// hour off its Monday across DST is left as it is when it arrives from the
+/// cloud; this device's own such rows are still moved by the schema
+/// migration.
+bool isOnWeeklyTrackerMonday(DateTime periodStart) =>
+    _nearestLocalDay(periodStart).weekday == DateTime.monday;
+
+/// Nearest local midnight, not the floor: a DST-corrupted row sits an hour
+/// *before* the date it means, and flooring would keep it there.
+DateTime _nearestLocalDay(DateTime instant) {
+  final local = instant.toLocal();
+  final floor = DateTime(local.year, local.month, local.day);
+  final ceil = addCalendarDays(floor, 1);
+  return local.difference(floor).abs() <= ceil.difference(local).abs()
+      ? floor
+      : ceil;
+}
+
 class PeriodicPromptService {
   DateTime periodStartFor(
     DateTime date,
