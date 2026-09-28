@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show ViewFocusDirection, ViewFocusEvent, ViewFocusState;
 
 import 'package:flutter/material.dart';
@@ -29,14 +30,16 @@ void main() {
 
   tearDown(() => controller.dispose());
 
+  Future<Object?> clipboardOutside(MethodCall call) async {
+    if (call.method == 'Clipboard.getData') {
+      return <String, dynamic>{'text': 'outside'};
+    }
+    return null;
+  }
+
   setUpAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-          if (call.method == 'Clipboard.getData') {
-            return <String, dynamic>{'text': 'outside'};
-          }
-          return null;
-        });
+        .setMockMethodCallHandler(SystemChannels.platform, clipboardOutside);
   });
 
   Future<void> pumpField(
@@ -636,6 +639,213 @@ void main() {
     await press(tester, LogicalKeyboardKey.enter);
     expect(controller.selection.baseOffset, 6);
     expect(VimSearchMemory.pattern, 'bravo');
+  });
+
+  Future<void> chord(
+    WidgetTester tester,
+    LogicalKeyboardKey modifier,
+    LogicalKeyboardKey key,
+  ) async {
+    await tester.sendKeyDownEvent(modifier);
+    await tester.sendKeyEvent(key);
+    await tester.sendKeyUpEvent(modifier);
+    await tester.idle();
+    await tester.pump();
+  }
+
+  for (final (name, modifier, key) in [
+    ('<C-BS>', LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.backspace),
+    ('<A-BS>', LogicalKeyboardKey.altLeft, LogicalKeyboardKey.backspace),
+    ('<C-w>', LogicalKeyboardKey.controlLeft, LogicalKeyboardKey.keyW),
+  ]) {
+    testWidgets('$name in the / bar deletes the last word', (tester) async {
+      await pumpField(tester, vimEnabled: true, text: 'alpha bravo');
+      await press(tester, LogicalKeyboardKey.escape);
+      await typeCommand(tester, '/alpha br');
+      await chord(tester, modifier, key);
+      await press(tester, LogicalKeyboardKey.enter);
+
+      expect(VimSearchMemory.pattern, 'alpha ');
+      expect(controller.text, 'alpha bravo');
+    });
+  }
+
+  testWidgets('<C-w> in the / bar keeps accented letters in the word', (
+    tester,
+  ) async {
+    await pumpField(tester, vimEnabled: true, text: 'x café');
+    await press(tester, LogicalKeyboardKey.escape);
+    await typeCommand(tester, '/x caf');
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE, character: 'é');
+    await chord(
+      tester,
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.keyW,
+    );
+    await press(tester, LogicalKeyboardKey.enter);
+
+    expect(VimSearchMemory.pattern, 'x ');
+  });
+
+  testWidgets('<C-u> in the / bar clears the pattern', (tester) async {
+    await pumpField(tester, vimEnabled: true, text: 'alpha bravo');
+    await press(tester, LogicalKeyboardKey.escape);
+    await typeCommand(tester, '/alpha');
+    await chord(
+      tester,
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.keyU,
+    );
+    await typeCommand(tester, 'bravo');
+    await press(tester, LogicalKeyboardKey.enter);
+
+    expect(VimSearchMemory.pattern, 'bravo');
+  });
+
+  testWidgets('<C-v> in the / bar pastes into the pattern, not the text', (
+    tester,
+  ) async {
+    await pumpField(tester, vimEnabled: true, text: 'alpha outside');
+    await press(tester, LogicalKeyboardKey.escape);
+    await typeCommand(tester, '/');
+    await chord(
+      tester,
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.keyV,
+    );
+    await press(tester, LogicalKeyboardKey.enter);
+
+    expect(VimSearchMemory.pattern, 'outside');
+    expect(controller.text, 'alpha outside');
+    expect(controller.selection.baseOffset, 6);
+  });
+
+  testWidgets('<C-z> in the / bar leaves the text alone', (tester) async {
+    await pumpField(tester, vimEnabled: true, text: 'alpha bravo');
+    await press(tester, LogicalKeyboardKey.escape);
+    await typeCommand(tester, 'x');
+    expect(controller.text, 'lpha bravo');
+
+    await typeCommand(tester, '/');
+    await chord(
+      tester,
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.keyZ,
+    );
+    expect(controller.text, 'lpha bravo');
+  });
+
+  /// Windows reports AltGr as Ctrl+Alt.
+  Future<void> altGr(
+    WidgetTester tester,
+    LogicalKeyboardKey key,
+    String character,
+  ) async {
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altRight);
+    await tester.sendKeyEvent(key, character: character);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altRight);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+  }
+
+  testWidgets('AltGr characters in the / bar join the pattern', (
+    tester,
+  ) async {
+    await pumpField(tester, vimEnabled: true, text: 'mail a@b');
+    await press(tester, LogicalKeyboardKey.escape);
+    await typeCommand(tester, '/');
+    // AltGr+Q on a German layout.
+    await altGr(tester, LogicalKeyboardKey.keyQ, '@');
+    await press(tester, LogicalKeyboardKey.enter);
+
+    expect(VimSearchMemory.pattern, '@');
+    expect(controller.text, 'mail a@b');
+    expect(controller.selection.baseOffset, 6);
+  });
+
+  testWidgets('AltGr characters in Normal mode are commands', (tester) async {
+    await pumpField(
+      tester,
+      vimEnabled: true,
+      text: 'one\n\ntwo',
+      multiline: true,
+    );
+    await press(tester, LogicalKeyboardKey.escape);
+    // AltGr+0 on a German layout: `}`, the paragraph motion.
+    await altGr(tester, LogicalKeyboardKey.digit0, '}');
+
+    expect(controller.text, 'one\n\ntwo');
+    expect(controller.selection.baseOffset, 4);
+  });
+
+  testWidgets('chorded caret keys in the / bar leave the preview alone', (
+    tester,
+  ) async {
+    await pumpField(tester, vimEnabled: true, text: 'alpha bravo charlie');
+    await press(tester, LogicalKeyboardKey.escape);
+    await typeCommand(tester, '/charlie');
+    expect(controller.selection.baseOffset, 12);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    await press(tester, LogicalKeyboardKey.enter);
+
+    expect(controller.selection, const TextSelection.collapsed(offset: 12));
+  });
+
+  testWidgets('Tab out of the / bar puts the caret back', (tester) async {
+    await pumpField(tester, vimEnabled: true, text: 'alpha bravo');
+    await press(tester, LogicalKeyboardKey.escape);
+    await typeCommand(tester, '/bra');
+    expect(controller.selection.baseOffset, 6);
+
+    await press(tester, LogicalKeyboardKey.tab);
+
+    expect(controller.selection.baseOffset, 0);
+    expect(VimSearchMemory.pattern, '');
+  });
+
+  testWidgets('<C-v> answered after the / bar was reopened pastes nothing', (
+    tester,
+  ) async {
+    final clipboard = Completer<Object?>();
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) => call.method == 'Clipboard.getData'
+          ? clipboard.future
+          : Future.value(),
+    );
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        clipboardOutside,
+      ),
+    );
+
+    await pumpField(tester, vimEnabled: true, text: 'alpha outside');
+    await press(tester, LogicalKeyboardKey.escape);
+    await typeCommand(tester, '/');
+    await chord(
+      tester,
+      LogicalKeyboardKey.controlLeft,
+      LogicalKeyboardKey.keyV,
+    );
+    await press(tester, LogicalKeyboardKey.escape);
+    await typeCommand(tester, '/');
+    clipboard.complete(<String, dynamic>{'text': 'outside'});
+    await tester.idle();
+    await tester.pump();
+    await typeCommand(tester, 'alpha');
+    await press(tester, LogicalKeyboardKey.enter);
+
+    expect(VimSearchMemory.pattern, 'alpha');
   });
 
   testWidgets('Vim stays off when the setting is disabled', (tester) async {

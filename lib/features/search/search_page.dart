@@ -719,6 +719,15 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                                   emphasisTheme: emphasisTheme,
                                   brightness: theme.brightness,
                                 ),
+                                trailing: Text(
+                                  DateFormat.yMMMd().format(
+                                    entry.entryDate.toLocal(),
+                                  ),
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.6),
+                                  ),
+                                ),
                                 onTap: () async {
                                   await showVoyagerDialog<void>(
                                     context: context,

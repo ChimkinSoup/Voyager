@@ -674,9 +674,19 @@ class VimSession {
     if (_isModifierKey(key)) return KeyEventResult.ignored;
 
     final keyboard = HardwareKeyboard.instance;
-    final ctrl = keyboard.isControlPressed;
-    final alt = keyboard.isAltPressed;
     final meta = keyboard.isMetaPressed;
+    // Windows reports AltGr as Ctrl+Alt. A chord that still types a character
+    // is AltGr — `@`, `[` or `{` on a German layout — and that character is a
+    // command or a pattern character like any other, not a shortcut.
+    final character = event.character;
+    final altGr =
+        keyboard.isControlPressed &&
+        keyboard.isAltPressed &&
+        !meta &&
+        character != null &&
+        character.isNotEmpty;
+    final ctrl = keyboard.isControlPressed && !altGr;
+    final alt = keyboard.isAltPressed && !altGr;
 
     if (searchListenable.value != null) {
       return _handleSearchKey(event, key, ctrl: ctrl, alt: alt, meta: meta);
@@ -726,7 +736,6 @@ class VimSession {
     final navigated = _handleNavigationKey(key);
     if (navigated != null) return navigated;
 
-    final character = event.character;
     if (character == null || character.isEmpty) {
       // A non-printing key with no Vim meaning (F-keys, media keys): let it
       // through so app-level shortcuts keep working.
@@ -2179,6 +2188,7 @@ class VimSession {
 
   void _openSearchPrompt({required bool forward}) {
     _clearPending();
+    _searchPromptGeneration++;
     _searchQuery = '';
     _searchForward = forward;
     _searchOriginOffset = _cursor;
@@ -2236,11 +2246,51 @@ class VimSession {
         _cancelSearchPrompt(restoreCaret: true);
         return KeyEventResult.handled;
       }
-      _searchQuery = _searchQuery.substring(0, _searchQuery.length - 1);
+      _searchQuery = ctrl || alt
+          ? _withoutLastWord(_searchQuery)
+          : _searchQuery.substring(0, _searchQuery.length - 1);
       _refreshSearchPreview();
       return KeyEventResult.handled;
     }
+    // The prompt has no caret of its own, so every caret key is spent here,
+    // whatever the modifiers: ignored, a chorded one reaches the field's
+    // text-editing shortcuts and moves or extends its selection under the
+    // preview.
+    if (_searchCaretKeys.contains(key)) return KeyEventResult.handled;
+    if (ctrl && !alt && !meta) {
+      // The prompt's own line editing. Anything else Ctrl-chorded that edits
+      // text is swallowed: ignoring it hands it to the field behind the
+      // prompt, which would paste, undo or cut there instead.
+      if (key == LogicalKeyboardKey.keyW) {
+        _searchQuery = _withoutLastWord(_searchQuery);
+        _refreshSearchPreview();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.keyU) {
+        _searchQuery = '';
+        _refreshSearchPreview();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.keyV) {
+        unawaited(_pasteIntoSearch());
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.keyA ||
+          key == LogicalKeyboardKey.keyX ||
+          key == LogicalKeyboardKey.keyY ||
+          key == LogicalKeyboardKey.keyZ ||
+          key == LogicalKeyboardKey.delete) {
+        return KeyEventResult.handled;
+      }
+    }
     if (alt || meta || ctrl) return KeyEventResult.ignored;
+    if (key == LogicalKeyboardKey.tab) {
+      // Focus traversal, as everywhere else in Vim — not a literal tab in a
+      // pattern nobody can see. Leaving abandons the search, so the caret goes
+      // back where Escape would put it.
+      _cancelSearchPrompt(restoreCaret: true);
+      return KeyEventResult.ignored;
+    }
 
     final character = event.character;
     if (character == null || character.isEmpty) {
@@ -2249,6 +2299,48 @@ class VimSession {
     _searchQuery += character;
     _refreshSearchPreview();
     return KeyEventResult.handled;
+  }
+
+  static final _searchCaretKeys = {
+    LogicalKeyboardKey.arrowLeft,
+    LogicalKeyboardKey.arrowRight,
+    LogicalKeyboardKey.arrowUp,
+    LogicalKeyboardKey.arrowDown,
+    LogicalKeyboardKey.home,
+    LogicalKeyboardKey.end,
+    LogicalKeyboardKey.pageUp,
+    LogicalKeyboardKey.pageDown,
+  };
+
+  /// [query] without its last word and any blanks after it — what Vim's
+  /// `<C-w>` takes: the `b` motion's split, so a run of punctuation counts as
+  /// a word of its own.
+  static String _withoutLastWord(String query) =>
+      query.substring(0, vimWordBackward(query, query.length));
+
+  /// Bumped per `/` opened, so a paste can tell the prompt it was asked for
+  /// from one opened while the clipboard read was in flight.
+  int _searchPromptGeneration = 0;
+
+  /// The prompt is one line, so only the clipboard's first line joins it.
+  Future<void> _pasteIntoSearch() async {
+    final generation = _searchPromptGeneration;
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    // Same window as [_pasteFromSystemClipboard]: the prompt can close — or
+    // be replaced by another — while the platform channel answers.
+    if (_disposed ||
+        !isFieldFocused() ||
+        searchListenable.value == null ||
+        generation != _searchPromptGeneration) {
+      return;
+    }
+    var line = data?.text ?? '';
+    final newline = line.indexOf('\n');
+    if (newline >= 0) line = line.substring(0, newline);
+    if (line.endsWith('\r')) line = line.substring(0, line.length - 1);
+    if (line.isEmpty) return;
+    _searchQuery += line;
+    _refreshSearchPreview();
   }
 
   /// Vim's `incsearch`: as the pattern grows, the caret previews the first

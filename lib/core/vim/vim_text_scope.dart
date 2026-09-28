@@ -635,8 +635,59 @@ class _VimTextScopeState extends State<VimTextScope> {
     if (session == null) return;
     session.modeListenable.removeListener(_syncOverlay);
     session.searchListenable.removeListener(_syncOverlay);
+    _setEarlyKeyRoute(false);
     session.dispose();
     _session = null;
+  }
+
+  bool _earlyKeyRouted = false;
+
+  /// The events [_routeEarlyKey] already offered to [_handleKey], so the focus
+  /// tree's pass over the same key message doesn't offer them twice. A message
+  /// can carry several events — synthesized modifier syncs ahead of the real
+  /// key — and the early pass sees them all before the focus pass sees any.
+  /// Both passes run in one synchronous dispatch, so the set is emptied on the
+  /// next microtask.
+  final Set<KeyEvent> _earlyKeyEvents = Set.identity();
+
+  /// Lets Vim claim keys ahead of the field while it is out of Insert — the
+  /// same states [_syncOverlay] shows the overlay for.
+  ///
+  /// [_handleKey] only sees what the field's own `focusNode.onKeyEvent`
+  /// declined, and plenty of fields claim Enter there to save or submit — so
+  /// the Enter meant to run a `/` search, or to move down a line in Normal
+  /// mode, closed the dialog instead. An early handler runs before the field,
+  /// and only exists while Vim has a use for it.
+  void _setEarlyKeyRoute(bool on) {
+    if (on == _earlyKeyRouted) return;
+    _earlyKeyRouted = on;
+    if (on) {
+      FocusManager.instance.addEarlyKeyEventHandler(_routeEarlyKey);
+    } else {
+      FocusManager.instance.removeEarlyKeyEventHandler(_routeEarlyKey);
+    }
+  }
+
+  /// The open `/` prompt takes every key; otherwise only Enter goes early, and
+  /// only where it is a motion. The other keys a field claims for itself
+  /// before Vim — Backspace leaving an empty search scope, say — stay its own.
+  /// A one-line field has no line for Enter to move to, so there it still
+  /// submits.
+  KeyEventResult _routeEarlyKey(KeyEvent event) {
+    final session = _session;
+    if (session == null || !_scopeNode.hasFocus) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final enter =
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter;
+    if (session.searchListenable.value == null &&
+        !(enter && widget.multiline)) {
+      return KeyEventResult.ignored;
+    }
+    final result = _handleKey(_scopeNode, event);
+    if (_earlyKeyEvents.isEmpty) scheduleMicrotask(_earlyKeyEvents.clear);
+    _earlyKeyEvents.add(event);
+    return result;
   }
 
   void _handleFocusChanged() {
@@ -740,6 +791,7 @@ class _VimTextScopeState extends State<VimTextScope> {
         _scopeNode.hasFocus &&
         (session.mode != VimMode.insert ||
             session.searchListenable.value != null);
+    _setEarlyKeyRoute(show);
     if (show == _overlayVisible) return;
     setState(() => _overlayVisible = show);
     if (show) {
@@ -751,9 +803,12 @@ class _VimTextScopeState extends State<VimTextScope> {
 
   /// Key arbitration for the field below.
   ///
-  /// By the time this runs, `TagSuggestionPortal` has already had first refusal
-  /// — it owns `focusNode.onKeyEvent`, one level down — so an open completion
-  /// popup keeps Tab and Escape for itself.
+  /// In Insert mode, `TagSuggestionPortal` has already had first refusal by
+  /// the time this runs — it owns `focusNode.onKeyEvent`, one level down — so
+  /// an open completion popup keeps Tab and Escape for itself. Out of Insert,
+  /// [_routeEarlyKey] can call this ahead of the field for Enter and for the
+  /// `/` prompt's keys; the popup only opens while typing, so it has nothing
+  /// to claim there.
   ///
   /// Snippets go before Vim because the two never want the same key: the only
   /// keys the snippet layer claims are Tab, the expand key and `Ctrl+Z`, and
@@ -763,6 +818,7 @@ class _VimTextScopeState extends State<VimTextScope> {
   /// Bare `u` stays with Vim: Normal mode asks the snippet session via
   /// [VimSession.trySnippetUndo] rather than claiming the key here.
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (_earlyKeyEvents.contains(event)) return KeyEventResult.ignored;
     final session = _session;
     final snippets = _snippetSession;
     final autocorrect = _autocorrectSession;
