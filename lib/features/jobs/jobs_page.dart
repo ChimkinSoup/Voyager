@@ -15,6 +15,7 @@ import 'package:voyager/core/widgets/edit_side_panel_host.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
+import 'package:voyager/features/jobs/job_clipboard_parser.dart';
 import 'package:voyager/features/jobs/jobs_actions.dart';
 import 'package:voyager/features/jobs/jobs_edit_panel.dart';
 import 'package:voyager/features/jobs/jobs_header.dart';
@@ -434,7 +435,7 @@ class _JobsPageState extends ConsumerState<JobsPage>
   }
 
   Future<void> _openUrl(String url) async {
-    final uri = Uri.tryParse(url.contains('://') ? url : 'https://$url');
+    final uri = launchableJobUri(url);
     if (uri == null) return;
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }

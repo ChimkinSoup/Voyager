@@ -101,6 +101,35 @@ JobApplication makeApplication({
 }
 
 void main() {
+  test('the row menu offers no Open for a URL it would refuse', () {
+    List<String> labelsFor(String url) => [
+      for (final item in jobApplicationMenuItems(
+        application: makeApplication(
+          company: 'Acme',
+          title: 'SWE',
+          applicationUrl: url,
+        ),
+        stages: const [],
+        seasons: const [],
+        onChangeStatus: (_) {},
+        onSetSeasons: (_) {},
+        onOpenUrl: () {},
+        onDuplicate: () {},
+        onDelete: () {},
+      ))
+        item.label,
+    ];
+
+    expect(
+      labelsFor('https://acme.com/jobs/1'),
+      contains('Open application URL'),
+    );
+    expect(
+      labelsFor('file://attacker.example/s/Offer.lnk'),
+      isNot(contains('Open application URL')),
+    );
+  });
+
   testWidgets('renders a row per application', (tester) async {
     await pumpJobsPage(
       tester,

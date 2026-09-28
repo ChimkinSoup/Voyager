@@ -310,25 +310,55 @@ class MediaService extends ChangeNotifier {
     );
     await _repository.upsertAsset(deleted);
     _publisher?.publishAsset(deleted);
+
+    final others = await _repository.listAssets(includeDeleted: true);
+    await _deleteBlob(
+      asset,
+      claimed: {
+        for (final other in others)
+          if (other.id != asset.id) other.contentHash,
+      },
+      storage: storage,
+      action: 'delete',
+    );
+
+    notifyListeners();
+  }
+
+  /// Drops [asset]'s bytes locally and, when they reached Storage, remotely —
+  /// unless [claimed] holds its hash.
+  ///
+  /// Blobs are named by hash, so two rows can share one: the same image
+  /// ingested on two devices, or a restored row copying a live one's hash.
+  /// A blob another row still claims stays, here and in Storage.
+  Future<void> _deleteBlob(
+    MediaAsset asset, {
+    required Set<String> claimed,
+    required MediaStorage? storage,
+    required String action,
+  }) async {
+    if (claimed.contains(asset.contentHash)) return;
     await _fileStore.deleteBytesForAsset(asset);
 
     final uid = storage?.currentUid;
+    // Only assets that actually reached Storage have an object to remove,
+    // and only a signed-in device can remove one. A device that never
+    // uploaded simply drops its local copy; whichever device did the upload
+    // clears the object on its own purge.
     if (storage != null &&
         uid != null &&
         asset.uploadState == MediaUploadState.uploaded) {
       try {
         await storage.delete(asset.remotePath(uid));
       } catch (error, stackTrace) {
-        debugPrint('[media] remote delete failed for ${asset.id}: $error');
+        debugPrint('[media] remote $action failed for ${asset.id}: $error');
         ErrorLogger.instance.record(
           error,
           stackTrace,
-          context: 'media: remote delete for ${asset.id}',
+          context: 'media: remote $action for ${asset.id}',
         );
       }
     }
-
-    notifyListeners();
   }
 
   /// Called when a parent entity is soft-deleted, so its images follow it
@@ -633,35 +663,20 @@ class MediaService extends ChangeNotifier {
   /// and the entries holding them expire on one clock rather than two.
   Future<void> purgeExpired(DateTime now, {MediaStorage? storage}) async {
     final purged = await _repository.purgeExpiredDeleted(now);
+    final live = await _repository.listAssets(includeDeleted: true);
+    final claimed = {for (final asset in live) asset.contentHash};
     for (final asset in purged) {
-      await _fileStore.deleteBytesForAsset(asset);
-      final uid = storage?.currentUid;
-      // Only assets that actually reached Storage have an object to remove,
-      // and only a signed-in device can remove one. A device that never
-      // uploaded simply drops its local copy; whichever device did the upload
-      // clears the object on its own purge.
-      if (storage != null &&
-          uid != null &&
-          asset.uploadState == MediaUploadState.uploaded) {
-        try {
-          await storage.delete(asset.remotePath(uid));
-        } catch (error, stackTrace) {
-          debugPrint('[media] remote purge failed for ${asset.id}: $error');
-          ErrorLogger.instance.record(
-            error,
-            stackTrace,
-            context: 'media: remote purge for ${asset.id}',
-          );
-        }
-      }
+      await _deleteBlob(
+        asset,
+        claimed: claimed,
+        storage: storage,
+        action: 'purge',
+      );
     }
 
     // Blobs on disk that no live row claims — see
     // [MediaFileStore.orphanedFiles].
-    final live = await _repository.listAssets(includeDeleted: true);
-    final orphans = await _fileStore.orphanedFiles({
-      for (final asset in live) asset.contentHash,
-    });
+    final orphans = await _fileStore.orphanedFiles(claimed);
     for (final file in orphans) {
       try {
         await file.delete();

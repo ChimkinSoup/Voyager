@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:oauth2/oauth2.dart' as oauth2;
 import 'package:url_launcher/url_launcher.dart';
@@ -48,9 +50,18 @@ class DesktopGoogleOAuth {
       basicAuth: false,
     );
 
+    // Ties the redirect to this sign-in, alongside PKCE. Any local process can
+    // reach the loopback port, and this rejects a code it injects even if the
+    // provider were to accept one issued without our code challenge.
+    final random = Random.secure();
+    final state = base64Url.encode([
+      for (var i = 0; i < 32; i++) random.nextInt(256),
+    ]);
+
     final authorizationUrl = grant.getAuthorizationUrl(
       redirectUri,
       scopes: const ['openid', 'email', 'profile'],
+      state: state,
     );
 
     final server = await HttpServer.bind(
@@ -68,12 +79,22 @@ class DesktopGoogleOAuth {
         throw StateError('Could not open the browser for Google sign-in.');
       }
 
-      final request = await server.first.timeout(
-        timeout,
-        onTimeout: () {
-          throw TimeoutException('Google sign-in timed out.');
-        },
-      );
+      final request = await server
+          .firstWhere((request) {
+            if (request.uri.queryParameters['state'] == state) return true;
+            // A favicon fetch, or a request that doesn't carry our state, is
+            // turned away and the wait goes on for the real redirect.
+            request.response.statusCode = HttpStatus.badRequest;
+            // The caller may already have hung up; nothing waits on this.
+            unawaited(request.response.close().catchError((Object _) => null));
+            return false;
+          })
+          .timeout(
+            timeout,
+            onTimeout: () {
+              throw TimeoutException('Google sign-in timed out.');
+            },
+          );
 
       final responseHtml =
           '<html><body><p>Signed in. You can close this tab and return to Voyager.</p></body></html>';

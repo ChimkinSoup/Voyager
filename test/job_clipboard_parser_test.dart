@@ -207,4 +207,33 @@ void main() {
     expect(normalizeJobUrl('example.com/x'), 'https://example.com/x');
     expect(normalizeJobUrl('  '), isNull);
   });
+
+  test('a markdown link to anything but the web keeps its title only', () {
+    // What a page that overwrites the clipboard on copy would plant: the URL
+    // would reach the shell through "Open".
+    final parsed = parseJobClipboard(
+      '[Senior SWE](file://attacker.example/s/Offer.lnk)',
+    );
+    expect(parsed.title, 'Senior SWE');
+    expect(parsed.url, isNull);
+    expect(normalizeJobUrl('obsidian://open?vault=x'), isNull);
+  });
+
+  test('only a web link with a host is launchable', () {
+    expect(
+      launchableJobUri('https://acme.com/jobs/1'),
+      Uri.parse('https://acme.com/jobs/1'),
+    );
+    expect(launchableJobUri('acme.com/jobs/1')?.scheme, 'https');
+    expect(launchableJobUri('HTTP://acme.com')?.scheme, 'http');
+    expect(launchableJobUri('file://attacker.example/s/Offer.lnk'), isNull);
+    expect(launchableJobUri(r'file:///C:/Windows/System32/calc.exe'), isNull);
+    expect(launchableJobUri('search-ms://query=x'), isNull);
+    expect(launchableJobUri('https:///no-host'), isNull);
+    // A `://` further in is a query value, not this URL's scheme.
+    expect(
+      launchableJobUri('acme.com/apply?next=https://acme.com/x')?.host,
+      'acme.com',
+    );
+  });
 }

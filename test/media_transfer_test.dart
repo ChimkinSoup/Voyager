@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:voyager/core/media/media_service.dart';
@@ -298,7 +299,7 @@ void main() {
       final now = DateTime.now().toUtc();
       final asset = MediaAsset(
         id: 'remote-1',
-        contentHash: 'remotehash',
+        contentHash: sha256.convert(bytes).toString(),
         byteSize: bytes.length,
         mimeType: 'image/jpeg',
         width: 30,
@@ -362,6 +363,17 @@ void main() {
       },
     );
 
+    test('bytes that do not match the hash are parked, not written', () async {
+      final asset = await remoteOnlyAsset();
+      storage.objects[asset.remotePath('user-1')] = pngOf(30, 30, r: 10);
+
+      await worker.prefetchMissing();
+
+      final updated = (await repository.getAsset(asset.id))!;
+      expect(updated.downloadState, MediaDownloadState.failed);
+      expect(await fileStore.hasBytes(updated), isFalse);
+    });
+
     test(
       'an upload of an asset with no local bytes is not a failure',
       () async {
@@ -398,6 +410,68 @@ void main() {
 
       expect(storage.deletes, contains(path));
       expect(storage.objects, isNot(contains(path)));
+    });
+
+    test('keeps a blob another row still claims by hash', () async {
+      final asset = await attach();
+      await worker.drainUploads();
+      final path = asset.remotePath('user-1');
+
+      // A second row for the same image — another device's ingest, or a
+      // restored backup — long since deleted.
+      final longAgo = DateTime.utc(2020);
+      await repository.upsertAsset(
+        MediaAsset(
+          id: 'shared-hash',
+          contentHash: asset.contentHash,
+          byteSize: asset.byteSize,
+          mimeType: asset.mimeType,
+          width: asset.width,
+          height: asset.height,
+          uploadState: MediaUploadState.uploaded,
+          downloadState: MediaDownloadState.present,
+          createdAt: longAgo,
+          updatedAt: longAgo,
+          deletedAt: longAgo,
+        ),
+      );
+
+      await service.purgeExpired(DateTime.now().toUtc(), storage: storage);
+
+      expect(await repository.getAsset('shared-hash'), isNull);
+      expect(storage.deletes, isEmpty);
+      expect(storage.objects, contains(path));
+      expect(await fileStore.hasBytes(asset), isTrue);
+    });
+
+    test('delete everywhere keeps a blob another row still claims', () async {
+      final asset = await attach();
+      await worker.drainUploads();
+      final path = asset.remotePath('user-1');
+
+      // A second row for the same image, still live.
+      final now = DateTime.now().toUtc();
+      await repository.upsertAsset(
+        MediaAsset(
+          id: 'shared-hash',
+          contentHash: asset.contentHash,
+          byteSize: asset.byteSize,
+          mimeType: asset.mimeType,
+          width: asset.width,
+          height: asset.height,
+          uploadState: MediaUploadState.uploaded,
+          downloadState: MediaDownloadState.present,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+
+      await service.deleteAssetEverywhere(asset.id, storage: storage);
+
+      expect((await repository.getAsset(asset.id))!.deletedAt, isNotNull);
+      expect(storage.deletes, isEmpty);
+      expect(storage.objects, contains(path));
+      expect(await fileStore.hasBytes(asset), isTrue);
     });
 
     test('leaves cloud storage alone for a local-only asset', () async {

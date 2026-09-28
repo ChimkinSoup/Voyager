@@ -15,6 +15,7 @@ import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
+import 'package:voyager/features/jobs/job_clipboard_parser.dart';
 import 'package:voyager/features/jobs/jobs_actions.dart';
 import 'package:voyager/features/jobs/jobs_company_field.dart';
 import 'package:voyager/features/jobs/jobs_option_list.dart';
@@ -250,7 +251,8 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
                     keyboardType: TextInputType.url,
                     onChanged: (_) => _scheduleSave(),
                   ),
-                  if (_current.applicationUrl case final url?)
+                  if (_current.applicationUrl case final url?
+                      when launchableJobUri(url) != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Align(
@@ -448,7 +450,7 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
   }
 
   Future<void> _openUrl(String url) async {
-    final uri = Uri.tryParse(url.contains('://') ? url : 'https://$url');
+    final uri = launchableJobUri(url);
     if (uri == null) return;
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }

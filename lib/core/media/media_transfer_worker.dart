@@ -2,6 +2,7 @@
 
 import 'dart:async';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:voyager/core/media/media_service.dart';
 import 'package:voyager/domain/models/media_models.dart';
@@ -266,6 +267,14 @@ class MediaTransferWorker {
 
     try {
       final bytes = await _storage.download(asset.remotePath(uid));
+      // The file is named by this hash and may already hold another row's
+      // copy of the image, so bytes that don't match it are never written.
+      // Retrying fetches the same object, hence permanent.
+      if (sha256.convert(bytes).toString() != asset.contentHash) {
+        throw const MediaStoragePermanentFailure(
+          'Downloaded bytes do not match the image hash.',
+        );
+      }
       await _service.fileStore.writeBytes(asset.contentHash, format, bytes);
       _attempts.remove(asset.id);
       await _repository.upsertAsset(

@@ -52,7 +52,8 @@ final _hostBehindPrefix = RegExp(
 );
 
 /// Any scheme at all, which is the test [normalizeJobUrl] uses before adding
-/// one: a markdown link may legitimately point at `mailto:` or `obsidian://`.
+/// one. A scheme other than http(s) is then dropped, not kept — see
+/// [launchableJobUri].
 final _anyScheme = RegExp(r'^[a-z][a-z0-9+.-]*://', caseSensitive: false);
 
 /// `host.tld`, optionally with a path, query or fragment after it.
@@ -124,11 +125,26 @@ JobClipboardParse parseJobClipboard(String raw) {
 }
 
 /// The URL as it should be stored: trailing prose punctuation off, and a
-/// scheme on the front of a token copied without one (§6.5).
+/// scheme on the front of a token copied without one (§6.5). A link with any
+/// scheme but http(s) is not stored at all, since "Open" would refuse it.
 String? normalizeJobUrl(String token) {
   final trimmed = _trimTrailingPunctuation(token.trim());
   if (trimmed.isEmpty) return null;
-  return _anyScheme.hasMatch(trimmed) ? trimmed : 'https://$trimmed';
+  if (!_anyScheme.hasMatch(trimmed)) return 'https://$trimmed';
+  return launchableJobUri(trimmed) == null ? null : trimmed;
+}
+
+/// [url] as something "Open" may hand the OS, or null when it is not a web
+/// link.
+///
+/// A stored URL can come from a restored backup, a sync, or the clipboard
+/// rather than from the user typing it, and the launcher passes anything else
+/// — a `file:` or UNC path, a custom protocol handler — straight to the shell.
+Uri? launchableJobUri(String url) {
+  final uri = Uri.tryParse(_anyScheme.hasMatch(url) ? url : 'https://$url');
+  if (uri == null) return null;
+  if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+  return uri.host.isEmpty ? null : uri;
 }
 
 /// Whether [token] reads as a link rather than as a word of the title.

@@ -5,6 +5,7 @@ import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
+import 'package:voyager/features/jobs/job_clipboard_parser.dart';
 import 'package:voyager/features/jobs/jobs_providers.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 
@@ -64,8 +65,8 @@ class JobsTableHeader extends StatelessWidget {
 ///
 /// Built by the page, which is the only place that knows the stage and season
 /// lists these submenus offer. "Open application URL" is absent rather than
-/// disabled when there is no URL — an entry that can never do anything is
-/// noise, not information.
+/// disabled when there is no URL it would open — an entry that can never do
+/// anything is noise, not information.
 List<ContextMenuItem> jobApplicationMenuItems({
   required JobApplication application,
   required List<JobStage> stages,
@@ -122,7 +123,7 @@ List<ContextMenuItem> jobApplicationMenuItems({
           ),
       ],
     ),
-    if (url.isNotEmpty)
+    if (launchableJobUri(url) != null)
       ContextMenuItem(
         label: 'Open application URL',
         icon: PhosphorIconsRegular.arrowSquareOut,
