@@ -1761,6 +1761,9 @@ void main() {
       matching: find.byType(EditableText),
     );
     await tester.enterText(unitBox, 'Dish');
+    // enterText's one frame lands before the focus does; without another,
+    // the box has no tap-outside handler yet and the press can't blur it.
+    await tester.pump();
 
     // The press blurs the box, whose rename reaches the disk before the
     // release flips the toggle — from the sheet's copy, not yet re-read.
@@ -1804,6 +1807,8 @@ void main() {
       ),
       'Dish',
     );
+    // As above: a frame for the focused box to pick up its tap-outside.
+    await tester.pump();
 
     // The press blurs the box and its rename lands; the dialog opens on the
     // release with the sheet's copy, not yet re-read, and holds it open.

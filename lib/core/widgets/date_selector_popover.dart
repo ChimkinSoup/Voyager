@@ -318,10 +318,19 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                   constraints: kMinTouchTarget,
                   onPressed: _previousMonth,
                 ),
-                Text(
-                  DateFormat.yMMMM().format(_focusedMonth),
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
+                // Shrinks rather than overflows where the title outgrows the
+                // pane: "September 2026" does in the date-and-time popover's
+                // left half under a large text scale, or in the fixed-pitch
+                // font a widget test renders with.
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      DateFormat.yMMMM().format(_focusedMonth),
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
                 IconButton(
