@@ -311,6 +311,9 @@ class _VoyagerNavigationRail extends StatelessWidget {
                 children: [
                   for (final item in orderedDestinations)
                     Padding(
+                      // Keyed so hiding or reordering destinations keeps the
+                      // selection on the same button instead of shifting it.
+                      key: ValueKey(item.originalIndex),
                       padding: const EdgeInsets.symmetric(vertical: 2),
                       child: ExcludeFocus(
                         child: _RailDestinationButton(
@@ -339,6 +342,10 @@ class _VoyagerNavigationRail extends StatelessWidget {
   }
 }
 
+/// Depth of the rail list's edge fades; see [_RailDestinationList].
+@visibleForTesting
+const double railFadeDepth = 14;
+
 /// The rail's scrolling destination list, softened at whichever end is holding
 /// content back.
 ///
@@ -363,7 +370,7 @@ class _RailDestinationList extends StatefulWidget {
 
 class _RailDestinationListState extends State<_RailDestinationList> {
   /// Depth of the gradient, and the travel over which it reaches full strength.
-  static const double _fade = 14;
+  static const double _fade = railFadeDepth;
 
   final ScrollController _controller = ScrollController();
 
@@ -422,8 +429,8 @@ class _RailDestinationListState extends State<_RailDestinationList> {
       child: VoyagerScrollView(controller: _controller, child: widget.child),
     );
 
-    if (_topFade == 0 && _bottomFade == 0) return list;
-
+    // Always masked, even with both fades off: swapping the wrapper in and out
+    // would remount the list and every button, losing the scroll position.
     return ShaderMask(
       blendMode: BlendMode.dstIn,
       shaderCallback: (rect) {
@@ -620,11 +627,39 @@ class _RailDestinationButtonState extends State<_RailDestinationButton> {
   Duration _fillDuration = shellNavHoverDuration;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.selected) _reveal(Duration.zero);
+  }
+
+  @override
   void didUpdateWidget(covariant _RailDestinationButton oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selected != widget.selected) {
       _fillDuration = shellNavSelectionDuration(context);
+      // Under the pointer means it was clicked: it's already in view, and
+      // scrolling now would slide it out from under the cursor mid-click.
+      if (widget.selected && !_hovered) {
+        _reveal(VoyagerMotion.reduced(context) ? Duration.zero : _fillDuration);
+      }
     }
+  }
+
+  /// Scrolls the rail just far enough to show this destination, so a page
+  /// reached by shortcut or on launch is never selected off-screen. The
+  /// margin keeps it clear of the list's edge fades too.
+  void _reveal(Duration duration) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final box = context.findRenderObject() as RenderBox?;
+      box?.showOnScreen(
+        rect: const EdgeInsets.symmetric(
+          vertical: _RailDestinationListState._fade,
+        ).inflateRect(Offset.zero & box.size),
+        duration: duration,
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   void _setHovered(bool hovered) {

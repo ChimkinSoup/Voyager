@@ -20,11 +20,13 @@ import 'fakes/fake_weather_api_client.dart';
 // straight through to `_ShellBranchChangeFlusher`'s child), so it still
 // needs working `key`/`createElement`/`createState` to actually mount.
 class _FakeNavigationShell extends Fake implements StatefulNavigationShell {
+  _FakeNavigationShell({this.currentIndex = 0});
+
   @override
   Key? get key => null;
 
   @override
-  int get currentIndex => 0;
+  final int currentIndex;
 
   @override
   void goBranch(int index, {bool initialLocation = false}) {}
@@ -139,6 +141,108 @@ void main() {
       }
 
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'rail scrolls the current page on launch clear of the edge fades',
+    (tester) async {
+      // Partway down, so the reveal isn't pinned against the end of the list.
+      final target = shellDestinations.length - 5;
+      tester.view.physicalSize = const Size(1000, 400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            authRepositoryProvider.overrideWithValue(InMemoryAuthRepository()),
+            syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
+            weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+            settingsProvider.overrideWith(_FixedSettings.new),
+          ],
+          child: MaterialApp(
+            home: AppShell(child: _FakeNavigationShell(currentIndex: target)),
+          ),
+        ),
+      );
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+
+      final icon = find.byIcon(shellDestinations[target].icon).first;
+      final rail = tester.state<ScrollableState>(
+        find.ancestor(of: icon, matching: find.byType(Scrollable)).first,
+      );
+      expect(rail.position.pixels, greaterThan(0));
+      expect(rail.position.pixels, lessThan(rail.position.maxScrollExtent));
+
+      // The whole button, not just its icon, sits outside the 14px fades.
+      final button = tester.getRect(
+        find.ancestor(of: icon, matching: find.byType(AnimatedContainer)).first,
+      );
+      final clear = tester
+          .getRect(find.byWidget(rail.widget))
+          .deflate(railFadeDepth);
+      expect(clear.top <= button.top && button.bottom <= clear.bottom, isTrue);
+    },
+  );
+
+  testWidgets(
+    'rail scrolls a page selected by shortcut clear of the edge fades',
+    (tester) async {
+      // Ctrl+Tab and notification jumps change the selection without touching
+      // the rail, so the reveal has to follow the new index on its own.
+      final target = shellDestinations.length - 5;
+      tester.view.physicalSize = const Size(1000, 400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+
+      Widget shell(int index) => ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          authRepositoryProvider.overrideWithValue(InMemoryAuthRepository()),
+          syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
+          weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+          settingsProvider.overrideWith(_FixedSettings.new),
+        ],
+        child: MaterialApp(
+          home: AppShell(child: _FakeNavigationShell(currentIndex: index)),
+        ),
+      );
+
+      await tester.pumpWidget(shell(0));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+
+      final icon = find.byIcon(shellDestinations[target].icon).first;
+      final rail = tester.state<ScrollableState>(
+        find.ancestor(of: icon, matching: find.byType(Scrollable)).first,
+      );
+      expect(rail.position.pixels, 0);
+
+      await tester.pumpWidget(shell(target));
+      // Past the selection clock, so the animated scroll has landed.
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+
+      expect(rail.position.pixels, greaterThan(0));
+      final button = tester.getRect(
+        find.ancestor(of: icon, matching: find.byType(AnimatedContainer)).first,
+      );
+      final clear = tester
+          .getRect(find.byWidget(rail.widget))
+          .deflate(railFadeDepth);
+      expect(clear.top <= button.top && button.bottom <= clear.bottom, isTrue);
     },
   );
 

@@ -187,20 +187,20 @@ The planner, live session and exercise detail work well together. Gaps:
 
 ## Seen in the live pass
 
-- **Search results have no date or journal.** Each hit shows title and snippet only,
+- ~~**Search results have no date or journal.** Each hit shows title and snippet only,
   so there's no way to tell which day "Fun Day" was without opening it. Cheap fix,
-  separate from the parked search-scope item.
-- **The rail doesn't reveal the current page.** At the default window height the rail
+  separate from the parked search-scope item.~~
+- ~~**The rail doesn't reveal the current page.** At the default window height the rail
   ends at LeetCode. Rankings, Jobs, Study and Workout sit below the fold, and when one
   is opened (Ctrl+Tab, a notification jump) the highlighted item stays scrolled out of
   view. Scroll the selected destination into view on change. Hiding unused pages would
-  also help (see above).
-- **Study's due count lives only on the Study page** ("Study 65 due"). This confirms the
-  inbox gap above.
-- **One small display bugs** (not gaps, noted in passing):
-  - Analytics sparkline x-axis: the last label collides with its neighbour
-    ("Sep 8" / "Sep 24" overprint at the right edge of the monthly tracker).
-  - The Calendar month header reads "September" with no year, so a month view in
+  also help (see above).~~
+- ~~**Study's due count lives only on the Study page** ("Study 65 due"). This confirms the
+  inbox gap above.~~
+- ~~**One small display bugs**~~ (not gaps, noted in passing):
+  - ~~Analytics sparkline x-axis: the last label collides with its neighbour
+    ("Sep 8" / "Sep 24" overprint at the right edge of the monthly tracker).~~
+  - ~~The Calendar month header reads "September" with no year, so a month view in~~
 
 ---
 
