@@ -484,14 +484,25 @@ final firestoreWriteGateProvider = Provider<FirestoreWriteGate>((ref) {
   return gate;
 });
 
+/// Overridable so tests can build a real [FirestoreSyncRepository] on a fake.
+final firestoreProvider = Provider<FirebaseFirestore>(
+  (ref) => FirebaseFirestore.instance,
+);
+
 final syncRepositoryProvider = Provider<SyncRepository>((ref) {
+  // Watched for its rebuilds: [authRepositoryProvider] is one object for the
+  // life of the app, so watching only it froze a signed-out launch on the
+  // no-op repository even after signing in, and the pull fetched nothing.
+  ref.watch(authNotifierProvider.select((auth) => auth.isAuthenticated));
   final uid = ref.watch(authRepositoryProvider).currentUserId;
   if (uid == null) return NoOpSyncRepository();
-  return FirestoreSyncRepository(
-    FirebaseFirestore.instance,
+  final repository = FirestoreSyncRepository(
+    ref.watch(firestoreProvider),
     uid,
     writeGate: ref.watch(firestoreWriteGateProvider),
   );
+  ref.onDispose(repository.close);
+  return repository;
 });
 
 /// Watches whether the sync backend is reachable, for the shell's offline

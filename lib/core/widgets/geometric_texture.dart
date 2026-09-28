@@ -11,12 +11,12 @@ export 'package:voyager/domain/models/enums.dart' show GeometricWaveShape;
 /// Tunable parameters for the equilateral-triangle gradient texture shader.
 class GeometricTextureParams {
   const GeometricTextureParams({
-    this.scale = 10.0,
-    this.intensity = 0.85,
-    this.focalSpread = 1.0,
-    this.focalPointX = 1.0,
+    this.scale = 15.0,
+    this.intensity = 0.67,
+    this.focalSpread = 1.1,
+    this.focalPointX = 0.1,
     this.focalPointY = 0.5,
-    this.variationFloor = 0.75,
+    this.variationFloor = 0.8,
   });
 
   /// Triangle density. Higher = smaller, more numerous triangles.
@@ -98,26 +98,26 @@ class GeometricWaveParams {
     this.enabled = false,
     this.shape = GeometricWaveShape.linear,
     this.directionDegrees = 135.0,
-    this.speed = 0.4,
-    this.width = 0.08,
-    this.period = 7.0,
-    this.popHoldSeconds = 0.6,
-    this.popScale = 1.4,
-    this.popBrightness = 0.32,
-    this.maskDensity = 0.5,
-    this.maskClusterScale = 5.0,
-    this.twinkleSparsity = 0.15,
-    this.shadowLightDegrees = 225.0,
-    this.shadowOffset = 0.06,
-    this.shadowSoftness = 0.04,
-    this.shadowStrength = 0.45,
-    this.popBrightnessVariance = 0.4,
-    this.tiltAmount = 0.7,
+    this.speed = 0.3,
+    this.width = 0.02,
+    this.period = 5.9,
+    this.popHoldSeconds = 2.25,
+    this.popScale = 1.5,
+    this.popBrightness = 0.4,
+    this.maskDensity = 0.22,
+    this.maskClusterScale = 1.0,
+    this.twinkleSparsity = 0.37,
+    this.shadowLightDegrees = 315.0,
+    this.shadowOffset = 0.105,
+    this.shadowSoftness = 0.3,
+    this.shadowStrength = 0.1,
+    this.popBrightnessVariance = 0.75,
+    this.tiltAmount = 0.5,
     this.tiltShading = 0.5,
-    this.massLagSeconds = 0.12,
-    this.massSpring = 0.3,
-    this.scatterMode = false,
-    this.scatterLitAmount = 0.12,
+    this.massLagSeconds = 0.25,
+    this.massSpring = 0.35,
+    this.scatterMode = true,
+    this.scatterLitAmount = 0.025,
   });
 
   /// Whether the wave animation runs at all. Off by default.
@@ -176,8 +176,8 @@ class GeometricWaveParams {
   final double twinkleSparsity;
 
   /// Direction the scene light shines *from*, in degrees (0 = from the right,
-  /// 90 = from the bottom, screen-space Y-down). Default 225° puts it at the
-  /// upper-left, so popped triangles drop their shadows toward the lower-right.
+  /// 90 = from the bottom, screen-space Y-down). Default 315° puts it at the
+  /// upper-right, so popped triangles drop their shadows toward the lower-left.
   ///
   /// One fixed direction for the whole grid, deliberately: parallel shadows
   /// read as a single sheet of triangles lifting off a surface, where a

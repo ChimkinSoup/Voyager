@@ -21,7 +21,7 @@ void main() {
     final settings = await repo.getSettings();
     expect(settings.themeMode, AppThemeMode.dark);
     expect(settings.petalColor, defaultPetalColor);
-    expect(settings.petalMaxCount, 60);
+    expect(settings.petalMaxCount, 160);
   });
 
   test(

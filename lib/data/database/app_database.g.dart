@@ -7646,7 +7646,7 @@ class $SettingsTableTable extends SettingsTable
     false,
     type: DriftSqlType.int,
     requiredDuringInsert: false,
-    defaultValue: const Constant(60),
+    defaultValue: const Constant(160),
   );
   static const VerificationMeta _petalFallSpeedMeta = const VerificationMeta(
     'petalFallSpeed',
@@ -7658,7 +7658,7 @@ class $SettingsTableTable extends SettingsTable
     false,
     type: DriftSqlType.double,
     requiredDuringInsert: false,
-    defaultValue: const Constant(34.0),
+    defaultValue: const Constant(38.86),
   );
   static const VerificationMeta _petalWindFrequencyMeta =
       const VerificationMeta('petalWindFrequency');
@@ -7683,7 +7683,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(46.0),
+        defaultValue: const Constant(16.88),
       );
   static const VerificationMeta _weekStartsOnMondayMeta =
       const VerificationMeta('weekStartsOnMonday');
@@ -8574,7 +8574,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(10.0),
+        defaultValue: const Constant(15.0),
       );
   static const VerificationMeta _geometricTextureIntensityMeta =
       const VerificationMeta('geometricTextureIntensity');
@@ -8586,7 +8586,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.85),
+        defaultValue: const Constant(0.67),
       );
   static const VerificationMeta _geometricTextureFocalSpreadMeta =
       const VerificationMeta('geometricTextureFocalSpread');
@@ -8598,7 +8598,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(1.0),
+        defaultValue: const Constant(1.1),
       );
   static const VerificationMeta _geometricTextureFocalPointXMeta =
       const VerificationMeta('geometricTextureFocalPointX');
@@ -8610,7 +8610,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(1.0),
+        defaultValue: const Constant(0.1),
       );
   static const VerificationMeta _geometricTextureFocalPointYMeta =
       const VerificationMeta('geometricTextureFocalPointY');
@@ -8634,7 +8634,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.75),
+        defaultValue: const Constant(0.8),
       );
   static const VerificationMeta _geometricWaveEnabledMeta =
       const VerificationMeta('geometricWaveEnabled');
@@ -8684,7 +8684,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.4),
+        defaultValue: const Constant(0.3),
       );
   static const VerificationMeta _geometricWaveWidthMeta =
       const VerificationMeta('geometricWaveWidth');
@@ -8696,7 +8696,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.08),
+        defaultValue: const Constant(0.02),
       );
   static const VerificationMeta _geometricWavePeriodMeta =
       const VerificationMeta('geometricWavePeriod');
@@ -8708,7 +8708,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(7.0),
+        defaultValue: const Constant(5.9),
       );
   static const VerificationMeta _geometricWavePopHoldSecondsMeta =
       const VerificationMeta('geometricWavePopHoldSeconds');
@@ -8720,7 +8720,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.6),
+        defaultValue: const Constant(2.25),
       );
   static const VerificationMeta _geometricWavePopScaleMeta =
       const VerificationMeta('geometricWavePopScale');
@@ -8732,7 +8732,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(1.4),
+        defaultValue: const Constant(1.5),
       );
   static const VerificationMeta _geometricWavePopBrightnessMeta =
       const VerificationMeta('geometricWavePopBrightness');
@@ -8744,7 +8744,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.32),
+        defaultValue: const Constant(0.4),
       );
   static const VerificationMeta _geometricWaveMaskDensityMeta =
       const VerificationMeta('geometricWaveMaskDensity');
@@ -8756,7 +8756,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.5),
+        defaultValue: const Constant(0.22),
       );
   static const VerificationMeta _geometricWaveMaskClusterScaleMeta =
       const VerificationMeta('geometricWaveMaskClusterScale');
@@ -8768,7 +8768,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(5.0),
+        defaultValue: const Constant(1.0),
       );
   static const VerificationMeta _geometricWaveTwinkleSparsityMeta =
       const VerificationMeta('geometricWaveTwinkleSparsity');
@@ -8780,7 +8780,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.15),
+        defaultValue: const Constant(0.37),
       );
   static const VerificationMeta _geometricWaveShadowLightDegreesMeta =
       const VerificationMeta('geometricWaveShadowLightDegrees');
@@ -8792,7 +8792,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(225.0),
+        defaultValue: const Constant(315.0),
       );
   static const VerificationMeta _geometricWaveShadowOffsetMeta =
       const VerificationMeta('geometricWaveShadowOffset');
@@ -8804,7 +8804,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.06),
+        defaultValue: const Constant(0.105),
       );
   static const VerificationMeta _geometricWaveShadowSoftnessMeta =
       const VerificationMeta('geometricWaveShadowSoftness');
@@ -8816,7 +8816,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.04),
+        defaultValue: const Constant(0.3),
       );
   static const VerificationMeta _geometricWaveShadowStrengthMeta =
       const VerificationMeta('geometricWaveShadowStrength');
@@ -8828,7 +8828,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.45),
+        defaultValue: const Constant(0.1),
       );
   static const VerificationMeta _geometricWavePopBrightnessVarianceMeta =
       const VerificationMeta('geometricWavePopBrightnessVariance');
@@ -8840,7 +8840,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.4),
+        defaultValue: const Constant(0.75),
       );
   static const VerificationMeta _geometricWaveTiltAmountMeta =
       const VerificationMeta('geometricWaveTiltAmount');
@@ -8852,7 +8852,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.7),
+        defaultValue: const Constant(0.5),
       );
   static const VerificationMeta _geometricWaveTiltShadingMeta =
       const VerificationMeta('geometricWaveTiltShading');
@@ -8876,7 +8876,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.12),
+        defaultValue: const Constant(0.25),
       );
   static const VerificationMeta _geometricWaveMassSpringMeta =
       const VerificationMeta('geometricWaveMassSpring');
@@ -8888,7 +8888,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.3),
+        defaultValue: const Constant(0.35),
       );
   static const VerificationMeta _geometricWaveScatterModeMeta =
       const VerificationMeta('geometricWaveScatterMode');
@@ -8903,7 +8903,7 @@ class $SettingsTableTable extends SettingsTable
         defaultConstraints: GeneratedColumn.constraintIsAlways(
           'CHECK ("geometric_wave_scatter_mode" IN (0, 1))',
         ),
-        defaultValue: const Constant(false),
+        defaultValue: const Constant(true),
       );
   static const VerificationMeta _geometricWaveScatterLitAmountMeta =
       const VerificationMeta('geometricWaveScatterLitAmount');
@@ -8915,7 +8915,7 @@ class $SettingsTableTable extends SettingsTable
         false,
         type: DriftSqlType.double,
         requiredDuringInsert: false,
-        defaultValue: const Constant(0.12),
+        defaultValue: const Constant(0.025),
       );
   static const VerificationMeta _navPageOrderJsonMeta = const VerificationMeta(
     'navPageOrderJson',

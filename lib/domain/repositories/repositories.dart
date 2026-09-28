@@ -1249,6 +1249,12 @@ abstract class SyncRepository {
   Future<void> appendOperationGroup(List<SyncOperation> operations);
   Future<List<SyncOperation>> listOperations(String documentId);
 
+  /// The documents with an operation the server took in at or after [since]
+  /// (its write time, not the operation's own `timestamp`), read from the
+  /// server: what a full pull must still resolve from its log even when the
+  /// document itself hasn't moved. Throws rather than answer from a cache.
+  Future<Set<String>> listOperationDocumentIdsSince(DateTime since);
+
   /// Batched counterpart to [upsertDocument] — see [appendOperationsBatch].
   Future<void> upsertDocumentsBatch(
     String collection,
@@ -1268,8 +1274,9 @@ abstract class SyncRepository {
   /// The only way to learn this from Firestore: writes are queued silently
   /// while offline and reads are answered from the local cache, so nothing in
   /// the normal sync path ever fails just because the network is gone.
-  /// Implementations must therefore force a real server round-trip and treat a
-  /// cache-answered result as a failure. Backends with no network behind them
-  /// are always reachable and should return normally.
+  /// Implementations must therefore make a real network round-trip, and not
+  /// one queued behind the sync traffic, or a busy client reads as offline.
+  /// Backends with no network behind them are always reachable and should
+  /// return normally.
   Future<void> ping();
 }

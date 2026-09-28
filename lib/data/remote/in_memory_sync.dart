@@ -35,6 +35,10 @@ class InMemorySyncRepository implements SyncRepository {
   final _collectionWatchers =
       <String, StreamController<Map<String, Map<String, dynamic>>>>{};
   final _operations = <String, List<SyncOperation>>{};
+
+  /// When each document's log last gained an operation, by the same server
+  /// clock as [_writeTimes] — not the operations' own `timestamp`.
+  final _operationWriteTimes = <String, DateTime>{};
   GoogleCalendarSyncLock? _calendarLock;
   WeatherFetchLock? _weatherLock;
   WeatherSnapshot? _currentWeather;
@@ -222,6 +226,7 @@ class InMemorySyncRepository implements SyncRepository {
   @override
   Future<void> appendOperation(SyncOperation operation) async {
     _operations.putIfAbsent(operation.documentId, () => []).add(operation);
+    _operationWriteTimes[operation.documentId] = _nextWriteTime();
   }
 
   @override
@@ -252,6 +257,12 @@ class InMemorySyncRepository implements SyncRepository {
   Future<List<SyncOperation>> listOperations(String documentId) async {
     return List.unmodifiable(_operations[documentId] ?? const []);
   }
+
+  @override
+  Future<Set<String>> listOperationDocumentIdsSince(DateTime since) async => {
+    for (final entry in _operationWriteTimes.entries)
+      if (!entry.value.isBefore(since)) entry.key,
+  };
 
   @override
   Future<void> deleteDocument(String collection, String id) async {

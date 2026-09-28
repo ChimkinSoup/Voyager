@@ -1649,6 +1649,7 @@ class _GeometricSettings extends ConsumerWidget {
     final texture = ref.watch(geometricTextureParamsProvider);
     final wave = ref.watch(geometricWaveParamsProvider);
     final textureNotifier = ref.read(geometricTextureParamsProvider.notifier);
+    final waveNotifier = ref.read(geometricWaveParamsProvider.notifier);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1672,13 +1673,23 @@ class _GeometricSettings extends ConsumerWidget {
           onChanged: (v) =>
               textureNotifier.update(texture.copyWith(focalSpread: v)),
         ),
+        // Scatter overrides the wave when both flags are set, so the switches
+        // are mutually exclusive: each shows only what actually renders.
         SwitchListTile(
           title: const Text('Wave'),
           subtitle: const Text('Triangles lift in a sweep across the grid'),
-          value: wave.enabled,
-          onChanged: (v) => ref
-              .read(geometricWaveParamsProvider.notifier)
-              .update(wave.copyWith(enabled: v)),
+          value: wave.enabled && !wave.scatterMode,
+          onChanged: (v) => waveNotifier.update(
+            wave.copyWith(enabled: v, scatterMode: v ? false : null),
+          ),
+        ),
+        SwitchListTile(
+          title: const Text('Scatter'),
+          subtitle: const Text('Triangles light up at random across the grid'),
+          value: wave.scatterMode,
+          onChanged: (v) => waveNotifier.update(
+            wave.copyWith(scatterMode: v, enabled: v ? false : null),
+          ),
         ),
       ],
     );

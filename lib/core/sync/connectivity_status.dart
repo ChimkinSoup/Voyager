@@ -10,10 +10,10 @@ import 'package:flutter/widgets.dart';
 /// deliberate round-trip — the `probe` callback, normally
 /// `SyncRepository.ping` — run on a timer.
 ///
-/// The probe is cheap but not free (one document read against the user's
-/// quota), so it runs slowly while things are healthy and speeds up once they
-/// are not: [onlineInterval] between successes, [offlineInterval] while
-/// waiting for the connection to come back.
+/// The probe is cheap but not free (one network request), so it runs slowly
+/// while things are healthy and speeds up once they are not:
+/// [onlineInterval] between successes, [offlineInterval] while waiting for
+/// the connection to come back.
 ///
 /// Starts optimistic. The UI shows nothing until the connection is *proven*
 /// gone, so guessing "online" before the first probe lands keeps the rail

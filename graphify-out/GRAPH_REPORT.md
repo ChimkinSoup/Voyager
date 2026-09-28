@@ -1,16 +1,16 @@
 # Graph Report - Voyager  (2026-09-27)
 
 ## Corpus Check
-- 1209 files · ~1,712,147 words
+- 1209 files · ~1,712,236 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 30420 nodes · 47778 edges · 893 communities (698 shown, 195 thin omitted)
+- 30420 nodes · 47778 edges · 894 communities (699 shown, 195 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 262 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `9d02abee`
+- Built from commit: `e3f10f53`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -846,6 +846,7 @@
 - studyFoldersProvider
 - studyRepositoryProvider
 - studyStatsProvider
+- local_overlay_wrapper.dart
 - tagColorsProvider
 - themeModeProvider
 - todoListStatsProvider
@@ -904,7 +905,7 @@
 6. `Result` - 73 edges
 7. `CanIgnoreReturnValue` - 70 edges
 8. `DataClass` - 65 edges
-9. `_State` - 59 edges
+9. `_State` - 58 edges
 10. `AppDatabase` - 56 edges
 
 ## Surprising Connections (you probably didn't know these)
@@ -922,7 +923,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (893 total, 195 thin omitted)
+## Communities (894 total, 195 thin omitted)
 
 ### Community 0 - "Drift Database Schema — app_database"
 Cohesion: 0.00
@@ -1717,7 +1718,7 @@ Nodes (44): Int32, _applyPlacement, atMainPlacement, _borrow, _clientSize, _cloa
 
 ### Community 195 - "Test Suite — package:flutter_riverpod/flu"
 Cohesion: 0.05
-Nodes (40): Brightness, Color, build, color, ColorCornerFlag, colorValue, _CornerFlagPainter, JournalBookmarkFlag (+32 more)
+Nodes (40): Brightness, Color?, build, color, ColorCornerFlag, colorValue, _CornerFlagPainter, JournalBookmarkFlag (+32 more)
 
 ### Community 196 - "Todo Feature — todo_list_actions"
 Cohesion: 0.02
@@ -2456,7 +2457,7 @@ Nodes (14): day, days, hours, local, mins, parts, reminderCadenceLabel, reminder
 
 ### Community 377 - "Test Suite — package:flutter_riverpod/flu"
 Cohesion: 0.04
-Nodes (76): AutomaticKeepAliveClientMixin, ChildIndexGetter?, EdgeInsetsGeometry, IndexedWidgetBuilder, WindowVisibility, VimTextOverlay, _VimTextOverlayState, AutocorrectFlashLayer (+68 more)
+Nodes (67): AutomaticKeepAliveClientMixin, ChildIndexGetter?, EdgeInsetsGeometry, IndexedWidgetBuilder, WindowVisibility, VimTextOverlay, _VimTextOverlayState, AutocorrectFlashLayer (+59 more)
 
 ### Community 378 - "Uncategorized — App-wide dictionary (HLD)"
 Cohesion: 0.12
@@ -3699,12 +3700,16 @@ Nodes (3): onThisDayDismissedProvider, build, _dismiss
 Cohesion: 0.50
 Nodes (4): -checkActionCodeAppcodecompletion, +operationFromRequestType, -parseActionCode, -resolveActionCodeOperationForAppcodefallbackInfocompletion
 
+### Community 838 - "local_overlay_wrapper.dart"
+Cohesion: 0.22
+Nodes (9): build, child, createState, didUpdateWidget, _entry, initState, LocalOverlayWrapper, _LocalOverlayWrapperState (+1 more)
+
 ### Community 1000 - "Global Hotkey Floaters — Test Methodology & Coverage"
 Cohesion: 0.12
 Nodes (15): Attempted, not reproduced, Covered — failed (see AUDIT.md), Covered — failed (see AUDIT.md), Covered — passed, Covered — passed, Global Hotkey Floaters — Test Methodology & Coverage, Not covered in session 1 (most now covered in session 2 — see "Still not covered" at the end), Probe artifacts (not app bugs) (+7 more)
 
 ## Knowledge Gaps
-- **22761 isolated node(s):** `~~No trash, but 18 delete dialogs promise one~~`, `~~Todo tasks don't record when they were completed~~`, `~~Errors in a release build vanish~~`, `~~Can't hide nav pages~~`, `~~Inbox doesn't know about spaced repetition~~` (+22756 more)
+- **22761 isolated node(s):** `initialStartDate`, `initialEndDate`, `singleDateMode`, `inlineMode`, `onDateSelected` (+22756 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **195 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -3717,7 +3722,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.017) - this node is a cross-community bridge._
 - **Why does `FLTFirebaseAuthPlugin` connect `SingleChildLayoutDelegate` to `Test Suite — package:voyager/core/sync/te`, `Firebase Auth (macos) — CustomPigeonHeader`?**
   _High betweenness centrality (0.015) - this node is a cross-community bridge._
-- **What connects `~~No trash, but 18 delete dialogs promise one~~`, `~~Todo tasks don't record when they were completed~~`, `~~Errors in a release build vanish~~` to the rest of the system?**
+- **What connects `initialStartDate`, `initialEndDate`, `singleDateMode` to the rest of the system?**
   _22762 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Drift Database Schema — app_database` be split into smaller, more focused modules?**
   _Cohesion score 0.0015552099533437014 - nodes in this community are weakly interconnected._

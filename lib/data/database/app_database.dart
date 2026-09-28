@@ -684,12 +684,12 @@ class SettingsTable extends Table {
   IntColumn get petalColor =>
       integer().withDefault(const Constant(defaultPetalColor))();
   TextColumn get minorPetalColorsJson => text().nullable()();
-  IntColumn get petalMaxCount => integer().withDefault(const Constant(60))();
-  RealColumn get petalFallSpeed => real().withDefault(const Constant(34.0))();
+  IntColumn get petalMaxCount => integer().withDefault(const Constant(160))();
+  RealColumn get petalFallSpeed => real().withDefault(const Constant(38.86))();
   RealColumn get petalWindFrequency =>
       real().withDefault(const Constant(0.12))();
   RealColumn get petalWindStrength =>
-      real().withDefault(const Constant(46.0))();
+      real().withDefault(const Constant(16.88))();
   BoolColumn get weekStartsOnMonday =>
       boolean().withDefault(const Constant(true))();
   BoolColumn get showQuotes => boolean().withDefault(const Constant(true))();
@@ -855,17 +855,17 @@ class SettingsTable extends Table {
   RealColumn get journalEntryListWidth => real().nullable()();
   RealColumn get editSidePanelWidth => real().nullable()();
   RealColumn get geometricTextureScale =>
-      real().withDefault(const Constant(10.0))();
+      real().withDefault(const Constant(15.0))();
   RealColumn get geometricTextureIntensity =>
-      real().withDefault(const Constant(0.85))();
+      real().withDefault(const Constant(0.67))();
   RealColumn get geometricTextureFocalSpread =>
-      real().withDefault(const Constant(1.0))();
+      real().withDefault(const Constant(1.1))();
   RealColumn get geometricTextureFocalPointX =>
-      real().withDefault(const Constant(1.0))();
+      real().withDefault(const Constant(0.1))();
   RealColumn get geometricTextureFocalPointY =>
       real().withDefault(const Constant(0.5))();
   RealColumn get geometricTextureVariationFloor =>
-      real().withDefault(const Constant(0.75))();
+      real().withDefault(const Constant(0.8))();
   BoolColumn get geometricWaveEnabled =>
       boolean().withDefault(const Constant(false))();
   TextColumn get geometricWaveShape =>
@@ -873,45 +873,45 @@ class SettingsTable extends Table {
   RealColumn get geometricWaveDirectionDegrees =>
       real().withDefault(const Constant(135.0))();
   RealColumn get geometricWaveSpeed =>
-      real().withDefault(const Constant(0.4))();
+      real().withDefault(const Constant(0.3))();
   RealColumn get geometricWaveWidth =>
-      real().withDefault(const Constant(0.08))();
+      real().withDefault(const Constant(0.02))();
   RealColumn get geometricWavePeriod =>
-      real().withDefault(const Constant(7.0))();
+      real().withDefault(const Constant(5.9))();
   RealColumn get geometricWavePopHoldSeconds =>
-      real().withDefault(const Constant(0.6))();
+      real().withDefault(const Constant(2.25))();
   RealColumn get geometricWavePopScale =>
-      real().withDefault(const Constant(1.4))();
+      real().withDefault(const Constant(1.5))();
   RealColumn get geometricWavePopBrightness =>
-      real().withDefault(const Constant(0.32))();
-  RealColumn get geometricWaveMaskDensity =>
-      real().withDefault(const Constant(0.5))();
-  RealColumn get geometricWaveMaskClusterScale =>
-      real().withDefault(const Constant(5.0))();
-  RealColumn get geometricWaveTwinkleSparsity =>
-      real().withDefault(const Constant(0.15))();
-  RealColumn get geometricWaveShadowLightDegrees =>
-      real().withDefault(const Constant(225.0))();
-  RealColumn get geometricWaveShadowOffset =>
-      real().withDefault(const Constant(0.06))();
-  RealColumn get geometricWaveShadowSoftness =>
-      real().withDefault(const Constant(0.04))();
-  RealColumn get geometricWaveShadowStrength =>
-      real().withDefault(const Constant(0.45))();
-  RealColumn get geometricWavePopBrightnessVariance =>
       real().withDefault(const Constant(0.4))();
+  RealColumn get geometricWaveMaskDensity =>
+      real().withDefault(const Constant(0.22))();
+  RealColumn get geometricWaveMaskClusterScale =>
+      real().withDefault(const Constant(1.0))();
+  RealColumn get geometricWaveTwinkleSparsity =>
+      real().withDefault(const Constant(0.37))();
+  RealColumn get geometricWaveShadowLightDegrees =>
+      real().withDefault(const Constant(315.0))();
+  RealColumn get geometricWaveShadowOffset =>
+      real().withDefault(const Constant(0.105))();
+  RealColumn get geometricWaveShadowSoftness =>
+      real().withDefault(const Constant(0.3))();
+  RealColumn get geometricWaveShadowStrength =>
+      real().withDefault(const Constant(0.1))();
+  RealColumn get geometricWavePopBrightnessVariance =>
+      real().withDefault(const Constant(0.75))();
   RealColumn get geometricWaveTiltAmount =>
-      real().withDefault(const Constant(0.7))();
+      real().withDefault(const Constant(0.5))();
   RealColumn get geometricWaveTiltShading =>
       real().withDefault(const Constant(0.5))();
   RealColumn get geometricWaveMassLagSeconds =>
-      real().withDefault(const Constant(0.12))();
+      real().withDefault(const Constant(0.25))();
   RealColumn get geometricWaveMassSpring =>
-      real().withDefault(const Constant(0.3))();
+      real().withDefault(const Constant(0.35))();
   BoolColumn get geometricWaveScatterMode =>
-      boolean().withDefault(const Constant(false))();
+      boolean().withDefault(const Constant(true))();
   RealColumn get geometricWaveScatterLitAmount =>
-      real().withDefault(const Constant(0.12))();
+      real().withDefault(const Constant(0.025))();
   TextColumn get navPageOrderJson => text().nullable()();
 
   /// JSON list of hidden nav page paths. Null only on rows from before v129,

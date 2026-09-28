@@ -43,6 +43,7 @@ import 'package:voyager/domain/models/notification_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/models/soft_deletable.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/study_deck_graph.dart';
 import 'package:voyager/domain/models/workout_models.dart';
@@ -1487,7 +1488,37 @@ class RemoteSyncService {
   /// How many operation logs a pull has in flight at once.
   static const _operationLogConcurrency = 16;
 
-  Future<void> pullAll() async {
+  /// [onProgress] hears how many listed documents have been applied (or
+  /// found unchanged) out of how many have been listed so far. The total grows
+  /// while collections are still being listed.
+  ///
+  /// One at a time: two pulls share Firestore's one worker, so a second only
+  /// slows the first (BUG-002). A call made while one runs waits for it and
+  /// then pulls once more — what changed after the running one listed — and
+  /// every call made in that wait shares the follow-up. Only the call that
+  /// starts a pull hears its [onProgress].
+  Future<void> pullAll({void Function(int done, int total)? onProgress}) {
+    final running = _runningPull;
+    if (running == null) return _startPull(onProgress);
+    return _queuedPull ??= running.catchError((Object _) {}).then((_) {
+      _queuedPull = null;
+      return _startPull(onProgress);
+    });
+  }
+
+  Future<void>? _runningPull;
+  Future<void>? _queuedPull;
+
+  Future<void> _startPull(void Function(int done, int total)? onProgress) {
+    final pull = _pull(onProgress);
+    _runningPull = pull;
+    pull.whenComplete(() {
+      if (identical(_runningPull, pull)) _runningPull = null;
+    }).ignore();
+    return pull;
+  }
+
+  Future<void> _pull(void Function(int done, int total)? onProgress) async {
     if (forceConflictUi) {
       _forceNextDownloadConflict = true;
     }
@@ -1497,7 +1528,11 @@ class RemoteSyncService {
       await runZoned(
         () =>
             Future.wait<void>([pullJournalAndTodoData(), pullSecondaryData()]),
-        zoneValues: {_pullTimingsKey: timings},
+        zoneValues: {
+          _pullTimingsKey: timings,
+          _recentOperationsKey: _RecentOperations(),
+          if (onProgress != null) _pullProgressKey: _PullProgress(onProgress),
+        },
       );
       // After the pull, never before — see [backfillSyncedCollections].
       await backfillSyncedCollections();
@@ -1510,6 +1545,13 @@ class RemoteSyncService {
   /// A zone rather than a field so an overlapping pull (a reconnect landing
   /// during the startup one) keeps its own list.
   static const _pullTimingsKey = #remoteSyncPullTimings;
+
+  /// Zone key under which [pullAll] counts documents for its `onProgress`.
+  static const _pullProgressKey = #remoteSyncPullProgress;
+
+  /// Zone key under which [pullAll] shares one query for recent operations
+  /// among the collections it pulls — see [_unchangedSinceLastFullPull].
+  static const _recentOperationsKey = #remoteSyncRecentOperations;
 
   /// One line for the log: the total, then the slowest collections, which is
   /// where any time worth winning back will be.
@@ -2003,10 +2045,7 @@ class RemoteSyncService {
           id,
           local: local,
         );
-        await _todoRepository.logCompletion(
-          merged,
-          recordLocalActivity: false,
-        );
+        await _todoRepository.logCompletion(merged, recordLocalActivity: false);
       },
     );
   }
@@ -2542,6 +2581,7 @@ class RemoteSyncService {
       FirestoreCollections.journalEntries,
       onlyFirestoreDocumentIds: documentIds,
       documentData: documentData,
+      localRow: _journalRepository.getEntry,
       apply: (id, data, {required fromCrdt}) async {
         final local = await _journalRepository.getEntry(id);
         if (await _applyErasure(
@@ -2691,6 +2731,7 @@ class RemoteSyncService {
       FirestoreCollections.dreamEntries,
       onlyFirestoreDocumentIds: documentIds,
       documentData: documentData,
+      localRow: _dreamRepository.getEntry,
       apply: (id, data, {required fromCrdt}) async {
         final local = await _dreamRepository.getEntry(id);
         if (await _applyErasure(
@@ -2851,6 +2892,9 @@ class RemoteSyncService {
       FirestoreCollections.todoTasks,
       onlyFirestoreDocumentIds: documentIds,
       documentData: documentData,
+      localRow: (id) async => localTasks != null
+          ? localTasks[id]
+          : await _todoRepository.getTask(id),
       apply: (id, data, {required fromCrdt}) async {
         try {
           final local = localTasks != null
@@ -2991,6 +3035,7 @@ class RemoteSyncService {
     Set<String>? onlyFirestoreDocumentIds,
     Map<String, Map<String, dynamic>>? documentData,
     bool resolveCrdt = true,
+    Future<SoftDeletable?> Function(String localId)? localRow,
   }) async {
     _syncActivity?.recordDownloadCheck(collection);
     // Reads hit the same Firestore native call path as writes — defer them
@@ -3002,6 +3047,7 @@ class RemoteSyncService {
     SyncWatermark? advance;
     Stopwatch? stopwatch;
     var full = false;
+    DateTime? previousFullPullAt;
     if (onlyFirestoreDocumentIds != null) {
       final scoped = <({String id, Map<String, dynamic> data})>[];
       for (final firestoreDocId in onlyFirestoreDocumentIds) {
@@ -3027,6 +3073,7 @@ class RemoteSyncService {
       docs = listed.documents;
       advance = listed.advance;
       full = listed.full;
+      previousFullPullAt = listed.previousFullPullAt;
     }
 
     String operationLogId(({String id, Map<String, dynamic> data}) doc) =>
@@ -3040,12 +3087,30 @@ class RemoteSyncService {
     // one round trip per document, back to back, was nearly all of a full
     // pull (456 todo tasks took 81 s). The apply loop below still runs in
     // order; only the waiting overlaps.
+    final unchanged =
+        resolveCrdt && full && previousFullPullAt != null && localRow != null
+        ? await _unchangedSinceLastFullPull(
+            collection,
+            docs,
+            since: previousFullPullAt,
+            operationLogId: operationLogId,
+            localRow: localRow,
+          )
+        : const <String>{};
+    final toApply = [
+      for (final doc in docs)
+        if (!unchanged.contains(doc.id)) doc,
+    ];
+    final progress = onlyFirestoreDocumentIds == null
+        ? Zone.current[_pullProgressKey] as _PullProgress?
+        : null;
+    progress?.listed(docs.length, alreadyDone: unchanged.length);
     final operationLogs = resolveCrdt
-        ? _fetchOperationLogs([for (final doc in docs) operationLogId(doc)])
+        ? _fetchOperationLogs([for (final doc in toApply) operationLogId(doc)])
         : const <String, Future<List<SyncOperation>>>{};
 
     final pulled = <String, Map<String, dynamic>>{};
-    for (final doc in docs) {
+    for (final doc in toApply) {
       final firestoreDocId = doc.data['id'] as String? ?? doc.id;
       final localDocId = _localDocumentId(collection, firestoreDocId);
       final logId = operationLogId(doc);
@@ -3070,6 +3135,7 @@ class RemoteSyncService {
         },
       );
       pulled[localDocId] = remote;
+      progress?.applied();
     }
     await _repushWinningTombstones(collection, pulled);
     // Only once every document has been applied: a pull that threw partway
@@ -3100,6 +3166,7 @@ class RemoteSyncService {
       List<({String id, Map<String, dynamic> data})> documents,
       SyncWatermark? advance,
       bool full,
+      DateTime? previousFullPullAt,
     })
   >
   _listChangedDocuments(String collection) async {
@@ -3115,7 +3182,12 @@ class RemoteSyncService {
     );
     if (!listed.fromServer) {
       (Zone.current[_servedFromCacheKey] as List<String>?)?.add(collection);
-      return (documents: listed.documents, advance: null, full: full);
+      return (
+        documents: listed.documents,
+        advance: null,
+        full: full,
+        previousFullPullAt: mark?.lastFullPullAt,
+      );
     }
     // The newest write seen is safe on any clock: whatever the server writes
     // next is stamped after it. Without one, a full pull falls back on this
@@ -3130,7 +3202,104 @@ class RemoteSyncService {
         lastFullPullAt: full ? startedAt : mark.lastFullPullAt,
       ),
       full: full,
+      previousFullPullAt: mark?.lastFullPullAt,
     );
+  }
+
+  /// The listed documents a full pull can leave alone: this device holds each
+  /// at the listed revision, and its operation log has gained nothing since
+  /// the last full pull resolved it.
+  ///
+  /// Resolving every document's log was nearly all of a full pull: 806 logs
+  /// took 395 s on Windows, where Firestore runs each query on one worker
+  /// (BUG-002). The logs a full pull is there to catch are the few that moved
+  /// without their document following (see [_fullPullInterval]), and one
+  /// query for the operations the server took in since the last full pull
+  /// names those — by the server's write time, not the writer's clock, so an
+  /// edit queued offline for days still counts from when it arrived.
+  /// If that query fails, nothing is skipped.
+  Future<Set<String>> _unchangedSinceLastFullPull(
+    String collection,
+    List<({String id, Map<String, dynamic> data})> docs, {
+    required DateTime since,
+    required String Function(({String id, Map<String, dynamic> data}) doc)
+    operationLogId,
+    required Future<SoftDeletable?> Function(String localId) localRow,
+  }) async {
+    final Set<String> moved;
+    try {
+      moved = await _operationDocumentIdsWrittenSince(
+        since.subtract(_clockAllowance),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('[sync] recent operations for $collection failed: $error');
+      ErrorLogger.instance.record(
+        error,
+        stackTrace,
+        context: 'sync: recent operations for $collection',
+      );
+      return const {};
+    }
+    final candidates = [
+      for (final doc in docs)
+        if (!moved.contains(operationLogId(doc)))
+          (
+            doc: doc,
+            localId: _localDocumentId(
+              collection,
+              doc.data['id'] as String? ?? doc.id,
+            ),
+          ),
+    ];
+    // Read side by side: one at a time held every operation-log request
+    // behind hundreds of back-to-back local reads.
+    final locals = await Future.wait([
+      for (final candidate in candidates) localRow(candidate.localId),
+    ]);
+    final unchanged = <String>{};
+    for (var i = 0; i < candidates.length; i++) {
+      final (:doc, :localId) = candidates[i];
+      final local = locals[i];
+      // An open editor absorbs what a pull brings; leave it the whole path.
+      if (_charOpRegistry.session(collection, localId) != null ||
+          isDocumentEditing(collection, localId)) {
+        continue;
+      }
+      if (local == null ||
+          !_localIsSameRevision(
+            doc.data,
+            version: local.version,
+            updatedAt: local.updatedAt,
+          )) {
+        continue;
+      }
+      final remoteDeletedAt = parseFirestoreDate(doc.data['deletedAt']);
+      final sameDeletion = remoteDeletedAt == null
+          ? local.deletedAt == null
+          : local.deletedAt != null &&
+                remoteDeletedAt.isAtSameMomentAs(local.deletedAt!);
+      if (sameDeletion) unchanged.add(doc.id);
+    }
+    return unchanged;
+  }
+
+  /// [SyncRepository.listOperationDocumentIdsSince], asked once per [pullAll]
+  /// rather than once per collection: the query spans every collection's
+  /// operations, and a full pull lists journal, dream and todo side by side.
+  ///
+  /// The first caller reaches a further [_clockAllowance] back, so a sibling
+  /// whose last full pull started up to that much earlier can reuse it.
+  Future<Set<String>> _operationDocumentIdsWrittenSince(DateTime from) {
+    final shared = Zone.current[_recentOperationsKey] as _RecentOperations?;
+    if (shared == null) {
+      return _syncRepository.listOperationDocumentIdsSince(from);
+    }
+    final cached = shared.query;
+    if (cached != null && !cached.from.isAfter(from)) return cached.ids;
+    final reach = from.subtract(_clockAllowance);
+    final ids = _syncRepository.listOperationDocumentIdsSince(reach);
+    shared.query = (from: reach, ids: ids);
+    return ids;
   }
 
   /// Whether the local row outranks the resolved remote snapshot [data] on
@@ -4672,7 +4841,8 @@ class RemoteSyncService {
 
   Future<List<CharacterOperation>> _listRemoteCharOps(String documentId) async {
     final fetched =
-        Zone.current[_fetchedOperationLogKey] as Map<String, List<SyncOperation>>?;
+        Zone.current[_fetchedOperationLogKey]
+            as Map<String, List<SyncOperation>>?;
     final ops =
         fetched?.remove(documentId) ??
         await _syncRepository.listOperations(documentId);
@@ -6239,6 +6409,30 @@ class _PullTiming {
   final int documents;
   final bool full;
   final Duration elapsed;
+}
+
+/// A [RemoteSyncService.pullAll]'s running count, shared by the collections
+/// it pulls side by side.
+class _PullProgress {
+  _PullProgress(this._onProgress);
+
+  final void Function(int done, int total) _onProgress;
+  var _done = 0;
+  var _total = 0;
+
+  void listed(int count, {required int alreadyDone}) {
+    _total += count;
+    _done += alreadyDone;
+    _onProgress(_done, _total);
+  }
+
+  void applied() => _onProgress(++_done, _total);
+}
+
+/// A [RemoteSyncService.pullAll]'s one query for recent operations, shared
+/// by the collections it pulls side by side.
+class _RecentOperations {
+  ({DateTime from, Future<Set<String>> ids})? query;
 }
 
 class LiveSyncController {

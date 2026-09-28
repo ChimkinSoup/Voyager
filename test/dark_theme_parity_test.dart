@@ -305,5 +305,55 @@ void main() {
         await tester.pump(const Duration(milliseconds: 300));
       },
     );
+
+    testWidgets(
+      'wave and scatter switches are mutually exclusive',
+      semanticsEnabled: false,
+      (tester) async {
+        await pumpSettings(tester, AppThemeMode.dark);
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(SettingsPage)),
+        );
+        bool switchValue(String title) => tester
+            .widget<SwitchListTile>(
+              find.widgetWithText(SwitchListTile, title, skipOffstage: false),
+            )
+            .value;
+        Future<void> tapSwitch(String title) async {
+          final tile = find.widgetWithText(
+            SwitchListTile,
+            title,
+            skipOffstage: false,
+          );
+          await tester.ensureVisible(tile);
+          await tester.pump();
+          await tester.tap(tile);
+          await tester.pump();
+        }
+
+        // Scatter is the default animation.
+        expect(switchValue('Scatter'), isTrue);
+        expect(switchValue('Wave'), isFalse);
+
+        await tapSwitch('Wave');
+        var params = container.read(geometricWaveParamsProvider);
+        expect(params.enabled, isTrue);
+        expect(params.scatterMode, isFalse);
+        expect(switchValue('Wave'), isTrue);
+        expect(switchValue('Scatter'), isFalse);
+
+        await tapSwitch('Scatter');
+        params = container.read(geometricWaveParamsProvider);
+        expect(params.scatterMode, isTrue);
+        expect(params.enabled, isFalse);
+        expect(switchValue('Wave'), isFalse);
+
+        await tapSwitch('Scatter');
+        params = container.read(geometricWaveParamsProvider);
+        expect(params.scatterMode, isFalse);
+        expect(params.enabled, isFalse);
+        await tester.pump(const Duration(milliseconds: 300));
+      },
+    );
   });
 }

@@ -86,11 +86,11 @@ Also awaited in `shellDataWarmupProvider` alongside journals, settings, calendar
 
 | Parameter | Default | Effect |
 |-----------|---------|--------|
-| `scale` | 10.0 | Triangle density |
-| `intensity` | 0.85 | Peak accent at focal point |
-| `focalSpread` | 1.0 | Gradient radius |
-| `focalPointX` / `focalPointY` | 1.0 / 0.5 | Focal position in normalized UV |
-| `variationFloor` | 0.75 | Minimum triangle brightness |
+| `scale` | 15.0 | Triangle density |
+| `intensity` | 0.67 | Peak accent at focal point |
+| `focalSpread` | 1.1 | Gradient radius |
+| `focalPointX` / `focalPointY` | 0.1 / 0.5 | Focal position in normalized UV |
+| `variationFloor` | 0.8 | Minimum triangle brightness |
 
 Production uses defaults via `geometricTextureParamsProvider`. The Dev page exposes live sliders and focal presets in `DevGeometricTextureSection` (`lib/features/dev/dev_geometric_texture_tile.dart`).
 

@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:voyager/core/sync/firestore_write_gate.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
@@ -25,14 +27,17 @@ class FirestoreSyncRepository implements SyncRepository {
     this._firestore,
     this._userId, {
     FirestoreWriteGate? writeGate,
+    http.Client? httpClient,
   }) : writeGate =
            writeGate ??
            FirestoreWriteGate(
              waitForPendingWrites: _firestore.waitForPendingWrites,
-           );
+           ),
+       _http = httpClient ?? http.Client();
 
   final FirebaseFirestore _firestore;
   final String _userId;
+  final http.Client _http;
 
   String get userId => _userId;
 
@@ -177,6 +182,45 @@ class FirestoreSyncRepository implements SyncRepository {
 
   @override
   Future<void> ping() async {
+    // Plain HTTPS to Firestore's host first, not a read through the SDK: the
+    // SDK runs everything on one worker, so a document read waited behind a
+    // full pull's queries for minutes and the badge reported a busy client as
+    // offline (BUG-002). Any HTTP answer, even an error status, means the
+    // network reached Google — over TLS, so no captive portal can fake one.
+    try {
+      await _pingHost();
+    } catch (_) {
+      // dart:io ignores the Windows system proxy, which the SDK's own stack
+      // honours: behind one, only the SDK can say whether Firestore is
+      // reachable.
+      await _pingThroughSdk();
+    }
+  }
+
+  /// Half the connectivity probe's 8 s timeout, leaving the SDK read time to
+  /// answer when the request fails.
+  static const _hostPingTimeout = Duration(seconds: 4);
+
+  Future<void> _pingHost() async {
+    // Aborted, not just abandoned: a probe every 10 s while offline would
+    // otherwise pile up requests waiting on the OS connect timeout.
+    final abort = Completer<void>();
+    final timer = Timer(_hostPingTimeout, abort.complete);
+    try {
+      final response = await _http.send(
+        http.AbortableRequest(
+          'HEAD',
+          Uri.https('firestore.googleapis.com'),
+          abortTrigger: abort.future,
+        ),
+      );
+      await response.stream.drain<void>();
+    } finally {
+      timer.cancel();
+    }
+  }
+
+  Future<void> _pingThroughSdk() async {
     // A document that is never written: the read costs the same whether it
     // exists or not, and a missing one can't be answered from a warm cache by
     // accident. Source.server is the request for a real round-trip, and the
@@ -194,6 +238,10 @@ class FirestoreSyncRepository implements SyncRepository {
       );
     }
   }
+
+  /// Releases the connections [ping] keeps alive. The repository is rebuilt
+  /// on every sign-in change, so each one left open would leak.
+  void close() => _http.close();
 
   @override
   Future<GoogleCalendarSyncLock?> getCalendarLock() async {
@@ -334,14 +382,17 @@ class FirestoreSyncRepository implements SyncRepository {
     }
   }
 
-  Map<String, dynamic> _operationData(SyncOperation operation) => {
+  /// Stamped like any synced write, so [listOperationDocumentIdsSince] can
+  /// ask by when an operation reached the server rather than by `timestamp`,
+  /// the writer's clock at the edit — days behind for one queued offline.
+  Map<String, dynamic> _operationData(SyncOperation operation) => stamped({
     'id': operation.id,
     'documentId': operation.documentId,
     'sequence': operation.sequence,
     'payload': operation.payload,
     'deviceId': operation.deviceId,
     'timestamp': operation.timestamp.toUtc().toIso8601String(),
-  };
+  });
 
   @override
   Future<void> appendOperation(SyncOperation operation) async {
@@ -456,6 +507,24 @@ class FirestoreSyncRepository implements SyncRepository {
   }
 
   @override
+  Future<Set<String>> listOperationDocumentIdsSince(DateTime since) async {
+    final query = await _collection('sync_operations')
+        .where(
+          _writeTimeField,
+          isGreaterThanOrEqualTo: Timestamp.fromDate(since),
+        )
+        .get(const GetOptions(source: Source.server));
+    if (query.metadata.isFromCache) {
+      throw FirebaseException(
+        plugin: 'cloud_firestore',
+        code: 'unavailable',
+        message: 'Recent operations were answered from the local cache.',
+      );
+    }
+    return {for (final doc in query.docs) doc.data()['documentId'] as String};
+  }
+
+  @override
   Future<void> deleteDocument(String collection, String id) async {
     await writeGate.run(() => _doc(collection, id).delete());
   }
@@ -469,9 +538,9 @@ class FirestoreSyncRepository implements SyncRepository {
   /// fully intact. Every caller uses the result to decide the log is gone —
   /// [RemoteSyncService.forceOverwriteJournalEntryText] then re-seeds a chain
   /// on top of the surviving one, producing exactly the duplicated text it
-  /// exists to prevent. The `isFromCache` check is what enforces the option,
-  /// the same way [ping] does: a platform that quietly ignored it would
-  /// otherwise report a cached miss as a completed wipe.
+  /// exists to prevent. The `isFromCache` check is what enforces the option:
+  /// a platform that quietly ignored it would otherwise report a cached miss
+  /// as a completed wipe.
   @override
   Future<int> deleteOperationsForDocument(String documentId) async {
     final query = await _collection('sync_operations')
@@ -561,6 +630,9 @@ class NoOpSyncRepository implements SyncRepository {
   @override
   Future<List<SyncOperation>> listOperations(String documentId) async =>
       const [];
+
+  @override
+  Future<Set<String>> listOperationDocumentIdsSince(DateTime since) async => {};
 
   @override
   Future<void> releaseCalendarLock(String deviceId) async {}

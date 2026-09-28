@@ -13,6 +13,8 @@ import 'package:voyager/core/platform/launch_at_login.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/reminders/device_registration.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
+import 'package:voyager/core/sync/pull_progress_toast.dart';
+import 'package:voyager/routing/app_router.dart';
 import 'package:voyager/core/tags/tag_palette.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/error_logger.dart';
@@ -294,8 +296,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     final sync = ref.read(syncEngineProvider);
     final lazy = ref.read(lazyLoadProvider);
     final backgroundSync = ref.read(backgroundSyncOrchestratorProvider);
-    final remoteSync = ref.read(remoteSyncServiceProvider);
-    final liveSync = ref.read(liveSyncProvider);
+    final router = ref.read(routerProvider);
     final quotesFuture = ref.read(quotesLoadedProvider.future);
     final shellWarmupFuture = ref.read(shellDataWarmupProvider.future);
 
@@ -313,20 +314,41 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
       await sync.pullOnStartup(
         purgeExpiredDeleted: backgroundSync.purgeExpiredDeleted,
         pullFromRemote: () async {
-          await remoteSync.pullAll();
-          if (!mounted) return;
+          // The root navigator's own overlay — the one toasts raised from a
+          // page reach with `rootOverlay: true`. Looking it up from the
+          // navigator's context would search above it and find nothing.
+          final progressToast = PullProgressToast(
+            () => router.routerDelegate.navigatorKey.currentState?.overlay,
+          );
+          try {
+            // Read here rather than up front: a sign-in change while the
+            // quotes loaded has already replaced the service.
+            await ref
+                .read(remoteSyncServiceProvider)
+                .pullAll(onProgress: progressToast.report);
+          } catch (_) {
+            progressToast.cancel();
+            rethrow;
+          }
+          if (!mounted) {
+            progressToast.cancel();
+            return;
+          }
+          progressToast.complete();
           _startupPullDone = true;
           // Loaded before the pull, so it has only this device's draws.
           ref.invalidate(quoteHistoryProvider);
           unawaited(_registerThisDevice());
-          liveSync.start();
           // The controller is rebuilt with the sync service — signing out and
           // back in swaps both — and a rebuilt one starts stopped. Start each
           // replacement too, or live sync stays off for the rest of the
-          // session after the first sign-in change.
+          // session after the first sign-in change. Read now, not before the
+          // pull: a sign-in change during it has already replaced the one
+          // there was then.
           ref.listenManual(
             liveSyncProvider,
             (_, controller) => controller.start(),
+            fireImmediately: true,
           );
           // Uploads parked by a permanent refusal get one more shot per
           // launch — otherwise a Storage rule that has since been fixed

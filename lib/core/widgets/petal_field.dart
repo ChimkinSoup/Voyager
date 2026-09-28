@@ -27,11 +27,11 @@ const List<List<double>> petalColorWeights = [
 class PetalFieldParams {
   const PetalFieldParams({
     this.color = const Color(0xFFE6A4B4),
-    this.minorColors = const [],
-    this.maxPetals = 60,
-    this.fallSpeed = 34.0,
+    this.minorColors = const [Color(0xFF895785), Color(0xFFEC407A)],
+    this.maxPetals = 160,
+    this.fallSpeed = 38.86,
     this.windFrequency = 0.12,
-    this.windStrength = 46.0,
+    this.windStrength = 16.88,
   });
 
   /// Petal tint. Distinct from the app accent color on purpose.
