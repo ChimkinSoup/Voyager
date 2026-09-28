@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -173,10 +175,6 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
   /// Bumped per jump so a slow search gives way to a newer request.
   var _jumpGeneration = 0;
 
-  /// The tab the last build showed. A jump arrives with the Ledger tab
-  /// already requested but not yet built.
-  var _builtMode = FinanceViewMode.ledger;
-
   // The Ctrl+F search bar. [_searchTokens] is the query as the tokens every
   // shown transaction has to match; the raw text lives in the controller.
   final _searchController = TextEditingController();
@@ -299,11 +297,7 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
   /// when the search began.
   void _scrollSearchToTop() {
     if (_searchTokens.isEmpty) return;
-    final controller = _wideScroll.hasClients
-        ? _wideScroll
-        : _narrowScroll.hasClients
-        ? _narrowScroll
-        : null;
+    final controller = _ledgerScroll;
     if (controller == null) return;
     final position = controller.position;
     if (position.pixels <= 0) return;
@@ -324,105 +318,165 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
           t.occurredAt.day == day.day,
     );
     setState(() => _emptyJumpDay = hasRows ? null : day);
-    _scrollToDay(
-      day,
-      ++_jumpGeneration,
-      switchingTabs: _builtMode != FinanceViewMode.ledger,
-      ready: ready,
-    );
+    _scrollToDay(day, ++_jumpGeneration, ready: ready);
   }
 
-  /// Scrolls the ledger until [day]'s header is at the top of it.
+  /// The ledger's scroller, whichever of the two is attached.
+  ScrollController? get _ledgerScroll => _wideScroll.hasClients
+      ? _wideScroll
+      : _narrowScroll.hasClients
+      ? _narrowScroll
+      : null;
+
+  /// Slides the ledger until [day]'s header is at the top of it.
   ///
-  /// The ledger is a lazy sliver of rows with different heights, so there is
-  /// no offset to compute up front. Instead this bisects: jump, let a frame
-  /// build, see whether the headers now on screen are newer or older than
-  /// [day], and halve the range. Once the header itself has been built,
-  /// [Scrollable.ensureVisible] finishes the move.
-  ///
-  /// Nothing moves until [ready] completes (the hero's view closing).
-  ///
-  /// When the jump also switches tabs, it waits the crossfade out first.
-  /// [VoyagerCrossfadeIndex] wraps the arriving page in an opacity and a scale
-  /// only while it animates, so the ledger's scroll view is rebuilt from
-  /// scratch when those wrappers come off. A scroll started before that is
-  /// disposed half-way, and the new view restores the half-way offset.
+  /// The target is found once the slide is due, after [ready] (the view
+  /// closing): searching while the view shrank stalled its animation, and a
+  /// target found then went stale if the ledger changed under the view.
   Future<void> _scrollToDay(
     DateTime day,
     int generation, {
-    required bool switchingTabs,
     Future<void>? ready,
   }) async {
     if (ready != null) await ready;
-    if (!mounted || generation != _jumpGeneration) return;
-    if (switchingTabs) {
-      await Future<void>.delayed(
-        (VoyagerMotion.reduced(context)
-                ? VoyagerMotion.crossfade
-                : kVoyagerCrossfadeDuration) +
-            const Duration(milliseconds: 100),
-      );
-    }
-    double? lower;
-    double? upper;
+    // A frame for the placeholder day to be built, and more while the Ledger
+    // tab is still switching in and has no scroller yet.
     for (var attempt = 0; attempt < 40; attempt++) {
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted || generation != _jumpGeneration) return;
-
-      final target = _headerKeys[day]?.currentContext;
-      if (target != null && target.mounted) {
-        await Scrollable.ensureVisible(
-          target,
-          duration: VoyagerMotion.reduced(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-        );
-        return;
-      }
-
-      final controller = _wideScroll.hasClients
-          ? _wideScroll
-          : _narrowScroll.hasClients
-          ? _narrowScroll
-          : null;
-      // Not laid out yet (the tab is still switching in); try next frame.
+      final controller = _ledgerScroll;
       if (controller == null) continue;
       final position = controller.position;
-
-      final built = [
-        for (final entry in _headerKeys.entries)
-          if (entry.value.currentContext != null) entry.key,
-      ];
-      // Newest day first, so a target older than everything built lies
-      // further down.
-      if (built.isNotEmpty && built.every((d) => d.isAfter(day))) {
-        lower = position.pixels;
-      } else if (built.isNotEmpty && built.every((d) => d.isBefore(day))) {
-        upper = position.pixels;
-      } else if (built.isNotEmpty) {
-        // Built on both sides but not itself: it isn't in the ledger.
+      final target = _offsetOfDay(day, position);
+      if (target == null) return;
+      if (VoyagerMotion.reduced(context)) {
+        position.jumpTo(target);
         return;
       }
-
-      final double next;
-      if (lower == null && upper == null) {
-        final index = _ledger.entries.indexWhere(
-          (e) => e is _LedgerDayHeader && e.day == day,
-        );
-        if (index < 0) return;
-        next = position.maxScrollExtent * index / _ledger.entries.length;
-      } else {
-        final lo = lower ?? position.minScrollExtent;
-        final hi = upper ?? position.maxScrollExtent;
-        next = (lo + hi) / 2;
-      }
-      final clamped = next.clamp(
-        position.minScrollExtent,
-        position.maxScrollExtent,
+      // 300ms for a hop within a screen or so, a little more for each
+      // doubling of the distance beyond that, and never more than 900ms.
+      final screens =
+          (target - position.pixels).abs() /
+          math.max(position.viewportDimension, 1);
+      final ms = (300 + 120 * math.log(1 + screens) / math.ln2).clamp(300, 900);
+      await position.animateTo(
+        target,
+        duration: Duration(milliseconds: ms.round()),
+        curve: Curves.easeInOutCubic,
       );
-      if ((clamped - position.pixels).abs() < 1) return;
-      position.jumpTo(clamped);
+      await _settleOnDay(day, generation, position, target);
+      return;
+    }
+  }
+
+  /// Finishes a slide to [day] on the ledger as it is now laid out.
+  ///
+  /// The ledger's extent is only an estimate until its rows are built, so a
+  /// long slide can stop at an end that has since moved, and rows can change
+  /// under it. Near the day its header is built, so each pass here is short.
+  /// A slide the user broke off (by scrolling) is left where they took it.
+  Future<void> _settleOnDay(
+    DateTime day,
+    int generation,
+    ScrollPosition position,
+    double aimedAt,
+  ) async {
+    for (var pass = 0; pass < 4; pass++) {
+      if (!mounted || generation != _jumpGeneration) return;
+      if (_ledgerScroll?.position != position) return;
+      final atEnd =
+          position.pixels >= position.maxScrollExtent - 1 ||
+          position.pixels <= position.minScrollExtent + 1;
+      if ((position.pixels - aimedAt).abs() >= 1 && !atEnd) return;
+      final target = _offsetOfDay(day, position);
+      if (target == null || (target - position.pixels).abs() < 1) return;
+      aimedAt = target;
+      await position.animateTo(
+        target,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
+  /// The scroll offset that puts [day]'s header at the top of the ledger, or
+  /// null when the day isn't in it. Leaves the ledger where it was.
+  ///
+  /// The ledger is a lazy sliver of rows with different heights, so there is
+  /// no offset to compute up front. Instead this bisects: jump, lay out, see
+  /// whether the headers now built are newer or older than [day], and halve
+  /// the range until the header itself is built. Each step lays the ledger
+  /// out by hand, with no frame painted between steps, so the search never
+  /// shows: painted, it read as the ledger lurching about behind the view.
+  double? _offsetOfDay(DateTime day, ScrollPosition position) {
+    // What a frame does short of painting: lay out (building the rows the
+    // sliver asks for), then unmount the rows it dropped, so a header's key
+    // only answers while the header is in the ledger.
+    void layOut() {
+      RendererBinding.instance.rootPipelineOwner.flushLayout();
+      WidgetsBinding.instance.buildOwner!.finalizeTree();
+    }
+
+    bool isBuilt(GlobalKey key) => key.currentContext != null;
+
+    final start = position.pixels;
+    double? lower;
+    double? upper;
+    try {
+      for (var attempt = 0; attempt < 40; attempt++) {
+        final key = _headerKeys[day];
+        if (key != null && isBuilt(key)) {
+          final header = key.currentContext!.findRenderObject()!;
+          final offset = RenderAbstractViewport.of(
+            header,
+          ).getOffsetToReveal(header, 0).offset;
+          return offset.clamp(
+            position.minScrollExtent,
+            position.maxScrollExtent,
+          );
+        }
+
+        final built = [
+          for (final entry in _headerKeys.entries)
+            if (isBuilt(entry.value)) entry.key,
+        ];
+        // Newest day first, so a target older than everything built lies
+        // further down.
+        if (built.isNotEmpty && built.every((d) => d.isAfter(day))) {
+          lower = position.pixels;
+        } else if (built.isNotEmpty && built.every((d) => d.isBefore(day))) {
+          upper = position.pixels;
+        } else if (built.isNotEmpty) {
+          // Built on both sides but not itself: it isn't in the ledger.
+          return null;
+        }
+
+        final double next;
+        if (lower == null && upper == null) {
+          final index = _ledger.entries.indexWhere(
+            (e) => e is _LedgerDayHeader && e.day == day,
+          );
+          if (index < 0) return null;
+          next = position.maxScrollExtent * index / _ledger.entries.length;
+        } else {
+          final lo = lower ?? position.minScrollExtent;
+          final hi = upper ?? position.maxScrollExtent;
+          next = (lo + hi) / 2;
+        }
+        final clamped = next.clamp(
+          position.minScrollExtent,
+          position.maxScrollExtent,
+        );
+        if ((clamped - position.pixels).abs() < 1) return null;
+        position.jumpTo(clamped);
+        layOut();
+      }
+      return null;
+    } finally {
+      if (position.pixels != start) {
+        position.jumpTo(start);
+        layOut();
+      }
     }
   }
 
@@ -578,7 +632,6 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
     final mode = ref.watch(
       financeUiPrefsProvider.select((prefs) => prefs.viewMode),
     );
-    _builtMode = mode;
     final ledgerFilter = ref.watch(financeLedgerFilterProvider);
     // Only a category filter needs them; watching them otherwise rebuilt the
     // whole ledger on every category edit.

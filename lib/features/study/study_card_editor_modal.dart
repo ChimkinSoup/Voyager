@@ -445,7 +445,6 @@ class _AddImageButtonState extends ConsumerState<_AddImageButton> {
 
   Future<void> _pick() async {
     if (_busy) return;
-    final messenger = ScaffoldMessenger.of(context);
     final overlay = Overlay.of(context, rootOverlay: true);
     final images = await pickImageFiles();
     if (images.isEmpty || !mounted) return;
@@ -453,7 +452,6 @@ class _AddImageButtonState extends ConsumerState<_AddImageButton> {
     try {
       await attachImagesForOwner(
         ref,
-        messenger: messenger,
         overlay: overlay,
         images: images,
         collection: FirestoreCollections.studyCards,

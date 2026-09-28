@@ -61,7 +61,6 @@ class MediaDropTarget extends ConsumerWidget {
           : DropOperation.none,
       onPerformDrop: (event) async {
         if (documentId == null) return;
-        final messenger = ScaffoldMessenger.of(context);
         final overlay = Overlay.of(context, rootOverlay: true);
         final images = <Uint8List>[];
         for (final item in event.session.items) {
@@ -74,7 +73,6 @@ class MediaDropTarget extends ConsumerWidget {
         final ownerId = await onBeforeAttach?.call() ?? documentId;
         await attachImagesForOwner(
           ref,
-          messenger: messenger,
           overlay: overlay,
           images: images,
           collection: collection,

@@ -93,7 +93,6 @@ class _MediaGalleryStripState extends ConsumerState<MediaGalleryStrip> {
     try {
       await attachImagesForOwner(
         ref,
-        messenger: ScaffoldMessenger.of(context),
         overlay: Overlay.of(context, rootOverlay: true),
         images: images,
         collection: widget.collection,

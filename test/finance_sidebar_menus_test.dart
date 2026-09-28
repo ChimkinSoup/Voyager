@@ -13,6 +13,7 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/features/finance/finance_bill_radar.dart';
 import 'package:voyager/features/finance/finance_budget_panel.dart';
 import 'package:voyager/features/finance/finance_page.dart';
 import 'package:voyager/features/finance/finance_ui_prefs.dart';
@@ -252,6 +253,22 @@ void main() {
       final restored = (await harness.repo.listSubscriptions()).single;
       expect(restored.name, 'Netflix');
       expect(restored.paidThroughDate, paid);
+    });
+
+    testWidgets('Deleting the only bill does not grow the radar', (
+      tester,
+    ) async {
+      await pumpDashboard(tester);
+      final radar = find.byType(BillRadarPanel);
+      final withOne = tester.getSize(radar).height;
+
+      await openMenuOn(tester, find.text('Netflix'));
+      await tester.tap(find.text('Delete'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Netflix'), findsNothing);
+      expect(tester.getSize(radar).height, lessThanOrEqualTo(withOne));
     });
 
     testWidgets('Log payment cancelled leaves the due date alone', (

@@ -13,6 +13,7 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/features/finance/finance_net_flow_chart.dart';
 import 'package:voyager/features/finance/finance_page.dart';
 import 'package:voyager/features/finance/finance_search.dart';
 import 'package:voyager/features/finance/finance_ui_prefs.dart';
@@ -195,6 +196,56 @@ void main() {
 
     expect(find.text('Net flow per day'), findsOneWidget);
     expect(find.text('No transactions'), findsOneWidget);
+  });
+
+  testWidgets('tapping the chart slides the ledger there without jumping', (
+    tester,
+  ) async {
+    await pumpFinance(tester);
+    await tester.tap(find.textContaining('Net flow ·'));
+    await frames(tester, 12);
+    await tester.tap(find.text('90D'));
+    await frames(tester, 4);
+
+    double ledgerOffset() => tester
+        .state<ScrollableState>(
+          find.descendant(
+            of: find.byKey(ShellPageStorageKeys.financeLedgerWide),
+            matching: find.byType(Scrollable),
+          ),
+        )
+        .position
+        .pixels;
+    final start = ledgerOffset();
+
+    // Straight above the axis label for the window's first day.
+    final target = DateTime(today.year, today.month, today.day - 89);
+    final chart = find.byType(FinanceNetFlowChart).last;
+    final label = find.descendant(
+      of: chart,
+      matching: find.text(DateFormat('MMM d').format(target)),
+    );
+    await tester.tapAt(
+      Offset(tester.getCenter(label).dx, tester.getCenter(chart).dy),
+    );
+
+    // Every frame painted while the view is up shows the ledger unmoved: the
+    // search for the day never reaches the screen.
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      if (find.text('Net flow per day').evaluate().isEmpty) break;
+      expect(ledgerOffset(), start);
+    }
+    expect(find.text('Net flow per day'), findsNothing);
+
+    // Then a slide, not a jump: part-way there after one frame.
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 100));
+    final midway = ledgerOffset();
+    await frames(tester, 20);
+    expect(midway, greaterThan(start));
+    expect(midway, lessThan(ledgerOffset()));
+    expect(atLedgerTop(tester, find.text(headerFor(target))), isTrue);
   });
 
   testWidgets('a jump to a day deep in the ledger scrolls its header in', (

@@ -283,7 +283,7 @@ class FinanceLedgerJump {
   /// Local midnight.
   final DateTime day;
 
-  /// Completes once the ledger is uncovered; the scroll waits for it. The
+  /// Completes once the ledger is uncovered; the slide waits for it. The
   /// page lays out the day's placeholder straight away, while still covered.
   final Future<void>? ready;
 }

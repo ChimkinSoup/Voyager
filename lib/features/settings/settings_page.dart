@@ -22,6 +22,7 @@ import 'package:voyager/core/widgets/petal_field.dart' show petalColorWeights;
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/rounded_drag_proxy.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
@@ -774,6 +775,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                           PhosphorIconsRegular.downloadSimple,
                         ),
                         onTap: () async {
+                          // Taken before the save dialog: the export goes ahead
+                          // even if this tile is gone by the time it returns.
+                          final overlay = Overlay.of(
+                            context,
+                            rootOverlay: true,
+                          );
+                          final exporter = ref.read(dataExportServiceProvider);
+                          VoyagerToast? toast;
                           try {
                             // saveFile, not getDirectoryPath: on Windows every other
                             // file_picker dialog runs on a spawned isolate, but
@@ -789,32 +798,33 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                             );
                             if (targetPath == null) return;
 
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Exporting backup...'),
-                                ),
-                              );
-                            }
+                            toast = showVoyagerToastIn(
+                              overlay,
+                              message: 'Exporting backup…',
+                            );
 
-                            final file = await ref
-                                .read(dataExportServiceProvider)
-                                .exportDataToZip(File(targetPath));
+                            final file = await exporter.exportDataToZip(
+                              File(targetPath),
+                            );
 
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Backup exported to: ${file.path}',
-                                  ),
-                                  duration: const Duration(seconds: 5),
-                                ),
-                              );
-                            }
+                            toast.update(
+                              message: 'Backup exported to: ${file.path}',
+                              icon: PhosphorIconsRegular.check,
+                              dwell: const Duration(seconds: 5),
+                            );
                           } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Export failed: $e')),
+                            if (toast != null) {
+                              toast.update(
+                                message: 'Export failed: $e',
+                                icon: PhosphorIconsRegular.warning,
+                                dwell: const Duration(seconds: 5),
+                              );
+                            } else {
+                              showVoyagerToastIn(
+                                overlay,
+                                message: 'Export failed: $e',
+                                icon: PhosphorIconsRegular.warning,
+                                dwell: const Duration(seconds: 5),
                               );
                             }
                           }

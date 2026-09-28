@@ -16,6 +16,15 @@ import 'package:voyager/domain/services/media_ingest.dart';
 /// toast is only there to close the sentence the spinner started.
 const _attachedToastDwell = Duration(milliseconds: 1600);
 
+/// How long a refusal stays up: longer than the confirmation, since it is
+/// news the user has to read rather than a close to what they already saw.
+const _failedToastDwell = Duration(seconds: 4);
+
+/// The low-disk warning standing in each overlay. Per overlay, so a warning
+/// that went with a torn-down overlay, never dismissed, doesn't hold back the
+/// next one.
+final _lowDiskToasts = Expando<VoyagerToast>();
+
 /// Attaches [images] to one parent, surfacing a refusal as a message rather
 /// than a crash.
 ///
@@ -35,7 +44,6 @@ const _attachedToastDwell = Duration(milliseconds: 1600);
 /// frozen app.
 Future<void> attachImagesForOwner(
   WidgetRef ref, {
-  required ScaffoldMessengerState messenger,
   required OverlayState overlay,
   required List<Uint8List> images,
   required String collection,
@@ -67,29 +75,37 @@ Future<void> attachImagesForOwner(
       icon: PhosphorIconsRegular.check,
       dwell: _attachedToastDwell,
     );
-    // The design's required low-disk warning, raised where a new file has
-    // just landed rather than on a timer.
-    if (await fileStore.isDiskLow()) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Less than 5% of this disk is free. Images may stop downloading.',
-          ),
-          duration: Duration(seconds: 6),
-        ),
-      );
-    }
   } on MediaIngestException catch (error) {
-    // The refusal is the message now, so the spinner goes rather than turning
-    // into a second thing to read on top of the snack bar.
-    toast.dismiss();
-    messenger.showSnackBar(SnackBar(content: Text(error.message)));
-  } catch (error) {
-    toast.dismiss();
-    messenger.showSnackBar(
-      SnackBar(content: Text('That image could not be attached: $error')),
+    // The spinner becomes the refusal, in the card the user is already
+    // watching.
+    toast.update(
+      message: error.message,
+      icon: PhosphorIconsRegular.warning,
+      dwell: _failedToastDwell,
     );
+    return;
+  } catch (error) {
+    toast.update(
+      message: 'That image could not be attached: $error',
+      icon: PhosphorIconsRegular.warning,
+      dwell: _failedToastDwell,
+    );
+    return;
   }
+  // The design's required low-disk warning, raised where a new file has just
+  // landed rather than on a timer. No dwell: it stays up until the user
+  // dismisses it. Only one at a time, since a toast without a dwell never
+  // joins a repeat of itself. Outside the attach's try: the images are in by
+  // now, and a failed free-space query must not report that they aren't; it
+  // just means there is no warning to give.
+  if (!await fileStore.isDiskLow().catchError((Object _) => false)) return;
+  if (!(_lowDiskToasts[overlay]?.isDismissed ?? true)) return;
+  _lowDiskToasts[overlay] = showVoyagerToastIn(
+    overlay,
+    message: 'Less than 5% of this disk is free. Images may stop downloading.',
+    icon: PhosphorIconsRegular.warning,
+    actions: [VoyagerToastAction(label: 'Dismiss', onPressed: () {})],
+  );
 }
 
 /// Opens the platform file dialog on the formats ingest accepts.

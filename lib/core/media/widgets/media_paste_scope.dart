@@ -147,7 +147,6 @@ class _MediaPasteScopeState extends ConsumerState<MediaPasteScope> {
 
   Future<void> _handlePaste() async {
     if (_busy) return;
-    final messenger = ScaffoldMessenger.of(context);
     final overlay = Overlay.of(context, rootOverlay: true);
     // Captured before the clipboard is read, so the paste is routed by what
     // had focus when the key went down rather than by whatever has it a few
@@ -175,9 +174,9 @@ class _MediaPasteScopeState extends ConsumerState<MediaPasteScope> {
         // attach below is asynchronous and the gallery repainting under the
         // field can take the focus off it.
         if (field!.mounted) _pasteText(field);
-        await _attachFromClipboard(messenger, overlay);
+        await _attachFromClipboard(overlay);
       case MediaPasteRoute.attach:
-        await _attachFromClipboard(messenger, overlay);
+        await _attachFromClipboard(overlay);
     }
   }
 
@@ -204,7 +203,6 @@ class _MediaPasteScopeState extends ConsumerState<MediaPasteScope> {
   /// image wherever [_handlePaste] would have from the same field.
   Future<void> _pasteImage() async {
     if (_busy || widget.documentId == null) return;
-    final messenger = ScaffoldMessenger.of(context);
     final overlay = Overlay.of(context, rootOverlay: true);
     final offer = await widget.clipboard.peek();
     if (!mounted) return;
@@ -216,17 +214,14 @@ class _MediaPasteScopeState extends ConsumerState<MediaPasteScope> {
       requireFocusedField: widget.requireFocusedField,
     )) {
       case MediaPasteRoute.attach || MediaPasteRoute.both:
-        await _attachFromClipboard(messenger, overlay);
+        await _attachFromClipboard(overlay);
       case MediaPasteRoute.text || MediaPasteRoute.ignore:
         return;
     }
   }
 
   /// Reads the clipboard's image and attaches it to this scope's owner.
-  Future<void> _attachFromClipboard(
-    ScaffoldMessengerState messenger,
-    OverlayState overlay,
-  ) async {
+  Future<void> _attachFromClipboard(OverlayState overlay) async {
     var documentId = widget.documentId;
     // Unreachable: an ownerless scope routes every paste away from the
     // gallery above, so this is only ever called with a row to attach to.
@@ -239,7 +234,6 @@ class _MediaPasteScopeState extends ConsumerState<MediaPasteScope> {
       if (!mounted) return;
       await attachImagesForOwner(
         ref,
-        messenger: messenger,
         overlay: overlay,
         images: [bytes],
         collection: widget.collection,

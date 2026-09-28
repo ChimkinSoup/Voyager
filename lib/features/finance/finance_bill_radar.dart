@@ -360,7 +360,9 @@ class _EmptyRadar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 20),
+      // Kept tight so the empty panel is no taller than one with a single
+      // bill; otherwise deleting the last bill makes the radar grow.
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         children: [
           Icon(

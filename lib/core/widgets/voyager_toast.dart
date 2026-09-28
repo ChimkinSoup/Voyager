@@ -182,9 +182,8 @@ VoyagerToast showVoyagerToast(
 /// Work that reports on itself has usually already awaited something by the
 /// time it has news, and the [BuildContext] it started from may be gone. The
 /// root overlay is not: it belongs to the app rather than to the surface that
-/// raised the toast, so resolving it up front — next to the
-/// [ScaffoldMessengerState] such callers already capture — is what makes a
-/// toast safe to finish later.
+/// raised the toast, so resolving it up front, before the first await, is
+/// what makes a toast safe to finish later.
 VoyagerToast showVoyagerToastIn(
   OverlayState overlay, {
   required String message,
@@ -535,6 +534,9 @@ class _VoyagerToastState extends State<_VoyagerToast>
               child: Text(
                 widget.message,
                 style: theme.textTheme.labelLarge,
+                // Room for a file path or an error's reason; the ellipsis is
+                // only a backstop.
+                maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),
             ),

@@ -240,24 +240,23 @@ class _NetFlowOverlayState extends State<_NetFlowOverlay>
     if (mounted) Navigator.of(context).pop();
   }
 
-  /// Shrinks back, then takes the ledger to [day].
+  /// Shrinks back, and takes the ledger to [day] as it goes.
   ///
   /// The container is captured before closing: once the route pops, this
-  /// overlay's context is gone. The filter and the jump go out as the close
-  /// starts, so an empty day's placeholder header is laid out under the
-  /// shrinking view instead of popping in after it; the tab switch and the
-  /// scroll wait for the close so they happen on a page the user can see.
-  Future<void> _jumpTo(DateTime day) async {
+  /// overlay's context is gone. The filter, the tab switch and the jump all
+  /// go out as the close starts, so the ledger is in place under the
+  /// shrinking view (an empty day's placeholder included); the slide to the
+  /// day waits for the close, so it plays on a page the user can see.
+  void _jumpTo(DateTime day) {
     if (_closing) return;
     final container = ProviderScope.containerOf(context, listen: false);
     final closed = _close();
     container.read(financeLedgerFilterProvider.notifier).state = null;
-    container.read(financeLedgerJumpProvider.notifier).state =
-        FinanceLedgerJump(day, ready: closed);
-    await closed;
     container
         .read(financeUiPrefsProvider.notifier)
         .setViewMode(FinanceViewMode.ledger);
+    container.read(financeLedgerJumpProvider.notifier).state =
+        FinanceLedgerJump(day, ready: closed);
   }
 
   @override
@@ -505,7 +504,11 @@ class _NetFlowDetailCardState extends ConsumerState<_NetFlowDetailCard> {
                 height: _kExpandedChartHeight,
                 child: Padding(
                   padding: const EdgeInsets.only(right: 8),
-                  child: FinanceNetFlowChart(flows: flows, selected: _selected),
+                  child: FinanceNetFlowChart(
+                    flows: flows,
+                    selected: _selected,
+                    onDayTap: widget.onDayTap,
+                  ),
                 ),
               ),
               const SizedBox(height: 12),

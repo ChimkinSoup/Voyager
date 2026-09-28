@@ -76,6 +76,7 @@ class FinanceNetFlowChart extends StatefulWidget {
     required this.flows,
     this.compact = false,
     this.selected,
+    this.onDayTap,
   });
 
   final List<DailyFlow> flows;
@@ -84,6 +85,9 @@ class FinanceNetFlowChart extends StatefulWidget {
   /// The legend's solo series, or null for all three. Ignored when compact,
   /// which only ever draws net.
   final NetFlowSeries? selected;
+
+  /// Called with the day under a tap on the plot. Ignored when compact.
+  final ValueChanged<DateTime>? onDayTap;
 
   @override
   State<FinanceNetFlowChart> createState() => _FinanceNetFlowChartState();
@@ -104,6 +108,16 @@ class _FinanceNetFlowChartState extends State<FinanceNetFlowChart> {
   void _handleTouch(FlTouchEvent event, LineTouchResponse? response) {
     final hits = response?.lineBarSpots;
     final position = event.localPosition;
+    final onDayTap = widget.onDayTap;
+    if (event is FlTapUpEvent &&
+        onDayTap != null &&
+        hits != null &&
+        hits.isNotEmpty) {
+      final index = hits.first.x.round();
+      if (index >= 0 && index < widget.flows.length) {
+        onDayTap(widget.flows[index].day);
+      }
+    }
     if (!event.isInterestedForInteractions ||
         position == null ||
         hits == null ||
@@ -218,6 +232,11 @@ class _FinanceNetFlowChartState extends State<FinanceNetFlowChart> {
           handleBuiltInTouches: false,
           touchSpotThreshold: 10000,
           touchCallback: _handleTouch,
+          mouseCursorResolver: (_, response) =>
+              widget.onDayTap != null &&
+                  (response?.lineBarSpots?.isNotEmpty ?? false)
+              ? SystemMouseCursors.click
+              : MouseCursor.defer,
           getTouchedSpotIndicator: (barData, spotIndexes) => [
             for (final _ in spotIndexes)
               TouchedSpotIndicatorData(
