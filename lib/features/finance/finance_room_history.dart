@@ -172,7 +172,7 @@ class _RoomEventRow extends ConsumerWidget {
       borderRadius: BorderRadius.circular(8),
       onTap: () => _edit(context, ref),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Row(
           children: [
             Icon(

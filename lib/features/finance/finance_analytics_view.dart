@@ -86,7 +86,11 @@ final _breakdownFocusProvider = StateProvider<BreakdownFocus>(
 /// against the others' twelve, which is why the heave was only ever visible
 /// crossing into or out of the yearly view. Equal lengths make every
 /// transition a true one-to-one morph.
-const int _kCashFlowPeriods = 12;
+///
+/// Thirteen rather than twelve so the twelve gaps between buckets split
+/// evenly into the axis labels, with both the oldest and current bucket
+/// labelled — eleven gaps only divide into every-bucket labels.
+const int _kCashFlowPeriods = 13;
 
 /// The macro analytics suite: income vs. expense, spending breakdown, and the
 /// net-worth tracker.
@@ -253,8 +257,11 @@ class _CashFlowCard extends ConsumerWidget {
       weekStartsMonday: weekStartsMonday,
     );
 
-    final totalIncome = series.fold<int>(0, (s, p) => s + p.incomeCents);
-    final totalExpense = series.fold<int>(0, (s, p) => s + p.expenseCents);
+    // Totals span the latest twelve buckets only — the thirteenth exists for
+    // axis labelling, and counting it would overstate a year by one period.
+    final totalled = series.skip(1);
+    final totalIncome = totalled.fold<int>(0, (s, p) => s + p.incomeCents);
+    final totalExpense = totalled.fold<int>(0, (s, p) => s + p.expenseCents);
     final maxCents = series.fold<int>(
       0,
       (m, p) =>
@@ -549,16 +556,17 @@ class _CashFlowChartState extends State<_CashFlowChart> {
                     if (i < 0 || i >= series.length) {
                       return const SizedBox.shrink();
                     }
-                    // Thin out labels so they never collide, counting back
-                    // from the right-hand end rather than forward from the
-                    // left. With an even number of buckets and every other
-                    // one labelled, one of the two ends goes unlabelled — and
-                    // the one that matters is the newest bucket, which is the
-                    // period the user is currently in.
-                    final step = (series.length / 6).ceil();
-                    if ((series.length - 1 - i) % step != 0) {
-                      return const SizedBox.shrink();
+                    // Thin out labels so they never collide, while labelling
+                    // both ends — the oldest bucket and the one the user is
+                    // currently in — with the rest evenly between: the
+                    // smallest step of at least a sixth of the span that
+                    // divides it exactly.
+                    final gaps = series.length - 1;
+                    var step = math.max(1, (gaps / 6).ceil());
+                    while (gaps % step != 0) {
+                      step++;
                     }
+                    if (i % step != 0) return const SizedBox.shrink();
                     return Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(
@@ -1191,7 +1199,7 @@ class _BreakdownLegendRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final row = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       child: Row(
         children: [
           Container(
@@ -1605,7 +1613,9 @@ class _NetWorthCard extends ConsumerWidget {
         room.id: roomYearSummary(room, roomEvents, now: now),
     };
 
-    final series = netWorthSeries(transactions, assets, valuations, months: 12);
+    // Thirteen points so a year back lands on this same month, and the twelve
+    // gaps between them split evenly into the chart's quarterly labels.
+    final series = netWorthSeries(transactions, assets, valuations, months: 13);
     final current = series.isEmpty ? null : series.last;
     final hasData = transactions.isNotEmpty || assets.isNotEmpty;
 
@@ -1642,7 +1652,7 @@ class _NetWorthCard extends ConsumerWidget {
           ],
           const SizedBox(height: 12),
           SizedBox(
-            height: 110,
+            height: 118,
             child: !hasData
                 ? Center(
                     child: Text(
@@ -1682,8 +1692,14 @@ class _NetWorthCard extends ConsumerWidget {
   }
 }
 
+/// Gap between the bottom of the net-worth plot and its month labels. The
+/// hover dot is fl_chart's default 10px-radius indicator, so a month at $0
+/// (the plot's bottom edge) hangs that far below it — any less and the dot
+/// sits on top of the label.
+const double _kNetWorthLabelGap = 12;
+
 /// Height reserved below the net-worth curve for its month labels.
-const double _kNetWorthBottomReserved = 18;
+const double _kNetWorthBottomReserved = _kNetWorthLabelGap + 14;
 
 class _NetWorthChart extends StatefulWidget {
   const _NetWorthChart({
@@ -1740,6 +1756,15 @@ class _NetWorthChartState extends State<_NetWorthChart> {
 
     // Draw the zero baseline whenever the series touches or dips below it.
     final showZeroLine = floor <= 0;
+
+    // Label both ends — the oldest month and the current one — and space the
+    // rest evenly between them: the smallest step of at least a quarter of
+    // the span that divides it exactly, so the last label lands on the end.
+    final gaps = series.length - 1;
+    var labelStep = math.max(1, (gaps / 4).ceil());
+    while (gaps % labelStep != 0) {
+      labelStep++;
+    }
 
     final touched =
         _touchedIndex != null &&
@@ -1804,16 +1829,25 @@ class _NetWorthChartState extends State<_NetWorthChart> {
               showTitles: true,
               reservedSize: _kNetWorthBottomReserved,
               interval: 1,
-              getTitlesWidget: (value, _) {
+              getTitlesWidget: (value, meta) {
                 final i = value.toInt();
                 if (i < 0 || i >= series.length) {
                   return const SizedBox.shrink();
                 }
-                final step = (series.length / 4).ceil();
-                if (i % step != 0) return const SizedBox.shrink();
-                return Text(
-                  DateFormat('MMM').format(series[i].date),
-                  style: theme.textTheme.labelSmall?.copyWith(fontSize: 9),
+                if (i % labelStep != 0) return const SizedBox.shrink();
+                return SideTitleWidget(
+                  meta: meta,
+                  space: _kNetWorthLabelGap,
+                  // The end labels sit on the plot's edges; centred there,
+                  // half of each would hang off the card.
+                  fitInside: SideTitleFitInsideData.fromTitleMeta(
+                    meta,
+                    distanceFromEdge: 0,
+                  ),
+                  child: Text(
+                    DateFormat('MMM').format(series[i].date),
+                    style: theme.textTheme.labelSmall?.copyWith(fontSize: 9),
+                  ),
                 );
               },
             ),
@@ -2007,7 +2041,7 @@ class _AssetRowState extends ConsumerState<_AssetRow> {
         onTap: () => showAssetModal(context, ref, existing: asset),
         onLongPress: () => _menuKey.currentState?.openMenuAt(_pressPosition),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
