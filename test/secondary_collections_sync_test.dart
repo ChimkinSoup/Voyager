@@ -13,7 +13,6 @@ import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
 import 'package:voyager/core/sync/synced_write_notifier.dart';
-import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
@@ -23,7 +22,6 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/life_tracker_models.dart';
 import 'package:voyager/domain/models/notification_models.dart';
-import 'package:voyager/domain/models/settings_models.dart';
 
 /// One device: its own database and repositories, wired to the shared server.
 class _Device {

@@ -230,7 +230,6 @@ void main() {
   test('same due date orders by most recently dated first', () {
     final due = DateTime.utc(2026, 6, 1, 9);
     final older = DateTime.utc(2026, 1, 1);
-    final newer = DateTime.utc(2026, 2, 1);
     final active = [
       _task(
         id: 'a',

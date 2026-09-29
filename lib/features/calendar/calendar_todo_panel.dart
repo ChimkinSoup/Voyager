@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,10 +9,7 @@ import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
-import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
-import 'package:voyager/core/widgets/time_selector_popovers.dart';
-import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
@@ -198,14 +194,6 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
     if (!_trySave(showValidationErrors: false)) {
       Navigator.of(context).pop();
     }
-  }
-
-  String _formatDue(DateTime dateTime) {
-    final local = dateTime.toLocal();
-    if (local.hour == 0 && local.minute == 0) {
-      return DateFormat('EEE, MMM d').format(local);
-    }
-    return '${DateFormat('EEE, MMM d').format(local)}  ${formatTime12Hour(dateTime)}';
   }
 
   @override

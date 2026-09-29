@@ -7,7 +7,6 @@ import 'package:voyager/core/caps_lock/caps_lock_indicator_scope.dart';
 import 'package:voyager/core/caps_lock/caps_lock_state.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
-import 'package:voyager/core/vim/vim_session.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 

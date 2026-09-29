@@ -28,7 +28,6 @@ import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
-import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
@@ -159,7 +158,6 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     );
   }
 
-  bool _subtaskCreating = false;
   bool _isDatePickerOpen = false;
 
   @override
@@ -771,23 +769,6 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     unawaited(_save(listId: listId));
   }
 
-  Future<void> _pickDueDateTime() async {
-    final picked = await showDateTimePickerDialog(
-      context,
-      initialDateTime: (_dueDate ?? DateTime.now()).toLocal(),
-    );
-    if (picked == null || !mounted) return;
-    final due = picked.hour == 0 && picked.minute == 0
-        ? DateUtils.dateOnly(picked).toUtc()
-        : picked.toUtc();
-    final previousDue = widget.task.dueDate;
-    setState(() => _dueDate = due);
-    widget.onTaskOptimistic?.call(
-      widget.task.copyWith(dueDate: due, dueDateSetAt: utcNow()),
-    );
-    unawaited(_save(dueDate: due, reorderDueDate: previousDue != due));
-  }
-
   Future<void> _openRepeatPicker(BuildContext buttonContext) async {
     setState(() => _isRepeatPickerOpen = true);
     final rule = await showContextualPopover<RecurrenceRule>(
@@ -1114,14 +1095,6 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     final before = previous.dueDate?.toUtc().toIso8601String() ?? 'null';
     final after = next.dueDate?.toUtc().toIso8601String() ?? 'null';
     return 'due date: $before → $after, sortOrder: ${previous.sortOrder} → ${next.sortOrder}';
-  }
-
-  String _formatDue(DateTime dateTime) {
-    final local = dateTime.toLocal();
-    if (local.hour == 0 && local.minute == 0) {
-      return DateFormat.MMMd().format(local);
-    }
-    return '${DateFormat.MMMd().format(local)} · ${formatTime12Hour(dateTime)}';
   }
 
   int _listFlagColor(TodoListModel list) =>

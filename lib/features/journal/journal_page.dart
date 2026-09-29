@@ -3317,7 +3317,6 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   Timer? _tagTimer;
   var _tags = const <String>[];
   var _lastText = '';
-  var _dirty = false;
   RemoteSyncService? _remoteSync;
   SettingsRepository? _settingsRepo;
   PendingTextMergeListener? _pendingTextMergeListener;
@@ -3485,7 +3484,6 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     _tags = event.remoteTags.isNotEmpty
         ? event.remoteTags
         : extractTags(merged);
-    _dirty = true;
     widget.onDraftChanged.call(event.documentId, merged);
     if (mounted) setState(() {});
   }
@@ -3520,7 +3518,6 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     // entry's text whether or not there is a sync service to register it with,
     // and a stale id here is what mislabels a save.
     _bodyEntryId = widget.entry?.id;
-    _dirty = false;
     _tags = widget.entry?.tags ?? extractTags(_controller.text);
     _setEditingFlag(widget.entry, widget.focusNode.hasFocus);
     final entry = widget.entry;
@@ -3655,7 +3652,6 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
         after: _controller.text,
       );
     }
-    _dirty = true;
     widget.onScheduleBodySave();
 
     _tagTimer?.cancel();

@@ -10,7 +10,6 @@ import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
-import 'package:voyager/core/dev/dev_settings_controller.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
@@ -193,7 +192,6 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   // Wide enough for the widest row 2 can get — a multi-day date range, a time
   // range, and the pinned repeat button — without the pills having to scroll.
   static const _eventPopupWidth = 344.0;
-  static const _popupWidth = 380.0;
   static const _baseZoomDuration = Duration(milliseconds: 600);
   static const _baseWeekMorphDuration = Duration(milliseconds: 600);
   static const _baseChainedMorphDuration = Duration(milliseconds: 400);

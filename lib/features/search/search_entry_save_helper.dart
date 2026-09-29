@@ -1,13 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
-import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
-import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/models/journal_models.dart';

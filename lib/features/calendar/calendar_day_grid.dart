@@ -2243,7 +2243,6 @@ class CalendarDayEventBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final barHeight = height ?? heightFor(fontSize);
     // isBottom bars sit flush against the cell's own clipped edge, so leaving
     // these corners square lets the enclosing ClipRRect impose the curve —
     // any attempt to match a radius here is one sub-pixel drift away from a gap.
