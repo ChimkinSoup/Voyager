@@ -147,10 +147,18 @@ class _RankingsChildListState extends ConsumerState<RankingsChildList> {
         ),
         const SizedBox(height: 6),
         if (ordered.isEmpty)
+          // Exactly one row's height — a row's padding around a line of its
+          // name's style — so the add box below stays put when the last unit
+          // is deleted, rather than dropping the pixel the smaller text's
+          // looser padding came to.
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: 6),
             child: Text(
               'No ${label.toLowerCase()}s yet.',
+              strutStyle: StrutStyle.fromTextStyle(
+                theme.textTheme.bodyMedium!,
+                forceStrutHeight: true,
+              ),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),

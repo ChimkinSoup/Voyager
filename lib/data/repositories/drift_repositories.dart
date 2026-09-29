@@ -4181,6 +4181,7 @@ class DriftSettingsRepository implements SettingsRepository {
       lastViewedJournalId: row.lastViewedJournalId,
       lastViewedTodoListId: row.lastViewedTodoListId,
       lastViewedCalendarId: row.lastViewedCalendarId,
+      lastViewedRankingCategoryId: row.lastViewedRankingCategoryId,
       leetCodeCheatLastTabId: row.leetCodeCheatLastTabId,
       leetCodeCheatCollapsedSections: List<String>.from(
         jsonDecode(row.leetCodeCheatCollapsedSectionsJson) as List,
@@ -4424,6 +4425,9 @@ class DriftSettingsRepository implements SettingsRepository {
             lastViewedJournalId: Value(settings.lastViewedJournalId),
             lastViewedTodoListId: Value(settings.lastViewedTodoListId),
             lastViewedCalendarId: Value(settings.lastViewedCalendarId),
+            lastViewedRankingCategoryId: Value(
+              settings.lastViewedRankingCategoryId,
+            ),
             leetCodeCheatLastTabId: Value(settings.leetCodeCheatLastTabId),
             leetCodeCheatCollapsedSectionsJson: Value(
               jsonEncode(settings.leetCodeCheatCollapsedSections),

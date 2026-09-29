@@ -293,8 +293,9 @@ void main() {
 
   group('download queue', () {
     /// An asset this device knows about but has no bytes for — what a pull
-    /// from another device leaves behind.
-    Future<MediaAsset> remoteOnlyAsset() async {
+    /// from another device leaves behind. Referenced unless [referenced] is
+    /// false, i.e. an image nothing shows any more.
+    Future<MediaAsset> remoteOnlyAsset({bool referenced = true}) async {
       final bytes = pngOf(30, 30, r: 90);
       final now = DateTime.now().toUtc();
       final asset = MediaAsset(
@@ -310,6 +311,18 @@ void main() {
         updatedAt: now,
       );
       await repository.upsertAsset(asset);
+      if (referenced) {
+        await repository.upsertReference(
+          MediaReference(
+            id: 'ref-1',
+            createdAt: now,
+            updatedAt: now,
+            mediaId: asset.id,
+            collection: FirestoreCollections.todoTasks,
+            documentId: 'task-1',
+          ),
+        );
+      }
       storage.objects[asset.remotePath('user-1')] = bytes;
       return asset;
     }
@@ -323,6 +336,38 @@ void main() {
       expect(updated.downloadState, MediaDownloadState.present);
       expect(await fileStore.hasBytes(updated), isTrue);
     });
+
+    test('prefetch skips an asset nothing references', () async {
+      final asset = await remoteOnlyAsset(referenced: false);
+      await worker.prefetchMissing();
+
+      expect(storage.downloads, isEmpty);
+      expect(
+        (await repository.getAsset(asset.id))!.downloadState,
+        MediaDownloadState.missing,
+      );
+    });
+
+    test(
+      'requeueFailedDownloads leaves an unreferenced asset parked',
+      () async {
+        // What an image looks like once its references are gone and another
+        // device has purged its Storage object: retrying can only fail again.
+        final asset = await remoteOnlyAsset(referenced: false);
+        await repository.updateAssetTransferState(
+          asset.id,
+          downloadState: MediaDownloadState.failed,
+          failureReason: 'No object exists at the desired reference.',
+        );
+
+        expect(await worker.requeueFailedDownloads(), 0);
+        expect(storage.downloads, isEmpty);
+        expect(
+          (await repository.getAsset(asset.id))!.downloadState,
+          MediaDownloadState.failed,
+        );
+      },
+    );
 
     test('prefetch does nothing while it is switched off', () async {
       settings = const AppSettings(mediaBackgroundPrefetchEnabled: false);

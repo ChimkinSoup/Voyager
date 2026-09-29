@@ -63,6 +63,7 @@ class AppSettings {
     this.lastViewedJournalId,
     this.lastViewedTodoListId,
     this.lastViewedCalendarId,
+    this.lastViewedRankingCategoryId,
     this.leetCodeCheatLastTabId,
     this.leetCodeCheatCollapsedSections = const [],
     this.defaultJournalId,
@@ -285,6 +286,10 @@ class AppSettings {
   /// Paired with [calendarShowAllCalendars] for the same reason the journal
   /// and todo ids are paired with their all-view flags.
   final String? lastViewedCalendarId;
+
+  /// The rankings category this device was last on. A stale id (deleted, or
+  /// not yet pulled) falls back to the first active category.
+  final String? lastViewedRankingCategoryId;
 
   /// The cheat sheet tab this device was last on. Device-local, and a stale id
   /// is expected rather than exceptional — the tab may have been deleted on
@@ -548,6 +553,7 @@ class AppSettings {
     String? lastViewedJournalId,
     String? lastViewedTodoListId,
     String? lastViewedCalendarId,
+    String? lastViewedRankingCategoryId,
     String? leetCodeCheatLastTabId,
     List<String>? leetCodeCheatCollapsedSections,
     String? defaultJournalId,
@@ -742,6 +748,8 @@ class AppSettings {
       lastViewedCalendarId: clearLastViewedCalendarId
           ? null
           : (lastViewedCalendarId ?? this.lastViewedCalendarId),
+      lastViewedRankingCategoryId:
+          lastViewedRankingCategoryId ?? this.lastViewedRankingCategoryId,
       leetCodeCheatLastTabId: clearLeetCodeCheatLastTabId
           ? null
           : (leetCodeCheatLastTabId ?? this.leetCodeCheatLastTabId),

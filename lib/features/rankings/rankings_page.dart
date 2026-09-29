@@ -76,6 +76,16 @@ class _RankingsPageState extends ConsumerState<RankingsPage>
     });
   }
 
+  Future<void> _persistLastViewedCategory(String categoryId) async {
+    final settingsRepo = ref.read(settingsRepositoryProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
+    final settings = await settingsRepo.getSettings();
+    if (settings.lastViewedRankingCategoryId == categoryId) return;
+    await settingsNotifier.saveSettings(
+      settings.copyWith(lastViewedRankingCategoryId: categoryId),
+    );
+  }
+
   Future<void> _persistEditSidePanelWidth(double? width) async {
     final settingsRepo = ref.read(settingsRepositoryProvider);
     final settingsNotifier = ref.read(settingsProvider.notifier);
@@ -132,6 +142,9 @@ class _RankingsPageState extends ConsumerState<RankingsPage>
         if (mounted) _resetOnCategoryChange();
       });
     });
+    ref.listen<String?>(rankingSelectedCategoryProvider, (_, next) {
+      if (next != null) unawaited(_persistLastViewedCategory(next));
+    });
     final categoriesAsync = ref.watch(rankingCategoriesProvider.settled);
     final categories = categoriesAsync.valueOrNull ?? const <RankingCategory>[];
     final active = [
@@ -139,9 +152,12 @@ class _RankingsPageState extends ConsumerState<RankingsPage>
         if (!category.isArchived) category,
     ];
 
-    // Null selection means "the first one", so a cold open lands somewhere
-    // without having to write a choice the user did not make.
-    final selectedId = ref.watch(rankingSelectedCategoryProvider);
+    // Null selection means "the last one this device was on, else the first",
+    // so a cold open lands somewhere without writing a choice the user did not
+    // make.
+    final selectedId =
+        ref.watch(rankingSelectedCategoryProvider) ??
+        ref.watch(settingsProvider).valueOrNull?.lastViewedRankingCategoryId;
     final category =
         categories.where((c) => c.id == selectedId).firstOrNull ??
         active.firstOrNull;

@@ -161,7 +161,12 @@ void main() {
   });
 
   test('a parked download is retried once on the next launch', () async {
-    final asset = await service.ingestBytes(pngOf(60, 40));
+    final reference = await service.attachBytes(
+      bytes: pngOf(60, 40),
+      collection: FirestoreCollections.todoTasks,
+      documentId: 'task-1',
+    );
+    final asset = (await repository.getAsset(reference.mediaId))!;
     final bytes = (await service.fileStore.readBytes(asset))!;
     await service.fileStore.deleteBytesForAsset(asset);
     await repository.updateAssetTransferState(

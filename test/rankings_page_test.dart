@@ -2132,6 +2132,46 @@ void main() {
       expect(find.byType(RangeSlider), findsOneWidget);
     });
 
+    testWidgets('reopens into the last category, or the first if it is gone', (
+      tester,
+    ) async {
+      late String foodId;
+      final harness = await pumpRankingsPage(
+        tester,
+        seed: (repo) async {
+          final shows = makeCategory();
+          await repo.upsertCategory(shows);
+          await repo.upsertParent(
+            makeParent(categoryId: shows.id, title: 'Severance'),
+          );
+          final food = makeCategory(name: 'Restaurants');
+          foodId = food.id;
+          await repo.upsertCategory(food);
+          await repo.upsertParent(
+            makeParent(categoryId: food.id, title: 'Noodle bar'),
+          );
+        },
+      );
+      final container = harness.container;
+
+      container.read(rankingSelectedCategoryProvider.notifier).state = foodId;
+      await tester.pumpAndSettle();
+      final saved = await DriftSettingsRepository(harness.db).getSettings();
+      expect(saved.lastViewedRankingCategoryId, foodId);
+
+      // A cold open: nothing picked this session, only the saved id.
+      container.read(rankingSelectedCategoryProvider.notifier).state = null;
+      await tester.pumpAndSettle();
+      expect(container.read(rankingActiveCategoryProvider)?.id, foodId);
+      expect(rowTitle('Noodle bar'), findsOneWidget);
+
+      await container
+          .read(settingsProvider.notifier)
+          .saveSettings(saved.copyWith(lastViewedRankingCategoryId: 'gone'));
+      await tester.pumpAndSettle();
+      expect(rowTitle('Severance'), findsOneWidget);
+    });
+
     testWidgets('a range left past a lowered scale still opens the menu', (
       tester,
     ) async {

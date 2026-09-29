@@ -4,9 +4,9 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/rankings/ranking_queries.dart';
 
-/// The category the page is showing, by id. Null means "the first one", which
-/// is what a cold open resolves to; the page writes an explicit id as soon as
-/// the user picks one.
+/// The category the page is showing, by id. Null means "whichever this device
+/// was last on" (else the first), which is what a cold open resolves to; the
+/// page writes an explicit id as soon as the user picks one.
 final rankingSelectedCategoryProvider = StateProvider<String?>((ref) => null);
 
 /// The category the page is actually showing, resolved from the selection and
@@ -20,7 +20,9 @@ final rankingActiveCategoryProvider = Provider<RankingCategory?>((ref) {
   final categories =
       ref.watch(rankingCategoriesProvider.settled).valueOrNull ??
       const <RankingCategory>[];
-  final selectedId = ref.watch(rankingSelectedCategoryProvider);
+  final selectedId =
+      ref.watch(rankingSelectedCategoryProvider) ??
+      ref.watch(settingsProvider).valueOrNull?.lastViewedRankingCategoryId;
   return categories.where((c) => c.id == selectedId).firstOrNull ??
       categories.where((c) => !c.isArchived).firstOrNull;
 });

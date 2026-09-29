@@ -772,6 +772,10 @@ class SettingsTable extends Table {
   /// and todo pair is (see below).
   TextColumn get lastViewedCalendarId => text().nullable()();
 
+  /// The category the rankings page reopens into. Device-local like the other
+  /// lastViewed* ids; a stale one falls back to the first active category.
+  TextColumn get lastViewedRankingCategoryId => text().nullable()();
+
   /// The cheat sheet tab this device was last on, and the section ids it has
   /// collapsed, as a JSON array.
   ///
@@ -1913,7 +1917,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 130;
+  int get schemaVersion => 131;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3376,6 +3380,12 @@ class AppDatabase extends _$AppDatabase {
       // existing ones need it made here.
       if (from < 130) {
         await customStatement(kJournalQuoteUseIndexSql);
+      }
+      if (from < 131) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.lastViewedRankingCategoryId,
+        );
       }
     },
   );

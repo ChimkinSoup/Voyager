@@ -131,7 +131,8 @@ class MediaTransferWorker {
     }
   }
 
-  /// Queues every asset this device knows about but has no bytes for.
+  /// Queues every asset this device knows about but has no bytes for, and
+  /// that something still shows.
   ///
   /// The background prefetch. Runs after a document pull, which is when new
   /// assets are learned about, and does nothing at all unless both the
@@ -150,9 +151,13 @@ class MediaTransferWorker {
       return;
     }
 
-    final missing = await _repository.listAssetsByDownloadState({
-      MediaDownloadState.missing,
-    });
+    final referenced = await _referencedAssetIds();
+    final missing = [
+      for (final asset in await _repository.listAssetsByDownloadState({
+        MediaDownloadState.missing,
+      }))
+        if (referenced.contains(asset.id)) asset,
+    ];
     for (final asset in missing) {
       await _repository.updateAssetTransferState(
         asset.id,
@@ -206,13 +211,21 @@ class MediaTransferWorker {
   /// Rendering the image no longer retries a parked download, so without
   /// this such an image would stay failed on this device until someone
   /// tapped retry.
+  ///
+  /// Only images something still shows are retried: an unreferenced one is
+  /// waiting to be purged, and its object is often already gone from Storage,
+  /// so fetching it would only re-park it with the same error every launch.
   Future<int> requeueFailedDownloads() async {
     final settings = await _readSettings();
     if (!settings.mediaRemoteDownloadsEnabled) return 0;
 
-    final parked = await _repository.listAssetsByDownloadState({
-      MediaDownloadState.failed,
-    });
+    final referenced = await _referencedAssetIds();
+    final parked = [
+      for (final asset in await _repository.listAssetsByDownloadState({
+        MediaDownloadState.failed,
+      }))
+        if (referenced.contains(asset.id)) asset,
+    ];
     for (final asset in parked) {
       _attempts.remove(asset.id);
       await _repository.updateAssetTransferState(
@@ -226,6 +239,16 @@ class MediaTransferWorker {
     await drainDownloads();
     return parked.length;
   }
+
+  /// Assets with at least one live reference.
+  ///
+  /// Read from the references rather than [MediaAsset.unreferencedAt], for
+  /// the same reason the purge does: a stale stamp on an image still in use
+  /// must not stop it from being fetched.
+  Future<Set<String>> _referencedAssetIds() async => {
+    for (final reference in await _repository.listReferences())
+      reference.mediaId,
+  };
 
   Future<void> _uploadOne(MediaAsset asset, String uid) async {
     final bytes = await _service.fileStore.readBytes(asset);

@@ -8079,6 +8079,17 @@ class $SettingsTableTable extends SettingsTable
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _lastViewedRankingCategoryIdMeta =
+      const VerificationMeta('lastViewedRankingCategoryId');
+  @override
+  late final GeneratedColumn<String> lastViewedRankingCategoryId =
+      GeneratedColumn<String>(
+        'last_viewed_ranking_category_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _leetCodeCheatLastTabIdMeta =
       const VerificationMeta('leetCodeCheatLastTabId');
   @override
@@ -9459,6 +9470,7 @@ class $SettingsTableTable extends SettingsTable
     lastViewedJournalId,
     lastViewedTodoListId,
     lastViewedCalendarId,
+    lastViewedRankingCategoryId,
     leetCodeCheatLastTabId,
     leetCodeCheatCollapsedSectionsJson,
     defaultJournalId,
@@ -9899,6 +9911,15 @@ class $SettingsTableTable extends SettingsTable
         lastViewedCalendarId.isAcceptableOrUnknown(
           data['last_viewed_calendar_id']!,
           _lastViewedCalendarIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_viewed_ranking_category_id')) {
+      context.handle(
+        _lastViewedRankingCategoryIdMeta,
+        lastViewedRankingCategoryId.isAcceptableOrUnknown(
+          data['last_viewed_ranking_category_id']!,
+          _lastViewedRankingCategoryIdMeta,
         ),
       );
     }
@@ -11009,6 +11030,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}last_viewed_calendar_id'],
       ),
+      lastViewedRankingCategoryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}last_viewed_ranking_category_id'],
+      ),
       leetCodeCheatLastTabId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}leet_code_cheat_last_tab_id'],
@@ -11513,6 +11538,10 @@ class SettingsTableData extends DataClass
   /// and todo pair is (see below).
   final String? lastViewedCalendarId;
 
+  /// The category the rankings page reopens into. Device-local like the other
+  /// lastViewed* ids; a stale one falls back to the first active category.
+  final String? lastViewedRankingCategoryId;
+
   /// The cheat sheet tab this device was last on, and the section ids it has
   /// collapsed, as a JSON array.
   ///
@@ -11724,6 +11753,7 @@ class SettingsTableData extends DataClass
     this.lastViewedJournalId,
     this.lastViewedTodoListId,
     this.lastViewedCalendarId,
+    this.lastViewedRankingCategoryId,
     this.leetCodeCheatLastTabId,
     required this.leetCodeCheatCollapsedSectionsJson,
     this.defaultJournalId,
@@ -11904,6 +11934,11 @@ class SettingsTableData extends DataClass
     }
     if (!nullToAbsent || lastViewedCalendarId != null) {
       map['last_viewed_calendar_id'] = Variable<String>(lastViewedCalendarId);
+    }
+    if (!nullToAbsent || lastViewedRankingCategoryId != null) {
+      map['last_viewed_ranking_category_id'] = Variable<String>(
+        lastViewedRankingCategoryId,
+      );
     }
     if (!nullToAbsent || leetCodeCheatLastTabId != null) {
       map['leet_code_cheat_last_tab_id'] = Variable<String>(
@@ -12217,6 +12252,10 @@ class SettingsTableData extends DataClass
       lastViewedCalendarId: lastViewedCalendarId == null && nullToAbsent
           ? const Value.absent()
           : Value(lastViewedCalendarId),
+      lastViewedRankingCategoryId:
+          lastViewedRankingCategoryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastViewedRankingCategoryId),
       leetCodeCheatLastTabId: leetCodeCheatLastTabId == null && nullToAbsent
           ? const Value.absent()
           : Value(leetCodeCheatLastTabId),
@@ -12470,6 +12509,9 @@ class SettingsTableData extends DataClass
       ),
       lastViewedCalendarId: serializer.fromJson<String?>(
         json['lastViewedCalendarId'],
+      ),
+      lastViewedRankingCategoryId: serializer.fromJson<String?>(
+        json['lastViewedRankingCategoryId'],
       ),
       leetCodeCheatLastTabId: serializer.fromJson<String?>(
         json['leetCodeCheatLastTabId'],
@@ -12792,6 +12834,9 @@ class SettingsTableData extends DataClass
       'lastViewedJournalId': serializer.toJson<String?>(lastViewedJournalId),
       'lastViewedTodoListId': serializer.toJson<String?>(lastViewedTodoListId),
       'lastViewedCalendarId': serializer.toJson<String?>(lastViewedCalendarId),
+      'lastViewedRankingCategoryId': serializer.toJson<String?>(
+        lastViewedRankingCategoryId,
+      ),
       'leetCodeCheatLastTabId': serializer.toJson<String?>(
         leetCodeCheatLastTabId,
       ),
@@ -13031,6 +13076,7 @@ class SettingsTableData extends DataClass
     Value<String?> lastViewedJournalId = const Value.absent(),
     Value<String?> lastViewedTodoListId = const Value.absent(),
     Value<String?> lastViewedCalendarId = const Value.absent(),
+    Value<String?> lastViewedRankingCategoryId = const Value.absent(),
     Value<String?> leetCodeCheatLastTabId = const Value.absent(),
     String? leetCodeCheatCollapsedSectionsJson,
     Value<String?> defaultJournalId = const Value.absent(),
@@ -13194,6 +13240,9 @@ class SettingsTableData extends DataClass
     lastViewedCalendarId: lastViewedCalendarId.present
         ? lastViewedCalendarId.value
         : this.lastViewedCalendarId,
+    lastViewedRankingCategoryId: lastViewedRankingCategoryId.present
+        ? lastViewedRankingCategoryId.value
+        : this.lastViewedRankingCategoryId,
     leetCodeCheatLastTabId: leetCodeCheatLastTabId.present
         ? leetCodeCheatLastTabId.value
         : this.leetCodeCheatLastTabId,
@@ -13509,6 +13558,9 @@ class SettingsTableData extends DataClass
       lastViewedCalendarId: data.lastViewedCalendarId.present
           ? data.lastViewedCalendarId.value
           : this.lastViewedCalendarId,
+      lastViewedRankingCategoryId: data.lastViewedRankingCategoryId.present
+          ? data.lastViewedRankingCategoryId.value
+          : this.lastViewedRankingCategoryId,
       leetCodeCheatLastTabId: data.leetCodeCheatLastTabId.present
           ? data.leetCodeCheatLastTabId.value
           : this.leetCodeCheatLastTabId,
@@ -13882,6 +13934,7 @@ class SettingsTableData extends DataClass
           ..write('lastViewedJournalId: $lastViewedJournalId, ')
           ..write('lastViewedTodoListId: $lastViewedTodoListId, ')
           ..write('lastViewedCalendarId: $lastViewedCalendarId, ')
+          ..write('lastViewedRankingCategoryId: $lastViewedRankingCategoryId, ')
           ..write('leetCodeCheatLastTabId: $leetCodeCheatLastTabId, ')
           ..write(
             'leetCodeCheatCollapsedSectionsJson: $leetCodeCheatCollapsedSectionsJson, ',
@@ -14059,6 +14112,7 @@ class SettingsTableData extends DataClass
     lastViewedJournalId,
     lastViewedTodoListId,
     lastViewedCalendarId,
+    lastViewedRankingCategoryId,
     leetCodeCheatLastTabId,
     leetCodeCheatCollapsedSectionsJson,
     defaultJournalId,
@@ -14212,6 +14266,8 @@ class SettingsTableData extends DataClass
           other.lastViewedJournalId == this.lastViewedJournalId &&
           other.lastViewedTodoListId == this.lastViewedTodoListId &&
           other.lastViewedCalendarId == this.lastViewedCalendarId &&
+          other.lastViewedRankingCategoryId ==
+              this.lastViewedRankingCategoryId &&
           other.leetCodeCheatLastTabId == this.leetCodeCheatLastTabId &&
           other.leetCodeCheatCollapsedSectionsJson ==
               this.leetCodeCheatCollapsedSectionsJson &&
@@ -14380,6 +14436,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<String?> lastViewedJournalId;
   final Value<String?> lastViewedTodoListId;
   final Value<String?> lastViewedCalendarId;
+  final Value<String?> lastViewedRankingCategoryId;
   final Value<String?> leetCodeCheatLastTabId;
   final Value<String> leetCodeCheatCollapsedSectionsJson;
   final Value<String?> defaultJournalId;
@@ -14526,6 +14583,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.lastViewedJournalId = const Value.absent(),
     this.lastViewedTodoListId = const Value.absent(),
     this.lastViewedCalendarId = const Value.absent(),
+    this.lastViewedRankingCategoryId = const Value.absent(),
     this.leetCodeCheatLastTabId = const Value.absent(),
     this.leetCodeCheatCollapsedSectionsJson = const Value.absent(),
     this.defaultJournalId = const Value.absent(),
@@ -14673,6 +14731,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.lastViewedJournalId = const Value.absent(),
     this.lastViewedTodoListId = const Value.absent(),
     this.lastViewedCalendarId = const Value.absent(),
+    this.lastViewedRankingCategoryId = const Value.absent(),
     this.leetCodeCheatLastTabId = const Value.absent(),
     this.leetCodeCheatCollapsedSectionsJson = const Value.absent(),
     this.defaultJournalId = const Value.absent(),
@@ -14820,6 +14879,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<String>? lastViewedJournalId,
     Expression<String>? lastViewedTodoListId,
     Expression<String>? lastViewedCalendarId,
+    Expression<String>? lastViewedRankingCategoryId,
     Expression<String>? leetCodeCheatLastTabId,
     Expression<String>? leetCodeCheatCollapsedSectionsJson,
     Expression<String>? defaultJournalId,
@@ -14984,6 +15044,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'last_viewed_todo_list_id': lastViewedTodoListId,
       if (lastViewedCalendarId != null)
         'last_viewed_calendar_id': lastViewedCalendarId,
+      if (lastViewedRankingCategoryId != null)
+        'last_viewed_ranking_category_id': lastViewedRankingCategoryId,
       if (leetCodeCheatLastTabId != null)
         'leet_code_cheat_last_tab_id': leetCodeCheatLastTabId,
       if (leetCodeCheatCollapsedSectionsJson != null)
@@ -15216,6 +15278,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<String?>? lastViewedJournalId,
     Value<String?>? lastViewedTodoListId,
     Value<String?>? lastViewedCalendarId,
+    Value<String?>? lastViewedRankingCategoryId,
     Value<String?>? leetCodeCheatLastTabId,
     Value<String>? leetCodeCheatCollapsedSectionsJson,
     Value<String?>? defaultJournalId,
@@ -15372,6 +15435,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       lastViewedJournalId: lastViewedJournalId ?? this.lastViewedJournalId,
       lastViewedTodoListId: lastViewedTodoListId ?? this.lastViewedTodoListId,
       lastViewedCalendarId: lastViewedCalendarId ?? this.lastViewedCalendarId,
+      lastViewedRankingCategoryId:
+          lastViewedRankingCategoryId ?? this.lastViewedRankingCategoryId,
       leetCodeCheatLastTabId:
           leetCodeCheatLastTabId ?? this.leetCodeCheatLastTabId,
       leetCodeCheatCollapsedSectionsJson:
@@ -15687,6 +15752,11 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     if (lastViewedCalendarId.present) {
       map['last_viewed_calendar_id'] = Variable<String>(
         lastViewedCalendarId.value,
+      );
+    }
+    if (lastViewedRankingCategoryId.present) {
+      map['last_viewed_ranking_category_id'] = Variable<String>(
+        lastViewedRankingCategoryId.value,
       );
     }
     if (leetCodeCheatLastTabId.present) {
@@ -16186,6 +16256,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('lastViewedJournalId: $lastViewedJournalId, ')
           ..write('lastViewedTodoListId: $lastViewedTodoListId, ')
           ..write('lastViewedCalendarId: $lastViewedCalendarId, ')
+          ..write('lastViewedRankingCategoryId: $lastViewedRankingCategoryId, ')
           ..write('leetCodeCheatLastTabId: $leetCodeCheatLastTabId, ')
           ..write(
             'leetCodeCheatCollapsedSectionsJson: $leetCodeCheatCollapsedSectionsJson, ',
@@ -52940,6 +53011,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<String?> lastViewedJournalId,
       Value<String?> lastViewedTodoListId,
       Value<String?> lastViewedCalendarId,
+      Value<String?> lastViewedRankingCategoryId,
       Value<String?> leetCodeCheatLastTabId,
       Value<String> leetCodeCheatCollapsedSectionsJson,
       Value<String?> defaultJournalId,
@@ -53088,6 +53160,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<String?> lastViewedJournalId,
       Value<String?> lastViewedTodoListId,
       Value<String?> lastViewedCalendarId,
+      Value<String?> lastViewedRankingCategoryId,
       Value<String?> leetCodeCheatLastTabId,
       Value<String> leetCodeCheatCollapsedSectionsJson,
       Value<String?> defaultJournalId,
@@ -53397,6 +53470,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<String> get lastViewedCalendarId => $composableBuilder(
     column: $table.lastViewedCalendarId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lastViewedRankingCategoryId => $composableBuilder(
+    column: $table.lastViewedRankingCategoryId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -54142,6 +54220,11 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get lastViewedRankingCategoryId => $composableBuilder(
+    column: $table.lastViewedRankingCategoryId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get leetCodeCheatLastTabId => $composableBuilder(
     column: $table.leetCodeCheatLastTabId,
     builder: (column) => ColumnOrderings(column),
@@ -54880,6 +54963,11 @@ class $$SettingsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get lastViewedRankingCategoryId => $composableBuilder(
+    column: $table.lastViewedRankingCategoryId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get leetCodeCheatLastTabId => $composableBuilder(
     column: $table.leetCodeCheatLastTabId,
     builder: (column) => column,
@@ -55497,6 +55585,8 @@ class $$SettingsTableTableTableManager
                 Value<String?> lastViewedJournalId = const Value.absent(),
                 Value<String?> lastViewedTodoListId = const Value.absent(),
                 Value<String?> lastViewedCalendarId = const Value.absent(),
+                Value<String?> lastViewedRankingCategoryId =
+                    const Value.absent(),
                 Value<String?> leetCodeCheatLastTabId = const Value.absent(),
                 Value<String> leetCodeCheatCollapsedSectionsJson =
                     const Value.absent(),
@@ -55663,6 +55753,7 @@ class $$SettingsTableTableTableManager
                 lastViewedJournalId: lastViewedJournalId,
                 lastViewedTodoListId: lastViewedTodoListId,
                 lastViewedCalendarId: lastViewedCalendarId,
+                lastViewedRankingCategoryId: lastViewedRankingCategoryId,
                 leetCodeCheatLastTabId: leetCodeCheatLastTabId,
                 leetCodeCheatCollapsedSectionsJson:
                     leetCodeCheatCollapsedSectionsJson,
@@ -55818,6 +55909,8 @@ class $$SettingsTableTableTableManager
                 Value<String?> lastViewedJournalId = const Value.absent(),
                 Value<String?> lastViewedTodoListId = const Value.absent(),
                 Value<String?> lastViewedCalendarId = const Value.absent(),
+                Value<String?> lastViewedRankingCategoryId =
+                    const Value.absent(),
                 Value<String?> leetCodeCheatLastTabId = const Value.absent(),
                 Value<String> leetCodeCheatCollapsedSectionsJson =
                     const Value.absent(),
@@ -55984,6 +56077,7 @@ class $$SettingsTableTableTableManager
                 lastViewedJournalId: lastViewedJournalId,
                 lastViewedTodoListId: lastViewedTodoListId,
                 lastViewedCalendarId: lastViewedCalendarId,
+                lastViewedRankingCategoryId: lastViewedRankingCategoryId,
                 leetCodeCheatLastTabId: leetCodeCheatLastTabId,
                 leetCodeCheatCollapsedSectionsJson:
                     leetCodeCheatCollapsedSectionsJson,
