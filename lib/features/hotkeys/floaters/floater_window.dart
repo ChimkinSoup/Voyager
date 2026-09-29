@@ -39,6 +39,11 @@ class FloaterWindow {
   /// the tray or minimized, which [release] puts back through the placement.
   _Frame? _savedFrame;
 
+  /// The window that was directly above the main window, among those on
+  /// screen and not topmost, when the floater borrowed it: [release] puts the
+  /// main window back under it, at the depth it had. 0 when nothing was.
+  var _savedAbove = 0;
+
   /// A placement still owed to a main window that was hidden when a floater
   /// borrowed it: applied the next time the main window is shown, since
   /// applying it while hidden would show it.
@@ -109,6 +114,7 @@ class FloaterWindow {
         _savedFrame = _savedVisible && IsIconic(hwnd) == 0
             ? _readFrame(hwnd)
             : null;
+        _savedAbove = _savedFrame == null ? 0 : _ordinaryWindowAbove(hwnd);
       }
       // The taskbar button stays: the shell builds Alt+Tab from the same
       // list, and a switcher opened over the floater would leave the app out.
@@ -319,7 +325,13 @@ class FloaterWindow {
     _Frame frame, {
     required int behind,
   }) {
-    final after = _neighbourBelow(hwnd, behind);
+    final above = _savedAbove;
+    _savedAbove = 0;
+    // Back at its old depth, so every app that was over it still is — not
+    // just the one in front. Under the one in front otherwise.
+    final after = IsWindow(above) != 0 && _isOnScreenOrdinary(above)
+        ? above
+        : _neighbourBelow(hwnd, behind);
     var flags = SWP_NOACTIVATE;
     if (after == 0) flags |= SWP_NOZORDER;
 
@@ -379,21 +391,34 @@ class FloaterWindow {
 
   /// The highest window in z-order that is on screen and not topmost, or 0.
   static int _topOrdinaryWindow({required int except}) {
+    for (var w = GetTopWindow(0); w != 0; w = GetWindow(w, GW_HWNDNEXT)) {
+      if (w != except && _isOnScreenOrdinary(w)) return w;
+    }
+    return 0;
+  }
+
+  /// The nearest window above [hwnd] in z-order that is on screen and not
+  /// topmost, or 0.
+  static int _ordinaryWindowAbove(int hwnd) {
+    for (
+      var w = GetWindow(hwnd, GW_HWNDPREV);
+      w != 0;
+      w = GetWindow(w, GW_HWNDPREV)
+    ) {
+      if (_isOnScreenOrdinary(w)) return w;
+    }
+    return 0;
+  }
+
+  static bool _isOnScreenOrdinary(int hwnd) {
+    if (IsWindowVisible(hwnd) == 0 || IsIconic(hwnd) != 0 || _isTopmost(hwnd)) {
+      return false;
+    }
+    // Suspended store apps are "visible" but cloaked, and sit high.
     final cloaked = calloc<Int32>();
     try {
-      for (var w = GetTopWindow(0); w != 0; w = GetWindow(w, GW_HWNDNEXT)) {
-        if (w == except ||
-            IsWindowVisible(w) == 0 ||
-            IsIconic(w) != 0 ||
-            _isTopmost(w)) {
-          continue;
-        }
-        // Suspended store apps are "visible" but cloaked, and sit high.
-        cloaked.value = 0;
-        DwmGetWindowAttribute(w, DWMWA_CLOAKED, cloaked, sizeOf<Int32>());
-        if (cloaked.value == 0) return w;
-      }
-      return 0;
+      DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, cloaked, sizeOf<Int32>());
+      return cloaked.value == 0;
     } finally {
       free(cloaked);
     }
