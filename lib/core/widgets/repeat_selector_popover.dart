@@ -1,16 +1,20 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
+import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/recurrence_rule.dart';
 import 'package:voyager/domain/services/recurrence_engine.dart';
 
 /// Width the repeat popover wants. Callers pass this to
 /// `showContextualPopover` so the preset list and the custom editor agree.
-const double kRepeatPopoverWidth = 268;
+const double kRepeatPopoverWidth = 240;
 
 /// Picker for a [RecurrenceRule], shared by the calendar event panel and the
 /// to-do edit panel.
@@ -113,6 +117,17 @@ class _RepeatSelectorPopoverState extends State<RepeatSelectorPopover> {
     }
   }
 
+  /// One wheel notch over the interval field. The whole number ends up
+  /// selected, so typing straight after scrolling replaces it.
+  void _nudgeInterval(int delta) {
+    _setInterval(_customInterval + delta);
+    _intervalFocusNode.requestFocus();
+    _intervalController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _intervalController.text.length,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return _customMode ? _buildCustomPage(context) : _buildPresetPage(context);
@@ -170,8 +185,8 @@ class _RepeatSelectorPopoverState extends State<RepeatSelectorPopover> {
     // The preset page is a full-bleed list, so the popover carries no padding
     // of its own; the custom editor is a form and has to inset itself clear of
     // the clipped corners.
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+    final page = Padding(
+      padding: const EdgeInsets.all(12),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -199,49 +214,61 @@ class _RepeatSelectorPopoverState extends State<RepeatSelectorPopover> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Row(
             children: [
               Text('Every', style: theme.textTheme.labelMedium),
               const SizedBox(width: 8),
-              SizedBox(
-                width: 56,
-                height: 34,
-                child: TextField(
-                  controller: _intervalController,
-                  focusNode: _intervalFocusNode,
-                  textAlign: TextAlign.center,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(3),
-                  ],
-                  style: theme.textTheme.labelLarge,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(
-                        VoyagerTheme.fieldRadius,
+              Listener(
+                onPointerSignal: (event) {
+                  if (event is! PointerScrollEvent) return;
+                  // Registering claims the notch, so nothing behind the
+                  // popover scrolls under the pointer as well.
+                  GestureBinding.instance.pointerSignalResolver.register(
+                    event,
+                    (resolved) {
+                      final dy =
+                          (resolved as PointerScrollEvent).scrollDelta.dy;
+                      if (dy == 0) return;
+                      _nudgeInterval(dy < 0 ? 1 : -1);
+                    },
+                  );
+                },
+                child: SizedBox(
+                  width: 56,
+                  child: VoyagerTextField(
+                    controller: _intervalController,
+                    focusNode: _intervalFocusNode,
+                    accentColor: _accent,
+                    textAlign: TextAlign.center,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(3),
+                    ],
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                    // Vertical 10 lands the field at the unit pill's 32px, so
+                    // the two controls on this row share a top and bottom edge.
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 10,
                       ),
                     ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(
-                        VoyagerTheme.fieldRadius,
-                      ),
-                      borderSide: BorderSide(color: _accent, width: 1.6),
-                    ),
+                    // Empty is a transient state while typing, not a value: leave
+                    // [_customInterval] alone until a real number lands so the unit
+                    // label does not flicker to "1" mid-edit.
+                    onChanged: (value) {
+                      final parsed = int.tryParse(value);
+                      if (parsed != null && parsed >= 1) {
+                        setState(() => _customInterval = parsed);
+                      }
+                    },
+                    onSubmitted: (_) => _setInterval(_customInterval),
                   ),
-                  // Empty is a transient state while typing, not a value: leave
-                  // [_customInterval] alone until a real number lands so the unit
-                  // label does not flicker to "1" mid-edit.
-                  onChanged: (value) {
-                    final parsed = int.tryParse(value);
-                    if (parsed != null && parsed >= 1) {
-                      setState(() => _customInterval = parsed);
-                    }
-                  },
-                  onSubmitted: (_) => _setInterval(_customInterval),
                 ),
               ),
               const SizedBox(width: 8),
@@ -261,7 +288,7 @@ class _RepeatSelectorPopoverState extends State<RepeatSelectorPopover> {
           if (isWeekly) ...[
             const SizedBox(height: 12),
             Text('On', style: theme.textTheme.labelMedium),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             _WeekdayChips(
               selected: effectiveWeekdays(
                 RecurrenceRule(
@@ -296,35 +323,20 @@ class _RepeatSelectorPopoverState extends State<RepeatSelectorPopover> {
             ),
           ],
           const SizedBox(height: 12),
-          Text(
-            recurrenceRuleLabel(
-              RecurrenceRule(
-                frequency: _customFrequency,
-                interval: _customInterval < 1 ? 1 : _customInterval,
-                weekdays: isWeekly ? _customWeekdays : const {},
-              ),
-              anchor: widget.anchor,
+          // The header's back chevron is the way out without saving, so the
+          // footer carries only the affirmative action.
+          Align(
+            alignment: Alignment.centerRight,
+            child: GlassButton(
+              onPressed: _saveCustom,
+              label: 'Done',
+              dense: true,
             ),
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: _accent,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              GlassButton(
-                onPressed: () => setState(() => _customMode = false),
-                label: 'Cancel',
-                dense: true,
-              ),
-              const Spacer(),
-              GlassButton(onPressed: _saveCustom, label: 'Done', dense: true),
-            ],
           ),
         ],
       ),
     );
+    return CtrlEnterToSubmitScope(onSubmit: _saveCustom, child: page);
   }
 }
 
@@ -346,11 +358,13 @@ class _OptionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Square highlight: the popover's own clip rounds the first and last rows,
+    // so the highlight follows the popover's corners instead of rounding
+    // inside them.
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
           child: Row(
@@ -450,30 +464,27 @@ class _UnitDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
+    return SelectorPill(
       onTap: () => _openMenu(context),
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Flexible(
-              child: Text(
-                _label(value),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelLarge,
-              ),
+      accentColor: accent,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              _label(value),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelLarge,
             ),
-            const SizedBox(width: 4),
-            Icon(
-              PhosphorIconsRegular.caretDown,
-              size: 16,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 4),
+          Icon(
+            PhosphorIconsRegular.caretDown,
+            size: 16,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+          ),
+        ],
       ),
     );
   }
@@ -503,6 +514,9 @@ class _WeekdayChips extends StatelessWidget {
         )
           () {
             final isOn = selected.contains(weekday);
+            // Solid accent fill when on: an edge-and-tint "on" was too
+            // faint to scan a week at a glance. The bold letter keeps the
+            // state from resting on the accent hue alone.
             return Tooltip(
               message: shortWeekdayName(weekday),
               child: Material(
@@ -511,22 +525,27 @@ class _WeekdayChips extends StatelessWidget {
                     : theme.colorScheme.surfaceContainerHighest.withValues(
                         alpha: 0.5,
                       ),
-                shape: const CircleBorder(),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+                  side: isOn
+                      ? BorderSide(color: accent, width: 1)
+                      : BorderSide.none,
+                ),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
                   onTap: () => onToggle(weekday),
                   child: SizedBox(
-                    width: 30,
-                    height: 30,
+                    width: 28,
+                    height: 28,
                     child: Center(
                       child: Text(
                         shortWeekdayName(weekday).substring(0, 1),
                         style: theme.textTheme.labelSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
+                          fontWeight: isOn ? FontWeight.w700 : FontWeight.w500,
                           color: isOn
                               ? onColorLabel(accent)
                               : theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.7,
+                                  alpha: 0.55,
                                 ),
                         ),
                       ),

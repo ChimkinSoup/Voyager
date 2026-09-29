@@ -30,6 +30,7 @@ class VoyagerTextField extends StatefulWidget {
     this.decoration,
     this.accentColor,
     this.style,
+    this.textAlign = TextAlign.start,
     this.autofocus = false,
     this.onChanged,
     this.onSubmitted,
@@ -66,6 +67,7 @@ class VoyagerTextField extends StatefulWidget {
   final InputDecoration? decoration;
   final Color? accentColor;
   final TextStyle? style;
+  final TextAlign textAlign;
   final bool autofocus;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
@@ -314,6 +316,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
         scrollController: _scrollController,
         decoration: innerDecoration,
         style: textStyle,
+        textAlign: widget.textAlign,
         // Held back for [VimTextOverlay] below — see [overlayCaretColor].
         cursorColor: vim.overlayCaretColor(widget.cursorColor ?? accent),
         cursorWidth: vim.overlayCaretWidth,

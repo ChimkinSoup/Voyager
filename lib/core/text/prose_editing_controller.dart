@@ -92,10 +92,8 @@ class ProseEditingController extends TextEditingController {
   /// The paragraph an overlay layer has to lay out against to line up with the
   /// field, glyph for glyph.
   ///
-  /// Takes [text] rather than reading it here because not every layer is
-  /// looking at the current value — the `#tag` pills work from a debounced
-  /// copy. Reveal is always resolved against the *live* caret, so a layer
-  /// running a beat behind on the text is still internally consistent.
+  /// Takes [text] rather than reading it here; reveal is always resolved
+  /// against the *live* caret.
   TextSpan overlaySpan(
     String text,
     TextStyle base, {

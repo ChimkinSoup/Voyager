@@ -1,7 +1,9 @@
 // The repeat picker: five presets on the first page, a custom editor behind
 // "Custom…" for "every X units" and specific weekdays.
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/widgets/repeat_selector_popover.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
@@ -113,9 +115,8 @@ void main() {
       await t.pumpAndSettle();
       await t.enterText(find.byType(TextField), '3');
       await t.pumpAndSettle();
-      // The unit dropdown defaults to days, and the summary line confirms it
-      // before the user commits.
-      expect(find.text('Every 3 days'), findsOneWidget);
+      // The unit dropdown defaults to days and pluralises with the count.
+      expect(find.text('days'), findsOneWidget);
       await t.tap(find.text('Done'));
     });
     expect(
@@ -153,18 +154,79 @@ void main() {
     });
   });
 
-  testWidgets('cancel on the custom page returns to the preset list', (
+  testWidgets('back on the custom page returns to the preset list', (
     tester,
   ) async {
     await _pump(tester);
     await tester.tap(find.text('Custom…'));
     await tester.pumpAndSettle();
     expect(find.text('Custom repeat'), findsOneWidget);
+    // The back chevron is the only way out without saving.
+    expect(find.text('Cancel'), findsNothing);
 
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
     expect(find.text('Custom repeat'), findsNothing);
     expect(find.text('Every month'), findsOneWidget);
+  });
+
+  testWidgets('Ctrl+Enter in the interval field commits the custom rule', (
+    tester,
+  ) async {
+    final rule = await _choose(tester, (t) async {
+      await t.tap(find.text('Custom…'));
+      await t.pumpAndSettle();
+      await t.enterText(find.byType(TextField), '4');
+      await t.pumpAndSettle();
+      await t.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await t.sendKeyEvent(LogicalKeyboardKey.enter);
+      await t.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    });
+    expect(
+      rule,
+      const RecurrenceRule(frequency: EventRecurrence.daily, interval: 4),
+    );
+  });
+
+  testWidgets('the wheel over the interval steps it by one, floored at 1', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      initial: const RecurrenceRule(
+        frequency: EventRecurrence.daily,
+        interval: 2,
+      ),
+    );
+    final field = find.byType(TextField);
+    final pointer = TestPointer(1, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(pointer.hover(tester.getCenter(field)));
+
+    Future<void> notch(double dy) async {
+      await tester.sendEventToBinding(pointer.scroll(Offset(0, dy)));
+      await tester.pumpAndSettle();
+    }
+
+    TextEditingValue value() =>
+        tester.widget<TextField>(field).controller!.value;
+
+    // Wheel up counts up, and the whole number is selected for retyping.
+    await notch(-20);
+    expect(value().text, '3');
+    expect(
+      value().selection,
+      const TextSelection(baseOffset: 0, extentOffset: 1),
+    );
+
+    await notch(20);
+    await notch(20);
+    await notch(20);
+    expect(value().text, '1');
+    expect(
+      value().selection,
+      const TextSelection(baseOffset: 0, extentOffset: 1),
+    );
+    expect(find.text('day'), findsOneWidget);
   });
 
   testWidgets('an existing custom rule opens showing its own description', (
@@ -180,7 +242,9 @@ void main() {
     );
     // Opens straight onto the custom page, seeded with the stored rule.
     expect(find.text('Custom repeat'), findsOneWidget);
-    expect(find.text('Every 2 weeks on Tue, Thu'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '2'), findsOneWidget);
+    expect(find.text('weeks'), findsOneWidget);
+    expect(_weekdaysOn(tester), {'Tue', 'Thu'});
   });
 
   testWidgets('the last weekday cannot be cleared', (tester) async {
@@ -192,11 +256,30 @@ void main() {
         weekdays: {DateTime.tuesday},
       ),
     );
-    expect(find.text('Every 2 weeks on Tue'), findsOneWidget);
+    expect(_weekdaysOn(tester), {'Tue'});
     // Clearing the only selected day would silently fall back to the anchor's
     // weekday, so the toggle is refused instead.
     await tester.tap(find.widgetWithText(SizedBox, 'T').first);
     await tester.pumpAndSettle();
-    expect(find.text('Every 2 weeks on Tue'), findsOneWidget);
+    expect(_weekdaysOn(tester), {'Tue'});
   });
+}
+
+/// The weekday toggles currently on, by their tooltip names. An on toggle is
+/// the one drawn with an edge.
+Set<String> _weekdaysOn(WidgetTester tester) {
+  bool isOn(String name) {
+    final chip = find.descendant(
+      of: find.byTooltip(name),
+      matching: find.byType(Material),
+    );
+    final shape = tester.widget<Material>(chip.first).shape!;
+    return (shape as RoundedRectangleBorder).side != BorderSide.none;
+  }
+
+  const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  return {
+    for (final name in names)
+      if (isOn(name)) name,
+  };
 }

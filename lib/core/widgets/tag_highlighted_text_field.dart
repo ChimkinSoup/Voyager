@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -41,7 +40,6 @@ class TagHighlightedTextField extends StatefulWidget {
     this.decoration = const InputDecoration(),
     this.cursorColor,
     this.useNotchedBorder = true,
-    this.highlightDebounce = const Duration(milliseconds: 200),
     this.readOnly = false,
     this.tagScope,
     this.onKeyEvent,
@@ -73,7 +71,6 @@ class TagHighlightedTextField extends StatefulWidget {
   final InputDecoration decoration;
   final Color? cursorColor;
   final bool useNotchedBorder;
-  final Duration highlightDebounce;
   final bool readOnly;
 
   /// Which page's tag pool to complete `#` against. Null (the default) leaves
@@ -99,8 +96,6 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
 
   late final ScrollController _scrollController;
   final GlobalKey<State<TextField>> _fieldKey = GlobalKey();
-  Timer? _highlightTimer;
-  String _highlightedText = '';
   bool _hasText = false;
   bool _bringCursorScheduled = false;
 
@@ -140,7 +135,6 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
   void initState() {
     super.initState();
     _scrollController = ScrollController();
-    _highlightedText = widget.controller.text;
     _hasText = widget.controller.text.isNotEmpty;
     widget.controller.addListener(_handleControllerChanged);
     _syncProseController();
@@ -166,9 +160,6 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
       widget.controller.addListener(_handleControllerChanged);
       _hasText = widget.controller.text.isNotEmpty;
     }
-    if (widget.controller.text != _highlightedText) {
-      _highlightedText = widget.controller.text;
-    }
     // The shape too: `_emphasisOn` is derived from it, so a field rebuilt from
     // `maxLines: 1` to `maxLines: null` would otherwise keep the stale
     // decision — emphasis off in a field that is now multiline, or still on in
@@ -185,7 +176,6 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
 
   @override
   void dispose() {
-    _highlightTimer?.cancel();
     widget.controller.removeListener(_handleControllerChanged);
     // Never the caller's controller, only the wrapper around it.
     _prose?.dispose();
@@ -194,13 +184,11 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
   }
 
   void _handleControllerChanged() {
-    // Immediate (undebounced) so the floating label reacts on the very first
-    // keystroke; the highlight repaint itself stays debounced below.
+    // So the floating label reacts on the very first keystroke.
     final hasText = widget.controller.text.isNotEmpty;
     if (hasText != _hasText) {
       setState(() => _hasText = hasText);
     }
-    _scheduleHighlightRepaint();
     if (widget.focusNode.hasFocus) _scheduleBringCursorIntoView();
   }
 
@@ -217,25 +205,6 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
       if (!mounted) return;
       bringCursorIntoView(fieldKey: _fieldKey);
     });
-  }
-
-  void _scheduleHighlightRepaint() {
-    if (widget.highlightDebounce == Duration.zero) {
-      _highlightTimer?.cancel();
-      _applyHighlightText(widget.controller.text);
-      return;
-    }
-
-    _highlightTimer?.cancel();
-    _highlightTimer = Timer(widget.highlightDebounce, () {
-      if (!mounted) return;
-      _applyHighlightText(widget.controller.text);
-    });
-  }
-
-  void _applyHighlightText(String text) {
-    if (_highlightedText == text) return;
-    setState(() => _highlightedText = text);
   }
 
   @override
@@ -433,18 +402,19 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
                   // The controller, not just the scroll position: the pills
                   // are measured from the same paragraph the field renders,
                   // and revealing a `**` moves every glyph after it on the
-                  // line. The *text* stays debounced — that is what
-                  // [_highlightedText] is — but the reveal must not be.
+                  // line. The text is read live too: a debounced copy left a
+                  // deleted tag's pill on screen for a beat after it was gone.
                   listenable: _controller,
                   builder: (context, _) {
+                    final text = _controller.text;
                     return ScrollOffsetFollower(
                       controller: _scrollController,
                       child: Padding(
                         padding: overlayPadding,
                         child: _TagHighlightLayer(
-                          text: _highlightedText,
+                          text: text,
                           span: (spanBuilder ?? flatProseSpan)(
-                            _highlightedText,
+                            text,
                             baseStyle,
                           ),
                           style: baseStyle,

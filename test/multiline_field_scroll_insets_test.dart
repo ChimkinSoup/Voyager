@@ -298,7 +298,6 @@ void main() {
           focusNode: focusNode,
           expands: true,
           style: const TextStyle(fontSize: 16, height: 1.5, color: _text),
-          highlightDebounce: Duration.zero,
         ),
       ),
     );

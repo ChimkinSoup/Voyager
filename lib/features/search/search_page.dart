@@ -9,7 +9,6 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/text/prose_text_span.dart';
-import 'package:voyager/core/icons/voyager_icons.dart';
 import 'package:voyager/core/media/widgets/media_drop_target.dart';
 import 'package:voyager/core/media/widgets/media_fan_stack.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
@@ -17,15 +16,11 @@ import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/features/journal/journal_entry_actions.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
-import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
-import 'package:voyager/core/widgets/date_selector_popover.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
-import 'package:voyager/core/widgets/time_selector_popovers.dart';
-import 'package:voyager/core/widgets/datetime_picker_dialog.dart';
 import 'package:voyager/core/widgets/journal_color_flag.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/enter_to_submit_scope.dart';
@@ -1324,6 +1319,15 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                                     Expanded(
                                       child: Text(widget.journals[i].name),
                                     ),
+                                    if (widget.journals[i].id ==
+                                        _entry.journalId)
+                                      Icon(
+                                        PhosphorIconsRegular.check,
+                                        size: 18,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                      ),
                                   ],
                                 ),
                               ),
