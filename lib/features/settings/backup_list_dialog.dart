@@ -14,6 +14,7 @@ import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/features/settings/services/auto_backup_service.dart';
 import 'package:voyager/features/settings/services/data_import_service.dart';
 
@@ -33,14 +34,21 @@ Future<void> showBackupListDialog(BuildContext context) {
 /// remounts every shell page, the one that started it included, and a
 /// disposed `ref` can't be used.
 Future<void> confirmAndRestoreBackup(BuildContext context, File file) async {
-  final messenger = ScaffoldMessenger.of(context);
+  // Resolved before the first await: the restore remounts the page that
+  // started it, and the toast has to outlive that.
+  final overlay = Overlay.of(context, rootOverlay: true);
   final container = ProviderScope.containerOf(context, listen: false);
   final DateTime? capturedAt;
   try {
     final manifest = await readBackupManifest(file);
     capturedAt = DateTime.tryParse(manifest['exportedAt'] as String? ?? '');
   } catch (e) {
-    messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
+    showVoyagerToastIn(
+      overlay,
+      message: 'Import failed: $e',
+      icon: PhosphorIconsRegular.warning,
+      dwell: const Duration(seconds: 5),
+    );
     return;
   }
   if (!context.mounted) return;
@@ -60,14 +68,20 @@ Future<void> confirmAndRestoreBackup(BuildContext context, File file) async {
   if (!confirmed || !context.mounted) return;
 
   // Nothing can be typed while it runs: text entered after the snapshot would
-  // be in neither the snapshot nor the restored data.
+  // be in neither the snapshot nor the restored data. The barrier is clear —
+  // the toast says what is going on.
   final done = Completer<void>();
   unawaited(
     showVoyagerDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _RestoringDialog(done: done.future),
+      barrierColor: Colors.transparent,
+      builder: (_) => _RestoringBarrier(done: done.future),
     ),
+  );
+  final toast = showVoyagerToastIn(
+    overlay,
+    message: 'Saving a snapshot, then restoring…',
   );
   final flushes = PendingFlushRegistry.instance;
   final BackupImportSummary summary;
@@ -83,52 +97,57 @@ Future<void> confirmAndRestoreBackup(BuildContext context, File file) async {
   } catch (e) {
     done.complete();
     // [AutoBackupService.restore] throws only when nothing was changed.
-    messenger.showSnackBar(
-      SnackBar(content: Text('Restore failed, nothing was changed: $e')),
+    toast.update(
+      message: 'Restore failed, nothing was changed: $e',
+      icon: PhosphorIconsRegular.warning,
+      dwell: const Duration(seconds: 8),
     );
     return;
   }
+  // The restore has landed, so neither the barrier nor its report may wait on
+  // the refresh below: a throw there would leave the barrier swallowing input
+  // and the spinner running for good.
+  done.complete();
+  final restored = summary.restoredTotal;
+  toast.update(
+    message: [
+      restored == 0 && !summary.settingsRestored
+          ? 'Backup restored — everything in it was already up to date.'
+          : 'Backup restored: $restored record(s) restored, '
+                '${summary.skipped} already up to date. Undo it from '
+                'Automatic backups → Before restore.',
+      if (summary.leftErased > 0)
+        '${summary.leftErased} item(s) deleted forever since the backup '
+            'were left deleted.',
+      ...summary.warnings,
+    ].join('\n'),
+    icon: summary.warnings.isEmpty
+        ? PhosphorIconsRegular.check
+        : PhosphorIconsRegular.warning,
+    dwell: Duration(seconds: summary.warnings.isEmpty ? 6 : 12),
+  );
   // A restore can rewrite any collection, so nothing on screen can be assumed
   // still current: the data first, so the pages remounted next read it fresh.
   invalidateAllDataProvidersIn(container);
   restoreGeneration.value++;
-  done.complete();
-  final restored = summary.restoredTotal;
-  messenger.showSnackBar(
-    SnackBar(
-      content: Text(
-        [
-          restored == 0 && !summary.settingsRestored
-              ? 'Backup restored — everything in it was already up to date.'
-              : 'Backup restored: $restored record(s) restored, '
-                    '${summary.skipped} already up to date. Undo it from '
-                    'Automatic backups → Before restore.',
-          if (summary.leftErased > 0)
-            '${summary.leftErased} item(s) deleted forever since the backup '
-                'were left deleted.',
-          ...summary.warnings,
-        ].join('\n'),
-      ),
-      duration: Duration(seconds: summary.warnings.isEmpty ? 6 : 12),
-    ),
-  );
 }
 
 /// How long each open editor gets to save before the snapshot, as when the
 /// window closes.
 const _flushDeadline = Duration(seconds: 3);
 
-/// Shown for the length of a restore, and closes itself when [done] completes.
-class _RestoringDialog extends StatefulWidget {
-  const _RestoringDialog({required this.done});
+/// Holds the pointer off the app for the length of a restore, and closes
+/// itself when [done] completes.
+class _RestoringBarrier extends StatefulWidget {
+  const _RestoringBarrier({required this.done});
 
   final Future<void> done;
 
   @override
-  State<_RestoringDialog> createState() => _RestoringDialogState();
+  State<_RestoringBarrier> createState() => _RestoringBarrierState();
 }
 
-class _RestoringDialogState extends State<_RestoringDialog> {
+class _RestoringBarrierState extends State<_RestoringBarrier> {
   @override
   void initState() {
     super.initState();
@@ -138,18 +157,7 @@ class _RestoringDialogState extends State<_RestoringDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => const AlertDialog(
-    content: Row(
-      children: [
-        SizedBox.square(
-          dimension: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-        SizedBox(width: 16),
-        Expanded(child: Text('Saving a snapshot, then restoring…')),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 enum _BackupAction { restore, saveCopy }
@@ -201,7 +209,7 @@ class _BackupListDialogState extends ConsumerState<_BackupListDialog> {
   }
 
   Future<void> _saveCopy(BackupFileEntry entry) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final overlay = Overlay.of(context, rootOverlay: true);
     try {
       final bytes = await entry.file.readAsBytes();
       // Android writes [bytes] itself; the desktop pickers only return a path.
@@ -214,9 +222,19 @@ class _BackupListDialogState extends ConsumerState<_BackupListDialog> {
       );
       if (target == null) return;
       if (!isAndroid) await entry.file.copy(target);
-      messenger.showSnackBar(SnackBar(content: Text('Saved to: $target')));
+      showVoyagerToastIn(
+        overlay,
+        message: 'Saved to: $target',
+        icon: PhosphorIconsRegular.check,
+        dwell: const Duration(seconds: 5),
+      );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      showVoyagerToastIn(
+        overlay,
+        message: 'Save failed: $e',
+        icon: PhosphorIconsRegular.warning,
+        dwell: const Duration(seconds: 5),
+      );
     }
   }
 

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
@@ -29,6 +30,59 @@ Future<BuildContext> pumpHost(WidgetTester tester, {ThemeData? theme}) async {
 }
 
 void main() {
+  bool hitsText(WidgetTester tester, Finder text) {
+    final target = tester.renderObject(text);
+    return tester
+        // Its first line, which is on screen even when the rest has to scroll.
+        .hitTestOnBinding(tester.getTopLeft(text) + const Offset(4, 4))
+        .path
+        .any((entry) => entry.target == target);
+  }
+
+  testWidgets('a toast shows every line of a long result, and one that fits '
+      'stays click-through', (tester) async {
+    final ctx = await pumpHost(tester);
+    const message = 'one\ntwo\nthree\nfour\nfive';
+
+    showVoyagerToast(ctx, message: message, icon: PhosphorIconsRegular.warning);
+    await tester.pumpAndSettle();
+    final text = find.text(message);
+    expect(tester.renderObject<RenderParagraph>(text).didExceedMaxLines, false);
+    final scroller = find.ancestor(
+      of: text,
+      matching: find.byType(SingleChildScrollView),
+    );
+    expect(tester.getSize(scroller).height, tester.getSize(text).height);
+    // Nothing to press and nothing to scroll: a click meant for what is under
+    // the card goes through.
+    expect(hitsText(tester, text), isFalse);
+  });
+
+  testWidgets('a toast scrolls past eight lines, and then takes the pointer', (
+    tester,
+  ) async {
+    final ctx = await pumpHost(tester);
+    final message = [for (var i = 1; i <= 30; i++) 'line $i'].join('\n');
+
+    showVoyagerToast(ctx, message: message, icon: PhosphorIconsRegular.warning);
+    await tester.pumpAndSettle();
+
+    final text = find.text(message);
+    final lineHeight = tester.getSize(text).height / 30;
+    final scroller = find.ancestor(
+      of: text,
+      matching: find.byType(SingleChildScrollView),
+    );
+    expect(tester.getSize(scroller).height, closeTo(lineHeight * 8, 0.5));
+
+    // The card takes the pointer, so the overflow can be scrolled to.
+    expect(hitsText(tester, text), isTrue);
+    final before = tester.getTopLeft(text).dy;
+    await tester.drag(scroller, const Offset(0, -200));
+    await tester.pump();
+    expect(tester.getTopLeft(text).dy, lessThan(before));
+  });
+
   testWidgets('a working toast becomes its own result in the same card', (
     tester,
   ) async {

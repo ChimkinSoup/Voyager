@@ -126,21 +126,16 @@ void main() {
     service.gate.complete();
 
     final shown = <String?>{};
-    // Long enough for the queued snackbar to follow the one showing now.
-    for (var i = 0; i < 100; i++) {
+    for (var i = 0; i < 20; i++) {
       await tester.pump(const Duration(milliseconds: 100));
       shown.addAll([
-        for (final text in tester.widgetList<Text>(
-          find.descendant(
-            of: find.byType(SnackBar),
-            matching: find.byType(Text),
-          ),
-        ))
+        for (final text in tester.widgetList<Text>(find.byType(Text)))
           text.data,
       ]);
     }
     expect(shown, contains(startsWith('Backup restored: 3 record(s)')));
     expect(shown, isNot(contains(startsWith('Restore failed'))));
+    expect(find.byType(SnackBar), findsNothing);
     expect(find.text('Saving a snapshot, then restoring…'), findsNothing);
     expect(PendingFlushRegistry.instance.restoring, isFalse);
     expect(restoreGeneration.value, generation + 1, reason: 'pages remount');

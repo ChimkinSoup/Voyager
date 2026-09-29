@@ -7,6 +7,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/dev/dev_backup_failure_tile.dart';
 import 'package:voyager/features/dev/dev_cache_status_tile.dart';
@@ -76,6 +77,20 @@ class DevPage extends ConsumerWidget {
             'Generate a randomized test deck with simple/complex LaTeX, long text, short text, and SRS states',
           ),
           onTap: () => populateDebugStudyDeck(context, ref),
+        ),
+        ListTile(
+          leading: const Icon(PhosphorIconsRegular.chatText),
+          title: const Text('Show a 10-line toast'),
+          subtitle: const Text(
+            'Longer than the 8 lines a toast shows, so it should scroll and '
+            'take the pointer',
+          ),
+          onTap: () => showVoyagerToast(
+            context,
+            message: [for (var i = 1; i <= 10; i++) 'Line $i'].join('\n'),
+            icon: PhosphorIconsRegular.info,
+            dwell: const Duration(seconds: 8),
+          ),
         ),
         ListTile(
           title: const Text('Device ID'),

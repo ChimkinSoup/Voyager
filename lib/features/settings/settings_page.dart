@@ -838,6 +838,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                         ),
                         leading: const Icon(PhosphorIconsRegular.uploadSimple),
                         onTap: () async {
+                          // Resolved before the first await: the restore
+                          // remounts this page, and a failure has to be
+                          // reported past that.
+                          final overlay = Overlay.of(
+                            context,
+                            rootOverlay: true,
+                          );
                           try {
                             final result = await FilePicker.platform.pickFiles(
                               type: FileType.custom,
@@ -855,11 +862,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                               File(result.files.single.path!),
                             );
                           } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Import failed: $e')),
-                              );
-                            }
+                            showVoyagerToastIn(
+                              overlay,
+                              message: 'Import failed: $e',
+                              icon: PhosphorIconsRegular.warning,
+                              dwell: const Duration(seconds: 5),
+                            );
                           }
                         },
                       ),

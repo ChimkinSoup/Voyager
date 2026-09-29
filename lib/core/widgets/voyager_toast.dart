@@ -161,6 +161,11 @@ class VoyagerToast {
 /// not one to take away — and restarts with [linger] once they move off, which
 /// is deliberately long enough to finish the sentence they were on rather than
 /// a token grace period.
+///
+/// A message longer than [_kVisibleLines] scrolls rather than being cut off —
+/// an error's reason, a file path and a restore's summary all have to be
+/// readable in full. Only then does a toast without actions take the pointer,
+/// since the overflow has to be reachable.
 VoyagerToast showVoyagerToast(
   BuildContext context, {
   required String message,
@@ -339,6 +344,11 @@ final _stacks = Expando<_ToastStack>('toast stack');
 /// longer than reading the card takes and still terminates on its own.
 const _kMaxHoverHold = Duration(seconds: 60);
 
+/// How many lines a toast shows before it scrolls. Tall enough for a
+/// restore's summary with a warning or two, short enough that an error dump
+/// cannot run down the whole window.
+const _kVisibleLines = 8;
+
 /// The label color for a toast's action buttons.
 ///
 /// The buttons are tinted in the accent, so the accent cannot also be the
@@ -405,6 +415,9 @@ class _VoyagerToastState extends State<_VoyagerToast>
   Timer? _dwellTimer;
   var _hovering = false;
   var _leaving = false;
+  // Whether the message runs past [_kVisibleLines] and has to scroll.
+  var _overflows = false;
+  late double _messageMaxHeight;
 
   @override
   void initState() {
@@ -501,10 +514,47 @@ class _VoyagerToastState extends State<_VoyagerToast>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Measured rather than guessed from the font size, so the text scale and
+    // the style's own line height are both accounted for. Here rather than in
+    // `build`, which the stack reruns for every card on any change to it.
+    final lines = TextPainter(
+      text: TextSpan(
+        text: List.filled(_kVisibleLines, 'x').join('\n'),
+        style: Theme.of(context).textTheme.labelLarge,
+      ),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    _messageMaxHeight = lines.height;
+    lines.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final reduced = VoyagerMotion.reduced(context);
     final interactive = widget.actions.isNotEmpty;
+    // A message that scrolls has to be reachable, and hovering it holds the
+    // dwell while the user reads.
+    final takesPointer = interactive || _overflows;
+
+    // Room for a file path or an error's reason. Past the limit it scrolls
+    // rather than cutting the reason off.
+    final message = ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: _messageMaxHeight),
+      child: NotificationListener<ScrollMetricsNotification>(
+        onNotification: (n) {
+          final overflows = n.metrics.maxScrollExtent > 0;
+          if (overflows != _overflows) setState(() => _overflows = overflows);
+          return true;
+        },
+        child: SingleChildScrollView(
+          child: Text(widget.message, style: theme.textTheme.labelLarge),
+        ),
+      ),
+    );
 
     Widget card = Material(
       color: theme.colorScheme.surfaceContainerHighest,
@@ -530,16 +580,7 @@ class _VoyagerToastState extends State<_VoyagerToast>
                     ),
             ),
             const SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                widget.message,
-                style: theme.textTheme.labelLarge,
-                // Room for a file path or an error's reason; the ellipsis is
-                // only a backstop.
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+            Flexible(child: message),
             if (widget.count > 1) ...[
               const SizedBox(width: 8),
               Text(
@@ -584,13 +625,11 @@ class _VoyagerToastState extends State<_VoyagerToast>
       ),
     );
 
-    if (interactive) {
-      card = MouseRegion(
-        onEnter: (_) => _handleHover(true),
-        onExit: (_) => _handleHover(false),
-        child: card,
-      );
-    }
+    card = MouseRegion(
+      onEnter: (_) => _handleHover(true),
+      onExit: (_) => _handleHover(false),
+      child: card,
+    );
 
     Widget body = Center(
       child: ConstrainedBox(
@@ -618,8 +657,10 @@ class _VoyagerToastState extends State<_VoyagerToast>
       ),
     );
 
-    // A toast with nothing to press stays out of the way entirely.
-    if (!interactive) body = IgnorePointer(child: body);
+    // A toast with nothing to press or scroll stays out of the way entirely.
+    // Always in the tree, only toggled, so a toast that starts to overflow
+    // keeps its scroll view rather than remounting it.
+    body = IgnorePointer(ignoring: !takesPointer, child: body);
 
     // The card collapses as it leaves rather than vanishing and dropping the
     // stack a notch. The gap rides inside the collapse, so a card taken from
