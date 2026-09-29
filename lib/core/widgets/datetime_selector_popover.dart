@@ -245,6 +245,24 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
 
   void _submit() {
     if (!mounted) return;
+    // Typing only moves the time while the text parses, so a half-typed or
+    // invalid entry would otherwise save the last value that did. Read the
+    // text as it stands: an empty optional time means no time, and anything
+    // unreadable keeps the picker open with the time it would have saved.
+    if (_timeFocus.hasFocus) {
+      final text = _timeController.text.trim();
+      if (text.isEmpty && widget.optionalTime) {
+        _timeSelected = false;
+      } else {
+        final parsed = parseTimeQuery(text, _currentDateTime);
+        if (parsed == null) {
+          _timeController.text = _formatTime(_currentDateTime);
+          selectAllTimeText(_timeController);
+          return;
+        }
+        _currentDateTime = parsed;
+      }
+    }
     setState(() => _canPop = true);
     if (widget.optionalTime && !_timeSelected) {
       Navigator.of(context).maybePop(
@@ -306,13 +324,13 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
       },
       child: Focus(
         focusNode: _mainFocus,
+        // Enter (and Ctrl+Enter) applies the picked date and time and closes,
+        // from the time field too — [_submit] reads the field's text first.
         onKeyEvent: (node, event) {
           if (event is KeyDownEvent &&
               event.logicalKey == LogicalKeyboardKey.enter) {
-            if (!_timeFocus.hasFocus) {
-              _submit();
-              return KeyEventResult.handled;
-            }
+            _submit();
+            return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
         },
@@ -417,9 +435,7 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
                                       }
                                     },
                                     selectAllPending: () => _selectAllNextTap,
-                                    onSubmitted: (_) {
-                                      _mainFocus.requestFocus();
-                                    },
+                                    onSubmitted: (_) => _submit(),
                                   ),
                                 ),
                               ),

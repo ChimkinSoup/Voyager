@@ -604,6 +604,17 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
 
   void _submit() {
     if (!mounted) return;
+    // Typing only moves the time while the text parses; an unreadable entry
+    // keeps the picker open, showing the time it would have saved.
+    if (_timeFocus.hasFocus) {
+      final parsed = parseTimeQuery(_timeController.text, _timeDt);
+      if (parsed == null) {
+        _timeController.text = _formatTime(_timeDt);
+        selectAllTimeText(_timeController);
+        return;
+      }
+      _timeDt = parsed;
+    }
     setState(() => _canPop = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) Navigator.of(context).pop(_timeDt);
