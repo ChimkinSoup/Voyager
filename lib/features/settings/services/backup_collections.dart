@@ -3,6 +3,8 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/job_models.dart';
+import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/study_deck_graph.dart';
 
@@ -36,6 +38,7 @@ class BackupCollection {
     required this.name,
     required this.read,
     required this.restore,
+    this.stampForImport,
     this.prepare,
     this.afterRestore,
   });
@@ -50,6 +53,16 @@ class BackupCollection {
   /// Writes [data] to the local database under [id], and returns the model it
   /// wrote so the caller can hand it to the sync layer.
   final Future<Object> Function(String id, Map<String, dynamic> data) restore;
+
+  /// Rewrites a backup import's [restore] payload so it wins field by field,
+  /// for a collection merged that way across devices. Only the import calls
+  /// it: the trash and colour replacement also go through [restore], but they
+  /// are not new edits of every field.
+  final Future<Map<String, dynamic>> Function(
+    String id,
+    Map<String, dynamic> data,
+  )?
+  stampForImport;
 
   /// Sees every record the backup holds for this collection before any of
   /// them is restored, for a [restore] that has to check one record against
@@ -86,6 +99,29 @@ bool backupContentEquals(Map<String, dynamic> a, Map<String, dynamic> b) {
       if (!_metadataFields.contains(entry.key)) entry.key: entry.value,
   };
   return const DeepCollectionEquality().equals(content(a), content(b));
+}
+
+/// [data] for a collection merged field by field across devices (ranking
+/// entries and units, job applications), stamped as though every one of
+/// [keys] were edited now.
+///
+/// A restore is a new edit, and has to win field by field as it does
+/// document by document. Left alone, the payload carries the backup's old
+/// stamps — or none, once the import has bumped its version past
+/// `fieldStampsVersion` — so any newer stamp on another device, or in
+/// Firestore, outranks it. [keys] includes the fields the local row has and
+/// the backup does not, so a field value the backup lacks is written as an
+/// explicit null: Firestore's merge would otherwise keep the old value.
+Map<String, dynamic> _stampedAsEditedNow(
+  Map<String, dynamic> data,
+  Set<String> keys,
+) {
+  final now = utcNow().toIso8601String();
+  return {
+    ...data,
+    'fieldUpdatedAt': {for (final key in keys) key: now},
+    'fieldStampsVersion': data['version'],
+  };
 }
 
 /// Every synced collection, ordered so that restoring the list front to back
@@ -996,6 +1032,15 @@ List<BackupCollection> buildBackupCollections({
             data: jobApplicationToFirestore(application),
           ),
       ],
+      stampForImport: (id, data) async {
+        final local = await jobRepository.getApplication(id);
+        return _stampedAsEditedNow(data, {
+          ...jobApplicationStampValues(
+            mergeJobApplicationFromRemote(data, id),
+          ).keys,
+          ...?local?.fieldUpdatedAt.keys,
+        });
+      },
       restore: (id, data) async {
         final application = mergeJobApplicationFromRemote(data, id);
         await jobRepository.upsertApplication(
@@ -1049,6 +1094,16 @@ List<BackupCollection> buildBackupCollections({
         for (final parent in await rankingRepository.getAllParents())
           BackupRecord(id: parent.id, data: rankingParentToFirestore(parent)),
       ],
+      stampForImport: (id, data) async {
+        final local = await rankingRepository.getParent(id);
+        return _stampedAsEditedNow(data, {
+          ...rankingParentStampValues(
+            mergeRankingParentFromRemote(data, id),
+          ).keys,
+          if (local != null) ...rankingParentStampValues(local).keys,
+          ...?local?.fieldUpdatedAt.keys,
+        });
+      },
       restore: (id, data) async {
         final parent = mergeRankingParentFromRemote(data, id);
         await rankingRepository.upsertParent(
@@ -1064,6 +1119,16 @@ List<BackupCollection> buildBackupCollections({
         for (final child in await rankingRepository.getAllChildren())
           BackupRecord(id: child.id, data: rankingChildToFirestore(child)),
       ],
+      stampForImport: (id, data) async {
+        final local = await rankingRepository.getChild(id);
+        return _stampedAsEditedNow(data, {
+          ...rankingChildStampValues(
+            mergeRankingChildFromRemote(data, id),
+          ).keys,
+          if (local != null) ...rankingChildStampValues(local).keys,
+          ...?local?.fieldUpdatedAt.keys,
+        });
+      },
       restore: (id, data) async {
         final child = mergeRankingChildFromRemote(data, id);
         await rankingRepository.upsertChild(child, recordLocalActivity: false);

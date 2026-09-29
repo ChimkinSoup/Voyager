@@ -415,6 +415,8 @@ class AutoBackupService extends ChangeNotifier {
       if (now.difference(entry.capturedAt) <= _snapshotLifetime) continue;
       try {
         await entry.file.delete();
+        final created = _createdFileFor(entry.file);
+        if (await created.exists()) await created.delete();
       } on FileSystemException {
         // Held open elsewhere; tried again within the hour.
       }
@@ -458,13 +460,27 @@ class AutoBackupService extends ChangeNotifier {
   // Restore
 
   /// Restores [backup] behind a verified snapshot of the current state
-  /// (§7.2). If [backup] is damaged, or the snapshot cannot be taken, nothing
-  /// is touched and this throws.
+  /// (§7.2). Throws only when nothing was changed: [backup] is damaged, the
+  /// snapshot cannot be taken, or the import rolled back. Anything that goes
+  /// wrong after the import commits is a warning on the summary instead.
+  ///
+  /// The records the restore creates are listed beside the snapshot, so
+  /// restoring the snapshot deletes them again; restoring any file with such
+  /// a list does that.
   Future<BackupImportSummary> restore(File backup) async {
     if (_restoring) throw _BackupFailure('A restore is already running');
     _restoring = true;
     try {
       await verifyBackupFile(backup);
+      Map<String, List<String>> deleteCreated = const {};
+      String? createdWarning;
+      try {
+        deleteCreated = await _readCreated(backup);
+      } catch (error) {
+        createdWarning =
+            'Records the earlier restore added could not be read, so they '
+            'were left in place: $error';
+      }
       final dir = await backupsDirectory();
       // No await between the wait ending and [_running] being claimed, so a
       // daily run cannot slip in and export alongside the snapshot.
@@ -476,16 +492,63 @@ class AutoBackupService extends ChangeNotifier {
         '$preRestorePrefix${backupTimestamp(_now())}.zip',
       );
       _running = snapshot.then<void>((_) {}, onError: (_) {});
+      final File snapshotFile;
       try {
-        await snapshot;
+        snapshotFile = await snapshot;
       } finally {
         _running = null;
       }
-      return await _importer().importFromZip(backup);
+      var summary = await _importer().importFromZip(
+        backup,
+        deleteCreated: deleteCreated,
+      );
+      if (createdWarning != null) summary = summary.withWarning(createdWarning);
+      if (summary.created.isNotEmpty) {
+        try {
+          await _writeCreated(snapshotFile, summary.created);
+        } catch (error) {
+          final count = summary.created.values.fold(
+            0,
+            (n, ids) => n + ids.length,
+          );
+          summary = summary.withWarning(
+            'Undoing this restore will not remove the $count record(s) it '
+            'added: ${_reason(error)}',
+          );
+        }
+      }
+      return summary;
     } finally {
       _restoring = false;
-      await refreshStatus();
+      // Display only; must not turn a finished restore into a failure.
+      await refreshStatus().then((_) {}, onError: (_) {});
     }
+  }
+
+  /// `voyager_prerestore_<stamp>.created.json` beside its snapshot. Not a
+  /// name [listBackups] matches, so it is never listed or pruned on its own.
+  static File _createdFileFor(File snapshot) =>
+      File('${p.withoutExtension(snapshot.path)}.created.json');
+
+  Future<Map<String, List<String>>> _readCreated(File backup) async {
+    final file = _createdFileFor(backup);
+    if (!await file.exists()) return const {};
+    final decoded = jsonDecode(await file.readAsString()) as Map;
+    return {
+      for (final entry in decoded.entries)
+        entry.key as String: (entry.value as List).cast<String>(),
+    };
+  }
+
+  /// Written beside the file and renamed over it, like `state.json`.
+  Future<void> _writeCreated(
+    File snapshot,
+    Map<String, List<String>> created,
+  ) async {
+    final path = _createdFileFor(snapshot).path;
+    final partial = File('$path.partial');
+    await partial.writeAsString(jsonEncode(created), flush: true);
+    await partial.rename(path);
   }
 
   // ---------------------------------------------------------------------------

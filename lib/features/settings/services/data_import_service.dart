@@ -5,8 +5,10 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
+import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
+import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/services/media_file_store.dart';
 import 'package:voyager/domain/models/media_models.dart';
@@ -54,7 +56,10 @@ class BackupImportSummary {
     required this.restoredByCollection,
     required this.skipped,
     required this.settingsRestored,
+    this.leftErased = 0,
     this.mediaFilesRestored = 0,
+    this.created = const {},
+    this.warnings = const [],
   });
 
   /// Records written, per collection. Collections that needed no work are
@@ -66,8 +71,32 @@ class BackupImportSummary {
 
   final bool settingsRestored;
 
+  /// Records the backup holds that were deleted forever here since, and so
+  /// were left deleted.
+  final int leftErased;
+
   /// Image files copied out of the archive into the local cache.
   final int mediaFilesRestored;
+
+  /// Ids of the live records, per collection, that this device did not hold
+  /// at all before the restore — what undoing it has to delete, because the
+  /// pre-restore snapshot cannot say "this was not here" (AUTO_BACKUP_HLD.md
+  /// §7.2).
+  final Map<String, List<String>> created;
+
+  /// Problems after the restore committed. The data is restored either way;
+  /// these say what did not fully land.
+  final List<String> warnings;
+
+  BackupImportSummary withWarning(String warning) => BackupImportSummary(
+    restoredByCollection: restoredByCollection,
+    skipped: skipped,
+    settingsRestored: settingsRestored,
+    leftErased: leftErased,
+    mediaFilesRestored: mediaFilesRestored,
+    created: created,
+    warnings: [...warnings, warning],
+  );
 
   int get restoredTotal =>
       restoredByCollection.values.fold(0, (sum, count) => sum + count);
@@ -102,7 +131,15 @@ class DataImportService {
   final MediaRepository? _mediaRepository;
   final MediaFileStore? _mediaFileStore;
 
-  Future<BackupImportSummary> importFromZip(File zipFile) async {
+  /// [deleteCreated] lists, per collection, records an earlier restore
+  /// created (its [BackupImportSummary.created]). Restoring the snapshot taken
+  /// before that restore passes them, and each one still live — and not in
+  /// this backup — is tombstoned, since the snapshot cannot delete what it
+  /// never held.
+  Future<BackupImportSummary> importFromZip(
+    File zipFile, {
+    Map<String, List<String>> deleteCreated = const {},
+  }) async {
     final zipBytes = await zipFile.readAsBytes();
     final parsed = await compute(extractBackupIsolate, zipBytes);
 
@@ -116,7 +153,9 @@ class DataImportService {
     // Uploaded with them but not counted as restored — nothing in the backup
     // asked for these.
     final followUps = <String, List<Object>>{};
+    final created = <String, List<String>>{};
     var skipped = 0;
+    var leftErased = 0;
     AppSettings? restoredSettings;
 
     // One transaction for the whole restore: a backup half-applied because
@@ -149,9 +188,39 @@ class DataImportService {
             skipped++;
             continue;
           }
+          // Emptied by "Delete forever", which is final (TRASH_HLD.md §6.4):
+          // the trash's own restore refuses it too. Other devices keep the
+          // erase whatever version a copy carries, so writing one back here
+          // would only leave this device disagreeing with them.
+          if (localData != null && isErasedPayload(localData)) {
+            leftErased++;
+            continue;
+          }
+          final data = _withRestoredVersion(record.data, localData);
           final model = await collection.restore(
             record.id,
-            _withRestoredVersion(record.data, localData),
+            await collection.stampForImport?.call(record.id, data) ?? data,
+          );
+          (restored[collection.name] ??= []).add(model);
+          if (localData == null && _isLive(record.data)) {
+            (created[collection.name] ??= []).add(record.id);
+          }
+        }
+        final backupIds = {for (final record in records) record.id};
+        for (final id in deleteCreated[collection.name] ?? const <String>[]) {
+          final localData = local[id];
+          if (localData == null ||
+              backupIds.contains(id) ||
+              !_isLive(localData)) {
+            continue;
+          }
+          final data = {
+            ..._withRestoredVersion(localData, localData),
+            'deletedAt': utcNow().toIso8601String(),
+          };
+          final model = await collection.restore(
+            id,
+            await collection.stampForImport?.call(id, data) ?? data,
           );
           (restored[collection.name] ??= []).add(model);
         }
@@ -189,6 +258,7 @@ class DataImportService {
             recordLocalActivity: false,
           );
           (restored[FirestoreCollections.snippets] ??= []).add(record);
+          (created[FirestoreCollections.snippets] ??= []).add(record.item.id);
         }
         for (final record in legacy.jobExperienceSnippets) {
           await _settingsRepository.upsertJobExperienceSnippetRecord(
@@ -198,6 +268,9 @@ class DataImportService {
           (restored[FirestoreCollections.jobExperienceSnippets] ??= []).add(
             record,
           );
+          (created[FirestoreCollections.jobExperienceSnippets] ??= []).add(
+            record.item.id,
+          );
         }
       }
     });
@@ -206,7 +279,17 @@ class DataImportService {
     // asset rows they belong to are committed by now, so a file landing on
     // disk always has a row to describe it, and writing megabytes of images
     // inside a write transaction would block every other write in the app.
-    final mediaFilesRestored = await _restoreMediaBlobs(backupBlobs);
+    //
+    // A failure here does not stop the uploads below: the records are already
+    // committed, and not announcing them would leave the other devices on the
+    // old data. An asset left `missing` downloads again if Storage has it.
+    final warnings = <String>[];
+    var mediaFilesRestored = 0;
+    try {
+      mediaFilesRestored = await _restoreMediaBlobs(backupBlobs);
+    } catch (error) {
+      warnings.add('Some images could not be saved to this device: $error');
+    }
 
     // Uploads run after the transaction commits — they are network calls, and
     // holding a write transaction open across them would block every other
@@ -229,10 +312,18 @@ class DataImportService {
         for (final entry in restored.entries) entry.key: entry.value.length,
       },
       skipped: skipped,
+      leftErased: leftErased,
       settingsRestored: settings != null,
       mediaFilesRestored: mediaFilesRestored,
+      created: created,
+      warnings: warnings,
     );
   }
+
+  /// A live record of a collection that can hold tombstones. Append-only
+  /// collections have no `deletedAt`, so an undo cannot remove their records.
+  bool _isLive(Map<String, dynamic> data) =>
+      data.containsKey('deletedAt') && data['deletedAt'] == null;
 
   /// Writes an archive's image bytes into the local cache and marks the
   /// assets they belong to as present.

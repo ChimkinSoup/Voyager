@@ -852,7 +852,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                             // Behind a pre-restore snapshot, like any other restore.
                             await confirmAndRestoreBackup(
                               context,
-                              ref,
                               File(result.files.single.path!),
                             );
                           } catch (e) {

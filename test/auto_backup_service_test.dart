@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
@@ -415,6 +416,103 @@ void main() {
         (await h.service.listBackups()).where((e) => e.isSnapshot),
         hasLength(2),
       );
+    });
+
+    test('undoing a restore deletes the records it brought back that this '
+        'device no longer had, and redoing brings them back', () async {
+      final h = await Harness.create();
+      final repo = DriftJournalRepository(h.db);
+      await h.service.runIfDue();
+      final backup = File(p.join(h.dir.path, h.autoFiles().single));
+
+      // After the backup: the entry's row is purged.
+      await repo.hardDeleteEntry('entry-1');
+
+      h.now = h.now.add(const Duration(hours: 1));
+      final restored = await h.service.restore(backup);
+      expect(restored.created[FirestoreCollections.journalEntries], [
+        'entry-1',
+      ]);
+      expect((await repo.getEntry('entry-1'))?.deletedAt, isNull);
+
+      final undo = (await h.service.listBackups()).firstWhere(
+        (e) => e.isSnapshot,
+      );
+      h.now = h.now.add(const Duration(hours: 1));
+      await h.service.restore(undo.file);
+      expect(
+        (await repo.getEntry('entry-1'))?.deletedAt,
+        isNotNull,
+        reason: 'the undo removes what the restore added',
+      );
+
+      // The undo's own snapshot is the redo.
+      final redo = (await h.service.listBackups()).firstWhere(
+        (e) => e.isSnapshot,
+      );
+      expect(redo.file.path, isNot(undo.file.path));
+      h.now = h.now.add(const Duration(hours: 1));
+      await h.service.restore(redo.file);
+      expect((await repo.getEntry('entry-1'))?.deletedAt, isNull);
+    });
+
+    test('a record deleted forever since the backup stays deleted', () async {
+      final h = await Harness.create();
+      final repo = DriftJournalRepository(h.db);
+      await h.service.runIfDue();
+      final backup = File(p.join(h.dir.path, h.autoFiles().single));
+
+      // As the trash's "Delete forever" leaves it (TRASH_HLD.md §6.4).
+      final entry = (await repo.getEntry('entry-1'))!;
+      await repo.upsertEntry(
+        entry.copyWith(
+          title: '',
+          body: '',
+          deletedAt: kErasedAt,
+          version: entry.version + kEraseVersionStep,
+        ),
+      );
+
+      h.now = h.now.add(const Duration(hours: 1));
+      final summary = await h.service.restore(backup);
+      expect(summary.leftErased, 1);
+      final after = (await repo.getEntry('entry-1'))!;
+      expect(isErasedAt(after.deletedAt), isTrue);
+      expect(after.body, isEmpty);
+    });
+
+    test('the list of added records expires with its snapshot', () async {
+      final h = await Harness.create();
+      await h.service.runIfDue();
+      await DriftJournalRepository(h.db).hardDeleteEntry('entry-1');
+      await h.service.restore(File(p.join(h.dir.path, h.autoFiles().single)));
+      expect(h.files().where((f) => f.endsWith('.created.json')), hasLength(1));
+
+      for (var day = 0; day < 8; day++) {
+        h.nextDay();
+        await h.service.runIfDue();
+      }
+      expect(h.files().where((f) => f.startsWith(preRestorePrefix)), isEmpty);
+    });
+
+    test('a failure after the import commits is a warning, not a '
+        'failure', () async {
+      final h = await Harness.create();
+      await h.service.runIfDue();
+      await DriftJournalRepository(h.db).hardDeleteEntry('entry-1');
+      final backup = File(p.join(h.dir.path, h.autoFiles().single));
+      h.now = h.now.add(const Duration(hours: 1));
+      // Where the list of added records goes, a directory is in the way.
+      Directory(
+        p.join(
+          h.dir.path,
+          '$preRestorePrefix${backupTimestamp(h.now)}.created.json.partial',
+        ),
+      ).createSync();
+
+      final summary = await h.service.restore(backup);
+      expect(summary.warnings.single, contains('will not remove'));
+      expect(await DriftJournalRepository(h.db).getEntry('entry-1'), isNotNull);
     });
 
     test('a failed snapshot blocks the restore', () async {

@@ -150,6 +150,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   var _statisticsOpen = false;
   VoidCallback? _removeBackInterceptor;
   late final Future<void> Function() _lifecycleFlushCallback;
+  final _restoreFence = RestoreFence();
 
   @override
   void initState() {
@@ -218,10 +219,15 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     super.dispose();
   }
 
+  // A remount after a restore unfocuses the old instance, whose focus-loss
+  // flush would write its pre-restore text — see [RestoreFence].
   DreamWriteCoordinator? _coordinatorOrNull() =>
-      mounted ? ref.read(dreamWriteCoordinatorProvider) : null;
-  DreamRepository? _repoOrNull() =>
-      mounted ? ref.read(dreamRepositoryProvider) : null;
+      mounted && !_restoreFence.isStale
+      ? ref.read(dreamWriteCoordinatorProvider)
+      : null;
+  DreamRepository? _repoOrNull() => mounted && !_restoreFence.isStale
+      ? ref.read(dreamRepositoryProvider)
+      : null;
   RemoteSyncService? _syncOrNull() =>
       mounted ? ref.read(remoteSyncServiceProvider) : null;
 

@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/motion/modal_scrim_observer.dart';
+import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/widgets/desktop_window_frame.dart';
 import 'package:voyager/features/auth/login_page.dart';
 import 'package:voyager/features/shell/app_shell.dart';
@@ -70,7 +72,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                   // for [_preloadedShellPaths], a few seconds on for the rest.
                   preload: true,
                   routes: [
-                    GoRoute(path: dest.path, builder: (_, _) => dest.page),
+                    GoRoute(
+                      path: dest.path,
+                      builder: (_, _) => _RemountOnRestore(child: dest.page),
+                    ),
                   ],
                 ),
             ],
@@ -95,3 +100,22 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
   );
 });
+
+/// Rebuilds [child] from scratch after a backup restore.
+///
+/// The shell keeps every page mounted, and a page holds what it loaded —
+/// an open entry's text, a draft, a selection — for as long as it lives. After
+/// a restore that is the pre-restore state, and the page's next save wrote it
+/// back over the restore. A fresh instance reads the restored rows instead.
+class _RemountOnRestore extends StatelessWidget {
+  const _RemountOnRestore({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+    valueListenable: restoreGeneration,
+    builder: (_, generation, _) =>
+        KeyedSubtree(key: ValueKey(generation), child: child),
+  );
+}

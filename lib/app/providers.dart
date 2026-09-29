@@ -1814,6 +1814,19 @@ void invalidateAllDataProvidersFrom(WidgetRef ref) {
   }
 }
 
+/// [invalidateAllDataProvidersFrom] for work that can outlive the widget that
+/// started it, whose `ref` is unusable once it is disposed.
+void invalidateAllDataProvidersIn(ProviderContainer container) {
+  for (final provider in [
+    ..._journalEntryProviders,
+    ..._primaryDataProviders,
+    ..._workoutDataProviders,
+    ..._secondaryDataProviders,
+  ]) {
+    container.invalidate(provider);
+  }
+}
+
 /// Total published LeetCode problem counts per difficulty, used as the
 /// progress rings' denominators. Not persisted locally — on fetch failure
 /// the ring UI degrades gracefully rather than blocking the page.

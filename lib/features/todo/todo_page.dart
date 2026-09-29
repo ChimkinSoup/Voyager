@@ -353,6 +353,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
   // Captured up front so pending writes can still be flushed from dispose(),
   // where `ref` is already off limits.
   late final ProviderContainer _container;
+  final _restoreFence = RestoreFence();
   // The active list computed by the last successful build. Row actions read
   // siblings from here instead of closing over the `active` list at row
   // construction time — a closure would go stale once cached row widgets
@@ -1253,6 +1254,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
 
   Future<void> _applyRecurringRollForward(String taskId) async {
     _rollForwardTimers.remove(taskId);
+    // A tick from before a restore; the restored row is what stands now.
+    if (_restoreFence.isStale) return;
     // Through [completeTodoTask], which is the same write the calendar's task
     // panel and the notification inbox make: a repeat ticked anywhere comes
     // back at its next due date. Read through the container, not `ref`: a
@@ -1325,6 +1328,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
     if (_pendingCompletionSaves.isEmpty) return;
     final pending = _pendingCompletionSaves.values.toList();
     _pendingCompletionSaves.clear();
+    // Toggles made on rows read before a restore; see [RestoreFence].
+    if (_restoreFence.isStale) return;
 
     final callStart = DevFlags.verboseSync ? DateTime.now() : null;
     final touchedLists = await _writeCompletionBatch(pending);

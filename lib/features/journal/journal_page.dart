@@ -172,6 +172,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   VoidCallback? _removeBackInterceptor;
 
   late final Future<void> Function() _lifecycleFlushCallback;
+  final _restoreFence = RestoreFence();
 
   @override
   void initState() {
@@ -505,6 +506,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   JournalWriteCoordinator? _writeCoordinatorOrNull() {
+    // Every save this page makes on its own comes through here, the dispose
+    // flush included.
+    if (_restoreFence.isStale) return null;
     if (_journalWriteCoordinator != null) return _journalWriteCoordinator;
     if (!mounted) return null;
     return ref.read(journalWriteCoordinatorProvider);

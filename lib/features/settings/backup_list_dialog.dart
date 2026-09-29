@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -8,11 +9,13 @@ import 'package:path/path.dart' as p;
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/platform/platform_info.dart';
+import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/features/settings/services/auto_backup_service.dart';
+import 'package:voyager/features/settings/services/data_import_service.dart';
 
 /// Every automatic backup and pre-restore snapshot on this device —
 /// AUTO_BACKUP_HLD.md §7.1.
@@ -25,12 +28,13 @@ Future<void> showBackupListDialog(BuildContext context) {
 
 /// Confirms, then restores [file] behind a pre-restore snapshot (§7.2), and
 /// reports the outcome. Shared by the backup list and Import Backup.
-Future<void> confirmAndRestoreBackup(
-  BuildContext context,
-  WidgetRef ref,
-  File file,
-) async {
+///
+/// Works through the container rather than a widget's `ref`: a restore
+/// remounts every shell page, the one that started it included, and a
+/// disposed `ref` can't be used.
+Future<void> confirmAndRestoreBackup(BuildContext context, File file) async {
   final messenger = ScaffoldMessenger.of(context);
+  final container = ProviderScope.containerOf(context, listen: false);
   final DateTime? capturedAt;
   try {
     final manifest = await readBackupManifest(file);
@@ -53,34 +57,99 @@ Future<void> confirmAndRestoreBackup(
         'this.',
     confirmLabel: 'Restore',
   );
-  if (!confirmed) return;
+  if (!confirmed || !context.mounted) return;
 
-  messenger.showSnackBar(
-    const SnackBar(content: Text('Saving a snapshot, then restoring...')),
+  // Nothing can be typed while it runs: text entered after the snapshot would
+  // be in neither the snapshot nor the restored data.
+  final done = Completer<void>();
+  unawaited(
+    showVoyagerDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _RestoringDialog(done: done.future),
+    ),
   );
+  final flushes = PendingFlushRegistry.instance;
+  final BackupImportSummary summary;
   try {
-    final summary = await ref.read(autoBackupServiceProvider).restore(file);
-    // A restore can rewrite any collection, so nothing on screen can be
-    // assumed still current.
-    invalidateAllDataProvidersFrom(ref);
-    final restored = summary.restoredTotal;
+    // What the open editors hold belongs in the snapshot.
+    await flushes.flushAll(perCallbackDeadline: _flushDeadline);
+    flushes.restoring = true;
+    try {
+      summary = await container.read(autoBackupServiceProvider).restore(file);
+    } finally {
+      flushes.restoring = false;
+    }
+  } catch (e) {
+    done.complete();
+    // [AutoBackupService.restore] throws only when nothing was changed.
     messenger.showSnackBar(
-      SnackBar(
-        content: Text(
+      SnackBar(content: Text('Restore failed, nothing was changed: $e')),
+    );
+    return;
+  }
+  // A restore can rewrite any collection, so nothing on screen can be assumed
+  // still current: the data first, so the pages remounted next read it fresh.
+  invalidateAllDataProvidersIn(container);
+  restoreGeneration.value++;
+  done.complete();
+  final restored = summary.restoredTotal;
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(
+        [
           restored == 0 && !summary.settingsRestored
               ? 'Backup restored — everything in it was already up to date.'
               : 'Backup restored: $restored record(s) restored, '
                     '${summary.skipped} already up to date. Undo it from '
                     'Automatic backups → Before restore.',
-        ),
-        duration: const Duration(seconds: 6),
+          if (summary.leftErased > 0)
+            '${summary.leftErased} item(s) deleted forever since the backup '
+                'were left deleted.',
+          ...summary.warnings,
+        ].join('\n'),
       ),
-    );
-  } catch (e) {
-    messenger.showSnackBar(
-      SnackBar(content: Text('Restore failed, nothing was changed: $e')),
-    );
+      duration: Duration(seconds: summary.warnings.isEmpty ? 6 : 12),
+    ),
+  );
+}
+
+/// How long each open editor gets to save before the snapshot, as when the
+/// window closes.
+const _flushDeadline = Duration(seconds: 3);
+
+/// Shown for the length of a restore, and closes itself when [done] completes.
+class _RestoringDialog extends StatefulWidget {
+  const _RestoringDialog({required this.done});
+
+  final Future<void> done;
+
+  @override
+  State<_RestoringDialog> createState() => _RestoringDialogState();
+}
+
+class _RestoringDialogState extends State<_RestoringDialog> {
+  @override
+  void initState() {
+    super.initState();
+    widget.done.then((_) {
+      if (mounted) Navigator.of(context).pop();
+    });
   }
+
+  @override
+  Widget build(BuildContext context) => const AlertDialog(
+    content: Row(
+      children: [
+        SizedBox.square(
+          dimension: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+        SizedBox(width: 16),
+        Expanded(child: Text('Saving a snapshot, then restoring…')),
+      ],
+    ),
+  );
 }
 
 enum _BackupAction { restore, saveCopy }
@@ -152,7 +221,7 @@ class _BackupListDialogState extends ConsumerState<_BackupListDialog> {
   }
 
   Future<void> _restore(BackupFileEntry entry) async {
-    await confirmAndRestoreBackup(context, ref, entry.file);
+    await confirmAndRestoreBackup(context, entry.file);
     if (mounted) await _reload();
   }
 

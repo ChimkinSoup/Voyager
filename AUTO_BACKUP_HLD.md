@@ -142,7 +142,7 @@ Before writing, check free space against about 2× the previous backup's size. I
 
 Settings → Backup & Restore → **Automatic backups** lists each file with its age label ("Yesterday", "3 days ago", "Weekly · 9 days ago", "Monthly · 34 days ago"), capture time, size and record counts from the manifest. Actions:
 
-- **Restore…** Confirm dialog, then checksum check, then pre-restore snapshot, then `importFromZip`, then `invalidateAllDataProvidersFrom(ref)`.
+- **Restore…** Confirm dialog, then checksum check, then pre-restore snapshot, then `importFromZip`, then `invalidateAllDataProvidersIn(container)`. The provider container, not the dialog's `ref`: the list can be closed while a restore runs, and a disposed `ref` would turn a finished restore into a reported failure.
 - **Save a copy…** Copies the file to a user-chosen location. This is how a backup leaves the device.
 - **Show in folder** (desktop).
 
@@ -157,17 +157,35 @@ Settings → Backup & Restore → **Automatic backups** lists each file with its
 1. Verify *X*'s checksums. If *X* is bad, stop; nothing has been touched.
 2. Take a normal backup of the current state, through the same pipeline and with the same verification as §6.2, named `voyager_prerestore_<timestamp>.zip`. **If this fails, the restore is refused.** An undo point is a precondition, not a best effort.
 3. Run `importFromZip(X)`.
+4. If the import created any live records, meaning records this device didn't hold at all, write their ids beside the snapshot as `voyager_prerestore_<timestamp>.created.json` (per collection).
 
 The snapshot appears at the top of the backup list as **"Before restore · today 14:02"**. Restoring it undoes the restore:
 
 - Every record *X* changed is back in the snapshot in its pre-restore form, so the snapshot wins it back. That includes a record *X* un-deleted: `deletedAt` is content, so the tombstone returns.
 - Records *X* didn't touch are the same in both, so they're skipped.
 - Records created after *X* was taken were never in *X*, so the restore left them alone, and the undo does too.
+- Records *X* **created** can't be undone by the snapshot alone, because it doesn't hold them. That covers a tombstone purged after 30 days, a row removed by the Dev page's out-of-sync purge, and anything in a ZIP from elsewhere. It doesn't cover Trash's **Delete forever**: that leaves an emptied tombstone behind (`TRASH_HLD.md` §6.4), which the snapshot holds and restores like any other row. So restoring any file with a `.created.json` beside it tombstones each listed record that is still live and isn't in that file itself. They are tombstoned rather than hard-deleted: they go to Trash, sync like any delete, and purge after the usual 30 days. Collections with no `deletedAt` (the append-only logs) can't be undone this way.
 - The one loss: an edit made **between** the restore and the undo, to a record the snapshot also holds, is reverted. The sooner you undo, the less that matters.
 
-Restoring the snapshot is itself a restore, so it takes its own snapshot first. An undo can be undone.
+Restoring the snapshot is itself a restore, so it takes its own snapshot first. An undo can be undone: the undo's tombstones are content in its own snapshot, so redoing brings those records back.
 
-**Lifetime.** Pre-restore snapshots sit outside the §5 rotation, so they never count as or displace a daily, weekly or monthly backup. Each one is deleted 7 days after it was taken, checked hourly whether or not automatic backups are on. They're taken even when automatic backups are off, because protecting a restore is a separate concern from scheduled backups.
+**Deleted forever stays deleted.** A restore skips every record whose local row has been erased by Trash's **Delete forever** (`deletedAt` = `kErasedAt`, `TRASH_HLD.md` §6.4). The success message says how many were left deleted. An erase is final, and the Trash's own restore refuses it for the same reason. A restore that wrote the backup's copy back would not even undo it consistently. On plain collections the copy outranked the erase on version and came back everywhere. But journal entries, dreams, tasks, ranking entries and units, and job applications keep a local erase whatever version arrives. Those came back on the restoring device only, and the devices disagreed permanently. A backup therefore can't recover something deleted forever.
+
+**Field-merged collections.** Ranking entries, ranking units and job applications merge field by field across devices, by per-field stamps (`fieldUpdatedAt`), rather than by whole-document version. A restored row of one of these is stamped as though every field had been edited at the moment of the restore. Its stamp keys include the fields the local row has and the backup doesn't. Without that, it carried the backup's old stamps, or none, since the import's version bump no longer matched `fieldStampsVersion`. A newer stamp on another device, or in Firestore, then outranked the restore. Also, a field value missing from the backup was left out of the upload, and Firestore's merging write kept the old value. The result was that a ranking score cleared before a restore came back after the undo. With every key stamped, a field the backup lacks goes up as an explicit null.
+
+**Open editors.** The shell keeps every page mounted, so an entry open in the journal is still open, with its text in the editor, while you restore from Settings. That text is the pre-restore state. Left alone, the page's next flush saved it back over the restored row as an ordinary edit, synced to every device. That flush can come from the window losing focus, leaving the entry, or disposing the page. So a restore runs like this:
+
+1. A dialog that can't be dismissed covers the app for the whole restore. Text typed after the snapshot would be in neither the snapshot nor the restored data.
+2. Every open editor is flushed (`PendingFlushRegistry.flushAll`) before the snapshot, so the snapshot holds what's on screen.
+3. Flushing is suspended (`PendingFlushRegistry.restoring`) until the restore finishes, and hotkey floaters don't open meanwhile.
+4. When it finishes, every data provider is invalidated. Then `restoreGeneration` is raised, which remounts every shell page (`_RemountOnRestore` in `app_router.dart`), so each page reads the restored rows. Invalidating comes first: a page remounted over cached providers would load, and could save, the pre-restore data.
+5. The pages that save on their own hold a `RestoreFence` and write nothing once it's stale. Those are the journal, dream journal and todo pages and the todo edit panel. That stops the old instance's dispose and focus-loss flushes during the remount.
+
+Modals and dialogs, such as the Track forms, Search's editors and the workout sheets, open on the root navigator and cover Settings, so none can be open during a restore.
+
+**Failures after the commit.** `restore` throws only when nothing was changed: *X* is damaged, the snapshot couldn't be taken, or the import's transaction rolled back. Anything that fails after the import commits is returned as a warning on the summary and shown with the success message. That covers writing media blobs, writing `.created.json`, and refreshing the status row. The restored records are still uploaded.
+
+**Lifetime.** Pre-restore snapshots sit outside the §5 rotation, so they never count as or displace a daily, weekly or monthly backup. Each one is deleted 7 days after it was taken, checked hourly whether or not automatic backups are on, and its `.created.json` goes with it. They're taken even when automatic backups are off, because protecting a restore is a separate concern from scheduled backups. **Save a copy…** copies only the ZIP, so restoring a saved copy of a snapshot won't remove the records its restore created.
 
 Only one restore runs at a time; a second is refused while the first is in progress.
 
@@ -264,7 +282,8 @@ If there has been no successful automatic backup for **2 consecutive local days 
 | Area | Change |
 |---|---|
 | `data_export_service.dart` | Read collections and settings in one transaction. Add `checksums` to the manifest. `flush: true` on write. |
-| `data_import_service.dart` | Verify `checksums` when present. Expose a verify-only entry point (reuses `extractBackupIsolate`). |
+| `data_import_service.dart` | Verify `checksums` when present. Expose a verify-only entry point (reuses `extractBackupIsolate`). Report the records a restore created and any post-commit warnings; tombstone the records listed in `deleteCreated` (§7.2). |
+| `backup_collections.dart` | Stamp restored field-merged rows (ranking entries and units, job applications) as edited now (§7.2). |
 | New `auto_backup_retention.dart` | Pure `Set<Backup> keep(Set<Backup> all, DateTime todayLocal)`. |
 | New `auto_backup_service.dart` | Trigger, single-flight guard, pipeline (§6.2), daily re-check, `state.json` (status + toggle), pre-restore snapshot. Exposes a stream of the status-row model (count, bytes, health). |
 | `providers.dart` | Provider for the service. Start it from `voyager_app.dart` after DB open. |
@@ -278,7 +297,9 @@ If there has been no successful automatic backup for **2 consecutive local days 
 - **Pipeline:** inject a failure at each step (snapshot, write, verify, rename) and assert the directory's retained set is unchanged and no `.partial` file remains. A corrupted byte in the written file fails verification.
 - **Round trip:** export, then auto-verify, then import into an empty in-memory DB, and assert every collection matches.
 - **Consistency:** a write that lands during export shows up either entirely or not at all.
-- **Restore:** confirm a pre-restore snapshot exists before `importFromZip` runs, that restoring it reverts the restore (including an un-delete), and that a failed snapshot blocks the restore.
+- **Restore:** confirm a pre-restore snapshot exists before `importFromZip` runs, that restoring it reverts the restore (including an un-delete), and that a failed snapshot blocks the restore. Undoing a restore tombstones a record the restore brought back after its row was purged, and redoing brings it back. `.created.json` expires with its snapshot. A record deleted forever since the backup stays erased and is counted. A failure after the commit is a warning, not a thrown error, and the restored records still upload. Closing the backup list mid-restore still reports success.
+- **Open editors:** a journal entry typed into and left focused keeps the restored body through a flush and the page's dispose, while the same sequence without a restore does save the editor's text. The restore flow flushes the editors before the snapshot, suspends flushes while it runs, and remounts the pages after.
+- **Field-merged restore (two devices):** with Firestore's merging writes simulated, a restore and its undo land on both devices for a ranking entry, a ranking unit and a job application, including a score or URL cleared between the backup and the restore.
 - **Health:** one test per §9.3 row, including the precedence order and a corrupted retained file producing *Attention*.
 - **Toggle:** off stops runs and pruning but keeps files; a missing `state.json` reads as on.
 

@@ -103,6 +103,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   late String _lastNonEmptyTitle;
   Timer? _titleSaveTimer;
   Timer? _notesSaveTimer;
+  final _restoreFence = RestoreFence();
   var _lastNotesText = '';
 
   late final Future<void> Function() _lifecycleFlushCallback;
@@ -498,6 +499,8 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     // and competes with it for frame budget.
     bool notifyChanged = true,
   }) async {
+    // The fields hold the task as it was before a restore; see [RestoreFence].
+    if (_restoreFence.isStale) return;
     // Everything `_save` needs is read before the first await. _close() calls
     // this with unawaited() while starting a 270ms animation that ends in this
     // State being disposed, and _applyPendingNotesMerge is a network-backed
@@ -682,6 +685,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     required String title,
     required String notes,
   }) async {
+    if (_restoreFence.isStale) return;
     final latest = await _container
         .read(todoRepositoryProvider)
         .getTask(taskId);

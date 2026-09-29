@@ -85,6 +85,18 @@ class ThrowingJournalRepository extends DriftJournalRepository {
   }
 }
 
+/// A media cache whose disk is full.
+class _FailingWriteStore extends MediaFileStore {
+  _FailingWriteStore(Directory root) : super(root: root);
+
+  @override
+  Future<File> writeBytes(
+    String contentHash,
+    MediaImageFormat format,
+    Uint8List bytes,
+  ) async => throw const FileSystemException('No space left on device');
+}
+
 /// Stands in for the sync layer so tests can assert what a restore uploaded.
 class RecordingUploader {
   final Map<String, List<Object>> records = {};
@@ -961,6 +973,63 @@ void main() {
         MediaDownloadState.present,
         reason: 'a restored blob must not sit waiting for a download',
       );
+    });
+
+    test('an image that cannot be written is a warning, and the restored '
+        'records still upload', () async {
+      final source = AppDatabase.inMemory();
+      addTearDown(source.close);
+      final sourceStore = MediaFileStore(root: sourceMediaDir);
+      final bytes = Uint8List.fromList(List<int>.generate(64, (i) => i));
+      final contentHash = sha256.convert(bytes).toString();
+      final now = DateTime.utc(2026, 3, 4);
+      await DriftMediaRepository(source).upsertAsset(
+        MediaAsset(
+          id: 'media-blob-1',
+          contentHash: contentHash,
+          byteSize: bytes.length,
+          mimeType: 'image/jpeg',
+          width: 1,
+          height: 1,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      await sourceStore.writeBytes(contentHash, MediaImageFormat.jpeg, bytes);
+      final zip = await writeBackupZip(
+        await DataExportService(
+          db: source,
+          collections: collectionsFor(source),
+          settingsRepository: DriftSettingsRepository(source),
+          mediaRepository: DriftMediaRepository(source),
+          mediaFileStore: sourceStore,
+        ).buildArchiveContents(),
+        'voyager_media_write_fails',
+      );
+      addTearDown(() async {
+        if (await zip.exists()) await zip.delete();
+      });
+
+      final target = AppDatabase.inMemory();
+      addTearDown(target.close);
+      final uploader = RecordingUploader();
+      final summary = await DataImportService(
+        db: target,
+        collections: collectionsFor(target),
+        settingsRepository: DriftSettingsRepository(target),
+        pushRecords: uploader.pushRecords,
+        pushSettings: uploader.pushSettings,
+        mediaRepository: DriftMediaRepository(target),
+        mediaFileStore: _FailingWriteStore(targetMediaDir),
+      ).importFromZip(zip);
+
+      expect(summary.mediaFilesRestored, 0);
+      expect(summary.warnings.single, contains('images could not be saved'));
+      expect(
+        await DriftMediaRepository(target).getAsset('media-blob-1'),
+        isNotNull,
+      );
+      expect(uploader.records[FirestoreCollections.mediaAssets], hasLength(1));
     });
 
     test('an archive with no media still restores its rows', () async {

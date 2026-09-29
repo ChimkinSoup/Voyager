@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
+import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_window.dart';
 import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:voyager/features/notifications/scheduled_reminders_section.dart';
@@ -113,6 +114,9 @@ class FloaterController extends ChangeNotifier with WindowListener {
 
   Future<void> onHotkey(QuickCaptureKind kind) => _serial(() async {
     if (!_ref.read(authNotifierProvider).isAuthenticated) return;
+    // A floater opened mid-restore would load, and save back, rows the
+    // restore is about to replace.
+    if (PendingFlushRegistry.instance.restoring) return;
     if (_active == kind) return;
     if (_active != null) {
       await _runFlush();
