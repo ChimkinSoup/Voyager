@@ -57,7 +57,12 @@ class PullProgressToast {
   void _show() {
     final overlay = _overlay();
     if (overlay == null || !overlay.mounted) return;
-    _toast = showVoyagerToastIn(overlay, message: _progressMessage);
+    _toast = showVoyagerToastIn(
+      overlay,
+      message: _progressMessage,
+      // Background work: the page the user happens to be on had no part in it.
+      origin: 'Sync',
+    );
   }
 
   String get _progressMessage => _total == 0

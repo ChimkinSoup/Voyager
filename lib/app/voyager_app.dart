@@ -9,6 +9,8 @@ import 'package:voyager/core/platform/app_tray.dart';
 import 'package:voyager/core/caps_lock/caps_lock_indicator_scope.dart';
 import 'package:voyager/core/dev/perf_stall_logger.dart';
 import 'package:voyager/core/motion/modal_scrim_observer.dart';
+import 'package:voyager/core/notifications/notification_history.dart';
+import 'package:voyager/core/notifications/recording_scaffold_messenger.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/reminders/reminder_engine.dart';
@@ -29,6 +31,7 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/finance/finance_sheet_warm_up.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_host.dart';
+import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/notifications/reminder_sticky_stack.dart';
 import 'package:voyager/features/settings/snippets_dialog.dart';
 import 'package:voyager/routing/app_router.dart';
@@ -228,6 +231,15 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
     final router = ref.watch(routerProvider);
     PerfStallLogger.instance.currentLocation = () =>
         router.routerDelegate.currentConfiguration.uri.toString();
+    NotificationHistory.instance.currentOrigin = () {
+      final path = router.routerDelegate.currentConfiguration.uri.path;
+      for (final dest in shellDestinations) {
+        if (path == dest.path || path.startsWith('${dest.path}/')) {
+          return dest.label;
+        }
+      }
+      return null;
+    };
     final themeMode = ref.watch(themeModeProvider);
     final theme = VoyagerTheme.forMode(themeMode, accent: accent);
     final vimEnabled = ref.watch(
@@ -244,36 +256,42 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       theme: theme,
       scrollBehavior: const _NoScrollbarScrollBehavior(),
       builder: (context, child) {
-        return TooltipVisibility(
-          visible: false,
-          // Wraps the Navigator, so dialogs and popovers — which mount into
-          // its overlay — see the same Vim setting as the page behind them.
-          child: VimEnabledScope(
-            enabled: vimEnabled,
-            child: CapsLockIndicatorScope(
-              enabled: capsLockIndicator,
-              child: AutocorrectEnabledScope(
-                data: autocorrectScope,
-                child: SnippetEnabledScope(
-                  data: snippetScope,
-                  // Lets a field's right-click quick-add reach the full
-                  // settings dialog without core importing features — see
-                  // [SnippetSettingsLauncher].
-                  child: SnippetSettingsLauncher(
-                    open: showSnippetsDialog,
-                    child: DefaultTextStyle(
-                      style: AppFonts.style(color: theme.colorScheme.onSurface),
-                      child: FloaterHost(
-                        child: Stack(
-                          children: [
-                            const _AppBackground(),
-                            RepaintBoundary(
-                              child: child ?? const SizedBox.shrink(),
-                            ),
-                            // Inside the floater host, so a floater that has
-                            // the window never shows the main app's stickies.
-                            const ReminderStickyStack(),
-                          ],
+        // Above the Navigator, so every route's snackbars go through it and
+        // into the notification history.
+        return RecordingScaffoldMessenger(
+          child: TooltipVisibility(
+            visible: false,
+            // Wraps the Navigator, so dialogs and popovers — which mount into
+            // its overlay — see the same Vim setting as the page behind them.
+            child: VimEnabledScope(
+              enabled: vimEnabled,
+              child: CapsLockIndicatorScope(
+                enabled: capsLockIndicator,
+                child: AutocorrectEnabledScope(
+                  data: autocorrectScope,
+                  child: SnippetEnabledScope(
+                    data: snippetScope,
+                    // Lets a field's right-click quick-add reach the full
+                    // settings dialog without core importing features — see
+                    // [SnippetSettingsLauncher].
+                    child: SnippetSettingsLauncher(
+                      open: showSnippetsDialog,
+                      child: DefaultTextStyle(
+                        style: AppFonts.style(
+                          color: theme.colorScheme.onSurface,
+                        ),
+                        child: FloaterHost(
+                          child: Stack(
+                            children: [
+                              const _AppBackground(),
+                              RepaintBoundary(
+                                child: child ?? const SizedBox.shrink(),
+                              ),
+                              // Inside the floater host, so a floater that has
+                              // the window never shows the main app's stickies.
+                              const ReminderStickyStack(),
+                            ],
+                          ),
                         ),
                       ),
                     ),

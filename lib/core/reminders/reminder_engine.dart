@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/notifications/notification_history.dart';
 import 'package:voyager/core/reminders/reminder_labels.dart';
 import 'package:voyager/core/reminders/reminder_os_notifier.dart';
 import 'package:voyager/core/utils/ids.dart';
@@ -289,6 +290,19 @@ class ReminderEngine extends ChangeNotifier {
         );
       }
       unawaited(_log(view, ReminderLogEvent.stickyShown));
+      NotificationHistory.instance.record(
+        view.title,
+        source: NotificationSource.reminder,
+        origin: switch (view.sourceKind) {
+          ReminderSourceKind.scheduledRule => 'Reminders',
+          ReminderSourceKind.todo => 'To-Do',
+          ReminderSourceKind.calendarEvent => 'Calendar',
+        },
+        detail: view.subtitle,
+        // `_shown` is per run; a reminder still due after a restart is the
+        // same appearance, not a new notification.
+        dedupeKey: 'reminder|${view.sourceKey}|${evaluation.instanceTag}',
+      );
       if (_os.raisesDueAlertsInApp) unawaited(_raiseOsAlertOnce(view));
     }
     for (final key in _dueOccurrence.keys.toList()) {

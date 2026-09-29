@@ -18,8 +18,10 @@ import 'package:voyager/routing/app_router.dart';
 import 'package:voyager/core/tags/tag_palette.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/error_logger.dart';
+import 'package:voyager/core/notifications/notification_history.dart';
 import 'package:voyager/core/dev/perf_stall_logger.dart';
 import 'package:voyager/features/finance/finance_ui_prefs.dart';
+import 'package:voyager/features/settings/settings_tab_memory.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/hotkey_service.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -39,6 +41,8 @@ Future<void> main([List<String> args = const []]) async {
   // can take a while, so the window says so meanwhile.
   if (await appDataMovePending()) runApp(const _MovingDataApp());
   await appDataDirectory();
+  await NotificationHistory.instance.load();
+  await SettingsTabMemory.load();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   try {
     await hotKeyManager.unregisterAll();

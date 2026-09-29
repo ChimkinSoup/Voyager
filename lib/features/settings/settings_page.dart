@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
@@ -27,6 +28,7 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
+import 'package:voyager/features/notifications/notification_history_dialog.dart';
 import 'package:voyager/features/settings/account_section.dart';
 import 'package:voyager/features/settings/backup_list_dialog.dart';
 import 'package:voyager/features/trash/trash_dialog.dart';
@@ -38,6 +40,7 @@ import 'package:voyager/features/settings/job_experience_snippets_dialog.dart';
 import 'package:voyager/features/settings/media_storage_dialog.dart';
 import 'package:voyager/features/settings/key_binding_dialog.dart';
 import 'package:voyager/features/settings/settings_color_palette_section.dart';
+import 'package:voyager/features/settings/settings_tab_memory.dart';
 import 'package:voyager/features/settings/snippets_dialog.dart';
 import 'package:voyager/features/settings/weather_location_tile.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
@@ -68,9 +71,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     length: _settingsTabs.length,
     vsync: this,
     // A reveal requested before Settings opened: start on the tab holding
-    // the backup tiles so they mount and answer it themselves.
-    initialIndex: ref.read(revealAutoBackupRequestProvider) ? _dataTab : 0,
+    // the backup tiles so they mount and answer it themselves. Otherwise
+    // wherever the user left Settings last time, even in an earlier run.
+    initialIndex: ref.read(revealAutoBackupRequestProvider)
+        ? _dataTab
+        : math.max(0, _settingsTabs.indexOf(SettingsTabMemory.lastTab ?? '')),
   );
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs.addListener(
+      () => SettingsTabMemory.remember(_settingsTabs[_tabs.index]),
+    );
+  }
 
   @override
   void dispose() {
@@ -680,6 +694,24 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                     storageKey: ShellPageStorageKeys.settingsDataTab,
                     padding: const EdgeInsets.all(16),
                     children: [
+                      Text(
+                        'Notifications',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      ListTile(
+                        title: const Text('Notification history'),
+                        subtitle: const Text(
+                          'Every notification shown on this device in the last '
+                          '30 days',
+                        ),
+                        leading: const Icon(
+                          PhosphorIconsRegular.clockCounterClockwise,
+                        ),
+                        trailing: const Icon(PhosphorIconsRegular.caretRight),
+                        onTap: () => showNotificationHistoryDialog(context),
+                      ),
+                      const SizedBox(height: 16),
                       Text(
                         'Images',
                         style: Theme.of(context).textTheme.titleMedium,

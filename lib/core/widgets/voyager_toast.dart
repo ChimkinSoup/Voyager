@@ -7,6 +7,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:voyager/core/motion/motion.dart';
+import 'package:voyager/core/notifications/notification_history.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/top_chrome_inset.dart';
 
@@ -36,12 +37,18 @@ class VoyagerToast {
     required this.actions,
     required Duration? dwell,
     required this.linger,
+    required this.origin,
   }) : _message = message,
        _icon = icon,
        _dwell = dwell;
 
   final List<VoyagerToastAction> actions;
   final Duration linger;
+
+  /// Where the toast came from, for the notification history. Fixed when it
+  /// is raised, so work started on one page and finished after the user moved
+  /// to another is still put down to the page it was started from.
+  final String? origin;
 
   String _message;
   IconData? _icon;
@@ -57,6 +64,12 @@ class VoyagerToast {
   /// words the user has not read yet deserve their own full countdown, not
   /// whatever was left of the previous message's.
   int _generation = 0;
+
+  /// This card's current line in the notification history.
+  NotificationRecord? _historyEntry;
+
+  /// Whether [_historyEntry] records a result rather than work in flight.
+  var _historySettled = false;
 
   final _dismissRequested = ValueNotifier<bool>(false);
   late final _ToastStack _stack;
@@ -106,7 +119,32 @@ class VoyagerToast {
   void _repeat() {
     _count++;
     _generation++;
+    // Each raise was shown, so each is its own line in the history.
+    _historyEntry = NotificationHistory.instance.record(
+      _message,
+      origin: origin,
+    );
     _stack.rebuild();
+  }
+
+  /// Keeps the notification history in step with the card.
+  ///
+  /// A "working" card — no icon, no dwell — is recorded the moment it shows,
+  /// and its progress rewrites revise that line, so one the work abandons
+  /// still leaves a record of how far it got. The result it turns into is
+  /// news of its own and gets a second line.
+  void _recordInHistory() {
+    final settled = _icon != null || _dwell != null;
+    final entry = _historyEntry;
+    if (entry == null || settled != _historySettled) {
+      _historyEntry = NotificationHistory.instance.record(
+        _message,
+        origin: origin,
+      );
+      _historySettled = settled;
+    } else {
+      _historyEntry = NotificationHistory.instance.revise(entry, _message);
+    }
   }
 
   /// Rewrites what the toast says without disturbing the card it says it in.
@@ -122,6 +160,7 @@ class VoyagerToast {
     if (icon != null) _icon = icon;
     if (dwell != null) _dwell = dwell;
     _generation++;
+    _recordInHistory();
     _stack.rebuild();
   }
 
@@ -156,6 +195,10 @@ class VoyagerToast {
 /// it stays click-through, so a toast over a form never eats a click meant for
 /// the field behind it.
 ///
+/// [origin] names where the toast came from in the notification history.
+/// Left out, it is the page the user is on — right for anything answering
+/// what they just did, wrong for background work, which should name itself.
+///
 /// [dwell] auto-dismisses the toast after that long. The countdown is held
 /// while the pointer is over the toast — an offer the user is still reading is
 /// not one to take away — and restarts with [linger] once they move off, which
@@ -173,6 +216,7 @@ VoyagerToast showVoyagerToast(
   List<VoyagerToastAction> actions = const [],
   Duration? dwell,
   Duration linger = const Duration(seconds: 4),
+  String? origin,
 }) => showVoyagerToastIn(
   Overlay.of(context, rootOverlay: true),
   message: message,
@@ -180,6 +224,7 @@ VoyagerToast showVoyagerToast(
   actions: actions,
   dwell: dwell,
   linger: linger,
+  origin: origin,
 );
 
 /// [showVoyagerToast] for a caller that resolved its overlay earlier.
@@ -196,6 +241,7 @@ VoyagerToast showVoyagerToastIn(
   List<VoyagerToastAction> actions = const [],
   Duration? dwell,
   Duration linger = const Duration(seconds: 4),
+  String? origin,
 }) {
   final stack = _ToastStack.of(overlay);
   final twin = stack.twinOf(
@@ -215,8 +261,10 @@ VoyagerToast showVoyagerToastIn(
     actions: actions,
     dwell: dwell,
     linger: linger,
+    origin: origin ?? NotificationHistory.instance.currentOrigin?.call(),
   );
   toast._insertInto(stack);
+  toast._recordInHistory();
   return toast;
 }
 
