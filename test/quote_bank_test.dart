@@ -24,24 +24,55 @@ void main() {
     }
   });
 
-  test('a quote drawn yesterday is much rarer than a fresh one', () {
+  test('never draws a quote used yesterday while another is available', () {
     final yesterday = today.subtract(const Duration(days: 1));
+    for (var seed = 0; seed < 200; seed++) {
+      final bank = QuoteBank(
+        _quotes,
+        lastUsed: {
+          'j': {'a': yesterday, 'b': yesterday},
+        },
+        random: Random(seed),
+      );
+      expect(
+        bank.nextQuote('j', now: today).id,
+        isNot(anyOf('a', 'b')),
+        reason: 'seed $seed',
+      );
+    }
+  });
+
+  test('a quote drawn two days ago is rarer than a fresh one', () {
+    final twoDaysAgo = today.subtract(const Duration(days: 2));
     final counts = <String, int>{};
     final random = Random(1);
     for (var i = 0; i < 20000; i++) {
       final bank = QuoteBank(
         _quotes,
         lastUsed: {
-          'j': {'a': yesterday},
+          'j': {'a': twoDaysAgo},
         },
         random: random,
       );
       final id = bank.nextQuote('j', now: today).id;
       counts[id] = (counts[id] ?? 0) + 1;
     }
-    // Weight 1/16 against 1 for each of the other three.
+    // Weight (2/4)² = 1/4 against 1 for each of the other three.
     final ratio = counts['a']! / counts['b']!;
-    expect(ratio, closeTo(1 / 16, 0.02));
+    expect(ratio, closeTo(1 / 4, 0.03));
+  });
+
+  test("prefers yesterday's quote over repeating today's", () {
+    for (var seed = 0; seed < 50; seed++) {
+      final bank = QuoteBank(
+        const [Quote(id: 'a', text: 'A'), Quote(id: 'b', text: 'B')],
+        lastUsed: {
+          'j': {'a': today.subtract(const Duration(days: 1)), 'b': today},
+        },
+        random: Random(seed),
+      );
+      expect(bank.nextQuote('j', now: today).id, 'a', reason: 'seed $seed');
+    }
   });
 
   test('history is per journal', () {
@@ -69,19 +100,23 @@ void main() {
   test('counts calendar days, not 24-hour spans', () {
     final lateLastNight = DateTime(2026, 9, 26, 23);
     final earlyThisMorning = DateTime(2026, 9, 27, 1);
-    // Two hours later but the next day: weight (1/2)², not 0.
-    var sawA = false;
-    for (var i = 0; i < 200 && !sawA; i++) {
-      final fresh = QuoteBank(
+    // Two hours later but the next day, so 'a' counts as yesterday's and wins
+    // over 'b', drawn today. Counted in hours, both would be today's and the
+    // draw would fall back to uniform.
+    for (var seed = 0; seed < 50; seed++) {
+      final bank = QuoteBank(
         const [Quote(id: 'a', text: 'A'), Quote(id: 'b', text: 'B')],
         lastUsed: {
-          'j': {'a': lateLastNight},
+          'j': {'a': lateLastNight, 'b': earlyThisMorning},
         },
-        random: Random(i),
+        random: Random(seed),
       );
-      sawA = fresh.nextQuote('j', now: earlyThisMorning).id == 'a';
+      expect(
+        bank.nextQuote('j', now: earlyThisMorning).id,
+        'a',
+        reason: 'seed $seed',
+      );
     }
-    expect(sawA, isTrue);
   });
 
   test('a use dated in the future counts as today', () {

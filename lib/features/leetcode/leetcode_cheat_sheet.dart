@@ -10,9 +10,11 @@ import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/sync/debouncer.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/rounded_drag_proxy.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
+import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
@@ -902,12 +904,17 @@ class _Header extends StatelessWidget {
               }
             },
             itemBuilder: (context) => [
-              PopupMenuItem(
+              VoyagerPopupMenuItem(
                 value: true,
+                position: VoyagerMenuItemPosition.first,
                 enabled: onExportTab != null,
                 child: const Text('Copy this tab'),
               ),
-              const PopupMenuItem(value: false, child: Text('Copy everything')),
+              const VoyagerPopupMenuItem(
+                value: false,
+                position: VoyagerMenuItemPosition.last,
+                child: Text('Copy everything'),
+              ),
             ],
           ),
           const SizedBox(width: 6),

@@ -3,12 +3,18 @@
 // status chips narrowing the queue, the score popover promoting a row out of
 // it, and the row menu acting on the entry under the pointer.
 
+import 'dart:io';
+
+import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/media/media_service.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
@@ -16,7 +22,10 @@ import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
+import 'package:voyager/data/services/media_file_store.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
+import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/rankings/ranking_queries.dart';
 import 'package:voyager/features/rankings/rankings_edit_panel.dart';
 import 'package:voyager/features/rankings/rankings_field_editor.dart';
@@ -77,6 +86,7 @@ Future<({AppDatabase db, ProviderContainer container})> pumpRankingsPage(
   WidgetTester tester, {
   required Future<void> Function(DriftRankingRepository repo) seed,
   DriftRankingRepository Function(AppDatabase db)? repository,
+  List<Override> extraOverrides = const [],
 }) async {
   // Wide and tall: the band is a long row, and the list sits beside a 420px
   // panel once one is open.
@@ -95,6 +105,7 @@ Future<({AppDatabase db, ProviderContainer container})> pumpRankingsPage(
         rankingRepositoryProvider.overrideWithValue(repository(db)),
       syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
       weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+      ...extraOverrides,
     ],
   );
   addTearDown(container.dispose);
@@ -1995,6 +2006,153 @@ void main() {
       final saved = await DriftRankingRepository(harness.db).getChild(childId);
       expect(saved!.notes, 'cold open');
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('Cancel puts a unit back the way it opened', (tester) async {
+      late String childId;
+      final harness = await pumpRankingsPage(
+        tester,
+        seed: (repo) async {
+          final category = makeCategory();
+          await repo.upsertCategory(category);
+          final parent = makeParent(categoryId: category.id, title: 'Andor');
+          await repo.upsertParent(parent);
+          final child = makeChild(parentId: parent.id, name: 'ep 1');
+          childId = child.id;
+          await repo.upsertChild(child);
+        },
+      );
+
+      await tester.tap(rowTitle('Andor'));
+      await tester.pumpAndSettle();
+      await tester.tap(inPanel(find.text('ep 1')));
+      await tester.pumpAndSettle();
+
+      final dialog = find.byType(AlertDialog);
+      // One edit already written, one still waiting on the debounce.
+      await tester.enterText(
+        find.descendant(
+          of: dialog,
+          matching: find.byType(TagHighlightedTextField),
+        ),
+        'cold open',
+      );
+      await tester.pumpAndSettle(const Duration(seconds: 1));
+      final repo = DriftRankingRepository(harness.db);
+      expect((await repo.getChild(childId))!.notes, 'cold open');
+      await tester.enterText(
+        find.descendant(of: dialog, matching: find.byType(TextField)).first,
+        'ep 1 renamed',
+      );
+      await tester.pump();
+
+      await tester.tap(
+        find.descendant(of: dialog, matching: find.text('Cancel')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(dialog, findsNothing);
+      final saved = await repo.getChild(childId);
+      expect(saved!.name, 'ep 1');
+      expect(saved.notes, '');
+    });
+
+    testWidgets('Cancel takes back images attached and removed in the dialog', (
+      tester,
+    ) async {
+      driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+      final tempDir = await tester.runAsync(
+        () => Directory.systemTemp.createTemp('voyager_rankings_cancel'),
+      );
+      final mediaDb = AppDatabase.inMemory();
+      addTearDown(mediaDb.close);
+      final fileStore = MediaFileStore(
+        root: Directory('${tempDir!.path}/media'),
+      );
+      final media = MediaService(
+        repository: DriftMediaRepository(mediaDb),
+        fileStore: fileStore,
+        readSettings: () async => const AppSettings(),
+      );
+      // A distinct picture per seed, so no two attaches dedupe to one asset.
+      Future<MediaReference> attach(String childId, int seed) async {
+        final image = img.Image(width: 8, height: 8, numChannels: 3);
+        img.fill(image, color: img.ColorRgb8(seed * 40, 30, 60));
+        return (await tester.runAsync(
+          () => media.attachBytes(
+            bytes: img.encodePng(image),
+            collection: FirestoreCollections.rankings,
+            documentId: childId,
+          ),
+        ))!;
+      }
+
+      late String childId;
+      await pumpRankingsPage(
+        tester,
+        seed: (repo) async {
+          // No strip on the entry itself: its drop target reaches for a
+          // native plugin a widget test does not have.
+          final category = makeCategory().copyWith(imagesOnParent: false);
+          await repo.upsertCategory(category);
+          final parent = makeParent(categoryId: category.id, title: 'Andor');
+          await repo.upsertParent(parent);
+          final child = makeChild(parentId: parent.id, name: 'ep 1');
+          childId = child.id;
+          await repo.upsertChild(child);
+        },
+        extraOverrides: [
+          mediaServiceProvider.overrideWith((ref) => media),
+          mediaFileStoreProvider.overrideWithValue(fileStore),
+        ],
+      );
+      final first = await attach(childId, 1);
+      final second = await attach(childId, 2);
+
+      await tester.tap(rowTitle('Andor'));
+      await tester.pumpAndSettle();
+      await tester.tap(inPanel(find.text('ep 1')));
+      await tester.pumpAndSettle();
+
+      // The same calls the dialog's gallery strip makes.
+      await tester.runAsync(() => media.removeReference(first.id));
+      await attach(childId, 3);
+      // Another device's image, landing by pull while the dialog is open.
+      final pulled = MediaReference(
+        id: 'pulled',
+        mediaId: second.mediaId,
+        collection: FirestoreCollections.rankings,
+        documentId: childId,
+        sortOrder: 99,
+        createdAt: second.createdAt,
+        updatedAt: second.updatedAt,
+      );
+      await tester.runAsync(
+        () => DriftMediaRepository(mediaDb).upsertReference(pulled),
+      );
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Cancel'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Cancel's image writes outlive the dialog; let them land.
+      for (var i = 0; i < 5; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)),
+        );
+        await tester.pump();
+      }
+
+      final images = await tester.runAsync(
+        () => media.referencesFor(FirestoreCollections.rankings, childId),
+      );
+      expect(
+        [for (final image in images!) image.id],
+        [first.id, second.id, pulled.id],
+      );
     });
 
     testWidgets('a field note and an unentered tag survive leaving the entry', (

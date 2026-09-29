@@ -586,4 +586,52 @@ void main() {
       );
     });
   });
+
+  group('attachesSettled', () {
+    Future<List<MediaReference>> owned() =>
+        service.referencesFor(FirestoreCollections.rankings, 'unit-1');
+
+    test('waits for an attach still ingesting', () async {
+      final attach = service.attachBytes(
+        bytes: pngOf(64, 64),
+        collection: FirestoreCollections.rankings,
+        documentId: 'unit-1',
+      );
+      await service.attachesSettled();
+      expect(await owned(), hasLength(1));
+      await attach;
+    });
+
+    test('waits for every image of a batch, not just the first', () async {
+      // The loop attachImagesForOwner runs: the second and third images have
+      // not started when the first is under way.
+      final batch = service.trackAttach(() async {
+        for (var seed = 1; seed <= 3; seed++) {
+          await service.attachBytes(
+            bytes: pngOf(16, 16, r: seed * 40),
+            collection: FirestoreCollections.rankings,
+            documentId: 'unit-1',
+          );
+        }
+      });
+      await service.attachesSettled();
+      expect(await owned(), hasLength(3));
+      await batch;
+    });
+
+    test('still completes when an attach fails', () async {
+      final failing = service.attachBytes(
+        bytes: Uint8List.fromList('GIF89a padding here'.codeUnits),
+        collection: FirestoreCollections.rankings,
+        documentId: 'unit-1',
+      );
+      final refused = expectLater(
+        failing,
+        throwsA(isA<MediaIngestException>()),
+      );
+      await service.attachesSettled();
+      await refused;
+      expect(await owned(), isEmpty);
+    });
+  });
 }

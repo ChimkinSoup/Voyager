@@ -5,10 +5,10 @@ import 'package:voyager/domain/models/settings_models.dart';
 /// Draws quotes at random, weighted against ones a journal used recently.
 ///
 /// A quote last drawn `d` days ago in the same journal weighs
-/// `(min(d, n) / n)²` for a pool of `n`: one drawn today can't come back
-/// today, one drawn yesterday is unlikely, and anything `n` or more days old —
-/// or never drawn in that journal — is back at full weight. Each journal keeps
-/// its own history.
+/// `(min(d, n) / n)²` for a pool of `n`, except that one drawn today or
+/// yesterday can't come back while anything older is available. Anything `n`
+/// or more days old — or never drawn in that journal — is back at full
+/// weight. Each journal keeps its own history.
 class QuoteBank {
   QuoteBank(
     this._quotes, {
@@ -32,20 +32,28 @@ class QuoteBank {
     now ??= DateTime.now();
     final used = _lastUsed.putIfAbsent(journalId, () => {});
     final n = _quotes.length;
-    final weights = [
+    final days = [
       for (final q in _quotes)
         switch (used[q.id]) {
-          null => 1.0,
+          null => null,
           // Clamped at 0: a use dated ahead of `now` (another device's clock
           // running fast) counts as today's rather than squaring into a
           // weight above 1.
-          final at => pow(
-            max(0, min(_daysBetween(at, now), n)) / n,
-            2,
-          ).toDouble(),
+          final at => max(0, min(_daysBetween(at, now), n)),
         },
     ];
+    List<double> weigh(int minDays) => [
+      for (final d in days)
+        d == null ? 1.0 : (d < minDays ? 0.0 : pow(d / n, 2).toDouble()),
+    ];
+    var weights = weigh(2);
     var total = weights.fold<double>(0, (a, b) => a + b);
+    // Only today's and yesterday's left, as with a pool of two: let
+    // yesterday's back in rather than repeat one drawn today.
+    if (total == 0) {
+      weights = weigh(1);
+      total = weights.fold<double>(0, (a, b) => a + b);
+    }
     // Every quote drawn today, as with a pool of one: fall back to uniform.
     if (total == 0) {
       weights.fillRange(0, n, 1);
@@ -54,7 +62,7 @@ class QuoteBank {
     // Falls through to the last *eligible* quote, not the last one: rounding
     // between the sum and the subtractions can leave the roll just short of
     // zero at the end, and landing on a zero-weight quote there would hand
-    // back one drawn today.
+    // back one drawn today or yesterday.
     final last = weights.lastIndexWhere((w) => w > 0);
     var roll = _random.nextDouble() * total;
     var i = 0;

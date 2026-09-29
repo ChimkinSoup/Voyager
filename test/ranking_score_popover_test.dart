@@ -328,6 +328,37 @@ void main() {
     expect(find.byType(RankingScorePopover), findsNothing);
   });
 
+  testWidgets('an unslotted number keeps its size whatever the score', (
+    tester,
+  ) async {
+    Future<Size> sizeAt(double? value) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topRight,
+              child: RankingScoreNumber(
+                value: value,
+                scoreMax: 10,
+                precision: RankingScorePrecision.tenths,
+                label: 'Field',
+                onChanged: (_) {},
+              ),
+            ),
+          ),
+        ),
+      );
+      return tester.getSize(find.byType(RankingScoreNumber));
+    }
+
+    // A wheel notch from 1.1 to 1 must not pull the left edge out from under
+    // the pointer.
+    final wide = await sizeAt(1.1);
+    expect(await sizeAt(1), wide);
+    expect(await sizeAt(10), wide);
+    expect(await sizeAt(null), wide);
+  });
+
   group('Rollers', () {
     /// Drags one roller by [items] whole rows — negative moves the wheel's
     /// values *up*, the way a real flick does.

@@ -22,6 +22,7 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/petal_field.dart' show petalColorWeights;
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/rounded_drag_proxy.dart';
+import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -1189,8 +1190,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                   if (mode == StartupPageMode.custom)
                     Padding(
                       padding: const EdgeInsets.only(left: 48, top: 8),
-                      child: DropdownButtonFormField<String>(
-                        value: customPath,
+                      child: VoyagerDropdownButtonFormField<String>(
+                        initialValue: customPath,
                         items: [
                           for (final d in ordered)
                             DropdownMenuItem(

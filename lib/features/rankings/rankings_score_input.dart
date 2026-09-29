@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -705,26 +706,55 @@ class _RankingScoreNumberState extends State<RankingScoreNumber> {
     widget.onChanged?.call(score);
   }
 
+  /// The widest thing the number can show on this scale, for a surface that
+  /// gives it no slot of its own. Sized to the score shown, a wheel notch from
+  /// 1.1 down to 1 pulled the edge out from under the pointer, and the next
+  /// notch landed on nothing.
+  double _widestLabelWidth(BuildContext context, TextStyle? style) {
+    var widest = 0.0;
+    for (final label in [
+      rankingUnscoredLabel,
+      formatRankingScore(widget.scoreMax.toDouble()),
+      formatRankingScore(widget.scoreMax - rankingScoreStep(widget.precision)),
+    ]) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: DefaultTextStyle.of(context).style.merge(style),
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        maxLines: 1,
+      )..layout();
+      widest = math.max(widest, painter.width);
+      painter.dispose();
+    }
+    return widest.ceilToDouble();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final value = widget.value;
     final label = widget.label;
     final scored = value != null;
+    final style = (widget.style ?? theme.textTheme.labelLarge)?.copyWith(
+      color: scored
+          ? (widget.accentColor ?? theme.colorScheme.primary)
+          : (widget.unscoredColor ??
+                theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
+    );
     final text = Text(
       scored ? formatRankingScore(value) : rankingUnscoredLabel,
       textAlign: widget.textAlign,
       maxLines: 1,
-      style: (widget.style ?? theme.textTheme.labelLarge)?.copyWith(
-        color: scored
-            ? (widget.accentColor ?? theme.colorScheme.primary)
-            : (widget.unscoredColor ??
-                  theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
-      ),
+      style: style,
     );
 
-    final width = widget.width;
-    final sized = width == null ? text : SizedBox(width: width, child: text);
+    final sized = SizedBox(
+      width: widget.width ?? _widestLabelWidth(context, style),
+      child: text,
+    );
     final semanticLabel = scored
         ? '$label ${formatRankingScore(value)} of ${widget.scoreMax}'
         : '$label unscored';

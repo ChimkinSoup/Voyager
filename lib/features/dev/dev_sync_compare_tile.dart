@@ -10,6 +10,7 @@ import 'package:voyager/core/dev/remote_sync_compare_service.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
 class DevSyncCompareSection extends ConsumerStatefulWidget {
@@ -207,8 +208,12 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                DropdownButtonFormField<String>(
-                  value: _selectedTodoListId,
+                VoyagerDropdownButtonFormField<String>(
+                  // Keyed: the field only reads its value once, and a list
+                  // deleted elsewhere moves the selection from outside it.
+                  key: ValueKey(_selectedTodoListId),
+                  initialValue: _selectedTodoListId,
+                  enabled: !_comparing,
                   decoration: const InputDecoration(
                     labelText: 'Todo list',
                     border: OutlineInputBorder(),
@@ -217,9 +222,8 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
                     for (final list in lists)
                       DropdownMenuItem(value: list.id, child: Text(list.name)),
                   ],
-                  onChanged: _comparing
-                      ? null
-                      : (value) => setState(() => _selectedTodoListId = value),
+                  onChanged: (value) =>
+                      setState(() => _selectedTodoListId = value),
                 ),
                 const SizedBox(height: 8),
                 ListTile(

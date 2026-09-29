@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/media/media_service.dart';
 import 'package:voyager/core/media/widgets/media_gallery_strip.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
+import 'package:voyager/core/soft_delete/restore_contract.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
@@ -18,7 +21,9 @@ import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
+import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/rankings/ranking_queries.dart';
 import 'package:voyager/features/rankings/rankings_actions.dart';
@@ -242,29 +247,41 @@ class _RankingsChildListState extends ConsumerState<RankingsChildList> {
 
   Future<void> _pickView(BuildContext buttonContext) async {
     final fields = widget.category.activeChildTemplate;
-    final selected = await showMenu<({RankingChildSort sort, String? fieldId})>(
-      context: buttonContext,
-      position: _menuPosition(buttonContext),
-      items: [
-        const PopupMenuItem(
-          value: (sort: RankingChildSort.saved, fieldId: null),
-          child: Text('Manual order'),
-        ),
-        const PopupMenuItem(
-          value: (sort: RankingChildSort.name, fieldId: null),
-          child: Text('Name'),
-        ),
-        const PopupMenuItem(
-          value: (sort: RankingChildSort.overallScore, fieldId: null),
-          child: Text('Overall score'),
-        ),
-        for (final field in fields)
-          PopupMenuItem(
-            value: (sort: RankingChildSort.customField, fieldId: field.id),
-            child: Text(field.label),
-          ),
-      ],
-    );
+    final selected =
+        await showVoyagerMenu<({RankingChildSort sort, String? fieldId})>(
+          context: buttonContext,
+          position: _menuPosition(buttonContext),
+          accentColor: paletteColor(widget.category.colorValue, context),
+          items:
+              voyagerSelectMenuEntries<
+                ({RankingChildSort sort, String? fieldId})
+              >(
+                context: buttonContext,
+                items: [
+                  (
+                    value: (sort: RankingChildSort.saved, fieldId: null),
+                    label: 'Manual order',
+                  ),
+                  (
+                    value: (sort: RankingChildSort.name, fieldId: null),
+                    label: 'Name',
+                  ),
+                  (
+                    value: (sort: RankingChildSort.overallScore, fieldId: null),
+                    label: 'Overall score',
+                  ),
+                  for (final field in fields)
+                    (
+                      value: (
+                        sort: RankingChildSort.customField,
+                        fieldId: field.id,
+                      ),
+                      label: field.label,
+                    ),
+                ],
+                selected: ref.read(rankingChildSortProvider),
+              ),
+        );
     if (selected == null) return;
     ref.read(rankingChildSortProvider.notifier).state = selected;
   }
@@ -508,12 +525,30 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
   /// `_actions`.
   late final RankingsActions _actions;
 
+  /// Resolved up front for the same reason: Cancel puts images back after the
+  /// dialog has gone.
+  late final MediaService _media;
+
+  /// This unit's images attached here, by id, for Cancel to detach.
+  final _attachedImages = <String>{};
+
+  /// This unit's images removed here, as they stood, for Cancel to put back.
+  final _removedImages = <String, MediaReference>{};
+
+  /// Only this device's edits, so nothing a pull brings in is ever undone.
+  /// Outlives the dialog on Cancel, to hear an attach that lands after it.
+  late final StreamSubscription<({MediaReference reference, bool removed})>
+  _imageEdits;
+
+  bool _cancelling = false;
+
   @override
   void initState() {
     super.initState();
-    _actions = RankingsActions.detached(
-      ProviderScope.containerOf(context, listen: false),
-    );
+    final container = ProviderScope.containerOf(context, listen: false);
+    _actions = RankingsActions.detached(container);
+    _media = container.read(mediaServiceProvider);
+    _imageEdits = _media.referenceEdits.listen(_recordImageEdit);
     _current = widget.child;
     _nameController = TextEditingController(text: _current.name);
     _notesController = TextEditingController(text: _current.notes);
@@ -524,6 +559,7 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
   void dispose() {
     _saveTimer?.cancel();
     unawaited(_commitText());
+    if (!_cancelling) unawaited(_imageEdits.cancel());
     _nameController.dispose();
     _notesController.dispose();
     _notesFocusNode.dispose();
@@ -583,6 +619,56 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
     _current = next;
     await _actions.saveChild(next, previous: previous);
     if (mounted) setState(() {});
+  }
+
+  /// Every edit here is already written, so Cancel writes the unit back to how
+  /// it opened. Only what this dialog changed is put back: anything another
+  /// device wrote meanwhile stays. Pending text is dropped rather than flushed
+  /// by [dispose].
+  void _cancel() {
+    _saveTimer?.cancel();
+    _cancelling = true;
+    _nameController.text = widget.child.name;
+    _notesController.text = widget.child.notes;
+    unawaited(_save(widget.child));
+    unawaited(_restoreImages());
+    Navigator.pop(context);
+  }
+
+  /// An attach and a removal of the same image cancel out, so a removal taken
+  /// back by the toast's Undo leaves nothing for Cancel to do.
+  void _recordImageEdit(({MediaReference reference, bool removed}) edit) {
+    final image = edit.reference;
+    if (image.collection != FirestoreCollections.rankings ||
+        image.documentId != widget.child.id) {
+      return;
+    }
+    if (edit.removed) {
+      if (!_attachedImages.remove(image.id)) _removedImages[image.id] = image;
+    } else {
+      if (_removedImages.remove(image.id) == null) {
+        _attachedImages.add(image.id);
+      }
+    }
+  }
+
+  /// Waits out any attach still ingesting, so an image pasted just before
+  /// Cancel is taken back too, then undoes this dialog's own image edits —
+  /// the same pair the gallery's own undo uses, so a removed image returns to
+  /// its old slot.
+  Future<void> _restoreImages() async {
+    await _media.attachesSettled();
+    await _imageEdits.cancel();
+    for (final id in _attachedImages) {
+      await _media.removeReference(id);
+    }
+    for (final image in _removedImages.values) {
+      try {
+        await _media.restoreReference(image);
+      } on RestoreSuperseded {
+        // A pull already put it back.
+      }
+    }
   }
 
   @override
@@ -724,19 +810,7 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
           : body,
       actions: [
         if (!widget.readOnly)
-          GlassButton(
-            onPressed: () async {
-              final deleted = await confirmDeleteRankingChild(
-                context,
-                ref,
-                _current,
-              );
-              if (deleted && context.mounted) Navigator.pop(context);
-            },
-            label: 'Delete',
-            color: Theme.of(context).colorScheme.error,
-            dense: true,
-          ),
+          GlassButton(onPressed: _cancel, label: 'Cancel', dense: true),
         GlassButton(
           onPressed: () => Navigator.pop(context),
           label: 'Done',

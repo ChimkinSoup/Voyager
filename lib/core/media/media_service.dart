@@ -71,6 +71,35 @@ class MediaService extends ChangeNotifier {
   /// call it directly.
   void notifyChanged() => notifyListeners();
 
+  /// Every reference this device adds, removes or restores, as it happens.
+  /// Pulls write the repository directly and never show up here, which is
+  /// what lets an editor take back only its own image changes. Synchronous,
+  /// so an edit is heard before the call that made it returns.
+  final _referenceEdits =
+      StreamController<({MediaReference reference, bool removed})>.broadcast(
+        sync: true,
+      );
+
+  Stream<({MediaReference reference, bool removed})> get referenceEdits =>
+      _referenceEdits.stream;
+
+  /// Attaches still ingesting, each settling whether it lands or fails.
+  final _attaching = <Future<void>>{};
+
+  /// Completes once every attach already under way has landed or failed.
+  Future<void> attachesSettled() => Future.wait(_attaching.toList());
+
+  /// Runs [attach] as one attach under way for [attachesSettled]. A batch
+  /// attaches its images one after another, so wrapping the whole loop is
+  /// what keeps the images not yet started from being missed.
+  Future<T> trackAttach<T>(Future<T> Function() attach) {
+    final attached = attach();
+    final settled = attached.then<void>((_) {}, onError: (Object _) {});
+    _attaching.add(settled);
+    unawaited(settled.whenComplete(() => _attaching.remove(settled)));
+    return attached;
+  }
+
   /// Ingests [bytes] and attaches the result to a parent.
   ///
   /// Throws [MediaIngestException] with a message meant for the user when the
@@ -84,16 +113,18 @@ class MediaService extends ChangeNotifier {
     MediaFacet facet = MediaFacet.gallery,
     int? sortOrder,
     int? displayWidthPx,
-  }) async {
-    final asset = await ingestBytes(bytes);
-    return addReference(
-      mediaId: asset.id,
-      collection: collection,
-      documentId: documentId,
-      facet: facet,
-      sortOrder: sortOrder,
-      displayWidthPx: displayWidthPx,
-    );
+  }) {
+    return trackAttach(() async {
+      final asset = await ingestBytes(bytes);
+      return addReference(
+        mediaId: asset.id,
+        collection: collection,
+        documentId: documentId,
+        facet: facet,
+        sortOrder: sortOrder,
+        displayWidthPx: displayWidthPx,
+      );
+    });
   }
 
   /// Ingests [bytes] into an asset without attaching it anywhere.
@@ -206,6 +237,7 @@ class MediaService extends ChangeNotifier {
     );
     await _repository.upsertReference(reference);
     _publisher?.publishReference(reference);
+    _referenceEdits.add((reference: reference, removed: false));
     // The asset now has something pointing at it, so the retention clock that
     // started when it was ingested has to stop.
     await _refreshRefcount(mediaId);
@@ -255,6 +287,7 @@ class MediaService extends ChangeNotifier {
       bumpVersion: true,
     );
     _publisher?.publishReference(tombstone);
+    _referenceEdits.add((reference: reference, removed: true));
     await _refreshRefcount(reference.mediaId);
     notifyListeners();
   }
@@ -284,6 +317,7 @@ class MediaService extends ChangeNotifier {
     );
     await _repository.upsertReference(restored);
     _publisher?.publishReference(restored);
+    _referenceEdits.add((reference: restored, removed: false));
     await _refreshRefcount(restored.mediaId);
     notifyListeners();
   }

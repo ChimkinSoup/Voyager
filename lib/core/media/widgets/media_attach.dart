@@ -62,14 +62,18 @@ Future<void> attachImagesForOwner(
     message: count == 1 ? 'Adding image…' : 'Adding $count images…',
   );
   try {
-    for (final bytes in images) {
-      await service.attachBytes(
-        bytes: bytes,
-        collection: collection,
-        documentId: documentId,
-        facet: facet,
-      );
-    }
+    // One attach under way from the first image to the last, so an editor
+    // cancelled mid-batch waits for the images not yet started too.
+    await service.trackAttach(() async {
+      for (final bytes in images) {
+        await service.attachBytes(
+          bytes: bytes,
+          collection: collection,
+          documentId: documentId,
+          facet: facet,
+        );
+      }
+    });
     toast.update(
       message: count == 1 ? 'Image added' : '$count images added',
       icon: PhosphorIconsRegular.check,
