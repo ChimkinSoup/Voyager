@@ -1,0 +1,24 @@
+# Past-time reminder from floater: where does focus go?
+other-open 60 1250 900 450
+other-click
+wait 300
+ostatus
+hotkey ctrl+alt+r
+wait 1800
+type past rem two
+click 250 552
+wait 1500
+key ctrl+a
+type 9:30 PM
+key enter
+wait 800
+shot p5-rp-form
+click 865 929
+wait 300
+shot p5-rp-a
+ostatus
+wait 700
+ostatus
+wait 1500
+ostatus
+shot p5-rp-b

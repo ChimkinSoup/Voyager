@@ -1,0 +1,1 @@
+visual-ctrlc	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	v e {ctrl+c} {wait:300}	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	*	normal

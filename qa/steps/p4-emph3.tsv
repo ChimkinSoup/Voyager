@@ -1,0 +1,5 @@
+b1	and 2*3\n* bullet with *emph* inside\nlast line	0	{ctrl+end}	*	*
+b2	and 2*3\n* bullet\nlast line	0	{ctrl+end}	*	*
+b3	and 2*3\nsome *emph* inside\nlast **x	0	{ctrl+end}	*	*
+b4	and 2*3 then *emph* here and more	0	{ctrl+end}	*	*
+b5	math $x * y$ and 2*3\nmore text *a* b	0	{ctrl+end}	*	*

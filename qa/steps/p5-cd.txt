@@ -1,0 +1,43 @@
+# (c) tray-hidden, replacement, no-op; (d) minimized
+activate
+key ctrl+a
+key backspace
+place 200 100 2000 1100
+wait 400
+other-open 60 1250 900 450
+close
+wait 1000
+ostatus
+hotkey ctrl+alt+t
+wait 1500
+ostatus
+shot p5-c-t
+hotkey ctrl+alt+f
+wait 1500
+ostatus
+shot p5-c-f
+hotkey ctrl+alt+f
+wait 1000
+ostatus
+hotkey ctrl+alt+j
+wait 1800
+ostatus
+shot p5-c-j
+other-click
+wait 1500
+ostatus
+tray-open
+wait 1500
+ostatus
+minimize
+wait 1000
+other-click
+wait 300
+ostatus
+hotkey ctrl+alt+r
+wait 1800
+ostatus
+shot p5-d-r
+other-click
+wait 1500
+ostatus

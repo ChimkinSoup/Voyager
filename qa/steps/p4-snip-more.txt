@@ -1,0 +1,20 @@
+activate
+# tabstop snippet pp -> ($0)$1 (manual)
+click 916 1137
+wait 700
+type pp
+key tab
+type ($0)$1
+key ctrl+enter
+wait 900
+shot p4-snip-pp
+# duplicate trigger addr -> error expected
+# after 3 rows the Add button is 28 display px (40 phys) lower
+click 916 1177
+wait 700
+type addr
+key tab
+type dup
+key ctrl+enter
+wait 900
+shot p4-snip-dup

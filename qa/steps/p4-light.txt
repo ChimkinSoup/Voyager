@@ -1,0 +1,22 @@
+# window placed 200,100 2000x1100; Settings > Appearance open
+activate
+click 1810 948
+wait 1500
+click 685 46
+wait 1000
+shot p4-light-editing
+click 1880 752
+wait 1200
+shot p4-light-snippets
+key esc
+wait 800
+click 1880 882
+wait 1200
+type form
+wait 800
+shot p4-light-dict
+key esc
+wait 800
+key ctrl+tab
+wait 1800
+shot p4-light-journal

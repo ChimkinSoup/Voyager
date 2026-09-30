@@ -1,0 +1,17 @@
+activate
+key esc
+wait 800
+shot p1-chpw3-closed
+click 469 354
+wait 1200
+click 1440 767
+type qavoyager2026
+click 1440 887
+type abc
+click 1440 1007
+type abc
+wait 300
+shot p1-chpw3-short-typed
+click 1735 1133
+wait 5000
+shot p1-chpw3-short-result

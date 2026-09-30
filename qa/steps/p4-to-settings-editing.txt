@@ -1,0 +1,8 @@
+# From any page (maximized): rail scroll -> Settings -> Editing tab
+activate
+wheel 88 1400 -10
+wait 400
+click 88 1518
+wait 1500
+click 685 46
+wait 800

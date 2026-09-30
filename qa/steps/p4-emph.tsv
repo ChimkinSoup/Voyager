@@ -1,0 +1,1 @@
+emph	plain **bold** *italic* __under__ ==high== end\nnested **bold *and italic* bold** ***both*** **bold ==hl==**\ntag **#project** code `a **not bold** b` math $x * y$ 2 * 3 and 2*3\n* bullet with *emph* inside\nunclosed **open and *half\nsnake_case__names a__b__c foo**bar**baz\n	0	{wait:10}	*	*

@@ -1,0 +1,10 @@
+l-cont	- a	3	{enter} b	- a\n- b	*
+l-cont-num	1. a	4	{enter} b	1. a\n2. b	*
+l-cont-star	* a	3	{enter} b	* a\n* b	*
+l-empty-exit	- a\n- 	6	{enter}	- a\n\n	*
+l-indent	- a\n- b	7	{tab}	- a\n  - b	*
+l-outdent	- a\n  - b	9	{shift+tab}	- a\n- b	*
+l-outdent-top	- a	3	{shift+tab}	- a	*
+l-indent-num	1. a\n2. b	9	{tab}	1. a\n   1. b	*
+l-plain-tab	hello	5	{tab}	hello	*
+l-indent-mid	- abc	3	{tab}	  - abc	*

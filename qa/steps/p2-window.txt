@@ -1,0 +1,26 @@
+activate
+click 470 1030
+wait 1200
+key h
+wait 1000
+place 0 0 1440 1040
+wait 2000
+status
+shot p2-win-min-settings
+place 0 0 1000 700
+wait 2000
+status
+wheel 60 500 10
+wait 800
+shot p2-win-min-railtop
+wheel 60 500 -20
+wait 800
+shot p2-win-min-railbottom
+place 100 50 2000 1100
+wait 2000
+status
+shot p2-win-odd
+maximize
+wait 2000
+status
+shot p2-win-max

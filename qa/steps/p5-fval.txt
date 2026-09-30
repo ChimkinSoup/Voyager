@@ -1,0 +1,31 @@
+# Finance floater validation (Vim OFF)
+other-open 60 1250 900 450
+hotkey ctrl+alt+f
+wait 1800
+click 632 917
+wait 800
+shot p5-fv-empty
+click 632 286
+type 0
+click 632 917
+wait 800
+shot p5-fv-zero
+click 632 286
+key backspace
+type 99999999999
+wait 300
+shot p5-fv-huge
+click 632 286
+key ctrl+a
+key backspace
+type -5
+wait 300
+shot p5-fv-neg
+click 632 286
+key ctrl+a
+key backspace
+type abc.1.2
+wait 300
+shot p5-fv-abc
+other-click
+wait 1200

@@ -1,0 +1,3 @@
+ctrlv-normal	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	{ctrl+v}	aCLIPXlpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	*	normal
+ctrlv-insert	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	i {ctrl+v}	CLIPXalpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	5	insert
+yy-then-p	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	yiw {wait:300} $ p	alpha beta gamma deltaalpha\none two three four five\n\nfoo(bar, baz); qu.end	*	normal

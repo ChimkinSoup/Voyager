@@ -1,0 +1,32 @@
+activate
+wheel 88 900 -15
+wait 600
+click 84 1518
+wait 2000
+click 487 46
+wait 1500
+click 2707 829
+wait 3000
+shot p2-light-settings
+key ctrl+slash
+wait 1500
+shot p2-light-help
+key esc
+wait 800
+click 88 148
+wait 2500
+shot p2-light-forecast
+key esc
+wait 800
+wheel 88 900 15
+wait 600
+click 88 538
+wait 2500
+shot p2-light-todo
+wheel 88 900 -15
+wait 600
+click 84 1518
+wait 2000
+click 2525 829
+wait 3000
+shot p2-dark-back

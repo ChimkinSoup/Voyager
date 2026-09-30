@@ -1,0 +1,11 @@
+activate
+place 200 100 2000 1100
+wait 1500
+status
+close
+wait 2000
+status
+tray-open
+wait 2500
+status
+shot p2-tray-reopened

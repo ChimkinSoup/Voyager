@@ -1,0 +1,19 @@
+activate
+click 1666 1028
+wait 1500
+click 1440 1728
+wait 500
+type task normal enter
+key esc
+wait 300
+key enter
+wait 1500
+shot p3-composer-normal-enter
+key esc
+type A
+key ctrl+a
+key backspace
+type task insert enter
+key enter
+wait 1500
+shot p3-composer-insert-enter

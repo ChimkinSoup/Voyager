@@ -1,0 +1,27 @@
+activate
+click 685 46
+wait 1200
+click 2739 258
+wait 1000
+shot p6-vim-on
+click 88 1688
+wait 1200
+click 550 605
+wait 300
+type vim note abc
+key esc
+wait 300
+shot p6-vim-normal
+key 0
+key x
+wait 200
+key A
+type Z
+key enter
+wait 800
+shot p6-vim-enter
+key esc
+wait 300
+key esc
+wait 600
+shot p6-vim-esc2

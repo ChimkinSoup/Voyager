@@ -1,0 +1,20 @@
+activate
+wheel 1400 900 -15
+wait 1200
+shot p2-state-todo-scrolled
+click 88 298
+wait 2000
+click 487 1735
+wait 1500
+click 1800 900
+type QA draft body for state check
+wait 300
+key ctrl+tab
+wait 1500
+shot p2-state-ctab-from-field
+click 88 538
+wait 2000
+shot p2-state-todo-back
+click 88 298
+wait 2000
+shot p2-state-journal-back

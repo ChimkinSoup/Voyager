@@ -1,0 +1,41 @@
+activate
+# 1. empty submit
+click 1735 1133
+wait 1500
+shot p1-chpw-empty
+# 2. wrong current password, valid new
+click 1440 767
+key ctrl+a
+type wrongpass999
+click 1440 887
+key ctrl+a
+type qavoyager2027
+click 1440 1007
+key ctrl+a
+type qavoyager2027
+click 1735 1133
+wait 4000
+shot p1-chpw-wrongcurrent
+# 3. correct current, too-short new
+click 1440 767
+key ctrl+a
+type qavoyager2026
+click 1440 887
+key ctrl+a
+type abc
+click 1440 1007
+key ctrl+a
+type abc
+click 1735 1133
+wait 4000
+shot p1-chpw-short
+# 4. mismatch confirm
+click 1440 887
+key ctrl+a
+type qavoyager2027
+click 1440 1007
+key ctrl+a
+type qavoyager2028
+click 1735 1133
+wait 3000
+shot p1-chpw-mismatch

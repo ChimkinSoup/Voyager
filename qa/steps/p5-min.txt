@@ -1,0 +1,28 @@
+# Min-size main: floater round trip restores placement; in-app F/R at min size
+activate
+place 0 0 1440 1040
+wait 1000
+status
+other-open 1500 1250 900 450
+hotkey ctrl+alt+j
+wait 1800
+status
+other-click
+wait 1500
+ostatus
+hotkey ctrl+alt+f
+wait 1800
+other-click
+wait 1500
+ostatus
+activate
+hotkey ctrl+alt+f
+wait 1800
+shot p5-min-f
+key esc
+wait 800
+hotkey ctrl+alt+r
+wait 1800
+shot p5-min-r
+click 700 400
+wait 300

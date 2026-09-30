@@ -1,0 +1,4 @@
+real-end		0	I {space} went {space} wti {space} her {left} {left} {left} {left} h {space}	I went with  her	*
+real-end2		0	I {space} went {space} wti {space} her {wait:800} {left} {left} {left} {left} h {space}	I went with  her	*
+real-mid		0	wih {space} her {left} {left} {left} {left} {left} t {space}	wt ih her	*
+real-end-click		0	wti {wait:800} {home} {end} h {space}	with 	*

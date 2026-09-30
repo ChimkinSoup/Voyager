@@ -1,0 +1,5 @@
+c1	tag **#project** code `a **not bold** b` math $x * y$ 2 * 3 and 2*3\nnext *line* here\nlast **x	0	{ctrl+end}	*	*
+c2	code `a **not bold** b` and 2*3\nnext *line* here	0	{ctrl+end}	*	*
+c3	tag **#project** and 2*3\nnext *line* here	0	{ctrl+end}	*	*
+c4	math $x * y$ 2 * 3 and 2*3\nnext *line* here	0	{ctrl+end}	*	*
+c5	code `a b` then *it* x\nnext *line* here	0	{ctrl+end}	*	*

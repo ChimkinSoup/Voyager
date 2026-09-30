@@ -1,0 +1,28 @@
+activate
+click 1440 696
+key ctrl+a
+type notanemail
+click 1440 816
+key ctrl+a
+type qavoyager2027
+key enter
+wait 4000
+shot p1-login-bademail
+click 1440 696
+key ctrl+a
+type voyager-qa-002@example.com
+click 1440 816
+key ctrl+a
+type qavoyager2026
+key enter
+wait 5000
+shot p1-login-wrongpw
+click 1440 696
+key ctrl+a
+type voyager-qa-999@example.com
+click 1440 816
+key ctrl+a
+type qavoyager2026
+key enter
+wait 5000
+shot p1-login-unknown

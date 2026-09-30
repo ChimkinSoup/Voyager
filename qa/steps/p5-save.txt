@@ -1,0 +1,41 @@
+# Saves from F / R floaters, journal Delete + recreate, todo Open app
+other-open 60 1250 900 450
+hotkey ctrl+alt+f
+wait 1800
+key tab
+type Floater Store
+wait 300
+shot p5-save-f-filled
+click 632 917
+wait 300
+shot p5-save-f-confirm
+wait 1800
+ostatus
+hotkey ctrl+alt+r
+wait 1800
+type floater reminder
+click 865 930
+wait 300
+shot p5-save-r-confirm
+wait 1800
+ostatus
+hotkey ctrl+alt+j
+wait 1800
+shot p5-j-before-del
+click 690 59
+wait 500
+shot p5-j-del
+wait 1500
+ostatus
+hotkey ctrl+alt+j
+wait 1800
+shot p5-j-after-del
+type second qje
+wait 1500
+hotkey ctrl+alt+t
+wait 1500
+type open app draft
+click 50 60
+wait 2500
+ostatus
+shot p5-openapp

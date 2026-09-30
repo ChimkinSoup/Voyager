@@ -1,0 +1,33 @@
+# Keyboard-only saves in F / R floaters
+other-open 60 1250 900 450
+hotkey ctrl+alt+f
+wait 1800
+type 3.21
+key tab
+type KbdStore
+key tab
+type kbd note
+wait 300
+shot p5-kb-f
+key ctrl+enter
+wait 400
+shot p5-kb-f2
+wait 1500
+ostatus
+hotkey ctrl+alt+r
+wait 1800
+type kbd reminder
+wait 300
+key ctrl+enter
+wait 400
+shot p5-kb-r
+wait 1500
+ostatus
+hotkey ctrl+alt+f
+wait 1800
+type 1
+key enter
+wait 400
+shot p5-kb-f-enter
+wait 1500
+ostatus

@@ -1,0 +1,26 @@
+# Todo floater: click outside while the List / Due picker is open
+activate
+key esc
+other-open 60 1250 900 450
+wait 1500
+ostatus
+hotkey ctrl+alt+t
+wait 1500
+click 1240 62
+wait 1000
+ostatus
+shot p5-pb-list
+other-click
+wait 2000
+ostatus
+wait 5000
+ostatus
+hotkey ctrl+alt+t
+wait 1500
+ostatus
+click 1075 62
+wait 1000
+ostatus
+other-click
+wait 2000
+ostatus

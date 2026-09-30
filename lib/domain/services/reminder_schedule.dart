@@ -95,10 +95,12 @@ ReminderOccurrence? latestRuleOccurrence(
 }
 
 /// The first occurrence of [rule] strictly after [now], or null.
-DateTime? nextRuleFire(ScheduledReminderRule rule, DateTime now) {
+ReminderOccurrence? nextRuleFire(ScheduledReminderRule rule, DateTime now) {
   final armed = rule.armedAt.toLocal();
   final today = DateTime(now.year, now.month, now.day);
   bool counts(DateTime at) => at.isAfter(now) && !at.isBefore(armed);
+  ReminderOccurrence occurrence(DateTime at) =>
+      ReminderOccurrence(fireAt: at, key: reminderOccurrenceKey(at));
   switch (rule.scheduleKind) {
     case ReminderScheduleKind.daily:
     case ReminderScheduleKind.weekly:
@@ -112,14 +114,14 @@ DateTime? nextRuleFire(ScheduledReminderRule rule, DateTime now) {
           continue;
         }
         final candidate = atLocalMinutes(day, rule.localTimeMinutes);
-        if (counts(candidate)) return candidate;
+        if (counts(candidate)) return occurrence(candidate);
       }
       return null;
     case ReminderScheduleKind.once:
       final date = rule.onceLocalDate;
       if (date == null) return null;
       final candidate = atLocalMinutes(date, rule.localTimeMinutes);
-      return counts(candidate) ? candidate : null;
+      return counts(candidate) ? occurrence(candidate) : null;
   }
 }
 
@@ -174,15 +176,19 @@ ReminderOccurrence? latestTodoOccurrence(
   return occurrence;
 }
 
-DateTime? nextTodoFire(TodoTask task, EntityReminder reminder, DateTime now) {
+ReminderOccurrence? nextTodoFire(
+  TodoTask task,
+  EntityReminder reminder,
+  DateTime now,
+) {
   if (!_todoRemindable(task)) return null;
-  final fireAt = _entityOccurrence(
+  final occurrence = _entityOccurrence(
     todoReminderBase(task)!,
     reminder.offsetMinutes,
-  ).fireAt;
-  if (!fireAt.isAfter(now)) return null;
-  if (fireAt.isBefore(reminder.armedAt.toLocal())) return null;
-  return fireAt;
+  );
+  if (!occurrence.fireAt.isAfter(now)) return null;
+  if (occurrence.fireAt.isBefore(reminder.armedAt.toLocal())) return null;
+  return occurrence;
 }
 
 /// How far back [latestEventOccurrence] looks, widening only when the nearer
@@ -245,7 +251,7 @@ ReminderOccurrence? latestEventOccurrence(
   return null;
 }
 
-DateTime? nextEventFire(
+ReminderOccurrence? nextEventFire(
   CalendarEvent event,
   EntityReminder reminder,
   DateTime now,
@@ -259,11 +265,12 @@ DateTime? nextEventFire(
     from,
     from.add(_eventLookahead),
   )) {
-    final fireAt = _entityOccurrence(
+    final occurrence = _entityOccurrence(
       _eventReminderBase(event, start),
       reminder.offsetMinutes,
-    ).fireAt;
-    if (fireAt.isAfter(now) && !fireAt.isBefore(armed)) return fireAt;
+    );
+    final fireAt = occurrence.fireAt;
+    if (fireAt.isAfter(now) && !fireAt.isBefore(armed)) return occurrence;
   }
   return null;
 }
@@ -282,6 +289,7 @@ class ReminderEvaluation {
     this.snoozeUntil,
     this.nextFireAt,
     this.supersededSnooze = false,
+    this.replacedKey,
   });
 
   final ReminderPhase phase;
@@ -299,9 +307,14 @@ class ReminderEvaluation {
   /// next natural occurrence, since the natural one replaces it.
   final DateTime? nextFireAt;
 
-  /// True when a snooze on an older occurrence was just replaced by a newer
-  /// natural one (§3.1 step 3).
+  /// True when a snooze on an older occurrence, still running, was replaced
+  /// by a newer natural one (§3.1 step 3).
   final bool supersededSnooze;
+
+  /// The older occurrence [occurrence] replaced unacknowledged, when the
+  /// synced state says so: one whose snooze had already run out. Known after
+  /// a restart, unlike the engine's own memory of what was due.
+  final String? replacedKey;
 
   /// Names this particular appearance of a due sticky. A snooze coming back
   /// is a new appearance of the same occurrence, and deserves its own alert.
@@ -314,18 +327,61 @@ class ReminderEvaluation {
   }
 }
 
-/// Where a source stands at [now], from its [latest] natural occurrence, its
-/// [nextNatural] one and the last thing the user did about it.
+/// How many occurrences past [now] a synced state may name and still be read
+/// as a device ahead having acted on one this device has yet to reach —
+/// a timezone up to a day ahead, or a clock skewed by a few days.
+const int _kAheadOccurrenceLimit = 7;
+
+/// The occurrence from [next] on that [state] was recorded against, or null.
+ReminderOccurrence? _occurrenceAhead(
+  ReminderDeliveryState state,
+  ReminderOccurrence? next,
+  ReminderOccurrence? Function(DateTime after) nextAfter,
+) {
+  var candidate = next;
+  for (var i = 0; candidate != null && i < _kAheadOccurrenceLimit; i++) {
+    final order = candidate.key.compareTo(state.occurrenceKey);
+    if (order == 0) return candidate;
+    if (order > 0) return null;
+    candidate = nextAfter(candidate.fireAt);
+  }
+  return null;
+}
+
+/// Where a source stands at [now], from its [latest] natural occurrence, the
+/// ones after it — [nextAfter] gives the first strictly after an instant —
+/// and the last thing the user did about it.
 ///
 /// A natural occurrence newer than the one [state] was recorded against wins
 /// outright — over an unacknowledged older one, and over a snooze still
 /// running (§3 "Natural occurrence wins").
 ReminderEvaluation evaluateReminder({
   required ReminderOccurrence? latest,
-  required DateTime? nextNatural,
+  required ReminderOccurrence? Function(DateTime after) nextAfter,
   required ReminderDeliveryState? state,
   required DateTime now,
 }) {
+  final next = nextAfter(now);
+  final ahead = state == null ? null : _occurrenceAhead(state, next, nextAfter);
+  if (ahead != null) {
+    // A device whose clock or timezone is ahead has already acted on an
+    // occurrence this one has yet to reach — which, there, replaced [latest]
+    // and anything between. Raising those would resurrect what it replaced.
+    // Nothing needs attention until [state] applies here as it does there.
+    final there = evaluateReminder(
+      latest: ahead,
+      nextAfter: nextAfter,
+      state: state,
+      now: ahead.fireAt,
+    );
+    return ReminderEvaluation(
+      phase: ReminderPhase.pending,
+      nextFireAt: there.phase == ReminderPhase.due
+          ? ahead.fireAt
+          : there.nextFireAt,
+    );
+  }
+  final nextNatural = next?.fireAt;
   if (latest == null) {
     return ReminderEvaluation(
       phase: ReminderPhase.pending,
@@ -333,12 +389,23 @@ ReminderEvaluation evaluateReminder({
     );
   }
   if (state == null || state.occurrenceKey != latest.key) {
+    final snoozedUntil = state?.status == ReminderDeliveryStatus.snoozed
+        ? state!.snoozeUntil?.toLocal()
+        : null;
+    // Only a snooze still running when [latest] fired; one that had already
+    // run out left the older occurrence due, and that is what was replaced.
+    final snoozeRunning =
+        snoozedUntil != null && snoozedUntil.isAfter(latest.fireAt);
     return ReminderEvaluation(
       phase: ReminderPhase.due,
       occurrence: latest,
       dueSince: latest.fireAt,
       nextFireAt: nextNatural,
-      supersededSnooze: state?.status == ReminderDeliveryStatus.snoozed,
+      supersededSnooze: snoozeRunning,
+      replacedKey:
+          state?.status == ReminderDeliveryStatus.snoozed && !snoozeRunning
+          ? state!.occurrenceKey
+          : null,
     );
   }
   switch (state.status) {

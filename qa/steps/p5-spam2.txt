@@ -1,0 +1,37 @@
+# Replacement bursts at different gaps (floater path)
+other-open 60 1250 900 450
+hotkey ctrl+alt+t
+wait 100
+hotkey ctrl+alt+f
+wait 100
+hotkey ctrl+alt+j
+wait 100
+hotkey ctrl+alt+r
+wait 100
+hotkey ctrl+alt+t
+wait 200
+hotkey ctrl+alt+f
+wait 200
+hotkey ctrl+alt+j
+wait 200
+hotkey ctrl+alt+r
+wait 200
+hotkey ctrl+alt+t
+wait 300
+hotkey ctrl+alt+f
+wait 300
+hotkey ctrl+alt+j
+wait 300
+hotkey ctrl+alt+r
+wait 300
+hotkey ctrl+alt+t
+wait 50
+hotkey ctrl+alt+j
+wait 50
+hotkey ctrl+alt+f
+wait 50
+hotkey ctrl+alt+r
+wait 3000
+ostatus
+other-click
+wait 1500

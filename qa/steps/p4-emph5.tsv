@@ -1,0 +1,5 @@
+d1	and 2*3\nunclosed **open and *half	0	{ctrl+end}	*	*
+d2	and 2*3\nfoo**bar**baz	0	{ctrl+end}	*	*
+d3	and 2*3\nsnake_case__names a__b__c	0	{ctrl+end}	*	*
+d4	and 2*3\nx *half	0	{ctrl+end}	*	*
+d5	and 2*3\nsee foo* bar	0	{ctrl+end}	*	*

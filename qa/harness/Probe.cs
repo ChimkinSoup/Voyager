@@ -41,6 +41,8 @@ public static class Voy
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder sb, int max);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder sb, int max);
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr l);
+    [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(POINT p);
+    [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
     delegate bool EnumProc(IntPtr h, IntPtr l);
 
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
@@ -274,10 +276,18 @@ public static class Voy
 
     // ---- mouse (coordinates are physical client pixels, same as screenshots) ----
 
+    /// Client px -> screen px. Refuses points outside Voyager's client area, or
+    /// where another window covers it, so a wrong coordinate can't click another app.
     static POINT ToScreen(int x, int y)
     {
+        var m = MainWindow();
+        RECT c; GetClientRect(m, out c);
+        if (x < 0 || y < 0 || x >= c.R || y >= c.B)
+            throw new InvalidOperationException("GUARD: (" + x + "," + y + ") is outside Voyager's client area " + c.R + "x" + c.B);
         var p = new POINT { X = x, Y = y };
-        ClientToScreen(MainWindow(), ref p);
+        ClientToScreen(m, ref p);
+        if (GetAncestor(WindowFromPoint(p), 2) != m)
+            throw new InvalidOperationException("GUARD: another window is over (" + x + "," + y + ")");
         return p;
     }
 

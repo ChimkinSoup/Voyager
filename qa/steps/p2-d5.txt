@@ -1,0 +1,60 @@
+activate
+click 2000 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+key ctrl+tab
+wait 40
+wait 3000
+shot p2-ctab20
+wheel 88 900 15
+wait 600
+click 88 418
+wait 2000
+click 1800 800
+key ctrl+end
+type  MIDEDIT-TRAY
+close
+wait 2000
+status
+tray-open
+wait 2500
+shot p2-midedit-reopen
+key win+down
+wait 1500
+status

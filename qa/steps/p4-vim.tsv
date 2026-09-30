@@ -1,0 +1,4 @@
+﻿v-auto	x 	0	A addr	x 123 Main St	*	insert
+v-ac	x 	0	A jsut {space}	x just 	*	insert
+v-sig	x 	0	A ;sig {space}	x Best regards, Juno	*	insert
+v-normal-addr	addr	0	{wait:10}	addr	*	normal

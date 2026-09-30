@@ -1,0 +1,3 @@
+backtick-insert	abc	0	i `` {esc}	*	*	normal
+shift-u-slow	x\n  y	0	{wait:1500} j >> {wait:1500} u	x\n  y	*	normal
+di-backtick	say `code` ok	6	di`	say `` ok	5	normal

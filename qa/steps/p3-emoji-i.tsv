@@ -1,0 +1,3 @@
+emoji-ll-i	a\u{1f600}b	0	l l iZ {esc}	a\u{1f600}b	*	normal
+emoji-a-after-l	a\u{1f600}b	0	l aZ {esc}	a\u{1f600}Zb	*	normal
+emoji-restore	alpha \u{1f600} ok	0		alpha \u{1f600} ok	0	normal

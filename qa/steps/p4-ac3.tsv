@@ -1,0 +1,6 @@
+edit-end	I went wti her	10	h {space}	I went with  her	*
+edit-end-eol	I went wti	10	h {space}	I went with 	*
+edit-mid-eol	I went wih	9	t {right} {space}	I went with 	*
+edit-comma	I went wti her	10	h ,	I went with, her	*
+undo-shz		0	wtih {space} {wait:700} {ctrl+z} {ctrl+shift+z}	with 	*
+ent-shift		0	wtih {shift+enter}	with\n	*

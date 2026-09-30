@@ -1,0 +1,17 @@
+# Finding 11: floater todo draft -> in-app T from Journal puts draft in composer, focused
+place 200 100 2000 1100
+wait 500
+other-open 60 1250 900 450
+hotkey ctrl+alt+t
+wait 1500
+type draft x
+wait 300
+other-click
+wait 1200
+activate
+wait 300
+hotkey ctrl+alt+j
+wait 1800
+hotkey ctrl+alt+t
+wait 1800
+shot p5-f11

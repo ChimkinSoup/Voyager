@@ -656,7 +656,7 @@ class _ScheduledReminderEditorState
           : null,
       armedAt: now,
     );
-    final next = nextRuleFire(draft, now);
+    final next = nextRuleFire(draft, now)?.fireAt;
     if (next == null) return 'That time has already passed';
     return 'Fires in ${reminderDistanceLabel(next, now)}';
   }
@@ -1164,8 +1164,11 @@ class _ReminderHistoryDialog extends ConsumerWidget {
                   devices[entry.deviceId] ?? 'Unknown device',
                   if (entry.occurrenceKey.isNotEmpty)
                     'for ${entry.occurrenceKey.replaceFirst('T', ' ')}',
+                  // Those two carry the appearance's instance tag, which is
+                  // bookkeeping rather than something to read.
                   if (entry.detail case final detail?
-                      when entry.eventType != ReminderLogEvent.osFired)
+                      when entry.eventType != ReminderLogEvent.osFired &&
+                          entry.eventType != ReminderLogEvent.stickyShown)
                     detail,
                 ].join(' · ');
                 return Padding(

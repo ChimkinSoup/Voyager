@@ -1,0 +1,85 @@
+activate
+click 1440 1728
+wait 400
+type QA task 01\n
+wait 250
+type QA task 02\n
+wait 250
+type QA task 03\n
+wait 250
+type QA task 04\n
+wait 250
+type QA task 05\n
+wait 250
+type QA task 06\n
+wait 250
+type QA task 07\n
+wait 250
+type QA task 08\n
+wait 250
+type QA task 09\n
+wait 250
+type QA task 10\n
+wait 250
+type QA task 11\n
+wait 250
+type QA task 12\n
+wait 250
+type QA task 13\n
+wait 250
+type QA task 14\n
+wait 250
+type QA task 15\n
+wait 250
+type QA task 16\n
+wait 250
+type QA task 17\n
+wait 250
+type QA task 18\n
+wait 250
+type QA task 19\n
+wait 250
+type QA task 20\n
+wait 250
+type QA task 21\n
+wait 250
+type QA task 22\n
+wait 250
+type QA task 23\n
+wait 250
+type QA task 24\n
+wait 250
+type QA task 25\n
+wait 250
+type QA task 26\n
+wait 250
+type QA task 27\n
+wait 250
+type QA task 28\n
+wait 250
+type QA task 29\n
+wait 250
+type QA task 30\n
+wait 250
+type QA task 31\n
+wait 250
+type QA task 32\n
+wait 250
+type QA task 33\n
+wait 250
+type QA task 34\n
+wait 250
+type QA task 35\n
+wait 250
+type QA task 36\n
+wait 250
+type QA task 37\n
+wait 250
+type QA task 38\n
+wait 250
+type QA task 39\n
+wait 250
+type QA task 40\n
+wait 250
+wait 1500
+shot p2-todo-40

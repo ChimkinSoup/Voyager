@@ -75,12 +75,12 @@ For each phase, besides its specific flows, tick this sweep. Copy it into the ph
 | # | Phase | Status |
 |---|---|---|
 | 0 | Setup (environment, harness, plan) | Done |
-| 1 | First run, auth & account lifecycle | Not Started |
-| 2 | Shell, navigation, window & tray | Not Started |
-| 3 | Vim modal keybinding system | Not Started |
-| 4 | Text-editing helpers (autocorrect, dictionary, snippets, formatting, images) | Not Started |
-| 5 | Global hotkeys & floaters | Not Started |
-| 6 | Notifications, inbox & reminders | Not Started |
+| 1 | First run, auth & account lifecycle | Done |
+| 2 | Shell, navigation, window & tray | Done |
+| 3 | Vim modal keybinding system | Done |
+| 4 | Text-editing helpers (autocorrect, dictionary, snippets, formatting, images) | Done |
+| 5 | Global hotkeys & floaters | Done |
+| 6 | Notifications, inbox & reminders | Done |
 | 7 | Journal | Not Started |
 | 8 | Dream journal | Not Started |
 | 9 | To-Do | Not Started |
@@ -114,116 +114,169 @@ Keep this table and each phase's **Status** line in sync.
 ---
 
 ## Phase 1 — First run, auth & account lifecycle
-- **Status:** Not Started
+- **Status:** Done (2026-09-29). Bugs: BUG-003 (Blocker), BUG-004 (Major), BUG-005 (Blocker), BUG-006 (Minor); BUG-001 re-checked fixed.
 - **Scope:** login page, sign-up/sign-in, error states, what a brand-new account sees on every page (first-run empty states), startup-page redirect after login, sign-out from Settings → Account, change password on a QA account. **Deferred:** rail/nav mechanics → P2; Settings page in general → P25; per-page empty-state *details* → each page's phase (here only check that nothing crashes and there's a sensible first-run prompt).
 - **HLD docs:** PLAN.md, PRODUCT.md, SESSION_RESUME_HLD.md (startup), GAPS.md
 - **Flows:**
-  - [ ] Login page layout; Sign in ↔ Create account toggle (card re-centres, fields keep or clear their text?)
-  - [ ] Sign up a new account (happy path) → lands on the startup page
-  - [ ] Sign-up errors: empty e-mail/password ("Email and password are required."), invalid e-mail format, weak password (<6 chars), e-mail already in use (reuse qa-001)
-  - [ ] Sign-in errors: wrong password, unknown e-mail, whitespace around the e-mail (it is trimmed)
-  - [ ] Enter in either field submits; the loading state disables the buttons; double Enter doesn't double-submit
-  - [ ] "Forgot password?" with an **empty** e-mail shows "Enter your email…" (with an e-mail filled in it's **MANUAL-ONLY**)
-  - [ ] Google button hidden on Windows unless OAuth configured (don't click it)
-  - [ ] **Lead from setup:** new account, Journal page, type into the body → does an entry/journal get created and persisted? Survives restart? (PROGRESS.md §7)
-  - [ ] First visit to every rail page on an empty account: no crash, no FlutterError, a sensible empty state or first-run prompt ("Create your first list", etc.)
-  - [ ] Settings → Account shows the right e-mail; Sign out → login page; sign back in → data still there (pulled back)
-  - [ ] Change password (QA account only): wrong current password error, too-short new password, success (then sign out/in with the new one; **record it in PROGRESS.md**)
-  - [ ] Startup page after login honours Settings → Startup page (first/last seen/custom) (the settings detail is in P25)
-  - [ ] Relaunch while signed in skips the login page; relaunch after sign-out shows it
-  - [ ] Record the first-run defaults (expected: Dark, Scatter on, Wave off, Juno's background values; see the standard configuration) and confirm they match
-- **Test data:** 1–2 fresh QA accounts.
-- **Skipped/blocked:** —
+  - [x] Login page layout; Sign in ↔ Create account toggle: the card re-centres, typed e-mail and password are **kept**, no field is focused afterwards. Sign-up mode buttons: "Sign up" / "Have an account? Sign in".
+  - [x] Sign up a new account (happy path) → lands on Journal (startup = first page), no e-mail verification. qa-002 and qa-003 created.
+  - [x] Sign-up errors: empty ("Email and password are required."), "notanemail" ("Enter a valid email address."), "abc" ("Password is too weak. Use at least 6 characters."), qa-001 ("An account already exists for this email.").
+  - [x] Sign-in errors: wrong password and unknown e-mail both show "Sign in failed. Check your email and password, then try again."; a padded e-mail is trimmed and signs in.
+  - [x] Enter in either field submits; loading shows a spinner in place of Sign in and dims the other buttons; double Enter → one sign-in, no error.
+  - [x] "Forgot password?" with an empty e-mail → "Enter your email to reset your password." (filled-in path not exercised: MANUAL-ONLY)
+  - [x] Google button hidden on Windows.
+  - [x] **Lead from setup:** confirmed, BUG-003 (text typed into the editor of an account with no journal is never saved; lost on restart). Follow-on BUG-004 (after "New entry", the journal and entry stay invisible until restart).
+  - [x] First visit to every rail page (Journal, Dreams, To-Do, Calendar, Search, Analytics, Finance, Life, LeetCode, Rankings, Jobs, Study, Workout, Settings): no crash, no FlutterError, sensible empty states ("No dreams logged yet.", "Create your first list", "No transactions yet…", "No categories yet / Create a category", "No problems tracked yet", "No applications tracked yet", "Nothing here yet / New folder / New deck", Workout pre-seeded exercise library, Life "Set your birth date in Settings").
+  - [x] Settings → Account shows the right e-mail ("Signed in with email and password"); Sign out → login page; sign back in → data pulled back (qa-002 onto an empty local DB). **Sign-out keeps the local data, and another account then sees and can upload it: BUG-005.**
+  - [x] Change password (qa-002): empty → "Fill in both passwords."; wrong current → "Could not change password. Check your current password, then try again."; "abc" → "Password is too weak. Use at least 6 characters."; mismatch → "New passwords do not match."; success via Enter in Confirm (dialog closes). Old password then rejected at sign-in, new one (`qavoyager2027`) works; recorded in PROGRESS.md.
+  - [x] Startup page: First → Journal after sign-up; Last seen → Finance after a restart and Settings after sign-in; Custom (To-Do) → To-Do after a restart while the last page seen was Finance. DB: `startup_page_mode`, `custom_startup_page`='/todo'.
+  - [x] Relaunch while signed in skips the login page; relaunch after sign-out shows it (`vm.ps1 whoami` = SIGNED-OUT).
+  - [x] First-run defaults match: dark, scatter on (lit 0.025), wave off, scale 15, intensity 0.67 (UI 67%), glow spread 1.10, focal (0.1, 0.5), floor 0.8, accent #7c9eff; light: 160 petals, fall 39, 2 minor colours.
+- **Five-dimension sweep:**
+  - D1 functional: flows above.
+  - D2 data: new entry in SQLite at once; outbox drained (0) throughout; restart keeps the entry; cold re-login restores qa-002's entry; settings writes checked by SQL.
+  - D3 visual: login card at maximized, min (1440×1040) and 2000×1100: no overflow. First-run pages at maximized in Dark + Scatter. Light spot-check: Appearance, Journal, To-Do, Account, login page (login page follows the saved theme): all legible. No `RenderFlex overflowed` in any run log.
+  - D4 keyboard: BUG-006 (no initial focus, focus lost after a failed submit, invisible button focus, buttons ignore Enter/Space; Create account unreachable by keyboard). Vim-ON behaviour in the login fields deferred to P3.
+  - D5 failures: 300-char e-mail (field scrolls; "Enter a valid email address."), malformed e-mail, weak password, double Enter, wrong current password. Not done: `stop.ps1` mid sign-in.
+- **Test data:** qa-002 (1 journal entry; password `qavoyager2027`), qa-003 (orphan entry from BUG-005 in its cloud copy; startup page Custom → To-Do).
+- **Skipped/blocked:** Forgot password with an e-mail (MANUAL-ONLY); interrupting a sign-in with `stop.ps1` (not done, low value); Vim ON in the login fields (P3).
 
 ## Phase 2 — Shell, navigation, window & tray
-- **Status:** Not Started
+- **Status:** Done (2026-09-29). Bugs: BUG-007 (Cosmetic), BUG-008 (Cosmetic), BUG-009 (Minor), BUG-010 (Major), BUG-011 (Minor), BUG-012 (Minor).
 - **Scope:** nav rail (order, hidden pages, selection), Ctrl+Tab/Ctrl+Shift+Tab, clock + weather button → forecast sheet, connectivity/sync activity indicators, shortcuts dialog (Ctrl+/), window min size/resize/maximize/restore, close-to-tray, tray menu (Open/Quit), page state kept across switches, the shell back interceptor. **Deferred:** global hotkeys/floaters → P5; inbox bell → P6; nav order/hidden/startup-page *settings dialogs* → P25 (use them here only to see the rail react).
 - **HLD docs:** GLOBAL_HOTKEY_FLOATERS_HLD.md §window/tray, AUDIT_TESTING.md, BACKGROUND.md, DESIGN.md
 - **Flows:**
-  - [ ] Every rail item navigates; selected state correct; hover/press visuals
-  - [ ] Ctrl+Tab / Ctrl+Shift+Tab cycle in *rail order* (including after reordering and hiding pages), wrap around, skip hidden pages
-  - [ ] Ctrl+Tab while a text field / dialog has focus (should it act?)
-  - [ ] Page state kept when switching away and back (scroll position, open panel, typed draft)
-  - [ ] Rail at min window height: can all pages be reached? (setup lead) Rail with every page visible vs several hidden
-  - [ ] Clock updates across a minute boundary; weather button opens the forecast sheet; weather not configured → sensible state (setting a location is **low-volume only**)
-  - [ ] Offline badge appears with Dev → Force offline, clears when turned off
-  - [ ] Ctrl+/ shortcuts dialog: content matches the actual bindings (custom calendar/grading keys reflected), scrolls, closes with Esc/Close, reopens
-  - [ ] Window: resize to min (clamped at 1440×1040 phys), odd sizes, maximize/restore, minimize/restore; layout reflows without overflow
-  - [ ] Close (X / WM_CLOSE) hides to tray; process stays; hotkeys still registered; tray "Open Voyager" restores placement; tray Quit exits cleanly (outbox drained? check)
-  - [ ] Second launch while one is running (single-instance behaviour?)
-  - [ ] Rapid rail clicking (20× across pages) → no errors, ends on the last clicked page
-- **Test data:** a little data on several pages so page state is observable.
-- **Skipped/blocked:** —
+  - [x] Every rail item navigates; the selected item is outlined in the accent colour; hover fills the item. The debug build adds a **Demo** item (debug-only, out of scope). Dev is hidden by default.
+  - [x] Ctrl+Tab / Ctrl+Shift+Tab: default order Journal → … → Workout → Demo → Settings → Journal (wraps both ways). After moving Jobs to the top and hiding Dreams + Calendar (and showing Dev): Settings → Jobs → Journal → To-Do → Search → … → Dev → Settings; hidden pages skipped. 20 Ctrl+Tabs 40 ms apart landed exactly on the computed page (Rankings), no errors.
+  - [x] Ctrl+Tab with a dialog open (Manage lists, shortcuts list): blocked. From a text field (journal body; To-Do composer with Vim ON in both Normal and Insert): **navigates** to the next page, and the typed text is kept on the page. Accepted as intended (the handler is a global `HardwareKeyboard` handler; the plan only asked whether it acts).
+  - [x] Page state kept across switches: To-Do scroll position (40 tasks), an unsaved journal body, the To-Do composer draft, the forecast sheet's selected day.
+  - [x] Rail at min window (1440×1040 phys): shows ~9 items with a fade at the cut, scrolls to reach every page (top: Jobs…; bottom: …Dev, Settings). The clock/weather and inbox stay fixed.
+  - [x] Clock: changes minute up to 30 s late → **BUG-007**. Weather not configured: sunny icon, empty sheet with no route to Settings → **BUG-008**. After "Chicago, US" (Settings → Pages → Weather location; ~15 s to save): rail cloud + 25°, forecast sheet with 5 daily cards; picking a day redraws the chart; Esc and X close it.
+  - [x] Offline badge: red no-wifi icon above the inbox 19–28 s after Dev → Force offline; it squeezes the rail list (Settings then needs a scroll). Clears within 9 s after turning it off.
+  - [x] Ctrl+/: lists General, Anywhere in Windows, Text editing, Calendar, To-Do, Finance, Study & LeetCode sessions, Image viewer; scrolls; Esc, Close and a second Ctrl+/ close it; reopens. Changing Calendar "previous period" to Y showed "← / →, Y / L" at once (restored to H).
+  - [x] Window: min clamps at 1440×1040 (a 1000×700 request stays 1440×1040); 2000×1100 and maximized reflow without overflow; Win+Down restores then minimizes, activate restores; maximize again OK.
+  - [x] Close (WM_CLOSE) hides to tray, process stays; tray "Open Voyager" restores the placement (normal 200,100 2000×1100 and maximized both kept). Ctrl+Alt+T while hidden opens the to-do floater (hotkeys stay registered); Esc and the same hotkey don't close it (by design per GLOBAL_HOTKEY_FLOATERS_HLD §2); tray Open brought the main window back maximized. Tray Quit: process exits, outbox was 0, log ends "Lost connection to device".
+  - [x] Second launch: the new process exits within 10 s and the running one stays; when the running one is hidden in the tray, the second launch shows it (foreground, maximized).
+  - [x] Rapid rail clicking (20 clicks, 60 ms apart) ended on the last clicked page (Life), no errors.
+  - [x] Shell back interceptor: n/a on desktop (Android Back only; no desktop key maps to it).
+- **Five-dimension sweep:**
+  - D1 functional: flows above.
+  - D2 data: 40 tasks, 1 journal entry, nav order/hidden pages, weather location, calendar key all in SQLite at once; outbox 0 throughout; tray Quit → relaunch kept everything (and startup "First" opened Jobs, the new first page); cold re-login (wipe + sign in) restored all of it into SQLite, but the Journal page didn't show the pulled entry until a restart (**BUG-010**), the landing page ignored the pulled startup setting (**BUG-011**) and To-Do opened on an empty hidden built-in list (**BUG-012**).
+  - D3 visual: maximized, min (1440×1040), 2000×1100 in Dark + Scatter; no `RenderFlex overflowed` / FlutterError in any of this session's run logs (`run-20260929-161755`, `-164745`, `-164850`, `-164924`, `-165102`); `voyager_errors.log` got only APP START lines. Light spot-check (Settings, shortcuts list, forecast, To-Do): legible; lead: the To-Do header "QA List 40 | 0" is pale green on cream (P9/P25).
+  - D4 keyboard: Ctrl+Tab/Ctrl+Shift+Tab/Ctrl+/ work; rail buttons are deliberately excluded from the Tab order; Tab from nothing focused goes nowhere and focus is never visible → **BUG-009**. Vim ON: Esc in the To-Do composer → NORMAL badge; Ctrl+Tab still navigates (see above). Vim turned back off.
+  - D5 failures: 20× rapid Ctrl+Tab and rail clicks; hide to tray mid-edit (journal body saved and kept); below-min resize; offline badge on/off; weather unset.
+- **Test data:** qa-004: list "QA List" (40 tasks "QA task 01".."40"), built-in "To-do" list (empty, BUG-012), journal `__legacy__` with 1 entry (body "QA draft body for state check MIDEDIT-TRAY"), nav order Jobs first, Dreams + Calendar hidden, Dev visible, weather "Chicago, Illinois, US".
+- **Skipped/blocked:** hotkey floaters beyond "still registered" (P5); inbox bell (P6); click-outside floater dismissal (needs a probe-owned window, not built); multi-monitor (out of scope).
 
 ## Phase 3 — Vim modal keybinding system
-- **Status:** Not Started
+- **Status:** Done (2026-09-29). Bugs: BUG-013 (Minor), BUG-014 (Minor), BUG-015 (Blocker), BUG-016 (Minor), BUG-017 (Minor), BUG-018 (Minor), BUG-019 (Cosmetic), BUG-020 (Minor, follow-up).
 - **Scope:** the Vim-lite engine in text fields (`lib/core/vim/`) across field types: single-line, multi-line journal body, dialogs, floater fields. Mode badge/caret, every command in VIM.md, conflicts with app shortcuts, Esc semantics. **Deferred:** floater-specific focus → P5; page-specific keys (calendar h/l, SRS keys) are checked per page under D4.
 - **HLD docs:** VIM.md, CAPS_LOCK.md (overlay/caret), CTRL_ENTER_SUBMIT_HLD.md, TEXTBOX_WIDGET.md
+- **Method:** `qa/harness/vimcase.ps1 <cases.tsv> -VmExe <vm.exe>` sets the focused field's text + caret over the VM service, sends real keys, and reads back selection|mode|length|text. Case files: `qa/steps/p3-*.tsv` (~110 cases). Compile `vm.dart` once (`dart compile exe qa/harness/vm.dart -o <scratchpad>\vm.exe`) for 0.6 s probes. Undo cases need `{wait:1500}` after the fixture write, or it coalesces with the first edit.
 - **Flows (Settings → Vim keybindings ON; type with `voy.ps1 type`/`key`, real VK presses):**
-  - [ ] Esc Insert→Normal; mode indicator shown/positioned correctly; `i I a A o O` enter Insert at the right spot
-  - [ ] Motions `h j k l w b e 0 $ gg G`; counts, if supported
-  - [ ] `f F t T` plus `;` `,` repeat; `.` repeats the last change
-  - [ ] Operators `d c y` with motions, doubled (`dd cc yy`), and in Visual `v`/`V`; `x`, `p`, Ctrl+V in Normal; `u` undo, Ctrl+R redo
-  - [ ] `/` search bar, `n`/`N`, Esc cancels search
-  - [ ] Pending state cleared by Esc (`d` then Esc then `l` moves, doesn't delete)
-  - [ ] Single-line fields: `j/k/o/O` behaviour sensible; Enter in Normal mode submits or not?
-  - [ ] Esc in a dialog's text field: first Esc → Normal, second Esc → closes the dialog? Consistent across dialogs
-  - [ ] App shortcuts vs Normal mode: Ctrl+Tab, Ctrl+/, Ctrl+Enter, Ctrl+F while in Normal/Insert; page letter-shortcuts (calendar `h/l`, study Space) must not fire while typing
-  - [ ] Clipboard: `y` then paste elsewhere with Ctrl+V; `p` pastes system clipboard
-  - [ ] Vim OFF: all keys type normally, Esc behaves as plain Esc, no mode badge
-  - [ ] Toggling Vim while a field is focused; state after navigating away and back
-  - [ ] Caps Lock on in Normal mode (uppercase commands `A`/`G` vs lowercase)
-- **Failure cases:** long lines (500+ chars), multi-line with empty lines, emoji (surrogate pairs) under `x`/`h`/`l`, rapid key bursts.
-- **Test data:** a journal entry with multi-paragraph text; a todo title; a dialog field (e.g. new list name).
-- **Skipped/blocked:** —
+  - [x] Esc Insert→Normal: the caret steps back one, a block caret appears, and a "NORMAL" badge sits bottom-right of the field (right edge in one-line fields). `i I a A o O` enter Insert at the right spot. Fields start in Insert on every focus (by design); Insert shows no badge.
+  - [x] Motions `h j k l w b e 0 $ gg G`: column memory across an empty line, `w` stops at punctuation, `G` → first non-blank of the last line. Counts: `3w`, `2j`, `100w`, `999x` (count capped at 100000). **`h` wraps to the previous line and counted `l` crosses lines; `dh`/`d5l` delete the line break → BUG-013.**
+  - [x] `f F t T` plus `;` `,`; `.` repeats `x`, `dw` and `ciw…Esc`.
+  - [x] `d c y` with motions, `dd cc yy`, `D`, `dj`, Visual `v`/`V` (+ `d`, `y`), `x`/`3x`, `r`, `~`, `p` (charwise and linewise), Ctrl+V, `u`, Ctrl+R. **`yy` moves the caret to column 0 → BUG-018.**
+  - [x] `/` search bar (bottom-left under the field, shows "n|total"): incremental preview, highlights, `n`/`N`; Esc restores the caret. **A pattern with no match leaves the caret on a partial match → BUG-014.**
+  - [x] Pending state cleared by Esc: `d Esc l` and `f Esc l` move one right. The HUD shows "NORMAL 2d" while pending.
+  - [x] Single-line fields (journal Title, New list name, To-Do composer): `o`/`O` act as `A`/`I`, `j`/`k` do nothing, `dd` clears, multi-line Ctrl+V is flattened. **Enter in Normal doesn't submit → BUG-016.** Enter in Insert does; Ctrl+Enter from Normal saved a calendar event.
+  - [x] Esc in a dialog's field (New list, calendar event popover): the first Esc → Normal; further presses are swallowed, never close the dialog, and the typed text is kept. Intended per `vim_session.dart`; consistent in both dialogs tried.
+  - [x] App shortcuts from Normal and Insert: Ctrl+/ opens the shortcuts list, Ctrl+F opens To-Do search, Ctrl+Enter saves the event form, Ctrl+Tab navigates (P2). Calendar `h`/`l` don't change the month while typing in the event title (Insert or Normal).
+  - [x] Clipboard (by design the register is **not** the OS clipboard): `yiw`/`yy` leave the OS clipboard untouched; `p` pastes the register; Ctrl+V pastes the OS clipboard in Normal (after the caret) and in Insert; Visual + Ctrl+C copies to the OS clipboard and drops to Normal.
+  - [x] Vim OFF: letters type normally, Esc does nothing to the text, no badge.
+  - [x] Toggling: n/a while a field is focused (the toggle is on the Settings page, so the field loses focus). After Ctrl+Tab away and back, no field has focus; clicking back in starts in Insert.
+  - [x] Caps Lock in Normal: `x` acts as `X` and `g` as `G`, same as real Vim. The Caps Lock mark shows in Normal and Insert; it sits over the next characters, by design per CAPS_LOCK.md.
+- **Failure cases:**
+  - 508-char line: `$`, `100w`, `0`, `j` and a missed `f` are all correct.
+  - Multi-line text with empty lines: correct. CJK: `w` and `x` correct.
+  - **Emoji: `l`/`h` land between the surrogate halves; `x` leaves "�" (saved and synced); inserting there crashes the app → BUG-015.**
+  - Rapid bursts (10×`w`, 20×`x`, `dw` + 8×`.`, typed 25 ms apart): processed in order, nothing dropped.
+  - Huge counts: `99999999999999999999x` stops at the line end.
+- **Five-dimension sweep:**
+  - D1 functional: flows above.
+  - D2 data: every edit autosaved to `journal_entries_table` (checked by SQL); outbox 0 throughout. `stop.ps1` → `launch.ps1` kept `vim_mode_enabled=1`, theme dark, 2 lists / 1 task / 1 event / 1 entry. The crash (BUG-015) lost nothing that had already been autosaved. Cold re-login not done; the Vim setting is a synced setting, and its sync belongs to P25/P26.
+  - D3 visual: badge, pending HUD, Visual/V-line highlights and `/` prompt checked at maximized, 2000×1100 and 1440×1040. **At minimum size the prompt overlaps the quote → BUG-019.** Light spot-check (search, Visual, pending HUD): legible. No `RenderFlex overflowed`. The only FlutterErrors came from BUG-015 (UTF-16), plus two "Build scheduled during frame" entries in `voyager_errors.log` caused by the harness's VM-service fixture writes (stack frame `Eval`; not an app bug).
+  - D4 keyboard: covered by this whole phase. Normal mode doesn't swallow Tab, so focus traversal still works (per code).
+  - D5 failures: see Failure cases. The crash was reproduced twice (17:18:53, 17:19:53).
+- **Test data:** qa-005:
+  - Journal `__legacy__` with 1 entry (title "L1\rL2"; body "alpha beta gamma delta / one two three four five / / foo(bar, baz); qu.end ENDhjkl dd x").
+  - List "Vim List" plus the built-in "To-do" (BUG-012); task "task insert enter".
+  - Calendar event "hello lll hhh" (Sep 29). Vim ON.
+- **Skipped/blocked:**
+  - Floater fields (P5).
+  - Visual mode + text objects beyond `ciw`: not covered exhaustively.
+  - ~~`>`/`<`, `J`, `%`, `{`/`}` exist in the code but aren't in VIM.md; not tested.~~ Done in a follow-up session (2026-09-29): about 125 cases in `qa/steps/p3x-*.tsv` (generators `p3x-gen*.py`) cover every command the code has beyond VIM.md; VIM.md now documents them (sections 9–16). New bug: BUG-020 (Minor: `V j J` joins one line too many). BUG-013 got a note (Space doesn't wrap, Backspace does). Untested: the backtick text object (the harness types `r` for a backtick on this PC's layout `0409:00060409`) and Esc clearing the search highlights.
+  - Cold re-login.
+- **Leads:**
+  - (P4) Autocorrect turned "qux." into "qu.", because "qu" is in `assets/dictionary_en.txt`.
+  - (P9) Closing the Ctrl+/ list returns focus to the composer with its text fully selected.
+  - (P9) With To-Do search open and empty, the list shows no tasks.
 
 ## Phase 4 — Text-editing helpers
-- **Status:** Not Started
+- **Status:** Done (2026-09-29). Bugs: BUG-021 (Major), BUG-022, BUG-023, BUG-024, BUG-025, BUG-026, BUG-027, BUG-028, BUG-032 (Minor), BUG-029, BUG-030, BUG-031 (Cosmetic).
 - **Scope:** autocorrect, spell check + suggestions, custom dictionary and flagged words (Settings → Dictionary), text snippets (Tab/Space expansion; Settings → Text snippets), Caps Lock indicator, emphasis formatting (bold/italic markers), list indent/outdent (Tab/Shift+Tab), right-click snippet menu, Ctrl+Enter submit, image paste (Ctrl+V) + lightbox (←/→/Esc), multiline scroll insets. **Deferred:** Vim → P3.
 - **HLD docs:** AUTOCORRECT.md, DICTIONARY.md, FLAGGED_WORDS.md, SNIPPET.md, RIGHT_CLICK_SNIPPET.md, CAPS_LOCK.md, EMPHASIS_FORMATTING.md, MULTILINE_FIELD_SCROLL_INSETS.md, MEDIA.md, CTRL_ENTER_SUBMIT_HLD.md
 - **Flows:**
-  - [ ] Autocorrect common typos on space/punctuation; undo an autocorrect; toggle off in Settings
-  - [ ] Misspelling underline, right-click suggestions, add to dictionary, flag a word; dictionary dialog search/remove
-  - [ ] Snippet create/edit/delete; expand with the configured key (Tab vs Space); snippet vs list-indent Tab conflict; expansion inside words
-  - [ ] Caps Lock indicator appears/disappears (caret chip), in single- and multi-line fields
-  - [ ] Emphasis formatting renders and round-trips after restart
-  - [ ] Bullet/numbered list indent/outdent
-  - [ ] Ctrl+Enter saves the open form on each form type (list which forms it works on)
-  - [ ] Paste image (Set-Clipboard -Path an image in qa/) into journal/dream/study; thumbnail; lightbox navigation; delete image; media storage dialog shows it
-- **Failure cases:** a huge pasted image, a non-image clipboard, paste 10 images fast, snippet with an empty body, a 1,000-char snippet.
-- **Test data:** snippets `;sig`, `addr`; custom words; a test PNG/JPG in `qa/data/`.
-- **Skipped/blocked:** —
+  - [x] Autocorrect (Vim OFF, journal body; cases `qa/steps/p4-ac*.tsv` via `vimcase.ps1`): `wtih`→`with` on Space `,` `.` `*`; first-letter case kept; ALL CAPS, `#tag`, unclosed backtick, `-`, digit, possessive, 2-letter words and single-line Title all left alone; flash visible (`p4-flash-sheet.png`); immediate Backspace reverts + suppresses; toggle off in Settings stops it (setting 0 in SQL). **Wrong-word rewrites → BUG-021 (Major); misspellings in the bundled dictionary → BUG-022; Enter never corrects → BUG-023; undo drops the space, redo does nothing → BUG-024; appending a letter at a word's end doesn't correct → BUG-025.** Vim ON: works in Insert.
+  - [x] Squiggles, right-click suggestions (apply `with`), Add to dictionary (`littl` in `custom_words_table`), Flag as misspelling… popover (`neve` → `never`, Replace this one, pair rewrite with autocorrect OFF, `Neve`→`Never`, `NEVE` kept, Backspace revert). Dictionary dialog: bundled search ranking, add by Enter, "already in the dictionary", shape errors, rename onto a bundled word ("Removed … already in the dictionary"), allow-wins on a flagged word, flag from search with/without replacement, replacement errors (flagged / unknown / same word). Flagged `form` with no pair cascades to `from` as designed. **Focus lost after a rejected Enter → BUG-026.**
+  - [x] Snippets: dialog create (empty-trigger and duplicate errors), edit (tick auto-expand), Ctrl+Enter saves a row; right-click → Add snippet popover (trigger prefilled, focus on Replacement, focus returns to the field). Expansion: Tab (manual), auto, inside a word, tabstops `($0)$1` + Tab advance, undo restores trigger (manual and auto), no expansion on programmatic write or delete-join, Title field too, autocorrect skips a trigger word. Space key: expands without inserting a space; Tab then inert; empty body; 1,000-char body. Vim Normal doesn't expand. **List line: Tab indents instead of expanding → BUG-027.** Manual expansion inside an active tabstop isn't possible (Tab advances first, per SNIPPET.md §4.5; not logged). Keyboard: Tab from Replacement → Space didn't tick the checkbox (app-wide BUG-009).
+  - [x] Caps Lock mark: body, Title, hidden with a selection and when off; flips left of the caret at the right edge (`p4-caps-*.png`).
+  - [x] Emphasis: bold/italic/underline/highlight, nesting, `**#tag**` pill, code/LaTeX/`2 * 3`/bullets/unclosed literal, `__` inside words literal; reveal on caret/selection; survives restart (SQL keeps markers; editor and list preview render bold). **Intra-word `*` pairs across lines → BUG-028.**
+  - [x] Lists (`qa/steps/p4-list*.tsv`): Enter continues `-`, `*`, `1.` lines (typed or pasted); Enter on an empty item exits the list; Tab indents / Shift+Tab outdents; Shift+Tab at top level does nothing. A numbered sub-item keeps counting (`  3. c`) rather than restarting at 1 (noted, not logged). A programmatic single-line fixture doesn't continue on Enter (harness artifact; paste and typing do).
+  - [x] Ctrl+Enter: works on Finance new transaction (saves from Amount; does nothing on an empty form; the Enter chain is Amount → Store → Note → Tags → save), Rankings new category, Jobs track modal (Enter = newline in Notes, Ctrl+Enter saves), Study new deck, snippet editor row; calendar event form in P3. Not tried: study card editor, search entry dialog, quote dialog, bucket list.
+  - [x] Images (journal): clipboard with the registered "PNG" format pastes into the body → fan in the corner, stored as JPEG, uploaded; lightbox opens on image 1, ←/→ move (no wrap at the ends), Remove asks to confirm and keeps the file 30 days (`unreferenced_at`), Esc closes; oversize (34.4 MB) rejected with a toast; text+image clipboard pastes both; image-only into the Title is a no-op; Settings → Data → Image storage lists every file with use counts. A bitmap-only clipboard (`CF_DIB`, e.g. .NET `SetImage`) is ignored silently: only PNG/JPEG/WebP/HEIC formats are read (noted). 9 pastes 150 ms apart kept 7 (a paste arriving while the previous is decoding is dropped by design; not humanly reachable). **Every upload logs an engine thread error → BUG-032.** Dream/study image paste not done.
+  - [x] Multiline scroll insets: scrolled body keeps a top strip showing the previous line's descenders → BUG-029 (open issue in MULTILINE_FIELD_SCROLL_INSETS.md). Bottom edge OK.
+- **Failure cases:** huge image, non-image clipboard, 10 fast pastes, empty-body and 1,000-char snippets: covered above.
+- **Five-dimension sweep:**
+  - D1 functional: flows above.
+  - D2 data: custom/flagged words, snippets (6), settings (`autocorrect_enabled`, `snippet_expand_key`, `vim_mode_enabled`), entry body with markers, transactions, job, deck, ranking category, media rows all in SQLite at once; outbox 0 throughout. `stop.ps1` → `launch.ps1` kept all of it. Cold re-login (reset -Force → launch → login) restored custom words, flags (with tombstones), 6 snippets, settings, the entry and all 8 live images (downloaded, `present`).
+  - D3 visual: maximized, 2000×1100 and 1440×1040 in Dark + Scatter; light spot-check of Editing, snippets dialog, dictionary dialog, journal. Found BUG-029, BUG-031; entry preview BUG-030. No `RenderFlex overflowed` / FlutterError in `run-20260929-174952`, `-175135`, `-182045`, `-220439`; `voyager_errors.log` got only APP START lines. Leads: the Rankings "New category" dialog's "Name" label is clipped at the top at 2000×1100 (P19); the "image too large" toast covers the Title label (cosmetic).
+  - D4 keyboard: Ctrl+Enter above; Vim ON gates autocorrect and snippets to Insert. BUG-026 (focus lost after a rejected Enter in the dictionary dialog). Snippet editor: Tab reaches Replacement, but Space doesn't tick the checkboxes (BUG-009). The dictionary search field isn't focused when the dialog opens.
+  - D5 failures: see Failure cases; rapid pastes; interrupted by the notification panel (see Skipped).
+- **Test data:** qa-006: journal `__legacy__` with 1 entry (title "Long title words …" ×12; body "Met Dr. Smith at 3 p.m. today neve"; 8 images); custom word `littl`; flagged `form` (no replacement); snippets `;sig`, `addr` (auto), `pp` (`($0)$1`), `wtih`, `zz` (empty), `lng` (1,000 chars); expand key **Space**; transactions $12.34 (Shop, #food) and $5.00; job "Acme"/"x"; study deck "Deck A"; ranking category "Books". Test images in `qa/data/` (`img01..10.png`, `huge-noise.png`).
+- **Skipped/blocked:** image paste into dreams and study cards; drag-and-drop and the gallery file picker (native dialog), moved to the P7 (drag-and-drop), P8 (dream paste), P9, P19 and P21 (file picker, galleries, card faces) checklists; Ctrl+Enter on the remaining inventory surfaces; the backtick autocorrect case needs clipboard input (typed via fixture instead). At 18:22 the session stalled for ~3 h: a click on the Finance "+" FAB at maximized hit the auto-hidden taskbar clock and the Windows notification panel held the foreground until Juno closed it (quirk in PROGRESS.md §5).
 
 ## Phase 5 — Global hotkeys & floaters
-- **Status:** Not Started
+- **Status:** Done (2026-09-29). Account qa-007. Bugs: BUG-033 (Minor), BUG-034 (Minor), BUG-035 (Minor), BUG-036 (Cosmetic), BUG-037 (Minor), BUG-038 (Minor).
 - **Scope:** Ctrl+Alt+J/T/F/R (journal notepad, quick to-do, quick transaction, quick reminder) from (a) main focused (in-app path), (b) another app focused (floater window), (c) main hidden in tray, (d) main minimized; floater save/close/draft retention, replacement between floaters, Esc behaviour, click-outside dismiss, Open app; rebinding in Settings (key binding dialog), conflicts/duplicates. **Deferred:** the resulting data's page behaviour → P7/P9/P13/P6.
 - **HLD docs:** GLOBAL_HOTKEY_FLOATERS_HLD.md, AUDIT_TESTING.md (what was already covered and the open findings 1–12; re-verify those rather than rediscover them), AUDIT.md (empty now)
+- **Harness added:** `qa/harness/OtherApp.cs` (probe-owned WinForms "other app", compiled by `voy.ps1`): verbs `other-open`, `other-click`, `other-type`, `other-topmost`, `other-close`, `ostatus`, `other-grab`, `tray-menu`, `minimize`. Step files `qa/steps/p5-*.txt`.
 - **Flows:**
-  - [ ] Each hotkey from each of states (a)–(d); floater size/position/topmost; field autofocus
-  - [ ] Save from each floater → row in DB, confirmation, draft cleared; the main app shows it
-  - [ ] Close/dismiss keeps the draft; reopen restores it
-  - [ ] Hotkey A while floater B is open (replacement); same hotkey twice (no-op)
-  - [ ] Quick reminder floater (new since AUDIT_TESTING): create reminder, time parsing, validation
-  - [ ] Rebind a hotkey (Settings); a conflicting/duplicate binding; one already owned by another app; the old binding released
-  - [ ] Vim in floater fields; Esc never closes a floater (as designed?)
-  - [ ] Re-verify AUDIT_TESTING.md findings 1, 3, 4, 5, 7, 10, 11, 12 (still present? log each still-present one as a bug referencing the finding)
-  - [ ] "Another app focused" needs a probe-owned WinForms window (pattern: AUDIT_TESTING.md Session 2). Build it under `qa/harness/` if needed.
+  - [x] Each hotkey from each of states (a)–(d): (a) in-app T → To-Do + composer focused (+ draft), J → Journal + today's QJE, F → Finance + transaction sheet (+ draft), R → "New reminder" over the current page; (b) floaters take the foreground and are topmost: to-do bar 680×68 upper-centre, notepad 380×320 bottom-right, finance 640×529 centre, reminder centre; first field focused; (c) from the tray: floater shown, main stays hidden after dismiss; (d) minimized: floater shown, main minimized again after dismiss. Placement restored after dismiss at 2000×1100, maximized and 1440×1040.
+  - [x] Save from each floater → row in DB, confirmation ("Added to To-do", "Transaction added", "Reminder added", "Quick entry deleted"), draft cleared, outbox drained; main app shows it. Enter saves the to-do; Ctrl+Enter saves finance and reminder; Tab walks amount → store → note. Focus returns to the previous app after save/dismiss.
+  - [x] Click-outside keeps the to-do and finance drafts (reminder deliberately discards, HLD §7a.2); drafts gone after restart; the QJE rebinds after restart (pointer file) but **not** after a wipe + sign-in (BUG-038). Open app moves the draft to the composer (arrives selected, BUG-033).
+  - [x] Hotkey A while floater B is open → replaced (T→F→J→R, all orders); same hotkey twice → no-op. Spam: 10× same key, 16-key mixed bursts at 0–300 ms gaps, in-app bursts: final state correct; once, reentrant-frame assertions on replacement (BUG-035, not reproduced in 6 retries).
+  - [x] Quick reminder floater: empty/spaces title → "Give the reminder a title"; time picker (date grid + time text) accepts "9:00 PM"; a past time shows "That time has already passed" but Create still saves an enabled once-rule (lead for P6); the 23:00 rule fired (sticky + OS toast logged) while a to-do floater was open, without disturbing it. In-app editor clips at short heights (BUG-036).
+  - [x] Rebinding: n/a. Settings → Editing lists the four combos read-only (HLD §1/§8: no editor in this work). Conflict: a combo another process owns at launch is silently never registered and never retried (BUG-034).
+  - [x] Vim in floater fields (ON): Normal badge, `0x`, `A`, `G o`, `0 dw`, `b D` all correct in bar, notepad, finance store, reminder title; Esc never closes a floater, Vim ON or OFF (OFF: Esc unfocuses the field, floater stays).
+  - [x] Re-verified AUDIT_TESTING findings: 1 (dismiss reflow errors) not seen in any dismiss (BUG-035 is a different path); 3 (WM_CLOSE on a focused floater) fixed: window returns to its prior minimized state; 4 (hero null check on replacement) not seen; 5 (two finance sheets) fixed; 7 (tray menu stays open after clicking elsewhere) still happens **with a posted tray click**, but the app now calls `popUpContextMenu(bringAppToFront: true)`, and a posted click can't grant foreground, so needs a real icon click (manual); 10 (main left topmost after dismissing into a topmost window) fixed; 11 (focus on a FocusScope) fixed, though the draft arrives selected (BUG-033); 12 (sheets left over Journal) fixed.
+  - [x] "Another app focused" window built (`OtherApp.cs`).
+- **Five dimensions:** D1 above. D2: every save checked in SQLite, outbox 0; restart (stop/launch) and cold re-login (reset -Force → launch → login) restored the to-dos, transactions, reminder rules and QJEs; 5,300-char titles/bodies with CJK, emoji and Arabic saved intact. D3: floaters at 2000×1100, maximized and 1440×1040 main placements; light-theme spot-check of all four floaters (fine); BUG-036 for the in-app reminder editor. D4: Enter/Ctrl+Enter/Tab as above, BUG-037 (empty Enter drops focus). D5: empty/whitespace/0/huge/negative/letters in finance amount (rejected or filtered correctly), long input, spam, hotkey during startup (193 presses from launch on: a to-do floater opened, no errors), quit from the tray with the notepad open (text flushed; exit took >3 s), other process owning a combo.
 - **Failure cases:** hotkey spam (10× quickly), hotkey during app startup, floater open while the app quits from tray.
-- **Skipped/blocked:** multi-monitor (out of scope).
+- **Skipped/blocked:** multi-monitor (out of scope). Force offline (Dev page hidden; floater saves go through the same local DB + outbox as in-app saves, covered in P26). QJE rollover across local midnight (not run; would need a notepad left open across 00:00). A real tray-icon click for finding 7 (the taskbar icon isn't reachable by the probe; MANUAL).
 
 ## Phase 6 — Notifications, inbox & reminders
-- **Status:** Not Started
+- **Status:** Done (2026-09-30). Account qa-008. Bugs: BUG-043 (Major), BUG-039, BUG-040, BUG-041 (Minor), BUG-042 (Cosmetic).
 - **Scope:** notification bell + inbox popover (sections, hide/restore, dismiss), reminder bell buttons on todos/events (entity reminders), reminder sticky stack, scheduled reminder rules (Settings), OS toast notifications (flutter_local_notifications), Settings → Devices, unified notifications. **Deferred:** creating the todos/events themselves → P9/P10.
-- **HLD docs:** INBOX_POPOVER_HLD.md, INBOX_HIDDEN_RESTORE_HLD.md, SCHEDULED_REMINDERS_HLD.md, UNIFIED_NOTIFICATIONS.md
+- **HLD docs:** INBOX_POPOVER_HLD.md, INBOX_HIDDEN_RESTORE_HLD.md, SCHEDULED_REMINDERS_HLD.md (its header still says "design (not implemented)"; it is implemented), UNIFIED_NOTIFICATIONS.md
+- **Method:** OS toasts verified read-only in Windows' notification store `%LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db` (handler `Voyager.App`; scratch `wpn.py`, see PROGRESS.md §5), plus `reminder_delivery_logs_table` (`stickyShown`/`osFired`). Step files `qa/steps/p6-*.txt`.
 - **Flows:**
-  - [ ] Inbox empty state; items appear from each source; badge count correct
-  - [ ] Hide an item → hidden section → restore; dismiss; persistence across restart and across a cold re-login (dismissed notifications sync)
-  - [ ] Scheduled reminder rule CRUD; fires at the time (set 2–3 min ahead) → OS toast + in-app; snooze/complete if offered
-  - [ ] Entity reminder on a todo and an event; changing the due time updates it; deleting the entity removes the reminder
-  - [ ] Reminder fires while the app is hidden to tray; while minimized
-  - [ ] Devices section lists this device; last-seen updates
-- **Failure cases:** reminder in the past, many (20+) simultaneous reminders, midnight/DST boundaries (reason about them if not reproducible), offline when a reminder fires.
-- **Skipped/blocked:** —
+  - [x] Inbox empty state ("All caught up / Pin a reminder above…", no Hidden footer); a task due today shows in Notifications with an urgency dot, the rail icon gets the pulsing accent dot, header "N items need attention" + broom. Due-today tasks only (undated tasks don't appear). Feed labels are day-granular ("Today" for a task 9 min overdue; red only from the next day), by design in the code.
+  - [x] Dismiss (hover ✕) → eye-slash toast `Hidden "bell task"` + Undo, Show-hidden eye in the header, Hidden (N) footer; Hidden expanded shows Restore all, selecting a row switches it to Restore (1); restore writes a synced tombstone. Undo within the 8 s dwell restores (hover holds the toast). Dismiss then Clear all → one toast rewritten to "Hidden 2 items"; Undo restores both. Pinned-note delete → `Deleted "…"` + trash icon + Undo (restored). Esc closes the Inbox (Vim OFF); Vim ON: NORMAL badge in the pinned-note field, `0x` works, extra Esc is swallowed (popover stays), as in P3.
+  - [x] Scheduled rule CRUD: Once/Daily/Weekly, note, time chip picker (type "12:32 AM" + Enter), device chips; validation "Give the reminder a title", "Pick at least one day", "Pick at least one device"; row menu Edit / Turn off / History / Delete (Deleted toast + Undo); list caps at 4 rows + "Show N more"; due rows highlighted. Fires to the second (`stickyShown`/`osFired` at hh:mm:00.0x) with a sticky (Snooze 10 min / Tomorrow / Acknowledge) and a Windows toast (title + note). Ack of a once-rule disables it ("Completed"); editing it to a future time + On re-arms it. Snooze 10 min returned exactly at +10:00 (new OS toast); Tomorrow = next day at the press time (Oct 1 00:39:30). History dialog lists shown / notification / snoozed / acked.
+  - [x] Entity bells: to-do bell disabled until a due date is set; presets No reminder / At time / 15 min / 1 h / 1 day / Custom…; changing the due time moved the fire (12:52 → 12:50 fired at 12:50:00); event bell "15 minutes before" 1:30 event fired at 1:15 ("Starts 1:30 AM", occurrence keyed on the start). Sticky title deep-links to the task (To-Do, panel open). Completing the task from the Inbox checkbox cleared its sticky; deleting the event (confirm → Deleted + Undo) cleared its sticky (the bell row stays, the engine skips deleted entities). A rule deleted while snoozed did not fire at its snooze end.
+  - [x] Fires while hidden to tray (snooze return at 12:44:04) and while minimized (to-do bell 12:50); both sticky + OS toast.
+  - [x] Devices: this device listed ("· This device", platform, last seen, notification permission row); rename (empty + Enter = silent cancel; "QA Zephyrus" saved + synced); last seen refreshes at most once an hour by design (`kDeviceLastSeenRefresh`), seen updating 12:26 → 1:27; after a wipe + sign-in a second row appears (HLD §4.1 by design); removing the stale row asks to confirm and soft-deletes it. P1/P2 leads resolved as intended behaviour.
+- **Failure cases:** past once-rule → saved enabled, never fires (**BUG-039**; also the P5 lead). 22 rules at the same minute: all 22 stickies + 22 OS toasts within 0.24 s (Action Center keeps 20, Windows' per-app cap); stack shows 3 + "+19 more"; 19 rapid Acknowledge clicks 150 ms apart acked exactly 19 in order. Force offline: a rule fired normally, ack/snooze worked (outbox still drained to 0: Force offline only fails the probe; P26). DST: task urgency and feed labels miscount across a 23-hour day (**BUG-040**, evaluated in the app isolate); scheduled-rule math uses calendar-day arithmetic and UTC-based labels, reasoned OK. Midnight: the session ran from 00:25, so every fire was just past midnight; no issue. Restart with a due sticky: it came back, no duplicate OS toast (a second `stickyShown` row per restart, by design of the per-run log).
+- **Five-dimension sweep:**
+  - D1 functional: flows above.
+  - D2 data: every rule/state/log/bell/pinned note/dismissal/device write in SQLite at once; outbox 0 throughout. Restart (stop/launch) kept all. Cold re-login restored identical row counts, **but the app didn't load reminders, delivery states, pinned notes or dismissals until restart → BUG-043 (Major)**.
+  - D3 visual: maximized, 2000×1100 and 1440×1040 in Dark + Scatter. **Stickies draw over the Inbox and dialogs; at min size they hide the editor's Create button → BUG-041.** Light spot-check: Inbox, editor, stickies; **"Show N more" 1.2:1 contrast, Acknowledge loses its accent → BUG-042.** No FlutterError / overflow in `run-20260930-002518`, `-003942`, `-020051`, `-020458`; `voyager_errors.log` got only APP START lines. Clock lag (BUG-007) seen repeatedly.
+  - D4 keyboard: Enter adds a pinned note; Enter commits the time field; Ctrl+Enter creates from the editor (the workaround for BUG-041); Esc closes the Inbox; Vim ON as above. Tab traversal not re-tested (BUG-009 app-wide).
+  - D5 failures: see Failure cases.
+- **Test data:** qa-008 (see PROGRESS.md §2).
+- **Skipped/blocked:** clicking an OS toast (tap → app focuses that sticky) — the toast is outside Voyager's window, which the probe guard refuses; MANUAL. Natural-occurrence-supersedes-snooze and same-rule coalescing need a daily rule to cross a day; reasoned from `evaluateReminder` (a newer occurrence key wins over a snooze/unacked state), not observed. Real multi-device ack sync (one PC). Custom… lead-time dialog not exercised. Stale OS toasts: on Windows, acknowledging/deleting doesn't withdraw a shown toast from Action Center (`dismiss` is a deliberate no-op for an unpackaged app); a re-fire of the same source replaces its toast. Noted, not logged.
 
 ## Phase 7 — Journal
 - **Status:** Not Started
@@ -238,6 +291,7 @@ Keep this table and each phase's **Status** line in sync.
   - [ ] Quotes toggle; custom quotes dialog CRUD; randomizer doesn't repeat immediately
   - [ ] On This Day: seed entries dated 1 month / 1+ years ago → overlay appears per the cadence setting
   - [ ] Entry list sorting with many entries (seed 50+ across dates), scroll performance, list-width drag persists
+  - [ ] (from P4) Drag-and-drop an image file onto the journal body → joins the fan. Needs a probe-owned drag-source window under `qa/harness/` (never drag from Explorer); build it here and reuse it in P9/P21. Also drop a non-image file and a GIF (should be refused, MEDIA.md: no GIF).
 - **Failure cases:** 10,000-char body, a 300-char unbroken title, empty entry (created at all?), rapid New entry ×10, two entries same timestamp, date far in the past (1900) / future (2100).
 - **Test data:** 2 journals, ~50 entries across 2 years (script via the UI or step files; record in PROGRESS.md).
 - **Skipped/blocked:** —
@@ -252,6 +306,7 @@ Keep this table and each phase's **Status** line in sync.
   - [ ] Dream search within the page; split-width drag persists (device-local)
   - [ ] Delete → undo; delete → Trash
   - [ ] "Show dream statistics in analytics" reflects in P12 (quick check)
+  - [ ] (from P4) Image paste into a dream (Ctrl+V with the registered "PNG" clipboard format; see PROGRESS.md §5 "Image clipboard"): into an existing dream and into a brand-new unsaved one (the scope writes the row first, `onBeforeAttach`); thumbnails/lightbox; remove; row in `media_references_table` with collection for dreams; delete the dream → its references soft-deleted
 - **Failure cases:** very long dreams, many dreams (100+) scrolling, rapid switching while typing.
 - **Skipped/blocked:** —
 
@@ -266,6 +321,7 @@ Keep this table and each phase's **Status** line in sync.
   - [ ] Reorder tasks and lists; sorting stable after restart
   - [ ] Ctrl+F search: matches, next/prev, Esc; search with no matches
   - [ ] Delete task/list → undo; list delete with tasks
+  - [ ] (from P4) Edit panel gallery strip (MEDIA.md): paste an image onto the panel (not into notes; image-only into notes/title is a no-op), attach via the file picker (native dialog: type a full path from `qa/data/` + Enter), drag-and-drop (P7's drag helper), reorder by drag, remove; rows in `media_references_table`
   - [ ] "All tasks" view across lists; last-viewed list restored on relaunch
 - **Failure cases:** 500-char task title, emoji titles, 200 tasks in one list (perf), rapid check/uncheck ×20, delete while the edit panel is open.
 - **Skipped/blocked:** —
@@ -394,6 +450,7 @@ Keep this table and each phase's **Status** line in sync.
   - [ ] Parent/child CRUD; scores (bounds, decimals, stars); ordering by score; ties
   - [ ] Tags on parents/children; filtering
   - [ ] Gallery with images; delete item with images
+  - [ ] (from P4) Gallery attach by paste and by the file picker (type a full path from `qa/data/` + Enter); reorder and remove
 - **Failure cases:** score out of range / non-numeric, 200 items, very long names, delete a category with items → undo.
 - **Skipped/blocked:** —
 
@@ -417,6 +474,7 @@ Keep this table and each phase's **Status** line in sync.
 - **Flows:**
   - [ ] Folder/deck CRUD, nesting, move (including into its own descendant: should be refused)
   - [ ] Card CRUD with plain text, formatting, LaTeX, images
+  - [ ] (from P4) Card-face images: paste goes to the face whose field is focused (front vs back facet), file picker per face, drag-and-drop (P7's drag helper); face browsing with arrows/dots in the editor preview
   - [ ] Import text: valid, malformed, large (500 cards)
   - [ ] Deck links: link/unlink; cycles; delete a linked deck
   - [ ] Delete folder with decks → undo

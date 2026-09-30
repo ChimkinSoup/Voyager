@@ -1,0 +1,9 @@
+pgdn	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	2	{pgdn}	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	85	normal
+pgup	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	85	{pgup}	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	2	normal
+/-tab-cancels	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	2	/gam {tab}	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	2	*
+di`	say `code` and 'x'	5	di`	say `` and 'x'	5	normal
+da'	say `code` and 'x'	16	da'	say `code` and 	*	normal
+2Y-P	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	0	2Y j j P	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	54	normal
+2S	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	8	2S	\n\nLine Four "quoted text" end\nlast	0	insert
+2P	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	83	yiw 2P	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlastlastlast	*	normal
+>>-u	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	32	>> {wait:1200} u	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	*	normal

@@ -1,0 +1,8 @@
+t-o	Vim probe title	4	o	Vim probe title	15	insert
+t-O	Vim probe title	4	O	Vim probe title	0	insert
+t-j	Vim probe title	4	j	Vim probe title	4	normal
+t-k	Vim probe title	4	k	Vim probe title	4	normal
+t-dd	Vim probe title	4	dd		0	normal
+t-yyp	Vim probe title	4	yy p	Vim probe title Vim probe title	*	normal
+t-w$	Vim probe title	0	w $	Vim probe title	14	normal
+t-ctrlv-multiline	Vim probe title	14	{ctrl+v}	Vim probe titleL1 L2	*	normal

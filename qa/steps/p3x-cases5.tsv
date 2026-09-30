@@ -1,0 +1,11 @@
+v-s	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	2	v l s	  pha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	2	insert
+v-x	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	2	v l x	  pha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	2	normal
+v-X	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	2	v l X	  pha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	2	normal
+v-gU	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	2	v e gU	  ALPHA-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	2	normal
+di)	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	36	di)	  alpha-beta gamma.delta  \ncall() <t>\n\nLine Four "quoted text" end\nlast	32	normal
+di}	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	41	di}	  alpha-beta gamma.delta  \ncall(x, [y], {}) <t>\n\nLine Four "quoted text" end\nlast	41	normal
+da[	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	36	da[	  alpha-beta gamma.delta  \ncall(x, , {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	35	normal
+da<	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	51	da<	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) \n\nLine Four "quoted text" end\nlast	*	normal
+V->	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	27	V >	  alpha-beta gamma.delta  \n  call(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	29	normal
+V-<	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	0	V <	alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	0	normal
+yy-caret	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	8	yy	  alpha-beta gamma.delta  \ncall(x, [y], {z: 'q'}) <t>\n\nLine Four "quoted text" end\nlast	8	normal

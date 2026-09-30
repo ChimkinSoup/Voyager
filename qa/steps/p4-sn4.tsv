@@ -1,0 +1,6 @@
+﻿sp-sig		0	;sig {space}	Best regards, Juno	18
+sp-zz	a 	2	zz {space}	a 	2
+sp-plain		0	hello {space}	hello 	6
+sp-tab-noexp		0	;sig {tab}	;sig	*
+sp-ac-still		0	jsut {space}	just 	5
+sp-lng		0	lng {space}	*	1000

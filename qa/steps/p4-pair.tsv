@@ -1,0 +1,4 @@
+﻿pair-acoff		0	neve {space}	never 	*
+pair-case		0	Neve {space}	Never 	*
+pair-caps		0	NEVE {space}	NEVE 	*
+pair-revert		0	neve {space} {backspace}	neve	*

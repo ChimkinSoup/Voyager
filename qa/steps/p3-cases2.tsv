@@ -1,0 +1,40 @@
+dh-bol	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	23	dh	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	23	normal
+2h-bol	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	24	2h	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	23	normal
+fa	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	fa	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	4	normal
+fa;	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	fa ;	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	9	normal
+fa;,	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	fa ; ,	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	4	normal
+tb	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	tb	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	5	normal
+Fa	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	21	Fa	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	15	normal
+Tg	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	21	Tg	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	12	normal
+dw	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	dw	beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+dd	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	6	dd	one two three four five\n\nfoo(bar, baz); qu.end	0	normal
+cw	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	cw	 beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	insert
+cc	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	6	cc	\none two three four five\n\nfoo(bar, baz); qu.end	0	insert
+yyp	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	6	yy p	alpha beta gamma delta\nalpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	23	normal
+ddp	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	6	dd p	one two three four five\nalpha beta gamma delta\n\nfoo(bar, baz); qu.end	24	normal
+D	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	6	D	alpha \none two three four five\n\nfoo(bar, baz); qu.end	5	normal
+d$	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	6	d$	alpha \none two three four five\n\nfoo(bar, baz); qu.end	5	normal
+x	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	x	lpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+3x	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	3x	ha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+dj	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	6	dj	\nfoo(bar, baz); qu.end	0	normal
+x-u	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	x u	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+x-u-ctrlr	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	x u {ctrl+r}	lpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+x-dot	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	x .	pha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+dw-dot	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	dw .	gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+ciw-dot	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	ciw ZZ {esc} w .	ZZ ZZ gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	4	normal
+v-e-d	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	v e d	 beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+V-d	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	6	V d	one two three four five\n\nfoo(bar, baz); qu.end	0	normal
+vly-p	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	v l l y $ p	alpha beta gamma deltaalp\none two three four five\n\nfoo(bar, baz); qu.end	24	normal
+v-mode	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	v l	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0,2	visual
+V-mode	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	6	V	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	*	visualLine
+v-esc	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	v l {esc}	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	1	normal
+d-esc-l	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	d {esc} l	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	1	normal
+f-esc-l	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	f {esc} l	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	1	normal
+search	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	/gam {enter}	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	11	normal
+search-n	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	/o {enter} n	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	29	normal
+search-nn	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	/o {enter} n n	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	38	normal
+search-nN	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	/o {enter} n n N	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	29	normal
+search-miss	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	/zzz {enter}	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+search-esc	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	/gam {esc}	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+rX	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	rX	Xlpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+tilde	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	~	Alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	1	normal

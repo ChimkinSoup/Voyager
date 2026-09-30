@@ -1,0 +1,17 @@
+activate
+click 1535 900
+wait 1500
+click 1824 963
+wait 1500
+shot p3-dlg-new
+type Vim List
+wait 300
+key esc
+wait 400
+shot p3-dlg-esc1
+key esc
+wait 400
+shot p3-dlg-esc2
+key esc
+wait 400
+shot p3-dlg-esc3

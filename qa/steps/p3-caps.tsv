@@ -1,0 +1,2 @@
+caps-x	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	5	{capslock} x {capslock}	alph beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	4	normal
+caps-g	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	6	{capslock} g {capslock}	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	48	normal

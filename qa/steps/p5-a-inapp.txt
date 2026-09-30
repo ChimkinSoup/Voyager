@@ -1,0 +1,25 @@
+# State (a): main focused -> in-app paths; findings 5, 11, 12
+activate
+place 200 100 2000 1100
+wait 600
+hotkey ctrl+alt+t
+wait 1500
+status
+shot p5-a-t
+hotkey ctrl+alt+j
+wait 2000
+status
+shot p5-a-j
+hotkey ctrl+alt+f
+wait 2000
+shot p5-a-f
+hotkey ctrl+alt+f
+wait 2000
+shot p5-a-f2
+hotkey ctrl+alt+j
+wait 2000
+shot p5-a-f2-j
+hotkey ctrl+alt+r
+wait 2000
+status
+shot p5-a-r

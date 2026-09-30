@@ -1,0 +1,53 @@
+# reminder fires (23:00) while todo floater is open
+other-open 1500 1250 900 450
+hotkey ctrl+alt+t
+wait 1500
+type typing during fire
+wait 10000
+ostatus
+shot p5-fire-1
+wait 10000
+ostatus
+shot p5-fire-2
+wait 10000
+ostatus
+shot p5-fire-3
+wait 10000
+ostatus
+shot p5-fire-4
+wait 10000
+ostatus
+shot p5-fire-5
+wait 10000
+ostatus
+shot p5-fire-6
+wait 10000
+ostatus
+shot p5-fire-7
+wait 10000
+ostatus
+shot p5-fire-8
+wait 10000
+ostatus
+shot p5-fire-9
+wait 10000
+ostatus
+shot p5-fire-10
+wait 10000
+ostatus
+shot p5-fire-11
+wait 10000
+ostatus
+shot p5-fire-12
+wait 10000
+ostatus
+shot p5-fire-13
+wait 10000
+ostatus
+shot p5-fire-14
+wait 10000
+ostatus
+shot p5-fire-15
+wait 10000
+ostatus
+shot p5-fire-16

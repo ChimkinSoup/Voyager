@@ -48,7 +48,7 @@ ReminderEvaluation _evaluateRule(
   ReminderDeliveryState? state,
 ]) => evaluateReminder(
   latest: latestRuleOccurrence(rule, now),
-  nextNatural: nextRuleFire(rule, now),
+  nextAfter: (after) => nextRuleFire(rule, after),
   state: state,
   now: now,
 );
@@ -220,6 +220,130 @@ void main() {
         expect(evaluation.supersededSnooze, isTrue);
       },
     );
+
+    test('a snooze that had already run out is not what was replaced', () {
+      final rule = _rule();
+      final state = _state(
+        '2026-09-14T13:00',
+        ReminderDeliveryStatus.snoozed,
+        snoozeUntil: DateTime(2026, 9, 14, 13, 10),
+      );
+      final tuesday = _evaluateRule(rule, DateTime(2026, 9, 15, 13, 0), state);
+      expect(tuesday.phase, ReminderPhase.due);
+      expect(tuesday.occurrence!.key, '2026-09-15T13:00');
+      expect(tuesday.supersededSnooze, isFalse);
+    });
+
+    test('a state from a device ahead, on the next occurrence, does not '
+        'resurrect the one before it', () {
+      final rule = _rule();
+      // Monday evening here; a device already into Tuesday snoozed Tuesday's.
+      final state = _state(
+        '2026-09-15T13:00',
+        ReminderDeliveryStatus.snoozed,
+        snoozeUntil: DateTime(2026, 9, 15, 13, 10),
+      );
+      final monday = _evaluateRule(rule, DateTime(2026, 9, 14, 20, 0), state);
+      expect(monday.phase, ReminderPhase.pending);
+      // Not the natural 1 PM, which the other device already snoozed.
+      expect(monday.nextFireAt, DateTime(2026, 9, 15, 13, 10));
+
+      // Reaching Tuesday here picks the snooze up as written.
+      final tuesday = _evaluateRule(rule, DateTime(2026, 9, 15, 13, 5), state);
+      expect(tuesday.phase, ReminderPhase.snoozed);
+      expect(tuesday.snoozeUntil, DateTime(2026, 9, 15, 13, 10));
+    });
+
+    test('a state from a device more than a day ahead resurrects nothing', () {
+      final rule = _rule();
+      // Monday 12:59 here: Sunday's is the latest, Monday's the next — and a
+      // device already into Tuesday acknowledged Tuesday's.
+      final state = _state('2026-09-15T13:00', ReminderDeliveryStatus.acked);
+      final evaluation = _evaluateRule(
+        rule,
+        DateTime(2026, 9, 14, 12, 59),
+        state,
+      );
+      expect(evaluation.phase, ReminderPhase.pending);
+      // Neither Monday's nor the acknowledged Tuesday's alerts: Wednesday's.
+      expect(evaluation.nextFireAt, DateTime(2026, 9, 16, 13, 0));
+    });
+
+    test('a snooze from a device ahead alerts when it ends here', () {
+      final rule = _rule();
+      final monday = DateTime(2026, 9, 14, 20, 0);
+      final longSnooze = _state(
+        '2026-09-15T13:00',
+        ReminderDeliveryStatus.snoozed,
+        snoozeUntil: DateTime(2026, 9, 15, 15, 0),
+      );
+      expect(
+        _evaluateRule(rule, monday, longSnooze).nextFireAt,
+        DateTime(2026, 9, 15, 15, 0),
+      );
+
+      // Over before Tuesday 1 PM comes round here: due the moment it does.
+      final shortSnooze = _state(
+        '2026-09-15T13:00',
+        ReminderDeliveryStatus.snoozed,
+        snoozeUntil: DateTime(2026, 9, 15, 4, 10),
+      );
+      expect(
+        _evaluateRule(rule, monday, shortSnooze).nextFireAt,
+        DateTime(2026, 9, 15, 13, 0),
+      );
+    });
+
+    test('a snooze that ran out names the occurrence it left due', () {
+      final rule = _rule();
+      final state = _state(
+        '2026-09-14T13:00',
+        ReminderDeliveryStatus.snoozed,
+        snoozeUntil: DateTime(2026, 9, 14, 13, 10),
+      );
+      final tuesday = _evaluateRule(rule, DateTime(2026, 9, 15, 13, 0), state);
+      expect(tuesday.replacedKey, '2026-09-14T13:00');
+
+      final running = _state(
+        '2026-09-14T13:00',
+        ReminderDeliveryStatus.snoozed,
+        snoozeUntil: DateTime(2026, 9, 15, 15, 0),
+      );
+      expect(
+        _evaluateRule(rule, DateTime(2026, 9, 15, 13, 0), running).replacedKey,
+        isNull,
+      );
+    });
+
+    test('a todo bell acknowledged by a device ahead stays quiet', () {
+      // Keyed by the due time, not the fire time fifteen minutes before it.
+      final task = _task(DateTime(2026, 9, 14, 16, 0));
+      final bell = _bell(ReminderSourceKind.todo, offsetMinutes: 15);
+      final state = _state('2026-09-14T16:00', ReminderDeliveryStatus.acked);
+      final now = DateTime(2026, 9, 14, 15, 30);
+      final evaluation = evaluateReminder(
+        latest: latestTodoOccurrence(task, bell, now),
+        nextAfter: (after) => nextTodoFire(task, bell, after),
+        state: state,
+        now: now,
+      );
+      expect(evaluation.phase, ReminderPhase.pending);
+      expect(evaluation.nextFireAt, isNull);
+    });
+
+    test('a todo moved earlier than an acknowledged due date is due', () {
+      final task = _task(DateTime(2026, 9, 14, 16, 0));
+      final bell = _bell(ReminderSourceKind.todo);
+      final state = _state('2026-09-18T16:00', ReminderDeliveryStatus.acked);
+      final now = DateTime(2026, 9, 14, 16, 5);
+      final evaluation = evaluateReminder(
+        latest: latestTodoOccurrence(task, bell, now),
+        nextAfter: (after) => nextTodoFire(task, bell, after),
+        state: state,
+        now: now,
+      );
+      expect(evaluation.phase, ReminderPhase.due);
+    });
   });
 
   test('coalesce: unacknowledged day N and day N+1 are one due state', () {
@@ -241,8 +365,8 @@ void main() {
         latestRuleOccurrence(rule, tuesday)!.fireAt,
         DateTime(2026, 9, 14, 8, 0),
       );
-      expect(nextRuleFire(rule, tuesday), DateTime(2026, 9, 17, 8, 0));
-      expect(nextRuleFire(rule, monday), DateTime(2026, 9, 14, 8, 0));
+      expect(nextRuleFire(rule, tuesday)?.fireAt, DateTime(2026, 9, 17, 8, 0));
+      expect(nextRuleFire(rule, monday)?.fireAt, DateTime(2026, 9, 14, 8, 0));
     });
 
     test('with no weekdays never fires', () {
@@ -260,7 +384,7 @@ void main() {
     );
 
     test('fires once at its date and time', () {
-      expect(nextRuleFire(rule, monday), DateTime(2026, 9, 20, 9, 0));
+      expect(nextRuleFire(rule, monday)?.fireAt, DateTime(2026, 9, 20, 9, 0));
       expect(latestRuleOccurrence(rule, monday), isNull);
       final after = DateTime(2026, 9, 25);
       expect(latestRuleOccurrence(rule, after)!.key, '2026-09-20T09:00');
@@ -279,7 +403,10 @@ void main() {
     test('a timed due date fires offset before it', () {
       final bell = _bell(ReminderSourceKind.todo, offsetMinutes: 60);
       final task = _task(DateTime(2026, 9, 14, 17, 0));
-      expect(nextTodoFire(task, bell, monday), DateTime(2026, 9, 14, 16, 0));
+      expect(
+        nextTodoFire(task, bell, monday)?.fireAt,
+        DateTime(2026, 9, 14, 16, 0),
+      );
       final occurrence = latestTodoOccurrence(
         task,
         bell,
@@ -293,7 +420,10 @@ void main() {
     test('a date-only due date counts back from 9:00 AM', () {
       final bell = _bell(ReminderSourceKind.todo, offsetMinutes: 15);
       final task = _task(DateTime(2026, 9, 14));
-      expect(nextTodoFire(task, bell, monday), DateTime(2026, 9, 14, 8, 45));
+      expect(
+        nextTodoFire(task, bell, monday)?.fireAt,
+        DateTime(2026, 9, 14, 8, 45),
+      );
     });
 
     test('a completed or undated task never fires', () {
@@ -318,7 +448,10 @@ void main() {
         start: DateTime(2026, 9, 14, 10, 0),
         end: DateTime(2026, 9, 14, 11, 0),
       );
-      expect(nextEventFire(event, bell, monday), DateTime(2026, 9, 14, 9, 0));
+      expect(
+        nextEventFire(event, bell, monday)?.fireAt,
+        DateTime(2026, 9, 14, 9, 0),
+      );
       expect(
         latestEventOccurrence(event, bell, DateTime(2026, 9, 14, 9, 30))!.key,
         '2026-09-14T10:00',
@@ -335,7 +468,10 @@ void main() {
         end: DateTime(2026, 9, 17),
         isFullDay: true,
       );
-      expect(nextEventFire(event, bell, monday), DateTime(2026, 9, 15, 9, 0));
+      expect(
+        nextEventFire(event, bell, monday)?.fireAt,
+        DateTime(2026, 9, 15, 9, 0),
+      );
     });
 
     test('a repeating event resolves its latest and next occurrence', () {
@@ -347,7 +483,10 @@ void main() {
       );
       final now = DateTime(2026, 9, 14, 12, 0);
       expect(latestEventOccurrence(event, bell, now)!.key, '2026-09-14T09:00');
-      expect(nextEventFire(event, bell, now), DateTime(2026, 9, 15, 8, 45));
+      expect(
+        nextEventFire(event, bell, now)?.fireAt,
+        DateTime(2026, 9, 15, 8, 45),
+      );
     });
 
     test('an occurrence before the bell was armed is not due', () {

@@ -1,0 +1,6 @@
+e-23	2*3 apples and pears	0	{ctrl+end}	*	*
+e-23-later	2*3 apples\nnext line with *word* here	0	{ctrl+end}	*	*
+e-unclosed	unclosed **open and *half	0	{ctrl+end}	*	*
+e-unclosed-next	unclosed **open line\nsecond line has **bold** ok	0	{ctrl+end}	*	*
+e-cross	a *start of italic\nnext line ends* here	0	{ctrl+end}	*	*
+e-bullet	* bullet with *emph* inside\n* second bullet	0	{ctrl+end}	*	*

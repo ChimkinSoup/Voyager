@@ -1,0 +1,24 @@
+ac-wtih		0	wtih {space}	with 	*
+ac-Wtih-case		0	Wtih {space}	With 	*
+ac-WTIH-caps		0	WTIH {space}	WTIH 	*
+ac-comma		0	wtih ,	with,	*
+ac-period		0	jsut .	just.	*
+ac-enter		0	knwo {enter}	know\n	*
+ac-star		0	*thnig *	*thing*	*
+ac-short-2ch		0	wt {space}	wt 	*
+ac-qux		0	qux .	qux.	*
+ac-littl		0	littl {space}	little 	*
+ac-peopl		0	peopl {space}	people 	*
+ac-nevr		0	nevr {space}	never 	*
+ac-culd		0	culd {space}	could 	*
+ac-shuld		0	shuld {space}	should 	*
+ac-wht		0	wht {space}	what 	*
+ac-bcause		0	bcause {space}	because 	*
+ac-drw		0	drw {space}	draw 	*
+ac-teh		0	teh {space}	the 	*
+ac-recieve		0	recieve {space}	receive 	*
+ac-tag		0	#wtih {space}	#wtih 	*
+ac-code-unclosed	`a 	3	wtih {space}	`a wtih 	*
+ac-hyphen		0	wtih -	wtih-	*
+ac-digit		0	wtih2 {space}	wtih2 	*
+ac-possessive		0	dog's {space}	dog's 	*

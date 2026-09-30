@@ -1,0 +1,4 @@
+t-yy-caret	Vim probe title	4	yy	Vim probe title	4	normal
+t-yy-p-slow	Vim probe title	4	yy {wait:500} p	*	*	normal
+t-ctrlv-insert	Vim probe title	15	A {ctrl+v} {wait:500} {esc}	*	*	normal
+t-ctrlv-normal-save	Vim probe title	14	{ctrl+v} {wait:3000}	*	*	normal

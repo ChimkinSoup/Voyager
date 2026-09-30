@@ -1,0 +1,4 @@
+r-inside	plain **bold** and *ital* end	9	{wait:10}	*	*
+r-outside	plain **bold** and *ital* end	2	{wait:10}	*	*
+r-select	plain **bold** and *ital* end	2	{shift+right} {shift+right} {shift+right} {shift+right} {shift+right} {shift+right} {shift+right} {shift+right}	*	*
+r-type	plain **bo	10	ld** tail	plain **bold** tail	*

@@ -1,0 +1,65 @@
+# Vim ON in floater fields; Esc never closes a floater
+activate
+click 380 420
+wait 500
+shot p5-hotkeyrow-click
+other-open 60 1250 900 450
+hotkey ctrl+alt+t
+wait 1500
+type abc def
+key esc
+wait 200
+type 0x
+wait 200
+key esc
+wait 400
+ostatus
+shot p5-vim-t
+type A
+type z
+wait 200
+shot p5-vim-t2
+other-click
+wait 1200
+hotkey ctrl+alt+j
+wait 1800
+key esc
+type G
+type o
+type hello world
+key esc
+type 0
+type dw
+wait 1500
+ostatus
+shot p5-vim-j
+other-click
+wait 1200
+hotkey ctrl+alt+f
+wait 1800
+key tab
+key tab
+type note text
+key esc
+type b
+type D
+key esc
+key esc
+wait 400
+ostatus
+shot p5-vim-f
+other-click
+wait 1200
+hotkey ctrl+alt+r
+wait 1800
+type remind vim
+key esc
+type 0
+type dw
+key esc
+wait 400
+ostatus
+shot p5-vim-r
+other-click
+wait 1200
+ostatus

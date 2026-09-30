@@ -1,0 +1,22 @@
+# Clipboard must hold "x<U+1F600>y" (set by the caller). Vim ON, Journal page.
+activate
+click 1800 900
+wait 600
+key ctrl+a
+key backspace
+key ctrl+v
+wait 800
+key esc
+key 0
+wait 300
+shot p3-crash-before
+type l
+wait 300
+type l
+wait 300
+shot p3-crash-mid
+type i
+wait 300
+type Z
+wait 1500
+status

@@ -1,0 +1,35 @@
+# Finding 3: WM_CLOSE on a focused floater (main minimized underneath)
+other-open 60 1250 900 450
+ostatus
+hotkey ctrl+alt+t
+wait 1500
+ostatus
+close
+wait 2000
+ostatus
+shot p5-f3
+# get main back to a normal visible window, other app in front
+tray-open
+wait 1500
+ostatus
+restore
+wait 500
+place 200 100 2000 1100
+wait 800
+other-click
+wait 300
+# Finding 10: dismiss into a topmost window
+other-topmost on
+other-click
+wait 300
+hotkey ctrl+alt+t
+wait 1500
+ostatus
+other-click
+wait 1500
+ostatus
+wait 5000
+ostatus
+other-topmost off
+wait 300
+ostatus

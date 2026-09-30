@@ -1,0 +1,31 @@
+# Light theme spot-check of the four floaters, then back to Dark
+activate
+click 2707 829
+wait 1500
+place 200 100 2000 1100
+wait 800
+other-open 60 1250 900 450
+hotkey ctrl+alt+t
+wait 1500
+shot p5-l-t
+hotkey ctrl+alt+j
+wait 1800
+shot p5-l-j
+hotkey ctrl+alt+f
+wait 1800
+click 632 917
+wait 300
+shot p5-l-f
+hotkey ctrl+alt+r
+wait 1800
+click 865 930
+wait 500
+shot p5-l-r
+other-click
+wait 1500
+activate
+maximize
+wait 1000
+click 2525 829
+wait 1500
+shot p5-l-back

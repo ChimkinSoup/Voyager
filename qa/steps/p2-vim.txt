@@ -1,0 +1,29 @@
+activate
+wheel 88 900 -15
+wait 600
+click 84 1518
+wait 2000
+click 685 46
+wait 1500
+click 2739 258
+wait 1200
+shot p2-vim-on
+wheel 88 900 15
+wait 600
+click 88 538
+wait 2000
+click 1440 1728
+type vimtest
+key esc
+wait 500
+shot p2-vim-normal
+key ctrl+tab
+wait 1500
+shot p2-vim-ctab-normal
+key ctrl+shift+tab
+wait 1500
+click 1440 1728
+wait 500
+key ctrl+tab
+wait 1500
+shot p2-vim-ctab-insert

@@ -1,0 +1,32 @@
+activate
+click 1440 1728
+wait 400
+type abc
+key esc
+wait 300
+key ctrl+slash
+wait 1200
+shot p3-sc-ctrlslash-normal
+key esc
+wait 800
+shot p3-sc-ctrlslash-normal-closed
+click 1440 1728
+wait 400
+key ctrl+slash
+wait 1200
+shot p3-sc-ctrlslash-insert
+key esc
+wait 800
+click 1440 1728
+wait 400
+key esc
+key ctrl+f
+wait 1200
+shot p3-sc-ctrlf-normal
+key esc
+wait 800
+click 1440 1728
+wait 400
+key ctrl+f
+wait 1200
+shot p3-sc-ctrlf-insert

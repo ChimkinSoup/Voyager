@@ -242,6 +242,86 @@ void main() {
     );
   });
 
+  test('a restart does not log the same appearance again', () async {
+    await repository.upsertRule(_rule());
+    await repository.upsertDeliveryState(
+      ReminderDeliveryState(
+        id: 'rule:r1',
+        sourceKind: ReminderSourceKind.scheduledRule,
+        sourceId: 'r1',
+        occurrenceKey: '2026-09-13T13:00',
+        status: ReminderDeliveryStatus.snoozed,
+        snoozeUntil: DateTime(2026, 9, 14, 15, 0).toUtc(),
+        createdAt: DateTime.utc(2026, 9, 13),
+        updatedAt: DateTime.utc(2026, 9, 13),
+      ),
+    );
+    await feed(engineWith(_FakeOs()));
+    await feed(engineWith(_FakeOs()));
+
+    final history = await repository.listLogs(deliveryStateId: 'rule:r1');
+    int count(ReminderLogEvent event) =>
+        history.where((l) => l.eventType == event).length;
+    expect(count(ReminderLogEvent.supersededByNatural), 1);
+    expect(count(ReminderLogEvent.stickyShown), 1);
+    expect(count(ReminderLogEvent.osFired), 1);
+  });
+
+  test(
+    'a line from before appearances were tagged is not logged again',
+    () async {
+      await repository.upsertRule(_rule());
+      final stamp = DateTime.utc(2026, 9, 14, 12);
+      await repository.appendLog(
+        ReminderDeliveryLog(
+          id: 'legacy',
+          createdAt: stamp,
+          updatedAt: stamp,
+          deliveryStateId: 'rule:r1',
+          sourceKind: ReminderSourceKind.scheduledRule,
+          sourceId: 'r1',
+          occurrenceKey: '2026-09-14T13:00',
+          eventType: ReminderLogEvent.stickyShown,
+          deviceId: _deviceId,
+          at: stamp,
+        ),
+      );
+      await feed(engineWith(_FakeOs()));
+
+      final history = await repository.listLogs(deliveryStateId: 'rule:r1');
+      expect(
+        history.where((l) => l.eventType == ReminderLogEvent.stickyShown),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'after a restart, a snooze that ran out is logged as replaced',
+    () async {
+      await repository.upsertRule(_rule());
+      await repository.upsertDeliveryState(
+        ReminderDeliveryState(
+          id: 'rule:r1',
+          sourceKind: ReminderSourceKind.scheduledRule,
+          sourceId: 'r1',
+          occurrenceKey: '2026-09-13T13:00',
+          status: ReminderDeliveryStatus.snoozed,
+          snoozeUntil: DateTime(2026, 9, 13, 13, 10).toUtc(),
+          createdAt: DateTime.utc(2026, 9, 13),
+          updatedAt: DateTime.utc(2026, 9, 13),
+        ),
+      );
+      await feed(engineWith(_FakeOs()));
+
+      final history = await repository.listLogs(deliveryStateId: 'rule:r1');
+      final superseded = history.singleWhere(
+        (l) => l.eventType == ReminderLogEvent.supersededByNatural,
+      );
+      expect(superseded.detail, 'replaced 2026-09-13T13:00');
+    },
+  );
+
   test('a rule aimed at another device never delivers here', () async {
     await repository.upsertRule(_rule(targets: const ['tablet']));
     final os = _FakeOs(raisesDueAlertsInApp: false);

@@ -1,0 +1,5 @@
+x-u-slow	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	{wait:1500} x {wait:1500} u	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+x-u-ctrlr-slow	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	{wait:1500} x {wait:1500} u {wait:500} {ctrl+r}	lpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+search-miss-q	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	/q {esc} /qqq {enter}	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+search-miss-z1	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	/z {enter}	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	59	normal
+search-miss-zz	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	/zz {enter}	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal

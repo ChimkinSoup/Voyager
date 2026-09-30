@@ -1,0 +1,50 @@
+# State (b) for J / F / R, click-outside dismiss, draft retention
+place 200 100 2000 1100
+wait 600
+other-open 60 1250 900 450
+hotkey ctrl+alt+j
+wait 2000
+ostatus
+shot p5-b-j-open
+type notepad line one
+wait 1500
+shot p5-b-j-typed
+other-click
+wait 1200
+ostatus
+hotkey ctrl+alt+j
+wait 2000
+shot p5-b-j-reopen
+other-click
+wait 1200
+hotkey ctrl+alt+f
+wait 2000
+ostatus
+shot p5-b-f-open
+type 12.34
+wait 300
+shot p5-b-f-typed
+other-click
+wait 1200
+ostatus
+hotkey ctrl+alt+f
+wait 2000
+shot p5-b-f-reopen
+other-click
+wait 1200
+hotkey ctrl+alt+r
+wait 2000
+ostatus
+shot p5-b-r-open
+type remind me
+wait 300
+shot p5-b-r-typed
+other-click
+wait 1200
+hotkey ctrl+alt+r
+wait 2000
+shot p5-b-r-reopen
+other-click
+wait 1200
+ostatus
+activate

@@ -1,0 +1,12 @@
+activate
+click 1440 677
+key ctrl+a
+type   voyager-qa-002@example.com
+click 1440 796
+key ctrl+a
+type qavoyager2027
+key enter
+key enter
+shot p1-login-loading
+wait 8000
+shot p1-login-trim-after

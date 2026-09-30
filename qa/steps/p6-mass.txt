@@ -1,0 +1,200 @@
+activate
+key ctrl+alt+r
+wait 1000
+type mass 01
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 02
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 03
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 04
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 05
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 06
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 07
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 08
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 09
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 10
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 11
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 12
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 13
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 14
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 15
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 16
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 17
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 18
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 19
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 20
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 21
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+key ctrl+alt+r
+wait 1000
+type mass 22
+click 1188 937
+wait 800
+type 1:28 AM\n
+wait 500
+click 1837 1346
+wait 1000
+shot p6-mass-created

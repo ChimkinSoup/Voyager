@@ -1,0 +1,34 @@
+activate
+click 88 418
+wait 2500
+shot p1-first-dreams
+click 88 538
+wait 2500
+shot p1-first-todo
+click 88 658
+wait 2500
+shot p1-first-calendar
+click 88 778
+wait 2500
+shot p1-first-search
+click 88 898
+wait 2500
+shot p1-first-analytics
+click 88 1018
+wait 2500
+shot p1-first-finance
+click 88 1138
+wait 2500
+shot p1-first-life
+click 88 1258
+wait 2500
+shot p1-first-leetcode
+click 88 1378
+wait 2500
+shot p1-first-rankings
+click 88 1498
+wait 2500
+shot p1-first-jobs
+wheel 88 1400 -10
+wait 800
+shot p1-rail-scrolled

@@ -1,0 +1,12 @@
+activate
+# empty trigger + Save (check) -> expect an error
+click 2002 1050
+wait 600
+shot p4-snip-empty
+click 973 963
+type ;sig
+click 1597 963
+type Best regards, Juno
+key enter
+wait 900
+shot p4-snip-sig

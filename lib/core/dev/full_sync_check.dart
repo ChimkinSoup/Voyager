@@ -9,6 +9,7 @@ import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
 
@@ -132,6 +133,12 @@ class FullSyncCheck {
         if (remote == null) {
           // A record deleted before it was ever uploaded loses nothing.
           if (record.data['deletedAt'] != null) continue;
+          // An untouched seed is never uploaded: every device seeds the same
+          // document for itself, so a wipe loses nothing the next seeding
+          // does not put back.
+          if (isJobSeedId(record.id) && parseVersion(record.data) == 0) {
+            continue;
+          }
           gaps.add(
             SyncGap(collection: name, id: record.id, reason: 'not in cloud'),
           );

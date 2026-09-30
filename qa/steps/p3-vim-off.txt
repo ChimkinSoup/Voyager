@@ -1,0 +1,29 @@
+activate
+wheel 88 900 -15
+wait 600
+click 84 1518
+wait 2000
+click 685 46
+wait 1200
+click 2739 258
+wait 1500
+shot p3-vim-toggle-off
+wheel 88 900 15
+wait 600
+click 88 298
+wait 2500
+click 1800 1300
+wait 400
+key ctrl+end
+type  END
+key esc
+wait 300
+type hjkl dd x
+wait 500
+shot p3-vimoff-body
+click 1800 136
+wait 400
+key ctrl+a
+key ctrl+v
+wait 2500
+shot p3-vimoff-title

@@ -1,0 +1,59 @@
+# Vim OFF: empty Enter in todo bar; Esc in each floater; finance/reminder validation
+other-open 60 1250 900 450
+hotkey ctrl+alt+t
+wait 1500
+key enter
+wait 800
+type abc
+wait 300
+shot p5-vo-t-enter
+key esc
+wait 600
+ostatus
+other-click
+wait 1200
+hotkey ctrl+alt+f
+wait 1800
+key esc
+wait 600
+ostatus
+click 632 917
+wait 800
+shot p5-vo-f-empty
+type 0
+click 632 917
+wait 800
+shot p5-vo-f-zero
+key backspace
+type 99999999999
+wait 300
+shot p5-vo-f-huge
+key ctrl+a
+key backspace
+type -5
+wait 300
+shot p5-vo-f-neg
+other-click
+wait 1200
+hotkey ctrl+alt+r
+wait 1800
+key esc
+wait 600
+ostatus
+click 865 930
+wait 800
+shot p5-vo-r-empty
+key space
+key space
+click 865 930
+wait 800
+shot p5-vo-r-ws
+other-click
+wait 1200
+hotkey ctrl+alt+j
+wait 1800
+key esc
+wait 600
+ostatus
+other-click
+wait 1200

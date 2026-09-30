@@ -1,0 +1,11 @@
+activate
+click 487 1735
+wait 1500
+shot p1-new-entry-1
+click 1843 1008
+wait 300
+type new entry body
+click 1843 137
+type new entry title
+wait 6000
+shot p1-new-entry-2

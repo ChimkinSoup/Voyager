@@ -1,0 +1,14 @@
+sn-tab		0	;sig {tab}	Best regards, Juno	18
+sn-space-noexp		0	;sig {space}	;sig 	5
+sn-auto		0	addr	123 Main St	11
+sn-auto-inword	x	1	addr	x123 Main St	12
+sn-tabstop		0	pp {tab}	()	1
+sn-tabstop-fill		0	pp {tab} a {tab} b	(a)b	4
+sn-undo		0	;sig {tab} {ctrl+z}	;sig	4
+sn-undo-auto		0	addr {ctrl+z}	addr	4
+sn-programmatic	addr	4	{wait:10}	addr	4
+sn-deljoin	ad dr	3	{backspace}	addr	2
+sn-list-tab	- ;sig	6	{tab}	- Best regards, Juno	*
+sn-list-indent	- item	6	{tab}	  - item	*
+sn-tab-nomatch	hello	5	{tab}	*	*
+sn-nested		0	pp {tab} pp {tab} x {tab} {tab} y	((x))y	*

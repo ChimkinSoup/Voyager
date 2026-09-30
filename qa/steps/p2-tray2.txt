@@ -1,0 +1,10 @@
+activate
+maximize
+wait 1500
+close
+wait 2000
+status
+hotkey ctrl+alt+t
+wait 2500
+status
+shot p2-tray-hotkey

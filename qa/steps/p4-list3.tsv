@@ -1,0 +1,2 @@
+﻿l-paste		0	{ctrl+v} {wait:500} {enter} b	- a\n- b	*
+l-paste-after	x\n	2	{ctrl+v} {wait:500} {enter} b	x\n- a\n- b	*

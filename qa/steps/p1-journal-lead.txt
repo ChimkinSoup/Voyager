@@ -1,0 +1,9 @@
+activate
+click 1843 1008
+wait 300
+type qa probe body text
+wait 500
+click 1843 137
+type qa probe title
+wait 8000
+shot p1-journal-typed

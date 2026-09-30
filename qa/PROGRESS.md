@@ -44,7 +44,9 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 | `whoami.ps1` | Offline: is *any* Firebase sign-in persisted? (`SIGNED-OUT` / `SIGNED-IN-UNKNOWN-ACCOUNT`) |
 | `voy.ps1` | Real input + window capture (below) |
 | `vm.ps1 whoami \| shot <png> \| eval <libSuffix> <expr>` | Dart VM service client (wraps `vm.dart`) |
-| `Probe.cs` | Win32 side of `voy.ps1` (compiled by Add-Type; must stay C# 5: no `=>` members, no `$""`) |
+| `vimcase.ps1 <cases.tsv> [-VmExe …]` | Phase 3 field probe: Esc, set the focused field's text + caret over the VM service, send real keys, read back `selection\|mode\|length\|text` (non-ASCII as `\u{hex}`). Works on any focused text field (Vim ON or OFF). Case format in its header. |
+| `Probe.cs` | Win32 side of `voy.ps1` (compiled by Add-Type; must stay C# 5: no `=>` members, no `$""`). Since Phase 5, `click`/`move`/`wheel`/`drag` also refuse a point outside Voyager's client area or covered by another window. |
+| `OtherApp.cs` | Phase 5: a probe-owned WinForms "other app" (compiled with `Probe.cs` by `voy.ps1`). Verbs: `other-open [x y w h]` (opens topmost, raised by a real click, then not topmost), `other-click [dx dy]` (only if the form is the window under the point), `other-type`, `other-topmost on\|off`, `other-close`, `ostatus` (foreground owner, form text, hotkey hits, open popup menu), `other-grab <chord>` (another process owns a global hotkey), plus `tray-menu` (posted right-click → real tray menu) and `minimize`. The form lives only for one `voy.ps1` run. |
 
 ### SESSION START (procedure)
 
@@ -111,11 +113,18 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 002.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 009.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
 | voyager-qa-001@example.com | 2026-09-27 (setup) | Empty (no journals, no entries). Created before the background defaults changed: holds the **old** defaults (Dark, Wave off, no Scatter). If reused, reset per SESSION START step 4. | Used to verify sign-up/sign-in. Free to reuse or ignore. |
+| voyager-qa-002@example.com | 2026-09-29 (Phase 1) | 1 journal "Journal" (`__legacy__`) with 1 entry "new entry title" / "new entry body". New defaults (Dark + Scatter). | **Password `qavoyager2027`** (changed in Phase 1, 2026-09-29 15:49). `login.ps1 -Password qavoyager2027`. |
+| voyager-qa-003@example.com | 2026-09-29 (Phase 1) | **Polluted by BUG-005:** one orphan journal entry (id `bf4bf6fd…`, journal `__legacy__` missing, body " EDITED-BY-003"), invisible in the UI. Startup page = Custom → To-Do. Dark + Scatter. | Password `qavoyager2026`. Prefer a fresh account for clean-state phases. |
+| voyager-qa-004@example.com | 2026-09-29 (Phase 2) | List "QA List" (40 open tasks "QA task 01".."40") + empty built-in "To-do" list (BUG-012); journal "Journal" (`__legacy__`) with 1 entry (body "QA draft body for state check MIDEDIT-TRAY", mood 5). Nav order: Jobs first; Dreams + Calendar **hidden**; Dev **visible**. Weather location "Chicago, Illinois, US". Dark + Scatter; Vim off. | Password `qavoyager2026`. Unhide Dreams/Calendar (Settings → Appearance → Navigation pages) before using it for those phases, or use a fresh account. |
+| voyager-qa-005@example.com | 2026-09-29 (Phase 3) | Journal "Journal" (`__legacy__`) with 1 entry (title "L1\rL2" with a hidden CR, BUG-017; body "alpha beta gamma delta…ENDhjkl dd x"). Lists "Vim List" (1 task "task insert enter") + empty built-in "To-do". Calendar event "hello lll hhh" on 2026-09-29. **Vim ON.** Dark + Scatter. | Password `qavoyager2026`. Turn Vim off (Settings → Editing) if reused for a non-Vim phase. |
+| voyager-qa-006@example.com | 2026-09-29 (Phase 4) | Journal "Journal" (`__legacy__`) with 1 entry (body "Met Dr. Smith at 3 p.m. today neve", 8 images). Custom word `littl`; flagged `form`. 6 snippets (`;sig`, `addr` auto, `pp` tabstops, `wtih`, `zz` empty, `lng` 1,000 chars); **expand key Space**. 2 transactions, job "Acme", study deck "Deck A", ranking category "Books". Dark + Scatter; Vim off. | Password `qavoyager2026`. Its snippets/flags change autocorrect and expansion behaviour; use a fresh account for text-editing baselines. |
+| voyager-qa-007@example.com | 2026-09-29 (Phase 5) | Journal "Journal" (`__legacy__`): 2 live quick entries dated Sep 29 ("second qje…" 5,349 chars incl. CJK/emoji/Arabic; "after cold login", BUG-038) + 1 deleted. List "To-do" (built-in): "floater task one" + a 5,316-char title. 2 transactions ("Floater Store" $12.34, "KbdStore" $3.21). 4 once-reminder rules on Sep 29 ("floater reminder" 23:00 fired; "past rem" 21:00 and "past rem two" 21:30 created in the past; "kbd reminder" 23:00). Vim off. Dark + Scatter. | Password `qavoyager2026`. |
+| voyager-qa-008@example.com | 2026-09-30 (Phase 6) | List "Rem List": "bell task" (completed, due Sep 30 12:50 AM, bell At time), "feed A" and "feed B" (due Sep 30; "feed B" hidden in the Inbox). 28 scheduled rules: 22 "mass 01..22" once 1:28 AM (21 acked, "mass 21" deleted, "mass 22" due), "rule once A" (completed), "rule daily B" (daily 12:33 AM, note), "past rule" (snoozed to Oct 1 00:39), "offline fire" (due), "min size rule" (due), "weekly C" (Mon/Fri 2:00 AM, targeted at the removed device). Event "bell event" (deleted, bell 15 min). 4 pinned notes. Devices: "ZephyrusG14" (current install) + "QA Zephyrus" (removed). Dark + Scatter; Vim off; Dev page visible. | Password `qavoyager2026`. Due stickies will show on sign-in (after a restart, BUG-043). |
 
 ---
 
@@ -124,12 +133,21 @@ Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; 
 One line per completed phase.
 
 - Phase 0 (Setup), 2026-09-27: environment, harness, reset procedure, interaction method verified; test plan written. No phase testing done.
+- Phase 1 (First run, auth & account lifecycle), 2026-09-29: Done. Accounts qa-002, qa-003. Logged BUG-003 (Blocker: typing into the empty-account Journal editor is never saved), BUG-004 (Major: first journal/entry invisible until restart), BUG-005 (Blocker: sign-out keeps local data; another account sees it, and an edit uploads it corrupted), BUG-006 (Minor: login page keyboard focus). Re-checked BUG-001 fixed.
+- Phase 2 (Shell, navigation, window & tray), 2026-09-29: Done. Account qa-004. Logged BUG-007 (Cosmetic: clock up to 30 s late), BUG-008 (Cosmetic: unset weather shows a sun + empty sheet), BUG-009 (Minor: Tab reaches nothing / focus invisible app-wide), BUG-010 (Major: pulled journal entries invisible until restart after sign-in on an empty device), BUG-011 (Minor: post-sign-in landing page ignores pulled startup setting), BUG-012 (Minor: hidden empty built-in "To-do" list created on first task add; new devices open on it).
+- Phase 3 (Vim modal keybinding system), 2026-09-29: Done. Account qa-005. Logged BUG-013 (Minor: `h`/counted `l` cross lines, `dh`/`d5l` delete the line break), BUG-014 (Minor: no-match `/` leaves the caret on a partial match), BUG-015 (Blocker: motions split emoji; inserting there crashes the app, `x` saves "�"), BUG-016 (Minor: Enter in Normal doesn't submit one-line fields), BUG-017 (Minor: pasted CRLF leaves a hidden `\r` in one-line fields; not Vim-specific), BUG-018 (Minor: `yy` moves the caret to column 0), BUG-019 (Cosmetic: `/` prompt covers the journal quote at min size).
+- Phase 3 follow-up (Juno's request), 2026-09-29: tested every Vim command the code has beyond VIM.md (~125 cases, `qa/steps/p3x-*`), and documented them in VIM.md §9–16. Logged BUG-020 (Minor: `V j J` joins one line too many) and added a note to BUG-013 (Space doesn't wrap, Backspace does).
+- Phase 5 (Global hotkeys & floaters), 2026-09-29: Done. Account qa-007. Logged BUG-033 (Minor: carried-over to-do draft arrives fully selected), BUG-034 (Minor: a combo another app owns at launch is silently dead all session), BUG-035 (Minor: reentrant-frame assertions on floater replacement, seen once), BUG-036 (Cosmetic: in-app reminder editor clips at short heights), BUG-037 (Minor: Enter on an empty to-do bar drops focus), BUG-038 (Minor: second quick entry for the day after a wipe + sign-in; HLD out of date). Re-verified AUDIT_TESTING findings 3, 5, 10, 11, 12 fixed; 1, 4 not seen; 7 needs a real tray click.
+- Phase 4 (Text-editing helpers), 2026-09-29: Done. Account qa-006. Logged BUG-021 (Major: autocorrect rewrites missing-letter typos into other wrong words, e.g. littl→litt, bcause→cause), BUG-022 (Minor: common misspellings are in the bundled dictionary), BUG-023 (Minor: Enter never autocorrects), BUG-024 (Minor: undoing an autocorrect drops the space; no redo), BUG-025 (Minor: appending a letter at a word's end doesn't autocorrect), BUG-026 (Minor: dictionary dialog drops focus after a rejected Enter), BUG-027 (Minor: Tab on a list line indents instead of expanding a snippet), BUG-028 (Minor: intra-word `*` pairs italic across lines), BUG-029 (Cosmetic: scrolled body top strip), BUG-030 (Cosmetic: entry preview cut at "1."/"Dr."), BUG-031 (Cosmetic: snippets dialog hides rows past the 4th with no scroll cue), BUG-032 (Minor: firebase_storage engine thread error on every upload).
+- Phase 6 (Notifications, inbox & reminders), 2026-09-30: Done. Account qa-008. Logged BUG-039 (Minor: past once-reminder saved on, never fires), BUG-040 (Minor: DST day miscounts in the Inbox feed), BUG-041 (Minor: stickies cover the Inbox/dialogs; editor Create hidden at min size), BUG-042 (Cosmetic: light-theme "Show N more" contrast, Acknowledge loses accent), BUG-043 (Major: after sign-in on an empty device reminders/dismissals/pinned notes load only after restart; due reminders never alert). Resolved P1/P2 Devices leads and the P5 past-reminder lead.
 
 ---
 
 ## 4. Test data currently present
 
 - **Local:** none. The last session ended with `session_end.ps1`: local data wiped, signed out.
+- **Harness changes (Phase 6):** none to the harness; step files `qa/steps/p6-*.txt` (`p6-mass.txt` creates 22 reminders through Ctrl+Alt+R).
+- **Harness changes (Phase 5):** `qa/harness/OtherApp.cs` (new), `voy.ps1` verbs, `Probe.cs` click guard. The scratchpad `startup_probe.ps1` (hold Ctrl+Alt+R in a probe form and press Ctrl+Alt+T every 400 ms for 120 s, started in the background before `launch.ps1`) is described in BUG-034; recreate it if needed.
 - **Cloud (QA accounts):** see the account table.
 - Juno's real data: only in the cloud; Juno signs in between sessions. Juno's pre-audit local-only files are backed up at `C:\Users\Juno\VoyagerQA-localonly-backup-2026-09-27\`.
 
@@ -140,12 +158,46 @@ One line per completed phase.
 - **Windows PowerShell 5.1:** `.ps1` files must be ASCII (a BOM-less UTF-8 em dash broke parsing). Native stderr + `$ErrorActionPreference='Stop'` throws, which is why `vm.ps1` wraps `dart run`.
 - **Shell guard hook (dcg):** `>` redirects need literal paths (not `$var`). No `perl -pi`. Don't invoke scripts through a variable (`& $s`) in multi-line commands. Don't write scripts with Bash heredocs. Write files with the Write tool, then run them by literal path. `git checkout -- <path>` is blocked.
 - **Focus:** `activate` sometimes needs its fallbacks (SwitchToThisWindow, then minimize/restore). A minimize/restore can itself trigger window-state handlers, so note it if a test is about window state.
-- **Login card re-centres** when toggling Sign in ↔ Create account (fields move down ~56 px). `login.ps1` handles it.
+- **Login card re-centres** when toggling Sign in ↔ Create account (fields move down ~56 px). `login.ps1` handles it. **It also moves when an error line appears** (one line: Email y≈696, Password y≈816 in sign-in mode; sign-up mode with one error line: 752/872). `login.ps1` assumes no error is showing: after a failed attempt, click the fields yourself. Dialogs (e.g. Change password) also grow and re-centre when an error appears, so re-measure button positions from a screenshot.
+- **Settings reopens on its last tab.** To sign out, click the Account tab (282, 46) first, then Sign out (394, 451). Step file `qa/steps/p1-signout.txt` does the whole thing (rail scroll → Settings → Account → Sign out).
+- **Rail when scrolled** (after `wheel 88 1400 -10`): Study ≈ y 1158, Workout ≈ 1280, Settings ≈ 1518, and Search/Analytics/Finance move up (Finance ≈ 569).
+- **`vm.ps1` changes the working directory** of the PowerShell session; use absolute paths after calling it.
+- **Harness-assisted helpers** (scratchpad, recreate if needed): read-only SQLite query script, and a PIL contact-sheet/crop script to tile several screenshots into one image for review.
+- **Mid-session account switch:** `reset.ps1` without `-Force` refuses while Voyager runs. After `guard.ps1` shows a QA account, `reset.ps1 -Force` → `launch.ps1` → `login.ps1` is the allowed cold re-login.
 - **Debug build:** first frames and page switches are slower than release. The shell warm-up of hidden pages is **off in debug**, so a first visit builds on arrival. Don't log debug-only slowness as a bug unless it's severe; note "debug build".
 - **Documents logs** are shared with Juno's everyday use, and `perf_stall.log` keeps growing during QA. Read only what this session appended.
 - **Installed release** (`%LOCALAPPDATA%\Programs\Voyager\voyager.exe`) starts at Windows login with `--hidden` and shares the same data dir. `stop.ps1` kills it too. Never test against it.
 - Screenshots are 2880×1800. The viewer downsizes by 1.44; click coordinates are physical.
 - `dart run qa/harness/vm.dart` prints "Running build hooks..." (harmless; filtered by `vm.ps1`).
+- **Cold re-login of the same account:** `session_start.ps1 -Email <same>` (no `-SignUp`) is refused by the sync gate ("no sync check has been run") unless the Dev page check was run. Use the allowed path instead: app running → `guard.ps1` OK (+ outbox 0) → `reset.ps1 -Force` → `launch.ps1` → `login.ps1 -Email …`.
+- **Dev page** is a nav page hidden by default: Settings → Appearance → Navigation pages → eye icon on "Dev" → Save. It then sits above Settings on the rail. Force offline toggle ≈ (2739, 776) maximized.
+- **Settings tabs** (maximized, y=46): Account 282, Appearance 487, Editing 685, Pages 841. Weather location is on **Pages**; Vim toggle on Editing ≈ (2739, 258); Theme Dark/Light on Appearance ≈ (2525, 829) / (2707, 829); Navigation pages row ≈ (1500, 1570).
+- **Floaters:** a global hotkey sent while the window is hidden turns the main window into the floater. Esc and the same hotkey don't dismiss it (by design); `tray-open` brings the main window back with its placement.
+- **Writing to BUGS.md:** the dcg hook can misfire on Python heredocs whose text contains flag-like strings; use the Edit tool for BUGS.md entries.
+- **Fast VM probes:** `dart compile exe qa/harness/vm.dart -o <scratchpad>\vm.exe` once per session. Each call then takes ~0.6 s instead of several seconds. Run it from the repo root (it reads `qa/logs/vm_uri.txt`). The VM service truncates string results at ~128 chars, so put short fields first in any expression that returns text.
+- **VM-service writes to a text controller** (`controller.value = …`) can log "Build scheduled during frame" into `voyager_errors.log` (stack frame `Eval`). That's the harness, not an app bug.
+- **The probe can't type a backtick:** on this PC's keyboard layout (`0409:00060409`), `Probe.cs` `type` sends an `r` for a backtick. Use the clipboard for text containing one.
+- **`vimcase.ps1` fixture writes are deferred** (`Future`), so a synchronous write no longer trips the debug `StackFrame` assertion. Put `{wait:1500}` before an edit you plan to undo.
+- **Emoji in text fields with Vim ON crash the app** (BUG-015). Don't leave emoji in fixtures you'll edit with Vim motions unless you're testing that.
+- **The dcg hook** also blocks Python heredocs whose text contains Markdown backticks ("embedded shell launcher"), and `python … "${var}…"` paths in PowerShell. Use the Edit tool for Markdown, and literal or relative paths for scripts.
+- **Don't click the bottom-right corner when maximized.** The Finance "+" FAB (≈2791, 1711) sits under the auto-hidden taskbar's clock; the click opens the Windows notification panel (ShellExperienceHost), which then keeps the foreground, and `activate`, `tray-open` and even a relaunch can't take it back. Use a non-maximized window (`place 200 100 2000 1100`) for bottom-edge controls.
+- **Dialogs re-centre as they grow** (dictionary errors, snippet rows): re-measure from a screenshot before each click. The dictionary dialog also drops focus after a rejected Enter (BUG-026), so click the field again before typing.
+- **Image clipboard:** Voyager reads only the registered "PNG"/JPEG/WebP/HEIC clipboard formats. `Set-Clipboard -Path` (a file drop) and .NET `SetImage` alone (bitmap) are ignored. Use a DataObject with the image *and* `SetData('PNG', $false, <MemoryStream of the PNG bytes>)`; the Phase 4 helper did exactly that (scratch `setimg.ps1`, recreate if needed). Test images are in `qa/data/`.
+- **Programmatic fixture writes don't autosave** (`vimcase.ps1` sets `controller.value`, which fires no `onChanged`): the DB keeps the last *typed* body. Type at least one character if a check depends on the saved value.
+- **vimcase keys are space-separated tokens**: a literal space must be `{space}` (`ld** tail` types "ld**tail").
+- **At 2000×1100 the rail shows fewer items and the inbox sits lower**; navigate with Ctrl+Tab / Ctrl+Shift+Tab instead of rail coordinates (Journal ↔ Settings wrap).
+- **A wrong click coordinate once reached another app** (Phase 5): a point read off a downscaled contact sheet was outside the 1344×239 floater, and the click landed on Juno's IDE window (one left click, no keys; the next `type` was refused). `Probe.cs` now refuses clicks outside Voyager's client area. Measure coordinates on the unscaled shot, and remember floaters are small windows.
+- **Probe form vs. foreground:** after `other-open`, `ostatus` often shows `fg=explorer:Shell_TrayWnd` (the taskbar) instead of the form; the floater still opens and dismisses correctly, and focus returns there. With the main window maximized it covers the form: `place 200 100 2000 1100` first, or the guard refuses `other-click`. End a run with `activate` (or leave a window foreground): when the probe process exits while its form is foreground, the foreground becomes empty and `activate` reports `locked=True`.
+- **Posted tray clicks can't grant foreground:** `tray-open` sometimes leaves Voyager visible but not foreground, and a tray menu opened by `tray-menu` doesn't close on clicking elsewhere (AUDIT finding 7 can't be judged this way). Close it with `activate; key esc`.
+- **Floater coordinates** (client px): to-do bar 1344×127: title (500,62), Due (1075,62), List (1240,62); the date picker grows it to 987 tall, the list picker to 239 (first list row ≈ y 175). Finance 1264×1049: amount (632,286), Add (632,917). Reminder 952×1023: title (475,167), time chip (250,552), Create (865,930) with the validation line showing, (865,929) without. Notepad 744×631: Delete (690,59).
+- **Hotkeys are registered once at launch.** If a probe or anything else holds a combo at launch, Voyager never gets it back until restart (BUG-034); `voy.ps1 hotkey` then refuses to send it.
+- **Tab focus probe:** `vm.ps1 eval "features/shell/app_shell.dart" "FocusManager.instance.primaryFocus?.toStringShort() ?? 'none'"` shows where keyboard focus is (focus rings are invisible in the app, BUG-009).
+- **Verifying OS toasts (P6):** read Windows' notification store read-only: `sqlite3.connect('file:<LOCALAPPDATA>/Microsoft/Windows/Notifications/wpndatabase.db?mode=ro', uri=True)`, join `Notification.HandlerId` → `NotificationHandler.RecordId` where `PrimaryId = 'Voyager.App'`, regex `<text>` out of `Payload`; `ArrivalTime` is a FILETIME. It also holds Juno's own notifications: filter on Voyager only. Windows keeps 20 per app. Toasts are never withdrawn on ack on Windows (by design), and a re-fire of the same source replaces its toast.
+- **Toast Undo has an 8 s dwell:** reading a screenshot takes longer, so click Undo in the same `voy.ps1` run, or `move` the mouse onto the toast right away (hover holds it) and read its position from a shot.
+- **`key A` sends an unshifted `a`:** for Vim capitals use `type A`, not `key A`.
+- **The Inbox popover re-lays out** after every dismiss/add (it's anchored at the bottom and grows upward): re-measure the broom, `+` and row positions from a fresh shot. Clicking a pinned-note row opens its inline editor (Esc commits the edit).
+- **Rail scroll persists:** after visiting Dev/Settings the rail may stay scrolled (To-Do at y 538 becomes Finance). `wheel 88 600 10` first.
+- **Reminder editor via Ctrl+Alt+R** (in-app) opens centred with fixed positions at maximized: time chip (1188, 937), Create (1837, 1346) with the "Fires in…" line. Typing `h:mm AM` + Enter in the picker's time field sets it and closes the picker; clicking outside the editor discards it silently.
 
 ---
 
@@ -172,8 +224,32 @@ One line per completed phase.
 
 ## 7. Handoff note
 
-**Next phase: Phase 1 — First run, auth & account lifecycle.** Start with `session_start.ps1 -Email voyager-qa-002@example.com -SignUp` (update the account table).
+**Next phase: Phase 7 — Journal.** Start with `session_start.ps1 -Email voyager-qa-009@example.com -SignUp` (update the account table). P7 asks for ~50 entries over 2 years: plan a step file or accept fewer. The P7 checklist also asks for a probe-owned drag-source window for drag-and-drop (build it under `qa/harness/`). Remember BUG-010/BUG-043: after any cold re-login, restart once before judging what the UI shows.
 
-Leads from setup to confirm in Phase 1 (not yet logged as bugs):
-- On a brand-new account (0 journals), the Journal page shows an editor ("Title", Mood, date, "Start writing…"). Text typed into its body ("qa probe text") **never reached SQLite**: `journal_entries_table` and `journals_table` both stayed empty after 8 s and after navigating to To-Do and back, though the text stayed on screen. The entry list on the left stayed empty. Check whether it persists across a restart, and whether it's lost.
-- At the minimum window size (1440×1040 physical), the nav rail shows only Journal…Search, then the inbox icon. Check whether the remaining pages can still be reached (scroll/overflow). This belongs to Phase 2.
+Leads (not yet logged as bugs):
+- (P6) Pinned-note inline edit: Esc commits the edit instead of cancelling it (P25 keyboard pass).
+- (P6) Clicking outside the "New reminder" editor discards the typed title/time with no confirm (same as the reminder floater, HLD §7a.2; decide whether the in-app dialog should differ).
+- (P6) Reminder History shows raw ISO text for snoozes ("until 2026-09-30T00:44:04.388792") (cosmetic sweep).
+- (P6) Dev → Force offline only fails the connectivity probe: the outbox still drained to 0 while the offline badge showed (P26).
+- (P6) Entity bell rows stay `enabled` after their task/event is deleted (the engine skips them). In P24 check whether restoring the event/task from Trash re-arms the bell, and whether it fires for an occurrence that passed while deleted.
+- (P6) The Inbox feed labels a task "Today" (grey) even when its due time passed minutes ago; overdue red starts the next day. Day-granular by design in the code; judge in P9.
+- (P6) Tapping a Windows toast (should focus that sticky) is untested: the toast is outside the app window (MANUAL).
+- (P5) Once, a to-do floater opened by a hotkey during app startup did **not** dismiss when another window took the foreground (with its List picker open); it stayed topmost until the next click. Not reproduced with the probe form (pickers open, click outside → dismissed). If it recurs, note whether the floater opened before the first frame.
+- (P5) Quit from the tray with the journal notepad open took more than 3 s to exit (the text was flushed). The audit measured <1 s without a floater.
+- (P5) In-app Ctrl+Alt+J on a fresh account: the entry list stayed empty while the editor showed the new QJE (same as BUG-004); after restart it lists it.
+- (P5) Esc with Vim OFF in a floater field unfocuses it; the floater stays open with nothing focused, so typing goes nowhere until a click. Judge with BUG-037 in mind (P25 keyboard pass).
+- (P4) Rankings "New category" dialog: the "Name" field label is clipped at its top at 2000×1100 (P19).
+- (P4) The "Image is too large" toast sits over the journal Title label (cosmetic sweep).
+- (P4) Numbered list sub-items keep the parent's numbering (`  3. c`) instead of restarting (P7 if it matters).
+- (P4) `p.m.` gets squiggles under `p` and `m` (single letters unknown to the spell checker).
+- (P4) Dream and study-card image paste, drag-and-drop and the gallery file picker were not tested; now checklist items in P7 (drag-and-drop + drag helper), P8, P9, P19 and P21.
+- (P3) BUG-017 (hidden `\r` from a pasted CRLF) was only checked on the journal Title. Check other one-line fields (todo titles, list names, finance store) and where the value renders (entry list, Search) in P9/P11.
+- (P3) Closing the Ctrl+/ shortcuts list returns focus to the To-Do composer with its text fully selected, so the next keystroke replaces it (P9).
+- (P3) With To-Do search (Ctrl+F) open and empty, the task list showed no tasks (P9).
+- (P1) BUG-003: also check the Journal page after deleting the last entry of an account that has journals (Phase 7).
+- (P2, resolved in P3) Ctrl+Tab navigates away even from inside a text field, in Vim Normal and Insert modes. No Vim binding uses Ctrl+Tab, so there is no conflict.
+- (P2) Life page showed "[ TASKS ] 0" with 40 open tasks and "No journal moods yet" with one entry whose `mood` = 5 in SQLite (the slider's midpoint default; never touched) (Phase 16; also check in P7 whether an untouched slider should store a mood at all).
+- (P2) Light theme: To-Do header "QA List 40 | 0" is pale green on cream, low contrast (P9/P25).
+- (P2) The forecast chart's y-axis shows a single label ("20°") and no rain scale (P25 or cosmetic sweep).
+- (P2) Check in P9 whether the To-Do page (not just SQLite) shows pulled tasks right after a cold sign-in, like BUG-010 for Journal.
+- (Setup lead, resolved in P2) at minimum window size the rail scrolls and every page is reachable.

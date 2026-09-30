@@ -181,7 +181,7 @@ class ReminderEngine extends ChangeNotifier {
         evaluation: rule.enabled
             ? evaluateReminder(
                 latest: latestRuleOccurrence(rule, now),
-                nextNatural: nextRuleFire(rule, now),
+                nextAfter: (after) => nextRuleFire(rule, after),
                 state: states[key],
                 now: now,
               )
@@ -208,7 +208,7 @@ class ReminderEngine extends ChangeNotifier {
             targetsThisDevice: !_removed,
             evaluation: evaluateReminder(
               latest: latestTodoOccurrence(task, bell, now),
-              nextNatural: nextTodoFire(task, bell, now),
+              nextAfter: (after) => nextTodoFire(task, bell, after),
               state: states[bell.id],
               now: now,
             ),
@@ -218,7 +218,7 @@ class ReminderEngine extends ChangeNotifier {
           if (event == null) continue;
           final evaluation = evaluateReminder(
             latest: latestEventOccurrence(event, bell, now),
-            nextNatural: nextEventFire(event, bell, now),
+            nextAfter: (after) => nextEventFire(event, bell, after),
             state: states[bell.id],
             now: now,
           );
@@ -278,18 +278,22 @@ class ReminderEngine extends ChangeNotifier {
       _dueOccurrence[view.sourceKey] = occurrenceKey;
       if (!_shown.add('${view.sourceKey}|${evaluation.instanceTag}')) continue;
 
+      final older = evaluation.replacedKey ?? previous;
       final replaced = evaluation.supersededSnooze
           ? 'replaced a snooze'
-          : (previous != null && previous != occurrenceKey)
-          ? 'replaced $previous'
+          : (older != null && older != occurrenceKey)
+          ? 'replaced $older'
           : null;
-      if (replaced != null &&
-          _superseded.add('${view.sourceKey}|$occurrenceKey')) {
-        unawaited(
-          _log(view, ReminderLogEvent.supersededByNatural, detail: replaced),
-        );
-      }
-      unawaited(_log(view, ReminderLogEvent.stickyShown));
+      unawaited(
+        _recordAppearance(
+          view,
+          replaced:
+              replaced != null &&
+                  _superseded.add('${view.sourceKey}|$occurrenceKey')
+              ? replaced
+              : null,
+        ),
+      );
       NotificationHistory.instance.record(
         view.title,
         source: NotificationSource.reminder,
@@ -303,7 +307,6 @@ class ReminderEngine extends ChangeNotifier {
         // same appearance, not a new notification.
         dedupeKey: 'reminder|${view.sourceKey}|${evaluation.instanceTag}',
       );
-      if (_os.raisesDueAlertsInApp) unawaited(_raiseOsAlertOnce(view));
     }
     for (final key in _dueOccurrence.keys.toList()) {
       if (dueKeys.contains(key)) continue;
@@ -313,22 +316,54 @@ class ReminderEngine extends ChangeNotifier {
     }
   }
 
-  /// One OS alert per appearance per device, across restarts: the history
-  /// already says whether this device raised it.
-  Future<void> _raiseOsAlertOnce(ReminderSourceView view) async {
-    final tag = view.evaluation?.instanceTag;
+  /// Logs a sticky appearance, and the supersession that brought it, and
+  /// raises the in-app OS alert — each once per device across restarts:
+  /// `_shown` and `_superseded` only cover this run, and a reminder still due
+  /// after a restart is the same appearance. The history says what this device
+  /// already did, trimmed lines included.
+  Future<void> _recordAppearance(
+    ReminderSourceView view, {
+    String? replaced,
+  }) async {
+    final evaluation = view.evaluation!;
+    final tag = evaluation.instanceTag;
     if (tag == null) return;
     try {
-      final history = await _repository.listLogs(
+      final history = (await _repository.listLogs(
         deliveryStateId: view.sourceKey,
-      );
-      final raised = history.any(
+        includeDeleted: true,
+      )).where((log) => log.deviceId == deviceId);
+      bool logged(
+        ReminderLogEvent event,
+        bool Function(ReminderDeliveryLog) of,
+      ) => history.any((log) => log.eventType == event && of(log));
+      if (_disposed) return;
+      if (replaced != null &&
+          !logged(
+            ReminderLogEvent.supersededByNatural,
+            (log) => log.occurrenceKey == evaluation.occurrence!.key,
+          )) {
+        await _log(
+          view,
+          ReminderLogEvent.supersededByNatural,
+          detail: replaced,
+        );
+      }
+      // A line from before appearances were tagged has no detail; it can only
+      // be matched to the natural appearance, whose tag is the bare key.
+      if (!logged(
+        ReminderLogEvent.stickyShown,
         (log) =>
-            log.eventType == ReminderLogEvent.osFired &&
-            log.deviceId == deviceId &&
-            log.detail == tag,
-      );
-      if (raised || _disposed) return;
+            log.detail == tag ||
+            (log.detail == null && log.occurrenceKey == tag),
+      )) {
+        await _log(view, ReminderLogEvent.stickyShown, detail: tag);
+      }
+      if (!_os.raisesDueAlertsInApp ||
+          logged(ReminderLogEvent.osFired, (log) => log.detail == tag) ||
+          _disposed) {
+        return;
+      }
       final shown = await _os.showNow(
         PlannedReminderAlert(
           sourceKey: view.sourceKey,
@@ -339,7 +374,7 @@ class ReminderEngine extends ChangeNotifier {
       );
       if (shown) await _log(view, ReminderLogEvent.osFired, detail: tag);
     } catch (error, stackTrace) {
-      _report(error, stackTrace, 'raising a reminder alert');
+      _report(error, stackTrace, 'delivering a reminder');
     }
   }
 

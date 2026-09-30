@@ -1,0 +1,10 @@
+activate
+wheel 88 1400 -10
+wait 800
+click 84 1518
+wait 2000
+click 282 46
+wait 1200
+click 394 451
+wait 3000
+shot p1-signed-out

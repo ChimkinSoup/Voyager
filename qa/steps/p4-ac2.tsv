@@ -1,0 +1,11 @@
+ent-wtih		0	wtih {enter}	with\n	*
+ent-mid	hello 	6	wtih {enter}	hello with\n	*
+ent-wait		0	wtih {wait:300} {enter}	with\n	*
+ent-list	- a\n- 	6	wtih {enter}	- a\n- with\n- 	*
+rev-bksp		0	wtih {space} {backspace}	wtih	4
+rev-bksp2		0	wtih {space} {backspace} {backspace}	wti	3
+rev-suppress		0	wtih {space} {backspace} {space} wtih {space}	wtih wtih 	*
+undo		0	wtih {space} {wait:700} {ctrl+z}	wtih 	*
+undo-redo		0	wtih {space} {wait:700} {ctrl+z} {ctrl+y}	with 	*
+edit-old	I went wtih her	7	{right} {right} {right} {right} {backspace} h {space}	I went with  her	*
+delete-only	I went wtihx her	11	{backspace} {space}	I went wtih  her	*

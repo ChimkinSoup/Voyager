@@ -12,6 +12,7 @@ import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
+import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
@@ -145,6 +146,22 @@ void main() {
     final report = await check.run();
 
     expect(report.safeToWipe, isTrue);
+  });
+
+  test('untouched seeds are not gaps, edited ones are', () async {
+    final jobs = DriftJobRepository(db);
+    await jobs.ensureSeeded();
+
+    expect((await check.run()).safeToWipe, isTrue);
+
+    final applied = (await jobs.listStages()).firstWhere(
+      (s) => s.id == jobSeedStageId('Applied'),
+    );
+    await jobs.upsertStage(applied.copyWith(name: 'Sent'));
+
+    final report = await check.run();
+
+    expect(report.gaps.single.id, applied.id);
   });
 
   test('a collection answered from the cache is not vouched for', () async {

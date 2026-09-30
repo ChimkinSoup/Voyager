@@ -1,0 +1,4 @@
+l-cont-wait	- a	3	{wait:800} {enter} {wait:800} b	- a\n- b	*
+l-cont-typed		0	- {space} a {enter} b	- a\n- b	*
+l-cont-2	- a\n- b	7	{enter} c	- a\n- b\n- c	*
+l-cont-typed-wait		0	- {space} a {wait:800} {enter} {wait:800} b	- a\n- b	*

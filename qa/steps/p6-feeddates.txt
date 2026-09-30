@@ -1,0 +1,21 @@
+activate
+click 1008 259
+wait 1000
+click 2202 252
+wait 900
+click 2163 891
+wait 400
+click 2363 1011
+wait 900
+click 1008 154
+wait 1000
+click 2202 252
+wait 900
+click 2163 891
+wait 400
+click 2363 1011
+wait 900
+shot p6-feeddates
+click 88 1688
+wait 1200
+shot p6-feed-3items

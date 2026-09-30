@@ -1,0 +1,10 @@
+activate
+click 2707 65
+wait 1800
+shot p3-cal-dialog
+type hello lll hhh
+wait 300
+key esc
+type llhhll
+wait 500
+shot p3-cal-dialog-typed

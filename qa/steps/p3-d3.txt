@@ -1,0 +1,35 @@
+activate
+wheel 88 900 -15
+wait 600
+click 84 1518
+wait 2000
+click 685 46
+wait 1200
+click 2739 258
+wait 1500
+wheel 88 900 15
+wait 600
+click 88 298
+wait 2500
+place 0 0 1440 1040
+wait 1500
+click 900 700
+wait 400
+key esc
+type /o
+wait 600
+shot p3-min-search
+key esc
+wait 300
+shot p3-min-normal
+place 0 0 2000 1100
+wait 1500
+click 1200 700
+wait 400
+key esc
+type /gam
+wait 600
+shot p3-odd-search
+key esc
+maximize
+wait 1500

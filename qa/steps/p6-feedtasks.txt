@@ -1,0 +1,14 @@
+activate
+key esc
+wheel 88 600 10
+wait 500
+click 88 538
+wait 1500
+click 1400 1727
+type feed A\n
+wait 600
+type feed B\n
+wait 800
+key esc
+wait 300
+shot p6-feedtasks

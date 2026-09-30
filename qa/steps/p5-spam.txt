@@ -1,0 +1,46 @@
+# Hotkey spam from another app
+other-open 60 1250 900 450
+hotkey ctrl+alt+t
+hotkey ctrl+alt+t
+hotkey ctrl+alt+t
+hotkey ctrl+alt+t
+hotkey ctrl+alt+t
+hotkey ctrl+alt+t
+hotkey ctrl+alt+t
+hotkey ctrl+alt+t
+hotkey ctrl+alt+t
+hotkey ctrl+alt+t
+wait 2000
+ostatus
+shot p5-spam-t
+hotkey ctrl+alt+f
+hotkey ctrl+alt+j
+hotkey ctrl+alt+r
+hotkey ctrl+alt+t
+hotkey ctrl+alt+f
+hotkey ctrl+alt+j
+hotkey ctrl+alt+r
+hotkey ctrl+alt+t
+hotkey ctrl+alt+f
+hotkey ctrl+alt+j
+wait 3000
+ostatus
+shot p5-spam-mix
+other-click
+wait 1500
+ostatus
+# spam in-app (main focused)
+activate
+hotkey ctrl+alt+f
+hotkey ctrl+alt+j
+hotkey ctrl+alt+r
+hotkey ctrl+alt+t
+hotkey ctrl+alt+f
+hotkey ctrl+alt+f
+hotkey ctrl+alt+j
+hotkey ctrl+alt+r
+hotkey ctrl+alt+t
+hotkey ctrl+alt+f
+wait 3000
+ostatus
+shot p5-spam-inapp
