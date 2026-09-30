@@ -1280,6 +1280,18 @@ abstract class SyncRepository {
   /// document itself hasn't moved. Throws rather than answer from a cache.
   Future<Set<String>> listOperationDocumentIdsSince(DateTime since);
 
+  /// Every document's operation log, each as [listOperations] would return
+  /// it, in a few paged reads rather than one query per document — with the
+  /// newest operation's server write time as the read began (null when there
+  /// was none). The pages are read one after another, so an operation
+  /// written meanwhile may be missing; [listOperationDocumentIdsSince] from
+  /// that time names every such log. The map is the caller's to change. Read
+  /// from the server; throws rather than answer from a cache.
+  Future<
+    ({Map<String, List<SyncOperation>> logs, DateTime? newestWriteAtStart})
+  >
+  listAllOperations();
+
   /// Batched counterpart to [upsertDocument] — see [appendOperationsBatch].
   Future<void> upsertDocumentsBatch(
     String collection,

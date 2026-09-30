@@ -9,7 +9,7 @@ import 'package:voyager/domain/models/media_models.dart';
 /// The check is on the input rather than the output so that a rejection can
 /// be reported immediately, without spending seconds decoding a 200 MB file
 /// only to refuse it.
-const int maxIngestInputBytes = 10 * 1024 * 1024;
+const int maxIngestInputBytes = 20 * 1024 * 1024;
 
 /// Longest edge kept after downscaling.
 ///
@@ -153,7 +153,7 @@ SniffedImageFormat validateIngestInput(Uint8List bytes) {
   if (bytes.length > maxIngestInputBytes) {
     final mb = (bytes.length / (1024 * 1024)).toStringAsFixed(1);
     throw MediaIngestException(
-      'Image is too large ($mb MB). The limit is 10 MB.',
+      'Image is too large ($mb MB). The limit is 20 MB.',
     );
   }
   final format = sniffImageFormat(bytes);

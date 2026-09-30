@@ -490,9 +490,13 @@ class FirestoreSyncRepository implements SyncRepository {
     final query = await _collection(
       'sync_operations',
     ).where('documentId', isEqualTo: documentId).get();
-    final operations = query.docs.map((doc) {
-      final data = doc.data();
-      return SyncOperation(
+    return _sortOperations(
+      query.docs.map((doc) => _parseOperation(doc.data())).toList(),
+    );
+  }
+
+  static SyncOperation _parseOperation(Map<String, dynamic> data) =>
+      SyncOperation(
         id: data['id'] as String,
         documentId: data['documentId'] as String,
         sequence: (data['sequence'] as num).toInt(),
@@ -500,13 +504,89 @@ class FirestoreSyncRepository implements SyncRepository {
         deviceId: data['deviceId'] as String,
         timestamp: DateTime.parse(data['timestamp'] as String).toUtc(),
       );
-    }).toList();
-    operations.sort((a, b) {
-      final sequenceOrder = a.sequence.compareTo(b.sequence);
-      if (sequenceOrder != 0) return sequenceOrder;
-      return a.timestamp.compareTo(b.timestamp);
-    });
-    return operations;
+
+  static List<SyncOperation> _sortOperations(List<SyncOperation> operations) =>
+      operations..sort((a, b) {
+        final sequenceOrder = a.sequence.compareTo(b.sequence);
+        if (sequenceOrder != 0) return sequenceOrder;
+        return a.timestamp.compareTo(b.timestamp);
+      });
+
+  /// Payload per page of [listAllOperations]. Firestore can only limit a page
+  /// by count, and operations run from a few kilobytes to near a megabyte
+  /// (one chunk of a large rewrite), so a fixed 1,000 could fetch hundreds of
+  /// megabytes at once. Each page is sized from the ones before it instead.
+  static const _operationPageBytes = 16 * 1024 * 1024;
+
+  /// The first page's size, before any sizes are known: 16 MB of operations
+  /// averaging ~64 KB, when the measured account's averaged ~12 KB.
+  static const _firstOperationPageSize = 250;
+
+  /// How many operations the next page of [listAllOperations] asks for, given
+  /// the [count] read so far and their payload [bytes].
+  @visibleForTesting
+  static int nextOperationPageSize({required int count, required int bytes}) {
+    if (count == 0 || bytes == 0) return _firstOperationPageSize;
+    return (_operationPageBytes * count ~/ bytes).clamp(50, 1000);
+  }
+
+  @override
+  Future<
+    ({Map<String, List<SyncOperation>> logs, DateTime? newestWriteAtStart})
+  >
+  listAllOperations() async {
+    // Taken before the first page, not as the newest write the pages held:
+    // they're read one after another, so an operation written mid-read into
+    // a page already passed is missed, while a later one in a page still to
+    // come would lift a max-of-what-was-read past it. Anything written once
+    // this has answered is stamped after it.
+    final newest = await _collection('sync_operations')
+        .orderBy(_writeTimeField, descending: true)
+        .limit(1)
+        .get(const GetOptions(source: Source.server));
+    _throwIfFromCache(newest);
+    final newestWriteAtStart = newest.docs.isEmpty
+        ? null
+        : (newest.docs.single.data()[_writeTimeField] as Timestamp)
+              .toDate()
+              .toUtc();
+    final logs = <String, List<SyncOperation>>{};
+    // By document name, the order a per-document query returns them in, so
+    // each log reaches [_sortOperations] exactly as [listOperations]' does.
+    final ordered = _collection(
+      'sync_operations',
+    ).orderBy(FieldPath.documentId);
+    QueryDocumentSnapshot<Map<String, dynamic>>? last;
+    var count = 0;
+    var bytes = 0;
+    while (true) {
+      final size = nextOperationPageSize(count: count, bytes: bytes);
+      final query = last == null ? ordered : ordered.startAfterDocument(last);
+      final page = await query
+          .limit(size)
+          .get(const GetOptions(source: Source.server));
+      _throwIfFromCache(page);
+      for (final doc in page.docs) {
+        final operation = _parseOperation(doc.data());
+        logs.putIfAbsent(operation.documentId, () => []).add(operation);
+        count++;
+        bytes += operation.payload.length;
+      }
+      if (page.docs.length < size) break;
+      last = page.docs.last;
+    }
+    logs.updateAll((_, operations) => _sortOperations(operations));
+    return (logs: logs, newestWriteAtStart: newestWriteAtStart);
+  }
+
+  static void _throwIfFromCache(QuerySnapshot<Map<String, dynamic>> query) {
+    if (query.metadata.isFromCache) {
+      throw FirebaseException(
+        plugin: 'cloud_firestore',
+        code: 'unavailable',
+        message: 'Operation logs were answered from the local cache.',
+      );
+    }
   }
 
   @override
@@ -639,6 +719,13 @@ class NoOpSyncRepository implements SyncRepository {
 
   @override
   Future<Set<String>> listOperationDocumentIdsSince(DateTime since) async => {};
+
+  @override
+  Future<
+    ({Map<String, List<SyncOperation>> logs, DateTime? newestWriteAtStart})
+  >
+  listAllOperations() async =>
+      (logs: <String, List<SyncOperation>>{}, newestWriteAtStart: null);
 
   @override
   Future<void> releaseCalendarLock(String deviceId) async {}

@@ -11710,7 +11710,7 @@ class SettingsTableData extends DataClass
   final DateTime? updatedAt;
 
   /// Which one-time upload of the newly synced collections this device has
-  /// run — see `RemoteSyncService.syncBackfillVersion`. Device-local, so it
+  /// run — see `FirestoreCollections.syncBackfillVersion`. Device-local, so it
   /// stays out of [settingsSyncPayload].
   final int syncBackfillVersion;
   const SettingsTableData({

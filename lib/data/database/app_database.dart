@@ -1020,7 +1020,7 @@ class SettingsTable extends Table {
   DateTimeColumn get updatedAt => dateTime().nullable()();
 
   /// Which one-time upload of the newly synced collections this device has
-  /// run — see `RemoteSyncService.syncBackfillVersion`. Device-local, so it
+  /// run — see `FirestoreCollections.syncBackfillVersion`. Device-local, so it
   /// stays out of [settingsSyncPayload].
   IntColumn get syncBackfillVersion =>
       integer().withDefault(const Constant(0))();

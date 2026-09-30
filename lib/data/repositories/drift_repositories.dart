@@ -4128,7 +4128,11 @@ class DriftSettingsRepository implements SettingsRepository {
       for (final record in await jobSnippetsRead) record.item,
     ];
     if (row == null) {
-      const defaults = AppSettings();
+      // No row means a new database, which holds nothing from before this
+      // device synced: the one-time backfill has nothing to carry up.
+      const defaults = AppSettings(
+        syncBackfillVersion: FirestoreCollections.syncBackfillVersion,
+      );
       // Not a local activity: writing the default row is not the user
       // choosing anything, and treating it as one would upload untouched
       // defaults over the settings their other devices already agreed on.

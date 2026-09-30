@@ -269,6 +269,24 @@ class InMemorySyncRepository implements SyncRepository {
   };
 
   @override
+  Future<
+    ({Map<String, List<SyncOperation>> logs, DateTime? newestWriteAtStart})
+  >
+  listAllOperations() async {
+    DateTime? newest;
+    for (final written in _operationWriteTimes.values) {
+      if (newest == null || written.isAfter(newest)) newest = written;
+    }
+    return (
+      logs: {
+        for (final entry in _operations.entries)
+          entry.key: List<SyncOperation>.unmodifiable(entry.value),
+      },
+      newestWriteAtStart: newest,
+    );
+  }
+
+  @override
   Future<void> deleteDocument(String collection, String id) async {
     final key = _key(collection, id);
     _documents.remove(key);

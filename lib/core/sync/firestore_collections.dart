@@ -190,4 +190,15 @@ abstract final class FirestoreCollections {
   /// so the cheap path is the one you get by default and a new collection
   /// cannot quietly start writing an operation log nobody reads.
   static final Set<String> snapshotOnly = records.difference(crdtBacked);
+
+  /// Bump when a new collection joins `RemoteSyncService`'s one-time upload,
+  /// to re-run it on every device and carry that collection's existing rows
+  /// up with it.
+  ///
+  /// A new database starts at this version (see
+  /// `DriftSettingsRepository.getSettings`): it holds nothing from before
+  /// this device synced, and re-uploading what its first pull just brought
+  /// down re-stamped every row, so the next launch pulled them all again
+  /// (BUG-044).
+  static const syncBackfillVersion = 2;
 }

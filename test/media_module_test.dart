@@ -66,7 +66,7 @@ void main() {
       );
     });
 
-    test('refuses an input over 10 MB before decoding it', () {
+    test('refuses an input over 20 MB before decoding it', () {
       final huge = Uint8List(maxIngestInputBytes + 1);
       // PNG magic so the size check is provably what rejected it, not the
       // format sniff.

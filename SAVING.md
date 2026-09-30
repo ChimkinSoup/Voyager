@@ -593,6 +593,9 @@ Worth recording so these are not re-audited:
 
 - **Write ordering in `SyncEngine._syncDocument`** — operation log before document mirror,
   each with its own retry scope, is the right order and the reasoning in the comment holds.
+  (Since 2026-09-30 a first pull's one read of every log depends on it: a document it lists
+  has its operations on the server already, so only ones written after that read need the
+  follow-up query in `RemoteSyncService._operationLogsFor` — QA BUG-002.)
 - **Compaction safety** — `compactOperationLog` writes the baseline before deleting
   superseded operations, guards re-entry with `_compactingDocuments`, and requires a 24 h
   foreign-write cool-off.
@@ -606,7 +609,9 @@ Worth recording so these are not re-audited:
   writes (weather cache, dev flags, `lastSeenNavPage`, `syncBackfillVersion`) from bumping
   the LWW clock or reaching the sync layer.
 - **`backfillSyncedCollections` ordering** — running after the pull, and recording the
-  version only on a clean run, is correct.
+  version only on a clean run, is correct. (Since 2026-09-30 a new database skips it
+  entirely: re-uploading what its first pull brought down re-stamped every row, so the
+  next launch pulled them all again — QA BUG-044.)
 - **Restore transaction hygiene** — `backup_collections.dart` restores with
   `recordLocalActivity: false`, so `SyncedWriteNotifier` does not fire uploads from inside
   the import's write transaction.

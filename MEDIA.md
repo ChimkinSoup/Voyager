@@ -159,7 +159,7 @@ The reference row is the placement everywhere, which is what gives sync, GC, swi
 ## Ingest pipeline
 
 1. Accept bytes from paste, drag-and-drop, or file picker (gallery only).
-2. **Reject** if decoded size **> 10 MB** (pre-compress). Show warning: image too large; do not attach.
+2. **Reject** if decoded size **> 20 MB** (pre-compress). Show warning: image too large; do not attach.
 3. Allowed inputs: **PNG, JPEG, WebP, HEIC**. **No GIF.**
 4. **HEIC → JPEG** on ingest; do not keep the HEIC original.
 5. **Auto compress / downscale** to a sensible max dimension (implementation detail; target: good quality on phone + desktop, stay under 10 MB post-ingest).

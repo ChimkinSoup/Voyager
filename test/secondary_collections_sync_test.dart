@@ -460,7 +460,18 @@ void main() {
   });
 
   group('backfill', () {
+    // A database from a build before these collections synced: its settings
+    // row was written before the backfill existed, so it starts at 0.
+    Future<void> upgradedFromBeforeBackfill(_Device device) async {
+      final settings = await device.settings.getSettings();
+      await device.settings.saveSettings(
+        settings.copyWith(syncBackfillVersion: 0),
+        recordLocalActivity: false,
+      );
+    }
+
     test('uploads rows that predate this device syncing them', () async {
+      await upgradedFromBeforeBackfill(deviceA);
       // Written with the sync layer detached, standing in for rows created
       // before these collections synced at all.
       deviceA.syncedWrites.onWrite = null;
@@ -486,13 +497,14 @@ void main() {
     });
 
     test('runs once, then stops', () async {
+      await upgradedFromBeforeBackfill(deviceA);
       await deviceA.sync.backfillSyncedCollections();
       await deviceA.settle();
 
       final settings = await deviceA.settings.getSettings();
       expect(
         settings.syncBackfillVersion,
-        RemoteSyncService.syncBackfillVersion,
+        FirestoreCollections.syncBackfillVersion,
       );
 
       // A second run must be a no-op, or every launch would re-upload
@@ -501,6 +513,32 @@ void main() {
       deviceA.syncedWrites.onWrite = (collection, records) => uploads++;
       await deviceA.sync.backfillSyncedCollections();
       expect(uploads, 0);
+    });
+
+    test('a new database starts at the current version', () async {
+      expect(
+        (await deviceA.settings.getSettings()).syncBackfillVersion,
+        FirestoreCollections.syncBackfillVersion,
+      );
+    });
+
+    // BUG-044: a restore onto a wiped device re-uploaded every row it had just
+    // pulled, re-stamping them, so the next launch pulled them all again.
+    test('a restore onto a new database uploads nothing back', () async {
+      await deviceB.calendars.upsertCalendar(calendar(name: 'Personal'));
+      await deviceB.settle();
+      final restoredAt = DateTime.now().toUtc();
+
+      await deviceA.sync.pullCalendars();
+      await deviceA.sync.backfillSyncedCollections();
+      await deviceA.settle();
+
+      expect((await deviceA.calendars.listCalendars()).single.name, 'Personal');
+      final rewritten = await server.listChangedDocuments(
+        FirestoreCollections.calendars,
+        since: restoredAt,
+      );
+      expect(rewritten.documents, isEmpty);
     });
   });
 

@@ -226,6 +226,8 @@ One line per completed phase.
 
 **Next phase: Phase 7 — Journal.** Start with `session_start.ps1 -Email voyager-qa-009@example.com -SignUp` (update the account table). P7 asks for ~50 entries over 2 years: plan a step file or accept fewer. The P7 checklist also asks for a probe-owned drag-source window for drag-and-drop (build it under `qa/harness/`). Remember BUG-010/BUG-043: after any cold re-login, restart once before judging what the UI shows.
 
+**Added 2026-09-30 (outside a phase session):** fixes were made in the working tree for BUG-010/BUG-043 (every page now refreshes when the startup pull ends) and BUG-044 (a restore onto a wiped device no longer re-uploads what it pulled). A later change the same day speeds up the restore itself: a first pull reads every operation log in one paged read instead of one query per document (BUG-002's 2026-09-30 notes: measured 27.5 s against 62.1 s on Juno's account, with the same rows restored). See those entries' Notes. They're not yet checked in the running app: TEST_PLAN.md has a new **Fix verification (FV)** section covering these and every other fix made during the audit (FV-1…FV-11). Keep restarting after a cold re-login until FV-2 passes. BUG-004 isn't fixed by this change.
+
 Leads (not yet logged as bugs):
 - (P6) Pinned-note inline edit: Esc commits the edit instead of cancelling it (P25 keyboard pass).
 - (P6) Clicking outside the "New reminder" editor discards the typed title/time with no confirm (same as the reminder floater, HLD §7a.2; decide whether the in-app dialog should differ).
@@ -248,8 +250,8 @@ Leads (not yet logged as bugs):
 - (P3) With To-Do search (Ctrl+F) open and empty, the task list showed no tasks (P9).
 - (P1) BUG-003: also check the Journal page after deleting the last entry of an account that has journals (Phase 7).
 - (P2, resolved in P3) Ctrl+Tab navigates away even from inside a text field, in Vim Normal and Insert modes. No Vim binding uses Ctrl+Tab, so there is no conflict.
-- (P2) Life page showed "[ TASKS ] 0" with 40 open tasks and "No journal moods yet" with one entry whose `mood` = 5 in SQLite (the slider's midpoint default; never touched) (Phase 16; also check in P7 whether an untouched slider should store a mood at all).
+- (P2) Life page showed "[ TASKS ] 0" with 40 open tasks and "No journal moods yet" with one entry whose `mood` = 5 in SQLite (the slider's midpoint default; never touched) (Phase 16; also check in P7 whether an untouched slider should store a mood at all). Possibly BUG-010's cause (seen right after a cold sign-in; `lifeTrackerStatsProvider` is kept alive); re-check in FV-2.
 - (P2) Light theme: To-Do header "QA List 40 | 0" is pale green on cream, low contrast (P9/P25).
 - (P2) The forecast chart's y-axis shows a single label ("20°") and no rain scale (P25 or cosmetic sweep).
-- (P2) Check in P9 whether the To-Do page (not just SQLite) shows pulled tasks right after a cold sign-in, like BUG-010 for Journal.
+- (P2) Check in P9 whether the To-Do page (not just SQLite) shows pulled tasks right after a cold sign-in, like BUG-010 for Journal. Now part of FV-2.
 - (Setup lead, resolved in P2) at minimum window size the rail scrolls and every page is reachable.

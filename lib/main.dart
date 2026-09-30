@@ -375,10 +375,10 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
           );
           // After the pull, so the references it brought in count.
           unawaited(ref.read(mediaServiceProvider).reconcileRefcounts());
-          ref.invalidate(journalEntriesProvider);
-          ref.invalidate(journalsProvider);
-          ref.invalidate(settingsProvider);
-          ref.invalidate(todoListsProvider);
+          // Every page, not a hand-picked few: each read its data once, before
+          // the pull, and on an empty device kept an empty answer until the
+          // app restarted (BUG-010, BUG-043).
+          invalidateAllDataProvidersFrom(ref);
         },
         localRefresh: () async {
           await lazy.loadRecentEntries();

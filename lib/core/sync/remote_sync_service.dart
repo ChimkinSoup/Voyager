@@ -1495,6 +1495,18 @@ class RemoteSyncService {
   /// How many operation logs a pull has in flight at once.
   static const _operationLogConcurrency = 16;
 
+  /// Zone key under which [pullAll] shares one read of every operation log
+  /// among the collections it pulls for the first time — see
+  /// [_operationLogsFor].
+  static const _allOperationsKey = #remoteSyncAllOperations;
+
+  /// How many documents a collection's first pull must list before it starts
+  /// the read of every operation log, which costs the whole account's logs
+  /// however few it needs. Measured on a 15,786-operation account (profile
+  /// build, BUG-002): the read took ~24 s, and fetching one log per document
+  /// ~0.1 s each, so it pays for itself from about 240 documents.
+  static const allOperationsMinDocuments = 200;
+
   /// [onProgress] hears how many listed documents have been applied (or
   /// found unchanged) out of how many have been listed so far. The total grows
   /// while collections are still being listed.
@@ -1530,6 +1542,7 @@ class RemoteSyncService {
       _forceNextDownloadConflict = true;
     }
     final timings = <_PullTiming>[];
+    final allOperations = _AllOperations();
     final stopwatch = Stopwatch()..start();
     try {
       await runZoned(
@@ -1538,12 +1551,16 @@ class RemoteSyncService {
         zoneValues: {
           _pullTimingsKey: timings,
           _recentOperationsKey: _RecentOperations(),
+          _allOperationsKey: allOperations,
           if (onProgress != null) _pullProgressKey: _PullProgress(onProgress),
         },
       );
       // After the pull, never before — see [backfillSyncedCollections].
       await backfillSyncedCollections();
     } finally {
+      // Whatever no collection took — logs of documents nothing listed — is
+      // not kept alive by a timer that outlives the pull in its zone.
+      allOperations.query = null;
       debugPrint(_describePull(stopwatch.elapsed, timings));
     }
   }
@@ -1578,6 +1595,82 @@ class RemoteSyncService {
     return '[sync] pullAll took ${elapsed.inMilliseconds}ms: $documents docs '
         'from ${timings.length} collections, $full pulled whole. '
         'Slowest: $top';
+  }
+
+  /// Each of [documentIds]' operation logs, for a collection's pull.
+  ///
+  /// A collection's [firstPull] resolves every document it lists, and one
+  /// query per document was most of a restore: ~800 logs, 16 at a time, on
+  /// Firestore's one worker on Windows (BUG-002). So inside [pullAll], once a
+  /// first pull lists [allOperationsMinDocuments] documents, it takes them
+  /// from one paged read of every log, which any other collection pulled for
+  /// the first time then shares, however few it lists. Each takes its logs
+  /// out of that read, so what was applied isn't held until the pull ends.
+  /// That read can miss what reached a log
+  /// while it ran, so a query taken now — after this collection was listed —
+  /// for the logs written since the newest operation as the read began names
+  /// those, and they are fetched on their own as before. Everything else,
+  /// and every log when either read fails, goes through
+  /// [_fetchOperationLogs].
+  Future<Map<String, Future<List<SyncOperation>>>> _operationLogsFor(
+    List<String> documentIds, {
+    required bool firstPull,
+  }) async {
+    final shared = Zone.current[_allOperationsKey] as _AllOperations?;
+    if (!firstPull ||
+        shared == null ||
+        documentIds.isEmpty ||
+        (shared.query == null &&
+            documentIds.length < allOperationsMinDocuments)) {
+      return _fetchOperationLogs(documentIds);
+    }
+    // Null once it has failed: recorded here once, not by every collection
+    // sharing it.
+    final all = await (shared.query ??= _syncRepository
+        .listAllOperations()
+        .then<
+          ({
+            Map<String, List<SyncOperation>> logs,
+            DateTime? newestWriteAtStart,
+          })?
+        >(
+          (all) => all,
+          onError: (Object error, StackTrace stackTrace) {
+            _recordAllOperationsFailure(error, stackTrace);
+            return null;
+          },
+        ));
+    final since = all?.newestWriteAtStart;
+    // No stamped operation to measure from, so nothing to say which logs
+    // moved since.
+    if (all == null || since == null) return _fetchOperationLogs(documentIds);
+    final Set<String> moved;
+    try {
+      moved = await _syncRepository.listOperationDocumentIdsSince(since);
+    } catch (error, stackTrace) {
+      _recordAllOperationsFailure(error, stackTrace);
+      return _fetchOperationLogs(documentIds);
+    }
+    // Taken, not read: a document belongs to one collection, and a moved log
+    // is fetched afresh anyway.
+    final taken = {for (final id in documentIds) id: all.logs.remove(id)};
+    return {
+      for (final id in documentIds)
+        if (!moved.contains(id)) id: Future.value(taken[id] ?? const []),
+      ..._fetchOperationLogs([
+        for (final id in documentIds)
+          if (moved.contains(id)) id,
+      ]),
+    };
+  }
+
+  static void _recordAllOperationsFailure(Object error, StackTrace stackTrace) {
+    debugPrint('[sync] reading every operation log failed: $error');
+    ErrorLogger.instance.record(
+      error,
+      stackTrace,
+      context: 'sync: reading every operation log',
+    );
   }
 
   /// Each of [documentIds]' operation logs, fetched at most
@@ -3090,10 +3183,11 @@ class RemoteSyncService {
         );
     // Snapshot-only collections never wrote an operation log, so resolving
     // one would spend an indexed query per document to learn nothing. The
-    // rest are all requested up front, [_operationLogConcurrency] at a time:
-    // one round trip per document, back to back, was nearly all of a full
-    // pull (456 todo tasks took 81 s). The apply loop below still runs in
-    // order; only the waiting overlaps.
+    // rest are all requested up front, [_operationLogConcurrency] at a time —
+    // or, on a first pull, read in one go (see [_operationLogsFor]): one
+    // round trip per document, back to back, was nearly all of a full pull
+    // (456 todo tasks took 81 s). The apply loop below still runs in order;
+    // only the waiting overlaps.
     final unchanged =
         resolveCrdt && full && previousFullPullAt != null && localRow != null
         ? await _unchangedSinceLastFullPull(
@@ -3113,7 +3207,11 @@ class RemoteSyncService {
         : null;
     progress?.listed(docs.length, alreadyDone: unchanged.length);
     final operationLogs = resolveCrdt
-        ? _fetchOperationLogs([for (final doc in toApply) operationLogId(doc)])
+        ? await _operationLogsFor(
+            [for (final doc in toApply) operationLogId(doc)],
+            // No watermark yet: this device has never pulled the collection.
+            firstPull: full && previousFullPullAt == null,
+          )
         : const <String, Future<List<SyncOperation>>>{};
 
     final pulled = <String, Map<String, dynamic>>{};
@@ -5007,10 +5105,6 @@ class RemoteSyncService {
   // resolution on the way down (see [FirestoreCollections.snapshotOnly]).
   // -------------------------------------------------------------------------
 
-  /// Bump when a new collection joins the list, to re-run the one-time upload
-  /// on every device and carry that collection's existing rows up with it.
-  static const syncBackfillVersion = 2;
-
   /// Uploads records a repository just wrote locally.
   ///
   /// Failures land on the outbox exactly as the debounced per-entity uploads
@@ -6321,10 +6415,14 @@ class RemoteSyncService {
   /// does no version comparison.
   ///
   /// Each version uploads only the collections it added, so a device that
-  /// already ran an earlier one doesn't re-upload everything.
+  /// already ran an earlier one doesn't re-upload everything. A new database
+  /// never runs it — see [FirestoreCollections.syncBackfillVersion].
   Future<void> backfillSyncedCollections() async {
     final settings = await _settingsRepository.getSettings();
-    if (settings.syncBackfillVersion >= syncBackfillVersion) return;
+    if (settings.syncBackfillVersion >=
+        FirestoreCollections.syncBackfillVersion) {
+      return;
+    }
 
     if (settings.syncBackfillVersion < 1) await _backfillVersion1();
 
@@ -6348,7 +6446,9 @@ class RemoteSyncService {
     // stale — the pushes above can have taken a while.
     final current = await _settingsRepository.getSettings();
     await _settingsRepository.saveSettings(
-      current.copyWith(syncBackfillVersion: syncBackfillVersion),
+      current.copyWith(
+        syncBackfillVersion: FirestoreCollections.syncBackfillVersion,
+      ),
       recordLocalActivity: false,
     );
   }
@@ -6516,6 +6616,16 @@ class _PullProgress {
 /// by the collections it pulls side by side.
 class _RecentOperations {
   ({DateTime from, Future<Set<String>> ids})? query;
+}
+
+/// A [RemoteSyncService.pullAll]'s one read of every operation log, shared
+/// by the collections it pulls for the first time. Completes with null when
+/// the read failed.
+class _AllOperations {
+  Future<
+    ({Map<String, List<SyncOperation>> logs, DateTime? newestWriteAtStart})?
+  >?
+  query;
 }
 
 class LiveSyncController {

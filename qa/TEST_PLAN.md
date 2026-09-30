@@ -101,6 +101,7 @@ For each phase, besides its specific flows, tick this sweep. Copy it into the ph
 | 24 | Trash, soft delete & undo | Not Started |
 | 25 | Settings, theming & data management | Not Started |
 | 26 | Sync, offline, persistence & Dev page | Not Started |
+| FV | Fix verification: app changes made during the audit | Not Started |
 | 27 | Final Review | Not Started |
 
 Keep this table and each phase's **Status** line in sync.
@@ -546,12 +547,116 @@ Keep this table and each phase's **Status** line in sync.
 - **Failure cases:** toggle offline 10× quickly, a huge entry while offline, `stop.ps1` during a drain.
 - **Skipped/blocked:** true multi-device live sync (only one PC). Note what could not be tested.
 
+## Fix verification (FV) — app changes made during the audit
+- **Status:** Not Started
+- **Why this section exists:** phase sessions never change app code, but Juno fixed bugs while the audit was running. This section re-tests each of those changes in the running app. The phases that found them are Done and don't re-test them. Run it after Phase 26, or earlier if Juno asks. The rules above still apply: no app code changes, QA accounts only, `guard.ps1` before anything destructive.
+- **Build:** some fixes may still be uncommitted in the working tree; `launch.ps1` builds whatever is on disk. Note `git log -1 --oneline` and `git status --short lib/` in the session log so it's clear what was tested.
+- **Unit tests:** `flutter test` must pass before starting (3,998 tests on 2026-09-30). Each item names its own tests; a test is evidence, not a substitute for the app check.
+- **Where a check reads Firestore:** use read-only REST GETs (`curl -s -G "https://firestore.googleapis.com/v1/projects/voyager-db9de/databases/%28default%29/documents/users/<uid>/<collection>?pageSize=300&mask.fieldPaths=_serverWrittenAt" -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "x-goog-user-project: voyager-db9de"`), and only against the QA account's uid. Find the uid by matching a collection's document count (`.../users?showMissing=true&pageSize=50&mask.fieldPaths=x` lists them). `.claude/settings.local.json` allows exactly this and denies curl `-X`/`-d`/`--data*`, so put query parameters in the URL.
+- **Test data:** use a fresh account for FV-1 and FV-2 (`session_start.ps1 -Email voyager-qa-0NN@example.com -SignUp`, next free number, recorded in PROGRESS.md §2), with at least one record on every page: 2 journals with entries in each, a dream, a to-do list with tasks, a calendar event, a tracker with values, a transaction, a budget, a savings goal, an asset, a scheduled reminder due a few minutes after the re-login, a pinned note, a hidden inbox item, a bucket-list item, a job application, a ranking category with items, a LeetCode problem, a study deck with cards, a workout session, a custom quote.
+
+### FV-1 — BUG-044: a restore onto a wiped device re-uploaded everything it pulled
+- **Change (2026-09-30, uncommitted):** a new database starts with the one-time backfill marked done (`DriftSettingsRepository.getSettings` writes the first settings row with `syncBackfillVersion` = `FirestoreCollections.syncBackfillVersion`). An upgraded database still runs it.
+- **Tests:** `test/secondary_collections_sync_test.dart`, group "backfill".
+- **Flows:**
+  - [ ] Cold re-login of the FV account (`guard.ps1` → outbox 0 → `reset.ps1 -Force` → `launch.ps1` → `login.ps1`), wait for the startup pull. Read-only SQL: `settings_table.sync_backfill_version` = 2.
+  - [ ] Firestore: `_serverWrittenAt` of calendar_events, tracker_values, transactions, tag_colors, custom_words and scheduled_reminder_rules is **older** than the re-login (none stamped during it). Before the fix, all of them were stamped within ~10 s of the restore.
+  - [ ] `stop.ps1` → `launch.ps1` without editing anything: the second `[sync] pullAll took …` line lists about 0 docs ("0 pulled whole"). Before the fix it listed nearly the whole account (qa-008: 158 then 160).
+  - [ ] An edit made during the re-login session (e.g. a new transaction) still uploads: it's in Firestore, and the outbox drains to 0.
+- **Failure cases:** `stop.ps1` halfway through the startup pull, relaunch: the pull finishes and nothing is re-uploaded (the Firestore times stay older).
+- **Not covered in the app:** the upgrade path (a database from before the backfill existed); the unit tests cover it.
+
+### FV-2 — BUG-010, BUG-043 (and BUG-004 still open): pages empty after a cold sign-in until restart
+- **Change (2026-09-30, uncommitted):** after the startup pull, `lib/main.dart` refreshes every data provider (`invalidateAllDataProvidersFrom`), not just journals, journal entries, settings and to-do lists.
+- **Tests:** none for the startup path (it lives in `main.dart`); the full suite must still pass.
+- **Flows (right after the FV-1 re-login, without restarting):**
+  - [ ] Journal: the entry list shows the entries; the journal dropdown shows the right count for each journal and for "All journals".
+  - [ ] Dreams, To-Do (lists and tasks), Calendar, Analytics/trackers, Finance (ledger, budgets, goals, assets), Life stats, LeetCode, Rankings, Jobs, Study (library and deck graph), Workout all show the pulled data.
+  - [ ] Inbox: the Scheduled section lists the rules, pinned notes show, the hidden item stays under Hidden (N).
+  - [ ] The reminder that falls due after the re-login fires (sticky + OS toast, `stickyShown`/`osFired` rows from the new device id) without a restart.
+  - [ ] Pages are still empty *while* the pull runs and fill in when it ends. That's expected; note how long it took.
+  - [ ] Known gaps, check and record: custom quotes in the quote randomizer, and older journal entries loaded by scrolling (`historicalJournalEntriesProvider`), aren't refreshed by this change.
+  - [ ] BUG-004 (new account → "New entry": the journal and entry stay invisible) is **not** fixed by this change. Re-run its steps and add the result to its Notes.
+  - [ ] A normal launch (not a cold sign-in): pages don't flash empty or jump when the startup pull ends (every provider is now re-read once at that point).
+- **Failure cases:** navigate between pages during the pull; open an entry in the editor during the pull and type: nothing typed is lost or overwritten when the refresh lands.
+
+### FV-3 — BUG-001: signing in after a signed-out launch left sync signed out
+- **Change:** commit `9c05738` (2026-09-28). Already re-checked in Phase 1 (fix holds); repeat once as a regression check.
+- **Flows:**
+  - [ ] Launch signed out → sign in to a QA account from the login page → its data is pulled, and Dev → Sync backlog shows the queue (not "Signed out — nothing is queued").
+
+### FV-4 — BUG-002: the full startup pull saturated Firestore (false offline badge, stalled pull)
+- **Change:** commit `9c05738` (2026-09-28). The offline probe is an HTTPS `HEAD` instead of an SDK read, a reconnect pull waits behind the startup pull, and a weekly full pull skips journal/dream/to-do documents that are unchanged since the last one.
+- **Tests:** `test/sync_full_pull_skip_test.dart`, `test/firestore_ping_test.dart`.
+- **Flows:**
+  - [ ] During the FV-1 cold re-login, watch the rail: no red no-wifi badge while the network is up.
+  - [ ] Dev → Force offline on, then off, during a pull: the badge follows the toggle, and the pull finishes.
+  - [ ] Weekly full-pull skip: only if a QA account with a few hundred journal entries/tasks exists. Age its watermarks past 7 days as in BUG-002's notes and compare the `pullAll took` line with the unchanged-document count. Otherwise note "unit tests only".
+- **Not fixed (by design of that change):** a restore onto an empty device still fetched every document's operation log, so it still took minutes on a large account. The 2026-09-30 follow-up for that is FV-11.
+
+### FV-5 — Reminder engine: repeats, snoozes and restarts
+- **Change:** commit `3dceca9` (2026-09-30, after the Phase 6 runs). A sticky's appearance and its OS alert are logged once per device across restarts. A snooze that had run out is logged as replaced when a newer occurrence arrives, including after a restart. Synced states from a device ahead (another timezone, clock skew of up to a few days) don't resurrect or silence the wrong occurrence.
+- **Tests:** `test/reminder_engine_test.dart`, `test/reminder_schedule_test.dart`.
+- **Flows:**
+  - [ ] Restart with a due, unacknowledged sticky: it comes back, with **no** second `stickyShown` row and no second OS toast. Phase 6 saw a second `stickyShown` row per restart; this change should remove it.
+  - [ ] Daily rule: snooze it past the next natural occurrence (or set the rule's time so the next occurrence arrives while snoozed): the newer occurrence shows once, and History shows the older one as replaced. Restart and check it isn't logged again.
+  - [ ] Acknowledge a to-do bell, then move the task's due date earlier than the acknowledged one: the bell is due again.
+- **Not testable here:** a second device in another timezone (unit tests only).
+
+### FV-6 — Sync gate: Dev → "Check, then quit (before a wipe)"
+- **Change:** commits `37db0b0` (2026-09-28, the whole-account check, `lib/core/dev/full_sync_check.dart`; `qa/harness/sync_gate.ps1` reads its report) and `3dceca9` (untouched seeded job records, version 0, aren't reported as gaps; edited ones are).
+- **Tests:** `test/full_sync_check_test.dart`.
+- **Flows:**
+  - [ ] QA account with the default job seeds untouched: the check reports safe to wipe, `sync_check.json` has `safeToWipe: true`, and `reset.ps1` (without `-Force`) passes the gate.
+  - [ ] Edit one seeded job record (e.g. rename a stage), then check again before it uploads (Dev → Force offline): expected to be reported as not in the cloud, and `reset.ps1` refuses. Go back online, let the outbox drain, check again: safe.
+  - [ ] Any write after a passing check (type in an entry): `reset.ps1` refuses with "the database changed after the check".
+
+### FV-7 — Floaters put the main window back at its old depth
+- **Change:** commit `99eb2d8` (2026-09-29). When a floater closes, the main window goes back under the window that was directly above it, not just under the one in front.
+- **Flows:**
+  - [ ] Main window behind two other windows (`other-open` twice; stack: other B, other A, Voyager). Open a floater from other B (Ctrl+Alt+T), dismiss it: the order is back to B, A, Voyager (check with `ostatus`/screenshots). Repeat with save instead of dismiss, and for each floater (T, J, F, R).
+  - [ ] Nothing above the main window (Voyager was frontmost): after dismiss it stays frontmost.
+
+### FV-8 — Time picker: Enter and Ctrl+Enter
+- **Change:** commit `64c678b` (2026-09-29). Ctrl+Enter in the date-time/time selectors commits, and Enter on a cleared optional time returns the date alone.
+- **Tests:** `test/reminder_time_picker_enter_test.dart`.
+- **Flows:**
+  - [ ] Reminder editor and a to-do due date: type a time + Enter commits it; Ctrl+Enter commits it; clear an optional time field + Enter leaves the date with no time.
+
+### FV-9 — Security gap fixes (links and media)
+- **Change:** commit `394ed2c` (2026-09-28).
+- **Tests:** `test/job_clipboard_parser_test.dart`, `test/jobs_page_test.dart`, `test/media_transfer_test.dart`.
+- **Flows:**
+  - [ ] Jobs: paste a posting whose markdown has a non-web link (`[x](file:///C:/Windows)`, `[y](javascript:alert(1))`): only the title is kept. A job row's menu offers no Open for a URL that isn't http(s) with a host.
+  - [ ] Media: an image used by two entries, delete one entry (and "delete everywhere" from Trash): the image still shows in the other entry.
+
+### FV-10 — Backup restore audit fixes
+- **Change:** commit `259c414` (2026-09-28). Overlaps Phase 25's backup checks; tick here what Phase 25 doesn't cover.
+- **Tests:** `test/auto_backup_service_test.dart`, `test/backup_list_dialog_test.dart`, `test/import_export_test.dart`, `test/restore_field_stamps_test.dart`, `test/restore_open_editor_test.dart`.
+- **Flows:**
+  - [ ] Restore a backup with a journal entry open in the editor: the open page doesn't save its old text over the restored entry.
+  - [ ] Undo a restore: records it brought back that didn't exist before are deleted again; a record deleted forever since the backup stays deleted.
+
+### FV-11 — BUG-002 (restore half): a first pull reads every operation log at once
+- **Change (2026-09-30, uncommitted):** when `pullAll` pulls journal entries, dream entries or to-do tasks for the first time on this device (no watermark), it reads the whole `sync_operations` collection in pages of 1,000, instead of one query per document. The three collections share that read. Operations written after it are picked up by one follow-up query and fetched one by one. If the read fails, the pull falls back to one query per document. Later pulls are unchanged. Only a first pull listing at least 200 documents starts the read (others then share it); pages are sized to ~16 MB.
+- **Tests:** `test/sync_first_pull_operation_logs_test.dart`.
+- **Flows:**
+  - [ ] During the FV-1 cold re-login (under 200 documents per collection, so it takes the one-query-per-document path; that's expected), the log has no `[sync] reading every operation log failed` line, and the journal entry text, dream text and to-do titles match what was written before the wipe (spot-check 3 of each, including one edited several times).
+  - [x] Speed: measured 2026-09-30 on Juno's account (profile build, cold restore): 27.5 s with the change against 62.1 s without it, with identical journal, dream and to-do rows. See BUG-002's notes. It was measured before the review fixes (one extra single-document query ahead of the read, the 200-document threshold, ~16 MB pages); those shouldn't change a restore of that account, but it hasn't been re-measured.
+  - [ ] After that restore, `stop.ps1` → `launch.ps1`: the second pull is incremental and reads no whole log (no long pause on journal_entries/todo_tasks).
+- **Failure cases:**
+  - Edit a journal entry from a second session of the same account (the harness VM via `vm.ps1`, if it's set up) while the re-login's pull is running: the edit shows up after the pull or on the next one, and isn't lost.
+  - Force offline partway through the pull: it falls back or retries, and completes once back online, with no text missing.
+
+- **Five-dimension sweep:** D2 is the heart of FV-1/FV-2 (SQL + Firestore + restart). D3: the pages in FV-2 at maximized only. D4/D5: as listed per item; otherwise n/a (covered by each feature's phase).
+- **Skipped/blocked:** —
+
 ## Phase 27 — Final Review
 - **Status:** Not Started
 - **Scope:** no new testing except re-checks.
 - **Checklist:**
   - [ ] Re-check every Blocker/Major bug in BUGS.md for exact duplicates (same root behaviour logged twice); mark duplicates in Notes ("Duplicate of BUG-###"). BUGS.md is append-only, so don't delete entries.
-  - [ ] Confirm every phase 1–26 is Done or has documented skips in its "Skipped/blocked"
+  - [ ] Confirm every phase 1–26 and FV is Done or has documented skips in its "Skipped/blocked"
   - [ ] Write the summary at the top of BUGS.md: counts by severity, counts by phase (a severity × phase table), and a list of all Blockers
   - [ ] Final PROGRESS.md update; final SESSION END
 - **Skipped/blocked:** —
