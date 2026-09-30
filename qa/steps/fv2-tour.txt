@@ -1,0 +1,43 @@
+activate
+maximize
+wait 800
+shot fv2-journal
+click 88 418
+wait 1800
+shot fv2-dreams
+click 88 538
+wait 1800
+shot fv2-todo
+click 88 658
+wait 1800
+shot fv2-calendar
+click 88 898
+wait 2000
+shot fv2-analytics
+click 88 1018
+wait 2000
+shot fv2-finance
+click 88 1138
+wait 1800
+shot fv2-life
+click 88 1258
+wait 1800
+shot fv2-leetcode
+click 88 1378
+wait 1800
+shot fv2-rankings
+click 88 1498
+wait 1800
+shot fv2-jobs
+wheel 88 1400 -10
+wait 600
+click 88 1158
+wait 1800
+shot fv2-study
+click 88 1280
+wait 1800
+shot fv2-workout
+wheel 88 600 10
+wait 400
+click 88 298
+wait 1200

@@ -1,0 +1,8 @@
+final repo = c.read(calendarRepositoryProvider);
+final cals = await repo.listCalendars();
+final legacy = cals.firstWhere((x) => x.id == '__legacy_calendar__');
+final now = DateTime.now().toUtc();
+final renamed = Calendar(id: legacy.id, createdAt: legacy.createdAt, updatedAt: now, version: legacy.version + 1, name: 'FV Renamed Default', colorValue: 0xFFE91E63);
+await repo.upsertCalendar(renamed);
+await c.read(remoteSyncServiceProvider).pushRecords('calendars', [renamed]);
+debugPrint('FV-RENAME from v${legacy.version} to v${renamed.version}');

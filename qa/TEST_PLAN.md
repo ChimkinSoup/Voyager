@@ -101,7 +101,7 @@ For each phase, besides its specific flows, tick this sweep. Copy it into the ph
 | 24 | Trash, soft delete & undo | Not Started |
 | 25 | Settings, theming & data management | Not Started |
 | 26 | Sync, offline, persistence & Dev page | Not Started |
-| FV | Fix verification: app changes made during the audit | Not Started |
+| FV | Fix verification: app changes made during the audit | In Progress (FV-1, FV-2 done) |
 | 27 | Final Review | Not Started |
 
 Keep this table and each phase's **Status** line in sync.
@@ -292,6 +292,7 @@ Keep this table and each phase's **Status** line in sync.
   - [ ] Quotes toggle; custom quotes dialog CRUD; randomizer doesn't repeat immediately
   - [ ] On This Day: seed entries dated 1 month / 1+ years ago → overlay appears per the cadence setting
   - [ ] Entry list sorting with many entries (seed 50+ across dates), scroll performance, list-width drag persists
+  - [ ] Older entries after a cold sign-in (added 2026-09-30, from FV-2): once the 50+ entries are in the cloud, do a cold re-login (`guard.ps1` → outbox 0 → `reset.ps1 -Force` → `launch.ps1` → `login.ps1`). Without restarting, scroll the entry list, in one journal and in "All journals", down to the oldest entry. Every seeded entry should load in date order, none missing or duplicated; compare the count with SQLite. `historicalJournalEntriesProvider` (the entries loaded by scrolling) isn't in the post-pull refresh (BUG-010's notes), so a gap here is the suspected failure. If entries are missing, restart and check whether they appear.
   - [ ] (from P4) Drag-and-drop an image file onto the journal body → joins the fan. Needs a probe-owned drag-source window under `qa/harness/` (never drag from Explorer); build it here and reuse it in P9/P21. Also drop a non-image file and a GIF (should be refused, MEDIA.md: no GIF).
 - **Failure cases:** 10,000-char body, a 300-char unbroken title, empty entry (created at all?), rapid New entry ×10, two entries same timestamp, date far in the past (1900) / future (2100).
 - **Test data:** 2 journals, ~50 entries across 2 years (script via the UI or step files; record in PROGRESS.md).
@@ -544,11 +545,20 @@ Keep this table and each phase's **Status** line in sync.
   - [ ] Dev → Disable cache on/off semantics (no startup pull while on); restore it to off
   - [ ] Sync compare / backlog tiles on a clean account show consistency
   - [ ] Conflict banner (Dev "force conflict UI" if present) renders and dismisses
+- **Edits during a long startup download** (added 2026-09-30). Nothing blocks editing while the startup pull runs: only a progress toast shows, and the pull merges into documents open in an editor rather than blocking them. No phase has edited during a pull yet (FV-2 couldn't: its pull took 1.2 s). BUG-045 is this class: the default calendar was written during sign-in, before the pull, and overwrote the cloud copy.
+  - **Setup:** a QA account big enough that a cold re-login's pull runs 20–30 s. Seed a few hundred journal entries and to-do tasks with `qa/harness/evalc.ps1` (pattern: `qa/steps/fv-seed1.dart.txt` in a loop), plus a renamed default calendar and non-default synced settings (accent colour, theme). Confirm it all in Firestore with `qa/harness/fs_snapshot.sh`. Measure one cold re-login first to know the pull's length.
+  - [ ] During the pull, create a journal entry, a to-do task and a transaction. They survive the page refresh when the pull ends, are still there after a restart, and are in Firestore. The pulled rows are all present too.
+  - [ ] During the pull, change a synced setting (e.g. the accent colour) before the settings have been pulled. After the pull, the account keeps the other settings from the cloud copy. They must not all reset to defaults, as in BUG-001's consequence note, where a local default settings row beat the real one on last-write-wins. Check the settings document in Firestore before and after.
+  - [ ] During the pull, rename the default calendar. Record which name wins; compare with BUG-045.
+  - [ ] During the pull, use each floater (Ctrl+Alt+T/J/F/R): the entry, task, transaction and reminder all survive and upload.
+  - [ ] During the pull, navigate between pages: no errors in `voyager_errors.log`, and each page fills in when the pull ends.
+  - [ ] `stop.ps1` halfway through the pull, then `launch.ps1`: the pull finishes on the next launch, nothing is missing, and nothing is re-uploaded. Compare `fs_snapshot.sh` before and after; the only new write times should be this device's registration and your own edits. This is FV-1's untried failure case.
+  - [ ] Normal launch (data already local): with a journal entry open and being typed into, have that entry change "on another device" before the startup pull. Two options: edit it from a second session of the account before this launch, or write the cloud copy through the app's `syncRepositoryProvider` with `evalc.ps1`. Keep typing through the pull. Nothing typed is lost, and the other change is merged, not dropped.
 - **Failure cases:** toggle offline 10× quickly, a huge entry while offline, `stop.ps1` during a drain.
 - **Skipped/blocked:** true multi-device live sync (only one PC). Note what could not be tested.
 
 ## Fix verification (FV) — app changes made during the audit
-- **Status:** Not Started
+- **Status:** In Progress (FV-1 and FV-2 done 2026-09-30; FV-3…FV-11 after Phase 26)
 - **Why this section exists:** phase sessions never change app code, but Juno fixed bugs while the audit was running. This section re-tests each of those changes in the running app. The phases that found them are Done and don't re-test them. Run it after Phase 26, or earlier if Juno asks. The rules above still apply: no app code changes, QA accounts only, `guard.ps1` before anything destructive.
 - **Build:** some fixes may still be uncommitted in the working tree; `launch.ps1` builds whatever is on disk. Note `git log -1 --oneline` and `git status --short lib/` in the session log so it's clear what was tested.
 - **Unit tests:** `flutter test` must pass before starting (3,998 tests on 2026-09-30). Each item names its own tests; a test is evidence, not a substitute for the app check.
@@ -559,26 +569,29 @@ Keep this table and each phase's **Status** line in sync.
 - **Change (2026-09-30, uncommitted):** a new database starts with the one-time backfill marked done (`DriftSettingsRepository.getSettings` writes the first settings row with `syncBackfillVersion` = `FirestoreCollections.syncBackfillVersion`). An upgraded database still runs it.
 - **Tests:** `test/secondary_collections_sync_test.dart`, group "backfill".
 - **Flows:**
-  - [ ] Cold re-login of the FV account (`guard.ps1` → outbox 0 → `reset.ps1 -Force` → `launch.ps1` → `login.ps1`), wait for the startup pull. Read-only SQL: `settings_table.sync_backfill_version` = 2.
-  - [ ] Firestore: `_serverWrittenAt` of calendar_events, tracker_values, transactions, tag_colors, custom_words and scheduled_reminder_rules is **older** than the re-login (none stamped during it). Before the fix, all of them were stamped within ~10 s of the restore.
-  - [ ] `stop.ps1` → `launch.ps1` without editing anything: the second `[sync] pullAll took …` line lists about 0 docs ("0 pulled whole"). Before the fix it listed nearly the whole account (qa-008: 158 then 160).
-  - [ ] An edit made during the re-login session (e.g. a new transaction) still uploads: it's in Firestore, and the outbox drains to 0.
-- **Failure cases:** `stop.ps1` halfway through the startup pull, relaunch: the pull finishes and nothing is re-uploaded (the Firestore times stay older).
+  - [x] Cold re-login of the FV account (`guard.ps1` → outbox 0 → `reset.ps1 -Force` → `launch.ps1` → `login.ps1`), wait for the startup pull. Read-only SQL: `settings_table.sync_backfill_version` = 2. (2026-09-30: 2; pull "40 docs, 60 pulled whole".)
+  - [x] Firestore: `_serverWrittenAt` of calendar_events, tracker_values, transactions, tag_colors, custom_words and scheduled_reminder_rules is **older** than the re-login (none stamped during it). Before the fix, all of them were stamped within ~10 s of the restore. (2026-09-30: whole-account before/after snapshot of 38 collections. Nothing re-stamped except the new device's registration and `calendars/legacy-default-calendar`, which is BUG-045. tag_colors and custom_words held no documents.)
+  - [x] `stop.ps1` → `launch.ps1` without editing anything: the second `[sync] pullAll took …` line lists about 0 docs ("0 pulled whole"). Before the fix it listed nearly the whole account (qa-008: 158 then 160). (2026-09-30: "7 docs, 0 pulled whole", all written by the session itself.)
+  - [x] An edit made during the re-login session (e.g. a new transaction) still uploads: it's in Firestore, and the outbox drains to 0. (2026-09-30: a default-calendar rename and a sticky acknowledgement reached Firestore; outbox 0.)
+- **Failure cases:** `stop.ps1` halfway through the startup pull, relaunch: the pull finishes and nothing is re-uploaded (the Firestore times stay older). (2026-09-30: not tried; the FV account's pull took 1.2 s.)
+- **Result (2026-09-30, build `f3c7cee`, qa-009):** passed. New bug found on the way: BUG-045 (a new device's default calendar overwrites a renamed one).
 - **Not covered in the app:** the upgrade path (a database from before the backfill existed); the unit tests cover it.
 
 ### FV-2 — BUG-010, BUG-043 (and BUG-004 still open): pages empty after a cold sign-in until restart
 - **Change (2026-09-30, uncommitted):** after the startup pull, `lib/main.dart` refreshes every data provider (`invalidateAllDataProvidersFrom`), not just journals, journal entries, settings and to-do lists.
 - **Tests:** none for the startup path (it lives in `main.dart`); the full suite must still pass.
 - **Flows (right after the FV-1 re-login, without restarting):**
-  - [ ] Journal: the entry list shows the entries; the journal dropdown shows the right count for each journal and for "All journals".
-  - [ ] Dreams, To-Do (lists and tasks), Calendar, Analytics/trackers, Finance (ledger, budgets, goals, assets), Life stats, LeetCode, Rankings, Jobs, Study (library and deck graph), Workout all show the pulled data.
-  - [ ] Inbox: the Scheduled section lists the rules, pinned notes show, the hidden item stays under Hidden (N).
-  - [ ] The reminder that falls due after the re-login fires (sticky + OS toast, `stickyShown`/`osFired` rows from the new device id) without a restart.
-  - [ ] Pages are still empty *while* the pull runs and fill in when it ends. That's expected; note how long it took.
-  - [ ] Known gaps, check and record: custom quotes in the quote randomizer, and older journal entries loaded by scrolling (`historicalJournalEntriesProvider`), aren't refreshed by this change.
-  - [ ] BUG-004 (new account → "New entry": the journal and entry stay invisible) is **not** fixed by this change. Re-run its steps and add the result to its Notes.
-  - [ ] A normal launch (not a cold sign-in): pages don't flash empty or jump when the startup pull ends (every provider is now re-read once at that point).
-- **Failure cases:** navigate between pages during the pull; open an entry in the editor during the pull and type: nothing typed is lost or overwritten when the refresh lands.
+  - [x] Journal: the entry list shows the entries; the journal dropdown shows the right count for each journal and for "All journals". (2026-09-30: entries and per-journal counts right. "All journals" wrong, 3 instead of 5: a separate counting bug, BUG-046.)
+  - [x] Dreams, To-Do (lists and tasks), Calendar, Analytics/trackers, Finance (ledger, budgets, goals, assets), Life stats, LeetCode, Rankings, Jobs, Study (library and deck graph), Workout all show the pulled data. (2026-09-30: all of them, `qa/shots/fv2-*.png`. Study checked in the library only. Life "[TASKS] 0" is completed tasks, correctly 0.)
+  - [x] Inbox: the Scheduled section lists the rules, pinned notes show, the hidden item stays under Hidden (N). (2026-09-30: yes.)
+  - [x] The reminder that falls due after the re-login fires (sticky + OS toast, `stickyShown`/`osFired` rows from the new device id) without a restart. (2026-09-30: fired at 1:34 PM, 22 min after the sign-in; all three confirmed.)
+  - [ ] Pages are still empty *while* the pull runs and fill in when it ends. That's expected; note how long it took. (2026-09-30: not observable; the pull took 1.2 s.)
+  - [x] Known gaps, check and record: custom quotes in the quote randomizer, and older journal entries loaded by scrolling (`historicalJournalEntriesProvider`), aren't refreshed by this change. (2026-09-30: custom quote confirmed missing from the quote pool until a restart. Historical entries not exercised: no entry was old enough.)
+  - [x] BUG-004 (new account → "New entry": the journal and entry stay invisible) is **not** fixed by this change. Re-run its steps and add the result to its Notes. (2026-09-30: still reproduces on qa-010.)
+  - [x] A normal launch (not a cold sign-in): pages don't flash empty or jump when the startup pull ends (every provider is now re-read once at that point). (2026-09-30: no empty flash. The journal list pane widened ~50 px in the first seconds; cause not determined.)
+- **Failure cases:** navigate between pages during the pull; open an entry in the editor during the pull and type: nothing typed is lost or overwritten when the refresh lands. (2026-09-30: not tried; the pull took 1.2 s. Moved to Phase 26 "Edits during a long startup download", which sets up a slow pull.)
+- **Result (2026-09-30, build `f3c7cee`, qa-009 and qa-010):** passed. Every page showed its data after a cold sign-in without a restart. Still open: BUG-004, the custom-quote gap, and the new BUG-046.
+- **How the data was seeded:** through the app's own repositories and upload calls over the VM service (`qa/harness/evalc.ps1`, bodies in `qa/steps/fv-seed*.dart.txt`), then checked in Firestore. This was quicker than creating ~20 records through the UI, and it avoids BUG-003/BUG-004 on a new account. It doesn't test the creation screens, which their own phases cover.
 
 ### FV-3 — BUG-001: signing in after a signed-out launch left sync signed out
 - **Change:** commit `9c05738` (2026-09-28). Already re-checked in Phase 1 (fix holds); repeat once as a regression check.

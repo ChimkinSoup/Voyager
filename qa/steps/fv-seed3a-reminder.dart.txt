@@ -1,0 +1,6 @@
+final now = DateTime.now().toUtc();
+final at = DateTime.now().add(const Duration(minutes: 25));
+final rule = ScheduledReminderRule(id: 'fv-rule', createdAt: now, updatedAt: now, version: 1, title: 'FV reminder', body: 'FV reminder body', scheduleKind: ReminderScheduleKind.once, localTimeMinutes: at.hour * 60 + at.minute, onceLocalDate: DateTime(at.year, at.month, at.day), armedAt: now);
+await c.read(reminderRepositoryProvider).upsertRule(rule);
+await c.read(remoteSyncServiceProvider).pushRecords('scheduled_reminder_rules', [rule]);
+debugPrint('FV rule at ${at.hour}:${at.minute}');

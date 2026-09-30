@@ -92,6 +92,7 @@ Entry format:
 - Notes: screenshots `qa/shots/p1-new-entry-2.png`, `p1-list-after-nav.png`, `p1-journal-dropdown.png`, `p1-list-after-restart.png`. No FlutterError logged. It looks like the journal list or entry list doesn't react to the default journal created during the first "New entry" (suspected, not verified). A new user can't see or navigate to their first entry after leaving it.
 - Notes (2026-09-30): likely the same underlying cause as BUG-010 (kept-alive providers that read SQLite once and aren't re-read), triggered here by the page's own first write rather than the startup pull. Not verified for this path. See BUG-010's notes.
 - Notes (2026-09-30): **not** fixed by the BUG-010 change, which refreshes the providers only after the startup pull. Expected to still reproduce; re-check in TEST_PLAN.md "Fix verification" FV-2.
+- Notes (2026-09-30, re-checked in FV-2, build `f3c7cee`, new account qa-010): **still reproduces.** Same steps (New entry → type a body and title → To-Do → Journal → dropdown). The entry and the `__legacy__` "Journal" row are in SQLite, the editor shows the entry, but the list stays empty and the header shows only the chevron (`qa/shots/fv2-b004-3.png`, `fv2-b004-4.png`).
 
 ### BUG-005 [Phase 1] Signing into a different account keeps the previous account's local data, and an edit uploads it (corrupted) into the new account
 - Severity: Blocker
@@ -151,6 +152,13 @@ Entry format:
 - Notes (2026-09-30, fixed in the working tree, uncommitted): after the startup pull, `lib/main.dart` now calls `invalidateAllDataProvidersFrom(ref)`, the same refresh live sync and backup restore already use, in place of the four hand-picked invalidations. It covers every provider in `_journalEntryProviders`, `_primaryDataProviders`, `_workoutDataProviders` and `_secondaryDataProviders` (journal counts, dreams, LeetCode, study, workout, calendar, trackers, finance, reminders, pinned notes, dismissals, jobs, rankings, settings). Providers that derive from those (Life stats, study deck graph, pending tracker entries) refresh through them. Pages still stay empty *during* the pull; they fill in when it ends.
   - Still not refreshed after the pull (outside every list, a gap live sync and backup restore share): `customQuotesProvider` (and so the quote pool) and `historicalJournalEntriesProvider`.
   - Tests: none cover `main.dart`'s startup path; the full suite passes (3,990). To verify: TEST_PLAN.md "Fix verification" FV-2.
+- Notes (2026-09-30, verified in the running app, FV-2 passed; build `f3c7cee`, qa-009): right after a cold re-login, **without restarting**, every page showed the pulled data (`qa/shots/fv2-*.png`):
+  - Journal: 3 entries in the open journal; per-journal counts right (FV Alpha 3, FV Beta 2).
+  - Dreams, To-Do, Calendar (the event, also listed in the Inbox feed), Analytics (5 entries, 3 open tasks, the tracker value), Finance (ledger, budget, goal, asset under Net Worth), LeetCode, Rankings, Jobs, Study (deck, 3 cards) and Workout.
+  - Life shows "[TASKS] 0", which counts *completed* tasks ("Tasks Conquered"), of which there were none. So the P2 "[TASKS] 0" lead isn't this bug.
+  - "All journals" showed 3 instead of 5: a separate counting bug, BUG-046, not the refresh.
+  - Known gap confirmed: the pulled custom quote was in SQLite but `customQuotesProvider` still held `[]` and the quote pool lacked it, until a restart (then `[fv-quote]`). `historicalJournalEntriesProvider` not exercised: the seeded entries were only 0–2 days old.
+  - A normal restart showed data from the first frame with no empty flash. The journal list pane widened by ~50 logical px within the first few seconds; not investigated whether that follows the pull or the settings load.
 
 ### BUG-011 [Phase 2] After signing in on an empty device, the startup page ignores the account's startup setting
 - Severity: Minor
@@ -423,6 +431,7 @@ Entry format:
 - Notes: the reminder engine is fed from `scheduledReminderRulesProvider`, `reminderDeliveryStatesProvider` and friends (`reminder_engine.dart`); with an empty rules list it has nothing to deliver, so any reminder due in that session is silently missed until the app restarts, and the user sees an empty Scheduled list (and might re-create reminders, duplicating them). Same shape as BUG-010 (pulled journal entries invisible until restart). The to-do feed items did appear, so not every provider is affected.
 - Notes (2026-09-30): same cause as BUG-010. The reminder providers are kept-alive `FutureProvider`s that read SQLite once, before the pull has written anything, and aren't among the four providers `lib/main.dart` invalidates after the startup pull. See BUG-010's notes.
 - Notes (2026-09-30, fixed in the working tree, uncommitted, with BUG-010): the startup pull now refreshes every data provider, including `scheduledReminderRulesProvider`, `reminderDeliveryStatesProvider`, `entityRemindersProvider`, `pinnedNotesProvider` and `notificationDismissalsProvider`, so the reminder engine sees the pulled rules once the pull ends. To verify: TEST_PLAN.md "Fix verification" FV-2.
+- Notes (2026-09-30, verified in the running app, FV-2 passed; build `f3c7cee`, qa-009): after a cold re-login, without restarting, the Inbox listed the scheduled rule, the pinned note and "Hidden (1)" (`qa/shots/fv2-inbox.png`). The once-rule due 22 minutes after the sign-in fired on time: sticky shown (`fv2-reminder.png`), `stickyShown` and `osFired` rows at 17:34:00Z from the new device id, and the OS toast in Windows' notification store. After acknowledging it and restarting, no second `stickyShown` row was logged.
 
 ### BUG-044 [Phase 6] Every restore onto a wiped device re-uploads the backfilled collections, so the next launch pulls them all again
 - Severity: Minor
@@ -435,5 +444,28 @@ Entry format:
 - Notes (2026-09-30, fixed in the working tree, uncommitted): a new database now starts with the backfill already done. `DriftSettingsRepository.getSettings` writes the first settings row (which only happens on a new database) with `syncBackfillVersion` = the current version, so `backfillSyncedCollections` returns at once. A database upgraded from an older build keeps its existing row and still runs the backfill. The version constant moved from `RemoteSyncService` to `FirestoreCollections.syncBackfillVersion` (the data layer can't import the sync service). The app has no signed-out mode, so a new database can't hold rows written before this device synced.
   - Tests (`test/secondary_collections_sync_test.dart`, group "backfill"): "a new database starts at the current version" and "a restore onto a new database uploads nothing back" (pulls a calendar onto a fresh device, runs the backfill, checks the server lists nothing written since). Both fail without the fix. The two existing backfill tests now start from an upgraded database (settings row at version 0). Full suite: 3,990 pass.
   - Not yet checked in the running app; see TEST_PLAN.md "Fix verification" FV-1.
+- Notes (2026-09-30, verified in the running app, FV-1 passed; build `f3c7cee`, qa-009):
+  - Setup: a record on every page, seeded through the app's own repositories and uploads. Firestore snapshot of 38 collections (every document's `_serverWrittenAt`, read-only), then a cold re-login at 17:11:13Z (`guard.ps1` OK, outbox 0, `reset.ps1 -Force` → `launch.ps1` → `login.ps1`).
+  - Startup pull: "40 docs from 60 collections, 60 pulled whole" (`qa/logs/run-20260930-131114.log`). `settings_table.sync_backfill_version` = 2, outbox 0.
+  - Second snapshot: no document in calendar_events, tracker_values, transactions, budgets, savings_goals, assets, scheduled_reminder_rules, pinned_notes, dismissed_notifications or bucket_list_items was written during the re-login.
+  - Only two writes during it: the new device's own registration (expected), and `calendars/legacy-default-calendar`, which is a different bug (BUG-045).
+  - Restart without edits (`run-20260930-133544.log`): "7 docs from 60 collections, 0 pulled whole". All 7 were written by the session itself: the sticky's acknowledgement (delivery state and log), a calendar rename made to test BUG-045, and the device's last-seen time. Before the fix this listed nearly the whole account (qa-008: 160).
+  - Not tried: stopping the app halfway through the startup pull; this account's pull took 1.2 s.
 
-<!-- Last ID: BUG-044. -->
+### BUG-045 [FV] Signing in on a new device resets the renamed default calendar to "Calendar" everywhere
+- Severity: Major
+- Found: 2026-09-30, Fix verification FV-1 (qa-009)
+- Steps to reproduce: an account whose default calendar (`__legacy_calendar__`, Firestore id `legacy-default-calendar`) was renamed and recoloured on another device and uploaded (here: "FV Renamed Default", pink, version 1, confirmed in Firestore at 17:18:30Z). On this PC: `guard.ps1` OK, outbox 0, `reset.ps1 -Force` → `launch.ps1` → `login.ps1`. Wait for the startup pull, then read the calendar locally and in Firestore.
+- Expected: the pull brings the renamed default calendar down; the name and colour survive.
+- Actual: at 17:39:56Z, during sign-in and about 2 s before the startup pull ended, the new device created its own default calendar ("Calendar", version 0, the accent colour, `createdAt` = now) and uploaded it over the cloud copy (`_serverWrittenAt` 17:39:57.9Z). After the pull, both SQLite and Firestore hold "Calendar" v0 with the default colour; the rename is gone. Every other device then pulls the reset too. Seen twice: the first re-login (17:11:40Z) also replaced the cloud's default calendar with a fresh v0 copy (both were unrenamed defaults then, so nothing visible changed).
+- Notes: `CalendarPage.initState` calls `_ensureDefaultCalendar()` (`lib/features/calendar/calendar_page.dart`). It creates `__legacy_calendar__` when the local table has none, which is always the case on a new database before the pull has run, and `upsertCalendar` announces the write to sync. The page's `initState` ran at sign-in although the app opened on Journal (not investigated why). The older migration path (`app_database.dart` v37) creates the same row for upgraded databases. The events themselves keep their calendar id, so no events were lost; only the calendar's name and colour. Same family as BUG-044's scope note: an upload does no version check, so the fresh v0 copy beat the cloud's v1. Code predates the 2026-09-30 sync changes (not in that diff). Related: BUG-001's notes saw a "locally created `__legacy_calendar__`" as the only calendar after a stuck sign-in.
+
+### BUG-046 [FV] Journal dropdown: "All journals" shows the open journal's count, not the total
+- Severity: Minor
+- Found: 2026-09-30, Fix verification FV-2 (qa-009); first seen by Juno on the real account (BUG-010's notes)
+- Steps to reproduce: account with 2 journals ("FV Alpha" 3 entries, "FV Beta" 2), both included in the all-journals view. Journal page with "FV Alpha" open → open the header dropdown.
+- Expected: "All journals 5", "FV Alpha 3", "FV Beta 2".
+- Actual: "All journals 3", "FV Alpha 3" ✓, "FV Beta 2" ✓ (`qa/shots/fv2-journal-dropdown.png`). Not a sync or refresh problem: the per-journal counts are right straight after the cold sign-in, and the code gives the same answer at any time.
+- Notes: `_JournalScopeHeader` gets `allEntriesCount: filtered.length` (`lib/features/journal/journal_page.dart`). `filtered` is the entry list on screen, which is the open journal's entries unless "All journals" is selected. BUG-010's first note had attributed this symptom to the refresh; it's a separate bug.
+
+<!-- Last ID: BUG-046. -->

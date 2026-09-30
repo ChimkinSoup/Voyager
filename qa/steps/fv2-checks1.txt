@@ -1,0 +1,27 @@
+activate
+wheel 88 600 10
+wait 400
+click 88 298
+wait 1500
+click 324 55
+wait 1000
+shot fv2-journal-dropdown
+key esc
+wait 500
+click 88 658
+wait 1500
+click 790 65
+wait 1000
+shot fv2-calendar-dropdown
+key esc
+wait 400
+click 88 1018
+wait 1500
+click 840 340
+wait 1500
+shot fv2-finance-goals
+click 88 1688
+wait 1500
+shot fv2-inbox
+key esc
+wait 400

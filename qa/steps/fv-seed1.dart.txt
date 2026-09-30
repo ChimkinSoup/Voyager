@@ -1,0 +1,13 @@
+final now = DateTime.now().toUtc();
+final today = DateTime.now();
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+for (final j in [Journal(id: 'fv-journal-a', createdAt: now, updatedAt: now, version: 1, name: 'FV Alpha'), Journal(id: 'fv-journal-b', createdAt: now, updatedAt: now, version: 1, name: 'FV Beta')]) { await jr.upsertJournal(j); r.pushJournal(j); }
+for (var i = 0; i < 3; i++) { final en = JournalEntry(id: 'fv-ja-$i', createdAt: now, updatedAt: now, version: 1, journalId: 'fv-journal-a', title: 'Alpha entry $i', body: 'FV alpha body $i', entryDate: today.subtract(Duration(days: i))); await jr.upsertEntry(en); r.pushJournalEntryNow(en); }
+for (var i = 0; i < 2; i++) { final en = JournalEntry(id: 'fv-jb-$i', createdAt: now, updatedAt: now, version: 1, journalId: 'fv-journal-b', title: 'Beta entry $i', body: 'FV beta body $i', entryDate: today.subtract(Duration(days: i))); await jr.upsertEntry(en); r.pushJournalEntryNow(en); }
+final dream = DreamEntry(id: 'fv-dream-1', createdAt: now, updatedAt: now, version: 1, title: 'FV dream', body: 'FV dream body flying', entryDate: today);
+await c.read(dreamRepositoryProvider).upsertEntry(dream); r.pushDreamEntryNow(dream);
+final tr = c.read(todoRepositoryProvider);
+final list = TodoListModel(id: 'fv-list', createdAt: now, updatedAt: now, version: 1, name: 'FV List');
+await tr.upsertList(list); r.pushTodoList(list);
+for (var i = 0; i < 3; i++) { final t = TodoTask(id: 'fv-task-$i', createdAt: now, updatedAt: now, version: 1, listId: 'fv-list', title: 'FV task $i', dueDate: i == 0 ? DateTime(today.year, today.month, today.day) : null); await tr.upsertTask(t); await r.pushTodoTaskNow(t); }

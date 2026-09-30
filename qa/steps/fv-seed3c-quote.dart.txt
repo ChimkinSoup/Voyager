@@ -1,0 +1,4 @@
+final now = DateTime.now().toUtc();
+final q = CustomQuote(id: 'fv-quote', text: 'FV custom quote: keep going', createdAt: now, updatedAt: now, version: 1);
+await c.read(settingsRepositoryProvider).upsertCustomQuote(q);
+c.read(remoteSyncServiceProvider).pushCustomQuote(q);

@@ -1,0 +1,23 @@
+activate
+maximize
+wait 800
+shot fv2-b004-0
+click 487 1735
+wait 1500
+shot fv2-b004-1
+click 1843 1008
+wait 300
+type fv bug004 body
+click 1843 137
+type fv bug004 title
+wait 6000
+shot fv2-b004-2
+click 88 538
+wait 1500
+click 88 298
+wait 1500
+shot fv2-b004-3
+click 324 55
+wait 1500
+shot fv2-b004-4
+key esc

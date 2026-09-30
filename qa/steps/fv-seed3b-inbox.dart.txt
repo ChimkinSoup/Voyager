@@ -1,0 +1,8 @@
+final now = DateTime.now().toUtc();
+final nr = c.read(notificationRepositoryProvider);
+final note = PinnedNote(id: 'fv-note', text: 'FV pinned note', createdAt: now, updatedAt: now, version: 1);
+await nr.upsertPinnedNote(note);
+await c.read(remoteSyncServiceProvider).pushRecords('pinned_notes', [note]);
+final dis = DismissedNotification(key: 'fv-task-0|important', dismissedAt: now, updatedAt: now, version: 1);
+await nr.upsertDismissal(dis);
+await c.read(remoteSyncServiceProvider).pushRecords('dismissed_notifications', [dis]);
