@@ -1,0 +1,19 @@
+[
+{"title":"OV1 10-11","date":"2026-10-06","start":"10:00","end":"11:00"},
+{"title":"OV2 1030-12","date":"2026-10-06","start":"10:30","end":"12:00"},
+{"title":"OV3 10-1030","date":"2026-10-06","start":"10:00","end":"10:30"},
+{"title":"OV4 1015-1115","date":"2026-10-06","start":"10:15","end":"11:15"},
+{"title":"OV5 1045-1130","date":"2026-10-06","start":"10:45","end":"11:30"},
+{"title":"OV6 10-13","date":"2026-10-06","start":"10:00","end":"13:00"},
+{"title":"AD Oct7","date":"2026-10-07"},
+{"title":"T Oct7 9-10","date":"2026-10-07","start":"09:00","end":"10:00"},
+{"title":"MD weekend span","date":"2026-10-10","endDate":"2026-10-13"},
+{"title":"MD overnight","date":"2026-10-11","endDate":"2026-10-12","start":"20:00","end":"02:00"},
+{"title":"MD month span","date":"2026-10-30","endDate":"2026-11-02"},
+{"title":"DST span","date":"2026-11-01","start":"00:30","end":"03:30"},
+{"title":"Weekly standup","date":"2026-10-05","start":"09:00","end":"09:30","repeat":"weekly"},
+{"title":"Daily walk","date":"2026-10-01","start":"07:00","end":"07:30","repeat":"daily"},
+{"title":"Monthly rent","date":"2026-10-01","repeat":"monthly","notes":"line one\nline two"},
+{"title":"Reminder evt","date":"2026-10-09","start":"18:00","reminder":15},
+{"title":"LONGTITLE_0123456789_abcdefghijklmnopqrstuvwxyz_0123456789_abcdefghijklmnopqrstuvwxyz_0123456789_abcdefghijklmnopqrstuvwxyz_0123456789_abcdefghijklmnopqrstuvwxyz_0123456789_abcdefghijklmnopqrstuvwxyz_0123456789_abcdefghijklmnopqrstuvwxyz_0123456789_abcdefghijklmnopqrstuvwxyz_END","date":"2026-10-09","start":"10:00","end":"11:00"}
+]

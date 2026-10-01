@@ -1,3 +1,4 @@
+import 'package:latlong2/latlong.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 
 /// Where a new category goes: after the last one.
@@ -214,11 +215,16 @@ List<String> rankingTagSuggestions(Iterable<RankingParent> parents) {
 /// The haystack spans the parent and its children together, so searching an
 /// episode name finds the show it belongs to — which is the only way a hit
 /// inside a child can surface in a list of parents.
+///
+/// [searchLocations] is off for a category whose Locations are: its entries
+/// keep the places they had, but show none, and a hit on one would have
+/// nothing on screen to explain it.
 bool rankingMatchesQuery(
   RankingParent parent,
   List<RankingChild> children,
-  String query,
-) {
+  String query, {
+  bool searchLocations = true,
+}) {
   final terms = query.toLowerCase().split(RegExp(r'\s+'))
     ..removeWhere((term) => term.isEmpty);
   if (terms.isEmpty) return true;
@@ -226,6 +232,11 @@ bool rankingMatchesQuery(
     parent.title,
     parent.notes,
     ...parent.tags,
+    if (searchLocations)
+      for (final location in parent.locations) ...[
+        location.label,
+        location.address,
+      ],
     for (final child in children) ...[child.name, child.notes],
   ].join(' ').toLowerCase();
   return terms.every(haystack.contains);
@@ -310,6 +321,7 @@ List<RankingParent> filterRankingParents(
   required String query,
   required RankingFilters filters,
   Set<String> documentIdsWithImages = const {},
+  bool searchLocations = true,
 }) {
   bool hasImages(RankingParent parent) {
     if (documentIdsWithImages.contains(parent.id)) return true;
@@ -334,9 +346,55 @@ List<RankingParent> filterRankingParents(
             parent,
             childrenByParent[parent.id] ?? const [],
             query,
+            searchLocations: searchLocations,
           ))
         parent,
   ];
+}
+
+/// The entries a map draws from [pool] — the parents the search box and the
+/// filter popover left — under the same rules the list's two sections follow:
+/// the status chips narrow the unranked ones, and a score range takes them out
+/// altogether (§5.1). Order means nothing on a map, so none is applied.
+List<RankingParent> rankingMapEntries(
+  List<RankingParent> pool,
+  RankingFilters filters,
+) => [
+  for (final parent in pool)
+    if (parent.isRanked ||
+        (!filters.hasScoreRange &&
+            (filters.statuses.isEmpty ||
+                filters.statuses.contains(parent.status))))
+      parent,
+];
+
+/// How close a new location may sit to one the entry already has before it is
+/// the same place added twice.
+const rankingDuplicateLocationMeters = 25.0;
+
+/// Whether [locations] already holds one at this point.
+bool rankingHasLocationNear(
+  Iterable<RankingLocation> locations,
+  double latitude,
+  double longitude,
+) => locations.any(
+  (location) =>
+      const Distance().as(
+        LengthUnit.Meter,
+        LatLng(location.latitude, location.longitude),
+        LatLng(latitude, longitude),
+      ) <=
+      rankingDuplicateLocationMeters,
+);
+
+/// Where a new entry goes in the queue: after the last one, so creating an
+/// entry never displaces one already waiting there.
+int rankingNextQueueSortOrder(Iterable<RankingParent> parents) {
+  var next = 0;
+  for (final parent in parents) {
+    if (parent.queueSortOrder >= next) next = parent.queueSortOrder + 1;
+  }
+  return next;
 }
 
 bool _passesScoreRange(RankingParent parent, RankingFilters filters) {
@@ -479,6 +537,11 @@ RankingParent rankingParentEditOnto(
     notes: next.notes != previous.notes ? next.notes : null,
     fieldValues: fieldValues,
     tags: _sameList(next.tags, previous.tags) ? null : next.tags,
+    locations: _locationsEditOnto(
+      fresh.locations,
+      previous: previous.locations,
+      next: next.locations,
+    ),
     status: next.status != previous.status ? next.status : null,
     starred: next.starred != previous.starred ? next.starred : null,
     createdAt: next.createdAt != previous.createdAt ? next.createdAt : null,
@@ -533,6 +596,33 @@ Map<String, RankingFieldValue>? _fieldValuesEditOnto(
     );
   }
   return result;
+}
+
+/// Null when the edit changed no location, so the fresh list is kept as is.
+///
+/// Location by location, like the field values: a branch another device added
+/// since the editor last read the entry is not this edit's to drop.
+List<RankingLocation>? _locationsEditOnto(
+  List<RankingLocation> fresh, {
+  required List<RankingLocation> previous,
+  required List<RankingLocation> next,
+}) {
+  final before = rankingParentLocationValues(previous);
+  final after = rankingParentLocationValues(next);
+  Map<String, RankingLocation>? result;
+  for (final location in previous) {
+    if (after.containsKey(location.id)) continue;
+    result ??= {for (final l in fresh) l.id: l};
+    result.remove(location.id);
+  }
+  for (final location in next) {
+    if (before[location.id] == after[location.id]) continue;
+    result ??= {for (final l in fresh) l.id: l};
+    result[location.id] = location;
+  }
+  if (result == null) return null;
+  return result.values.toList()
+    ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 }
 
 bool _sameStampValues(Map<String, Object?> a, Map<String, Object?> b) {

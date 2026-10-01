@@ -26,6 +26,7 @@ import 'package:voyager/features/dev/dev_geometric_wave_tile.dart';
 import 'package:voyager/features/dev/dev_leaf_gallery_tile.dart';
 import 'package:voyager/features/dev/dev_weather_api_tile.dart';
 import 'package:voyager/features/life_tracker/life_tracker_providers.dart';
+import 'package:voyager/features/rankings/rankings_providers.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/study/study_debug_generator.dart';
 
@@ -152,6 +153,17 @@ class DevPage extends ConsumerWidget {
           onChanged: (v) {
             DevFlags.showLifeTreeSegmentDebug = v;
             ref.read(lifeTrackerShowDebugColorsProvider.notifier).state = v;
+          },
+        ),
+        SwitchListTile(
+          title: const Text('Show rankings map zoom level'),
+          subtitle: const Text(
+            'Overlay the current zoom level at the bottom of the rankings map',
+          ),
+          value: ref.watch(rankingMapShowZoomProvider),
+          onChanged: (v) {
+            DevFlags.showRankingsMapZoom = v;
+            ref.read(rankingMapShowZoomProvider.notifier).state = v;
           },
         ),
         SwitchListTile(

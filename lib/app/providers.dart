@@ -54,6 +54,7 @@ import 'package:voyager/data/remote/dev_openweather_client.dart';
 import 'package:voyager/data/remote/firebase_auth_repository.dart';
 import 'package:voyager/data/remote/firebase_media_storage.dart';
 import 'package:voyager/data/remote/firestore_sync_repository.dart';
+import 'package:voyager/data/remote/geoapify_client.dart';
 import 'package:voyager/data/remote/http_callable_client.dart';
 import 'package:voyager/data/remote/leetcode_api_client.dart';
 import 'package:voyager/firebase_options.dart';
@@ -104,6 +105,14 @@ const _useCloudFunctions = bool.fromEnvironment(
   defaultValue: true,
 );
 const _openWeatherApiKey = String.fromEnvironment('OPENWEATHER_API_KEY');
+const _geoapifyApiKey = String.fromEnvironment('GEOAPIFY_API_KEY');
+
+/// Null without a key: the rankings map and place search are unavailable, and
+/// stored locations still read.
+final geoapifyClientProvider = Provider<GeoapifyClient?>((ref) {
+  if (_geoapifyApiKey.isEmpty) return null;
+  return GeoapifyClient(apiKey: _geoapifyApiKey);
+});
 
 /// Opens the real on-disk voyager.sqlite (see [AppDatabase.create]) — not a
 /// test double. Any ProviderScope-based test (e.g. one that pumps

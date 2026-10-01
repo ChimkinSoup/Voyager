@@ -489,6 +489,7 @@ class RankingsActions {
     required String categoryId,
     required String title,
     required int queueSortOrder,
+    List<RankingLocation> locations = const [],
   }) async {
     final now = utcNow();
     final parent = RankingParent(
@@ -496,6 +497,7 @@ class RankingsActions {
       categoryId: categoryId,
       title: title.trim(),
       queueSortOrder: queueSortOrder,
+      locations: locations,
       createdAt: now,
       updatedAt: now,
     );
@@ -562,6 +564,132 @@ class RankingsActions {
       return parent.copyWith(tags: tags);
     });
   }
+
+  /// A new entry at the end of [categoryId]'s queue, with one location on it —
+  /// the map's "New entry here".
+  Future<RankingParent> createParentAt({
+    required String categoryId,
+    required String title,
+    required double latitude,
+    required double longitude,
+    required String address,
+  }) async {
+    final parents = await _repository.listParents(categoryId);
+    return createParent(
+      categoryId: categoryId,
+      title: title,
+      queueSortOrder: rankingNextQueueSortOrder(parents),
+      locations: [
+        RankingLocation(
+          id: newId(),
+          latitude: latitude,
+          longitude: longitude,
+          address: address,
+        ),
+      ],
+    );
+  }
+
+  /// Appends a location to [parentId]. False, writing nothing, when the entry
+  /// already has one at that point (§6.4) or is gone.
+  Future<bool> addLocation(
+    String parentId, {
+    required double latitude,
+    required double longitude,
+    required String address,
+  }) async {
+    var added = false;
+    await _patchParent(parentId, (parent) {
+      if (rankingHasLocationNear(parent.locations, latitude, longitude)) {
+        return parent;
+      }
+      added = true;
+      return parent.copyWith(
+        locations: [
+          ...parent.locations,
+          RankingLocation(
+            id: newId(),
+            latitude: latitude,
+            longitude: longitude,
+            address: address,
+            sortOrder: parent.locations.isEmpty
+                ? 0
+                : parent.locations.last.sortOrder + 1,
+          ),
+        ],
+      );
+    });
+    return added;
+  }
+
+  /// Replaces the location with [location]'s id — a move, a rename.
+  Future<void> updateLocation(String parentId, RankingLocation location) =>
+      _patchParent(
+        parentId,
+        (parent) => parent.locations.any((l) => l.id == location.id)
+            ? parent.copyWith(
+                locations: [
+                  for (final existing in parent.locations)
+                    existing.id == location.id
+                        ? location.copyWith(sortOrder: existing.sortOrder)
+                        : existing,
+                ],
+              )
+            : parent,
+      );
+
+  Future<void> removeLocation(String parentId, String locationId) =>
+      _patchParent(
+        parentId,
+        (parent) => parent.locations.any((l) => l.id == locationId)
+            ? parent.copyWith(
+                locations: [
+                  for (final location in parent.locations)
+                    if (location.id != locationId) location,
+                ],
+              )
+            : parent,
+      );
+
+  /// Puts back a location [removeLocation] took, where it sat. One already
+  /// back — re-added by another device's merge — throws [RestoreSuperseded],
+  /// as [restoreTag] does.
+  Future<void> restoreLocation(String parentId, RankingLocation location) =>
+      _patchParent(parentId, (parent) {
+        if (parent.locations.any((l) => l.id == location.id)) {
+          throw const RestoreSuperseded();
+        }
+        return parent.copyWith(
+          locations: [...parent.locations, location]
+            ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder)),
+        );
+      });
+
+  /// Renumbers [parentId]'s locations into [orderedIds]' order.
+  Future<void> reorderLocations(
+    String parentId,
+    List<String> orderedIds,
+  ) => _patchParent(parentId, (parent) {
+    final byId = {for (final l in parent.locations) l.id: l};
+    final ordered = [
+      for (final id in orderedIds) ?byId.remove(id),
+      // One added elsewhere since the drag began keeps its place at the end.
+      ...byId.values,
+    ];
+    // Dropped where it was picked up: nothing to write or sync.
+    if ([
+      for (final (index, location) in ordered.indexed)
+        location.sortOrder == index,
+    ].every((same) => same)) {
+      return parent;
+    }
+    return parent.copyWith(
+      locations: [
+        for (final (index, location) in ordered.indexed)
+          location.copyWith(sortOrder: index),
+      ],
+    );
+  });
 
   /// Marks an entry started because something was added to it that is not one
   /// of its own fields — a child, an image.
@@ -906,6 +1034,26 @@ void offerRankingTagUndo(
     message: deletedMessage(tag, fallback: 'tag'),
     restore: () =>
         RankingsActions.detached(container).restoreTag(parentId, tag, index),
+  );
+}
+
+/// Removes one location from [parentId] and offers it back — no confirm, the
+/// same as a tag chip. Both captures are for the reason
+/// [confirmDeleteRankingParent] gives.
+Future<void> removeRankingLocationWithUndo(
+  BuildContext context,
+  WidgetRef ref, {
+  required String parentId,
+  required RankingLocation location,
+}) async {
+  final container = ProviderScope.containerOf(ref.context, listen: false);
+  final overlay = Overlay.of(context, rootOverlay: true);
+  final actions = RankingsActions.detached(container);
+  await actions.removeLocation(parentId, location.id);
+  showSoftDeleteUndoToast(
+    overlay: overlay,
+    message: deletedMessage(location.displayName, fallback: 'location'),
+    restore: () => actions.restoreLocation(parentId, location),
   );
 }
 

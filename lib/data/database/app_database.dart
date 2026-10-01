@@ -945,6 +945,15 @@ class SettingsTable extends Table {
   /// a category that appears from another device opens expanded.
   TextColumn get rankingsCollapsedQueueCategoriesJson => text().nullable()();
 
+  /// Rankings categories showing their map instead of their list, and the
+  /// ones switched off on the All categories map, as JSON lists of ids.
+  TextColumn get rankingsMapViewCategoriesJson => text().nullable()();
+  TextColumn get rankingsMapHiddenCategoriesJson => text().nullable()();
+
+  /// Where this device was last found, for the rankings map to open on.
+  RealColumn get rankingsDeviceLatitude => real().nullable()();
+  RealColumn get rankingsDeviceLongitude => real().nullable()();
+
   /// Profile links the Jobs header copies to the clipboard (§3.4). Null means
   /// the slot is unset and its button is not rendered.
   TextColumn get jobProfileLinkedInUrl => text().nullable()();
@@ -1710,6 +1719,8 @@ class RankingCategoriesTable extends Table {
   TextColumn get sortFieldId => text().nullable()();
   BoolColumn get sortAscending =>
       boolean().withDefault(const Constant(false))();
+  BoolColumn get locationEnabled =>
+      boolean().withDefault(const Constant(false))();
 
   /// Set = hidden from the picker and view-only. Not [deletedAt]: archiving
   /// does not cascade.
@@ -1741,6 +1752,11 @@ class RankingParentsTable extends Table {
   /// with the parent they hang off, and the one query anyone wants of them is
   /// "what does this category use", which is a scan of parents either way.
   TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
+
+  /// The entry's `RankingLocation`s as a JSON array. A column for the reason
+  /// [tagsJson] is one: they are only read with their parent, and the map
+  /// reads parents anyway.
+  TextColumn get locationsJson => text().withDefault(const Constant('[]'))();
 
   /// [RankingStatus] by `name`. Only read while unranked.
   TextColumn get status => text().withDefault(const Constant('queued'))();
@@ -1917,7 +1933,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 131;
+  int get schemaVersion => 134;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3385,6 +3401,46 @@ class AppDatabase extends _$AppDatabase {
         await _addSettingsColumnIfNotExists(
           migrator,
           settingsTable.lastViewedRankingCategoryId,
+        );
+      }
+      if (from < 132) {
+        await _addColumnIfNotExists(
+          migrator,
+          'ranking_categories_table',
+          rankingCategoriesTable,
+          rankingCategoriesTable.locationEnabled,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'ranking_parents_table',
+          rankingParentsTable,
+          rankingParentsTable.locationsJson,
+        );
+      }
+      if (from < 133) {
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.rankingsMapViewCategoriesJson,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.rankingsMapHiddenCategoriesJson,
+        );
+      }
+      // 133 also stored where the rankings map was left; the map now keeps
+      // that only for the run, and opens on where the device was last found.
+      if (from < 134) {
+        await _dropSettingsColumnIfExists(
+          migrator,
+          'rankings_map_viewport_json',
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.rankingsDeviceLatitude,
+        );
+        await _addSettingsColumnIfNotExists(
+          migrator,
+          settingsTable.rankingsDeviceLongitude,
         );
       }
     },

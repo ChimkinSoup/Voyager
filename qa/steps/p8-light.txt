@@ -1,0 +1,27 @@
+activate
+maximize
+wait 1500
+click 88 298
+wait 800
+key ctrl+shift+tab
+wait 1500
+click 487 46
+wait 1200
+click 2707 829
+wait 2500
+wheel 88 600 10
+wait 400
+click 88 418
+wait 2500
+shot p8-51-light
+click 580 175
+wait 1500
+shot p8-52-light-note
+click 88 298
+wait 800
+key ctrl+shift+tab
+wait 1500
+click 487 46
+wait 1200
+click 2525 829
+wait 2500

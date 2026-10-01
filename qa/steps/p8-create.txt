@@ -1,0 +1,10 @@
+activate
+click 662 1735
+wait 1200
+shot p8-02-new
+type First dream title
+key enter
+wait 300
+type Flying over a city of glass #lucid #flying
+wait 2500
+shot p8-03-typed

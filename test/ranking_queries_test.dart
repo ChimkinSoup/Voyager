@@ -50,6 +50,20 @@ RankingChild child(
   updatedAt: _base,
 );
 
+RankingLocation location(
+  String id, {
+  String label = '',
+  String address = '',
+  int sortOrder = 0,
+}) => RankingLocation(
+  id: id,
+  latitude: 43.4834,
+  longitude: -80.526,
+  label: label,
+  address: address,
+  sortOrder: sortOrder,
+);
+
 List<String> ids(Iterable<RankingParent> parents) => [
   for (final parent in parents) parent.id,
 ];
@@ -907,6 +921,151 @@ void main() {
         before.copyWith(tags: ['thai'], notes: 'went back'),
       );
       expect(after.status, RankingStatus.inProgress);
+    });
+
+    // Pinning a place you want to try is not starting it.
+    test('a location-only edit leaves a queued entry queued', () {
+      final before = parent('p1');
+      final after = applyRankingEditRules(
+        before,
+        before.copyWith(locations: [location('x')]),
+      );
+      expect(after.status, RankingStatus.queued);
+      expect(after.locations.single.id, 'x');
+    });
+
+    test('a location edited alongside notes still promotes', () {
+      final before = parent('p1');
+      final after = applyRankingEditRules(
+        before,
+        before.copyWith(locations: [location('x')], notes: 'went'),
+      );
+      expect(after.status, RankingStatus.inProgress);
+    });
+  });
+
+  group('Locations', () {
+    test('search finds an entry by a location label or address', () {
+      final entry = parent('p1').copyWith(
+        locations: [location('x', label: 'Queen St', address: '12 Main Road')],
+      );
+      expect(rankingMatchesQuery(entry, const [], 'queen'), isTrue);
+      expect(rankingMatchesQuery(entry, const [], 'main road'), isTrue);
+      expect(rankingMatchesQuery(entry, const [], 'king'), isFalse);
+    });
+
+    test('an edit keeps a branch added since the editor last read', () {
+      final previous = parent('p1').copyWith(locations: [location('x')]);
+      final next = previous.copyWith(
+        locations: [location('x'), location('y', sortOrder: 2)],
+      );
+      // Another device's branch landed on disk in the meantime.
+      final fresh = previous.copyWith(
+        locations: [location('x'), location('z', sortOrder: 1)],
+      );
+      final written = rankingParentEditOnto(
+        fresh,
+        previous: previous,
+        next: next,
+      );
+      expect([for (final l in written.locations) l.id], ['x', 'z', 'y']);
+    });
+
+    test('an edit that removes a branch removes only that one', () {
+      final previous = parent(
+        'p1',
+      ).copyWith(locations: [location('x'), location('y', sortOrder: 1)]);
+      final next = previous.copyWith(locations: [location('y', sortOrder: 1)]);
+      final fresh = previous.copyWith(
+        locations: [
+          location('x'),
+          location('y', sortOrder: 1),
+          location('z', sortOrder: 2),
+        ],
+      );
+      final written = rankingParentEditOnto(
+        fresh,
+        previous: previous,
+        next: next,
+      );
+      expect([for (final l in written.locations) l.id], ['y', 'z']);
+    });
+
+    test('a removed location keeps a stamp newer than its add', () {
+      final added = parent('p1').copyWith(locations: [location('x')]);
+      final removed = added.copyWith(locations: const []);
+      final key = rankingLocationStampKey('x');
+      expect(removed.locations, isEmpty);
+      expect(
+        removed.fieldUpdatedAt[key]!.isBefore(added.fieldUpdatedAt[key]!),
+        isFalse,
+      );
+      // And a later unrelated edit leaves the removal's stamp where it was.
+      expect(
+        removed.copyWith(notes: 'n').fieldUpdatedAt[key],
+        removed.fieldUpdatedAt[key],
+      );
+    });
+
+    test('display name prefers the label, then the address', () {
+      expect(
+        location('x', label: 'Airport', address: 'A').displayName,
+        'Airport',
+      );
+      expect(location('x', address: '1 Main St').displayName, '1 Main St');
+      expect(location('x').displayName, '43.48340, -80.52600');
+    });
+
+    test('the map draws what the list would, sort aside', () {
+      final pool = [
+        parent('ranked', score: 4),
+        parent('queued'),
+        parent('started', status: RankingStatus.inProgress),
+      ];
+      expect(ids(rankingMapEntries(pool, RankingFilters.none)), [
+        'ranked',
+        'queued',
+        'started',
+      ]);
+      // A status chip narrows the unranked entries and leaves the ranked.
+      expect(
+        ids(
+          rankingMapEntries(
+            pool,
+            const RankingFilters(statuses: {RankingStatus.inProgress}),
+          ),
+        ),
+        ['ranked', 'started'],
+      );
+      // A score range takes every unranked entry out, as it does the queue.
+      expect(ids(rankingMapEntries(pool, const RankingFilters(scoreMin: 1))), [
+        'ranked',
+      ]);
+    });
+
+    test('a point within 25 m of a location is the same place', () {
+      final existing = [location('x')];
+      // About 11 m north.
+      expect(rankingHasLocationNear(existing, 43.4835, -80.526), isTrue);
+      // About 111 m north.
+      expect(rankingHasLocationNear(existing, 43.4844, -80.526), isFalse);
+    });
+
+    test('a new entry joins the end of the queue', () {
+      expect(rankingNextQueueSortOrder(const []), 0);
+      expect(
+        rankingNextQueueSortOrder([
+          parent('a', queueSortOrder: 4),
+          parent('b', queueSortOrder: 2),
+        ]),
+        5,
+      );
+    });
+
+    test('a column written before locations decodes as none', () {
+      expect(decodeRankingLocations(null), isEmpty);
+      expect(decodeRankingLocations(''), isEmpty);
+      expect(decodeRankingLocations('{}'), isEmpty);
     });
   });
 }

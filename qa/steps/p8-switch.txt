@@ -1,0 +1,10 @@
+activate
+click 2560 1520
+type note for dream one
+wait 1500
+click 662 1735
+wait 1200
+type Second dream
+key enter
+type Body two in progress
+shot p8-05a-before

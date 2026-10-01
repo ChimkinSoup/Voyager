@@ -1,0 +1,29 @@
+activate
+key ctrl+tab
+wait 1500
+click 340 55
+wait 800
+click 300 280
+wait 1500
+shot p7-82-alpha
+click 486 1736
+wait 100
+click 486 1736
+wait 100
+click 486 1736
+wait 100
+click 486 1736
+wait 100
+click 486 1736
+wait 100
+click 486 1736
+wait 100
+click 486 1736
+wait 100
+click 486 1736
+wait 100
+click 486 1736
+wait 100
+click 486 1736
+wait 2500
+shot p7-83-rapid10

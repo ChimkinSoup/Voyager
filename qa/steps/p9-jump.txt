@@ -1,0 +1,12 @@
+activate
+wheel 1400 900 200
+wait 1500
+move 1400 1400
+shot p9-88-j0
+click 273 173
+wait 150
+click 273 173
+shot p9-88-j1
+wait 1500
+move 1400 1400
+shot p9-88-j2

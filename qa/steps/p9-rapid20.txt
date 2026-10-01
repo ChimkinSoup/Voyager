@@ -1,0 +1,45 @@
+activate
+click 900 606
+wait 1200
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+click 2107 138
+wait 60
+wait 3000
+shot p9-71-rapid20

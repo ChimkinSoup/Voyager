@@ -1,0 +1,48 @@
+activate
+click 2832 48
+wait 800
+wheel 1400 900 80
+wait 800
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+click 273 173
+wait 150
+wait 3000
+move 1400 1400
+shot p9-85-rapidrows

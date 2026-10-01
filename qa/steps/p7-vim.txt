@@ -1,0 +1,27 @@
+activate
+key ctrl+shift+tab
+wait 1500
+click 685 46
+wait 1000
+click 2739 258
+wait 1000
+shot p7-104-vim-on
+key ctrl+tab
+wait 1500
+click 1440 137
+key end
+type  V
+key esc
+wait 400
+shot p7-105-vim-title-normal
+click 2847 500
+wait 900
+shot p7-106-vim-otd-out
+type j
+wait 600
+shot p7-107-vim-otd-key
+key esc
+wait 400
+key esc
+wait 400
+shot p7-108-vim-esc

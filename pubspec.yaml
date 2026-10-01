@@ -54,6 +54,12 @@ dependencies:
   ffi: ^2.2.0
   flutter_local_notifications: ^22.3.1
   timezone: ^0.11.1
+  flutter_map: ^8.3.2
+  latlong2: ^0.9.1
+  flutter_map_marker_cluster: ^8.2.2
+  vector_map_tiles: 9.0.0-beta.9
+  vector_tile_renderer: ^6.1.0
+  geolocator: ^14.0.2
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -79,9 +85,78 @@ dev_dependencies:
 # third_party/firebase_auth-6.5.3/windows/firebase_auth_plugin.cpp) if
 # upgrading firebase_auth past 6.5.3, and drop this override once upstream
 # fixes it.
+#
+# vector_tile_renderer draws a street name whose exact text box collides
+# with another label anyway, at its estimated position and without reserving
+# the space, so street names overlap on the rankings map; it reserves a
+# street name's upright bounding box, which on an angled grid blocks the
+# block beside it, and pads every label by a margin in tile units, 32-64
+# pixels at 16x overzoom, so restaurant names find no room; it clips an
+# overzoomed tile's geometry to the tile's exact square, so wide roads lose
+# bites at tile edges; and it drops a label that does not fit whole inside
+# the tile being drawn, so past the tiles' last zoom a third of the names are
+# missing, a different third at each zoom. The local copy fixes all four, in
+# lib/src/features/symbol_line_renderer.dart,
+# lib/src/features/label_space.dart,
+# lib/src/model/transform/tile_clip.dart and
+# lib/src/features/label_layout.dart, with renderer.dart, text_renderer.dart,
+# themes/style.dart and themes/theme_reader.dart (marked VOYAGER PATCH);
+# 7.0.0-beta.1 has the same bugs. Re-apply them if upgrading past 6.1.0, and
+# drop this override once upstream fixes them.
+#
+# flutter_map shows each tile of a new zoom as soon as it loads, beside the
+# old zoom's tiles scaled up, so on the rankings map roads change width from
+# tile to tile until the last one arrives. The local copy holds a zoom's tiles
+# back until all of them on screen have loaded and swaps them in together
+# (lib/src/layer/tile_layer/tile_image_view.dart, with tile_image.dart and
+# tile_layer.dart; marked VOYAGER PATCH). Re-apply it if upgrading past
+# 8.3.2.
+#
+# vector_map_tiles keeps a drawn tile only on disk, so one that leaves the
+# rankings map and comes back is read and decoded again; holds a new tile back
+# until its PNG is written, and every 20th behind a scan of the whole cache
+# folder; and draws every tile whose data has arrived back to back on the UI
+# thread, freezing a pan. The local copy keeps drawn tiles in memory, writes
+# them in the background and spreads the drawing over frames, in
+# lib/src/raster/tile_loader.dart, lib/src/cache/caches.dart and
+# lib/src/cache/storage_cache.dart (marked VOYAGER PATCH). It also hands each
+# overzoomed tile the label layout of its source tile (the renderer's
+# label_layout.dart), in tile_loader.dart, raster_tile_provider.dart and
+# lib/src/rendering/tile_renderer.dart. And upstream decodes a whole source
+# tile again for every overzoomed tile cut from it, on isolates that share
+# the UI's heap, so collecting that garbage stalled the UI for up to half a
+# second while tiles loaded; the local copy sends a source tile's cuts to one
+# isolate that keeps it decoded, in lib/src/cache/vector_tile_loading_cache.dart,
+# and runs four isolates however many tiles may be in flight, in
+# lib/src/grid/grid_layer.dart. And a whole tile is tens of milliseconds of
+# drawing in one go; the local copy draws it a piece at a time over frames
+# (tile_loader.dart and tile_renderer.dart, with the renderer's renderer.dart,
+# themes/theme.dart and themes/theme_layers.dart) and no longer makes every
+# path up front (raster_tile_provider.dart). And the labels of a theme layer
+# whose metadata sets `overlay` are placed but not drawn into the tiles: its
+# controller hands them over (vector_tile_controller.dart, tile_loader.dart,
+# with the renderer's label_layout.dart), so the rankings map draws
+# restaurant names itself, hides one under a pin and lets one be pressed.
+# Re-apply them if upgrading past
+# 9.0.0-beta.9.
+#
+# flutter_map_marker_cluster, pressed on a cluster whose pins never part,
+# moves to the camera's zoom rounded up before fanning the pins out, and then
+# closes them again because the zoom changed: between two whole zooms the
+# press only zooms in, and it takes a second to open the cluster. The local
+# copy stays at the camera's zoom (lib/src/marker_cluster_layer.dart, marked
+# VOYAGER PATCH). Re-apply it if upgrading past 8.2.2.
 dependency_overrides:
   firebase_auth:
     path: third_party/firebase_auth-6.5.3
+  flutter_map:
+    path: third_party/flutter_map-8.3.2
+  flutter_map_marker_cluster:
+    path: third_party/flutter_map_marker_cluster-8.2.2
+  vector_tile_renderer:
+    path: third_party/vector_tile_renderer-6.1.0
+  vector_map_tiles:
+    path: third_party/vector_map_tiles-9.0.0-beta.9
 
 flutter:
   uses-material-design: true
@@ -90,6 +165,7 @@ flutter:
     - shaders/paper_texture.frag
   assets:
     - assets/quotes.json
+    - assets/rankings_map_style.json
     - assets/dictionary_en.txt
     - assets/app_icon.ico
   fonts:

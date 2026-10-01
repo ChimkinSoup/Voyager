@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/edit_side_panel_host.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/prompt_name_dialog.dart';
+import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -17,7 +19,9 @@ import 'package:voyager/features/rankings/rankings_category_dialog.dart';
 import 'package:voyager/features/rankings/rankings_edit_panel.dart';
 import 'package:voyager/features/rankings/rankings_gallery.dart';
 import 'package:voyager/features/rankings/rankings_header.dart';
+import 'package:voyager/features/rankings/rankings_icons.dart';
 import 'package:voyager/features/rankings/rankings_manage_sheet.dart';
+import 'package:voyager/features/rankings/rankings_map_view.dart';
 import 'package:voyager/features/rankings/rankings_providers.dart';
 import 'package:voyager/features/rankings/rankings_row.dart';
 import 'package:voyager/features/sync/sync_conflict_banner.dart';
@@ -158,9 +162,13 @@ class _RankingsPageState extends ConsumerState<RankingsPage>
     final selectedId =
         ref.watch(rankingSelectedCategoryProvider) ??
         ref.watch(settingsProvider).valueOrNull?.lastViewedRankingCategoryId;
-    final category =
-        categories.where((c) => c.id == selectedId).firstOrNull ??
-        active.firstOrNull;
+    final locationCategories = rankingLocationCategories(categories);
+    final allCategories =
+        selectedId == rankingAllCategoriesId && locationCategories.isNotEmpty;
+    final category = allCategories
+        ? null
+        : categories.where((c) => c.id == selectedId).firstOrNull ??
+              active.firstOrNull;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -180,7 +188,24 @@ class _RankingsPageState extends ConsumerState<RankingsPage>
           data: (_) => Column(
             children: [
               const SyncConflictBanner(),
-              if (category == null)
+              if (allCategories)
+                Expanded(
+                  child: _AllCategoriesBody(
+                    categories: active,
+                    locationCategories: locationCategories,
+                    searchController: _searchController,
+                    panelAnimation: _panelAnimation,
+                    storedPanelWidth: ref
+                        .watch(settingsProvider)
+                        .valueOrNull
+                        ?.editSidePanelWidth,
+                    onPanelWidthCommitted: (width) =>
+                        unawaited(_persistEditSidePanelWidth(width)),
+                    onOpenPanel: _openPanel,
+                    onClosePanel: _closePanel,
+                  ),
+                )
+              else if (category == null)
                 Expanded(
                   child: _EmptyState(
                     icon: PhosphorIconsRegular.star,
@@ -197,6 +222,7 @@ class _RankingsPageState extends ConsumerState<RankingsPage>
                   child: _CategoryBody(
                     category: category,
                     categories: active,
+                    offerAllCategories: locationCategories.isNotEmpty,
                     searchController: _searchController,
                     panelAnimation: _panelAnimation,
                     storedPanelWidth: ref
@@ -243,14 +269,7 @@ class _RankingsPageState extends ConsumerState<RankingsPage>
     final created = await RankingsActions(ref).createParent(
       categoryId: category.id,
       title: title,
-      // Bottom of the queue: creating an entry never displaces one already
-      // waiting there.
-      queueSortOrder: parents.isEmpty
-          ? 0
-          : parents
-                    .map((parent) => parent.queueSortOrder)
-                    .reduce((a, b) => a > b ? a : b) +
-                1,
+      queueSortOrder: rankingNextQueueSortOrder(parents),
     );
     if (!mounted) return;
     _openPanel(created.id);
@@ -262,6 +281,7 @@ class _CategoryBody extends ConsumerWidget {
   const _CategoryBody({
     required this.category,
     required this.categories,
+    required this.offerAllCategories,
     required this.searchController,
     required this.panelAnimation,
     required this.storedPanelWidth,
@@ -272,6 +292,7 @@ class _CategoryBody extends ConsumerWidget {
 
   final RankingCategory category;
   final List<RankingCategory> categories;
+  final bool offerAllCategories;
   final TextEditingController searchController;
   final Animation<double> panelAnimation;
   final double? storedPanelWidth;
@@ -294,13 +315,12 @@ class _CategoryBody extends ConsumerWidget {
     // The lists alone, not the load state around them: a refresh first
     // announces itself carrying the old list, and watching the whole value
     // rebuilt every row for that, then again a frame later for the new one.
-    final parents =
-        ref.watch(
-          rankingParentsProvider(
-            category.id,
-          ).select((parents) => parents.valueOrNull),
-        ) ??
-        const <RankingParent>[];
+    final loadedParents = ref.watch(
+      rankingParentsProvider(
+        category.id,
+      ).select((parents) => parents.valueOrNull),
+    );
+    final parents = loadedParents ?? const <RankingParent>[];
     final childrenByParent =
         ref.watch(
           rankingChildrenByParentProvider(
@@ -325,6 +345,7 @@ class _CategoryBody extends ConsumerWidget {
       query: query,
       filters: filters.withoutStatuses(),
       documentIdsWithImages: withImages,
+      searchLocations: category.locationEnabled,
     );
     final stats = rankingCategoryStats(pool);
 
@@ -346,12 +367,16 @@ class _CategoryBody extends ConsumerWidget {
     final collapsedIds =
         settings?.rankingsCollapsedQueueCategories ?? const <String>[];
     final queueCollapsed = collapsedIds.contains(category.id);
+    final mapView =
+        category.locationEnabled &&
+        (settings?.rankingsMapViewCategories.contains(category.id) ?? false);
 
     return Column(
       children: [
         RankingsStatsBand(
           category: category,
           categories: categories,
+          offerAllCategories: offerAllCategories,
           stats: stats,
           activeStatuses: filters.statuses,
           onStatusTapped: (status) {
@@ -387,6 +412,10 @@ class _CategoryBody extends ConsumerWidget {
             ref,
             initialCategoryId: category.id,
           ),
+          isMapView: mapView,
+          onViewChanged: category.locationEnabled
+              ? (map) => _setMapView(ref, settings, map)
+              : null,
         ),
         if (category.isArchived) const _ArchivedBanner(),
         Expanded(
@@ -395,7 +424,27 @@ class _CategoryBody extends ConsumerWidget {
             listMinWidth: EditSidePanelMetrics.rankingsListMinWidth,
             storedWidth: storedPanelWidth,
             onWidthCommitted: onPanelWidthCommitted,
-            list: parents.isEmpty
+            list: mapView
+                ? RankingsMapView(
+                    // Per category, so each mounts a map of its own. It opens
+                    // where the last was left, not fitted to its pins: the
+                    // viewport is the device's, shared across categories.
+                    key: ValueKey('rankings-map-${category.id}'),
+                    entries: [
+                      for (final parent in rankingMapEntries(pool, filters))
+                        (parent: parent, category: category),
+                    ],
+                    scope: [
+                      for (final parent in parents)
+                        (parent: parent, category: category),
+                    ],
+                    createIn: category.isArchived ? const [] : [category],
+                    selectedParentId: selectedParentId,
+                    onOpen: onOpenPanel,
+                    onShowList: () => _setMapView(ref, settings, false),
+                    loading: loadedParents == null,
+                  )
+                : parents.isEmpty
                 ? _EmptyState(
                     icon: PhosphorIconsRegular.listPlus,
                     title: 'Nothing in ${category.name} yet',
@@ -421,18 +470,41 @@ class _CategoryBody extends ConsumerWidget {
                     selectedId: selectedParentId,
                     onOpen: onOpenPanel,
                   ),
-            panel: _panel(selectedParentId, parents, childrenByParent),
+            panel: _panel(
+              selectedParentId,
+              parents,
+              childrenByParent,
+              mapShowing: mapView,
+            ),
           ),
         ),
       ],
     );
   }
 
+  Future<void> _setMapView(
+    WidgetRef ref,
+    AppSettings? settings,
+    bool map,
+  ) async {
+    if (settings == null) return;
+    final current = settings.rankingsMapViewCategories;
+    if (map == current.contains(category.id)) return;
+    await ref
+        .read(settingsProvider.notifier)
+        .saveSettings(
+          settings.copyWith(
+            rankingsMapViewCategories: _toggled(current, category.id),
+          ),
+        );
+  }
+
   Widget? _panel(
     String? selectedParentId,
     List<RankingParent> parents,
-    Map<String, List<RankingChild>> childrenByParent,
-  ) {
+    Map<String, List<RankingChild>> childrenByParent, {
+    required bool mapShowing,
+  }) {
     final selected = parents
         .where((parent) => parent.id == selectedParentId)
         .firstOrNull;
@@ -444,6 +516,7 @@ class _CategoryBody extends ConsumerWidget {
       children: childrenByParent[selected.id] ?? const <RankingChild>[],
       tagSuggestions: rankingTagSuggestions(parents),
       readOnly: category.isArchived,
+      mapShowing: mapShowing,
       onClose: onClosePanel,
     );
   }
@@ -454,13 +527,247 @@ class _CategoryBody extends ConsumerWidget {
     List<String> collapsedIds,
   ) async {
     if (settings == null) return;
-    final next = [...collapsedIds];
-    if (!next.remove(category.id)) next.add(category.id);
     await ref
         .read(settingsProvider.notifier)
         .saveSettings(
-          settings.copyWith(rankingsCollapsedQueueCategories: next),
+          settings.copyWith(
+            rankingsCollapsedQueueCategories: _toggled(
+              collapsedIds,
+              category.id,
+            ),
+          ),
         );
+  }
+}
+
+/// [ids] with [id] taken out if it was there and added if it was not.
+List<String> _toggled(List<String> ids, String id) {
+  final next = [...ids];
+  if (!next.remove(id)) next.add(id);
+  return next;
+}
+
+/// Every location-enabled category on one map, each switched on or off by its
+/// chip. Map-only: there is no cross-category list, no shared score scale to
+/// filter or average by, and no sort.
+class _AllCategoriesBody extends ConsumerWidget {
+  const _AllCategoriesBody({
+    required this.categories,
+    required this.locationCategories,
+    required this.searchController,
+    required this.panelAnimation,
+    required this.storedPanelWidth,
+    required this.onPanelWidthCommitted,
+    required this.onOpenPanel,
+    required this.onClosePanel,
+  });
+
+  /// The switcher's categories — every active one, mapped or not.
+  final List<RankingCategory> categories;
+  final List<RankingCategory> locationCategories;
+  final TextEditingController searchController;
+  final Animation<double> panelAnimation;
+  final double? storedPanelWidth;
+  final ValueChanged<double?> onPanelWidthCommitted;
+  final ValueChanged<String> onOpenPanel;
+  final VoidCallback onClosePanel;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final settings = ref.watch(settingsProvider.settled).valueOrNull;
+    final hidden = settings?.rankingsMapHiddenCategories ?? const <String>[];
+    final visible = [
+      for (final category in locationCategories)
+        if (!hidden.contains(category.id)) category,
+    ];
+    final query = ref.watch(rankingSearchQueryProvider);
+    final filters = ref.watch(rankingFiltersProvider);
+    final selectedParentId = ref.watch(rankingSelectedParentProvider);
+    final withImages =
+        ref.watch(rankingDocumentIdsWithImagesProvider.settled).valueOrNull ??
+        const <String>{};
+
+    // The open entry left the map — deleted, or its category switched off.
+    // Only once every visible category has settled, for the reason the
+    // single-category body gives.
+    for (final category in visible) {
+      ref.listen(rankingParentsProvider(category.id), (_, _) {
+        final selectedId = ref.read(rankingSelectedParentProvider);
+        if (selectedId == null) return;
+        for (final other in visible) {
+          final parents = ref.read(rankingParentsProvider(other.id));
+          if (parents.isLoading || !parents.hasValue) return;
+          if (parents.requireValue.any((p) => p.id == selectedId)) return;
+        }
+        WidgetsBinding.instance.addPostFrameCallback((_) => onClosePanel());
+      });
+    }
+    // Or its category left the map — archived, or its Locations turned off —
+    // which no parents provider announces.
+    ref.listen(rankingCategoriesProvider, (_, next) {
+      final selectedId = ref.read(rankingSelectedParentProvider);
+      final categories = next.valueOrNull;
+      if (selectedId == null || categories == null) return;
+      final staying = {
+        for (final category in rankingLocationCategories(categories))
+          category.id,
+      };
+      for (final category in visible) {
+        if (staying.contains(category.id)) continue;
+        final parents = ref
+            .read(rankingParentsProvider(category.id))
+            .valueOrNull;
+        if (parents != null && parents.any((p) => p.id == selectedId)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => onClosePanel());
+        }
+      }
+    });
+
+    final scope = <RankingMapEntry>[];
+    final entries = <RankingMapEntry>[];
+    final pool = <RankingParent>[];
+    final childrenByParent = <String, List<RankingChild>>{};
+    var loading = false;
+    for (final category in visible) {
+      final loadedParents = ref.watch(
+        rankingParentsProvider(category.id).select((p) => p.valueOrNull),
+      );
+      if (loadedParents == null) loading = true;
+      final parents = loadedParents ?? const <RankingParent>[];
+      final children =
+          ref.watch(
+            rankingChildrenByParentProvider(
+              category.id,
+            ).select((c) => c.valueOrNull),
+          ) ??
+          const <String, List<RankingChild>>{};
+      childrenByParent.addAll(children);
+      final categoryPool = filterRankingParents(
+        parents,
+        childrenByParent: children,
+        query: query,
+        filters: filters.withoutStatuses(),
+        documentIdsWithImages: withImages,
+      );
+      pool.addAll(categoryPool);
+      for (final parent in parents) {
+        scope.add((parent: parent, category: category));
+      }
+      for (final parent in rankingMapEntries(categoryPool, filters)) {
+        entries.add((parent: parent, category: category));
+      }
+    }
+    final selected = scope
+        .where((entry) => entry.parent.id == selectedParentId)
+        .firstOrNull;
+
+    Future<void> toggle(RankingCategory category) async {
+      if (settings == null) return;
+      final hiding = !hidden.contains(category.id);
+      if (hiding && selected?.category.id == category.id) onClosePanel();
+      await ref
+          .read(settingsProvider.notifier)
+          .saveSettings(
+            settings.copyWith(
+              rankingsMapHiddenCategories: _toggled(hidden, category.id),
+            ),
+          );
+    }
+
+    return Column(
+      children: [
+        RankingsStatsBand(
+          category: null,
+          categories: categories,
+          offerAllCategories: true,
+          stats: rankingCategoryStats(pool),
+          activeStatuses: filters.statuses,
+          onStatusTapped: (status) {
+            final next = {...filters.statuses};
+            if (!next.remove(status)) next.add(status);
+            ref.read(rankingFiltersProvider.notifier).state = filters.copyWith(
+              statuses: next,
+            );
+          },
+          onSelectCategory: (id) =>
+              ref.read(rankingSelectedCategoryProvider.notifier).state = id,
+        ),
+        RankingsToolbar(
+          category: null,
+          searchController: searchController,
+          onQueryChanged: (value) =>
+              ref.read(rankingSearchQueryProvider.notifier).state = value,
+          filters: filters,
+          onFiltersChanged: (value) =>
+              ref.read(rankingFiltersProvider.notifier).state = value,
+          onSortChanged: (_, _, _) {},
+          // The union of the visible categories' tags; one shared by two of
+          // them matches in both.
+          tags: rankingTags(scope.map((entry) => entry.parent)),
+          onManage: () => showRankingsManageSheet(context, ref),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final category in locationCategories)
+                  SelectorPill(
+                    label: category.name,
+                    icon: rankingCategoryIcon(category.iconKey),
+                    dense: true,
+                    accentColor: paletteColor(category.colorValue, context),
+                    isActive: !hidden.contains(category.id),
+                    fillWhenActive: true,
+                    onTap: () => toggle(category),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: EditSidePanelHost(
+            animation: panelAnimation,
+            listMinWidth: EditSidePanelMetrics.rankingsListMinWidth,
+            storedWidth: storedPanelWidth,
+            onWidthCommitted: onPanelWidthCommitted,
+            list: ColoredBox(
+              color: theme.colorScheme.surface,
+              child: RankingsMapView(
+                key: const ValueKey('rankings-map-all'),
+                entries: entries,
+                scope: scope,
+                createIn: visible,
+                selectedParentId: selectedParentId,
+                onOpen: onOpenPanel,
+                loading: loading,
+              ),
+            ),
+            panel: selected == null
+                ? null
+                : RankingsEditPanel(
+                    key: ValueKey(selected.parent.id),
+                    parent: selected.parent,
+                    category: selected.category,
+                    children:
+                        childrenByParent[selected.parent.id] ??
+                        const <RankingChild>[],
+                    tagSuggestions: rankingTagSuggestions([
+                      for (final entry in scope)
+                        if (entry.category.id == selected.category.id)
+                          entry.parent,
+                    ]),
+                    mapShowing: true,
+                    onClose: onClosePanel,
+                  ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

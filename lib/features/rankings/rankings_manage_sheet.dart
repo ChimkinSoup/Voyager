@@ -398,6 +398,16 @@ class _CategorySettings extends ConsumerWidget {
                   (stored) => stored.copyWith(imagesOnChild: value),
                 ),
               ),
+            _Toggle(
+              label: 'Locations',
+              help: 'Pin entries to places and show them on a map.',
+              value: category.locationEnabled,
+              accent: accent,
+              onChanged: (value) => actions.patchCategory(
+                category.id,
+                (stored) => stored.copyWith(locationEnabled: value),
+              ),
+            ),
             const Divider(height: 24),
             _ScaleRow(
               label: 'Entry scale',

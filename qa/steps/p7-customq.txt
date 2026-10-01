@@ -1,0 +1,24 @@
+activate
+click 1394 899
+type QA quote one
+key enter
+wait 600
+type QA quote two
+key enter
+wait 600
+type QA quote three
+key enter
+wait 600
+shot p7-78-cq-added
+type QA quote one
+key enter
+wait 600
+shot p7-79-cq-dup
+key ctrl+a
+key delete
+key enter
+wait 500
+type
+key enter
+wait 500
+shot p7-80-cq-empty

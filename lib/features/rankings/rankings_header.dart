@@ -31,9 +31,15 @@ class RankingsStatsBand extends StatelessWidget {
     required this.activeStatuses,
     required this.onStatusTapped,
     required this.onSelectCategory,
+    this.offerAllCategories = false,
   });
 
-  final RankingCategory category;
+  /// Null on the All categories map, which belongs to no one category.
+  final RankingCategory? category;
+
+  /// Whether the switcher lists **All categories** — only while some active
+  /// category has a map to overlay.
+  final bool offerAllCategories;
 
   /// Active categories only — archived ones are reached through Manage (§2.2).
   final List<RankingCategory> categories;
@@ -45,7 +51,7 @@ class RankingsStatsBand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = paletteColor(category.colorValue, context);
+    final accent = _accentOf(category, context);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
@@ -57,6 +63,7 @@ class RankingsStatsBand extends StatelessWidget {
             _CategoryTrigger(
               category: category,
               categories: categories,
+              offerAllCategories: offerAllCategories,
               onSelect: onSelectCategory,
             ),
             const SizedBox(width: 22),
@@ -81,6 +88,15 @@ class RankingsStatsBand extends StatelessWidget {
   }
 }
 
+/// The category's colour, or the app's own on the All categories map.
+Color _accentOf(RankingCategory? category, BuildContext context) =>
+    category == null
+    ? Theme.of(context).colorScheme.primary
+    : paletteColor(category.colorValue, context);
+
+const _allCategoriesLabel = 'All categories';
+const _allCategoriesIcon = PhosphorIconsRegular.mapTrifold;
+
 /// The category picker, reduced to one word and an icon (§2.2).
 ///
 /// A strip of pills spent a whole tier of the page on a control that is used
@@ -91,17 +107,20 @@ class _CategoryTrigger extends StatelessWidget {
   const _CategoryTrigger({
     required this.category,
     required this.categories,
+    required this.offerAllCategories,
     required this.onSelect,
   });
 
-  final RankingCategory category;
+  final RankingCategory? category;
   final List<RankingCategory> categories;
+  final bool offerAllCategories;
   final ValueChanged<String> onSelect;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = paletteColor(category.colorValue, context);
+    final category = this.category;
+    final accent = _accentOf(category, context);
 
     return Center(
       child: Builder(
@@ -115,8 +134,9 @@ class _CategoryTrigger extends StatelessWidget {
               accentColor: accent,
               width: 240,
               builder: (context) => _CategoryMenu(
-                selectedId: category.id,
+                selectedId: category?.id ?? rankingAllCategoriesId,
                 categories: categories,
+                offerAllCategories: offerAllCategories,
                 onSelect: onSelect,
               ),
             ),
@@ -126,7 +146,9 @@ class _CategoryTrigger extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    rankingCategoryIcon(category.iconKey),
+                    category == null
+                        ? _allCategoriesIcon
+                        : rankingCategoryIcon(category.iconKey),
                     size: 18,
                     color: accent,
                   ),
@@ -134,7 +156,7 @@ class _CategoryTrigger extends StatelessWidget {
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 160),
                     child: Text(
-                      category.name,
+                      category?.name ?? _allCategoriesLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleSmall?.copyWith(
@@ -163,11 +185,13 @@ class _CategoryMenu extends ConsumerWidget {
   const _CategoryMenu({
     required this.selectedId,
     required this.categories,
+    required this.offerAllCategories,
     required this.onSelect,
   });
 
   final String selectedId;
   final List<RankingCategory> categories;
+  final bool offerAllCategories;
   final ValueChanged<String> onSelect;
 
   @override
@@ -182,6 +206,39 @@ class _CategoryMenu extends ConsumerWidget {
         shrinkWrap: true,
         padding: EdgeInsets.zero,
         children: [
+          if (offerAllCategories)
+            InkWell(
+              onTap: () {
+                onSelect(rankingAllCategoriesId);
+                Navigator.of(context).pop();
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 9,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _allCategoriesIcon,
+                      size: 15,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _allCategoriesLabel,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: selectedId == rankingAllCategoriesId
+                              ? FontWeight.w700
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           for (final entry in categories)
             InkWell(
               onTap: () {
@@ -237,7 +294,7 @@ class _HeroStats extends StatelessWidget {
   const _HeroStats({required this.stats, required this.category});
 
   final ({int ranked, int inProgress, int queued, double? average}) stats;
-  final RankingCategory category;
+  final RankingCategory? category;
 
   static const _countWidth = 64.0;
   static const _averageWidth = 56.0;
@@ -246,6 +303,7 @@ class _HeroStats extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final average = stats.average;
+    final category = this.category;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -258,7 +316,12 @@ class _HeroStats extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '${stats.ranked}',
+                // Every visible entry on the All categories map, which has
+                // no average to set a ranked count beside: its categories
+                // score on different scales.
+                category == null
+                    ? '${stats.ranked + stats.inProgress + stats.queued}'
+                    : '${stats.ranked}',
                 maxLines: 1,
                 style: theme.textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.w600,
@@ -267,7 +330,7 @@ class _HeroStats extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               Text(
-                'ranked',
+                category == null ? 'entries' : 'ranked',
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -275,40 +338,41 @@ class _HeroStats extends StatelessWidget {
             ],
           ),
         ),
-        SizedBox(
-          width: _averageWidth,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                average == null
-                    ? '—'
-                    : formatRankingScore(
-                        roundRankingScore(
-                          average,
-                          scoreMax: category.parentScoreMax,
-                          precision: category.parentScorePrecision,
+        if (category != null)
+          SizedBox(
+            width: _averageWidth,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  average == null
+                      ? '—'
+                      : formatRankingScore(
+                          roundRankingScore(
+                            average,
+                            scoreMax: category.parentScoreMax,
+                            precision: category.parentScorePrecision,
+                          ),
                         ),
-                      ),
-                maxLines: 1,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  height: 1,
-                  color: paletteColor(category.colorValue, context),
+                  maxLines: 1,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    height: 1,
+                    color: paletteColor(category.colorValue, context),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                'avg',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
+                const SizedBox(height: 5),
+                Text(
+                  'avg',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
@@ -444,9 +508,18 @@ class RankingsToolbar extends StatelessWidget {
     required this.onSortChanged,
     required this.tags,
     required this.onManage,
+    this.isMapView = false,
+    this.onViewChanged,
   });
 
-  final RankingCategory category;
+  /// Null on the All categories map: no sort, and no score range to filter by.
+  final RankingCategory? category;
+
+  /// Whether the map is showing in place of the list, and the List / Map
+  /// toggle's handler — null where there is no choice to make.
+  final bool isMapView;
+  final ValueChanged<bool>? onViewChanged;
+
   final TextEditingController searchController;
   final ValueChanged<String> onQueryChanged;
   final RankingFilters filters;
@@ -463,7 +536,9 @@ class RankingsToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = paletteColor(category.colorValue, context);
+    final category = this.category;
+    final accent = _accentOf(category, context);
+    final hasPlaces = category == null || category.locationEnabled;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
@@ -488,7 +563,9 @@ class RankingsToolbar extends StatelessWidget {
                   cursorColor: accent,
                   decoration: InputDecoration(
                     isDense: true,
-                    hintText: 'Search titles, notes, units and tags',
+                    hintText: hasPlaces
+                        ? 'Search titles, notes, units, tags and places'
+                        : 'Search titles, notes, units and tags',
                     prefixIcon: const Icon(
                       PhosphorIconsRegular.magnifyingGlass,
                       size: 14,
@@ -511,24 +588,56 @@ class RankingsToolbar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Builder(
-            builder: (buttonContext) => SelectorPill(
-              label: _sortLabel(category),
-              icon: category.sortAscending
-                  ? PhosphorIconsRegular.sortAscending
-                  : PhosphorIconsRegular.sortDescending,
+          if (onViewChanged != null) ...[
+            SelectorPill(
+              label: 'List',
+              icon: PhosphorIconsRegular.listBullets,
               dense: true,
               accentColor: accent,
-              onTap: () => showContextualPopover<void>(
-                context: context,
-                buttonContext: buttonContext,
-                accentColor: accent,
-                width: 240,
-                builder: (context) => _SortMenu(onSortChanged: onSortChanged),
+              isActive: !isMapView,
+              fillWhenActive: true,
+              onTap: () => onViewChanged!(false),
+            ),
+            const SizedBox(width: 4),
+            SelectorPill(
+              label: 'Map',
+              icon: PhosphorIconsRegular.mapTrifold,
+              dense: true,
+              accentColor: accent,
+              isActive: isMapView,
+              fillWhenActive: true,
+              onTap: () => onViewChanged!(true),
+            ),
+            const SizedBox(width: 8),
+          ],
+          if (category != null) ...[
+            // Order means nothing on a map, so the sort goes quiet there.
+            IgnorePointer(
+              ignoring: isMapView,
+              child: Opacity(
+                opacity: isMapView ? 0.4 : 1,
+                child: Builder(
+                  builder: (buttonContext) => SelectorPill(
+                    label: _sortLabel(category),
+                    icon: category.sortAscending
+                        ? PhosphorIconsRegular.sortAscending
+                        : PhosphorIconsRegular.sortDescending,
+                    dense: true,
+                    accentColor: accent,
+                    onTap: () => showContextualPopover<void>(
+                      context: context,
+                      buttonContext: buttonContext,
+                      accentColor: accent,
+                      width: 240,
+                      builder: (context) =>
+                          _SortMenu(onSortChanged: onSortChanged),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 6),
+            const SizedBox(width: 6),
+          ],
           Builder(
             builder: (buttonContext) => SelectorPill(
               label: filters.hasPopoverFilters ? 'Filtered' : 'Filter',
@@ -720,58 +829,17 @@ class _FilterMenu extends ConsumerWidget {
     final theme = Theme.of(context);
     final category = ref.watch(rankingActiveCategoryProvider);
     final filters = ref.watch(rankingFiltersProvider);
-    if (category == null) return const SizedBox.shrink();
-
-    final max = category.parentScoreMax.toDouble();
-    // Clamped: a range set before the scale was lowered would otherwise hand
-    // RangeSlider values past its max, which it asserts against.
-    final end = math.min(filters.scoreMax ?? max, max);
-    final start = math.min(filters.scoreMin ?? 0, end);
-    // The slider lands on `max * k / divisions`, which in floating point is
-    // often a hair off the stored grid — 1.4000000000000001 against 1.4 — and
-    // the filter compares exactly, so an entry sitting on the bound fell out.
-    double snap(double value) => roundRankingScore(
-      value,
-      scoreMax: category.parentScoreMax,
-      precision: category.parentScorePrecision,
-    );
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-          child: Text(
-            'Score ${formatRankingScore(start)}–${formatRankingScore(end)}',
-            style: theme.textTheme.labelSmall,
-          ),
-        ),
-        RangeSlider(
-          values: RangeValues(start, end),
-          min: 0,
-          max: max,
-          // One division per step of the entry overall's precision, so a
-          // bound the slider can reach is always a score an entry can hold
-          // (§8.4).
-          divisions:
-              (category.parentScoreMax /
-                      rankingScoreStep(category.parentScorePrecision))
-                  .round(),
-          onChanged: (values) {
-            final low = snap(values.start);
-            final high = snap(values.end);
-            onChanged(
-              filters.copyWith(
-                scoreMin: low,
-                scoreMax: high,
-                clearScoreMin: low == 0,
-                clearScoreMax: high == max,
-              ),
-            );
-          },
-        ),
-        const Divider(height: 1),
+        // Absent on the All categories map: 5- and 10-point scales share no
+        // range to filter by.
+        if (category != null) ...[
+          ..._scoreRange(theme, category, filters),
+          const Divider(height: 1),
+        ],
         _CheckTile(
           label: 'Has images',
           value: filters.hasImages,
@@ -818,6 +886,61 @@ class _FilterMenu extends ConsumerWidget {
         ],
       ],
     );
+  }
+
+  /// The score slider and its label, on [category]'s scale.
+  List<Widget> _scoreRange(
+    ThemeData theme,
+    RankingCategory category,
+    RankingFilters filters,
+  ) {
+    final max = category.parentScoreMax.toDouble();
+    // Clamped: a range set before the scale was lowered would otherwise hand
+    // RangeSlider values past its max, which it asserts against.
+    final end = math.min(filters.scoreMax ?? max, max);
+    final start = math.min(filters.scoreMin ?? 0, end);
+    // The slider lands on `max * k / divisions`, which in floating point is
+    // often a hair off the stored grid — 1.4000000000000001 against 1.4 — and
+    // the filter compares exactly, so an entry sitting on the bound fell out.
+    double snap(double value) => roundRankingScore(
+      value,
+      scoreMax: category.parentScoreMax,
+      precision: category.parentScorePrecision,
+    );
+
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+        child: Text(
+          'Score ${formatRankingScore(start)}–${formatRankingScore(end)}',
+          style: theme.textTheme.labelSmall,
+        ),
+      ),
+      RangeSlider(
+        values: RangeValues(start, end),
+        min: 0,
+        max: max,
+        // One division per step of the entry overall's precision, so a
+        // bound the slider can reach is always a score an entry can hold
+        // (§8.4).
+        divisions:
+            (category.parentScoreMax /
+                    rankingScoreStep(category.parentScorePrecision))
+                .round(),
+        onChanged: (values) {
+          final low = snap(values.start);
+          final high = snap(values.end);
+          onChanged(
+            filters.copyWith(
+              scoreMin: low,
+              scoreMax: high,
+              clearScoreMin: low == 0,
+              clearScoreMax: high == max,
+            ),
+          );
+        },
+      ),
+    ];
   }
 }
 

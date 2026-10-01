@@ -7,6 +7,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   firebase_auth
   firebase_core
   firebase_storage
+  geolocator_windows
   hotkey_manager_windows
   irondash_engine_context
   screen_retriever_windows

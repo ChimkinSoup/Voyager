@@ -23,6 +23,7 @@ import 'package:voyager/domain/rankings/ranking_queries.dart';
 import 'package:voyager/features/rankings/rankings_actions.dart';
 import 'package:voyager/features/rankings/rankings_child_list.dart';
 import 'package:voyager/features/rankings/rankings_field_editor.dart';
+import 'package:voyager/features/rankings/rankings_locations_section.dart';
 import 'package:voyager/features/rankings/rankings_providers.dart';
 import 'package:voyager/features/rankings/rankings_score_stars.dart';
 import 'package:voyager/features/rankings/rankings_tags_field.dart';
@@ -46,6 +47,7 @@ class RankingsEditPanel extends ConsumerStatefulWidget {
     required this.tagSuggestions,
     required this.onClose,
     this.readOnly = false,
+    this.mapShowing = false,
   });
 
   final RankingParent parent;
@@ -61,6 +63,10 @@ class RankingsEditPanel extends ConsumerStatefulWidget {
 
   /// An archived category is readable but not editable (§7.4).
   final bool readOnly;
+
+  /// Whether the map is open beside the panel — see
+  /// [RankingLocationsSection.mapShowing].
+  final bool mapShowing;
 
   @override
   ConsumerState<RankingsEditPanel> createState() => _RankingsEditPanelState();
@@ -408,6 +414,15 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                       ),
                     ),
                   ),
+                  if (category.locationEnabled) ...[
+                    const SizedBox(height: 12),
+                    RankingLocationsSection(
+                      parent: _current,
+                      accent: accent,
+                      mapShowing: widget.mapShowing,
+                      readOnly: widget.readOnly,
+                    ),
+                  ],
                   if (!_current.isRanked) ...[
                     const SizedBox(height: 12),
                     Row(

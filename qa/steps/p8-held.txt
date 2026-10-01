@@ -1,0 +1,16 @@
+activate
+click 662 1735
+wait 800
+click 662 1735
+wait 800
+click 662 1735
+wait 800
+shot p8-07-held3
+click 2560 1520
+type only a note here
+wait 100
+key ctrl+tab
+wait 1500
+key ctrl+shift+tab
+wait 2000
+shot p8-08-back

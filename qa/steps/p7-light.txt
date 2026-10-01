@@ -1,0 +1,28 @@
+activate
+maximize
+wait 1000
+key esc
+key ctrl+shift+tab
+wait 1500
+click 487 46
+wait 1000
+click 2707 829
+wait 1500
+key ctrl+tab
+wait 2000
+shot p7-98-light-journal
+click 2847 500
+wait 1000
+shot p7-99-light-otd
+key esc
+wait 500
+click 724 55
+wait 1000
+shot p7-100-light-manage
+key esc
+wait 500
+click 340 55
+wait 800
+shot p7-101-light-dropdown
+key esc
+wait 500

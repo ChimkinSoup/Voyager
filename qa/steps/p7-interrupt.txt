@@ -1,0 +1,25 @@
+activate
+click 1800 900
+key ctrl+end
+type  TRAY1
+close
+wait 1500
+tray-open
+wait 1000
+activate
+click 1800 900
+key ctrl+end
+type  NAV2
+key ctrl+tab
+wait 1500
+key ctrl+shift+tab
+wait 1000
+click 1800 900
+key ctrl+end
+click 180 139
+type  TITLE4
+key ctrl+tab
+wait 1500
+key ctrl+shift+tab
+wait 800
+shot p7-11-interrupts

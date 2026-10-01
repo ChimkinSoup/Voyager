@@ -1,0 +1,6 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final tr = c.read(todoRepositoryProvider);
+final list = TodoListModel(id: 'p9-perf', createdAt: now, updatedAt: now, version: 1, name: 'Perf 200');
+await tr.upsertList(list); r.pushTodoList(list);
+for (var i = 0; i < 200; i++) { final t = TodoTask(id: 'p9-perf-$i', createdAt: now, updatedAt: now, version: 1, listId: 'p9-perf', title: 'Perf task ${i.toString().padLeft(3, '0')}', sortOrder: i * 1000, notes: i % 10 == 0 ? 'perf note $i' : null); await tr.upsertTask(t); await r.pushTodoTaskNow(t); }

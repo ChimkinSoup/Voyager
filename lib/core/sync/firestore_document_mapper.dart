@@ -3625,6 +3625,7 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'jobsHiddenColumns': s.jobsHiddenColumns,
   'jobsIncludeArchived': s.jobsIncludeArchived,
   'rankingsCollapsedQueueCategories': s.rankingsCollapsedQueueCategories,
+  'rankingsMapViewCategories': s.rankingsMapViewCategories,
   'jobProfileLinkedInUrl': s.jobProfileLinkedInUrl,
   'jobProfileGitHubUrl': s.jobProfileGitHubUrl,
   'jobProfilePortfolioUrl': s.jobProfilePortfolioUrl,
@@ -3827,6 +3828,9 @@ AppSettings mergeSettingsFromRemote(
     rankingsCollapsedQueueCategories: _stringListOrNull(
       data['rankingsCollapsedQueueCategories'],
     ),
+    rankingsMapViewCategories: _stringListOrNull(
+      data['rankingsMapViewCategories'],
+    ),
     startupPageMode: _enumFromName(
       StartupPageMode.values,
       data['startupPageMode'],
@@ -3904,6 +3908,7 @@ Map<String, dynamic> rankingCategoryToFirestore(RankingCategory category) => {
   'sortMode': category.sortMode.name,
   'sortFieldId': category.sortFieldId,
   'sortAscending': category.sortAscending,
+  'locationEnabled': category.locationEnabled,
   'archivedAt': _dateToFirestore(category.archivedAt),
   'createdAt': _dateToFirestoreRequired(category.createdAt),
   'updatedAt': _dateToFirestoreRequired(category.updatedAt),
@@ -4005,6 +4010,8 @@ RankingCategory mergeRankingCategoryFromRemote(
         : local?.sortFieldId,
     sortAscending:
         data['sortAscending'] as bool? ?? local?.sortAscending ?? false,
+    locationEnabled:
+        data['locationEnabled'] as bool? ?? local?.locationEnabled ?? false,
     archivedAt: data.containsKey('archivedAt')
         ? parseFirestoreDate(data['archivedAt'])
         : local?.archivedAt,
@@ -4039,6 +4046,42 @@ Iterable<String> _stampedFieldIds(RankingFieldStamps stamps) sync* {
   for (final key in stamps.keys) {
     if (key.startsWith('fv:')) yield key.substring(3, key.lastIndexOf(':'));
   }
+}
+
+Iterable<String> _stampedLocationIds(RankingFieldStamps stamps) sync* {
+  for (final key in stamps.keys) {
+    if (key.startsWith('loc:')) yield key.substring(4);
+  }
+}
+
+/// Locations as a map keyed by id, a removed one as an explicit null — the
+/// shape [_fieldValuesToFirestore] gives field values, for the same reason.
+///
+/// An array would be replaced whole by an upload while the `loc:<id>` stamps
+/// beside it are merged key by key. A device that had not yet pulled another's
+/// new branch would then upload an array without it and leave that branch's
+/// stamp standing — which reads, on the device that added it, as a removal.
+/// Keyed by id, an upload only touches the locations it knows about.
+Map<String, dynamic> _locationsToFirestore(
+  List<RankingLocation> locations,
+  RankingFieldStamps stamps,
+) => {
+  for (final id in _stampedLocationIds(stamps)) id: null,
+  for (final location in locations) location.id: location.toJson(),
+};
+
+/// Reads [_locationsToFirestore]'s map, skipping the nulls it clears with. A
+/// list is read too: backups and documents written before the map form.
+List<RankingLocation> _locationsFromRemote(
+  dynamic value,
+  List<RankingLocation> fallback,
+) {
+  if (value is List) return decodeRankingLocations(value);
+  if (value is! Map) return fallback;
+  return decodeRankingLocations([
+    for (final entry in value.entries)
+      if (entry.value is Map) {...entry.value as Map, 'id': entry.key},
+  ]);
 }
 
 Map<String, RankingFieldValue> _fieldValuesFromRemote(
@@ -4149,6 +4192,48 @@ class _RankingFieldPicker {
     return result;
   }
 
+  /// Each location from whichever side changed it last, removals included: a
+  /// removed location keeps its stamp and no value, and wins as a null.
+  ///
+  /// A side holding neither a value nor a stamp for a location has never
+  /// heard of it, and loses outright. Left to [call], its missing stamp would
+  /// read as the row's `updatedAt`, and any later edit to that row — a note,
+  /// another branch removed — would outrank a branch added on another device
+  /// before it and drop it.
+  List<RankingLocation> locations(
+    List<RankingLocation> local,
+    List<RankingLocation> remote,
+  ) {
+    final localById = {for (final location in local) location.id: location};
+    final remoteById = {for (final location in remote) location.id: location};
+    final ids = {
+      ...localById.keys,
+      ...remoteById.keys,
+      ..._stampedLocationIds(localStamps),
+      ..._stampedLocationIds(remoteStamps),
+    };
+    final result = <RankingLocation>[];
+    for (final id in ids) {
+      final key = rankingLocationStampKey(id);
+      final l = localById[id];
+      final r = remoteById[id];
+      final RankingLocation? winner;
+      if (l == null && !localStamps.containsKey(key)) {
+        stamps[key] = (remoteStamps[key] ?? remoteUpdated).toUtc();
+        winner = r;
+      } else if (r == null && !remoteStamps.containsKey(key)) {
+        stamps[key] = (localStamps[key] ?? localUpdated).toUtc();
+        localWon = true;
+        winner = l;
+      } else {
+        winner = call(key, l, r);
+      }
+      if (winner != null) result.add(winner);
+    }
+    result.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    return result;
+  }
+
   DateTime get updatedAt =>
       remoteUpdated.isBefore(localUpdated) ? localUpdated : remoteUpdated;
 
@@ -4171,6 +4256,7 @@ Map<String, dynamic> rankingParentToFirestore(RankingParent parent) => {
     parent.fieldUpdatedAt,
   ),
   'tags': parent.tags,
+  'locations': _locationsToFirestore(parent.locations, parent.fieldUpdatedAt),
   'status': parent.status.name,
   'starred': parent.starred,
   'queueSortOrder': parent.queueSortOrder,
@@ -4239,6 +4325,12 @@ RankingMergeResult<RankingParent> resolveRankingParentFromRemote(
     tags: normalizeRankingTags(
       _stringListFromRemote(data['tags'], local?.tags ?? const []),
     ),
+    // A payload written before locations existed keeps whatever this device
+    // has; with no local row either, that is none.
+    locations: _locationsFromRemote(
+      data['locations'],
+      local?.locations ?? const [],
+    ),
     status: RankingStatus.fromName(
       data['status'] as String? ?? local?.status.name,
     ),
@@ -4276,6 +4368,7 @@ RankingMergeResult<RankingParent> resolveRankingParentFromRemote(
     notes: pick('notes', local.notes, remote.notes),
     fieldValues: pick.fieldValues(local.fieldValues, remote.fieldValues),
     tags: pick('tags', local.tags, remote.tags),
+    locations: pick.locations(local.locations, remote.locations),
     status: pick('status', local.status, remote.status),
     starred: pick('starred', local.starred, remote.starred),
     queueSortOrder: pick(

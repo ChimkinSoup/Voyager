@@ -81,10 +81,10 @@ For each phase, besides its specific flows, tick this sweep. Copy it into the ph
 | 4 | Text-editing helpers (autocorrect, dictionary, snippets, formatting, images) | Done |
 | 5 | Global hotkeys & floaters | Done |
 | 6 | Notifications, inbox & reminders | Done |
-| 7 | Journal | Not Started |
-| 8 | Dream journal | Not Started |
-| 9 | To-Do | Not Started |
-| 10 | Calendar | Not Started |
+| 7 | Journal | Done |
+| 8 | Dream journal | Done |
+| 9 | To-Do | Done |
+| 10 | Calendar | Done |
 | 11 | Search | Not Started |
 | 12 | Analytics & trackers | Not Started |
 | 13 | Finance A: ledger & transactions | Not Started |
@@ -93,7 +93,8 @@ For each phase, besides its specific flows, tick this sweep. Copy it into the ph
 | 16 | Life tracker | Not Started |
 | 17 | LeetCode A: dashboard, problems & review deck | Not Started |
 | 18 | LeetCode B: sessions, cram, scratch pad & cheat sheet | Not Started |
-| 19 | Rankings | Not Started |
+| 19A | Rankings core | Not Started |
+| 19B | Rankings: locations & map | Not Started (needs the map feature merged; see its section) |
 | 20 | Jobs | Not Started |
 | 21 | Study A: library, decks & card editing | Not Started |
 | 22 | Study B: sessions, cram & session resume | Not Started |
@@ -280,69 +281,132 @@ Keep this table and each phase's **Status** line in sync.
 - **Skipped/blocked:** clicking an OS toast (tap → app focuses that sticky) — the toast is outside Voyager's window, which the probe guard refuses; MANUAL. Natural-occurrence-supersedes-snooze and same-rule coalescing need a daily rule to cross a day; reasoned from `evaluateReminder` (a newer occurrence key wins over a snooze/unacked state), not observed. Real multi-device ack sync (one PC). Custom… lead-time dialog not exercised. Stale OS toasts: on Windows, acknowledging/deleting doesn't withdraw a shown toast from Action Center (`dismiss` is a deliberate no-op for an unpackaged app); a re-fire of the same source replaces its toast. Noted, not logged.
 
 ## Phase 7 — Journal
-- **Status:** Not Started
+- **Status:** Done (2026-09-30, build `7119be7`, account qa-011). Bugs: BUG-047, BUG-048, BUG-050, BUG-051, BUG-052, BUG-053, BUG-054, BUG-055, BUG-056, BUG-058, BUG-059 (Minor); BUG-049, BUG-057 (Cosmetic). Note added to BUG-017. BUG-046 re-confirmed.
 - **Scope:** journals (create/rename/delete, manage sheet, journal settings dialog), entries (new, edit title/body/mood/date-time/weather icon/tags, delete + undo), entry list (all entries vs one journal, ordering, list width drag), quotes on entries + custom quotes randomizer, guided prompts, On This Day overlay, quick-journal-entry (QJE) interplay, geometric texture background. **Deferred:** Vim → P3; images/snippets/autocorrect → P4; search → P11; trash → P24.
 - **HLD docs:** JOURNAL_DATA_LOSS_POSTMORTEM.md (known risk areas), SAVING.md, ON_THIS_DAY_HLD.md, SESSION_RESUME_HLD.md, UNDO.md, DRAFT.md, SOFT_DELETE_TOAST.md
+- **Method:** UI via `voy.ps1` step files `qa/steps/p7-*.txt`; 51 entries seeded through the app's repositories (`qa/steps/p7-seed.dart.txt`, `p7-seed-dates.dart.txt`, via `evalc.ps1`). New harness: `qa/harness/DragSource.cs` + `dragdrop.ps1` (drag files from a probe-owned window onto a Voyager client point; releases only if the window under the point is voyager.exe) and `wfp.ps1` (which process owns the window at given screen points, with its hit-test code; no capture).
 - **Flows:**
-  - [ ] Create a journal; create entries in it; switch journals; "all entries" view
-  - [ ] Autosave: type, wait, check DB; type then immediately navigate/close to tray/`stop.ps1` → is the text there after relaunch? (data-loss focus)
-  - [ ] Edit title, mood slider, date/time picker (past/future dates), weather icon, tags
-  - [ ] Delete entry → toast undo → restored exactly; delete without undo → Trash
-  - [ ] Journal rename/delete (what happens to its entries?), manage sheet reorder
-  - [ ] Quotes toggle; custom quotes dialog CRUD; randomizer doesn't repeat immediately
-  - [ ] On This Day: seed entries dated 1 month / 1+ years ago → overlay appears per the cadence setting
-  - [ ] Entry list sorting with many entries (seed 50+ across dates), scroll performance, list-width drag persists
-  - [ ] Older entries after a cold sign-in (added 2026-09-30, from FV-2): once the 50+ entries are in the cloud, do a cold re-login (`guard.ps1` → outbox 0 → `reset.ps1 -Force` → `launch.ps1` → `login.ps1`). Without restarting, scroll the entry list, in one journal and in "All journals", down to the oldest entry. Every seeded entry should load in date order, none missing or duplicated; compare the count with SQLite. `historicalJournalEntriesProvider` (the entries loaded by scrolling) isn't in the post-pull refresh (BUG-010's notes), so a gap here is the suspected failure. If entries are missing, restart and check whether they appear.
-  - [ ] (from P4) Drag-and-drop an image file onto the journal body → joins the fan. Needs a probe-owned drag-source window under `qa/harness/` (never drag from Explorer); build it here and reuse it in P9/P21. Also drop a non-image file and a GIF (should be refused, MEDIA.md: no GIF).
-- **Failure cases:** 10,000-char body, a 300-char unbroken title, empty entry (created at all?), rapid New entry ×10, two entries same timestamp, date far in the past (1900) / future (2100).
-- **Test data:** 2 journals, ~50 entries across 2 years (script via the UI or step files; record in PROGRESS.md).
-- **Skipped/blocked:** —
+  - [x] Create a journal (gear → Manage journals → New journal): empty and spaces-only names rejected ("Title cannot be empty" + focus lost, **BUG-050**); the first journal also creates an undeletable empty "Journal" (**BUG-048**). Closing the dialog opens the new journal with a new entry. Switching journals and "All journals" work; All shows the total (52/66) and its New entry names a target journal. **BUG-046** re-confirmed (All = open journal's count while a single journal is open).
+  - [x] Autosave (400 ms debounce): typed title/body in SQLite within 2.5 s. Type then immediately close to tray / Ctrl+Tab away / tray Quit: all kept (TRAY1, NAV2, T4, QUIT3). Type then `stop.ps1` (hard kill) within the debounce: the last 12 chars were lost, expected for a kill inside 400 ms (not logged). Restart shows everything else.
+  - [x] Edit title, mood (clicked 9 → `mood` 9), weather menu (Sunny/Cloudy/Rain/Snow → `rain`), tags from `#hashtags` in the body (`["travel","Work2"]`, pills rendered), date picker (Today/Tomorrow/Next Week, month arrows, time spinner/field; moved Sep 30 → Sep 15, list re-sorted; `entry_date` changes, `timestamp` keeps the creation time). The header "September 2026" isn't clickable, so 1900/2100 need ~1,500 month clicks: seeded instead (below).
+  - [x] Delete entry → confirm → toast `Deleted "Same stamp B"` + Undo; Undo restored the row with identical fields except `version`/`updated_at` (seeded `tags_json` that wasn't in the body was rewritten to `[]`, see Leads). Deleted without undo → shown in Recently deleted → Restore brings it back, but the "Restored …" toast never goes away (**BUG-051**).
+  - [x] Journal rename (OK; empty/same name = silent no-op), change colour (menu present), delete with "Yes" (moves 21 entries to "Journal") and "Yes (delete all entries)" (entries soft-deleted with the journal's stamp; restore from Recently deleted brings both back). Copy "1 entries" + ambiguous "Yes" (**BUG-049**). Deleting the journal that's open leaves its trashed entry editable (**BUG-047**). No reorder control exists and the order isn't stable across installs (**BUG-056**).
+  - [x] Quotes: click the quote → Edit quote (Save, Ctrl+Enter, Cancel), Browse quotes (4 bundled; search case-insensitive with highlight; "No quotes match …"). Emptying a quote removes the only way back to it (**BUG-052**). Custom quotes dialog (Settings → Pages): add ×3, duplicate rejected (focus lost, BUG-050 note), empty/spaces ignored, "Only my quotes" switch. Randomizer: each journal draws every unused quote before repeating one drawn today; once all were drawn today it's uniform (30 draws sampled in-app: 12/11/7) — by design. First entry after turning on "Only my quotes" still got a bundled quote (**BUG-054**). "Show quotes" toggle not exercised beyond the per-journal Quotes switch (both on).
+  - [x] On This Day (Alpha → Monthly + yearly) on Sep 30 (last day of the month): matches exactly Aug 31 (last-day catch-up), Aug 30, Sep 30 2025, Sep 30 2024; blank entry, Aug 29, Sep 29/Oct 1 2025, Beta's Sep 30 2025 (journal off) and a future Sep 30 2027 excluded. Strip "1mo" + badge 4; paging 1→4; mood/weather per match; Open opens the 2024 entry and scrolls the list to it; ✕ hides for the run (also in All); comes back after restart; a key press tucks it (Vim ON too). It auto-expanded behind the Manage/Settings dialogs the first time (entrance spent while covered; noted). At min size it covers mood 10 and half the delete button (**BUG-055**).
+  - [x] Entry list: 67 entries over 2024–2026 plus 1900/2100 seeded; newest-first order, 1900 last, 2100 first; two entries with the same timestamp both listed. Scrolling is smooth (debug). List width drag stored (`journal_entry_list_width` 464.68 / 440.68), survives restart, device-local (null after a cold re-login, as designed).
+  - [x] Older entries after a cold sign-in: re-login pulled 67 entries (`pullAll` 3.7 s, "78 docs"); without restarting, "Journal" (21) and "All journals" (66) scrolled to the oldest entries (Oct 23 2024 / Jan 1 1900), counts equal SQLite, none missing or duplicated. `historicalJournalEntriesProvider` is declared in `providers.dart` but used nowhere; the journal list loads every entry, so the suspected gap can't happen. Custom quotes, however, stayed stale (**BUG-059**).
+  - [x] (from P4) Drag-and-drop with the new `dragdrop.ps1`: one PNG onto the body → joins the fan (`media_references_table` collection `journal_entries`, facet `gallery`; asset uploaded as JPEG); two PNGs in one drag → both join; a GIF and a .txt → refused silently (drop effect None, nothing written, no toast).
+  - [x] Guided prompts: no UI on the journal page; `guidedPrompt` is only carried through saves (n/a).
+  - [x] QJE interplay: in-app Ctrl+Alt+J opens today's quick entry in the editor; typing saves it; a second Ctrl+Alt+J reuses it (one row).
+- **Failure cases:** 13,090-char pasted body (renders, saves; keeps `\r`, BUG-017 note) and a 300-char unbroken title (field scrolls, list truncates with …): fine. Empty entry: created and kept at once; rapid New entry ×10 → 10 blank "Untitled" entries (**BUG-053**). Two entries with the same timestamp: both listed, stable. 1900 and 2100 (seeded): display and sort correctly; the future Sep 30 2027 isn't an OTD match. Deleting a journal's last entry opens a fresh blank entry that saves what's typed (P1 lead for BUG-003: resolved, works).
+- **Five-dimension sweep:**
+  - D1 functional: flows above.
+  - D2 data: every edit checked in SQLite; outbox 0 throughout (the 51-entry seed briefly deferred writes to the outbox — "Sync paused: 50 writes" — and it drained). Restarts kept entries, width, settings. Cold re-login restored all journals (incl. the deleted one as deleted), 67 entries, custom quotes, `custom_quotes_only`; media references survived restart.
+  - D3 visual: maximized, 2000×1100 and 1440×1040 in Dark + Scatter. Header label truncates to "All journ…"/"All jou…" at 2000×1100 and min (noted, not logged). At min the metadata row wraps to two lines. Light spot-check: journal page, OTD card, Manage dialog fine; switcher names low contrast (**BUG-057**). Back to Dark afterwards (`theme_mode` dark). No FlutterError / overflow in any of this session's run logs; `voyager_errors.log` got only APP START lines; no `BODY_BUFFER_ENTRY_MISMATCH` in `journal_debug.log`.
+  - D4 keyboard: Enter in Title → body; Tab Title → body, then the body keeps focus on every Tab/Shift+Tab (**BUG-058**), so the rest of the page is mouse-only (BUG-009). Ctrl+Enter saves the quote dialog. Vim ON: NORMAL badge in the Title, a key tucks the OTD card; turned back off.
+  - D5 failures: see Failure cases; interrupts (tray, navigate, quit, kill) above. Force offline not exercised here (Dev page hidden; covered by P26).
+- **Test data:** qa-011, see PROGRESS.md §2.
+- **Skipped/blocked:** offline create/edit (P26); the "Show quotes on journal entries" app-wide toggle (P25); caret behaviour around stored `\r`; dragging the mood thumb at min size (BUG-055). **Harness artifact found:** the FV-2 lead "header dropdown wouldn't open after a restart" was the harness: `voy.ps1 maximize` sent during the app's own startup leaves the window zoomed at the centred position (rect 160,100 2906×1826), and a native caption strip then eats clicks along the top (`p7-56-dd.png`). 1 in 4 with the harness `maximize`, 0 in 6 without. Resolved as not an app bug; quirk in PROGRESS.md §5.
+- **Leads:**
+  - Opening an entry whose stored `tags_json` doesn't match its body's `#hashtags` rewrites the tags and bumps the version (seen only on seeded rows; real rows derive tags from the body). Could matter for imported/older rows.
+  - The OTD card auto-expanded while the Manage/Settings dialogs covered the page, so its one entrance per run was spent unseen.
+  - "Restored …" toast (BUG-051) also sits over dialog titles while it lingers.
+  - The image fan sits over the body's bottom-right text lines (text runs under it).
 
 ## Phase 8 — Dream journal
-- **Status:** Not Started
+- **Status:** Done (2026-09-30, build `7119be7`, account qa-012). Bugs: BUG-061 (Blocker); BUG-060, BUG-062, BUG-063 (Minor); BUG-064 (Cosmetic). Notes added to BUG-058 and BUG-051.
 - **Scope:** dream entries (title/note, sticky notes, branch painter visuals), split pane width, dream search, dream images, delete + undo, dream stats (to Analytics, if enabled). **Deferred:** images mechanics → P4; Search page → P11.
 - **HLD docs:** DREAM_JOURNAL.md
+- **Method:** UI via `voy.ps1` step files `qa/steps/p8-*.txt`; 122 dreams seeded through the app's repository (`qa/steps/p8-seed.dart.txt` via `evalc.ps1`); DB checks read-only (scratch `q.py`); focus probes via `vm.exe eval` (`FocusManager.instance.primaryFocus`).
 - **Flows:**
-  - [ ] Create/edit/delete dreams; autosave + restart; switch entries mid-typing (no cross-contamination)
-  - [ ] Title submit moves focus to the note; tab focus between fields
-  - [ ] Dream search within the page; split-width drag persists (device-local)
-  - [ ] Delete → undo; delete → Trash
-  - [ ] "Show dream statistics in analytics" reflects in P12 (quick check)
-  - [ ] (from P4) Image paste into a dream (Ctrl+V with the registered "PNG" clipboard format; see PROGRESS.md §5 "Image clipboard"): into an existing dream and into a brand-new unsaved one (the scope writes the row first, `onBeforeAttach`); thumbnails/lightbox; remove; row in `media_references_table` with collection for dreams; delete the dream → its references soft-deleted
-- **Failure cases:** very long dreams, many dreams (100+) scrolling, rapid switching while typing.
-- **Skipped/blocked:** —
+  - [x] Create/edit/delete: New dream → Title, Enter → body; autosaved within 2.5 s (tags `["lucid","flying"]` from `#hashtags`). "New dream" holds the row in memory until it has content: 3 quick clicks → one blank "Untitled" on screen, nothing written; a note-only dream is written. Rapid switching between two dreams while typing: no cross-contamination (keys typed right after a row click go nowhere, since the row click takes focus). Restart keeps everything **except the sticky notes: every dream with a body gets its body copied into its note on the next restart/pull (BUG-061, Blocker, reproduced 3×, root cause in `CharacterSequenceCrdtMerger.applyMergedPayload`)**. No "drafted" indicator for dreams without a log (**BUG-060**). The HLD's sticky-note "pin" was removed on purpose (commit `2b667aa`), so the HLD is out of date (in BUG-060's notes).
+  - [x] Title Enter/Tab → body (works). The body swallows Tab/Shift+Tab/Esc (BUG-058 note). Opening the note by click doesn't focus it, and the note can't be opened from the keyboard (**BUG-062**). In the note, Tab → body, Shift+Tab → its close button.
+  - [x] Dream search within the page: **n/a**, the page has no search (dreams are searched from the Search page, P11). Split width: drag clamps at 240–620 logical, stored in `dream_split_width` (390.5), survives restart, null after a cold re-login (device-local, as designed).
+  - [x] Delete (trash icon or row right-click → Delete) → confirm (Esc cancels, Enter confirms) → toast + Undo restores the row (and, because of BUG-061, the pre-corruption note). Delete without undo → Trash dialog → Dreams tab → Restore works; its "Restored …" toast sticks (BUG-051).
+  - [x] Settings → Pages → "Show dream statistics in analytics" → Analytics gains a 5th card "Dream Today: Yes" (off: 4 cards). Row right-click → "See statistics" dialog: date, words, characters, notes, themes: correct.
+  - [x] (from P4) Image paste (clipboard "PNG") into an existing dream → thumbnail, `media_references_table` row (collection `dream_entries`, facet `gallery`), asset uploaded. Into a brand-new unsaved dream → the row is written first (version 0, empty text) and pushed. Lightbox opens (zoom/copy/save/remove/close); Remove → confirm → reference soft-deleted. Deleting a dream soft-deletes its reference; Undo restores both. Right-click on a thumbnail does nothing.
+- **Failure cases:** 122 seeded dreams + 7 UI dreams: list scrolls smoothly (debug) to the oldest (Jun 2), ordering by date correct. 300-char title (field scrolls, list truncates) and a 700-word body render fine. Pasted CJK/Arabic/emoji incl. a ZWJ family render and save; non-ASCII hashtags are cut or dropped (**BUG-063**). Interrupts: type then close to tray / Ctrl+Tab away / tray Quit: all kept. Date picker: moved R1 to Sep 15 (`entry_date` changes, `created_at` kept), list re-sorts. Double-clicking the trash icon opens and dismisses the confirm (second click hits the scrim), no double delete.
+- **Five-dimension sweep:**
+  - D1 functional: flows above.
+  - D2 data: every change checked in SQLite; outbox drained to 0 (the seed briefly hit "Sync paused: 50 writes", as in P7). Restarts keep everything except notes (BUG-061). Cold re-login (`reset.ps1 -Force` → `login.ps1`): 129 dreams (1 deleted), 2 media references, `show_dream_statistics` restored, and the page lists them without a restart. `pullAll` 3.8 s. The same 77 notes are body copies there too.
+  - D3 visual: maximized, 1440×1040, 2000×1100 in Dark + Scatter: layout fine; the open note covers the image thumbnail (by design) and, at min size, the lower-right of the body. Shrinking to min logs a RenderFlex overflow (**BUG-064**). Light spot-check: list, editor, note legible; branch overlay faint (as the HLD asks). Back to Dark (`theme_mode` dark).
+  - D4 keyboard: see flow 2. Vim ON: body `x`, `A`, `0`, `i` and note `dd` work and save; turned back off.
+  - D5 failures: see Failure cases. Offline not exercised (Dev page hidden; P26).
+- **Test data:** qa-012, see PROGRESS.md §2.
+- **Skipped/blocked:** offline create/edit (P26); Search-page dream search (P11); the stats heatmap/Analytics detail beyond the card (P12); drag-and-drop of an image onto a dream (paste covers the same attach path; `MediaDropTarget` wraps the body). Firestore's copy of the dream notes wasn't read: a direct REST read was blocked by the session's permission classifier.
+- **Harness artifact:** `evalc.ps1` reads its body file with PowerShell 5.1 `Get-Content -Raw` (ANSI), so non-ASCII literals in a seed body arrive as mojibake (`p8-intl` "å¤¢…"). Use `\u` escapes that stay ASCII in the file (the Write tool turned mine into literal characters), or paste through the clipboard. Not an app bug.
+- **Leads:**
+  - The Journal page on an account with no journals created a "Journal" (`__legacy__`) and a blank "Untitled" entry (21:21:14Z) while I only opened it to reach Trash and left without typing (P7/BUG-003/BUG-048 area; not reproduced).
+  - Tray Quit with the Dreams page and note open took more than 4 s for both processes to exit (P5 lead: >3 s with a floater).
+  - Trash dialog opened from the Journal page first shows an empty "Journal" tab; after switching to Dreams, the Journal tab disappears from the chips (P24).
+  - The HLD's split is 35/65; the default is `0.35 × width` clamped to 240–480 logical, so at maximized it's 480/1440 (≈33%). Fine, noted.
 
 ## Phase 9 — To-Do
-- **Status:** Not Started
+- **Status:** Done (2026-09-30, build `7119be7`, account qa-013). Bugs: BUG-066 (Major); BUG-065, BUG-067, BUG-068, BUG-069, BUG-072 (Minor); BUG-070, BUG-071, BUG-073 (Cosmetic, follow-up). Note added to BUG-017. BUG-012 and BUG-051 re-seen.
 - **Scope:** lists (create/rename/delete/reorder, manage sheet, settings dialog), tasks (add via composer, edit side panel: notes, due date/time, recurrence?, reminder bell, tags), complete/uncomplete, completed section collapse, hide completed, sort order, list search (Ctrl+F, Enter/Shift+Enter, Esc), "all tasks" view, statistics tiles. **Deferred:** reminders firing → P6; calendar markers → P10.
 - **HLD docs:** TODO_EDIT_PANEL_UI.md, TODO_LIST_SEARCH_HLD.md, SOFT_DELETE_TOAST.md, UNDO.md
+- **Method:** UI via `voy.ps1` (step files `qa/steps/p9-*.txt`); 200 tasks seeded through the repository (`qa/steps/p9-seed200.dart.txt` via `evalc.ps1`; they appear after a restart, harness quirk); DB checks read-only (scratch `q.py`); focus via `vm.exe eval`; images via scratch `setimg.ps1`, `qa/harness/dragdrop.ps1` and the native file dialog (typed path).
 - **Flows:**
-  - [ ] First list creation; add 30+ tasks quickly via the composer (Enter keeps focus?)
-  - [ ] Edit panel: every field; open/close panel; panel width drag
-  - [ ] Complete/uncomplete (completion records); the completed section; hide completed toggle
-  - [ ] Reorder tasks and lists; sorting stable after restart
-  - [ ] Ctrl+F search: matches, next/prev, Esc; search with no matches
-  - [ ] Delete task/list → undo; list delete with tasks
-  - [ ] (from P4) Edit panel gallery strip (MEDIA.md): paste an image onto the panel (not into notes; image-only into notes/title is a no-op), attach via the file picker (native dialog: type a full path from `qa/data/` + Enter), drag-and-drop (P7's drag helper), reorder by drag, remove; rows in `media_references_table`
-  - [ ] "All tasks" view across lists; last-viewed list restored on relaunch
-- **Failure cases:** 500-char task title, emoji titles, 200 tasks in one list (perf), rapid check/uncheck ×20, delete while the edit panel is open.
-- **Skipped/blocked:** —
+  - [x] First list: "Create your first list" opens Manage lists (empty, no hint) → New list "Work" (focused, Enter creates). 32 tasks typed into the composer with Enter: focus stays, all saved in order, newest on top. The first task add also created the hidden built-in "To-do" (BUG-012, still).
+  - [x] Edit panel: title (autosave), Enter → Notes, `#tag` pill in notes, subtasks (newest first; row shows "0 | 3"), date & time picker (Today/Tomorrow, time field), repeat (Every day), bell (15 minutes before → `entity_reminders_table`), list flag (move), completion checkbox, Created footer, × (under the debug ribbon), Enter in Notes closes the panel. Selected row has the accent border. Panel date label truncates ("Thu, Oct 1 at 9:30 …") even maximized (noted). Moving a task leaves its subtasks in the old list (**BUG-066**). After a move + complete of a repeating task the panel shows a stale date (**BUG-065**). Width drag stores `edit_side_panel_width` (403.2, clamped). At min size and 2000×1100 the image strip/Add subtask are below a capped scroll area (**BUG-070**).
+  - [x] Complete/uncomplete: row checkbox (confetti, completed section with count, uncomplete snaps to top), repeating task rolls to the next occurrence and logs a `todo_task_completions_table` row; Completed section collapse persisted (`todo_completed_section_expanded`); Settings → Pages → Hide completed tasks removes the section and excludes completed tasks from search.
+  - [x] Order: drag reorder (persisted, survives restart), star sorts to the very top, dated tasks above undated, "Send to bottom". No list reorder control exists in Manage lists (list order = creation order).
+  - [x] Ctrl+F: bar overlays the list, live filter, "13 matches" (AND tokens), first match opens in the panel, Enter/Shift+Enter navigate, no-match "No tasks match" + "0 matches", empty query shows all (P3 lead not reproduced), one Esc clears+closes (Vim ON too). Composer `/search sub B` hands off; subtask match shows the parent with the list badge in All tasks.
+  - [x] Delete task (menu → confirm, Enter confirms) → toast with Undo (8 s); Undo restores. Delete with the panel open closes the panel. Delete list "Yes (delete all tasks)" → Recently deleted → Restore brings tasks back; the "Restored …" toast sticks (BUG-051); the default-view setting isn't restored (**BUG-072**).
+  - [x] (from P4) Gallery: paste onto the strip, drag-and-drop of two PNGs, file picker (typed path), reorder by drag, remove (confirm → reference soft-deleted, asset `unreferenced_at`). Image paste with Notes focused still attaches, and a second paste duplicates (**BUG-067**).
+  - [x] All tasks view (231 | 2 counts, list badges); last-viewed list restored on relaunch (Work). Switching from a deep-scrolled list opened Work scrolled to its end (lead).
+- **Failure cases:** 500-char title (truncates with …), CJK/Arabic/emoji ZWJ title (renders), pasted CRLF keeps `
+` (BUG-017 note). 200 tasks: scroll/search smooth (debug; stalls >300 ms only at startup). Rapid ×20 panel toggles: consistent; rapid row clicks at ≤150 ms make the list jump with a RenderViewport layout-cycle FlutterError and hit unrelated tasks (**BUG-068**). Delete while panel open: fine. Ctrl+/ then typing wipes the composer draft (**BUG-069**). Interrupts: notes typed then hide to tray → saved; typed then `stop.ps1` after 1.5 s → saved.
+- **Five-dimension sweep:**
+  - D1 functional: flows above.
+  - D2 data: every change checked in SQLite; outbox 0 throughout. Two restarts kept order, notes, completions. Cold re-login: 4 lists, 239 tasks (2 deleted, 19 done, 22 with notes), 26 completions, 4 media refs, 2 bells, identical; task notes not touched by BUG-061; the page showed the data without a restart. Default view lost (BUG-072). Subtasks still carry Work's list id after the pull (BUG-066).
+  - D3 visual: maximized, 2000×1100, 1440×1040 in Dark + Scatter (panel overlays the list when narrow, by design). BUG-070. FlutterErrors only from BUG-068 (3×); BUG-032's upload thread errors as known. Light spot-check: page/panel fine, header list name 1.4:1 (**BUG-071**). Back to Dark.
+  - D4 keyboard: Tab composer → Add → task rows (focus invisible, BUG-009); Space opens the focused row's panel. Ctrl+F from fields, Enter in Title → Notes, Enter in Notes closes the panel. Vim ON: composer NORMAL badge, Ctrl+F from Normal, Esc in the search bar; turned back off.
+  - D5 failures: see Failure cases. Offline not exercised (Dev page hidden; P26).
+- **Test data:** qa-013, see PROGRESS.md §2.
+- **Skipped/blocked:** offline (P26); statistics tiles (none on the page; P12 covers analytics); subtask reorder by drag and subtask delete/undo not driven; list rename/colour (same shared dialog as journals, BUG-050).
+- **Follow-up (2026-09-30, account qa-014): list delete → "Yes" (move tasks to the default list).** Setup: Alpha (A1 daily + 2 subtasks + 1 image, A2 completed, A3 in the trash, A5, A6 starred), A4 + subtask s3 moved to Beta (BUG-066 setup), built-in list renamed "Inbox" with T1, Alpha = default view. Delete Alpha → "Yes":
+  - [x] Live tasks moved to Inbox with state intact: A1 kept repeat, due date, subtasks and image (reference unchanged); A2 still completed; A6 still starred and on top; moved tasks placed above the existing T1. No FlutterError.
+  - [x] A3 (already in the trash) stayed with Alpha's id, by design (`_moveTasksToDefaultList`); restoring it alone afterwards rehomed it to Inbox ("Restored … to To-do").
+  - [x] A4's stray subtask s3 was dragged into Inbox while A4 stays in Beta; still shown under A4 (BUG-066 note).
+  - [x] Dialog says "7 tasks" (counts subtasks, incl. s3) vs "3 open · 1 done", and names "To-do" after the rename (**BUG-073**). Default view cleared and not restored (BUG-072 note). Restoring Alpha brings it back empty (tasks stay in Inbox; consistent with "move").
+  - [x] Outbox 0; cold re-login restored the identical state (10 tasks, lists, 1 image reference).
+- **Leads:**
+  - Switching lists keeps the previous list's scroll offset (Work opened at its end after the deep-scrolled Perf 200).
+  - Panel date label truncated at maximized ("Thu, Oct 1 at 9:30 …") where there's room for it.
+  - Manage lists dialog on a fresh account shows only buttons, no empty-state hint.
+  - `todo_task_completions_table` gets rows for non-repeating completions too (26 rows), not just repeats; per the model comment only repeating ticks are "completion rows". Check in P12 whether statistics double-count.
 
 ## Phase 10 — Calendar
-- **Status:** Not Started
+- **Status:** Done (2026-09-30, build `7119be7`, account qa-015). Bugs: BUG-074, BUG-078 (Major); BUG-079, BUG-080, BUG-081, BUG-082, BUG-083 (Minor); BUG-075, BUG-076, BUG-077 (Cosmetic). Notes added to BUG-045, BUG-049, BUG-051.
 - **Scope:** week/month/year views and morph transitions, navigation (←/→, configured prev/next keys, today), calendars (create/colour/hide, manage sheet, show all), events (create/edit/delete, all-day vs timed, multi-day, recurring + delete occurrence vs series), overlap layout, event panel, todo markers + todo panel, calendar overlay dialog, import dialog (paste text / copy prompt), workouts on calendar, last-viewed calendar/page. **Deferred:** reminders firing → P6.
 - **HLD docs:** WEEKLY_CALENDAR.md, CALENDAR_OVERLAY_HLD.md, TIME_SELECTOR.md
+- **Method:** UI via `voy.ps1`; most test events created through the page's own Import dialog (`qa/steps/p10-import*.json` pasted from the clipboard), the rest typed in the event panel. DB checks read-only (scratch `q.py`); focus via `vm.exe eval`.
 - **Flows:**
-  - [ ] Each view; switch views; navigate periods by mouse and keys; Vim off/on (keys must not fire while typing)
-  - [ ] Event CRUD in each view; drag/resize if supported; time selector spinner
-  - [ ] Overlapping events (3–6 at the same time) layout; all-day + timed on the same day; multi-day across a week/month boundary
-  - [ ] Recurring events: create, edit one vs all, delete occurrence
-  - [ ] Calendars: hide/show changes the grid; colour change; delete a calendar with events
-  - [ ] Todo markers from dated tasks; the todo popover live-updates when the task changes
-  - [ ] Import dialog: valid paste, malformed paste, undo import
-  - [ ] Week starts on Monday setting; year view density
-- **Failure cases:** event ending before it starts, zero-length event, event spanning DST, 50 events in one day, very long titles.
-- **Skipped/blocked:** —
+  - [x] Views: Month, Week, Year; Year → click a month zooms into Month; the today/clock button; ‹ › arrows; `←`/`→` and the letter keys `h`/`l` (default) move the period; last view mode and month kept across restart. Vim ON: `h` on the page navigates; inside the event Title (Insert and Normal) `h`/`l` move the caret and never change the period.
+  - [x] Event create: Add event (Title autofocused, Enter saves), click an empty day cell (popover for that day), clock toggle for a timed event, date/repeat/bell/notes/colour. Edit (title, colour; version bumps), Cancel discards, Esc/click-outside saves valid edits (by design, `_handleDismissPop`). Time selector: start field focused with text selected, "2p" parsed live, Enter flows to End. **Typing an end time moves the start back a day (BUG-074, Major).** After closing the picker with Esc nothing has focus and Ctrl+Enter is dead (**BUG-082**). Drag-to-move/resize: **n/a**, not implemented (no draggable code).
+  - [x] Overlap: 6 events 10:00–13:00 on Oct 6 split the Week column side by side; Month shows 3 + "+3" overflow popover in time order. All-day + timed on one day fine. Multi-day all-day and overnight timed events span correctly in Week; in Month the continuation row's bar has no title (**BUG-075**). Month cell order isn't by time for recurring events (**BUG-076**). Week: events hide the hour label they start on (**BUG-077**). DST (Nov 1, 00:30 EDT → 03:30 EST) draws at wall-clock times; the daily 7 AM event stays at 7 AM after the change.
+  - [x] Recurring: daily/weekly/monthly (imported). Save on an occurrence asks Cancel / This event only / This and all future events / All events. "This event only" → exception date + detached override row; "This and all future" → old series ends the day before, new series from that day. Right-click → Delete → "This event only" adds the right exception date. **Week view: left-click opens the wrong occurrence (the week's anchor day), so "This event only" edits a different day (BUG-078, Major).** Month view picks the clicked day.
+  - [x] Calendars: New calendar (name + colour; the page switches scope to it), switcher (All calendars / each calendar), Also show (overlay) per CALENDAR_OVERLAY_HLD.md: dialog `Show on "Calendar"`, Manage subtitle "Also shows Holidays", host shows overlay events in their own colour, overlay calendar's own view excludes the host. Default calendar has no Delete. Change colour: **events keep the old colour (BUG-079)**. Delete with "Yes (delete all events)": events soft-deleted with the calendar's stamp, overlay link stripped from the host (HLD §4.4); Trash → Restore brings the calendar + its 3 events back, the link stays removed (as the HLD says). Delete dialog's "Yes" wording = BUG-049; restore toast sticks = BUG-051. "Hide calendar" doesn't exist as a separate control (scope switcher + overlay cover it).
+  - [x] To-do markers: a dated task shows as a bar at its due time in Week; click → popover (title, date, list, notes, completion circle); title edit updates the marker live. **Completing it from the popover removes the marker; the HLD's completed styling never shows (BUG-080).**
+  - [x] Import: Copy AI prompt button; paste → per-event preview with dates/times; invalid rows block the whole batch with clear messages (zero-length "Ends before it starts, or at the same time.", backwards, unknown colour lists the valid ones); "Into" calendar picker; toast "Imported N events" + Undo soft-deletes all N. Undone imports stay in the Trash as individual events (lead).
+  - [x] Settings → Pages → Week starts on Monday off: Month and Week start on Sunday; persisted and restored after cold re-login. Year view: dot density per day readable.
+- **Failure cases:** end before start / zero length (import rejects; the panel's time selector pushes the start instead, BUG-074); DST span (fine); 50 events on one day (Month "+47"; Week's all-day shelf grows to 25 rows and squeezes the timeline, **BUG-081**; ties have no stable order); 300-char title (truncates with … in Month/Week). Interrupts: popover open + close to tray → text and caret kept on return. Rapid double-clicks on Save not tried.
+- **Five-dimension sweep:**
+  - D1 functional: flows above.
+  - D2 data: every create/edit/delete checked in SQLite; outbox 0 throughout. Restart kept 79 events, both calendars, last view (Month, September). Cold re-login (`reset.ps1 -Force` → `login.ps1`): `pullAll` 1.4 s; 83 events (80 live), exceptions, overrides, split series, `week_starts_on_monday` 0, theme dark, all identical; the page showed them without a restart. The default calendar came back at version 0 instead of 2 (BUG-045 note).
+  - D3 visual: maximized fine. At 1440×1040 and 2000×1100 Month events are unreadable slivers and "+N" undercounts (**BUG-083**); at min the Week all-day shelf eats the timeline. Light spot-check (Month, Week, event panel): bars and text legible; today's cell mutes all its events in both themes (lead). Back to Dark. No FlutterError / overflow in `run-20260930-205316`, `-213513`, `-215332`; `voyager_errors.log` got nothing.
+  - D4 keyboard: Title autofocus; Enter/Ctrl+Enter save; Esc saves+closes; arrow and `h`/`l` navigation, blocked while typing (Vim on and off). BUG-082 (focus lost after the time picker). Calendar grid/rail not reachable by Tab (BUG-009).
+  - D5 failures: see Failure cases. Offline not exercised (P26).
+- **Test data:** qa-015, see PROGRESS.md §2.
+- **Skipped/blocked:** workouts on the calendar (needs workout data; P23); "All events" scope on a recurring edit; recurring event with a reminder firing (P6); offline (P26); rapid double Save; Week view at 1440×1040 beyond one look.
+- **Harness artifacts / my mistakes:** the "abc" all-day event on Aug 1 is mine: a mis-measured "Cancel" click landed outside the popover, which saves by design. Several coordinates were read off 1440-wide downscales (factor 2, not 1.44); the guard caught one.
+- **Leads:**
+  - Undoing an import soft-deletes the events, which then sit in Trash as separate restorable items (3 "HOL …" rows); maybe expected, but the toast says "Undo".
+  - Today's month cell draws all its events with greyed text (dark and light), the same as past days; lowest contrast on the day that matters most.
+  - All-day events made in the panel are stored ending 01:00 the same day; imported ones end 23:59. No visible effect found (fading is per-day), but reminders/search may read `end` (P6/P11).
+  - Week view: right-click on an event offers Change colour / Default colour / Delete, but no Edit.
+  - Manage "23 events" counts raw rows (override rows and the series each count once), not occurrences.
 
 ## Phase 11 — Search
 - **Status:** Not Started
@@ -443,9 +507,9 @@ Keep this table and each phase's **Status** line in sync.
 - **Failure cases:** 2,000-line scratch code, tab characters, session with 0 due cards, 100 due cards.
 - **Skipped/blocked:** —
 
-## Phase 19 — Rankings
+## Phase 19A — Rankings core
 - **Status:** Not Started
-- **Scope:** categories (category dialog, manage sheet tabs: settings/parent template/child template), parents & children (rows, child list, edit panel, field editor per template, score input + stars, tags field, parent tags), gallery and media grid (images), sorting. **Deferred:** image mechanics → P4.
+- **Scope:** categories (category dialog, manage sheet tabs: settings/parent template/child template), parents & children (rows, child list, edit panel, field editor per template, score input + stars, tags field, parent tags), gallery and media grid (images), sorting. **Deferred:** image mechanics → P4; the category dialog's location toggle, the List / Map toggle, the switcher's **All categories** row and the panel's Locations section → P19B. Test everything else in Rankings here with every category's location toggle **off**: that's the default, and the screens must look and behave as they did before the map feature.
 - **HLD docs:** RANKINGS.md, RANKINGS_UI.md, RANKINGS_PARENT_TAGS_HLD.md, RANKINGS_SCORE_INPUT_HLD.md
 - **Flows:**
   - [ ] Category CRUD; template fields of each type; template change on existing items
@@ -455,6 +519,45 @@ Keep this table and each phase's **Status** line in sync.
   - [ ] (from P4) Gallery attach by paste and by the file picker (type a full path from `qa/data/` + Enter); reorder and remove
 - **Failure cases:** score out of range / non-numeric, 200 items, very long names, delete a category with items → undo.
 - **Skipped/blocked:** —
+
+## Phase 19B — Rankings: locations & map
+- **Status:** Not Started. **Gate:** needs the map feature (`RANKINGS_MAP_HLD.md`) merged into `main`. If it isn't merged when you reach this phase, mark it Blocked, go on to Phase 20, and come back to it once it is merged. Note `git log -1 --oneline` in the session log.
+- **Scope:** the per-category location toggle; the panel's Locations section; the Add location dialog (search, pasted Google Maps link, dropped pin, duplicate check); the List / Map toggle; pins, clusters and pin menus; the empty-map context menu; quick-rate from a pin; filters on the map; the **All categories** map; the tile cache; the no-key and offline states; attribution. **Deferred:** trash/restore of pins → P24; import/export → P25; branch merge across devices and real offline → P26.
+- **HLD docs:** RANKINGS_MAP_HLD.md (the acceptance criteria in §11 are this phase's pass/fail list), plus RANKINGS.md §4 and §7.1, RANKINGS_SCORE_INPUT_HLD.md §7
+- **Setup:**
+  - **API key:** the app reads `GEOAPIFY_API_KEY` from `--dart-define`. Before the first session, `launch.ps1` must pass it from an environment variable or a file outside the repo (a harness change, so allowed). The key must never be written to `qa/` files, step files, screenshots or the run log. Add a `-NoMapKey` switch for the no-key checks.
+  - **Places:** use Waterloo, ON. The provider check in HLD §12 Step 0 found 13 of 14 local restaurants, and Lazeez and Tim Hortons both have several branches, which is useful for chains. "Nick and Nat's Uptown 21" is the known miss, which makes it the paste-a-link / drop-a-pin case.
+  - **Google Maps links:** keep one fixture per link shape in HLD §6.2 (`/place/…!3d!4d`, `@lat,lng,zoomz`, `?q=lat,lng`, `ll=`, a `maps.app.goo.gl` short link) in `qa/steps/p19b-links.txt`. Put them on the clipboard with `Set-Clipboard`. Opening the links in a browser is MANUAL-ONLY; the app only parses them.
+  - **Bulk data:** seed 200 entries spread over about 40 locations with `evalc.ps1` for the cluster and performance checks, and 1 chain with 10 branches.
+  - **Legacy data:** reuse an account with rankings made before the feature: qa-006 ("Books") or qa-009 ("FV Movies"), after a fresh-account pass.
+- **Flows:**
+  - [ ] Category toggle (AC 1): off by default on new and existing categories. Turning it on shows the List / Map toggle and the Locations section; turning it off hides both and keeps the stored locations (SQL). Turn it back on: the locations come back unchanged.
+  - [ ] Add location by **search** (AC 2): results appear after 3 characters, 300 ms after typing stops (count requests in the log, or watch for one request per pause rather than one per key). Each suggestion shows a name and an address. Choosing one moves the preview pin; the pin can be nudged before Add. The 30 km filter keeps far-away places with the same name out; **Search everywhere** appears when nothing is found nearby. "No places found" shows the hint to paste a link or drop a pin.
+  - [ ] Add location by **pasted link** (AC 2), one row per link shape in the fixtures: the right coordinates (compare with the link), one reverse-geocode fills the address, the place name is offered as the title when creating an entry, and the link itself is not stored anywhere (grep the parent's `locations_json` and its outbox row). An unparseable link shows "Couldn't find a location in that link" and adds nothing.
+  - [ ] Add location by **dropped pin** (AC 2): click the dialog's map, drag the pin; the address fills in after the pin settles.
+  - [ ] Duplicates: adding a point within ~25 m of an existing branch shows "This entry already has a location here" and adds nothing; ~50 m away is accepted.
+  - [ ] Locations section: rows show the display name (label, else address, else coordinates) and the address; Rename, Edit location…, Remove; drag-reorder persists (`sortOrder`); clicking a row pans the open map to it; empty state is only the Add location button.
+  - [ ] Multiple locations (AC 3): a chain with 10 branches shows 10 pins, all with the entry's score.
+  - [ ] Pins (AC 4): ranked pins show only the score number (`formatRankingScore`; check a decimal such as 7.5 and both 5- and 10-point scales); queued and in-progress entries are hollow with no number. The open entry's pins are raised with a ring; hover shows "title · location name".
+  - [ ] Pin interactions (AC 5): click opens the panel; right-click → Open / Rate… / Edit location… / Remove this location. Rate… opens the score popover at the pin; rating an unranked entry turns all its pins solid. Clearing the score turns every branch hollow and the entry goes back to in progress. Remove this location removes that branch only, and its snackbar's Undo brings it back.
+  - [ ] Empty-map context menu (AC 6): **New entry here** opens the dialog at the clicked point, needs a title, and creates a **queued** entry with that location (SQL). **Add this location to an existing entry…** lists the current scope's entries, is searchable, and appends the point. Both are hidden in an archived category.
+  - [ ] Lifecycle carve-out (AC 9): on a queued entry, add, rename, reorder and remove locations; it stays queued (SQL `status`). Edit a location and the notes together: it moves to in progress.
+  - [ ] Filters (AC 7): search, status chips, score range, has-images and the tag filter narrow the pins exactly as they narrow the list (compare pin count with list count for 3 filter combinations). Sort controls are disabled in Map view. Changing filters doesn't move the camera; **Fit** does. Filters that hide every pin leave an empty map with the filters still showing. Header stats follow the filters, not the viewport (pan away; the stats don't change).
+  - [ ] View state: the List / Map choice persists per category across restart; the last viewport persists per device and is **not** in `settingsSyncPayload` or any synced table (SQL, outbox). The first open fits the visible pins; with no pins, it opens on the last viewport. The "N without a location" chip has the right count and switches to List.
+  - [ ] Clusters: with the 200-entry seed, zoomed out, overlapping pins form a bubble with a count; clicking it zooms to fit its members; the counts add up to the visible entries.
+  - [ ] **All categories** map (AC 8): the switcher row shows only when at least one active category has locations on; it's map-only (no List toggle). Category chips toggle each category and persist per device. Pins use their own category's accent and scale. The score range filter is hidden; the hero shows a count only; tag vocabulary is the union of the visible categories (a tag name in two categories matches both). The panel opens with the entry's own template. New entry here asks for the category first, offering only active categories with locations on. The Add-to-existing picker is grouped by category. Archived categories and categories with locations off never appear.
+  - [ ] Attribution (AC 12): "Powered by Geoapify", "© OpenStreetMap contributors", "© OpenMapTiles" are visible on every map (page map, All categories, the dialog's map), at every window size, and aren't covered by the panel or the map controls.
+  - [ ] Theme: Light uses the `positron` tiles, Dark uses `dark-matter`; switching theme with the map open swaps them. Pins, clusters, popovers and controls are legible on both.
+  - [ ] No key (launch with `-NoMapKey`): the map area shows "Map unavailable — no Geoapify key"; the Locations section still lists the stored locations and accepts a full pasted link; nothing throws.
+  - [ ] Tile cache: pan an area, restart, then Dev → Force offline. The area that was viewed draws; areas never viewed are blank; pins still draw. Search shows "Search needs a connection", a full link still parses, a short link fails cleanly. (Force offline may not stop real HTTP requests, see the P6 lead; record whether tiles and search really stopped. True offline is P26.)
+- **Failure cases:** a 300-char label; a location at lat/lng extremes (±85°, ±180°, the antimeridian); a pasted link with no coordinates, a non-Google URL, a 5,000-char paste; typing fast in search (the debounce holds); 20 fast toggles of List / Map; closing to the tray with the Add location dialog open; `stop.ps1` with the dialog open; deleting an entry while its pin menu is open; 200 entries and 1 chain with 10 branches (pan/zoom frame time, see the profile-mode memory note if it feels slow).
+- **Five-dimension sweep:**
+  - D1: the flows above.
+  - D2: `locations_json` and `location_enabled` in SQLite after each change; each location's `loc:<id>` stamp; the outbox drains. Restart keeps everything. A cold re-login restores the locations, the toggle and the view choice (the viewport and chip visibility stay per device). The legacy account loads as `[]` / `false` (AC 11) and gets no new outbox rows just from opening Rankings.
+  - D3: the map, the panel over the map (420 px), the dialog and the All categories chips, at maximized, 1440×1040 and 2000×1100, in Dark + Scatter and a Light spot-check. Watch the run log for overflows.
+  - D4: the dialog by keyboard (input autofocused, arrows through suggestions, Enter chooses, Esc closes); the List / Map toggle; Vim ON: typing `h`/`j`/`k`/`l` in the search box doesn't pan the map or trigger page shortcuts. Map panning and pin choosing by keyboard: record what exists.
+  - D5: the failure cases above.
+- **Skipped/blocked:** Android (AC 13): no Android SDK on this PC, so MANUAL-ONLY. Opening a Google Maps link in a browser: MANUAL-ONLY. Real offline (no admin rights for a firewall rule): P26 decides. Two devices editing branches at once: P26.
 
 ## Phase 20 — Jobs
 - **Status:** Not Started
@@ -515,6 +618,7 @@ Keep this table and each phase's **Status** line in sync.
   - [ ] For each kind in `trash_kinds.dart`: delete → toast → undo; delete → Trash shows it → restore → back exactly (verify fields in SQL); permanent delete → gone locally and remotely (after the outbox drains)
   - [ ] Restore a child whose parent is also in the trash
   - [ ] Two deletes in quick succession: which toast/undo wins
+  - [ ] (from P19B) Ranking entries with locations: soft-delete one, and its pins leave the page map and the All categories map; restore it, and every branch comes back with the same coordinates and labels (SQL). Soft-delete a category with locations on: it leaves All categories (and the switcher row disappears if it was the last one); restore brings it back. A branch removed from a pin menu is undone from its snackbar, not the Trash.
   - [ ] Purge of items older than 30 days: backdate `deleted_at` in SQLite. Editing local data is allowed; only app *code* is off-limits. Run `stop.ps1` first, and remember the startup pull may bring the cloud value back. Note which value won.
 - **Failure cases:** restore after a cold re-login, trash with 500 items, undo after navigating away.
 - **Skipped/blocked:** —
@@ -529,6 +633,8 @@ Keep this table and each phase's **Status** line in sync.
   - [ ] Dark background controls: Grid intensity, Glow spread, and the **Wave** / **Scatter** switches (mutually exclusive: turning one on turns the other off; both can be off for a static grid). Each keeps animating across page switches, dialogs and restore-from-tray, and the choice survives a restart. Leave it on Dark + Scatter (Wave off) at the end
   - [ ] Accent colour and palette changes propagate everywhere, including tags
   - [ ] Export → file written; wipe (new account) → Import → data identical (count rows per table with SQL); import a corrupt/foreign zip
+  - [ ] (from P19B) The export carries `locations` and `locationEnabled`: import it onto a fresh account and compare `locations_json` and `location_enabled` with SQL. Importing an export made before the map feature (keep one from an earlier phase) loads as `[]` / `false`.
+  - [ ] (from P19B) The theme switch also swaps the map tiles (`positron` / `dark-matter`); check the map in the full light-theme pass.
   - [ ] Auto-backup runs/rotates per retention; backup list dialog actions
   - [ ] Media storage dialog: list, delete one, delete all
   - [ ] Nav pages dialog: hide all but one, reorder, cancel vs save
@@ -545,6 +651,12 @@ Keep this table and each phase's **Status** line in sync.
   - [ ] Dev → Disable cache on/off semantics (no startup pull while on); restore it to off
   - [ ] Sync compare / backlog tiles on a clean account show consistency
   - [ ] Conflict banner (Dev "force conflict UI" if present) renders and dismisses
+  - [ ] (from P19B) Branch merge (RANKINGS_MAP_HLD.md §5.4, AC 10, §10 rows). With one PC, simulate the "other device" by writing the cloud copy through the app's `syncRepositoryProvider` with `evalc.ps1`, then let the startup pull merge it:
+    - this device adds branch X while the "other device" removes branch Y: both survive (X present, Y gone);
+    - this device renames X's label, then the "other device" removes X with a later stamp: X is gone;
+    - the reverse order (remove first, rename later): record which wins and compare with the HLD;
+    - check the `loc:<id>` stamps in SQLite and Firestore (`fs_snapshot.sh`) after each case.
+  - [ ] (from P19B) Offline map: with Force offline (and real offline if one is found), pins still draw, cached tiles draw, search shows "Search needs a connection", a branch added offline queues in the outbox and uploads on reconnect.
 - **Edits during a long startup download** (added 2026-09-30). Nothing blocks editing while the startup pull runs: only a progress toast shows, and the pull merges into documents open in an editor rather than blocking them. No phase has edited during a pull yet (FV-2 couldn't: its pull took 1.2 s). BUG-045 is this class: the default calendar was written during sign-in, before the pull, and overwrote the cloud copy.
   - **Setup:** a QA account big enough that a cold re-login's pull runs 20–30 s. Seed a few hundred journal entries and to-do tasks with `qa/harness/evalc.ps1` (pattern: `qa/steps/fv-seed1.dart.txt` in a loop), plus a renamed default calendar and non-default synced settings (accent colour, theme). Confirm it all in Firestore with `qa/harness/fs_snapshot.sh`. Measure one cold re-login first to know the pull's length.
   - [ ] During the pull, create a journal entry, a to-do task and a transaction. They survive the page refresh when the pull ends, are still there after a restart, and are in Firestore. The pulled rows are all present too.

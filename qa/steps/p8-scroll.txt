@@ -1,0 +1,17 @@
+activate
+shot p8-27-after-seed
+click 88 298
+wait 1000
+click 88 418
+wait 2000
+shot p8-28-list-seeded
+wheel 580 900 -15
+wait 400
+wheel 580 900 -15
+wait 400
+wheel 580 900 -15
+wait 400
+shot p8-29-scrolled
+wheel 580 900 -200
+wait 1500
+shot p8-30-bottom

@@ -782,6 +782,10 @@ abstract class SettingsRepository {
   /// roll it back.
   Future<void> saveLastSeenNavPage(String path);
 
+  /// Records [AppSettings.rankingsDeviceLocation] on its own, for the same
+  /// reason: [saveSettings] leaves it alone.
+  Future<void> saveRankingsDeviceLocation(RankingsDeviceLocation location);
+
   Future<Map<String, int>> getTagColors();
 
   /// Tag colors with their sync metadata, as distinct from [getTagColors]'

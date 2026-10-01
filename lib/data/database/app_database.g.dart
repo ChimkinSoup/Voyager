@@ -9051,6 +9051,50 @@ class $SettingsTableTable extends SettingsTable
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _rankingsMapViewCategoriesJsonMeta =
+      const VerificationMeta('rankingsMapViewCategoriesJson');
+  @override
+  late final GeneratedColumn<String> rankingsMapViewCategoriesJson =
+      GeneratedColumn<String>(
+        'rankings_map_view_categories_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _rankingsMapHiddenCategoriesJsonMeta =
+      const VerificationMeta('rankingsMapHiddenCategoriesJson');
+  @override
+  late final GeneratedColumn<String> rankingsMapHiddenCategoriesJson =
+      GeneratedColumn<String>(
+        'rankings_map_hidden_categories_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _rankingsDeviceLatitudeMeta =
+      const VerificationMeta('rankingsDeviceLatitude');
+  @override
+  late final GeneratedColumn<double> rankingsDeviceLatitude =
+      GeneratedColumn<double>(
+        'rankings_device_latitude',
+        aliasedName,
+        true,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _rankingsDeviceLongitudeMeta =
+      const VerificationMeta('rankingsDeviceLongitude');
+  @override
+  late final GeneratedColumn<double> rankingsDeviceLongitude =
+      GeneratedColumn<double>(
+        'rankings_device_longitude',
+        aliasedName,
+        true,
+        type: DriftSqlType.double,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _jobProfileLinkedInUrlMeta =
       const VerificationMeta('jobProfileLinkedInUrl');
   @override
@@ -9548,6 +9592,10 @@ class $SettingsTableTable extends SettingsTable
     jobsHiddenColumnsJson,
     jobsIncludeArchived,
     rankingsCollapsedQueueCategoriesJson,
+    rankingsMapViewCategoriesJson,
+    rankingsMapHiddenCategoriesJson,
+    rankingsDeviceLatitude,
+    rankingsDeviceLongitude,
     jobProfileLinkedInUrl,
     jobProfileGitHubUrl,
     jobProfilePortfolioUrl,
@@ -10610,6 +10658,42 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('rankings_map_view_categories_json')) {
+      context.handle(
+        _rankingsMapViewCategoriesJsonMeta,
+        rankingsMapViewCategoriesJson.isAcceptableOrUnknown(
+          data['rankings_map_view_categories_json']!,
+          _rankingsMapViewCategoriesJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('rankings_map_hidden_categories_json')) {
+      context.handle(
+        _rankingsMapHiddenCategoriesJsonMeta,
+        rankingsMapHiddenCategoriesJson.isAcceptableOrUnknown(
+          data['rankings_map_hidden_categories_json']!,
+          _rankingsMapHiddenCategoriesJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('rankings_device_latitude')) {
+      context.handle(
+        _rankingsDeviceLatitudeMeta,
+        rankingsDeviceLatitude.isAcceptableOrUnknown(
+          data['rankings_device_latitude']!,
+          _rankingsDeviceLatitudeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('rankings_device_longitude')) {
+      context.handle(
+        _rankingsDeviceLongitudeMeta,
+        rankingsDeviceLongitude.isAcceptableOrUnknown(
+          data['rankings_device_longitude']!,
+          _rankingsDeviceLongitudeMeta,
+        ),
+      );
+    }
     if (data.containsKey('job_profile_linked_in_url')) {
       context.handle(
         _jobProfileLinkedInUrlMeta,
@@ -11342,6 +11426,22 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.string,
         data['${effectivePrefix}rankings_collapsed_queue_categories_json'],
       ),
+      rankingsMapViewCategoriesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}rankings_map_view_categories_json'],
+      ),
+      rankingsMapHiddenCategoriesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}rankings_map_hidden_categories_json'],
+      ),
+      rankingsDeviceLatitude: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}rankings_device_latitude'],
+      ),
+      rankingsDeviceLongitude: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}rankings_device_longitude'],
+      ),
       jobProfileLinkedInUrl: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}job_profile_linked_in_url'],
@@ -11654,6 +11754,15 @@ class SettingsTableData extends DataClass
   /// a category that appears from another device opens expanded.
   final String? rankingsCollapsedQueueCategoriesJson;
 
+  /// Rankings categories showing their map instead of their list, and the
+  /// ones switched off on the All categories map, as JSON lists of ids.
+  final String? rankingsMapViewCategoriesJson;
+  final String? rankingsMapHiddenCategoriesJson;
+
+  /// Where this device was last found, for the rankings map to open on.
+  final double? rankingsDeviceLatitude;
+  final double? rankingsDeviceLongitude;
+
   /// Profile links the Jobs header copies to the clipboard (§3.4). Null means
   /// the slot is unset and its button is not rendered.
   final String? jobProfileLinkedInUrl;
@@ -11831,6 +11940,10 @@ class SettingsTableData extends DataClass
     this.jobsHiddenColumnsJson,
     required this.jobsIncludeArchived,
     this.rankingsCollapsedQueueCategoriesJson,
+    this.rankingsMapViewCategoriesJson,
+    this.rankingsMapHiddenCategoriesJson,
+    this.rankingsDeviceLatitude,
+    this.rankingsDeviceLongitude,
     this.jobProfileLinkedInUrl,
     this.jobProfileGitHubUrl,
     this.jobProfilePortfolioUrl,
@@ -12137,6 +12250,26 @@ class SettingsTableData extends DataClass
         rankingsCollapsedQueueCategoriesJson,
       );
     }
+    if (!nullToAbsent || rankingsMapViewCategoriesJson != null) {
+      map['rankings_map_view_categories_json'] = Variable<String>(
+        rankingsMapViewCategoriesJson,
+      );
+    }
+    if (!nullToAbsent || rankingsMapHiddenCategoriesJson != null) {
+      map['rankings_map_hidden_categories_json'] = Variable<String>(
+        rankingsMapHiddenCategoriesJson,
+      );
+    }
+    if (!nullToAbsent || rankingsDeviceLatitude != null) {
+      map['rankings_device_latitude'] = Variable<double>(
+        rankingsDeviceLatitude,
+      );
+    }
+    if (!nullToAbsent || rankingsDeviceLongitude != null) {
+      map['rankings_device_longitude'] = Variable<double>(
+        rankingsDeviceLongitude,
+      );
+    }
     if (!nullToAbsent || jobProfileLinkedInUrl != null) {
       map['job_profile_linked_in_url'] = Variable<String>(
         jobProfileLinkedInUrl,
@@ -12386,6 +12519,20 @@ class SettingsTableData extends DataClass
           rankingsCollapsedQueueCategoriesJson == null && nullToAbsent
           ? const Value.absent()
           : Value(rankingsCollapsedQueueCategoriesJson),
+      rankingsMapViewCategoriesJson:
+          rankingsMapViewCategoriesJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rankingsMapViewCategoriesJson),
+      rankingsMapHiddenCategoriesJson:
+          rankingsMapHiddenCategoriesJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rankingsMapHiddenCategoriesJson),
+      rankingsDeviceLatitude: rankingsDeviceLatitude == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rankingsDeviceLatitude),
+      rankingsDeviceLongitude: rankingsDeviceLongitude == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rankingsDeviceLongitude),
       jobProfileLinkedInUrl: jobProfileLinkedInUrl == null && nullToAbsent
           ? const Value.absent()
           : Value(jobProfileLinkedInUrl),
@@ -12712,6 +12859,18 @@ class SettingsTableData extends DataClass
       rankingsCollapsedQueueCategoriesJson: serializer.fromJson<String?>(
         json['rankingsCollapsedQueueCategoriesJson'],
       ),
+      rankingsMapViewCategoriesJson: serializer.fromJson<String?>(
+        json['rankingsMapViewCategoriesJson'],
+      ),
+      rankingsMapHiddenCategoriesJson: serializer.fromJson<String?>(
+        json['rankingsMapHiddenCategoriesJson'],
+      ),
+      rankingsDeviceLatitude: serializer.fromJson<double?>(
+        json['rankingsDeviceLatitude'],
+      ),
+      rankingsDeviceLongitude: serializer.fromJson<double?>(
+        json['rankingsDeviceLongitude'],
+      ),
       jobProfileLinkedInUrl: serializer.fromJson<String?>(
         json['jobProfileLinkedInUrl'],
       ),
@@ -12990,6 +13149,18 @@ class SettingsTableData extends DataClass
       'rankingsCollapsedQueueCategoriesJson': serializer.toJson<String?>(
         rankingsCollapsedQueueCategoriesJson,
       ),
+      'rankingsMapViewCategoriesJson': serializer.toJson<String?>(
+        rankingsMapViewCategoriesJson,
+      ),
+      'rankingsMapHiddenCategoriesJson': serializer.toJson<String?>(
+        rankingsMapHiddenCategoriesJson,
+      ),
+      'rankingsDeviceLatitude': serializer.toJson<double?>(
+        rankingsDeviceLatitude,
+      ),
+      'rankingsDeviceLongitude': serializer.toJson<double?>(
+        rankingsDeviceLongitude,
+      ),
       'jobProfileLinkedInUrl': serializer.toJson<String?>(
         jobProfileLinkedInUrl,
       ),
@@ -13154,6 +13325,10 @@ class SettingsTableData extends DataClass
     Value<String?> jobsHiddenColumnsJson = const Value.absent(),
     bool? jobsIncludeArchived,
     Value<String?> rankingsCollapsedQueueCategoriesJson = const Value.absent(),
+    Value<String?> rankingsMapViewCategoriesJson = const Value.absent(),
+    Value<String?> rankingsMapHiddenCategoriesJson = const Value.absent(),
+    Value<double?> rankingsDeviceLatitude = const Value.absent(),
+    Value<double?> rankingsDeviceLongitude = const Value.absent(),
     Value<String?> jobProfileLinkedInUrl = const Value.absent(),
     Value<String?> jobProfileGitHubUrl = const Value.absent(),
     Value<String?> jobProfilePortfolioUrl = const Value.absent(),
@@ -13397,6 +13572,18 @@ class SettingsTableData extends DataClass
         rankingsCollapsedQueueCategoriesJson.present
         ? rankingsCollapsedQueueCategoriesJson.value
         : this.rankingsCollapsedQueueCategoriesJson,
+    rankingsMapViewCategoriesJson: rankingsMapViewCategoriesJson.present
+        ? rankingsMapViewCategoriesJson.value
+        : this.rankingsMapViewCategoriesJson,
+    rankingsMapHiddenCategoriesJson: rankingsMapHiddenCategoriesJson.present
+        ? rankingsMapHiddenCategoriesJson.value
+        : this.rankingsMapHiddenCategoriesJson,
+    rankingsDeviceLatitude: rankingsDeviceLatitude.present
+        ? rankingsDeviceLatitude.value
+        : this.rankingsDeviceLatitude,
+    rankingsDeviceLongitude: rankingsDeviceLongitude.present
+        ? rankingsDeviceLongitude.value
+        : this.rankingsDeviceLongitude,
     jobProfileLinkedInUrl: jobProfileLinkedInUrl.present
         ? jobProfileLinkedInUrl.value
         : this.jobProfileLinkedInUrl,
@@ -13800,6 +13987,19 @@ class SettingsTableData extends DataClass
           data.rankingsCollapsedQueueCategoriesJson.present
           ? data.rankingsCollapsedQueueCategoriesJson.value
           : this.rankingsCollapsedQueueCategoriesJson,
+      rankingsMapViewCategoriesJson: data.rankingsMapViewCategoriesJson.present
+          ? data.rankingsMapViewCategoriesJson.value
+          : this.rankingsMapViewCategoriesJson,
+      rankingsMapHiddenCategoriesJson:
+          data.rankingsMapHiddenCategoriesJson.present
+          ? data.rankingsMapHiddenCategoriesJson.value
+          : this.rankingsMapHiddenCategoriesJson,
+      rankingsDeviceLatitude: data.rankingsDeviceLatitude.present
+          ? data.rankingsDeviceLatitude.value
+          : this.rankingsDeviceLatitude,
+      rankingsDeviceLongitude: data.rankingsDeviceLongitude.present
+          ? data.rankingsDeviceLongitude.value
+          : this.rankingsDeviceLongitude,
       jobProfileLinkedInUrl: data.jobProfileLinkedInUrl.present
           ? data.jobProfileLinkedInUrl.value
           : this.jobProfileLinkedInUrl,
@@ -14038,6 +14238,14 @@ class SettingsTableData extends DataClass
           ..write(
             'rankingsCollapsedQueueCategoriesJson: $rankingsCollapsedQueueCategoriesJson, ',
           )
+          ..write(
+            'rankingsMapViewCategoriesJson: $rankingsMapViewCategoriesJson, ',
+          )
+          ..write(
+            'rankingsMapHiddenCategoriesJson: $rankingsMapHiddenCategoriesJson, ',
+          )
+          ..write('rankingsDeviceLatitude: $rankingsDeviceLatitude, ')
+          ..write('rankingsDeviceLongitude: $rankingsDeviceLongitude, ')
           ..write('jobProfileLinkedInUrl: $jobProfileLinkedInUrl, ')
           ..write('jobProfileGitHubUrl: $jobProfileGitHubUrl, ')
           ..write('jobProfilePortfolioUrl: $jobProfilePortfolioUrl, ')
@@ -14190,6 +14398,10 @@ class SettingsTableData extends DataClass
     jobsHiddenColumnsJson,
     jobsIncludeArchived,
     rankingsCollapsedQueueCategoriesJson,
+    rankingsMapViewCategoriesJson,
+    rankingsMapHiddenCategoriesJson,
+    rankingsDeviceLatitude,
+    rankingsDeviceLongitude,
     jobProfileLinkedInUrl,
     jobProfileGitHubUrl,
     jobProfilePortfolioUrl,
@@ -14365,6 +14577,12 @@ class SettingsTableData extends DataClass
           other.jobsIncludeArchived == this.jobsIncludeArchived &&
           other.rankingsCollapsedQueueCategoriesJson ==
               this.rankingsCollapsedQueueCategoriesJson &&
+          other.rankingsMapViewCategoriesJson ==
+              this.rankingsMapViewCategoriesJson &&
+          other.rankingsMapHiddenCategoriesJson ==
+              this.rankingsMapHiddenCategoriesJson &&
+          other.rankingsDeviceLatitude == this.rankingsDeviceLatitude &&
+          other.rankingsDeviceLongitude == this.rankingsDeviceLongitude &&
           other.jobProfileLinkedInUrl == this.jobProfileLinkedInUrl &&
           other.jobProfileGitHubUrl == this.jobProfileGitHubUrl &&
           other.jobProfilePortfolioUrl == this.jobProfilePortfolioUrl &&
@@ -14514,6 +14732,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<String?> jobsHiddenColumnsJson;
   final Value<bool> jobsIncludeArchived;
   final Value<String?> rankingsCollapsedQueueCategoriesJson;
+  final Value<String?> rankingsMapViewCategoriesJson;
+  final Value<String?> rankingsMapHiddenCategoriesJson;
+  final Value<double?> rankingsDeviceLatitude;
+  final Value<double?> rankingsDeviceLongitude;
   final Value<String?> jobProfileLinkedInUrl;
   final Value<String?> jobProfileGitHubUrl;
   final Value<String?> jobProfilePortfolioUrl;
@@ -14661,6 +14883,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.jobsHiddenColumnsJson = const Value.absent(),
     this.jobsIncludeArchived = const Value.absent(),
     this.rankingsCollapsedQueueCategoriesJson = const Value.absent(),
+    this.rankingsMapViewCategoriesJson = const Value.absent(),
+    this.rankingsMapHiddenCategoriesJson = const Value.absent(),
+    this.rankingsDeviceLatitude = const Value.absent(),
+    this.rankingsDeviceLongitude = const Value.absent(),
     this.jobProfileLinkedInUrl = const Value.absent(),
     this.jobProfileGitHubUrl = const Value.absent(),
     this.jobProfilePortfolioUrl = const Value.absent(),
@@ -14809,6 +15035,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.jobsHiddenColumnsJson = const Value.absent(),
     this.jobsIncludeArchived = const Value.absent(),
     this.rankingsCollapsedQueueCategoriesJson = const Value.absent(),
+    this.rankingsMapViewCategoriesJson = const Value.absent(),
+    this.rankingsMapHiddenCategoriesJson = const Value.absent(),
+    this.rankingsDeviceLatitude = const Value.absent(),
+    this.rankingsDeviceLongitude = const Value.absent(),
     this.jobProfileLinkedInUrl = const Value.absent(),
     this.jobProfileGitHubUrl = const Value.absent(),
     this.jobProfilePortfolioUrl = const Value.absent(),
@@ -14957,6 +15187,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<String>? jobsHiddenColumnsJson,
     Expression<bool>? jobsIncludeArchived,
     Expression<String>? rankingsCollapsedQueueCategoriesJson,
+    Expression<String>? rankingsMapViewCategoriesJson,
+    Expression<String>? rankingsMapHiddenCategoriesJson,
+    Expression<double>? rankingsDeviceLatitude,
+    Expression<double>? rankingsDeviceLongitude,
     Expression<String>? jobProfileLinkedInUrl,
     Expression<String>? jobProfileGitHubUrl,
     Expression<String>? jobProfilePortfolioUrl,
@@ -15189,6 +15423,14 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (rankingsCollapsedQueueCategoriesJson != null)
         'rankings_collapsed_queue_categories_json':
             rankingsCollapsedQueueCategoriesJson,
+      if (rankingsMapViewCategoriesJson != null)
+        'rankings_map_view_categories_json': rankingsMapViewCategoriesJson,
+      if (rankingsMapHiddenCategoriesJson != null)
+        'rankings_map_hidden_categories_json': rankingsMapHiddenCategoriesJson,
+      if (rankingsDeviceLatitude != null)
+        'rankings_device_latitude': rankingsDeviceLatitude,
+      if (rankingsDeviceLongitude != null)
+        'rankings_device_longitude': rankingsDeviceLongitude,
       if (jobProfileLinkedInUrl != null)
         'job_profile_linked_in_url': jobProfileLinkedInUrl,
       if (jobProfileGitHubUrl != null)
@@ -15356,6 +15598,10 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<String?>? jobsHiddenColumnsJson,
     Value<bool>? jobsIncludeArchived,
     Value<String?>? rankingsCollapsedQueueCategoriesJson,
+    Value<String?>? rankingsMapViewCategoriesJson,
+    Value<String?>? rankingsMapHiddenCategoriesJson,
+    Value<double?>? rankingsDeviceLatitude,
+    Value<double?>? rankingsDeviceLongitude,
     Value<String?>? jobProfileLinkedInUrl,
     Value<String?>? jobProfileGitHubUrl,
     Value<String?>? jobProfilePortfolioUrl,
@@ -15563,6 +15809,15 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       rankingsCollapsedQueueCategoriesJson:
           rankingsCollapsedQueueCategoriesJson ??
           this.rankingsCollapsedQueueCategoriesJson,
+      rankingsMapViewCategoriesJson:
+          rankingsMapViewCategoriesJson ?? this.rankingsMapViewCategoriesJson,
+      rankingsMapHiddenCategoriesJson:
+          rankingsMapHiddenCategoriesJson ??
+          this.rankingsMapHiddenCategoriesJson,
+      rankingsDeviceLatitude:
+          rankingsDeviceLatitude ?? this.rankingsDeviceLatitude,
+      rankingsDeviceLongitude:
+          rankingsDeviceLongitude ?? this.rankingsDeviceLongitude,
       jobProfileLinkedInUrl:
           jobProfileLinkedInUrl ?? this.jobProfileLinkedInUrl,
       jobProfileGitHubUrl: jobProfileGitHubUrl ?? this.jobProfileGitHubUrl,
@@ -16092,6 +16347,26 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         rankingsCollapsedQueueCategoriesJson.value,
       );
     }
+    if (rankingsMapViewCategoriesJson.present) {
+      map['rankings_map_view_categories_json'] = Variable<String>(
+        rankingsMapViewCategoriesJson.value,
+      );
+    }
+    if (rankingsMapHiddenCategoriesJson.present) {
+      map['rankings_map_hidden_categories_json'] = Variable<String>(
+        rankingsMapHiddenCategoriesJson.value,
+      );
+    }
+    if (rankingsDeviceLatitude.present) {
+      map['rankings_device_latitude'] = Variable<double>(
+        rankingsDeviceLatitude.value,
+      );
+    }
+    if (rankingsDeviceLongitude.present) {
+      map['rankings_device_longitude'] = Variable<double>(
+        rankingsDeviceLongitude.value,
+      );
+    }
     if (jobProfileLinkedInUrl.present) {
       map['job_profile_linked_in_url'] = Variable<String>(
         jobProfileLinkedInUrl.value,
@@ -16360,6 +16635,14 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write(
             'rankingsCollapsedQueueCategoriesJson: $rankingsCollapsedQueueCategoriesJson, ',
           )
+          ..write(
+            'rankingsMapViewCategoriesJson: $rankingsMapViewCategoriesJson, ',
+          )
+          ..write(
+            'rankingsMapHiddenCategoriesJson: $rankingsMapHiddenCategoriesJson, ',
+          )
+          ..write('rankingsDeviceLatitude: $rankingsDeviceLatitude, ')
+          ..write('rankingsDeviceLongitude: $rankingsDeviceLongitude, ')
           ..write('jobProfileLinkedInUrl: $jobProfileLinkedInUrl, ')
           ..write('jobProfileGitHubUrl: $jobProfileGitHubUrl, ')
           ..write('jobProfilePortfolioUrl: $jobProfilePortfolioUrl, ')
@@ -44330,6 +44613,21 @@ class $RankingCategoriesTableTable extends RankingCategoriesTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _locationEnabledMeta = const VerificationMeta(
+    'locationEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> locationEnabled = GeneratedColumn<bool>(
+    'location_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("location_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _archivedAtMeta = const VerificationMeta(
     'archivedAt',
   );
@@ -44406,6 +44704,7 @@ class $RankingCategoriesTableTable extends RankingCategoriesTable
     sortMode,
     sortFieldId,
     sortAscending,
+    locationEnabled,
     archivedAt,
     createdAt,
     updatedAt,
@@ -44571,6 +44870,15 @@ class $RankingCategoriesTableTable extends RankingCategoriesTable
         ),
       );
     }
+    if (data.containsKey('location_enabled')) {
+      context.handle(
+        _locationEnabledMeta,
+        locationEnabled.isAcceptableOrUnknown(
+          data['location_enabled']!,
+          _locationEnabledMeta,
+        ),
+      );
+    }
     if (data.containsKey('archived_at')) {
       context.handle(
         _archivedAtMeta,
@@ -44689,6 +44997,10 @@ class $RankingCategoriesTableTable extends RankingCategoriesTable
         DriftSqlType.bool,
         data['${effectivePrefix}sort_ascending'],
       )!,
+      locationEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}location_enabled'],
+      )!,
       archivedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}archived_at'],
@@ -44747,6 +45059,7 @@ class RankingCategoriesTableData extends DataClass
   final String sortMode;
   final String? sortFieldId;
   final bool sortAscending;
+  final bool locationEnabled;
 
   /// Set = hidden from the picker and view-only. Not [deletedAt]: archiving
   /// does not cascade.
@@ -44774,6 +45087,7 @@ class RankingCategoriesTableData extends DataClass
     required this.sortMode,
     this.sortFieldId,
     required this.sortAscending,
+    required this.locationEnabled,
     this.archivedAt,
     required this.createdAt,
     required this.updatedAt,
@@ -44803,6 +45117,7 @@ class RankingCategoriesTableData extends DataClass
       map['sort_field_id'] = Variable<String>(sortFieldId);
     }
     map['sort_ascending'] = Variable<bool>(sortAscending);
+    map['location_enabled'] = Variable<bool>(locationEnabled);
     if (!nullToAbsent || archivedAt != null) {
       map['archived_at'] = Variable<DateTime>(archivedAt);
     }
@@ -44837,6 +45152,7 @@ class RankingCategoriesTableData extends DataClass
           ? const Value.absent()
           : Value(sortFieldId),
       sortAscending: Value(sortAscending),
+      locationEnabled: Value(locationEnabled),
       archivedAt: archivedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(archivedAt),
@@ -44879,6 +45195,7 @@ class RankingCategoriesTableData extends DataClass
       sortMode: serializer.fromJson<String>(json['sortMode']),
       sortFieldId: serializer.fromJson<String?>(json['sortFieldId']),
       sortAscending: serializer.fromJson<bool>(json['sortAscending']),
+      locationEnabled: serializer.fromJson<bool>(json['locationEnabled']),
       archivedAt: serializer.fromJson<DateTime?>(json['archivedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -44908,6 +45225,7 @@ class RankingCategoriesTableData extends DataClass
       'sortMode': serializer.toJson<String>(sortMode),
       'sortFieldId': serializer.toJson<String?>(sortFieldId),
       'sortAscending': serializer.toJson<bool>(sortAscending),
+      'locationEnabled': serializer.toJson<bool>(locationEnabled),
       'archivedAt': serializer.toJson<DateTime?>(archivedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -44935,6 +45253,7 @@ class RankingCategoriesTableData extends DataClass
     String? sortMode,
     Value<String?> sortFieldId = const Value.absent(),
     bool? sortAscending,
+    bool? locationEnabled,
     Value<DateTime?> archivedAt = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -44959,6 +45278,7 @@ class RankingCategoriesTableData extends DataClass
     sortMode: sortMode ?? this.sortMode,
     sortFieldId: sortFieldId.present ? sortFieldId.value : this.sortFieldId,
     sortAscending: sortAscending ?? this.sortAscending,
+    locationEnabled: locationEnabled ?? this.locationEnabled,
     archivedAt: archivedAt.present ? archivedAt.value : this.archivedAt,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -45013,6 +45333,9 @@ class RankingCategoriesTableData extends DataClass
       sortAscending: data.sortAscending.present
           ? data.sortAscending.value
           : this.sortAscending,
+      locationEnabled: data.locationEnabled.present
+          ? data.locationEnabled.value
+          : this.locationEnabled,
       archivedAt: data.archivedAt.present
           ? data.archivedAt.value
           : this.archivedAt,
@@ -45044,6 +45367,7 @@ class RankingCategoriesTableData extends DataClass
           ..write('sortMode: $sortMode, ')
           ..write('sortFieldId: $sortFieldId, ')
           ..write('sortAscending: $sortAscending, ')
+          ..write('locationEnabled: $locationEnabled, ')
           ..write('archivedAt: $archivedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -45073,6 +45397,7 @@ class RankingCategoriesTableData extends DataClass
     sortMode,
     sortFieldId,
     sortAscending,
+    locationEnabled,
     archivedAt,
     createdAt,
     updatedAt,
@@ -45101,6 +45426,7 @@ class RankingCategoriesTableData extends DataClass
           other.sortMode == this.sortMode &&
           other.sortFieldId == this.sortFieldId &&
           other.sortAscending == this.sortAscending &&
+          other.locationEnabled == this.locationEnabled &&
           other.archivedAt == this.archivedAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -45128,6 +45454,7 @@ class RankingCategoriesTableCompanion
   final Value<String> sortMode;
   final Value<String?> sortFieldId;
   final Value<bool> sortAscending;
+  final Value<bool> locationEnabled;
   final Value<DateTime?> archivedAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -45153,6 +45480,7 @@ class RankingCategoriesTableCompanion
     this.sortMode = const Value.absent(),
     this.sortFieldId = const Value.absent(),
     this.sortAscending = const Value.absent(),
+    this.locationEnabled = const Value.absent(),
     this.archivedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -45179,6 +45507,7 @@ class RankingCategoriesTableCompanion
     this.sortMode = const Value.absent(),
     this.sortFieldId = const Value.absent(),
     this.sortAscending = const Value.absent(),
+    this.locationEnabled = const Value.absent(),
     this.archivedAt = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
@@ -45209,6 +45538,7 @@ class RankingCategoriesTableCompanion
     Expression<String>? sortMode,
     Expression<String>? sortFieldId,
     Expression<bool>? sortAscending,
+    Expression<bool>? locationEnabled,
     Expression<DateTime>? archivedAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -45238,6 +45568,7 @@ class RankingCategoriesTableCompanion
       if (sortMode != null) 'sort_mode': sortMode,
       if (sortFieldId != null) 'sort_field_id': sortFieldId,
       if (sortAscending != null) 'sort_ascending': sortAscending,
+      if (locationEnabled != null) 'location_enabled': locationEnabled,
       if (archivedAt != null) 'archived_at': archivedAt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -45266,6 +45597,7 @@ class RankingCategoriesTableCompanion
     Value<String>? sortMode,
     Value<String?>? sortFieldId,
     Value<bool>? sortAscending,
+    Value<bool>? locationEnabled,
     Value<DateTime?>? archivedAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -45292,6 +45624,7 @@ class RankingCategoriesTableCompanion
       sortMode: sortMode ?? this.sortMode,
       sortFieldId: sortFieldId ?? this.sortFieldId,
       sortAscending: sortAscending ?? this.sortAscending,
+      locationEnabled: locationEnabled ?? this.locationEnabled,
       archivedAt: archivedAt ?? this.archivedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -45362,6 +45695,9 @@ class RankingCategoriesTableCompanion
     if (sortAscending.present) {
       map['sort_ascending'] = Variable<bool>(sortAscending.value);
     }
+    if (locationEnabled.present) {
+      map['location_enabled'] = Variable<bool>(locationEnabled.value);
+    }
     if (archivedAt.present) {
       map['archived_at'] = Variable<DateTime>(archivedAt.value);
     }
@@ -45404,6 +45740,7 @@ class RankingCategoriesTableCompanion
           ..write('sortMode: $sortMode, ')
           ..write('sortFieldId: $sortFieldId, ')
           ..write('sortAscending: $sortAscending, ')
+          ..write('locationEnabled: $locationEnabled, ')
           ..write('archivedAt: $archivedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -45489,6 +45826,18 @@ class $RankingParentsTableTable extends RankingParentsTable
   @override
   late final GeneratedColumn<String> tagsJson = GeneratedColumn<String>(
     'tags_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _locationsJsonMeta = const VerificationMeta(
+    'locationsJson',
+  );
+  @override
+  late final GeneratedColumn<String> locationsJson = GeneratedColumn<String>(
+    'locations_json',
     aliasedName,
     false,
     type: DriftSqlType.string,
@@ -45598,6 +45947,7 @@ class $RankingParentsTableTable extends RankingParentsTable
     notes,
     fieldValuesJson,
     tagsJson,
+    locationsJson,
     status,
     starred,
     queueSortOrder,
@@ -45668,6 +46018,15 @@ class $RankingParentsTableTable extends RankingParentsTable
       context.handle(
         _tagsJsonMeta,
         tagsJson.isAcceptableOrUnknown(data['tags_json']!, _tagsJsonMeta),
+      );
+    }
+    if (data.containsKey('locations_json')) {
+      context.handle(
+        _locationsJsonMeta,
+        locationsJson.isAcceptableOrUnknown(
+          data['locations_json']!,
+          _locationsJsonMeta,
+        ),
       );
     }
     if (data.containsKey('status')) {
@@ -45768,6 +46127,10 @@ class $RankingParentsTableTable extends RankingParentsTable
         DriftSqlType.string,
         data['${effectivePrefix}tags_json'],
       )!,
+      locationsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}locations_json'],
+      )!,
       status: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}status'],
@@ -45826,6 +46189,11 @@ class RankingParentsTableData extends DataClass
   /// "what does this category use", which is a scan of parents either way.
   final String tagsJson;
 
+  /// The entry's `RankingLocation`s as a JSON array. A column for the reason
+  /// [tagsJson] is one: they are only read with their parent, and the map
+  /// reads parents anyway.
+  final String locationsJson;
+
   /// [RankingStatus] by `name`. Only read while unranked.
   final String status;
   final bool starred;
@@ -45845,6 +46213,7 @@ class RankingParentsTableData extends DataClass
     required this.notes,
     required this.fieldValuesJson,
     required this.tagsJson,
+    required this.locationsJson,
     required this.status,
     required this.starred,
     required this.queueSortOrder,
@@ -45866,6 +46235,7 @@ class RankingParentsTableData extends DataClass
     map['notes'] = Variable<String>(notes);
     map['field_values_json'] = Variable<String>(fieldValuesJson);
     map['tags_json'] = Variable<String>(tagsJson);
+    map['locations_json'] = Variable<String>(locationsJson);
     map['status'] = Variable<String>(status);
     map['starred'] = Variable<bool>(starred);
     map['queue_sort_order'] = Variable<int>(queueSortOrder);
@@ -45890,6 +46260,7 @@ class RankingParentsTableData extends DataClass
       notes: Value(notes),
       fieldValuesJson: Value(fieldValuesJson),
       tagsJson: Value(tagsJson),
+      locationsJson: Value(locationsJson),
       status: Value(status),
       starred: Value(starred),
       queueSortOrder: Value(queueSortOrder),
@@ -45916,6 +46287,7 @@ class RankingParentsTableData extends DataClass
       notes: serializer.fromJson<String>(json['notes']),
       fieldValuesJson: serializer.fromJson<String>(json['fieldValuesJson']),
       tagsJson: serializer.fromJson<String>(json['tagsJson']),
+      locationsJson: serializer.fromJson<String>(json['locationsJson']),
       status: serializer.fromJson<String>(json['status']),
       starred: serializer.fromJson<bool>(json['starred']),
       queueSortOrder: serializer.fromJson<int>(json['queueSortOrder']),
@@ -45939,6 +46311,7 @@ class RankingParentsTableData extends DataClass
       'notes': serializer.toJson<String>(notes),
       'fieldValuesJson': serializer.toJson<String>(fieldValuesJson),
       'tagsJson': serializer.toJson<String>(tagsJson),
+      'locationsJson': serializer.toJson<String>(locationsJson),
       'status': serializer.toJson<String>(status),
       'starred': serializer.toJson<bool>(starred),
       'queueSortOrder': serializer.toJson<int>(queueSortOrder),
@@ -45958,6 +46331,7 @@ class RankingParentsTableData extends DataClass
     String? notes,
     String? fieldValuesJson,
     String? tagsJson,
+    String? locationsJson,
     String? status,
     bool? starred,
     int? queueSortOrder,
@@ -45974,6 +46348,7 @@ class RankingParentsTableData extends DataClass
     notes: notes ?? this.notes,
     fieldValuesJson: fieldValuesJson ?? this.fieldValuesJson,
     tagsJson: tagsJson ?? this.tagsJson,
+    locationsJson: locationsJson ?? this.locationsJson,
     status: status ?? this.status,
     starred: starred ?? this.starred,
     queueSortOrder: queueSortOrder ?? this.queueSortOrder,
@@ -45998,6 +46373,9 @@ class RankingParentsTableData extends DataClass
           ? data.fieldValuesJson.value
           : this.fieldValuesJson,
       tagsJson: data.tagsJson.present ? data.tagsJson.value : this.tagsJson,
+      locationsJson: data.locationsJson.present
+          ? data.locationsJson.value
+          : this.locationsJson,
       status: data.status.present ? data.status.value : this.status,
       starred: data.starred.present ? data.starred.value : this.starred,
       queueSortOrder: data.queueSortOrder.present
@@ -46023,6 +46401,7 @@ class RankingParentsTableData extends DataClass
           ..write('notes: $notes, ')
           ..write('fieldValuesJson: $fieldValuesJson, ')
           ..write('tagsJson: $tagsJson, ')
+          ..write('locationsJson: $locationsJson, ')
           ..write('status: $status, ')
           ..write('starred: $starred, ')
           ..write('queueSortOrder: $queueSortOrder, ')
@@ -46044,6 +46423,7 @@ class RankingParentsTableData extends DataClass
     notes,
     fieldValuesJson,
     tagsJson,
+    locationsJson,
     status,
     starred,
     queueSortOrder,
@@ -46064,6 +46444,7 @@ class RankingParentsTableData extends DataClass
           other.notes == this.notes &&
           other.fieldValuesJson == this.fieldValuesJson &&
           other.tagsJson == this.tagsJson &&
+          other.locationsJson == this.locationsJson &&
           other.status == this.status &&
           other.starred == this.starred &&
           other.queueSortOrder == this.queueSortOrder &&
@@ -46083,6 +46464,7 @@ class RankingParentsTableCompanion
   final Value<String> notes;
   final Value<String> fieldValuesJson;
   final Value<String> tagsJson;
+  final Value<String> locationsJson;
   final Value<String> status;
   final Value<bool> starred;
   final Value<int> queueSortOrder;
@@ -46100,6 +46482,7 @@ class RankingParentsTableCompanion
     this.notes = const Value.absent(),
     this.fieldValuesJson = const Value.absent(),
     this.tagsJson = const Value.absent(),
+    this.locationsJson = const Value.absent(),
     this.status = const Value.absent(),
     this.starred = const Value.absent(),
     this.queueSortOrder = const Value.absent(),
@@ -46118,6 +46501,7 @@ class RankingParentsTableCompanion
     this.notes = const Value.absent(),
     this.fieldValuesJson = const Value.absent(),
     this.tagsJson = const Value.absent(),
+    this.locationsJson = const Value.absent(),
     this.status = const Value.absent(),
     this.starred = const Value.absent(),
     this.queueSortOrder = const Value.absent(),
@@ -46140,6 +46524,7 @@ class RankingParentsTableCompanion
     Expression<String>? notes,
     Expression<String>? fieldValuesJson,
     Expression<String>? tagsJson,
+    Expression<String>? locationsJson,
     Expression<String>? status,
     Expression<bool>? starred,
     Expression<int>? queueSortOrder,
@@ -46158,6 +46543,7 @@ class RankingParentsTableCompanion
       if (notes != null) 'notes': notes,
       if (fieldValuesJson != null) 'field_values_json': fieldValuesJson,
       if (tagsJson != null) 'tags_json': tagsJson,
+      if (locationsJson != null) 'locations_json': locationsJson,
       if (status != null) 'status': status,
       if (starred != null) 'starred': starred,
       if (queueSortOrder != null) 'queue_sort_order': queueSortOrder,
@@ -46179,6 +46565,7 @@ class RankingParentsTableCompanion
     Value<String>? notes,
     Value<String>? fieldValuesJson,
     Value<String>? tagsJson,
+    Value<String>? locationsJson,
     Value<String>? status,
     Value<bool>? starred,
     Value<int>? queueSortOrder,
@@ -46197,6 +46584,7 @@ class RankingParentsTableCompanion
       notes: notes ?? this.notes,
       fieldValuesJson: fieldValuesJson ?? this.fieldValuesJson,
       tagsJson: tagsJson ?? this.tagsJson,
+      locationsJson: locationsJson ?? this.locationsJson,
       status: status ?? this.status,
       starred: starred ?? this.starred,
       queueSortOrder: queueSortOrder ?? this.queueSortOrder,
@@ -46232,6 +46620,9 @@ class RankingParentsTableCompanion
     }
     if (tagsJson.present) {
       map['tags_json'] = Variable<String>(tagsJson.value);
+    }
+    if (locationsJson.present) {
+      map['locations_json'] = Variable<String>(locationsJson.value);
     }
     if (status.present) {
       map['status'] = Variable<String>(status.value);
@@ -46273,6 +46664,7 @@ class RankingParentsTableCompanion
           ..write('notes: $notes, ')
           ..write('fieldValuesJson: $fieldValuesJson, ')
           ..write('tagsJson: $tagsJson, ')
+          ..write('locationsJson: $locationsJson, ')
           ..write('status: $status, ')
           ..write('starred: $starred, ')
           ..write('queueSortOrder: $queueSortOrder, ')
@@ -53089,6 +53481,10 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<String?> jobsHiddenColumnsJson,
       Value<bool> jobsIncludeArchived,
       Value<String?> rankingsCollapsedQueueCategoriesJson,
+      Value<String?> rankingsMapViewCategoriesJson,
+      Value<String?> rankingsMapHiddenCategoriesJson,
+      Value<double?> rankingsDeviceLatitude,
+      Value<double?> rankingsDeviceLongitude,
       Value<String?> jobProfileLinkedInUrl,
       Value<String?> jobProfileGitHubUrl,
       Value<String?> jobProfilePortfolioUrl,
@@ -53238,6 +53634,10 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<String?> jobsHiddenColumnsJson,
       Value<bool> jobsIncludeArchived,
       Value<String?> rankingsCollapsedQueueCategoriesJson,
+      Value<String?> rankingsMapViewCategoriesJson,
+      Value<String?> rankingsMapHiddenCategoriesJson,
+      Value<double?> rankingsDeviceLatitude,
+      Value<double?> rankingsDeviceLongitude,
       Value<String?> jobProfileLinkedInUrl,
       Value<String?> jobProfileGitHubUrl,
       Value<String?> jobProfilePortfolioUrl,
@@ -53868,6 +54268,27 @@ class $$SettingsTableTableFilterComposer
         column: $table.rankingsCollapsedQueueCategoriesJson,
         builder: (column) => ColumnFilters(column),
       );
+
+  ColumnFilters<String> get rankingsMapViewCategoriesJson => $composableBuilder(
+    column: $table.rankingsMapViewCategoriesJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get rankingsMapHiddenCategoriesJson =>
+      $composableBuilder(
+        column: $table.rankingsMapHiddenCategoriesJson,
+        builder: (column) => ColumnFilters(column),
+      );
+
+  ColumnFilters<double> get rankingsDeviceLatitude => $composableBuilder(
+    column: $table.rankingsDeviceLatitude,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get rankingsDeviceLongitude => $composableBuilder(
+    column: $table.rankingsDeviceLongitude,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get jobProfileLinkedInUrl => $composableBuilder(
     column: $table.jobProfileLinkedInUrl,
@@ -54622,6 +55043,28 @@ class $$SettingsTableTableOrderingComposer
         builder: (column) => ColumnOrderings(column),
       );
 
+  ColumnOrderings<String> get rankingsMapViewCategoriesJson =>
+      $composableBuilder(
+        column: $table.rankingsMapViewCategoriesJson,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<String> get rankingsMapHiddenCategoriesJson =>
+      $composableBuilder(
+        column: $table.rankingsMapHiddenCategoriesJson,
+        builder: (column) => ColumnOrderings(column),
+      );
+
+  ColumnOrderings<double> get rankingsDeviceLatitude => $composableBuilder(
+    column: $table.rankingsDeviceLatitude,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get rankingsDeviceLongitude => $composableBuilder(
+    column: $table.rankingsDeviceLongitude,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get jobProfileLinkedInUrl => $composableBuilder(
     column: $table.jobProfileLinkedInUrl,
     builder: (column) => ColumnOrderings(column),
@@ -55365,6 +55808,28 @@ class $$SettingsTableTableAnnotationComposer
         builder: (column) => column,
       );
 
+  GeneratedColumn<String> get rankingsMapViewCategoriesJson =>
+      $composableBuilder(
+        column: $table.rankingsMapViewCategoriesJson,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<String> get rankingsMapHiddenCategoriesJson =>
+      $composableBuilder(
+        column: $table.rankingsMapHiddenCategoriesJson,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<double> get rankingsDeviceLatitude => $composableBuilder(
+    column: $table.rankingsDeviceLatitude,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get rankingsDeviceLongitude => $composableBuilder(
+    column: $table.rankingsDeviceLongitude,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get jobProfileLinkedInUrl => $composableBuilder(
     column: $table.jobProfileLinkedInUrl,
     builder: (column) => column,
@@ -55684,6 +56149,12 @@ class $$SettingsTableTableTableManager
                 Value<bool> jobsIncludeArchived = const Value.absent(),
                 Value<String?> rankingsCollapsedQueueCategoriesJson =
                     const Value.absent(),
+                Value<String?> rankingsMapViewCategoriesJson =
+                    const Value.absent(),
+                Value<String?> rankingsMapHiddenCategoriesJson =
+                    const Value.absent(),
+                Value<double?> rankingsDeviceLatitude = const Value.absent(),
+                Value<double?> rankingsDeviceLongitude = const Value.absent(),
                 Value<String?> jobProfileLinkedInUrl = const Value.absent(),
                 Value<String?> jobProfileGitHubUrl = const Value.absent(),
                 Value<String?> jobProfilePortfolioUrl = const Value.absent(),
@@ -55836,6 +56307,11 @@ class $$SettingsTableTableTableManager
                 jobsIncludeArchived: jobsIncludeArchived,
                 rankingsCollapsedQueueCategoriesJson:
                     rankingsCollapsedQueueCategoriesJson,
+                rankingsMapViewCategoriesJson: rankingsMapViewCategoriesJson,
+                rankingsMapHiddenCategoriesJson:
+                    rankingsMapHiddenCategoriesJson,
+                rankingsDeviceLatitude: rankingsDeviceLatitude,
+                rankingsDeviceLongitude: rankingsDeviceLongitude,
                 jobProfileLinkedInUrl: jobProfileLinkedInUrl,
                 jobProfileGitHubUrl: jobProfileGitHubUrl,
                 jobProfilePortfolioUrl: jobProfilePortfolioUrl,
@@ -56008,6 +56484,12 @@ class $$SettingsTableTableTableManager
                 Value<bool> jobsIncludeArchived = const Value.absent(),
                 Value<String?> rankingsCollapsedQueueCategoriesJson =
                     const Value.absent(),
+                Value<String?> rankingsMapViewCategoriesJson =
+                    const Value.absent(),
+                Value<String?> rankingsMapHiddenCategoriesJson =
+                    const Value.absent(),
+                Value<double?> rankingsDeviceLatitude = const Value.absent(),
+                Value<double?> rankingsDeviceLongitude = const Value.absent(),
                 Value<String?> jobProfileLinkedInUrl = const Value.absent(),
                 Value<String?> jobProfileGitHubUrl = const Value.absent(),
                 Value<String?> jobProfilePortfolioUrl = const Value.absent(),
@@ -56160,6 +56642,11 @@ class $$SettingsTableTableTableManager
                 jobsIncludeArchived: jobsIncludeArchived,
                 rankingsCollapsedQueueCategoriesJson:
                     rankingsCollapsedQueueCategoriesJson,
+                rankingsMapViewCategoriesJson: rankingsMapViewCategoriesJson,
+                rankingsMapHiddenCategoriesJson:
+                    rankingsMapHiddenCategoriesJson,
+                rankingsDeviceLatitude: rankingsDeviceLatitude,
+                rankingsDeviceLongitude: rankingsDeviceLongitude,
                 jobProfileLinkedInUrl: jobProfileLinkedInUrl,
                 jobProfileGitHubUrl: jobProfileGitHubUrl,
                 jobProfilePortfolioUrl: jobProfilePortfolioUrl,
@@ -70322,6 +70809,7 @@ typedef $$RankingCategoriesTableTableCreateCompanionBuilder =
       Value<String> sortMode,
       Value<String?> sortFieldId,
       Value<bool> sortAscending,
+      Value<bool> locationEnabled,
       Value<DateTime?> archivedAt,
       required DateTime createdAt,
       required DateTime updatedAt,
@@ -70349,6 +70837,7 @@ typedef $$RankingCategoriesTableTableUpdateCompanionBuilder =
       Value<String> sortMode,
       Value<String?> sortFieldId,
       Value<bool> sortAscending,
+      Value<bool> locationEnabled,
       Value<DateTime?> archivedAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -70453,6 +70942,11 @@ class $$RankingCategoriesTableTableFilterComposer
 
   ColumnFilters<bool> get sortAscending => $composableBuilder(
     column: $table.sortAscending,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get locationEnabled => $composableBuilder(
+    column: $table.locationEnabled,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -70581,6 +71075,11 @@ class $$RankingCategoriesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get locationEnabled => $composableBuilder(
+    column: $table.locationEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get archivedAt => $composableBuilder(
     column: $table.archivedAt,
     builder: (column) => ColumnOrderings(column),
@@ -70696,6 +71195,11 @@ class $$RankingCategoriesTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get locationEnabled => $composableBuilder(
+    column: $table.locationEnabled,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get archivedAt => $composableBuilder(
     column: $table.archivedAt,
     builder: (column) => column,
@@ -70778,6 +71282,7 @@ class $$RankingCategoriesTableTableTableManager
                 Value<String> sortMode = const Value.absent(),
                 Value<String?> sortFieldId = const Value.absent(),
                 Value<bool> sortAscending = const Value.absent(),
+                Value<bool> locationEnabled = const Value.absent(),
                 Value<DateTime?> archivedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -70803,6 +71308,7 @@ class $$RankingCategoriesTableTableTableManager
                 sortMode: sortMode,
                 sortFieldId: sortFieldId,
                 sortAscending: sortAscending,
+                locationEnabled: locationEnabled,
                 archivedAt: archivedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -70830,6 +71336,7 @@ class $$RankingCategoriesTableTableTableManager
                 Value<String> sortMode = const Value.absent(),
                 Value<String?> sortFieldId = const Value.absent(),
                 Value<bool> sortAscending = const Value.absent(),
+                Value<bool> locationEnabled = const Value.absent(),
                 Value<DateTime?> archivedAt = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
@@ -70855,6 +71362,7 @@ class $$RankingCategoriesTableTableTableManager
                 sortMode: sortMode,
                 sortFieldId: sortFieldId,
                 sortAscending: sortAscending,
+                locationEnabled: locationEnabled,
                 archivedAt: archivedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -70900,6 +71408,7 @@ typedef $$RankingParentsTableTableCreateCompanionBuilder =
       Value<String> notes,
       Value<String> fieldValuesJson,
       Value<String> tagsJson,
+      Value<String> locationsJson,
       Value<String> status,
       Value<bool> starred,
       Value<int> queueSortOrder,
@@ -70919,6 +71428,7 @@ typedef $$RankingParentsTableTableUpdateCompanionBuilder =
       Value<String> notes,
       Value<String> fieldValuesJson,
       Value<String> tagsJson,
+      Value<String> locationsJson,
       Value<String> status,
       Value<bool> starred,
       Value<int> queueSortOrder,
@@ -70971,6 +71481,11 @@ class $$RankingParentsTableTableFilterComposer
 
   ColumnFilters<String> get tagsJson => $composableBuilder(
     column: $table.tagsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get locationsJson => $composableBuilder(
+    column: $table.locationsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -71059,6 +71574,11 @@ class $$RankingParentsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get locationsJson => $composableBuilder(
+    column: $table.locationsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get status => $composableBuilder(
     column: $table.status,
     builder: (column) => ColumnOrderings(column),
@@ -71135,6 +71655,11 @@ class $$RankingParentsTableTableAnnotationComposer
 
   GeneratedColumn<String> get tagsJson =>
       $composableBuilder(column: $table.tagsJson, builder: (column) => column);
+
+  GeneratedColumn<String> get locationsJson => $composableBuilder(
+    column: $table.locationsJson,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
@@ -71215,6 +71740,7 @@ class $$RankingParentsTableTableTableManager
                 Value<String> notes = const Value.absent(),
                 Value<String> fieldValuesJson = const Value.absent(),
                 Value<String> tagsJson = const Value.absent(),
+                Value<String> locationsJson = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<int> queueSortOrder = const Value.absent(),
@@ -71232,6 +71758,7 @@ class $$RankingParentsTableTableTableManager
                 notes: notes,
                 fieldValuesJson: fieldValuesJson,
                 tagsJson: tagsJson,
+                locationsJson: locationsJson,
                 status: status,
                 starred: starred,
                 queueSortOrder: queueSortOrder,
@@ -71251,6 +71778,7 @@ class $$RankingParentsTableTableTableManager
                 Value<String> notes = const Value.absent(),
                 Value<String> fieldValuesJson = const Value.absent(),
                 Value<String> tagsJson = const Value.absent(),
+                Value<String> locationsJson = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<int> queueSortOrder = const Value.absent(),
@@ -71268,6 +71796,7 @@ class $$RankingParentsTableTableTableManager
                 notes: notes,
                 fieldValuesJson: fieldValuesJson,
                 tagsJson: tagsJson,
+                locationsJson: locationsJson,
                 status: status,
                 starred: starred,
                 queueSortOrder: queueSortOrder,

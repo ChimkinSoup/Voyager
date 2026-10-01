@@ -1,0 +1,8 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final dr = c.read(dreamRepositoryProvider);
+for (var i = 0; i < 120; i++) { final d = now.subtract(Duration(days: i + 1, hours: i % 7)); final en = DreamEntry(id: 'p8-seed-$i', createdAt: now, updatedAt: now, version: 1, title: 'Seed dream ${i.toString().padLeft(3, '0')}', body: 'Seeded dream body number $i about #seed${i % 5} and a long corridor', notes: i % 10 == 0 ? 'seed note $i' : null, entryDate: d); await dr.upsertEntry(en); r.pushDreamEntryNow(en); }
+final longBody = List.generate(700, (k) => 'word$k').join(' ');
+final big = DreamEntry(id: 'p8-long', createdAt: now, updatedAt: now, version: 1, title: 'L' * 300, body: longBody, entryDate: now.subtract(const Duration(hours: 2))); await dr.upsertEntry(big); r.pushDreamEntryNow(big);
+final intl = DreamEntry(id: 'p8-intl', createdAt: now, updatedAt: now, version: 1, title: '夢 \u{1F319} حلم', body: '我在飞 \u{1F54A}\u{FE0F} أنا أطير mixed RTL #夢', entryDate: now.subtract(const Duration(hours: 3))); await dr.upsertEntry(intl); r.pushDreamEntryNow(intl);
+debugPrint('P8 seeded ${(await dr.listEntries()).length}');

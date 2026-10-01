@@ -1,0 +1,32 @@
+activate
+wheel 490 1000 -80
+wait 800
+wheel 490 1000 -80
+wait 1200
+shot p7-92-journal-bottom
+click 340 55
+wait 800
+click 300 280
+wait 1500
+wheel 490 1000 -80
+wait 800
+wheel 490 1000 -80
+wait 800
+wheel 490 1000 -80
+wait 1200
+shot p7-93-alpha-bottom
+click 340 55
+wait 800
+click 300 139
+wait 1500
+wheel 490 1000 -80
+wait 800
+wheel 490 1000 -80
+wait 800
+wheel 490 1000 -80
+wait 800
+wheel 490 1000 -80
+wait 800
+wheel 490 1000 -80
+wait 1200
+shot p7-94-all-bottom

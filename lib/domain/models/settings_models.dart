@@ -19,6 +19,16 @@ const int defaultPetalColor = 0xFFE6A4B4;
 /// stays one toggle away because the error log lives there.
 const defaultHiddenNavPages = <String>['/dev'];
 
+/// Where a map was left: its centre and zoom.
+typedef RankingsMapViewport = ({
+  double latitude,
+  double longitude,
+  double zoom,
+});
+
+/// Where the device was last found.
+typedef RankingsDeviceLocation = ({double latitude, double longitude});
+
 class AppSettings {
   const AppSettings({
     this.accentColor = 0xFF7C9EFF,
@@ -140,6 +150,9 @@ class AppSettings {
     this.jobsHiddenColumns = const [],
     this.jobsIncludeArchived = false,
     this.rankingsCollapsedQueueCategories = const [],
+    this.rankingsMapViewCategories = const [],
+    this.rankingsMapHiddenCategories = const [],
+    this.rankingsDeviceLocation,
     this.jobProfileLinkedInUrl,
     this.jobProfileGitHubUrl,
     this.jobProfilePortfolioUrl,
@@ -416,6 +429,19 @@ class AppSettings {
   /// another device opens expanded — which is the default (§6.1).
   final List<String> rankingsCollapsedQueueCategories;
 
+  /// Rankings categories showing their map rather than their list. Synced,
+  /// like the collapsed queues: how a category is read goes with the category.
+  final List<String> rankingsMapViewCategories;
+
+  /// Categories switched off on the All categories map. Device-local.
+  final List<String> rankingsMapHiddenCategories;
+
+  /// Where this device was last found, so the first map of a run can open
+  /// there at once instead of waiting seconds for a fix. Device-local, and
+  /// read here but written only by
+  /// `SettingsRepository.saveRankingsDeviceLocation`.
+  final RankingsDeviceLocation? rankingsDeviceLocation;
+
   /// The user's own profile links, offered as one-tap clipboard copies in the
   /// Jobs header (§3.4). Written only from Settings; the Jobs page reads them
   /// and never exposes an edit affordance. A null or empty slot has no button.
@@ -630,6 +656,8 @@ class AppSettings {
     List<String>? jobsHiddenColumns,
     bool? jobsIncludeArchived,
     List<String>? rankingsCollapsedQueueCategories,
+    List<String>? rankingsMapViewCategories,
+    List<String>? rankingsMapHiddenCategories,
     String? jobProfileLinkedInUrl,
     String? jobProfileGitHubUrl,
     String? jobProfilePortfolioUrl,
@@ -902,6 +930,11 @@ class AppSettings {
       rankingsCollapsedQueueCategories:
           rankingsCollapsedQueueCategories ??
           this.rankingsCollapsedQueueCategories,
+      rankingsMapViewCategories:
+          rankingsMapViewCategories ?? this.rankingsMapViewCategories,
+      rankingsMapHiddenCategories:
+          rankingsMapHiddenCategories ?? this.rankingsMapHiddenCategories,
+      rankingsDeviceLocation: rankingsDeviceLocation,
       jobProfileLinkedInUrl: clearJobProfileLinkedInUrl
           ? null
           : (jobProfileLinkedInUrl ?? this.jobProfileLinkedInUrl),

@@ -276,6 +276,7 @@ class RankingCategory extends SoftDeletable {
     this.sortMode = RankingSortMode.overallScore,
     this.sortFieldId,
     this.sortAscending = false,
+    this.locationEnabled = false,
     this.archivedAt,
   });
 
@@ -320,6 +321,10 @@ class RankingCategory extends SoftDeletable {
   final String? sortFieldId;
   final bool sortAscending;
 
+  /// Whether entries carry locations and the category has a map. Turning it
+  /// off hides both and keeps what is stored, the same as [childUnitsEnabled].
+  final bool locationEnabled;
+
   /// Set = archived: hidden from the strip, and view-only until it is
   /// unarchived. Distinct from [deletedAt], which cascades to the entries.
   final DateTime? archivedAt;
@@ -357,6 +362,7 @@ class RankingCategory extends SoftDeletable {
     String? sortFieldId,
     bool clearSortFieldId = false,
     bool? sortAscending,
+    bool? locationEnabled,
     DateTime? archivedAt,
     bool clearArchivedAt = false,
     DateTime? deletedAt,
@@ -386,6 +392,7 @@ class RankingCategory extends SoftDeletable {
     sortMode: sortMode ?? this.sortMode,
     sortFieldId: clearSortFieldId ? null : (sortFieldId ?? this.sortFieldId),
     sortAscending: sortAscending ?? this.sortAscending,
+    locationEnabled: locationEnabled ?? this.locationEnabled,
     archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
   );
 }
@@ -429,6 +436,103 @@ List<String> normalizeRankingTags(Iterable<String> raw) {
 }
 
 String encodeRankingTags(List<String> tags) => jsonEncode(tags);
+
+/// One real-world place an entry is at. A chain is one entry with several.
+///
+/// Addressed by [id] for the life of the entry: each location is stamped under
+/// its own key ([rankingLocationStampKey]), which is what lets two devices add
+/// different branches offline and both keep theirs.
+class RankingLocation {
+  const RankingLocation({
+    required this.id,
+    required this.latitude,
+    required this.longitude,
+    this.address = '',
+    this.label = '',
+    this.sortOrder = 0,
+  });
+
+  factory RankingLocation.fromJson(Map<String, dynamic> json) =>
+      RankingLocation(
+        id: json['id'] as String,
+        latitude: (json['latitude'] as num).toDouble(),
+        longitude: (json['longitude'] as num).toDouble(),
+        address: json['address'] as String? ?? '',
+        label: json['label'] as String? ?? '',
+        sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+      );
+
+  final String id;
+  final double latitude;
+  final double longitude;
+
+  /// Formatted address from the provider; empty when unknown.
+  final String address;
+
+  /// The user's own name for the branch — `Queen St`, `Airport`.
+  final String label;
+
+  /// Position in the panel's list. New locations join the end.
+  final int sortOrder;
+
+  String get displayName => label.isNotEmpty
+      ? label
+      : address.isNotEmpty
+      ? address
+      : '${latitude.toStringAsFixed(5)}, ${longitude.toStringAsFixed(5)}';
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'latitude': latitude,
+    'longitude': longitude,
+    'address': address,
+    'label': label,
+    'sortOrder': sortOrder,
+  };
+
+  RankingLocation copyWith({
+    double? latitude,
+    double? longitude,
+    String? address,
+    String? label,
+    int? sortOrder,
+  }) => RankingLocation(
+    id: id,
+    latitude: latitude ?? this.latitude,
+    longitude: longitude ?? this.longitude,
+    address: address ?? this.address,
+    label: label ?? this.label,
+    sortOrder: sortOrder ?? this.sortOrder,
+  );
+}
+
+String encodeRankingLocations(List<RankingLocation> locations) =>
+    jsonEncode([for (final location in locations) location.toJson()]);
+
+/// Reads locations from the local column's JSON string or from a payload's
+/// native list. Anything else — a row or payload written before locations
+/// existed — is no locations.
+List<RankingLocation> decodeRankingLocations(Object? value) {
+  final decoded = value is String
+      ? (value.isEmpty ? null : jsonDecode(value))
+      : value;
+  if (decoded is! List) return const [];
+  final locations = [
+    for (final entry in decoded)
+      if (entry is Map &&
+          entry['id'] is String &&
+          entry['latitude'] is num &&
+          entry['longitude'] is num)
+        RankingLocation.fromJson(Map<String, dynamic>.from(entry)),
+  ];
+  locations.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  return locations;
+}
+
+/// The stamp key for one location. Its stamped value is the whole encoded
+/// location, so a move, a rename and a reorder all restamp it, and a removal
+/// leaves the key stamped with no value behind it.
+String rankingLocationStampKey(String locationId) => 'loc:$locationId';
 
 /// When each field of an entry or unit last changed, keyed as
 /// [rankingParentStampValues] and [rankingChildStampValues] key them — what
@@ -503,6 +607,13 @@ Map<String, Object?> _fieldValueStampValues(
   },
 };
 
+/// Each location's stamped value, by location id.
+Map<String, String> rankingParentLocationValues(
+  List<RankingLocation> locations,
+) => {
+  for (final location in locations) location.id: jsonEncode(location.toJson()),
+};
+
 /// The stamped values of [parent], by stamp key.
 Map<String, Object?> rankingParentStampValues(RankingParent parent) => {
   'title': parent.title,
@@ -515,6 +626,8 @@ Map<String, Object?> rankingParentStampValues(RankingParent parent) => {
   'createdAt': parent.createdAt.toUtc(),
   'deletedAt': parent.deletedAt?.toUtc(),
   ..._fieldValueStampValues(parent.fieldValues),
+  for (final entry in rankingParentLocationValues(parent.locations).entries)
+    rankingLocationStampKey(entry.key): entry.value,
 };
 
 /// The stamped values of [child], by stamp key.
@@ -555,6 +668,7 @@ class RankingParent extends SoftDeletable {
     this.notes = '',
     this.fieldValues = const {},
     this.tags = const [],
+    this.locations = const [],
     this.status = RankingStatus.queued,
     this.starred = false,
     this.queueSortOrder = 0,
@@ -577,6 +691,10 @@ class RankingParent extends SoftDeletable {
   /// added them. Nothing to do with the `#tags` written inside [notes]: those
   /// stay freeform annotation, and only these reach the row and the filter.
   final List<String> tags;
+
+  /// Where the entry is, in [RankingLocation.sortOrder] order. Only shown
+  /// while the category has [RankingCategory.locationEnabled].
+  final List<RankingLocation> locations;
 
   /// Only read while unranked.
   final RankingStatus status;
@@ -608,6 +726,7 @@ class RankingParent extends SoftDeletable {
     String? notes,
     Map<String, RankingFieldValue>? fieldValues,
     List<String>? tags,
+    List<RankingLocation>? locations,
     RankingStatus? status,
     bool? starred,
     int? queueSortOrder,
@@ -632,6 +751,7 @@ class RankingParent extends SoftDeletable {
       notes: notes ?? this.notes,
       fieldValues: fieldValues ?? this.fieldValues,
       tags: tags ?? this.tags,
+      locations: locations ?? this.locations,
       status: status ?? this.status,
       starred: starred ?? this.starred,
       queueSortOrder: queueSortOrder ?? this.queueSortOrder,
@@ -674,8 +794,21 @@ bool rankingParentsMatch(RankingParent a, RankingParent b) {
       a.starred != b.starred ||
       a.queueSortOrder != b.queueSortOrder ||
       a.tags.length != b.tags.length ||
+      a.locations.length != b.locations.length ||
       a.fieldValues.length != b.fieldValues.length) {
     return false;
+  }
+  for (var i = 0; i < a.locations.length; i++) {
+    final x = a.locations[i];
+    final y = b.locations[i];
+    if (x.id != y.id ||
+        x.latitude != y.latitude ||
+        x.longitude != y.longitude ||
+        x.address != y.address ||
+        x.label != y.label ||
+        x.sortOrder != y.sortOrder) {
+      return false;
+    }
   }
   for (var i = 0; i < a.tags.length; i++) {
     if (a.tags[i] != b.tags[i]) return false;

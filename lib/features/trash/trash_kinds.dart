@@ -400,7 +400,7 @@ final _kinds = <TrashKind>[
     feature: TrashFeature.rankings,
     noun: 'entry',
     title: (data) => _field(data, 'title'),
-    wipe: const ['title', 'notes', 'tags', 'fieldValues'],
+    wipe: const ['title', 'notes', 'tags', 'fieldValues', 'locations'],
     children: const [
       TrashChild(
         FirestoreCollections.rankingChildren,

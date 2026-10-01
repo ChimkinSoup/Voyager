@@ -1,0 +1,68 @@
+activate
+click 1440 1728
+type P9 task 01
+key enter
+type P9 task 02
+key enter
+type P9 task 03
+key enter
+type P9 task 04
+key enter
+type P9 task 05
+key enter
+type P9 task 06
+key enter
+type P9 task 07
+key enter
+type P9 task 08
+key enter
+type P9 task 09
+key enter
+type P9 task 10
+key enter
+type P9 task 11
+key enter
+type P9 task 12
+key enter
+type P9 task 13
+key enter
+type P9 task 14
+key enter
+type P9 task 15
+key enter
+type P9 task 16
+key enter
+type P9 task 17
+key enter
+type P9 task 18
+key enter
+type P9 task 19
+key enter
+type P9 task 20
+key enter
+type P9 task 21
+key enter
+type P9 task 22
+key enter
+type P9 task 23
+key enter
+type P9 task 24
+key enter
+type P9 task 25
+key enter
+type P9 task 26
+key enter
+type P9 task 27
+key enter
+type P9 task 28
+key enter
+type P9 task 29
+key enter
+type P9 task 30
+key enter
+type P9 task 31
+key enter
+type P9 task 32
+key enter
+wait 1500
+shot p9-06-32tasks

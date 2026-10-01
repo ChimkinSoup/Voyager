@@ -4276,6 +4276,24 @@ class DriftSettingsRepository implements SettingsRepository {
           : List<String>.from(
               jsonDecode(row.rankingsCollapsedQueueCategoriesJson!) as List,
             ),
+      rankingsMapViewCategories: row.rankingsMapViewCategoriesJson == null
+          ? const []
+          : List<String>.from(
+              jsonDecode(row.rankingsMapViewCategoriesJson!) as List,
+            ),
+      rankingsMapHiddenCategories: row.rankingsMapHiddenCategoriesJson == null
+          ? const []
+          : List<String>.from(
+              jsonDecode(row.rankingsMapHiddenCategoriesJson!) as List,
+            ),
+      rankingsDeviceLocation:
+          row.rankingsDeviceLatitude == null ||
+              row.rankingsDeviceLongitude == null
+          ? null
+          : (
+              latitude: row.rankingsDeviceLatitude!,
+              longitude: row.rankingsDeviceLongitude!,
+            ),
       jobProfileLinkedInUrl: row.jobProfileLinkedInUrl,
       jobProfileGitHubUrl: row.jobProfileGitHubUrl,
       jobProfilePortfolioUrl: row.jobProfilePortfolioUrl,
@@ -4345,6 +4363,18 @@ class DriftSettingsRepository implements SettingsRepository {
   Future<void> saveLastSeenNavPage(String path) async {
     await (_db.update(_db.settingsTable)..where((t) => t.id.equals(1))).write(
       SettingsTableCompanion(lastSeenNavPage: Value(path)),
+    );
+  }
+
+  @override
+  Future<void> saveRankingsDeviceLocation(
+    RankingsDeviceLocation location,
+  ) async {
+    await (_db.update(_db.settingsTable)..where((t) => t.id.equals(1))).write(
+      SettingsTableCompanion(
+        rankingsDeviceLatitude: Value(location.latitude),
+        rankingsDeviceLongitude: Value(location.longitude),
+      ),
     );
   }
 
@@ -4560,6 +4590,16 @@ class DriftSettingsRepository implements SettingsRepository {
               settings.rankingsCollapsedQueueCategories.isEmpty
                   ? null
                   : jsonEncode(settings.rankingsCollapsedQueueCategories),
+            ),
+            rankingsMapViewCategoriesJson: Value(
+              settings.rankingsMapViewCategories.isEmpty
+                  ? null
+                  : jsonEncode(settings.rankingsMapViewCategories),
+            ),
+            rankingsMapHiddenCategoriesJson: Value(
+              settings.rankingsMapHiddenCategories.isEmpty
+                  ? null
+                  : jsonEncode(settings.rankingsMapHiddenCategories),
             ),
             startupPageMode: Value(settings.startupPageMode.name),
             customStartupPage: Value(settings.customStartupPage),
@@ -7947,6 +7987,7 @@ class DriftRankingRepository implements RankingRepository {
     sortMode: Value(category.sortMode.name),
     sortFieldId: Value(category.sortFieldId),
     sortAscending: Value(category.sortAscending),
+    locationEnabled: Value(category.locationEnabled),
     archivedAt: Value(category.archivedAt),
     createdAt: Value(category.createdAt),
     updatedAt: Value(category.updatedAt),
@@ -7963,6 +8004,7 @@ class DriftRankingRepository implements RankingRepository {
         notes: Value(parent.notes),
         fieldValuesJson: Value(encodeRankingFieldValues(parent.fieldValues)),
         tagsJson: Value(encodeRankingTags(parent.tags)),
+        locationsJson: Value(encodeRankingLocations(parent.locations)),
         status: Value(parent.status.name),
         starred: Value(parent.starred),
         queueSortOrder: Value(parent.queueSortOrder),
@@ -8017,6 +8059,7 @@ class DriftRankingRepository implements RankingRepository {
         sortMode: RankingSortMode.fromName(row.sortMode),
         sortFieldId: row.sortFieldId,
         sortAscending: row.sortAscending,
+        locationEnabled: row.locationEnabled,
         archivedAt: row.archivedAt,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
@@ -8032,6 +8075,7 @@ class DriftRankingRepository implements RankingRepository {
     notes: row.notes,
     fieldValues: decodeRankingFieldValues(row.fieldValuesJson),
     tags: decodeRankingTags(row.tagsJson),
+    locations: decodeRankingLocations(row.locationsJson),
     status: RankingStatus.fromName(row.status),
     starred: row.starred,
     queueSortOrder: row.queueSortOrder,

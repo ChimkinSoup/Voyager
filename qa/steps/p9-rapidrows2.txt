@@ -1,0 +1,27 @@
+activate
+wheel 1400 900 150
+wait 400
+wheel 1400 900 150
+wait 1000
+move 1400 1400
+shot p9-86-r0
+click 273 173
+wait 400
+move 1400 1400
+shot p9-86-r1
+click 273 173
+wait 400
+move 1400 1400
+shot p9-86-r2
+click 273 173
+wait 400
+move 1400 1400
+shot p9-86-r3
+click 273 173
+wait 400
+move 1400 1400
+shot p9-86-r4
+click 273 173
+wait 400
+move 1400 1400
+shot p9-86-r5

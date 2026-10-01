@@ -221,6 +221,8 @@ Entry format:
 - Expected: the line break is dropped or turned into a space ("L1L2" or "L1 L2"), with no control characters in the saved title.
 - Actual: the field shows "L1L2", but `journal_entries_table.title` is "L1\rL2" (hex `4C 31 0D 4C 32`): the `\n` is removed and the `\r` kept, invisibly. Same with Vim ON: Ctrl+V in Insert mode gives "…titleL1\rL2"; Ctrl+V in Normal mode gives "…titleL1\r L2" (Vim flattens `\n` to a space and keeps the `\r`). The value synced (outbox drained).
 - Notes: screenshots `qa/shots/p3-vimoff-title.png` (Vim OFF), `p3-title-cr-crop.png` (Vim ON). Checked only on the journal Title; probably any one-line field (todo titles, list names, finance fields). Consequences not checked: search, exports, and how the title renders elsewhere (entry list, Search results).
+- Notes (2026-09-30, Phase 7): the multi-line journal body keeps them too. Pasting 200 CRLF-terminated lines (13,090 chars) into the body saved 200 `\r` characters (`instr(body, char(13))` = 63, the first line end). It renders normally (`qa/shots/p7-86-long.png`); caret behaviour at those line ends wasn't checked.
+- Notes (2026-09-30, Phase 9): the To-Do composer too (Vim off). Pasting "CRLF line1`\r\n`line2" + Enter created a task titled `'CRLF line1\rline2'` (16 chars); the row shows "CRLF line1line2", words run together (`qa/shots/p9-70-failtitles.png`). The `\n` was dropped, the `\r` kept.
 
 ### BUG-018 [Phase 3] Vim `yy` moves the caret to the start of the line; in a one-line field `p` then pastes after the first character
 - Severity: Minor
@@ -459,6 +461,7 @@ Entry format:
 - Expected: the pull brings the renamed default calendar down; the name and colour survive.
 - Actual: at 17:39:56Z, during sign-in and about 2 s before the startup pull ended, the new device created its own default calendar ("Calendar", version 0, the accent colour, `createdAt` = now) and uploaded it over the cloud copy (`_serverWrittenAt` 17:39:57.9Z). After the pull, both SQLite and Firestore hold "Calendar" v0 with the default colour; the rename is gone. Every other device then pulls the reset too. Seen twice: the first re-login (17:11:40Z) also replaced the cloud's default calendar with a fresh v0 copy (both were unrenamed defaults then, so nothing visible changed).
 - Notes: `CalendarPage.initState` calls `_ensureDefaultCalendar()` (`lib/features/calendar/calendar_page.dart`). It creates `__legacy_calendar__` when the local table has none, which is always the case on a new database before the pull has run, and `upsertCalendar` announces the write to sync. The page's `initState` ran at sign-in although the app opened on Journal (not investigated why). The older migration path (`app_database.dart` v37) creates the same row for upgraded databases. The events themselves keep their calendar id, so no events were lost; only the calendar's name and colour. Same family as BUG-044's scope note: an upload does no version check, so the fresh v0 copy beat the cloud's v1. Code predates the 2026-09-30 sync changes (not in that diff). Related: BUG-001's notes saw a "locally created `__legacy_calendar__`" as the only calendar after a stuck sign-in.
+- Notes (2026-09-30, Phase 10, qa-015): seen again on a cold re-login. Before: `__legacy_calendar__` "Calendar" version 2 (an "Also show Holidays" overlay was added, then stripped when Holidays was deleted). After `reset.ps1 -Force` → `login.ps1`: version 0. The name/colour/overlay list happened to match the defaults, so nothing visible changed, but the same path would reset the default calendar's `overlayCalendarIds` (CALENDAR_OVERLAY_HLD.md §5.3 says it syncs "version-wins like name and color"), so "Also show" on the default calendar wouldn't survive a new device either (inferred).
 
 ### BUG-046 [FV] Journal dropdown: "All journals" shows the open journal's count, not the total
 - Severity: Minor
@@ -468,4 +471,309 @@ Entry format:
 - Actual: "All journals 3", "FV Alpha 3" ✓, "FV Beta 2" ✓ (`qa/shots/fv2-journal-dropdown.png`). Not a sync or refresh problem: the per-journal counts are right straight after the cold sign-in, and the code gives the same answer at any time.
 - Notes: `_JournalScopeHeader` gets `allEntriesCount: filtered.length` (`lib/features/journal/journal_page.dart`). `filtered` is the entry list on screen, which is the open journal's entries unless "All journals" is selected. BUG-010's first note had attributed this symptom to the refresh; it's a separate bug.
 
-<!-- Last ID: BUG-046. -->
+### BUG-047 [Phase 7] Deleting the open journal with "delete all entries" leaves its trashed entry open and editable; what you type is saved into the trashed row
+- Severity: Minor
+- Found: 2026-09-30, Phase 7 (qa-011)
+- Steps to reproduce: create journal "Gamma" (gear → New journal), close the dialog (the page opens Gamma with a new entry), type a title and body ("Gamma entry" / "Gamma body text"). Gear → Gamma ⋮ → Delete → "Yes (delete all entries)". Close the dialog. Click the body and type " GHOST".
+- Expected: the deleted journal's entry leaves the editor (the page moves to another journal and opens one of its entries, or an empty state), as it does after deleting a single entry.
+- Actual: the header switches to "Journal 0" with an empty list, but the editor keeps showing "Gamma entry" with its body, fully editable (`qa/shots/p7-43-after-gdelete.png`). Typing autosaves into the soft-deleted row: SQLite `708b3627…` body "Gamma body text GHOST", `deleted_at` still set, `updated_at` bumped (`p7-44-ghost.png`). It stays on screen after Ctrl+Tab away and back (`p7-45-ghost-after.png`); only a restart clears it. Nothing tells the user that what they're typing goes into the trash.
+- Notes: nothing is lost outright (the text is in the trashed row and would come back with a restore), but a user who keeps writing there loses track of it. `settings_table.last_viewed_journal_id` also still names the deleted journal after the delete (the page fell back correctly on restart: All journals).
+
+### BUG-048 [Phase 7] Creating the first journal also creates an empty "Journal" that can never be deleted
+- Severity: Minor
+- Found: 2026-09-30, Phase 7 (qa-011)
+- Steps to reproduce: fresh account (no journals). Journal page → gear (Manage journals) → New journal → name "Alpha" → Create.
+- Expected: one journal, "Alpha".
+- Actual: two journals: "Journal" (`__legacy__`, 0 entries) and "Alpha" (`qa/shots/p7-07-created.png`). "Journal" stays in the switcher and the Manage list for good: its ⋮ menu has Rename / Change color / Settings but no Delete (`p7-38-legacymenu.png`; `deleteJournalList` returns early for `legacyJournalId`). In "All journals", New entry defaults to it ("New entry in Journal") after a restart.
+- Notes: deliberate in the code (`createJournalList`, `lib/features/journal/journal_list_actions.dart`: "if (allJournals.isEmpty) … legacy"), presumably so a delete-with-move always has a target. Same shape as BUG-012 (To-Do's hidden built-in list). Whether a user should be stuck with it is Juno's call; it can at least be renamed.
+
+### BUG-049 [Phase 7] Delete-journal dialog says "This journal has 1 entries" and its "Yes" button doesn't say what it does
+- Severity: Cosmetic
+- Found: 2026-09-30, Phase 7 (qa-011)
+- Steps to reproduce: a journal with exactly one entry. Gear → its ⋮ → Delete.
+- Expected: "This journal has 1 entry." Buttons that name the action, e.g. "Move to Journal" and "Delete all entries".
+- Actual: "This journal has 1 entries. Move them to the default "Journal", or delete everything." with buttons Cancel / **Yes** / Yes (delete all entries) (`qa/shots/p7-41-gdelete.png`). "Yes" means "move the entries"; it reads as "yes, delete".
+- Notes: message built in `deleteJournalList` (`journal_list_actions.dart`); the zero-entry case has its own wording.
+- Notes (2026-09-30, Phase 10): the delete-calendar dialog has the same "Yes" / "Yes (delete all events)" pair: `Delete "Holidays"?` "This calendar has 3 events. Move them to the default "Calendar", or delete everything." (`qa/shots/p10-75-delcal.png`).
+
+### BUG-050 [Phase 7] New journal / list / calendar name dialog: "Title cannot be empty" under a "Name" field, and Enter on an empty name drops keyboard focus
+- Severity: Minor
+- Found: 2026-09-30, Phase 7 (qa-011)
+- Steps to reproduce: Journal page → gear → New journal. With the Name field focused (it is on open), press Enter. Then type anything.
+- Expected: an error that matches the field ("Name cannot be empty"), and focus stays in the field so the user can type the name.
+- Actual: the error reads "Title cannot be empty" (`qa/shots/p7-04-empty-enter.png`), and the field loses focus: `primaryFocus` = the dialog's `FocusScopeNode`, so what's typed next goes nowhere until the field is clicked. Spaces-only is also rejected with the same text (correct).
+- Notes: shared widget `lib/core/widgets/create_name_color_dialog.dart`, used by journals, calendars (`calendar_list_actions.dart`), to-do lists (`todo_list_actions.dart`, `todo_manage_sheet.dart`) and jobs (`jobs_manage_sheet.dart`), so all of those inherit it (only the journal one was driven). Same focus shape as BUG-026 (dictionary dialog). Also seen in Settings → Pages → Custom quotes: Enter on a duplicate ("That quote is already in the pool.") drops focus from the "Add a quote" field (`p7-79-cq-dup.png`; the next Ctrl+A/Delete did nothing).
+
+### BUG-051 [Phase 7] The Trash dialog's "Restored …" toast never goes away
+- Severity: Minor
+- Found: 2026-09-30, Phase 7 (qa-011)
+- Steps to reproduce: Journal page → gear → Recently deleted → Restore on any item (here journal "Gamma", later entry "Same stamp B"). Close the dialogs and move the mouse away from the toast.
+- Expected: the confirmation disappears after a few seconds like the other notices (SOFT_DELETE_TOAST.md §5.4 uses an 8 s dwell for the delete toasts).
+- Actual: `Restored Journal "Gamma"` sat at the top of the window from 4:04 PM until the app was restarted at 4:11 (`qa/shots/p7-52-closed.png`, `p7-56-dd.png`); `Restored "Same stamp B"` was still there after 3 s, 18 s and 48 s with the pointer elsewhere (`p7-63-toast-3s.png` … `p7-65-toast-48s.png`). It covers the middle of the title area.
+- Notes (2026-09-30, Phase 8): same for a dream: `Restored "Second dream"` stayed over the Dreams page title area for over 2 minutes (`qa/shots/p8-22-dreams-after-restore.png`, `p8-25-narrow.png`).
+- Notes (2026-09-30, Phase 10): same for a calendar: `Restored Calendar "Holidays"` still showing 15 s later with the pointer elsewhere (`qa/shots/p10-79-after15s.png`).
+- Notes: `trash_dialog.dart` `_restore` calls `showVoyagerToast` with no `dwell`, and in `voyager_toast.dart` a toast without a dwell "is staying up until its owner takes it away"; the dialog never does. The same applies to its "Already restored" and "Can't restore … / Restore … first" toasts. Other dwell-less notices that aren't progress cards and so may stick the same way (not driven): `workout_history.dart:800` "Can't move a workout into the future", `media_attach.dart:107` low-disk warning.
+
+### BUG-052 [Phase 7] An entry whose quote is empty has no way to get one back
+- Severity: Minor
+- Found: 2026-09-30, Phase 7 (qa-011)
+- Steps to reproduce: open an entry that shows a quote under the body. Click the quote → Edit quote → select all, delete → Save. (Or open any entry that was created without a quote, e.g. one imported or synced from an older build.)
+- Expected: some way to add a quote again (the quote area stays as a placeholder, or Browse quotes is reachable elsewhere).
+- Actual: the quote line disappears and the body box grows into its space (`qa/shots/p7-75-emptyquote.png`); SQLite `custom_quote` = '' and `quote_id` null. The only entry point to the quote editor was the quote text itself, so the entry can never get a quote again, even with "Show quotes" on.
+- Notes: `_EntryQuote` (`journal_page.dart`) returns `SizedBox.shrink()` for a null or empty quote, and it is the only caller of `_editQuote`. Saving and Ctrl+Enter in the dialog, Browse quotes (search, case-insensitive match highlight, "No quotes match …") all worked.
+
+### BUG-053 [Phase 7] "New entry" saves a blank entry on every click; ten quick clicks leave ten empty "Untitled" entries
+- Severity: Minor
+- Found: 2026-09-30, Phase 7 (qa-011)
+- Steps to reproduce: Journal page, journal Alpha. Click "New entry" ten times, 100 ms apart. (Or click it once and then move to another entry without typing.)
+- Expected: an untouched new entry is either not kept, or the button reuses the blank entry already open instead of stacking another.
+- Actual: ten rows, all `title` '' and `body` '', each with its own quote and timestamp 0.3 s apart, listed as ten "Untitled" entries (`qa/shots/p7-83-rapid10.png`, Alpha 31 → 41). They stay after switching entries and after restart, sync to the cloud, and count in the journal totals (On This Day skips them, since both title and body are blank). Nothing ever cleans them up; each has to be deleted by hand, with a confirm dialog each time.
+- Notes: by design in the code the row is written at once (`_createEntryOptimistic`, and `_finalizeNewEntry`'s comment explains the write is what schedules the upload). No FlutterError; the ten were created in order with distinct ids. JOURNAL_DATA_LOSS_POSTMORTEM.md's incident began while "empty test entries were being deleted in quick succession", i.e. clearing exactly this kind of leftover.
+
+### BUG-054 [Phase 7] With "Only my quotes" just turned on, the next new entry still gets a bundled quote
+- Severity: Minor
+- Found: 2026-09-30, Phase 7 (qa-011)
+- Steps to reproduce: Settings → Pages → Custom quotes: add three quotes, turn "Only my quotes" on, Done. Ctrl+Tab to Journal, open Alpha, click "New entry".
+- Expected: the entry's quote is one of the three custom quotes.
+- Actual: the first new entry got the bundled "Write what should not be forgotten." (`quote_id` `quote_1`); the next nine got custom quotes. SQLite `settings_table.custom_quotes_only` was already 1.
+- Notes: suspected from the code: `_createEntryOptimistic` draws synchronously from `quoteBankProvider` whenever `quotesLoadedProvider.hasValue`, and a provider that is refreshing still has its previous value, so the first draw after a pool change comes from the old bank. The same applies right after adding a custom quote ("a quote the user just added is immediately eligible" per the provider's comment). Not re-run.
+
+### BUG-055 [Phase 7] At the minimum window size the tucked On This Day strip covers mood 10 and half of the delete button
+- Severity: Minor
+- Found: 2026-09-30, Phase 7 (qa-011)
+- Steps to reproduce: a journal with On This Day on and a match today (Alpha, Monthly + yearly). Window at the minimum size (`place 0 0 1440 1040`), Dark + Scatter, any entry open. Click where the mood slider's last stop (10) is, at about (1368, 252) client px.
+- Expected: mood set to 10 (HLD §5.3 allows the strip to overlap "~8 px over the editor's right edge").
+- Actual: at this width the metadata row wraps, and the tucked strip (x ≈ 1350–1424) sits over the right end of the mood slider and the left half of the trash button (`qa/shots/p7-96-min-otdclick.png`). The click at the "10" stop opened the card instead and the mood stayed 5 in SQLite (`p7-97-min-mood10.png`). Only the left half of the trash button is clickable. At maximized they don't overlap.
+- Notes: the strip only shows on days with a match, so it comes and goes. Dragging the slider thumb to the end may still reach 10 (not tried). ON_THIS_DAY_HLD.md §10 open point 3 covers the scrollbar overlap only.
+
+### BUG-056 [Phase 7] Journals have no stable order: after signing in on another install the switcher, the Manage list and the All-journals "New entry" target all change
+- Severity: Minor
+- Found: 2026-09-30, Phase 7 (qa-011)
+- Steps to reproduce: create journals in the order "Journal" (auto, BUG-048), "Alpha", "Gamma". The dropdown and Manage journals list them in that order, and in All journals the button reads "New entry in Journal". Cold re-login (`guard.ps1` → `reset.ps1 -Force` → `launch.ps1` → `login.ps1`).
+- Expected: the same order on every device (creation order, or a user-set order), and the same default journal for new entries.
+- Actual: after the pull the order is Alpha, Gamma, Journal (`qa/shots/p7-100-light-manage.png`, `p7-101-light-dropdown.png`), and in All journals the button became "New entry in Gamma" (`p7-95-min.png`); earlier in the session it had said "New entry in Alpha" and then "New entry in Journal".
+- Notes: `DriftJournalRepository.listJournals` (`drift_repositories.dart`) selects with no ORDER BY, so the order is SQLite's row order, i.e. whatever order rows were inserted, which after a pull is the order they arrived. There's no sort field and no reorder control (TEST_PLAN P7 lists "manage sheet reorder"; the Manage dialog has none). The All-journals new-entry target looks like it follows the first listed journal (not confirmed in code).
+
+### BUG-057 [Phase 7] Light theme: journal names in the switcher are pastel on cream (Gamma 2.0:1)
+- Severity: Cosmetic
+- Found: 2026-09-30, Phase 7 (qa-011), light-theme spot-check
+- Steps to reproduce: Settings → Appearance → Light. Journal page → click the header to open the journal dropdown.
+- Expected: readable labels (4.5:1 for text).
+- Actual: each journal name is drawn in its own palette colour on the cream menu: "Gamma" `#EA999C` on `#F8F6EF` measures 2.04:1, "Alpha" (peach) about the same; "Journal"/"All journals" (periwinkle) a little better (`qa/shots/p7-101-light-dropdown.png`). The header title uses the same colour. In dark the same colours read fine.
+- Notes: same family as the P2 lead (To-Do header pale green on cream) and BUG-042. The rest of the journal page in light (list, editor, On This Day card, Manage dialog) was legible.
+
+### BUG-058 [Phase 7] The journal body swallows Tab and Shift+Tab on every line, so keyboard focus can never leave it
+- Severity: Minor
+- Found: 2026-09-30, Phase 7 (qa-011)
+- Steps to reproduce: Vim off. Journal page, click the Title. Press Tab, then Tab and Shift+Tab several more times. Read `FocusManager.instance.primaryFocus` over the VM service after each press.
+- Expected: Tab moves on from the body (to the next control), Shift+Tab goes back to the Title, at least on lines that aren't list items (P4: Tab indents only list lines).
+- Actual: Title → body on the first Tab (correct), then the body keeps focus for every further Tab and Shift+Tab (8 and 4 presses, focus rect unchanged); nothing is inserted into the text (no `\t` in SQLite). Esc doesn't release it either (focus stays on the body). Enter in the Title does move to the body, as designed.
+- Notes (2026-09-30, Phase 8): the dream body does the same (`_DreamBodyEditorState._handleKey` returns `handled` for every Tab, on purpose per its comment). Title Enter/Tab → body works; Shift+Tab ×2, Tab ×2 and Esc then all keep focus in the body. Clicking a dream row leaves focus on the route's scope, so the next keystrokes go nowhere.
+- Notes: with BUG-009 (nothing else on the page takes Tab focus), the journal is mouse-only apart from typing: there's no keyboard route to the entry list, New entry, mood, weather, date, delete, the journal switcher or the gear, and no journal shortcuts in the Ctrl+/ list. Arrow keys in the body move the caret only.
+
+### BUG-059 [Phase 7] After signing in on an empty device, custom quotes don't load until restart: the dialog says there are none, re-adding one duplicates it, and with "Only my quotes" new entries get the placeholder "Write your story."
+- Severity: Minor
+- Found: 2026-09-30, Phase 7 (qa-011)
+- Steps to reproduce: account with 3 custom quotes and "Only my quotes" on, all in the cloud. Cold re-login (`guard.ps1` → outbox 0 → `reset.ps1 -Force` → `launch.ps1` → `login.ps1`); SQLite has the 3 quotes and `custom_quotes_only` = 1 within 15 s. Without restarting: (a) press Ctrl+Alt+J on the Journal page and type a line; (b) Settings → Pages → Custom quotes; (c) type "QA quote one" there and press Enter.
+- Expected: the quick entry gets one of the custom quotes; the dialog lists the three quotes; adding an existing one says "That quote is already in the pool."
+- Actual: (a) the quick entry is stamped `quote_id` 'default', "Write your story." (`qa/shots/p7-116-qje2.png`), the QuoteBank's empty-pool placeholder, because the pool is custom quotes only and the custom list is still the empty one read before the pull. (b) The dialog says "You haven't added any quotes yet." with the switch on and the hint "with none of your own, entries have no quote to draw" (`p7-117-cq-after-relogin.png`). (c) It's accepted and SQLite now holds "QA quote one" twice (`1b6d4e48…` and `0d7f6d91…`), which syncs.
+- Notes: the known gap from FV-2 (BUG-010's notes: `customQuotesProvider` isn't refreshed after the startup pull, so the pool lacks pulled quotes until a restart), with these user-visible results. With "Only my quotes" off, the pool falls back to the bundled quotes only, so the symptom is just that custom quotes aren't drawn.
+
+### BUG-060 [Phase 8] Dream list: a dream with no detailed log looks the same as a finished one (no "drafted" indicator)
+- Severity: Minor
+- Found: 2026-09-30, Phase 8 (qa-012)
+- Steps to reproduce: Dreams page → New dream → click the sticky-note corner and type "only a note here" (leave Title and body empty). Ctrl+Tab away and back.
+- Expected: DREAM_JOURNAL.md, Split-Pane Dashboard: "If the user hasn't written a detailed log yet, the card should have a faint border or subtle indicator letting them know it's drafted."
+- Actual: the row reads "Untitled" + date, with the same surface and border as every other row (`qa/shots/p8-08-back.png`, right half). A dream with a title but no body ("Second dream" before its body autosaved, `p8-05a-before.png`) also looks like any other row. Nothing in the list separates drafts from logged dreams.
+- Notes: `_DreamEntryListTile` (`dream_journal_page.dart`) has no draft state; it only omits the preview line when the body is empty. Related HLD drift (not logged separately): the HLD's sticky-note "pin" button (note slides away, a text box slides up under the body) was removed on purpose in commit `2b667aa` ("Feedback + apple_design"), and the note now only opens/closes; DREAM_JOURNAL.md still describes pinning.
+
+### BUG-061 [Phase 8] Restarting replaces every dream's sticky note with a copy of its body; the note text is lost
+- Severity: Blocker
+- Found: 2026-09-30, Phase 8 (qa-012)
+- Steps to reproduce: Dreams page → New dream → Title "R1 dream", Enter, body "R1 BODY text". Open the sticky note (bottom-right corner) and type "R1 NOTE text". Click another dream. SQLite: `notes` = 'R1 NOTE text', outbox 0. Quit (`stop.ps1`) and relaunch; wait ~5 s.
+- Expected: the note still reads "R1 NOTE text".
+- Actual: within 5 s of launch (the startup pull) SQLite has `notes` = 'R1 BODY text', with `version` (1) and `updated_at` unchanged, and the sticky note shows the body text (`qa/shots/p8-11-typed-after-open.png` for "Second dream"). The same happened to every dream with both a body and a note: "First dream title" lost "note for dream one", "Second dream" (no note before) got its body as a note. Only the dream with an empty body kept its note ("only a note here"). Nothing is shown to the user, and there's no undo.
+- Notes: cause: `CharacterSequenceCrdtMerger.applyMergedPayload` (`lib/domain/services/character_sequence_crdt_merger.dart`, about line 102) builds the pulled payload from the operation log's latest snapshot, sets `body` to the merged text, and then `if (latestSnapshot.containsKey('notes')) result['notes'] = body`, a branch meant for to-do tasks, whose CRDT text field is `notes`. A dream snapshot (`dreamEntryToFirestore`) has both keys, so its note is always overwritten. `pullDreamEntries` then applies that payload via `mergeDreamEntryFromRemote` (`notes` taken from the data when the remote version wins or ties). A dream with an empty body has no char ops, so the snapshot is returned unchanged, which is why that one survived. Scope (inferred from the code, not driven): every device that pulls a dream through the operation log gets the corruption, including a cold sign-in on a new device. The corrupted note is written locally with `recordLocalActivity: false` and no version bump, so it isn't uploaded straight away, but the next note or body edit uploads the whole row, body-as-note included. Firestore's copy of the notes wasn't checked: a direct REST read was blocked in this session.
+- Notes (2026-09-30, same session, reproduction): seen on 3 of 4 restarts. (1) First restart: all three dreams that had a body. (2) New dream "R1" (body + note): note overwritten on the next restart. (3) The restart after that left R1 alone (probably skipped as unchanged since the last full pull, `_unchangedSinceLastFullPull`). (4) After new dream "R2" (body "R2 BODY", note "R2 NOTE plus") and a note edit: the next restart overwrote both R1 and R2 (`notes` = 'R1 BODY text' / 'R2 BODY'), outbox 0 before the stop. Side effect: deleting R1 after (2) and clicking Undo brought its old note back ("R1 NOTE text", version 4). The undo restored the page's in-memory copy, which was loaded before the pull corrupted the row, so the pre-pull note got written back.
+- Notes (2026-09-30, scope): dreams with **no** note are hit too. The snapshot carries `'notes': null`, so `containsKey('notes')` is true. After 122 dreams were seeded through the app's repository + `pushDreamEntryNow` and the app was restarted once, 74 of the 129 live dreams had `notes` = `body` (SQLite), e.g. `p8-long` (seeded with notes null) now shows its whole 700-word body in the sticky note (`qa/shots/p8-56-long-title-end.png`). Every seeded note ("seed note 0", "seed note 10", …) survived; a seeded dream counts only if its op log has char ops. For a user, every dream they type a body into gets that body copied into its note on the next restart.
+- Notes (2026-09-30, cold sign-in): after `reset.ps1 -Force` → `login.ps1` on an empty device, the pull (`dream_entries 3796ms (129, full)`) produced the same state: 77 of 129 dreams with `notes` = `body`, every other field equal to the pre-wipe snapshot. A new device gets the corrupted notes too. It isn't known whether Firestore's documents still hold the original notes and only the pull resolves them wrongly, or whether the notes were uploaded corrupted.
+
+### BUG-062 [Phase 8] Opening the dream sticky note doesn't put the caret in it; what's typed next is lost, and the note can't be opened from the keyboard
+- Severity: Minor
+- Found: 2026-09-30, Phase 8 (qa-012)
+- Steps to reproduce: Dreams page, a dream open, note collapsed. Click the note's corner tab (≈ 2782, 1703 maximized); it animates open. Type "zzopen" straight away.
+- Expected: the note opens ready to type (it exists "to take brief notes … to jog their memory", DREAM_JOURNAL.md), or at least the keystrokes land somewhere visible.
+- Actual: `primaryFocus` after the click is the body's `FocusScopeNode`, not the note field; "zzopen" went nowhere (not in the note, the body or the title; SQLite unchanged, `qa/shots/p8-11-typed-after-open.png`). The user has to click a second time inside the note. The collapsed tab also has no keyboard route: Tab from the body never leaves it (see BUG-058's P8 note), and no shortcut opens the note.
+- Notes: `_DreamStickyNoteState._toggleExpanded` (`dream_sticky_note.dart`) only runs the animation; it never requests the note's focus node. Once the note has focus, Tab (nothing to indent) moves to the body and Shift+Tab reaches the note's close button, as the code intends.
+
+### BUG-063 [Phase 8] Hashtags stop at the first non-ASCII letter: "#café" is saved as tag "caf", "#naïve" as "na", and "#夢" is no tag at all
+- Severity: Minor
+- Found: 2026-09-30, Phase 8 (qa-012)
+- Steps to reproduce: Dreams page → New dream. Paste (clipboard) into the body: `… mixed RTL #夢 … end #café #naïve`.
+- Expected: three tags, "夢", "café", "naïve", each highlighted in full.
+- Actual: SQLite `tags_json` = `["caf","na"]`. The pill covers only "#caf" and "#na", and "é" / "ïve" trail after it unstyled (`qa/shots/p8-32-tags.png`); "#夢" gets no pill and no tag.
+- Notes: `journalTagPattern` = `#(\w+(?:-\w+)*)` (`lib/core/utils/journal_tags.dart`), and Dart's `\w` is ASCII-only `[A-Za-z0-9_]`. `extractTags` is shared, so journal entries (and every other user of the pattern) are affected the same way (inferred, only the dream body was driven). A user writing in French, German, Spanish, CJK, Arabic etc. gets truncated or missing tags, and different words can collapse into the same tag ("#café" and "#cafè" both become "caf"). The rest of the pasted text (CJK, Arabic, emoji including a ZWJ family) rendered and saved correctly.
+
+### BUG-064 [Phase 8] Shrinking the window on the Dreams page overflows the editor's date/delete row (RenderFlex overflowed by 70 px)
+- Severity: Cosmetic
+- Found: 2026-09-30, Phase 8 (qa-012)
+- Steps to reproduce: Dreams page, a dream open, list width dragged to 390 logical (`dream_split_width` 390.5), window maximized. Resize to the minimum (`place 0 0 1440 1040`).
+- Expected: the editor keeps at least `DreamSplitLayout.minEditorWidth` (380 logical) while the list narrows; no FlutterError.
+- Actual: the run log gets `A RenderFlex overflowed by 70 pixels on the right`, from the `Row` at `lib/features/dream_journal/dream_journal_page.dart:1325` (date pill + trash button), with `constraints: BoxConstraints(w=157.5 …)`. The editor column was 157.5 logical wide for a moment. Seen twice (17:42:44 and again after a fresh launch, `qa/logs/run-20260930-173309.log`, `run-20260930-175012.log`; also in `voyager_errors.log`). The settled layout is fine (`qa/shots/p8-63-min-again.png`); the stripe only shows during the resize.
+- Notes: suspected from the code: the list pane is an animated container (260 ms) whose width is clamped against the *new* total width, but while it animates from the old width, the editor gets whatever is left, which is far below its minimum. Resizing to 2000×1100 didn't trigger it.
+
+### BUG-065 [Phase 9] Edit panel keeps showing a task's old due date after the task was moved to another list and then completed (repeating task)
+- Severity: Minor
+- Found: 2026-09-30, Phase 9 (qa-013)
+- Steps to reproduce: To-Do, list "Work". Click "P9 task 31" to open the edit panel. Set date & time → Today → Done; repeat → Every day. Click the list flag (bookmark in the Title) → "Home"; the page stays on Work and the panel stays open on the task. Click the panel's completion checkbox, then move the pointer away.
+- Expected: the task rolls forward to its next occurrence and the panel shows the new date (Thu, Oct 1), as it does for a task that stays in the list on screen.
+- Actual: SQLite has `due_date` Oct 1, `completed` 0 and a completion row for Sep 30, but the panel still reads "Wed, Sep 30" (`qa/shots/p9-76-moved-complete.png`). The first run, on "P9 task 30 EDITED" (moved Work → To-do), kept "Thu, Oct 1 at 9:30 …" on screen through two completions while the task was due Oct 3 (`p9-18-panelcomplete.png`, `p9-20-panel-second.png`); only reopening it from All tasks showed Oct 3. Same list (task 29, not moved): the panel's date updates at once (`p9-22-t29-complete.png`).
+- Notes: display only as far as checked. Each completion recorded the right occurrence (Oct 1, then Oct 2 for task 30), and typing into the stale panel's Title afterwards ("P9 task 31 X") didn't write the old date back. Presumably the page's `panelTask` comes from the list on screen, which no longer contains the moved task. Not checked: changing repeat or "Reset due date" from the stale panel. Not a bug (my first reading of these shots): the panel checkbox looked ticked after each click, but that is the checkbox's hover preview (grey tick while the pointer is over it); with the pointer moved away it's unticked (`p9-74-moved.png`). Clicking it again completes the next occurrence, the same as the row checkbox does.
+
+### BUG-066 [Phase 9] Moving a task to another list leaves its subtasks in the old list; deleting the old list then deletes them from under the moved task
+- Severity: Major
+- Found: 2026-09-30, Phase 9 (qa-013)
+- Steps to reproduce: list "Work" with 30 tasks. Open "P9 task 30" in the edit panel, add subtasks "sub A", "sub B", "sub C". Click the list flag (bookmark at the Title's right edge) → "To-do". Then gear (Manage lists) → Work ⋮ → Delete.
+- Expected: subtasks travel with their parent; Work's delete dialog counts Work's own 30 tasks; deleting Work leaves "P9 task 30" and its subtasks in "To-do" untouched.
+- Actual: after the move SQLite has the parent in `__legacy_todo__` but all three subtasks still with Work's `list_id`. The delete dialog says "This list has 33 tasks" while the Manage row says "28 open · 2 done" (`qa/shots/p9-48-listdelete.png`). "Yes (delete all tasks)" soft-deleted sub A/B/C with Work's stamp; "P9 task 30 EDITED" in To-do lost its subtasks and its row's "0 | 3" count (`p9-49-afterdelete.png`). Nothing says the other list's task was touched. The only way back is restoring the whole Work list from Recently deleted, which also brings back the 30 tasks the user meant to delete (`p9-51-restored.png`); the subtasks came back with it.
+- Notes: `_moveToList` (`todo_edit_panel.dart`) and `_moveTaskToList` (`todo_page.dart`, row menu "Move task to") both write only the parent's `listId`; `deleteTodoList` → `softDeleteTasksInList(list.id)` then matches the subtasks by their stale `list_id`. "Yes" (move to "To-do") would move the subtasks to To-do as a side effect (not driven).
+- Notes (2026-09-30, Phase 9 follow-up, qa-014): driven. A4 (with subtask "s3") moved Alpha → Beta, then Alpha deleted with "Yes": s3 now has the built-in list's id while A4 stays in Beta; the dialog counted s3 among Alpha's "7 tasks" (BUG-073). On screen nothing looks wrong: Beta's A4 row shows "0 | 1" and its panel lists s3 (`qa/shots/p9f-20-beta.png`), because the panel finds subtasks by parent. The stray `list_id` survived a cold re-login. So with "Yes" the damage is a wrong `list_id` only; with "Yes (delete all tasks)" it's the deletion described above. Anything else that queries by `list_id` (counts, search per list) sees the subtasks in the wrong list too. The Trash dialog's "Restored …" toast stuck here as well (BUG-051).
+
+### BUG-067 [Phase 9] To-do edit panel: an image pasted while the Notes field has focus is attached to the task, and pasting the same image again adds a second copy
+- Severity: Minor
+- Found: 2026-09-30, Phase 9 (qa-013)
+- Steps to reproduce: window 2000×1100, To-Do, open a task in the edit panel. Put a PNG on the clipboard (registered "PNG" format, `qa/data/img05.png`). Click inside the gallery strip and press Ctrl+V. Then click into Notes (caret at the end; `primaryFocus` = the notes `FocusNode`) and press Ctrl+V again.
+- Expected: MEDIA.md §"Surfaces" table: "Todo notes / title / subtasks — No images — Text only; image-only → no-op". The second paste does nothing. And the same picture shouldn't be attached twice to one task (or the second attach should say it's already there).
+- Actual: the second paste (Notes focused, notes text unchanged) attached the image to the task's gallery anyway. `media_references_table` holds two live rows for the same `media_id` `6d74e7c8…` (sort 3 and 4), and the strip shows the purple image twice (`qa/shots/p9-64-dupes.png`). Removing one copy works and keeps the shared asset referenced (`unreferenced_at` stays null), so there's no data loss, just a duplicate the user didn't ask for.
+- Notes: the first paste, onto the strip, was correct. File picker, drag-and-drop (two PNGs at once), reorder by drag and remove (confirm → reference soft-deleted, asset `unreferenced_at` set) all worked. Not checked whether the Title or subtask fields also accept an image paste.
+
+### BUG-068 [Phase 9] Ticking the top task several times quickly scrolls the list far down; the next clicks tick, untick or open unrelated tasks
+- Severity: Minor
+- Found: 2026-09-30, Phase 9 (qa-013)
+- Steps to reproduce: list "Perf 200" (200 open tasks "Perf task 000".."199", seeded with `qa/steps/p9-seed200.dart.txt`), maximized, scrolled to the top. Click the first row's checkbox (273, 173) ten times, 100–150 ms apart (step files `qa/steps/p9-burst10.txt`, `p9-rapidrows3.txt`).
+- Expected: the top tasks are completed one after another (each click hits the row that slid up), or clicks that land mid-animation are ignored; the list stays at the top.
+- Actual: within the burst the list jumps to the lower part of the list. One run completed "Perf task 183", "184" and "186" and none of the top tasks (`qa/shots/p9-87-fast10.png`). Another left the list showing tasks 167–188 with the edit panel open on "Perf task 120", and SQLite showed "Perf task 123" and "167" each completed and un-completed again (version 4, `completed` 0) (`p9-90-f0.png` … `p9-90-f2.png`); none of the top tasks were ticked. The first 20-click run completed 000, 001 and 129. The user sees unrelated tasks flash, a panel open, and has to scroll back to find where they were; any task completed down there by accident drops into the Completed section unnoticed.
+- Notes: at one click per 400 ms or slower it works as intended: 002–006, then 008–012 were completed in order with confetti, the list stayed at the top (`p9-86-r0.png` … `r5`, `p9-89-b1.png` … `b7`). At 150 ms, a second click on the row that just slid up is dropped (`p9-88-j1.png`: only 007 of two clicks). Each of the three jumping bursts logged a FlutterError at that moment (`voyager_errors.log` 19:51:36.613, 19:53:27.089, 19:55:12.885; `qa/logs/run-20260930-194620.log` line 22 and "Another exception" ×6): "A RenderViewport exceeded its maximum number of layout cycles … 20 times and still there was no consensus on the scroll offset", from `CustomScrollView-[String <'shell.todo.taskList'>]` (`lib/core/widgets/keep_alive_scroll.dart:154`), position `_StableViewScrollPosition` offset 6731.0 of 0.0..9822.8. So the jump is the viewport giving up on its offset corrections; the slow runs logged nothing. Debug build; the release build may animate faster, so the threshold may differ.
+
+### BUG-069 [Phase 9] Closing the shortcuts list (Ctrl+/) returns focus to the To-Do composer with its draft fully selected; the next keystroke wipes the draft
+- Severity: Minor
+- Found: 2026-09-30, Phase 9 (qa-013); first noticed in Phase 3 (lead, Vim ON)
+- Steps to reproduce: Vim off. To-Do, click the "Add task" composer and type "draft text". Press Ctrl+/ (shortcuts list opens), then Esc. Type "Z", press Enter.
+- Expected: the caret comes back where it was, after "draft text"; typing continues the draft ("draft textZ").
+- Actual: the draft is selected in full on return, so "Z" replaces it; Enter adds a task titled "Z" (SQLite, created 00:03:01Z) and "draft text" is gone (`qa/shots/p9-98a.png` before, `p9-99-afterZ.png` after). Ctrl+Z wasn't tried.
+- Notes: the same shape as BUG-033 (carried-over quick to-do draft arrives fully selected). Probably Flutter's select-all on a text field regaining focus by non-pointer means, here when the dialog's route pops and focus is restored. Other dialogs opened from the page by keyboard (Ctrl+F's bar is in-page) weren't checked.
+
+### BUG-070 [Phase 9] At the minimum window size the to-do edit panel hides its image strip and "Add subtask" field below a capped scroll area while the empty space under it stays unused
+- Severity: Cosmetic
+- Found: 2026-09-30, Phase 9 (qa-013)
+- Steps to reproduce: window at the minimum size (`place 0 0 1440 1040`), Dark + Scatter. To-Do → click a task with no subtasks and no images ("P9 task 25"), pointer away from the panel.
+- Expected: Title, date row, Notes, the image strip and "Add subtask" all visible (there is room), or at least a sign that the fields scroll.
+- Actual: the panel shows Title, the date row and Notes; the image strip and "Add subtask" are cut off, and the lower ~40% of the panel (the subtask list area, empty here) is blank above the "Created …" footer (`qa/shots/p9-108-min2.png`). Scrolling the fields with the wheel reveals them (`p9-109-min-scroll.png`), but nothing hints that they're there; a user can't add a subtask or an image without discovering that the field block scrolls.
+- Notes: by design the field block is capped and the subtask list takes the rest (TODO_EDIT_PANEL_UI.md §4.2; comment in `todo_edit_panel.dart` "Capped rather than given a flex share"), which works at maximized. At 2000×1100 the same thing happens: only the top edge of the image strip shows under Notes, and the rest of the panel down to the footer is empty (`p9-110-odd.png`). At those sizes the cap is smaller than the fields, and the reserved subtask area is wasted when there are no subtasks.
+
+### BUG-071 [Phase 9] Light theme: the To-Do header shows the list name in its raw pastel colour on cream (1.4:1)
+- Severity: Cosmetic
+- Found: 2026-09-30, Phase 9 (qa-013), light-theme spot-check; first noted in Phase 2 (lead: "QA List 40 | 0" pale green on cream)
+- Steps to reproduce: Settings → Appearance → Light. To-Do, list "Work" (default pale gold colour `0xFFE5C890`).
+- Expected: a readable header (4.5:1 for text), as the list dropdown manages: its "Work" row is drawn in a darkened brown that reads fine.
+- Actual: the header "Work" is drawn in the list colour itself, `#E5C890` on the cream background `#F4F0E8`, measured 1.42:1, barely visible (`qa/shots/p9-112-light.png`). The dropdown rows for Work/Home are darkened, but "All tasks", "To-do" and "Perf 200" (no list colour, accent periwinkle) are pale too (`p9-113-light-dd.png`).
+- Notes: same family as BUG-057 (journal switcher pastel on cream) and BUG-042. The rest of the page in light (rows, panel, composer, image strip placeholder) was legible.
+
+### BUG-072 [Phase 9] Restoring a deleted to-do list from Recently deleted doesn't bring back its "Default view" setting
+- Severity: Minor
+- Found: 2026-09-30, Phase 9 (qa-013)
+- Steps to reproduce: gear → Work ⋮ → Settings → Default view: on (SQLite `settings_table.default_todo_list_id` = Work's id). Gear → Work ⋮ → Delete → "Yes (delete all tasks)". Gear → Recently deleted → Restore "Work". Then sign in on an empty device (`guard.ps1` → `reset.ps1 -Force` → `launch.ps1` → `login.ps1`) and open To-Do.
+- Expected: the restored list is back exactly as it was, including being the default view, so a new device opens on Work.
+- Actual: after the cold sign-in `default_todo_list_id` is null and To-Do opens on the built-in "To-do" list (1 task) instead of Work (`qa/shots/p9-116-coldpull.png`). The list, its 33 tasks, subtasks, notes and images all came back.
+- Notes: `deleteTodoList` (`lib/features/todo/todo_list_actions.dart`, ~line 323) clears `defaultTodoListId` when the deleted list is the default (on purpose, per its comment) and the clear syncs; the Trash dialog's restore doesn't record or reapply it (nothing under `lib/features/trash` touches `defaultTodoListId`). On this device it went unnoticed because `last_viewed_todo_list_id` (device-local) still pointed at Work. The value wasn't read between the delete and the restore, so "cleared at delete" is from the code, and "null after the pull" from SQLite. The landing on "To-do" is also BUG-012's shape.
+- Notes (2026-09-30, Phase 9 follow-up, qa-014): same with "Yes" (move tasks): Alpha was the default view (`default_todo_list_id` = Alpha's id); right after the delete it was null, and restoring Alpha from Recently deleted left it null. The restored Alpha comes back empty (its tasks stay in the default list, which fits the user's choice to move them, but the Trash row doesn't say so).
+
+### BUG-073 [Phase 9] Delete-list dialog: calls the destination "To-do" after it was renamed, and its task count includes subtasks (even another list's) and doesn't match the list's own count
+- Severity: Cosmetic
+- Found: 2026-09-30, Phase 9 follow-up (qa-014)
+- Steps to reproduce: lists "Alpha" (5 top-level tasks, 1 completed, 1 in the trash; 2 subtasks under A1) and "Beta", plus the built-in list renamed to "Inbox" (Manage lists → ⋮ → Rename). Move "A4" (with subtask "s3") from Alpha to Beta via the panel's list flag (BUG-066 leaves s3 in Alpha). Manage lists → Alpha ⋮ → Delete. Afterwards Recently deleted → Restore a task that was in the trash before the delete.
+- Expected: the dialog names the list the tasks will actually go to ("Inbox"), and gives a count that matches what the user sees for Alpha.
+- Actual: "This list has 7 tasks. Move them to the default "To-do" list, or delete everything." with Cancel / Yes / Yes (delete all tasks) (`qa/shots/p9f-15-deletedlg.png`). The list is named "Inbox" everywhere else; the Manage row just above said "3 open · 1 done"; 7 = the 4 live top-level tasks + 3 subtasks, one of which (s3) belongs to Beta's task. The restore toast also says `Restored "A3 trashed" to To-do` (`p9f-18-restoreA3.png`) while the task lands in "Inbox".
+- Notes: message hard-coded in `deleteTodoList` (`lib/features/todo/todo_list_actions.dart`); `total` counts `listTasks(list.id, topLevelOnly: false)`. "Yes" doesn't say what it does (BUG-049's shape, shared `showDeleteContainerDialog`). The move itself worked: see the Phase 9 follow-up in TEST_PLAN.md.
+
+### BUG-074 [Phase 10] Typing an end time in the event time selector moves the start back a day: "11 AM → 12:30p" saves as 11 PM the previous day → 12:30 PM
+- Severity: Major
+- Found: 2026-09-30, Phase 10 (qa-015)
+- Steps to reproduce: Calendar → Add event → title "Repro noon" → clock toggle (time defaults to 12:00 AM → 1:00 AM) → click the time chip. Start field: type `11a`, Enter (focus moves to End, shows 12:00 PM selected). Type `12:30p`, Enter. Save.
+- Expected: Sep 30 11:00 AM → 12:30 PM.
+- Actual: SQLite `start` 2026-09-29T23:00, `end` 2026-09-30T12:30 (13.5 h). The panel's date line becomes "Sep 29 → Sep 30" with "11:00 PM → 12:3…" (the chip truncates the end), which is easy to miss. Keystroke by keystroke (`qa/shots/p10-20-start11.png` … `p10-24-done.png`): after "1" the end reads 1:00 PM (fine); after "12" it parses as 12:00 **AM**, which is before the start, and the start is pushed to 11:00 PM the previous day; ":30p" then only moves the end. Nothing restores the start.
+- Notes: cause, from the code: `_onEndTextChanged` (`lib/core/widgets/time_selector_popovers.dart`) applies every partial parse, and `_applyEndDt`'s failsafe ("if end is pushed to or before start, push start backwards") rewrites `_startDt` mid-typing. The start keeps its new value and the new 13.5 h `_duration` carries into later edits. A second shape seen first in the session: start 2:00 PM, end typed `1:30p` (a typo) silently set the start to 12:00 AM; re-setting the start to `2p` then kept the 13.5 h duration, so the end jumped to 3:30 AM the next day and the saved event "Timed one" is Oct 1 2:00 PM → Oct 2 3:30 PM (`p10-11-endbefore-enter.png`, `p10-15-final.png`). Any end whose prefix parses earlier than the start (12, 1 before a PM start, etc.) triggers it. TIME_SELECTOR.md describes typing "1400" / "2:30 PM" as the main path.
+
+### BUG-075 [Phase 10] Month view: a multi-day event that continues into the next week row shows a blank bar there, with no title
+- Severity: Cosmetic
+- Found: 2026-09-30, Phase 10 (qa-015)
+- Steps to reproduce: Calendar → Month → October 2026, with an all-day event "MD weekend span" Sat Oct 10 → Tue Oct 13 and a timed "MD overnight" Sun Oct 11 20:00 → Mon Oct 12 02:00 (imported, `qa/steps/p10-import2.json`).
+- Expected: the bar repeats the event title at the start of each week row (it is the only place the Mon–Tue part can be identified).
+- Actual: the Oct 10–11 row shows "MD weekend span" and "MD overnight"; the Mon Oct 12 row shows two plain blue bars with no text, and Oct 13 another (`qa/shots/p10-31-october.png`). The same for "MD month span" on Sat Oct 31 / Sun Nov 1 and for "Timed one" on Fri Oct 2. Events take the calendar colour by default, so the blank bars can't be told apart without clicking each one.
+- Notes: at the end of a week row the bar runs off the cell edge, so it's clearly a continuation; the problem is only that the next row's segment has no label.
+
+### BUG-076 [Phase 10] Month view: events in a day cell aren't in time order; a weekly 9 AM event is listed above a daily 7 AM one in some weeks
+- Severity: Cosmetic
+- Found: 2026-09-30, Phase 10 (qa-015)
+- Steps to reproduce: "Daily walk" daily from Oct 1, 07:00–07:30; "Weekly standup" weekly from Mon Oct 5, 09:00–09:30; "Monthly rent" all-day monthly from Oct 1. Month → October 2026.
+- Expected: within a cell, the 7 AM walk above the 9 AM standup every Monday.
+- Actual: Oct 5, 12 and 19 show "Daily walk" then "Weekly standup"; **Oct 26** shows "Weekly standup" then "Daily walk" (`qa/shots/p10-31-october.png`).
+- Notes: cause, from the code: `calendarPackWeekEvents` (`calendar_day_grid.dart`) gives each event one lane for the whole week row, sorted by the *series* start. In the Oct 26 row "Monthly rent" (Sun Nov 1, series start Oct 1 00:00) takes lane 0 on Sunday, so "Daily walk" (which occurs every day of the row) can't use lane 0 and goes to lane 1 all week, and the standup takes lane 0 on Monday. Any event later in the week can reshuffle a recurring event's position, so the same pair flips order from week to week.
+
+### BUG-077 [Phase 10] Week view: an event starting on the hour covers the lower half of that hour's label
+- Severity: Cosmetic
+- Found: 2026-09-30, Phase 10 (qa-015)
+- Steps to reproduce: Week → week of Oct 5, 2026, with "Daily walk" 07:00 every day and "Weekly standup" Mon 09:00. Scroll the timeline up to 4 AM.
+- Expected: WEEKLY_CALENDAR.md §II: the grid layer (hour lines and their inline labels) renders *above* the event blocks, "ensur[ing] the user can always read the time, even over brightly colored blocks."
+- Actual: the event block is drawn over the label: only the top half of "7 AM" and "9 AM" shows above the Monday bars (`qa/shots/p10-34-week-up.png`; zoomed crop of the Mon column). The hour lines are hidden under the blocks too.
+- Notes: only the left (Monday) column carries labels, so it shows wherever a Monday event starts on an hour.
+
+### BUG-078 [Phase 10] Week view: clicking any occurrence of a repeating event opens the wrong day; "This event only" then changes a different occurrence
+- Severity: Major
+- Found: 2026-09-30, Phase 10 (qa-015)
+- Steps to reproduce: "Daily walk" repeating daily from Oct 1, 07:00–07:30. Calendar → Week → move to the week of Oct 12 (`l`). Click the **Friday Oct 16** "Daily walk" bar. Change the title to "Fri16 walk" → Save → "This event only".
+- Expected: the popover says "Fri, Oct 16"; Friday's walk gets the new title.
+- Actual: the popover says "Mon, Oct 12" for Wed Oct 14 and Fri Oct 16 alike (`qa/shots/p10-42-walkedit.png`, `p10-43-fri16.png`). After saving, **Monday** shows "Fri16 walk" and Friday still says "Daily walk" (`p10-45-after.png`). SQLite: series `exception_dates` = `2026-10-12`, new override "Fri16 walk" with `start` 2026-10-12 07:00 and `recurrence_date` 2026-10-12. The user edited a day they didn't click, and the day they meant to change is untouched; with "This and all future events" the split point would be the wrong day too (not driven).
+- Notes: cause, from the code: the grid's `onEventTap: (event) => _openEventSidebar(event: event)` (`calendar_page.dart` ~2334) passes no day, so `_showEventPopup` takes `date: day ?? _focused` and resolves the occurrence from the page's focused date (the week's anchor), not the clicked column. Month view opens the clicked day correctly (Thu Oct 15 → "Thu, Oct 15", `p10-47-month-oct15.png`), and the Week view's right-click → Delete → "This event only" deleted the right day (Sat Oct 17 → exception `2026-10-17`). Non-repeating events are unaffected (their date comes from the event). The earlier "Standup Oct12 only" edit looked right only because the clicked Monday happened to be the focused date.
+
+### BUG-079 [Phase 10] Changing a calendar's colour doesn't change its events' colour: the switcher and Manage dot turn green while every event stays pink
+- Severity: Minor
+- Found: 2026-09-30, Phase 10 (qa-015)
+- Steps to reproduce: Manage calendars → New calendar "Holidays" (pink). Import 3 events into it (no "color" field, so they take the calendar's colour). Manage → Holidays ⋮ → Change color → green → Save.
+- Expected: the calendar's events follow its colour (they were never given a colour of their own), so the grid turns green.
+- Actual: `calendars_table.color_value` is green, but each event's `color_value` still holds the old pink (4294228196), and the grid keeps drawing them pink (`qa/shots/p10-74-recolor.png`); the Manage dot is green. A calendar's colour only reaches events created after the change, so one calendar ends up in two colours and "Change color" looks like it did nothing on the page.
+- Notes: every creation path snapshots the colour: the import dialog's `_defaultColor` writes the calendar colour into each event, and the event panel stores it too ("Allday one" got the default calendar's 4286357247). The per-event right-click menu has "Default color", which suggests a "follow the calendar" state exists, but new events never start in it. CALENDAR_OVERLAY_HLD.md §2 says overlay events "paint `event.colorValue`", so the snapshot is used everywhere.
+
+### BUG-080 [Phase 10] Completing a to-do from the calendar makes its marker vanish; the HLD's completed styling never shows, and there's no way to undo from the calendar
+- Severity: Minor
+- Found: 2026-09-30, Phase 10 (qa-015)
+- Steps to reproduce: To-Do → list "Cal Tasks" → task "Cal task A", due Thu Oct 1 10:15 AM. Calendar → Week (week of Sep 28): the task shows as a red bar at 10:15. Click it → in the popover tick the circle → Save. (Settings → Hide completed tasks is off.)
+- Expected: WEEKLY_CALENDAR.md §IV: task bars are "Solid fill or bordered (depending on completion state)", i.e. a completed task stays on the grid in its completed style, where it can be seen and unticked.
+- Actual: SQLite `completed` 1, and the bar disappears from the grid (`qa/shots/p10-91-todocomplete.png` before Save, `p10-92-todosaved.png` after). No toast or undo; to revert it the user has to go to To-Do.
+- Notes: `calendar_todo_markers.dart` line ~191 skips `task.completed` when building markers (and line ~212 again), while the bar/row painters (lines ~293–431) have a full completed style (lower alpha, strikethrough) that can never be reached. The rest of the to-do interplay worked: the marker appears at its due time, the popover edits the title, and the marker updates at once (`p10-90-todoedited.png`).
+
+### BUG-081 [Phase 10] Week view: many all-day events on one day grow the all-day shelf without limit and squeeze the whole week's timeline to a strip
+- Severity: Minor
+- Found: 2026-09-30, Phase 10 (qa-015)
+- Steps to reproduce: import 25 all-day events and 25 timed (09:00–09:30) events on Thu Oct 22, 2026 (`qa/steps/p10-import50.json`). Calendar → Week → week of Oct 19, maximized.
+- Expected: the all-day shelf caps at a few rows with a "+N more" (as each month cell does with "+47"), so the hour grid stays usable for every day of the week.
+- Actual: the shelf lists all 25 all-day bars at full height, about 750 px; the timeline below gets ~150 px for all seven days (two hours visible at a time, `qa/shots/p10-94-week50.png`, `p10-95-week50-scroll.png`). The rest of the week (Mon–Sun, which have only one or two events each) is equally squeezed. At 1440×1040 it would be worse (not tried).
+- Notes: the 25 overlapping 9 AM events become 25 unlabeled 10 px slivers, which is expected at that density. Month view handles the same day well: three rows and "+47" (`p10-96-month50.png`), although its three all-day rows read "D50 allday 15, 01, 02": events with equal start and length have no stable tie-break (`calendarPackWeekEvents` sorts only by start, then duration).
+
+### BUG-082 [Phase 10] Event panel: after the time picker is closed with Esc, nothing has focus, so Ctrl+Enter doesn't save and typing goes nowhere
+- Severity: Minor
+- Found: 2026-09-30, Phase 10 (qa-015)
+- Steps to reproduce: Vim off. Calendar → Add event → type "Focus test" → clock toggle → click the time chip (the picker opens with the start field focused) → Esc (the picker closes, the panel stays). Press Ctrl+Enter.
+- Expected: focus returns to the panel (the Title, or the time chip), so Ctrl+Enter saves the event as it does before the picker was opened (CTRL_ENTER_SUBMIT_HLD.md).
+- Actual: `primaryFocus` = the popover route's `FocusScopeNode`; Ctrl+Enter does nothing and the panel stays open with nothing saved (`qa/shots/p10-105-after-timeesc.png`, `p10-106-ctrlenter-after.png`; no row in SQLite). Typed keys go nowhere. The user has to click the Title or press Save. First hit while saving "Repro noon" (BUG-074), where Ctrl+Enter after Esc was silently ignored.
+- Notes: Esc on the panel itself still works and, by design, saves (`_handleDismissPop`: dismissing saves valid edits), so a keyboard user who presses Esc again gets the event saved anyway. The other route, Ctrl+Enter, is what's lost. Same focus-loss family as BUG-050 and BUG-026.
+
+### BUG-083 [Phase 10] Month view at smaller window sizes squashes every event into an unreadable sliver, and the "+N" count misses events that are hidden
+- Severity: Minor
+- Found: 2026-09-30, Phase 10 (qa-015)
+- Steps to reproduce: October 2026 with 1–6 events per day (this session's data). Calendar → Month. `place 0 0 1440 1040` (the minimum), then `place 0 0 2000 1100`.
+- Expected: cells show at least one readable event title (or a count) at every window size the app allows, and "+N" counts everything not shown.
+- Actual: at 1440×1040 each cell draws one bar about 4 px tall with its title clipped to the top pixels of the letters (`qa/shots/p10-111-min-month.png`; zoomed: "Daily walk" is illegible). At 2000×1100 cells show 2–3 such slivers (`p10-115-odd-month.png`). Events beyond the first are hidden without a count: Oct 5 holds "Daily walk" + "Weekly standup" and shows one sliver and no "+1"; Oct 6 (6 events) says "+3" while only one is visible. The month view at these sizes conveys only "something is here".
+- Notes: maximized (2880×1800) is fine: 3–4 readable rows per cell (`p10-31-october.png`). Week view at the minimum size is usable but its all-day shelf (4 rows on Sep 30) leaves about 3 hours of timeline visible (`p10-113-min-week.png`); see BUG-081 for the extreme case. No `RenderFlex overflowed` in the run log during these resizes.
+
+<!-- Last ID: BUG-083. -->

@@ -1,0 +1,19 @@
+activate
+click 1800 700
+key end
+type  MORE2
+click 660 310
+type QQ
+wait 30
+click 660 175
+wait 30
+type WW
+click 660 310
+wait 30
+click 660 175
+wait 30
+click 1800 700
+key ctrl+end
+type  AFTER
+wait 2500
+shot p8-06-switch

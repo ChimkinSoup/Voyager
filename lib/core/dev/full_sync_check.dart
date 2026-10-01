@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
@@ -137,6 +138,13 @@ class FullSyncCheck {
           // document for itself, so a wipe loses nothing the next seeding
           // does not put back.
           if (isJobSeedId(record.id) && parseVersion(record.data) == 0) {
+            continue;
+          }
+          // Starter exercises are seeded under random ids and uploaded only
+          // once edited, so an untouched one is told by its name instead.
+          if (name == FirestoreCollections.exercises &&
+              parseVersion(record.data) == 0 &&
+              kStarterExercises.contains(record.data['name'])) {
             continue;
           }
           gaps.add(

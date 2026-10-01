@@ -1,0 +1,10 @@
+﻿final b = c.read(quoteBankProvider);
+final counts = <String, int>{};
+final seq = <String>[];
+for (var i = 0; i < 30; i++) { final q = b.nextQuote('6e770f3c-1623-44b8-a50d-16508c00dac1'); counts[q.text] = (counts[q.text] ?? 0) + 1; seq.add(q.text.replaceAll('QA quote ', '')); }
+debugPrint('P7QB counts $counts');
+debugPrint('P7QB seq ${seq.join('-')}');
+final counts2 = <String, int>{};
+for (var i = 0; i < 30; i++) { final q = b.nextQuote('p7-fresh-journal-x'); counts2[q.text] = (counts2[q.text] ?? 0) + 1; }
+debugPrint('P7QB fresh $counts2');
+

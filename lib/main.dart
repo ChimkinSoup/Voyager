@@ -14,6 +14,7 @@ import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/reminders/device_registration.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/sync/pull_progress_toast.dart';
+import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/routing/app_router.dart';
 import 'package:voyager/core/tags/tag_palette.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
@@ -111,6 +112,14 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
   /// Whether the startup pull has run, and with it the merge that makes this
   /// device's registration safe to write — see [registerThisDevice].
   var _startupPullDone = false;
+
+  /// Counts sign-outs, so a warmup begun under one sign-in can tell it has
+  /// outlived it and must not finish as if for the next.
+  var _authSession = 0;
+
+  /// Starts each live sync controller once the pull ahead of it is done.
+  /// Dropped on sign-out, so the next account's pull runs first too.
+  ProviderSubscription<LiveSyncController>? _liveSync;
 
   @override
   void initState() {
@@ -296,6 +305,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
   Future<void> _warmUpAfterFirstShellFrame() async {
     if (!mounted) return;
     if (DevFlags.disableCache) return;
+    final session = _authSession;
 
     final sync = ref.read(syncEngineProvider);
     final lazy = ref.read(lazyLoadProvider);
@@ -305,7 +315,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     final shellWarmupFuture = ref.read(shellDataWarmupProvider.future);
 
     await quotesFuture;
-    if (!mounted) return;
+    if (!mounted || session != _authSession) return;
 
     // Alongside the sync rather than after it: the weather location is the
     // only thing it needs from the pull, and it syncs that for itself.
@@ -334,7 +344,9 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
             progressToast.cancel();
             rethrow;
           }
-          if (!mounted) {
+          // Signed out during the pull: the sign-out reset stands, and the
+          // next sign-in runs a warmup of its own.
+          if (!mounted || session != _authSession) {
             progressToast.cancel();
             return;
           }
@@ -349,7 +361,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
           // session after the first sign-in change. Read now, not before the
           // pull: a sign-in change during it has already replaced the one
           // there was then.
-          ref.listenManual(
+          _liveSync ??= ref.listenManual(
             liveSyncProvider,
             (_, controller) => controller.start(),
             fireImmediately: true,
@@ -477,6 +489,14 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
       }
     } else {
       _stopWeatherRefreshTimer();
+      // So signing in to another account pulls it the way a launch does,
+      // progress toast and all, instead of trickling in through live sync.
+      _postAuthWarmupTimer?.cancel();
+      _authSession++;
+      _postAuthWarmupStarted = false;
+      _startupPullDone = false;
+      _liveSync?.close();
+      _liveSync = null;
     }
   }
 

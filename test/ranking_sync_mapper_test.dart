@@ -36,6 +36,22 @@ Map<String, dynamic> remote(Map<String, dynamic> overrides) => {
   ...overrides,
 };
 
+/// What Firestore holds after [update] is uploaded over [stored] with merge:
+/// maps are merged key by key, everything else is replaced.
+Map<String, dynamic> firestoreMerge(
+  Map<String, dynamic> stored,
+  Map<String, dynamic> update,
+) => {
+  ...stored,
+  for (final entry in update.entries)
+    entry.key: entry.value is Map && stored[entry.key] is Map
+        ? firestoreMerge(
+            Map<String, dynamic>.from(stored[entry.key] as Map),
+            Map<String, dynamic>.from(entry.value as Map),
+          )
+        : entry.value,
+};
+
 void main() {
   group('Parent merge', () {
     test('an explicit null score demotes the local copy', () {
@@ -471,6 +487,293 @@ void main() {
       expect(result.merged.notes, 'cold open');
       expect(result.merged.overallScore, 4.5);
       expect(result.localWon, isTrue);
+    });
+  });
+
+  group('Location merge', () {
+    final base = DateTime.utc(2026, 3, 1);
+    final t1 = DateTime.utc(2026, 3, 2);
+    final t2 = DateTime.utc(2026, 3, 3);
+
+    RankingLocation branch(String id, {String label = ''}) => RankingLocation(
+      id: id,
+      latitude: 43.4834,
+      longitude: -80.526,
+      address: '384 King Street North',
+      label: label,
+    );
+
+    /// One device's copy of the entry: [locations] as it holds them, every
+    /// field it has stamped at [base], and [changed] moved on. A removal is a
+    /// key in [changed] with no location behind it.
+    RankingParent device({
+      required List<RankingLocation> locations,
+      required DateTime updatedAt,
+      required int version,
+      Map<String, DateTime> changed = const {},
+    }) {
+      RankingParent build(RankingFieldStamps stamps) => RankingParent(
+        id: 'p1',
+        categoryId: 'cat',
+        title: 'Lazeez',
+        locations: locations,
+        createdAt: base,
+        updatedAt: updatedAt,
+        version: version,
+        fieldUpdatedAt: stamps,
+      );
+      return build({
+        for (final key in rankingParentStampValues(build(const {})).keys)
+          key: base,
+        ...changed,
+      });
+    }
+
+    List<String> idsOf(RankingParent parent) => [
+      for (final location in parent.locations) location.id,
+    ];
+
+    test('locations round trip', () {
+      final parent = device(
+        locations: [branch('x', label: 'Queen St')],
+        updatedAt: base,
+        version: 1,
+      );
+      final merged = mergeRankingParentFromRemote(
+        rankingParentToFirestore(parent),
+        parent.id,
+      );
+      final location = merged.locations.single;
+      expect(location.id, 'x');
+      expect(location.latitude, 43.4834);
+      expect(location.longitude, -80.526);
+      expect(location.address, '384 King Street North');
+      expect(location.label, 'Queen St');
+    });
+
+    test('a payload written before locations keeps the local ones', () {
+      final local = RankingParent(
+        id: 'p1',
+        categoryId: 'cat',
+        title: 'Severance',
+        locations: [branch('x')],
+        createdAt: _older,
+        updatedAt: _older,
+        version: 1,
+      );
+      final merged = mergeRankingParentFromRemote(
+        remote({}),
+        'p1',
+        local: local,
+      );
+      expect(idsOf(merged), ['x']);
+      expect(mergeRankingParentFromRemote(remote({}), 'p1').locations, isEmpty);
+    });
+
+    // HLD §10: device A adds branch X, device B removes branch Y, both
+    // offline. B's removal makes its row newer than A's add, and B has no
+    // stamp for X at all — which must read as "never heard of it", not as
+    // "last touched when the row was".
+    test('an add on one device and a removal on another both survive', () {
+      final a = device(
+        locations: [branch('y'), branch('x')],
+        updatedAt: t1,
+        version: 4,
+        changed: {'loc:x': t1},
+      );
+      final b = device(
+        locations: const [],
+        updatedAt: t2,
+        version: 4,
+        changed: {'loc:y': t2},
+      );
+
+      final onB = resolveRankingParentFromRemote(
+        rankingParentToFirestore(a),
+        'p1',
+        local: b,
+      );
+      expect(idsOf(onB.merged), ['x']);
+      // Y's removal is only on B, so B uploads the merge.
+      expect(onB.localWon, isTrue);
+
+      final onA = resolveRankingParentFromRemote(
+        rankingParentToFirestore(b),
+        'p1',
+        local: a,
+      );
+      expect(idsOf(onA.merged), ['x']);
+      expect(onA.localWon, isTrue);
+    });
+
+    test('two devices adding different branches both keep theirs', () {
+      final a = device(
+        locations: [branch('x')],
+        updatedAt: t1,
+        version: 4,
+        changed: {'loc:x': t1},
+      );
+      final b = device(
+        locations: [branch('y')],
+        updatedAt: t2,
+        version: 4,
+        changed: {'loc:y': t2},
+      );
+      for (final (local, other) in [(a, b), (b, a)]) {
+        final result = resolveRankingParentFromRemote(
+          rankingParentToFirestore(other),
+          'p1',
+          local: local,
+        );
+        expect(idsOf(result.merged).toSet(), {'x', 'y'});
+      }
+    });
+
+    test('a removal later than a label edit removes the branch', () {
+      final a = device(
+        locations: [branch('x', label: 'Airport')],
+        updatedAt: t1,
+        version: 4,
+        changed: {'loc:x': t1},
+      );
+      final b = device(
+        locations: const [],
+        updatedAt: t2,
+        version: 4,
+        changed: {'loc:x': t2},
+      );
+      for (final (local, other) in [(a, b), (b, a)]) {
+        final result = resolveRankingParentFromRemote(
+          rankingParentToFirestore(other),
+          'p1',
+          local: local,
+        );
+        expect(result.merged.locations, isEmpty);
+        // The removal keeps its stamp, so a third device loses to it too.
+        expect(result.merged.fieldUpdatedAt['loc:x'], t2);
+      }
+    });
+
+    test('a label edit later than a removal keeps the branch', () {
+      final a = device(
+        locations: [branch('x', label: 'Airport')],
+        updatedAt: t2,
+        version: 4,
+        changed: {'loc:x': t2},
+      );
+      final b = device(
+        locations: const [],
+        updatedAt: t1,
+        version: 4,
+        changed: {'loc:x': t1},
+      );
+      for (final (local, other) in [(a, b), (b, a)]) {
+        final result = resolveRankingParentFromRemote(
+          rankingParentToFirestore(other),
+          'p1',
+          local: local,
+        );
+        expect(result.merged.locations.single.label, 'Airport');
+      }
+    });
+
+    // Uploads merge into the stored document key by key. A device that has
+    // not pulled another's new branch uploads without it — and must not take
+    // it out of the document, or the device that added it reads its own
+    // surviving stamp with no branch behind it as a removal.
+    test('a device that never saw a branch cannot upload it away', () {
+      final a = device(
+        locations: [branch('x')],
+        updatedAt: t1,
+        version: 4,
+        changed: {'loc:x': t1},
+      );
+      // B edited a note at t2 and has never heard of X.
+      final b = RankingParent(
+        id: 'p1',
+        categoryId: 'cat',
+        title: 'Lazeez',
+        notes: 'went again',
+        createdAt: base,
+        updatedAt: t2,
+        version: 5,
+        fieldUpdatedAt: {
+          for (final key in rankingParentStampValues(
+            device(locations: const [], updatedAt: base, version: 3),
+          ).keys)
+            key: base,
+          'notes': t2,
+        },
+      );
+      final stored = firestoreMerge(
+        rankingParentToFirestore(a),
+        rankingParentToFirestore(b),
+      );
+
+      final onA = resolveRankingParentFromRemote(stored, 'p1', local: a);
+      expect(idsOf(onA.merged), ['x']);
+      expect(onA.merged.notes, 'went again');
+      final onB = resolveRankingParentFromRemote(stored, 'p1', local: b);
+      expect(idsOf(onB.merged), ['x']);
+    });
+
+    test('a removal reaches the stored document as an explicit null', () {
+      final added = device(
+        locations: [branch('x'), branch('y')],
+        updatedAt: t1,
+        version: 4,
+        changed: {'loc:x': t1, 'loc:y': t1},
+      );
+      final removed = device(
+        locations: [branch('y')],
+        updatedAt: t2,
+        version: 5,
+        changed: {'loc:x': t2, 'loc:y': t1},
+      );
+      final stored = firestoreMerge(
+        rankingParentToFirestore(added),
+        rankingParentToFirestore(removed),
+      );
+      expect((stored['locations'] as Map)['x'], isNull);
+      expect(
+        idsOf(
+          resolveRankingParentFromRemote(stored, 'p1', local: added).merged,
+        ),
+        ['y'],
+      );
+    });
+
+    test('locations written as a list still read', () {
+      final merged = mergeRankingParentFromRemote(
+        remote({
+          'locations': [branch('x').toJson()],
+        }),
+        'p1',
+      );
+      expect(idsOf(merged), ['x']);
+    });
+
+    test('a category carries its location toggle, and a legacy one is off', () {
+      final category = RankingCategory(
+        id: 'cat',
+        name: 'Restaurants',
+        colorValue: 0xFF7C9EFF,
+        locationEnabled: true,
+        createdAt: _older,
+        updatedAt: _older,
+      );
+      final merged = mergeRankingCategoryFromRemote(
+        rankingCategoryToFirestore(category),
+        'cat',
+      );
+      expect(merged.locationEnabled, isTrue);
+      expect(
+        mergeRankingCategoryFromRemote(
+          remote({'name': 'Shows'}),
+          'cat',
+        ).locationEnabled,
+        isFalse,
+      );
     });
   });
 

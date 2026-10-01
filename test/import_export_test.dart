@@ -760,6 +760,7 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       ],
       sortMode: RankingSortMode.customField,
       sortFieldId: 'field-writing',
+      locationEnabled: true,
       createdAt: now,
       updatedAt: now,
     ),
@@ -774,6 +775,15 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       fieldValues: const {
         'field-writing': RankingFieldValue(score: 9, notes: 'tight'),
       },
+      locations: const [
+        RankingLocation(
+          id: 'location-1',
+          latitude: 43.4834,
+          longitude: -80.5260,
+          address: '384 King Street North, Waterloo, ON',
+          label: 'King St',
+        ),
+      ],
       status: RankingStatus.inProgress,
       starred: true,
       queueSortOrder: 2,

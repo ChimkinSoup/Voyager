@@ -1,0 +1,12 @@
+activate
+click 1440 576
+type
+key enter
+wait 500
+shot p7-06-spaces
+click 1440 576
+key ctrl+a
+type Alpha
+key enter
+wait 1200
+shot p7-07-created

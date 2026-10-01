@@ -18,4 +18,6 @@ class DevFlags {
   // reconnect→resume-sync path) run through the same failure streak they
   // would against an unreachable Firestore. Session-only; not persisted.
   static bool forceOffline = false;
+  // Shows the rankings map's current zoom level over the map.
+  static bool showRankingsMapZoom = false;
 }

@@ -164,6 +164,28 @@ void main() {
     expect(report.gaps.single.id, applied.id);
   });
 
+  test('untouched starter exercises are not gaps, edited ones are', () async {
+    final workouts = DriftWorkoutRepository(db);
+    await workouts.ensureSeeded();
+    // The plans seeded alongside are not what this test is about.
+    for (final plan in await workouts.listPlans()) {
+      await server.upsertDocument(
+        FirestoreCollections.workoutPlans,
+        plan.id,
+        workoutPlanToFirestore(plan),
+      );
+    }
+
+    expect((await check.run()).safeToWipe, isTrue);
+
+    final bench = (await workouts.listExercises()).first;
+    await workouts.upsertExercise(bench.copyWith(targetSets: 5));
+
+    final report = await check.run();
+
+    expect(report.gaps.single.id, bench.id);
+  });
+
   test('a collection answered from the cache is not vouched for', () async {
     server.cachedCollections.add(FirestoreCollections.trackers);
 

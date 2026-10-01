@@ -1,0 +1,9 @@
+activate
+wheel 88 600 10
+wait 400
+click 88 418
+wait 1500
+place 0 0 1440 1040
+wait 1500
+shot p8-48-min
+status

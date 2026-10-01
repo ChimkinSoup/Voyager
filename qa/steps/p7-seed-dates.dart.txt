@@ -1,0 +1,14 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final alphaId = (await jr.listJournals()).firstWhere((j) => j.name == 'Alpha').id;
+final specs = <List<Object>>[
+  ['p7-date-1900', 1900, 1, 1, 'Year 1900 entry', 'Oldest possible.'],
+  ['p7-date-2100', 2100, 12, 31, 'Year 2100 entry', 'Far future.'],
+  ['p7-date-2027sep30', 2027, 9, 30, 'Future Sep 30 2027', 'Should not be an On This Day match.'],
+];
+for (final s in specs) {
+  final d = DateTime(s[1] as int, s[2] as int, s[3] as int, 12).toUtc();
+  final en = JournalEntry(id: s[0] as String, createdAt: now, updatedAt: now, version: 1, journalId: alphaId, title: s[4] as String, body: s[5] as String, entryDate: d, timestamp: d, mood: 5, weatherIcon: 'sunny');
+  await jr.upsertEntry(en); r.pushJournalEntryNow(en);
+}
