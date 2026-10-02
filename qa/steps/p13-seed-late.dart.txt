@@ -1,0 +1,5 @@
+final now = DateTime.now().toUtc();
+final fr = c.read(financeRepositoryProvider);
+final tx = FinancialTransaction(id: 'p13-late', createdAt: now, updatedAt: now, version: 0, type: TransactionType.expense, amountCents: 900, occurredAt: DateTime(2026, 9, 30, 22, 0), origin: 'LateStore', note: 'late 10pm Sep 30', tags: const ['eve']);
+await fr.upsertTransaction(tx);
+c.invalidate(transactionsProvider);

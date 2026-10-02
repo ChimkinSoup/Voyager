@@ -18,8 +18,13 @@ import 'dart:ui';
 /// [land] to read on its own — see [_labelInk]. Places to eat and drink, which
 /// positron leaves out, are the exception: they keep a grey off the ramp, so
 /// they sit behind the street and place names and the rankings' own markers.
-/// They are also marked `overlay`, which keeps them out of the tiles: the map
-/// draws them itself — see `RankingsTileLayer`.
+/// They are placed in order of the tiles' `rank`, the best known first, so
+/// where names crowd it is those that keep theirs.
+///
+/// Every label is marked `overlay`, which keeps it out of the tiles: the map
+/// draws them itself, the same size on screen at any zoom, where a tile's
+/// own would grow and shrink with it between whole zooms — see
+/// `RankingsTileLayer`.
 Map<String, dynamic> voyagerMapStyle(
   Map<String, dynamic> base, {
   required Color land,
@@ -35,8 +40,9 @@ Map<String, dynamic> voyagerMapStyle(
   // accented labels and the renderer's tile-edge fix, v5 haloless labels in
   // a deeper accent, v6 food and drink labels, v7 building seams closed, v8
   // labels drawn across tile edges, v9 food and drink labels left out of the
-  // tiles — so tiles cached under the old drawing are not reused.
-  'id': 'voyager-v9-${_hex(land)}-${_hex(ink)}-${_hex(accent)}',
+  // tiles, v10 every label left out of them — so tiles cached under the old
+  // drawing are not reused.
+  'id': 'voyager-v10-${_hex(land)}-${_hex(ink)}-${_hex(accent)}',
   'layers': [
     for (final layer in base['layers'] as List)
       _layer(
@@ -80,7 +86,7 @@ Map<String, dynamic> _layer(
   final layout = layer['layout'] as Map?;
   return {
     ...layer,
-    if (isPoi) 'metadata': {'overlay': true},
+    if (isLabel) 'metadata': {'overlay': true},
     if (layer['paint'] != null)
       'paint': {
         for (final MapEntry(:key, :value)
@@ -94,6 +100,7 @@ Map<String, dynamic> _layer(
         'text-font': [fontFamily],
         if (layout?['text-size'] != null)
           'text-size': _enlarged(layout!['text-size']),
+        if (isPoi) 'symbol-sort-key': ['get', 'rank'],
       },
   };
 }

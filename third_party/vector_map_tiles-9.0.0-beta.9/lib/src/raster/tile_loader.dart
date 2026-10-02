@@ -114,9 +114,11 @@ class TileLoader {
           zoom: tileResponse.identity.z);
       // VOYAGER PATCH: a tile past the source's last zoom draws its part of
       // the labels laid out for the whole source tile it is cut from, so its
-      // neighbours draw the rest of any that cross its edge.
+      // neighbours draw the rest of any that cross its edge. A tile at or
+      // under it is its own source tile, laid out the same way, so a theme
+      // layer marked `overlay` is left out of it at every zoom.
       final source = translator.translate(requestedTile);
-      final labels = source.isTranslated ? await _labelsOf(source) : null;
+      final labels = await _labelsOf(source);
 
       final renderer = TileRenderer(
           theme: _theme,
@@ -191,16 +193,12 @@ class TileLoader {
 
   /// VOYAGER PATCH: the labels left out of [tile] for the caller to draw
   /// over it — LabelLayout.overlaid, one list for every tile cut from the
-  /// same source tile — and [tile]'s corner among them. Null for a tile at
-  /// or under the source's last zoom, which has no layout. A tile served
+  /// same source tile — and [tile]'s corner among them. A tile served
   /// from the image cache was drawn from one on an earlier run, which is
   /// made again here: the same data lays out the same.
   Future<({List<PlacedLabel> labels, Offset origin})?> overlaidLabels(
       TileIdentity tile) async {
     final source = SlippyMapTranslator(_provider.maximumZoom).translate(tile);
-    if (!source.isTranslated) {
-      return null;
-    }
     final LabelLayout layout;
     try {
       layout = await _labelsOf(source);
@@ -256,8 +254,9 @@ class _TileJob {
 int _maxOutstandingJobs = 100;
 
 /// A wide window just past the source's last zoom shows about twenty source
-/// tiles at once.
-const _maxLabelLayouts = 32;
+/// tiles at once; at or under it, where each tile is its own source tile,
+/// a 2560 x 1440 one shows about eighty.
+const _maxLabelLayouts = 96;
 
 final _frameBudget = _FrameBudget();
 

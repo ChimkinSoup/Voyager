@@ -137,6 +137,7 @@ Entry format:
 - Expected: Tab moves focus to the next control (rail items, weather button, inbox, the page's buttons) with a visible focus indicator; Enter/Space activates the focused control.
 - Actual: (a) focus stays on the root `FocusScopeNode` after every Tab; nothing gets focus, nothing is highlighted, and Enter does nothing (no "Create a category" dialog). (b) focus moves to a different `FocusNode` on each Tab and the task list scrolls (so focus is going into the list rows), but no row, checkbox, star or button shows any focus indicator, so the user can't tell where they are.
 - Notes: screenshots `qa/shots/p2-tab-1..6.png`, `p2-tab-enter.png`, `p2-tab-todo.png`. The rail's destination buttons are wrapped in `ExcludeFocus` (`lib/features/shell/app_shell.dart`), so they are deliberately out of the Tab order; Ctrl+Tab / Ctrl+Shift+Tab is the only keyboard route between pages (it works, including over hidden/reordered pages). The weather button and inbox bell were not reached by Tab in (a). Same pattern as BUG-006 (login page); this is the app-wide case. Scatter was on.
+- Notes (2026-10-01, Phase 16): the Life page is case (a): after a click on the canvas, Tab leaves `primaryFocus` on one scope wrapping the whole page, so the stat labels and the bucket list (opened by clicking the trunk) can't be reached from the keyboard. Inside the bucket-list popover Tab escapes to an off-screen page and the title bar (BUG-137).
 
 ### BUG-010 [Phase 2] Signing in on an empty device: the Journal page shows no entries until restart, although they were pulled
 - Severity: Major
@@ -213,6 +214,7 @@ Entry format:
 - Expected: per the design note in `lib/core/vim/vim_text_scope.dart` (`_routeEarlyKey`: "A one-line field has no line for Enter to move to, so there it still submits"), Enter submits in Normal mode too: (a) creates the list, (b) adds the task.
 - Actual: nothing is submitted; the caret jumps to the first character (Vim's Enter motion: first non-blank of the next line, here the same line). `todo_lists_table` / `todo_tasks_table` stay empty. Pressing `A` then Enter (Insert mode) submits normally ("Vim List" and "task insert enter" were created).
 - Notes: screenshots `qa/shots/p3-dlg-enter.png` (dialog still open, caret on "V", NORMAL), `p3-dlg-insert-enter.png`, `p3-composer-normal-enter.png`. Combined with the intended "Esc never closes a dialog from a Vim field", a user in Normal mode has no keyboard way to finish a one-line dialog except returning to Insert first (or Ctrl+Enter where a form supports it; not checked here).
+- Notes (2026-10-01, Phase 16): the Bucket List add field too: type "vimtest" → Esc → Enter moves the caret to the start and adds nothing (`qa/shots/p16-052-vim-normal.png`, `p16-053-vim-enter.png`). A second Esc leaves the popover open, so in Normal mode the only ways out are a mouse click or `A` + Enter. The completion-note dialog's Ctrl+Enter works from Normal mode.
 
 ### BUG-017 [Phase 3] Pasting multi-line text into a one-line field keeps an invisible carriage return, which is saved
 - Severity: Minor
@@ -222,6 +224,7 @@ Entry format:
 - Actual: the field shows "L1L2", but `journal_entries_table.title` is "L1\rL2" (hex `4C 31 0D 4C 32`): the `\n` is removed and the `\r` kept, invisibly. Same with Vim ON: Ctrl+V in Insert mode gives "…titleL1\rL2"; Ctrl+V in Normal mode gives "…titleL1\r L2" (Vim flattens `\n` to a space and keeps the `\r`). The value synced (outbox drained).
 - Notes: screenshots `qa/shots/p3-vimoff-title.png` (Vim OFF), `p3-title-cr-crop.png` (Vim ON). Checked only on the journal Title; probably any one-line field (todo titles, list names, finance fields). Consequences not checked: search, exports, and how the title renders elsewhere (entry list, Search results).
 - Notes (2026-09-30, Phase 7): the multi-line journal body keeps them too. Pasting 200 CRLF-terminated lines (13,090 chars) into the body saved 200 `\r` characters (`instr(body, char(13))` = 63, the first line end). It renders normally (`qa/shots/p7-86-long.png`); caret behaviour at those line ends wasn't checked.
+- Notes (2026-10-01, Phase 16): the Bucket List add field too. Pasting "line1`\r\n`line2" + Enter saved the title `'line1\rline2'` (11 chars), shown as "line1line2" (`qa/shots/p16-015-crlf-rapid.png`).
 - Notes (2026-09-30, Phase 9): the To-Do composer too (Vim off). Pasting "CRLF line1`\r\n`line2" + Enter created a task titled `'CRLF line1\rline2'` (16 chars); the row shows "CRLF line1line2", words run together (`qa/shots/p9-70-failtitles.png`). The `\n` was dropped, the `\r` kept.
 
 ### BUG-018 [Phase 3] Vim `yy` moves the caret to the start of the line; in a one-line field `p` then pastes after the first character
@@ -512,6 +515,9 @@ Entry format:
 - Actual: `Restored Journal "Gamma"` sat at the top of the window from 4:04 PM until the app was restarted at 4:11 (`qa/shots/p7-52-closed.png`, `p7-56-dd.png`); `Restored "Same stamp B"` was still there after 3 s, 18 s and 48 s with the pointer elsewhere (`p7-63-toast-3s.png` … `p7-65-toast-48s.png`). It covers the middle of the title area.
 - Notes (2026-09-30, Phase 8): same for a dream: `Restored "Second dream"` stayed over the Dreams page title area for over 2 minutes (`qa/shots/p8-22-dreams-after-restore.png`, `p8-25-narrow.png`).
 - Notes (2026-09-30, Phase 10): same for a calendar: `Restored Calendar "Holidays"` still showing 15 s later with the pointer elsewhere (`qa/shots/p10-79-after15s.png`).
+- Notes (2026-10-01, Phase 11): `Restored "Case test"` (journal entry, restored from Manage journals → Recently deleted) stayed for about 25 minutes across Journal and Search, sitting over the Search query field the whole time (`qa/shots/p11-47-restored-search.png` … `p11-111-dialog-still.png`); it went only with the restart.
+- Notes (2026-10-01, Phase 13): two finance restores from Settings → Data → Trash left two stacked toasts (`Restored "Paycheque"`, `Restored "evening 9:30pm Sep 30"`) for 24 minutes, until the restart. They sit over the Finance hero: at the minimum window size they hide the month's net-flow figure (`qa/shots/p13-81-min-ledger.png`), and they cover the range chips of the hero's expanded view and the title of the transaction sheet (`p13-85-min-expand.png`, `p13-82-min-modal.png`).
+- Notes (2026-10-01, Phase 14): `Restored "Transit"` (a finance category) stayed from 7:26 PM until the 7:34 PM restart, over the Finance hero in both themes and at every window size (`qa/shots/p14-95-annual.png`, `p14-110-light-ledger.png`, `p14-115-min-analytics.png`).
 - Notes: `trash_dialog.dart` `_restore` calls `showVoyagerToast` with no `dwell`, and in `voyager_toast.dart` a toast without a dwell "is staying up until its owner takes it away"; the dialog never does. The same applies to its "Already restored" and "Can't restore … / Restore … first" toasts. Other dwell-less notices that aren't progress cards and so may stick the same way (not driven): `workout_history.dart:800` "Can't move a workout into the future", `media_attach.dart:107` low-disk warning.
 
 ### BUG-052 [Phase 7] An entry whose quote is empty has no way to get one back
@@ -570,6 +576,7 @@ Entry format:
 - Actual: Title → body on the first Tab (correct), then the body keeps focus for every further Tab and Shift+Tab (8 and 4 presses, focus rect unchanged); nothing is inserted into the text (no `\t` in SQLite). Esc doesn't release it either (focus stays on the body). Enter in the Title does move to the body, as designed.
 - Notes (2026-09-30, Phase 8): the dream body does the same (`_DreamBodyEditorState._handleKey` returns `handled` for every Tab, on purpose per its comment). Title Enter/Tab → body works; Shift+Tab ×2, Tab ×2 and Esc then all keep focus in the body. Clicking a dream row leaves focus on the route's scope, so the next keystrokes go nowhere.
 - Notes: with BUG-009 (nothing else on the page takes Tab focus), the journal is mouse-only apart from typing: there's no keyboard route to the entry list, New entry, mood, weather, date, delete, the journal switcher or the gear, and no journal shortcuts in the Ctrl+/ list. Arrow keys in the body move the caret only.
+- Notes (2026-10-01, Phase 11): same in Search's "Journal entry" dialog: Tab from the title goes to the body (by design there), and from the body every Tab stays in it, so the mood, weather, date, journal flag, Close and Save can't be reached by keyboard. Ctrl+Enter saves; Esc discards (BUG-084).
 
 ### BUG-059 [Phase 7] After signing in on an empty device, custom quotes don't load until restart: the dialog says there are none, re-adding one duplicates it, and with "Only my quotes" new entries get the placeholder "Write your story."
 - Severity: Minor
@@ -597,6 +604,7 @@ Entry format:
 - Notes (2026-09-30, same session, reproduction): seen on 3 of 4 restarts. (1) First restart: all three dreams that had a body. (2) New dream "R1" (body + note): note overwritten on the next restart. (3) The restart after that left R1 alone (probably skipped as unchanged since the last full pull, `_unchangedSinceLastFullPull`). (4) After new dream "R2" (body "R2 BODY", note "R2 NOTE plus") and a note edit: the next restart overwrote both R1 and R2 (`notes` = 'R1 BODY text' / 'R2 BODY'), outbox 0 before the stop. Side effect: deleting R1 after (2) and clicking Undo brought its old note back ("R1 NOTE text", version 4). The undo restored the page's in-memory copy, which was loaded before the pull corrupted the row, so the pre-pull note got written back.
 - Notes (2026-09-30, scope): dreams with **no** note are hit too. The snapshot carries `'notes': null`, so `containsKey('notes')` is true. After 122 dreams were seeded through the app's repository + `pushDreamEntryNow` and the app was restarted once, 74 of the 129 live dreams had `notes` = `body` (SQLite), e.g. `p8-long` (seeded with notes null) now shows its whole 700-word body in the sticky note (`qa/shots/p8-56-long-title-end.png`). Every seeded note ("seed note 0", "seed note 10", …) survived; a seeded dream counts only if its op log has char ops. For a user, every dream they type a body into gets that body copied into its note on the next restart.
 - Notes (2026-09-30, cold sign-in): after `reset.ps1 -Force` → `login.ps1` on an empty device, the pull (`dream_entries 3796ms (129, full)`) produced the same state: 77 of 129 dreams with `notes` = `body`, every other field equal to the pre-wipe snapshot. A new device gets the corrupted notes too. It isn't known whether Firestore's documents still hold the original notes and only the pull resolves them wrongly, or whether the notes were uploaded corrupted.
+- Notes (2026-10-01, Phase 11, build `5ea667d`): still reproduces. qa-016: 4 dreams seeded through the repository (one with note "notekeyword secret", three without notes); one edited from the Search dream dialog (note intact afterwards in SQLite). After `stop.ps1` → `launch.ps1` all 4 dreams had `notes` = `body`, including the three that had no note, and "notekeyword secret" was gone. Effect on Search: dream note searches now match body copies.
 
 ### BUG-062 [Phase 8] Opening the dream sticky note doesn't put the caret in it; what's typed next is lost, and the note can't be opened from the keyboard
 - Severity: Minor
@@ -776,4 +784,496 @@ Entry format:
 - Actual: at 1440×1040 each cell draws one bar about 4 px tall with its title clipped to the top pixels of the letters (`qa/shots/p10-111-min-month.png`; zoomed: "Daily walk" is illegible). At 2000×1100 cells show 2–3 such slivers (`p10-115-odd-month.png`). Events beyond the first are hidden without a count: Oct 5 holds "Daily walk" + "Weekly standup" and shows one sliver and no "+1"; Oct 6 (6 events) says "+3" while only one is visible. The month view at these sizes conveys only "something is here".
 - Notes: maximized (2880×1800) is fine: 3–4 readable rows per cell (`p10-31-october.png`). Week view at the minimum size is usable but its all-day shelf (4 rows on Sep 30) leaves about 3 hours of timeline visible (`p10-113-min-week.png`); see BUG-081 for the extreme case. No `RenderFlex overflowed` in the run log during these resizes.
 
-<!-- Last ID: BUG-083. -->
+### BUG-084 [Phase 11] Search's entry dialog: Esc and Close throw away everything typed, with no confirm and no autosave; a crash or kill loses it too
+- Severity: Major
+- Found: 2026-10-01, Phase 11 (qa-016)
+- Steps to reproduce: Vim off. Search → type `zebracorn` → click the result ("Journal entry" dialog opens) → click the end of the body → type " ESCTEST" → press Esc. Reopen it, type " CLOSETEST", click Close. Separately: reopen, type " KILLEDIT", wait 4 s, then end the process (`stop.ps1`) and relaunch.
+- Expected: text typed into a journal entry is kept, as everywhere else the same entry can be edited: the Journal page autosaves within 400 ms, the calendar event popover saves on Esc, and this same dialog saves on a click outside it, on Enter, Ctrl+Enter, Save and on hide-to-tray. If Esc is meant as "discard", it should ask first.
+- Actual: SQLite kept the body without " ESCTEST" and without " CLOSETEST": both edits are gone with no prompt and no toast (`qa/shots/p11-35-afteresc.png`). The click-outside edit right after them was saved. " KILLEDIT" was lost too (`p11-111-dialog-still.png` shows it on screen 4 s before the kill; the row afterwards still ends "…TRAYEDIT"). The dialog writes only when it closes, so a crash, power loss or a kill loses the whole session's typing in it.
+- Notes: deliberate per the code: `_SearchEntryDialogState._discardAndClose` and the `DismissIntent` override ("Escape reads as Close, not as a second Save"); `_SearchDreamDialogState` is the same for dreams. Esc is the key users press to close a dialog, and in this app it usually keeps the text, so the loss is easy to trigger. With Vim ON the first Esc only leaves Insert and a second Esc is swallowed, so Vim users are protected (`p11-87`, `p11-88`). Hide to tray did flush the edit (`PendingFlushRegistry`). Severity set Major for silent loss of typed text by a common key; downgrade if discard-on-Esc is the intended contract.
+
+### BUG-085 [Phase 11] Search's entry and dream dialogs: Enter in the body saves and closes the dialog instead of starting a new line
+- Severity: Minor
+- Found: 2026-10-01, Phase 11 (qa-016)
+- Steps to reproduce: Search → open any result → click at the end of the body → type "- item one" → press Enter.
+- Expected: a new line, with the list continued ("- "), as Enter does in the same entry's body on the Journal page and in the dream body on the Dreams page.
+- Actual: the dialog saves and closes (SQLite body ends "…\n- item one" with no next line, `qa/shots/p11-37-listenter.png`). The only way to add a line break is Shift+Enter, and list continuation (P4) never happens in this dialog. Same in the dream dialog. The first time, typing " EDITED1 line" + Enter closed the dialog mid-thought (`p11-31-afterenter.png`).
+- Notes: `_handleBodyKey` in both dialogs (`lib/features/search/search_page.dart`) maps a plain Enter to `_saveAndClose`. The body is a 480 px multi-line field, so it looks like an editor and is the full entry text. Ctrl+Enter already saves, so the plain-Enter shortcut isn't needed for keyboard saving.
+
+### BUG-086 [Phase 11] Tab reaches the invisible title-bar buttons; Enter then minimizes the window or hides Voyager to the tray
+- Severity: Minor
+- Found: 2026-10-01, Phase 11 (qa-016)
+- Steps to reproduce: maximized, Vim off. Search → click the query field → type `zebracorn` → Tab (focus: the first result row) → Tab → Enter.
+- Expected: Tab stays on the page (or skips the auto-hidden title bar), and Enter on a page never minimizes or hides the app.
+- Actual: the second Tab moves focus into `DesktopWindowTitleBar` (`_WindowControlButton`, focus ancestry logged in `qa/logs/run-20261001-162641.log` lines `FOF3`/`FOG0`/`FOG1`). The bar is hidden, and focus is never drawn (BUG-009), so nothing on screen changes. Enter then **minimized** the window (`status`: iconic=True). One Tab further, Enter **hid the window to the tray** (first run, 16:18: visible=False; the process kept running). The next Tab after the title-bar buttons goes to the rail's clock/weather button.
+- Notes: the three buttons are Minimize, Maximize/Restore and Close (`lib/core/widgets/desktop_window_title_bar.dart`). They stay in the focus order while the bar is hidden, so this applies on every page, not just Search. A keyboard user tabbing through a short page reaches them after one or two stops.
+
+### BUG-087 [Phase 11] Search shows a blank page when nothing matches (and on an account with no entries); no "no results" message or count
+- Severity: Minor
+- Found: 2026-10-01, Phase 11 (qa-016)
+- Steps to reproduce: Search → type `qqqzzz` (or `cafe`, `#nonexistent`, `foobar`). Also: a fresh account with no entries → Search.
+- Expected: a message such as "No entries match 'qqqzzz'" (the To-Do search shows "No tasks match" + "0 matches"), and a first-run hint when there's nothing to search.
+- Actual: below the field the page is empty (`qa/shots/p11-q20-noresult.png`, `p11-q19-notag.png`, `p11-01-search-empty.png`). It looks the same as "still loading" or "broken". No result count is shown for any query either (`commonword` matches 600 entries with no indication of how many).
+- Notes: `SearchPage.build` renders `KeepAliveScrollList(itemCount: results.length)` with no empty branch, for both the journal and the dream scope.
+
+### BUG-088 [Phase 11] Search page: the query field isn't focused on arrival and Ctrl+F doesn't focus it, so typed text goes nowhere
+- Severity: Minor
+- Found: 2026-10-01, Phase 11 (qa-016)
+- Steps to reproduce: from Journal, click the Search rail item (or Ctrl+Tab onto Search). Type `abc`. Press Ctrl+F, type `abc` again.
+- Expected: on a page whose only control is a search field, the field takes focus on arrival (or at least on Ctrl+F, as To-Do does), and typing searches.
+- Actual: `primaryFocus` = the route's `FocusScopeNode`; both `abc`s are dropped and the field stays empty (`qa/shots/p11-80-typed-unfocused.png`). The user has to click the field. Tab from nothing reaches the field only sometimes; after a tray restore focus sat at the root scope and Tab did nothing at all.
+- Notes: same family as BUG-009 (no visible focus / Tab order). The results dialog also opens with nothing focused: Tab then goes to the body, skipping the title (`p11-83-state.png`).
+
+### BUG-089 [Phase 11] Search matches the stored formatting markers, not the text the user sees: "foobar" misses "foo**bar**", while "**" or "==" match entries with no visible match
+- Severity: Minor
+- Found: 2026-10-01, Phase 11 (qa-016)
+- Steps to reproduce: an entry whose body is "This has \*\*boldword\*\* and foo\*\*bar\*\* and ==marked== text" (seed `qa/steps/p11-seed.dart.txt`, "Emphasis"). Search `foobar`; then search `**`.
+- Expected: the search works on what the result itself displays ("…and **foobar** and marked text", markers rendered), so `foobar` finds it; `**` finds nothing, or at least shows what matched.
+- Actual: `foobar` → blank page (`qa/shots/p11-q12-foobar.png`) although the Emphasis result shows "foobar" for any other query. `**` → the Emphasis entry, with nothing highlighted (`p11-q14-stars.png`). Searching `boldword` works because the marker sits outside the word.
+- Notes: `SearchService.searchEntries` and `filterDreamEntries` lowercase the raw `title body` (markers included); only the display goes through `proseReadRanges` (EMPHASIS_FORMATTING.md §10). The same applies to `__underline__`, `==highlight==` and any marker inside a word (BUG-028's intra-word pairs).
+
+### BUG-090 [Phase 11] Search doesn't fold accents: "cafe" doesn't find "café", "naive" doesn't find "naïve"
+- Severity: Minor
+- Found: 2026-10-01, Phase 11 (qa-016)
+- Steps to reproduce: entry "Accents", body "Coffee at the café was naïve fun". Search `cafe`; then paste `café`.
+- Expected: `cafe` finds it (users type unaccented letters on a US keyboard; most search boxes fold diacritics).
+- Actual: `cafe` → blank page (`qa/shots/p11-q03-cafe.png`); only the exact `café`, pasted, finds it (`p11-103-cafe-accent.png`). Case folding works (`XYLOPHONE mixedcase` matched "MixedCase XYLOPHONE"); CJK, Arabic and emoji queries match exactly.
+- Notes: plain `toLowerCase()` + `contains` in `SearchService.searchEntries` and `filterDreamEntries`. Related: hashtags with non-ASCII letters are cut short (BUG-063), so `#café` can't be searched as a tag either.
+
+### BUG-091 [Phase 11] Typing a query that starts with "/dream" (e.g. "/dreamscape") switches to the dream scope halfway through the word
+- Severity: Minor
+- Found: 2026-10-01, Phase 11 (qa-016)
+- Steps to reproduce: Search (journal scope) → type `/dreamscape`.
+- Expected: per the code's own contract (`dream_search.dart`: "Matches the command only at a word boundary, so `/dreamscape` stays an ordinary query"), the journal search runs for "/dreamscape".
+- Actual: as soon as the sixth character is typed the field reads `/dream`, which matches `^/dream($| )`, so the scope switches to "Dream journals" and the rest arrives as a dream query: the field shows `scape` beside the chip (`qa/shots/p11-69-dreamscape.png`). Only a paste of the whole word would stay a journal query. It also means the literal text "/dream…" can't be searched in journal entries by typing.
+- Notes: `_onQueryChanged` runs `dreamSearchCommandQuery` on every keystroke, and the pattern's `$` alternative is satisfied by the prefix. A unit test that passes the whole string at once wouldn't see it. Exits work: Esc (Vim off), Backspace on an empty query, the chip's ✕.
+
+### BUG-092 [Phase 11] A dream that matches only through its sticky note is listed with nothing that shows why
+- Severity: Cosmetic
+- Found: 2026-10-01, Phase 11 (qa-016)
+- Steps to reproduce: dream "Flying dream", body "I was flying over the #ocean dreamonly", note "notekeyword secret". Search → `/dream notekeyword`.
+- Expected: the result shows the note text (or a note icon) with the keyword highlighted, as body matches do.
+- Actual: "Flying dream / I was flying over the #ocean dreamonly" with no highlight (`qa/shots/p11-62-notekw.png`); it reads as a false positive.
+- Notes: `dreamSearchCorpus` includes `notes`, but the subtitle is `searchSnippet(entry.body, …)`. After BUG-061's restart corruption the notes become body copies, so note-only matches disappear anyway (seen this session).
+
+### BUG-093 [Phase 11] Search's entry dialog: the "Title" field label is cut in half at the minimum and 2000×1100 window sizes
+- Severity: Cosmetic
+- Found: 2026-10-01, Phase 11 (qa-016)
+- Steps to reproduce: `place 0 0 1440 1040` (or 2000×1100). Search → `entry` → open a result.
+- Expected: the floating "Title" label sits fully visible on the field's top border, as it does maximized (`qa/shots/p11-30-dialog.png`).
+- Actual: only the lower half of "Title" shows; its top is clipped by the dialog's scroll area (`p11-91-min-dialog.png`, `p11-93-odd-dialog.png`). At 1440×1040 the 480 px body also runs below the fold and the dialog scrolls.
+- Notes: same symptom as the P4 lead on the Rankings "New category" dialog's "Name" label at 2000×1100; likely the shared `LabeledTextField` at the top of a `VoyagerScrollView`.
+
+### BUG-094 [Phase 11] Light theme: the "Dream journals" scope chip is pale accent blue on cream (≈2.5:1)
+- Severity: Cosmetic
+- Found: 2026-10-01, Phase 11 (qa-016)
+- Steps to reproduce: Settings → Appearance → Light. Search → type `/dream`.
+- Expected: chip label readable (≥4.5:1).
+- Actual: label and icon in the accent #7c9eff on a 14 % accent tint over cream; the darkest text pixel against the background measures ≈2.5:1 (`qa/shots/p11-97-light-dream.png`). Result rows, tag pills and the dialog are legible (`p11-95`, `p11-96`).
+- Notes: the chip uses the raw accent (`_DreamScopeChip`), same pattern as BUG-042/BUG-057/BUG-071.
+
+### BUG-095 [Phase 12] "Best Streak" breaks a run at the spring-forward DST change: 8 journaled days in a row across Mar 8 show as 5
+- Severity: Minor
+- Found: 2026-10-01, Phase 12 (qa-017)
+- Steps to reproduce: time zone Eastern (Windows "Eastern Standard Time"). Journal entries on every day Mar 5–12 2026 (one each, 10:00), and on Jun 1–5 2026 (seed `qa/steps/p12-seed-journal.dart.txt`). Open Analytics.
+- Expected: Best Streak "8 days" (Mar 5–12 is unbroken).
+- Actual: "5 days" (the June run) (`qa/shots/p12-02-seeded.png`). The Streak detail popup opened from the same chip says "Highest 8" (`p12-03-streak-detail.png`), so the chip and its own drill-down disagree.
+- Notes: `PeriodicPromptService.longestJournalStreak` compares local midnights with `difference(...).inDays == 1`; Mar 8 00:00 → Mar 9 00:00 is 23 h, so `inDays` = 0 and the run restarts. Every run that crosses the March change is split in two each year (the November change is 25 h and passes). The Streak sparkline (`streakTrackerValues`) walks calendar days and is right. Elsewhere the code uses `calendarDaysBetween`/`addCalendarDays` for exactly this.
+
+### BUG-096 [Phase 12] Streak detail popup: "Current streak" and "Longest streak" count every day since the first entry (211 days), and "Entries logged" counts days with no entry
+- Severity: Minor
+- Found: 2026-10-01, Phase 12 (qa-017)
+- Steps to reproduce: same data as BUG-095 (first entry Mar 5 2026, entries on 19 days; today Oct 1, with entries Sep 29, 30 and Oct 1). Analytics → click the Best Streak chip.
+- Expected: current streak 3 days, longest 8 days; "Entries logged" either the 20 entries / 19 journaled days or no such row.
+- Actual: STATISTICS lists "Entries logged 211", "Average 0.29", "Highest 8", "Lowest 0", "Current streak 211 days", "Longest streak 211 days" (`qa/shots/p12-03-streak-detail.png`). Only Highest is meaningful; the two streak rows contradict both the chip ("5 days") and the chart beside them.
+- Notes: the virtual Streak tracker has a value on every day from the first entry to today (0 on silent days, `streakTrackerValues`), and `_DetailStatisticsSection` treats it as an ordinary integer tracker: every day counts as "logged" and keeps the streak alive. The virtual Word Count tracker has a special case for exactly this (it shows only Average and Highest over days with words); Streak doesn't.
+
+### BUG-097 [Phase 12] A long number typed into a tracker value is saved as Infinity: the tracker's detail popup shows a red error screen and every other value in the row looks unlogged
+- Severity: Major
+- Found: 2026-10-01, Phase 12 (qa-017)
+- Steps to reproduce: New tracker "Pages read" (Number, Heatmap, daily, no limit). Log 25 on Sep 30, 12.34 on Sep 29, 5 on Sep 27. Click the Sep 28 square, type 400 nines (anything past ~309 digits), press Enter. Then click the tracker's name to open its detail popup and scroll down.
+- Expected: the field caps the length, or Save rejects a number that can't be stored, with a message.
+- Actual: `tracker_values_table.int_value` = `inf` (SQLite REAL), and the outbox drained, so it's in the cloud copy too. The tooltip and editor show "Infinity" (`qa/shots/p12-18-after.png`, `p12-21-inf-popover.png`). The row's other squares (25, 12.34, 5) drop to the empty shade because the infinite maximum scales them to 0. The detail popup's body becomes a red error box, "Unsupported operation: Infinity or NaN toInt" (`p12-20-pages-detail-bottom.png`); in a release build that area would be blank/grey. Run log `run-20261001-165139.log` line 43: thrown in `compactNumberLabel` (`stat_number_format.dart:24`) from `_trackerStatLabel` ← `_DetailStatisticsSection._buildStats` (`analytics_page.dart:4478`).
+- Notes: the value field's formatter (`^\d*\.?\d{0,2}`) has no length limit and `_save` takes `double.tryParse` as is; `clampToTrackerRange` only clamps when the tracker has a limit, so a limited tracker clamps it. Workaround: open the square → Delete. Typing "-5" saves 5 (the minus is filtered out silently; negative readings can't be logged at all).
+- Notes (same day): the row's right-click → **Statistics** dialog fails the same way but covers the **whole window** with the error box (`qa/shots/p12-68-statsdlg.png`, run log line 148); Esc closes it (`p12-69-afteresc.png`). In release that is a full-window grey barrier with no visible way out except Esc.
+- Notes (same day, D2): **the Infinity value never synced and nothing says so.** Saving it threw "Converting object to an encodable object failed: Infinity" in `RemoteSyncService._payloadFingerprint` (`jsonEncode`) ← `pushRecords` ← `DriftTrackerRepository.upsertValue` (`voyager_errors.log` 16:54:43; run log line 21, "Unhandled Exception"). No outbox row was left behind (outbox 0 all session), so the device looked synced. After a cold re-login (`reset.ps1 -Force` → `login.ps1`) the Sep 28 row is gone: "Pages read" came back with 3 values (sum 42.34) instead of 4. So this device and the cloud silently disagree until the value is deleted; a value that can't be encoded is dropped from sync rather than rejected at entry.
+
+### BUG-098 [Phase 12] New tracker dialog: a Dropdown tracker with no options does nothing on Create (no message), and a rejected "Add option" Enter drops keyboard focus
+- Severity: Minor
+- Found: 2026-10-01, Phase 12 (qa-017)
+- Steps to reproduce: Analytics → New tracker → Name "Book", Type Dropdown, no options → Create (or Ctrl+Enter). Then click "Add option", type `Opt01` + Enter (added), type `Opt01` + Enter again, then type `Opt02` + Enter.
+- Expected: Create with no options says why it can't create (e.g. "Add at least one option"), as the dialog does for an empty name; after the "This option already exists" error the caret stays in the field so the user can fix the text.
+- Actual: Create leaves the dialog as it is with no error anywhere (`qa/shots/p12-33-enum-empty-create.png`). After the duplicate error, `primaryFocus` is the route's `FocusScopeNode`; the next typing ("Opt02", Ctrl+A) goes nowhere (`p12-34-enum-dup.png`, `p12-37-afterdup.png`) until the field is clicked again. An Enter on a whitespace-only option does the same.
+- Notes: `_TrackerDialogState._submit` has `if (enumOptions.isEmpty) return;` with no message. `_addOption` returns on empty/duplicate text without `requestFocus`, and the TextField's default `onSubmitted` unfocuses it (a successful add calls `_newOptionFocusNode.requestFocus()`). Same family as BUG-026 (dictionary dialog) and BUG-050 (this dialog's empty name also reads "Title cannot be empty" for a field labelled "Name").
+
+### BUG-099 [Phase 12] Sparkline trackers with one recorded value: clicking any other day edits (and overwrites) that one value
+- Severity: Major
+- Found: 2026-10-01, Phase 12 (qa-017)
+- Steps to reproduce: New tracker "Weight" (Number, Sparkline, daily, limit 50–300). On the grid's sparkline click near Sep 28 → type 180 → Enter (saved on Sep 28). Now click the sparkline near Sep 30 → type 175 → Enter; near Sep 25 → 500 → Enter; near Sep 20 → 10 → Enter. Also open the tracker's detail popup and click its large chart at Jun 3.
+- Expected: each click edits the day under the pointer (ANALYTICS_EXPLANATION.md §3A: anchor spots exist so "a user can tap anywhere on an empty sparkline").
+- Actual: every click opened the editor for **Sep 28**, prefilled with its value, and each Save overwrote it: SQLite ends with one Weight row, Sep 28, `version` 5, last value 50 (500 and 10 clamped); 180, 175, 300 were each replaced without any sign that another day was being edited (only the popover's small date shows "Sep 28, 2026", `qa/shots/p12-44-typed180.png`). Hovering at Sep 5 shows the tooltip "Sep 28, 2026 · 180" (`p12-46-hover-sep5.png`); the detail chart's Jun 3 click opens Sep 28 too (`p12-49-detail-click.png`). So once a sparkline tracker has its first value, no second day can be logged from the analytics page; the first habitual use ("log today after logging yesterday") silently replaces yesterday's reading.
+- Notes: `sparklinePeriodAnchorX` (`lib/features/analytics/sparkline_touch.dart`) clamps the resolved day to `[spots.first.x, spots.last.x]`; `interpolateConsecutive` returns a single spot when the window holds one value, so the range collapses to that day. It also applies whenever only one value falls inside the visible window (older ones are outside it). In the grid row the single value isn't drawn at all, only a y-axis that rescaled to 0–200 (`p12-45-after180.png`); the detail chart draws it as a dot. Also cosmetic: the editor's slider doesn't follow typed digits (thumb stays at the minimum while the field reads 180, `p12-44-typed180.png`).
+
+### BUG-100 [Phase 12] Changing a tracker's type keeps its old readings and counts them as explicit "no"s: a Number tracker turned Boolean shows four "Not completed" days and a 0% completion rate
+- Severity: Minor
+- Found: 2026-10-01, Phase 12 (qa-017)
+- Steps to reproduce: tracker "Pages read" (Number, daily) with values on Sep 27–30. Pencil → Type: Boolean → Save. Hover a logged square; open the tracker's detail popup.
+- Expected: the edit dialog warns that existing values don't carry over (or doesn't offer a type change once values exist); readings of the old type aren't presented as answers of the new one.
+- Actual: no warning. The four days show bordered squares with the tooltip "Not completed" (`qa/shots/p12-62-boolhover.png`), and the STATISTICS read "Recorded true 0, Completion rate 0%, Current/Longest streak 0 days" (`p12-63-booldetail.png`), i.e. four deliberate "no" answers the user never gave. SQLite keeps `int_value` with `bool_value` NULL. Switching back to Number restores the numbers (`p12-66-restored.png`), but saving any of those days while Boolean writes `intValue: null` and the number is gone for good.
+- Notes: `_TrackerDialog` lets Type (and Cadence) change on an existing tracker; `_DetailStatisticsSection` counts every value row as answered (`trueCount / values.length`). A cadence change (daily → weekly) hides the off-anchor rows instead, which is the documented behaviour (ANALYTICS_EXPLANATION.md §2); there's no equivalent rule for type.
+
+### BUG-101 [Phase 12] Dropdown trackers can't record any value: the value picker is collapsed to a thin strip that ignores clicks and keys, in the analytics grid and in the Inbox
+- Severity: Major
+- Found: 2026-10-01, Phase 12 (qa-017)
+- Steps to reproduce: New tracker "Mood2", Type Dropdown, options A and B, daily → Create. Click any of its heatmap squares (e.g. Sep 30). Click the "Value" field; press Space. Then open the Inbox → Log stats and click the Mood2 field there. Same with the monthly "Book" tracker (20 options).
+- Expected: a menu with A / B opens; picking one and Save records it.
+- Actual: the popover shows "Value" inside a ~6 px tall bordered strip with no caret (`qa/shots/p12-80-mood2pop.png`, `p12-74-enumpop.png`); clicking it or pressing Space does nothing (`p12-81-mood2click.png`, `p12-76-enumspace.png`). In the Inbox's Log stats the Mood2 row is an empty sliver that also does nothing (`p12-83-logstats2.png`, `p12-84-inboxenum.png`). No exception in the run log. There's no other place to enter a value, so a Dropdown tracker can't be used at all.
+- Notes: `_VoyagerDropdownFieldControlState.build` (`lib/core/widgets/voyager_dropdown_button.dart`) renders `selected?.child ?? SizedBox.shrink()` plus the caret only when `showCaret`; the tracker editor (`_MorphPopoverState._valueEditor`, `showCaret: false`, `isDense: true`) and the Inbox row both hit the case "no value yet, no caret", so the `InkWell` that opens the menu has zero height. The dialogs that show a caret (New tracker → Type/Cadence) work. Workaround (verified): Edit the tracker → set "Default option" → Save. The popover's field then shows the default and opens its menu; picking B + Ctrl+Enter saved `enum_value` B (`p12-87-withdefault.png`, `p12-88-menu.png`). Nothing in the UI hints at this, and "Default option" is optional in the create dialog.
+
+### BUG-102 [Phase 12] After a tracker value popover is closed with Esc, the next click anywhere on the page is ignored
+- Severity: Minor
+- Found: 2026-10-01, Phase 12 (qa-017)
+- Steps to reproduce: Analytics → click any heatmap square (value popover opens) → Esc → wait 2.5 s → click "New tracker".
+- Expected: the New tracker dialog opens.
+- Actual: nothing happens (`qa/shots/p12-90-firstclick.png`); a second click opens it (`p12-91-secondclick.png`). Seen 6 times this session with different targets: New tracker, a tracker's name (detail popup), a row's pencil, the Inbox tray icon. Closing the popover with its Cancel button instead leaves the next click working (`p12-93-aftercancel.png`), and Esc on the New tracker dialog doesn't cause it (`p12-94-control.png`).
+- Notes: the popover is a zero-duration `PageRouteBuilder` that morphs out of the hover tooltip (ANALYTICS_EXPLANATION.md §4B); something from the Esc path (the outside-tap handler or the tooltip overlay) seems to absorb one pointer-down after it closes. Not verified whether a keyboard-sent Esc vs a real key matters (real input via SendInput in both cases).
+
+### BUG-103 [Phase 12] "Dream Today" says Yes for an empty, abandoned dream, while its own drill-down says today has no dream
+- Severity: Minor
+- Found: 2026-10-01, Phase 12 (qa-017)
+- Steps to reproduce: Settings → Pages → "Show dream statistics in analytics" on. Have a real dream yesterday and, today, only a blank dream (what "New dream" leaves when abandoned; seeded here as `p12-dream-blank`, title and body empty). Open Analytics.
+- Expected: "Dream Today: No" (the Dream Logged tracker skips blank dreams on purpose).
+- Actual: the chip reads "Dream Today: Yes" (`qa/shots/p12-102-dreamchip.png`). Clicking it opens "Dream Logged", whose year calendar marks only Sep 30 and leaves Oct 1 empty, "Days logged 1" (`p12-103-dreamdetail.png`).
+- Notes: `_AnalyticsPageState._buildPage` computes `dreamLoggedToday` with `any(entry dated today)`; `dreamLoggedTrackerValues` (`analytics_models.dart`) skips entries whose title and body are both blank ("An abandoned 'New dream' has neither, and must not mark the day logged"). Two rules for the same stat.
+
+### BUG-104 [Phase 12] At the minimum window size the Analytics stat chips cut their values: "5 d…", "2 o…"
+- Severity: Cosmetic
+- Found: 2026-10-01, Phase 12 (qa-017)
+- Steps to reproduce: dream statistics on (5 chips). `place 0 0 1440 1040` → Analytics.
+- Expected: the chips' values stay readable (wrap the label, drop the icon, or go to two rows).
+- Actual: "Best Streak 5 d…" and "Tasks 2 o…", while labels wrap onto two lines ("Best / Streak", "Dream / Today") and leave room unused (`qa/shots/p12-112-min-top.png`). At 2000×1100 and maximized they fit (`p12-114-odd-top.png`).
+- Notes: `_StatChip` gives the value `maxLines: 1, overflow: ellipsis` in an `Expanded` beside an 18 px icon, and the five chips share one `Row`. With the workout statistic also on there would be six.
+
+### BUG-105 [Phase 12] Boolean tracker value popover: Esc doesn't close it, and Space doesn't toggle the switch until Tab is pressed
+- Severity: Minor
+- Found: 2026-10-01, Phase 12 (qa-017)
+- Steps to reproduce: weekly Boolean tracker "Gym". Click any of its squares (popover "Gym · Week of May 25, 2026" opens). Press Esc (once or twice). Separately: open it, press Space.
+- Expected: Esc closes the popover (as it does for the Number and Dropdown popovers, and as ANALYTICS_EXPLANATION.md §4C describes: "pressing escape triggers a save callback"); Space toggles "Completed".
+- Actual: Esc does nothing, with or without Tab first (`qa/shots/p12-126-b.png` → `p12-126-c.png`, `p12-123-tabesc.png`, `p12-124-tabesc2.png`); the popover stays until Save/Cancel or a click outside. On open `primaryFocus` is the route's `FocusScopeNode`, so Space is dropped (`p12-28-boolspace.png`); after one Tab (focus on the switch row) Space toggles it (`p12-30-tabspace.png`). Ctrl+Enter saves in both states, so a user pressing Space then Ctrl+Enter saves an unintended "Not completed".
+- Notes: `_MorphPopoverState.build` wraps the content in `CtrlEnterToSubmitScope(autofocus: type != integer)`; the integer editor's text field takes focus itself. Ctrl+Tab doesn't change page while the popover is open (it's a route), so keyboard users are stuck in it until Tab → Cancel → Enter.
+
+### BUG-106 [Phase 13] Evening transactions move to the next day in the ledger after a Trash restore, and on any device that pulls them from the cloud
+- Severity: Major
+- Found: 2026-10-01, Phase 13 (qa-018)
+- Steps to reproduce: time zone Eastern (UTC-4). Have an expense dated Sep 30 at 9:30 PM local (seeded as `p13-eve`, "EveStore", $7.00; any transaction saved after 8 PM local is the same). On Oct 1: Finance → right-click the row → Delete. Settings → Data → Trash → Restore on it. Back to Finance → Ledger.
+- Expected: the row comes back under YESTERDAY (Sep 30), where it was (`qa/shots/p13-25-eve.png`: YESTERDAY -$27.00).
+- Actual: it is listed under TODAY, whose day total becomes +$993.00, and YESTERDAY drops to -$20.00 (`qa/shots/p13-27-eve-restored.png`). The hero above still reads "+$1,000.00" for October, so the hero and the ledger's own day header now disagree about which month the $7 belongs to.
+- Notes: SQLite `transactions_table.occurred_at` went from `2026-09-30T21:30:00.000 -04:00` to `2026-10-01T01:30:00.000Z`: the same instant, rewritten in UTC by the Trash restore (the toast Undo keeps the local form: `181a3450` stayed `… -04:00` through delete + Undo). Drift hands a `Z` value back as a UTC `DateTime`, and the ledger groups rows by `occurredAt.year/month/day` without `toLocal()`, so the row is filed under its UTC date. Any transaction between 8 PM and midnight local (7 PM in winter) is affected; on the last evening of a month it also changes month in the ledger. The Employer deposit restored the same way (18:13 local) was rewritten too but stays on the same day. Scatter on.
+- Notes (same day, cold re-login): **a cloud pull does the same to every row.** Seeded `p13-late` ("LateStore", $9.00, Sep 30 10:00 PM local): listed under YESTERDAY, day total -$30.07 (`qa/shots/p13-117-late-seeded.png`); a plain restart kept it there. After `reset.ps1 -Force` → `login.ps1` (wipe + sign in, i.e. what a second device or a reinstall does) all 1,145 pulled rows have `occurred_at` ending in `Z`, and LateStore is under TODAY: TODAY -$258.50, YESTERDAY -$21.07 (`p13-118-late-after-pull.png`). So on any device other than the one that entered it, every transaction made between 8 PM and midnight shows on the following day.
+- Notes (same day): the pages disagree with each other for such a row. The hero's month figure excludes it from October (correct: "-$242.50" in both shots), while the ledger's day header and the hero's expanded view count it on Oct 1 (expanded view, Month chip: "Net +$993.00 / Expense $7.00" while the hero read "+$1,000.00", `p13-28-expand.png`). The Analytics tab's October breakdown ($1,244.50) excludes it. The amounts, counts and every other field survive the pull unchanged (snapshot diff: 0 field differences in 1,144 rows).
+- Notes (2026-10-01, Phase 14): the Analytics tab's **Income vs. Expense** chart has the same fault. After a pull, the monthly bar for October reads $1,446.50 and September $1,139.91 (`qa/shots/p14-s1.png` tiles of `p14-53-cf-oct.png`, `p14-54-cf-sep.png`), while the Spending Breakdown on the same tab says $1,430.50 for October; SQL by local day gives $1,430.50 and $1,155.91. The $16.00 difference is the two Sep 30 evening rows (`p13-eve`, `p13-late`). `cashFlowPeriodStart` reads `occurredAt.year/month/day` without `toLocal()`. The chart's In/Out totals, the weekly and yearly views, budgets ("spent this month": #eve stayed $0.00), the breakdown and Net Worth all matched SQL, since they compare instants. Subscription due dates survive the pull here (stored as `…T04:00:00.000Z`, still the same calendar day west of UTC); in a time zone east of UTC a local-midnight anchor becomes the previous day in UTC, so the same `.year/.month/.day` reads would show bills a day early there (reasoned from the code, not run).
+- Notes (2026-10-01, Phase 15): **contribution-room entries move a day too, and at year end they change tax year.** Contribute / Withdraw / Transfer stamp the chosen day with the current wall-clock time, so anything entered after 8 PM (7 PM in winter) is hit. Entered at 8:00 PM and 8:09 PM on qa-018: a $300.00 contribution dated Sep 1, 2026 and a $100.00 one dated Dec 31, 2026; the asset sheet's history listed them as "Sep 1, 2026" and "Dec 31, 2026 · Upcoming" (`qa/shots/p15-98-history-dec31.png`). After a cold re-login (wipe + sign in) the same list reads "Sep 2, 2026" and "Jan 1, 2027 · Upcoming" (`p15-105-cold-history.png`); SQLite `occurred_at` `2026-09-02T00:00:23.000Z`, `2027-01-01T01:09:40.000Z`. `roomYearSummary` files an entry by `occurredAt.year`: run in the app on the pulled rows (read-only probe `qa/steps/p15-room-probe.dart.txt`), the year 2026 as of Dec 31 has used $13,400.00 where the Contribute sheet had warned for $13,500.00 ("This puts TFSA over by $3,200.00", `p15-97-dec31-sheet.png`), and the $100.00 shows as 2027's first contribution ("cap 390000 used 10000"). The room left over in 2027 comes out the same either way ($3,800.00), so the damage is the wrong date, the wrong year's bar and a 2026 total that is short. Asset valuations (stored at local midnight, `…T04:00:00.000Z`), goal target dates and allocation dates keep their day in this time zone. The Trash restore of a linked ledger row rewrites `occurred_at` the same way.
+
+### BUG-107 [Phase 13] Transaction sheet: clicking Expense/Deposit drops keyboard focus, so the amount typed next goes nowhere
+- Severity: Minor
+- Found: 2026-10-01, Phase 13 (qa-018)
+- Steps to reproduce: Finance → + (or Ctrl+Alt+F). The Amount field has the caret. Click "Deposit". Type `1000`.
+- Expected: the caret stays in Amount (or returns to it), so "click Deposit, type the amount" works; that is the natural order for a deposit, since the toggle sits above Amount.
+- Actual: after the click `primaryFocus` is the sheet's route `FocusScopeNode`; the digits are dropped and Amount stays empty with Add disabled (`qa/shots/p13-05-deposit-filled.png`: Source, Note and Tags filled by clicking each, Amount empty; `p13-08-typed-after-toggle.png`). Clicking the segment that is already selected drops focus as well. Nothing shows that focus was lost (BUG-009).
+- Notes: `_setType` in `lib/features/finance/finance_transaction_modal.dart` only clears the origin; the `SegmentedButton` takes focus on click and nothing hands it back. The Ctrl+Alt+F floater uses the same form (not re-checked there).
+
+### BUG-108 [Phase 13] Amount field silently rewrites what is typed: "1,5" becomes $15.00, "1e12" becomes $112.00, "1.999" saves as $2.00
+- Severity: Minor
+- Found: 2026-10-01, Phase 13 (qa-018)
+- Steps to reproduce: Finance → + → in Amount type `1,5`. Clear it and type `1.999`, Store "Round", Ctrl+Enter. Also `-5`, `1e12`.
+- Expected: a decimal comma is either accepted as a decimal point or refused with a message; a third decimal can't be typed (the tracker value field stops at two) or is flagged.
+- Actual: the comma is dropped as it's typed and the field reads `15`, with no error and Add enabled, so the expense is logged at ten times the amount (`qa/shots/p13-a-sheet.png`, tiles of `p13-a1…a10`). `-5` reads `5`, `1e12` reads `112`. `1.999` stays in the field as typed and is saved as 200 cents; `1.005` is saved as 100 cents. The paste "$1,234.50" gives 1234.50, which is right.
+- Notes: `FilteringTextInputFormatter.allow([0-9.])` plus `parseAmountCents` (rounds). Validation that does work: `0`, `.`, `0.004` and `1.2.3` show "Enter an amount over $0.00"; twelve nines shows "Max $99,999,999.99"; five Ctrl+Enters in a row saved one row.
+- Notes (2026-10-01, Phase 14): the budget "Monthly limit" field does the same: `1,5` becomes 15 and the helper line reads "Keep #groceries under $15.00 this month." (`qa/shots/p14-07-budget-comma.png`). The subscription Amount field uses the same formatter. Both reject 0 ("Enter a limit over $0.00" / "Enter an amount over $0.00") and twelve nines ("Max $99,999,999.99").
+- Notes (2026-10-01, Phase 15): the goal "Target amount" field too: `1,5` reads 15 and `-5` reads 5 (`qa/shots/p15-s1.png`); 0 and `1.2.3` show "Enter a target over $0.00", twelve nines "Max $99,999,999.99". The asset "Current value" accepts a leading minus on purpose and rejects `1-2` and a lone `-` ("Enter a number, e.g. 1250.00", `p15-s2.png`), but saved `-15000.999` as -$15,001.00 without a word. The room sheet's limit and remaining fields show no message at all for a bad value (a lone `-`): Track just stays disabled (`p15-43-room-sheet-bad.png`).
+
+### BUG-109 [Phase 13] Enter or Tab on an empty Store/Source field fills in the most recent store, so skipping the field records a store the user never chose
+- Severity: Minor
+- Found: 2026-10-01, Phase 13 (qa-018)
+- Steps to reproduce: have a few expenses with stores. Finance → + → type `3` → Enter (focus moves to Store; the suggestion list opens with its first row highlighted) → Enter again without typing. Same with Tab instead of Enter.
+- Expected: Enter (or Tab) on an empty Store moves on to Note and leaves Store empty: the field is optional and FINANCE_TRANSACTION_ORIGIN_HLD.md §3 says "never invent an origin". A suggestion is taken only after the user typed or arrowed to it.
+- Actual: the highlighted suggestion is written into the field: "FutureStore", the store of a post-dated row, because the list is ordered by transaction date (`qa/shots/p13-origin2-sheet.png`, `p13-origin3-sheet.png`). The next Enter/Tab then moves on. Someone pressing Enter four times to log a quick amount saves it against that store. The placeholder in the empty field reads "Walmart" while the highlighted row says "FutureStore".
+- Notes: workaround: Esc closes the list, then Enter skips (`p13-origin4-sheet.png`); but with nothing typed Esc is also the key that closes the whole sheet when the list isn't open. Typing a new name and pressing Enter works. `FinanceOriginField` (the HLD's "Jobs company parity": Tab/Enter accept the highlight).
+
+### BUG-110 [Phase 13] Pasting two lines into Store keeps the line break: only the first line shows, the whole text is saved
+- Severity: Minor
+- Found: 2026-10-01, Phase 13 (qa-018)
+- Steps to reproduce: copy "Line1⏎Line2" (CRLF). Finance → + → `4` → Enter → Ctrl+V in Store → Ctrl+Enter.
+- Expected: a one-line field flattens the paste to "Line1 Line2" (or keeps the first line only) and saves what it shows.
+- Actual: the field and the ledger row show "Line1" (`qa/shots/p13-crlf-sheet.png`); SQLite `origin` = `4C696E65310A4C696E6532` ("Line1\nLine2"). The Analytics store breakdown lists it as "Line1" as well (`p13-filter2-sheet.png`), so the hidden second line makes it a different store from a real "Line1".
+- Notes: same family as BUG-017 (there a hidden `\r` stays; here the `\r` is gone and the `\n` stays). Note and Tags weren't checked for this.
+
+### BUG-111 [Phase 13] Transaction date can't be chosen from the keyboard: the picker opens, but no key selects a day
+- Severity: Minor
+- Found: 2026-10-01, Phase 13 (qa-018)
+- Steps to reproduce: Vim off. Finance → + → Tab to the Date pill (it shows a focus outline) → Space (picker opens on October) → Left → Enter.
+- Expected: arrow keys move the selected day and Enter picks it, so a transaction can be back-dated without the mouse.
+- Actual: Left turns the page to September with Oct 1 still selected; Tab does nothing visible; Enter closes the picker with the date unchanged, "Today" (`qa/shots/p13-picker2-sheet.png`). Only a click picks a day.
+- Notes: the picker is the shared `DateSelectorPopover`, so the same likely holds for the to-do due date and the journal date (BUG-082 is its calendar cousin). Its quick buttons are "Today / Tomorrow / Next Week", which suit a due date; for a ledger the useful one, Yesterday, is missing. The rest of the sheet is keyboard-operable: Enter walks Amount → Store → Note → Tags → save, Ctrl+Enter saves from anywhere.
+
+### BUG-112 [Phase 13] Vim ON: Esc in the Amount field closes the transaction sheet, while in Store, Note and Tags it goes to Normal mode
+- Severity: Minor
+- Found: 2026-10-01, Phase 13 (qa-018)
+- Steps to reproduce: Settings → Editing → Vim keybindings on. Finance → + → type `12` → Esc. Then reopen, click Note, type `abc`, Esc, Esc.
+- Expected: one rule for Esc inside the sheet. Everywhere else with Vim on, Esc in a dialog's text field never closes the dialog (Phase 3).
+- Actual: in Amount the sheet closes at once (`qa/shots/p13-vim2-sheet.png`). In Note the first Esc shows the NORMAL badge, a second Esc is swallowed and `x` deletes a letter (`p13-vim3-sheet.png`). A new transaction's fields come back as a draft on the next open, so nothing is lost there. Not tried in "Edit transaction", which keeps no draft.
+- Notes: the Amount field has input formatters and a numeric keyboard type and evidently isn't a Vim field. The ledger search bar closes on the first Esc too (`_handleSearchKey`), which reads as intended.
+- Notes (2026-10-01, Phase 14): the same happens in "New subscription" (Amount) and "New budget" (Monthly limit), and there it loses what was typed: with Vim on, Esc in Name shows the NORMAL badge, Esc in Amount closes the sheet (`qa/shots/p14-105-vim-name-esc.png`, `p14-106-vim-amount-esc.png`; budget: `p14-108-vim-budget.png` → `p14-109-vim-budget-esc.png`). These sheets keep no draft, so the name, amount, period and date are gone.
+- Notes (2026-10-01, Phase 15): same in the Goals and asset sheets. "New goal": Esc in Goal shows the NORMAL badge, Esc in Target amount closes the sheet and the typed name and target are lost (`qa/shots/p15-s23.png`). "Contribute to …": Esc in Note goes to Normal, Esc in "New value of …" closes the sheet (`p15-s24.png`). By the same rule the allocate Amount, the asset "Current value" and the room's limit / remaining fields are affected (all numeric fields with input formatters; not each tried).
+
+### BUG-113 [Phase 13] Ledger day headers never show the year: a 2016 transaction is headed "SATURDAY, OCT 1" right under TODAY
+- Severity: Cosmetic
+- Found: 2026-10-01, Phase 13 (qa-018)
+- Steps to reproduce: on Oct 1 2026 have an expense dated Oct 1 2016 (seed `p13-old-2016`) and rows from 2025. Finance → Ctrl+F → `store`; or search `bulk 99`.
+- Expected: headers for days outside the current year carry the year ("SAT, OCT 1 2016").
+- Actual: "SATURDAY, OCT 1" directly below "TODAY" (`qa/shots/p13-96-crop.png`); the `bulk 99` results run "SUNDAY, JUN 28 / FRIDAY, MAR 20 / WEDNESDAY, DEC 10 / MONDAY, SEP 1 / SATURDAY, MAY 24…", crossing from 2026 into 2025 with nothing to mark it (`p13-93-bulk-search.png`). With a search or filter on, where rows from different years sit next to each other, the date can't be told.
+- Notes: `_DayHeader._label` uses `DateFormat('EEEE, MMM d')` for every day that isn't today, yesterday or tomorrow.
+
+### BUG-114 [Phase 13] Light theme: expense amounts and the expanded view's "All categories" button are pale accent blue with too little contrast
+- Severity: Cosmetic
+- Found: 2026-10-01, Phase 13 (qa-018)
+- Steps to reproduce: Settings → Appearance → Light. Finance → Ledger; open + ; click the hero to expand it.
+- Expected: the amounts (the main data of the page) and controls readable, as they are in Dark.
+- Actual: every expense amount ("-$4.00", "-$1,234.50"), the hero's "-$672.44 vs last month" and the UPCOMING label are the raw accent #7c9eff on cream (`qa/shots/p13-111-light-ledger.png`). In the expanded view the "All categories" filter is pale accent text on a mid-grey pill and can barely be read (`p13-113-light-expand.png`). In the sheet the selected "Expense" segment and the "Amount" label are accent on a pale accent tint (`p13-light-sheet.png`). Deposits (green), titles, tags and day headers are fine.
+- Notes: same pattern as BUG-042, BUG-057, BUG-071, BUG-094 (raw accent on the light surface). FINANCIAL_TRACKER.md asks for money out in the main accent colour, so the fix belongs with the light theme's accent handling.
+
+### BUG-115 [Phase 14] Budgets match tags by exact case, and adding a budget whose tag differs only by case silently replaces the existing budget
+- Severity: Minor
+- Found: 2026-10-01, Phase 14 (qa-018)
+- Steps to reproduce: October expenses of $40.00 tagged #groceries and $70.00 tagged #Groceries. Finance → Ledger → Budgets & Pacing → + → tag "groceries", limit 100 → Add. Then + again → tag "Groceries", limit 200 → Add.
+- Expected: either both spellings count toward one budget ($110.00), as they do in a category, or the two are separate budgets. A second "Add" doesn't overwrite another budget without saying so.
+- Actual: the first budget reads "$40.00 / $100.00" (`qa/shots/p14-11-after-adds.png`): the $70.00 #Groceries expense isn't counted. After the second Add there is still one budget, now "#Groceries $70.00 / $200.00" (`p14-s1.png` tile of `p14-13-budget-caps-saved.png`); the #groceries budget and its $100 limit are gone and the $40.00 is no longer counted anywhere. SQLite: the same row id, `tag` 'Groceries', `limit_cents` 20000, `version` 1. No message at any point. The same overwrite happens for an identical tag (a second "Add" for a tag that already has a budget just changes its limit).
+- Notes: `budgetSpentCents` uses `t.tags.contains(tag)` (exact), while the budget sheet's duplicate check lowercases both sides and reuses the matching row, taking the newly typed spelling. Categories match case-insensitively (`FinanceCategory.containsTag`), so the Spending Breakdown put both expenses under one category ($110.00) while the budget saw $40.00 or $70.00. The suggestion chips offer both spellings ("#groceries", "#Groceries") as different tags.
+
+### BUG-116 [Phase 14] The budget Tag field accepts text that can never be a tag (spaces, several tags), so the budget stays at $0.00 forever
+- Severity: Minor
+- Found: 2026-10-01, Phase 14 (qa-018)
+- Steps to reproduce: Budgets & Pacing → + → Tag "dining out", limit 80 → Add. Again with Tag "##fun #x", limit 12 → Add (there is a $12.00 expense tagged #fun this month).
+- Expected: the field keeps to one tag (as the transaction sheet's Tags field splits on spaces), or says the text isn't a valid tag.
+- Actual: budgets "#dining out $0.00 / $80.00" and "#fun x $0.00 / $12.00" are saved and shown as "On track" (`qa/shots/p14-22-budgets.png`; sheets in `p14-20-budget-space.png`, `p14-21-budget-hash.png`, with the helper line "Keep #fun x under $12.00 this month."). SQLite `tag` = 'dining out' and 'fun x'. No transaction can carry a tag with a space, so neither can ever count anything; the #fun expense isn't counted.
+- Notes: `_tag` strips every `#` and trims, nothing else. The sheet's hint is "dining_out", which suggests the underscore form is the intended one.
+
+### BUG-117 [Phase 14] Budget and category sheets drop keyboard focus after a chip click or a rejected Enter: typing goes nowhere and Ctrl+Enter no longer saves
+- Severity: Minor
+- Found: 2026-10-01, Phase 14 (qa-018)
+- Steps to reproduce: (a) Budgets & Pacing → + → type `gro` → click the "#groceries" suggestion → type `55`. (b) In the same sheet click Monthly limit, type `0`, press Enter, then type `100`. (c) Analytics → Manage categories → New category → type `Transit` → click the #travel and #food chips → Ctrl+Enter.
+- Expected: (a) focus moves on to Monthly limit (or stays in Tag) so the amount can be typed; (b) the caret stays in the field after the "Enter a limit over $0.00" error; (c) Ctrl+Enter adds the category, as it does while the name field has the caret.
+- Actual: (a) the tag is filled in but "55" goes nowhere, Monthly limit stays empty (`qa/shots/p14-10-chip-then-type.png`); (b) the error shows, the digits typed afterwards are dropped (first run of `p14-06…08`, all still reading "0"); (c) nothing happens, the sheet stays open (`p14-66-cat2-ctrlenter.png`); in the first attempt the next Esc then closed the sheet and the half-made category was lost. In all three `primaryFocus` is the sheet route's `FocusScopeNode`. Nothing on screen shows that focus was lost (BUG-009).
+- Notes: same family as BUG-107 (transaction sheet toggle), BUG-026, BUG-050, BUG-098. `CtrlEnterToSubmitScope` only hears the chord while a node below it has focus; `ActionChip`/`FilterChip` take focus on click and nothing hands it back, and the limit field's default `onSubmitted` unfocuses when `_save` returns early. The colour swatches behave like the chips. Clicking the Add button works.
+- Notes (2026-10-01, Phase 15): the same in three more sheets. Goal "Add funds": after clicking Withdraw (or Add), typed digits go nowhere and the button stays disabled (`qa/shots/p15-08-wd-typed-after-toggle.png`). "Track contribution room" → Join existing: after clicking the room's chip, Ctrl+Enter does nothing; only the Track button works (`p15-53-join-after-ctrlenter.png`). The Edit goal sheet opens with nothing focused, so typing does nothing until a field is clicked (`p15-16-goal-edit-typed.png`; `autofocus` is only set for a new goal, and the same holds for Update asset and the room edit sheet).
+
+### BUG-118 [Phase 14] A tag can be put in two categories with no warning; the breakdown then files it under whichever category name sorts first, so renaming a category moves money between categories
+- Severity: Minor
+- Found: 2026-10-01, Phase 14 (qa-018)
+- Steps to reproduce: October expenses: $40.00 #groceries, $70.00 #Groceries, $30.00 #food #thai, $25.00 #travel #food. Analytics → Manage categories → New category "Food" with tags #food, #groceries, #thai. New category "Transit" with tags #travel and #food. Read the Spending Breakdown (Category). Then rename "Food" to "Zfood".
+- Expected: the sheet says #food already belongs to "Food" (or moves it); a rename changes a label, not the figures.
+- Actual: both categories save with #food and the chip list gives no hint that it's taken (`qa/shots/p14-66-cat2-ctrlenter.png`). Breakdown before the rename: Food $140.00, Transit $25.00 (`p14-67-cat2-saved.png`); after it: Zfood $110.00, Transit $55.00 (`p14-69-cat-renamed.png`). The $30.00 #food #thai expense moved from one category to the other because "Transit" now sorts before "Zfood".
+- Notes: `spendingBreakdown` takes `categories.firstWhere((c) => c.containsTag(primaryTag))` and the list comes back ordered by name. Two categories can also share a name: "Transit" and "transit" saved side by side as two slices (`p14-72-bd-dup.png`), and since slices are keyed by name, two with the identical name would merge into one slice (from the code, not tried).
+
+### BUG-119 [Phase 14] The hero's expanded view and the Spending Breakdown disagree on what a category contains: "Zfood" is $165.00 in one and $110.00 in the other for the same month
+- Severity: Minor
+- Found: 2026-10-01, Phase 14 (qa-018)
+- Steps to reproduce: data as in BUG-118 (category "Zfood" = #food, #groceries, #thai; "Transit" = #food, #travel). Finance → click the hero → Month → category filter → Zfood. Compare with Analytics → Spending Breakdown → Category.
+- Expected: one rule for "spending in a category", so the two views of October agree.
+- Actual: expanded view "Expense $165.00" for Zfood and "$55.00" for Transit (`qa/shots/p14-84-hero-zfood.png`, `p14-85-hero-transit.png`); the breakdown lists Zfood $110.00 and Transit $55.00. The two filtered figures add up to $220.00 against $165.00 actually spent on those rows.
+- Notes: the expanded view filters with `t.tags.any(category.containsTag)` (any tag on the expense), the breakdown and the ledger's "Expenses in <category>" filter use the first tag only. They differ for every expense carrying more than one tag (here the $25.00 #travel #food and the $30.00 #food #thai rows), with or without overlapping categories. Budgets use a third rule (any tag, exact case; BUG-115).
+
+### BUG-120 [Phase 14] Deleting a category takes one click on the trash icon: no confirmation and no "Deleted … Undo" toast, unlike budgets and subscriptions
+- Severity: Minor
+- Found: 2026-10-01, Phase 14 (qa-018)
+- Steps to reproduce: Analytics → Manage categories → click "Transit" → click the trash icon in "Edit category".
+- Expected: the same `Deleted "Transit"` toast with Undo that deleting a budget or a subscription shows (`qa/shots/p14-18-budget-deleted.png`, `p14-40-sub-deleted.png`).
+- Actual: the sheet closes and the category is gone from the list and the breakdown at once (its $55.00 falls back to Zfood and Uncategorized), with no toast (`qa/shots/p14-89-cat-deleted.png`). The trash icon sits next to the sheet's close X. The category can be brought back from Settings → Data → Trash, where it's listed as `"Transit"` / "Finance" (`p14-93-trash.png`); nothing on the Finance page says so.
+- Notes: `_CategoryModalState._delete` calls `softDeleteCategory` directly; the budget and subscription sheets go through `deleteBudgetWithUndo` / `deleteSubscriptionWithUndo`. Trash labels categories, subscriptions and transactions all as "Finance" with no kind (P24). Its "Restored …" toast stayed up for the rest of the run (BUG-051).
+
+### BUG-121 [Phase 14] In a narrow window the Bill Radar and Budgets sit below the entire ledger, so with a long ledger they can't be reached
+- Severity: Minor
+- Found: 2026-10-01, Phase 14 (qa-018, 1,150 transactions)
+- Steps to reproduce: `place 0 0 1440 1040` (the minimum window, 720 logical px wide). Finance → Ledger. Scroll down looking for "Subscription & Bill Radar" / "Budgets & Pacing".
+- Expected: the two panels stay reachable (above the ledger, in a tab, or a button), as they are in the wide layout's sidebar.
+- Actual: the page is one list: every transaction first, the two panels after the last one. After 4,500 wheel notches the list had reached April 2026 of a ledger that goes back to 2024 (and one row from 2016), still with no panel in sight (`qa/shots/p14-116-min-ledger.png`, `p14-120-min-far.png`, `p14-121-min-end.png`). Bills due today and over-budget tags are therefore invisible at this size; the Inbox still lists bills due today.
+- Notes: `finance_page.dart` switches to a single `CustomScrollView` under `_kSplitBreakpoint` (880 logical px of content width): ledger sliver, then a `SliverToBoxAdapter` holding `BillRadarPanel` and `BudgetPanel`. At 2000×1100 physical the wide layout still applies. Workaround: widen the window. In the wide layout the floating + covers part of the sidebar's lower rows and, once the radar has 7 or more bills, the "Add budget" button (`p14-95-annual.png`); the sidebar scrolls on its own, which uncovers them.
+
+### BUG-122 [Phase 14] Subscription sheet: the Billing dropdown takes two Tab stops; on the first one Space does nothing and Enter saves the subscription
+- Severity: Minor
+- Found: 2026-10-01, Phase 14 (qa-018)
+- Steps to reproduce: Vim off. Bill Radar → + → type `Kb` → Tab → `7` → Tab (focus on Billing) → Space → Down → Enter.
+- Expected: Space (or Enter) opens the Billing menu, the arrows move through it and Enter picks a period.
+- Actual: Space and Down do nothing; Enter saved the subscription as "Kb, $7.00, Monthly" and closed the sheet (`qa/shots/p14-99-kb-dd-space.png` first run, `p14-100-kb-dd-picked.png`: "Kb … monthly" in the radar). A second Tab lands on the same rectangle again, and from there Space opens the menu, Down highlights (starting at Weekly, not at the current Monthly) and Enter picks (`p14-s1.png` tile of the second run).
+- Notes: focus rects after each Tab: Name, Amount, Billing (742–1004 × 326–344) twice, Note, date pill, then the 14 colour swatches one by one. The date pill opens its picker with Space, but no key picks a day (BUG-111). The + buttons, the tiles and their right-click menus (Edit / Log payment / Duplicate / Delete) aren't reachable by Tab at all (BUG-009 family).
+
+### BUG-123 [Phase 14] "Income by Source" chart: the donut's centre reads "$1,001.00 spent"
+- Severity: Cosmetic
+- Found: 2026-10-01, Phase 14 (qa-018)
+- Steps to reproduce: Analytics → click the "Spending Breakdown" title → Income by Source.
+- Expected: "$1,001.00 received" (or "earned" / "income").
+- Actual: "$1,001.00 / spent" in the centre of a chart of deposits (`qa/shots/p14-132-income.png`). The slices themselves are right (Employer $1,000.00, No source $1.00).
+- Notes: `_BreakdownPie` is shared by both charts and its centre label is fixed.
+
+### BUG-124 [Phase 14] Breakdown percentages are rounded to whole numbers: a slice with money in it shows "0%" and another shows "100%"
+- Severity: Cosmetic
+- Found: 2026-10-01, Phase 14 (qa-018)
+- Steps to reproduce: a month with one large and one small slice. Analytics → Spending Breakdown (or Income by Source).
+- Expected: a non-zero slice never reads 0% (e.g. "<1%"), and a slice that isn't everything doesn't read 100%.
+- Actual: "Uncategorized $5.00 0%" of $1,430.50 (`qa/shots/p14-72-bd-dup.png`, `p14-126-restart-analytics.png`); "Employer $1,000.00 100%" next to "No source $1.00 0%" (`p14-132-income.png`). Phase 13 saw "100%" beside two other "0%" slices.
+- Notes: `_BreakdownLegendRow` prints `((amount / total) * 100).round()`; the hover bubble on the pie uses the same figure ("Untagged $1,248.50 · 87%").
+
+### BUG-125 [Phase 15] A goal lets you withdraw more than it holds, and then shows the negative balance as a positive one: "$1,500.00 of $2,000.00" at 0% with "$3,500.00 to go"
+- Severity: Minor
+- Found: 2026-10-01, Phase 15 (qa-018)
+- Steps to reproduce: Finance → Goals → New goal "Japan trip", target 2000 → Add. Add funds → 500 → save (25%, "$500.00 of $2,000.00"). Add funds → Withdraw → 2000 → Withdraw.
+- Expected: the withdrawal is refused or capped at the $500.00 the goal holds; if a negative balance is allowed, it is shown as negative.
+- Actual: saved with no message. The card reads "0%", "$1,500.00 of $2,000.00", "$3,500.00 to go", and the summary strip "$1,500.00 of $2,000.00" (`qa/shots/p15-10-wd-saved.png`). SQLite: allocations 50000 and -200000, i.e. the goal holds -$1,500.00. The three figures on the card can't all be true, and the strip's total across goals is understated by the same sign loss.
+- Notes: `_AllocateModalState._save` stores `-cents` with no check against `goalAllocatedCents`; `formatCents` prints `cents.abs()` unless `signed: true`, and the card and the strip call it unsigned. A later Add of $5,000.00 brought it to "$3,500.00 of $2,000.00", 100%, "Goal reached" (over-allocation is accepted without a note, which reads fine). Scatter on.
+
+### BUG-126 [Phase 15] Goal allocations can't be seen, edited or deleted once saved, and their Date and Note are never shown anywhere
+- Severity: Minor
+- Found: 2026-10-01, Phase 15 (qa-018)
+- Steps to reproduce: add funds to a goal with a note ("From October paycheck") and, separately, with the date pill set to Oct 31 (30 days ahead). Look for the entries afterwards: the goal card, the Edit goal sheet, the Add funds sheet.
+- Expected: a list of the goal's allocations (as the asset sheet has "Contribution room" history with edit / delete + undo), so a mistyped amount can be corrected and the note and date mean something. A post-dated allocation either waits for its day (the rule for ledger rows and room events) or the date isn't offered.
+- Actual: no screen lists allocations. The only way to correct one is a counter-entry (Withdraw), which BUG-125 shows isn't bounded. The note and date are stored (`goal_allocations_table.note`, `allocated_at`) and synced but never displayed; the Oct 31 allocation counted at once ("$3,600.00 of $2,000.00", `qa/shots/p15-14-alloc-future-saved.png`). The only way to remove allocations is to delete the whole goal.
+- Notes: `goalAllocationsProvider` is read only by `FinanceGoalsView` (summed per goal) and the allocate sheet ("… to go"). Trash shows the count ("Finance · 4 allocations").
+
+### BUG-127 [Phase 15] Deleting a goal takes one click on the trash icon: no confirmation and no "Deleted … Undo" toast, and its allocations go with it
+- Severity: Minor
+- Found: 2026-10-01, Phase 15 (qa-018)
+- Steps to reproduce: goal "Japan trip 2027" with four allocations ($3,600.00). Click its pencil → click the trash icon in "Edit goal".
+- Expected: the `Deleted "…"` toast with Undo that budgets, subscriptions and transactions show (or a confirm, since the allocations go too).
+- Actual: the sheet closes and the card is gone, with no toast (`qa/shots/p15-26-goal-deleted.png`); the summary drops from "$3,600.00 of $5,100.01" to "$0.00 of $100.01". SQLite: the goal and its four allocations all get `deleted_at`. The trash icon sits beside the sheet's close X. Settings → Data → Trash lists it (`"Japan trip 2027"` / "Finance · 4 allocations", `p15-27-trash.png`) and Restore brings the goal and all four allocations back (`p15-28-goal-restored.png`); nothing on the Finance page says so.
+- Notes: same as BUG-120 (categories). `_GoalModalState._delete` calls `softDeleteSavingsGoal` directly. The Trash restore rewrote `target_date` and `allocated_at` in UTC form (`2026-10-31T04:00:00.000Z`, the BUG-106 rewrite); the card still reads "Oct 31, 2026" in this time zone (west of UTC).
+
+### BUG-128 [Phase 15] Contributing to a tracked asset raises Net Worth by twice the amount and counts as income; a withdrawal lowers it twice and counts as spending
+- Severity: Major
+- Found: 2026-10-01, Phase 15 (qa-018)
+- Steps to reproduce: Finance → Analytics → Net Worth → + → asset "TFSA A", value 10000. Right-click it → Track contribution room… → "TFSA", limit 7000, remaining 10000 → Track. Note Net Worth and the hero. Right-click → Contribute… → 3000 → Contribute. Later: right-click → Withdraw… → 1000 → Withdraw.
+- Expected: moving $3,000 of the user's own money into an account leaves net worth where it was (cash down, asset up), and isn't income; taking $1,000 back out isn't spending.
+- Actual: the contribution adds a $3,000.00 **deposit** to the ledger and raises the asset's value by $3,000.00, so Net Worth goes up by $6,000.00: "-$33,097.39 ledger · -$4,751.00 assets" before (`qa/shots/p15-45-room-saved.png`), "-$30,097.39 ledger · $3,249.00 assets" after (`p15-49-three-assets.png`; a $5,000.00 asset was added in between, the other $3,000.00 on each side is the contribution). The hero's "Net flow · October" went from -$429.50 to +$2,570.50 and the Income vs. Expense "In" from $7,823.37 to $10,823.37. The withdrawal is an **expense**: the hero dropped by $1,000.00, the asset by $1,000.00, and Spending Breakdown shows it as spending ("Untagged $2,248.50", total $2,430.50 against $1,430.50 before; `p15-59-after-transfer.png`). After five contributions the hero read "+$11,070.50" for a month whose real net flow is -$429.50 (`p15-74-tr-deleted.png`).
+- Notes: this is what FINANCE_CONTRIBUTION_ROOM_HLD.md specifies (§3 "Contribution → `TransactionType.deposit`. Withdrawal → `TransactionType.expense`"; §11 calls the effect on cash-flow charts "acceptable in v1"), so the app matches its HLD; the HLD doesn't mention that the Net Worth card adds the ledger balance and the asset values, which turns each contribution into a double count. Transfers between two assets in the room write no ledger row and leave Net Worth unchanged, which is the behaviour a contribution would need. SQLite: `transactions_table` rows with `room_event_id` set, type deposit/expense, origin = the asset's name. Scatter on.
+
+### BUG-129 [Phase 15] A post-dated contribution's valuation is treated as the asset's current value: the asset row shows it today, and saving the asset sheet for any reason writes it over today's value
+- Severity: Major
+- Found: 2026-10-01, Phase 15 (qa-018)
+- Steps to reproduce: tracked asset "TFSA A" worth $11,750.00 today (Oct 1). Right-click → Contribute… → 4000, date pill → Oct 15 → Contribute. Look at the Net Worth card. Then click the TFSA A row (Update asset), change only the Note, Ctrl+Enter.
+- Expected: until Oct 15 the asset is worth $11,750.00 everywhere (the room bar and the ledger both wait for the day: the history row says "Upcoming"). Editing the note changes the note.
+- Actual: (1) the row reads "TFSA A $15,750.00" at once, while the headline above it still adds $11,750.00 ("$4,249.00 assets" = 11,750.00 + 7,500.00 − 15,001.00; `qa/shots/p15-62-postdated-saved.png`), so the list and its own total disagree by $4,000.00. (2) The Update asset sheet opens with "Current value $ 15750.00" and "Valued as of Oct 1, 2026" (`p15-71-asset-history.png`). Saving it after typing one character in Note rewrote today's valuation from 975000 to 1575000 cents (`asset_valuations_table`, same row id, `version` 7 → 8) and the headline jumped from "$10,249.00 assets" to "$16,249.00 assets" (Net Worth -$11,548.39 → -$5,548.39, `p15-s9.png` tile of `p15-81-rename-saved.png`). Nothing on the sheet says a value is being written.
+- Notes: `_AssetRow` and the asset sheet's seed call `latestValuation(valuations, asset.id)` with no `asOf`, so the newest valuation wins even when it's in the future; `netWorthSeries` cuts off at today. The sheet always writes a valuation when the value field is non-empty, and the field is pre-filled, so every rename or recolour re-stamps today's value with whatever was seeded. A valuation dated ahead by hand in the asset sheet (the date pill allows it) would do the same. The contribute sheet's own proposal is right ("Was $11,750.00" → 15750.00 on Oct 15).
+
+### BUG-130 [Phase 15] An asset's valuations can't be listed or deleted: a wrong or mis-dated valuation stays in the history for good
+- Severity: Minor
+- Found: 2026-10-01, Phase 15 (qa-018)
+- Steps to reproduce: asset with valuations on Sep 15 and Oct 1. Open it (Update asset) and look for a way to remove the Sep 15 point. Also: right-click → Contribute… → 300 dated Sep 1, before the asset's first valuation.
+- Expected: the valuation history can be seen as figures and a point removed (TEST_PLAN's "delete a valuation"), as room events can (history list with trash + Undo).
+- Actual: the sheet shows only a line chart with its first and last dates (`qa/shots/p15-36-asset-chart.png`); there's no list and no delete. The only correction is to save again on exactly the same date, which replaces that day's figure; a point saved on the wrong date can't be removed short of deleting the asset. The back-dated contribution wrote a "$300.00 on Sep 1" valuation ("Was $0.00", `p15-69-sep1-sheet.png`) that now starts the chart (`p15-71-asset-history.png`), and deleting that contribution wouldn't remove it (valuations are kept on purpose, HLD §6.3).
+- Notes: `FinanceRepository.softDeleteAssetValuation` exists but nothing in `lib/features` calls it. With a single valuation the sheet shows no chart at all (an empty band above the name field, `p15-33-asset-update.png`).
+
+### BUG-131 [Phase 15] A debt in the Net Worth list has no minus sign: "Car loan $15,001.00", told apart only by its red colour
+- Severity: Cosmetic
+- Found: 2026-10-01, Phase 15 (qa-018)
+- Steps to reproduce: Net Worth → + → "Car loan", value -15000.999 → Add.
+- Expected: "-$15,001.00", as the headline and the "… assets" line print negatives ("-$4,751.00 assets").
+- Actual: the row reads "$15,001.00" in red (`qa/shots/p15-40-two-assets.png`). The sum under the headline is right (-$4,751.00 = 10,250.00 − 15,001.00). The third decimal was rounded silently (-1500100 cents saved for "-15000.999", the BUG-108 pattern).
+- Notes: `_AssetRow` uses `formatCents` (prints the magnitude) plus an error colour; the headline uses `formatNetCents`. Same sign loss as BUG-125.
+
+### BUG-132 [Phase 15] Restoring a deleted contribution from Trash brings back its ledger deposit but not the room entry, so the room no longer counts it
+- Severity: Major
+- Found: 2026-10-01, Phase 15 (qa-018)
+- Steps to reproduce: two assets in room "TFSA"; TFSA B has a $2,000.00 contribution (ledger row "TFSA B +$2,000.00"). Finance → Ledger → right-click that row → Delete; let the Undo toast expire. Settings → Data → Trash → Restore on the newest "Untitled transaction". Back to Finance.
+- Expected: both halves come back (HLD §6.3: "Undo soft-delete: Restore both sides when paired"), and the room bar counts the $2,000.00 again.
+- Actual: the ledger shows "TFSA B +$2,000.00" again and the hero counts it, but the room bar stays at "$9,400/$10,300" (`qa/shots/p15-s14.png` tile of `p15-94-after-trash-restore.png`); with the entry it would read $11,400, over by $1,100.00. TFSA B's history in the asset sheet doesn't list it. SQLite: `transactions_table` row `deleted_at` NULL, `version` 2; its `asset_room_events_table` row (kind contribution, 200000) still has `deleted_at`. The room now understates what was contributed, with nothing on screen to show the two are out of step; the ledger row still opens as "Linked to a contribution room".
+- Notes: deleting either side removes both (ledger row menu → event gone; history trash → ledger row gone), and the toast's Undo restores both (checked from the history list: a transfer's two legs, `p15-74-tr-deleted.png` → both `deleted_at` NULL). Only the Trash dialog restores one side. Trash lists these rows as "Untitled transaction / Finance" with no amount, asset or kind, so a deleted $1,000.00 withdrawal and a $2,000.00 contribution can't be told apart (`p15-92-trash.png`); the room entries themselves aren't listed, so there is no way to restore the other half. The restore also rewrote `occurred_at` in UTC form (BUG-106).
+
+### BUG-133 [Phase 15] Right-click menus can't be closed or used from the keyboard: Esc, Down and Enter do nothing, and the click that dismisses one also activates what is under it
+- Severity: Minor
+- Found: 2026-10-01, Phase 15 (qa-018)
+- Steps to reproduce: Finance → Ledger → right-click any transaction (for a room-linked row the menu is the single item "Delete"). Press Esc. Press Down, Enter. Then click somewhere else on the page, e.g. on a bill in the sidebar.
+- Expected: Esc closes the menu; the arrow keys and Enter choose an item; a click outside only closes it.
+- Actual: the menu stays open after Esc, twice (`qa/shots/p15-85-menu-esc.png`, `p15-87-menu-esc2.png`), and after Down + Enter (`p15-88-menu-keys.png`). The click outside closed the menu and opened "Edit subscription" for the bill under the pointer in the same click (`p15-86-menu-clickaway.png`). In an earlier run a click meant for the row landed on the still-open menu's "Delete" and removed a $2,000.00 contribution (how BUG-132 was found).
+- Notes: `ContextMenuRegion` is the app-wide right-click menu (asset rows, bills, budgets, ledger rows), so this likely holds everywhere; only the Finance ledger and the asset rows were tried here. Part of the BUG-009 family (nothing on a page is reachable by keyboard), but Esc not closing a popup is new.
+
+### BUG-134 [Phase 15] Deleting a contribution room takes one click, has no confirmation or Undo, and the room isn't in Trash, so it can't be brought back
+- Severity: Major
+- Found: 2026-10-01, Phase 15 (qa-018)
+- Steps to reproduce: asset "TFSA A" in room "TFSA 2" (annual limit $6,500.00, $2,000.00 remaining, nine entries this year). Right-click the asset → Edit contribution room… → click the trash icon beside the close X. Then Settings → Data → Trash.
+- Expected: a confirmation or a `Deleted "TFSA 2"` toast with Undo, and the room listed in Trash for 30 days like every other deleted item.
+- Actual: the sheet closes at once; the bar disappears from the asset (`qa/shots/p15-114-room-deleted.png`). No toast. Trash lists the asset deleted afterwards, an old transaction and other Finance items, but no room (`p15-117-trash.png`). SQLite: `contribution_rooms_table.deleted_at` set, `assets_table.contribution_room_id` cleared on the member; the nine room entries and their ledger rows stay live (as HLD §7.4 intends) but nothing reads them any more. The limit, the baseline and the link between the assets can only be re-entered by hand as a new room, and a new room starts with none of this year's entries, since they carry the old room's id.
+- Notes: `_ContributionRoomModalState._deleteRoom` calls `softDeleteContributionRoom` directly (compare BUG-120, BUG-127: categories and goals are also one click, but those are restorable from Trash). The ledger rows of the dead room still open as "Linked to a contribution room". "Detach from room" (asset menu) and "Remove … from this room" are also immediate, but reversible through Join existing.
+- Notes (same day): after a new room "TFSA 3" was made for the same assets, their bars read "$0/$5,000" while the history list in each asset's sheet still shows the dead room's entries (Withdrawal -$1,000.00, Contribution +$6,000.00, Transfer +$2,500.00 under "Contribution room · TFSA 3", `qa/shots/p15-s21.png`): the list is filtered by asset and year, the bar by room id, so the two disagree. The Track sheet's "Join existing" correctly offers only the live room.
+
+### BUG-135 [Phase 15] Deleting an asset takes one click on the trash icon: no confirmation and no Undo toast, and Net Worth jumps
+- Severity: Minor
+- Found: 2026-10-01, Phase 15 (qa-018)
+- Steps to reproduce: assets "Car loan" (-$15,001.00), "TFSA A", "TFSA B". Click the Car loan row → click the trash icon in "Update asset".
+- Expected: the `Deleted "Car loan"` toast with Undo, as for transactions, budgets, subscriptions and room entries.
+- Actual: the sheet closes and the row is gone with no toast; Net Worth goes from -$7,448.39 to $7,552.61 (`qa/shots/p15-116-carloan-deleted.png`). The trash icon sits beside the close X. Trash lists it (`"Car loan"` / "Finance · 1 valuation") and Restore brings back the asset and its valuation (`p15-s19.png`).
+- Notes: same pattern as BUG-120 (category) and BUG-127 (goal). `_AssetModalState._delete` calls `softDeleteAsset` directly.
+
+### BUG-136 [Phase 16] Bucket list: the add field isn't focused when the list opens, and a rejected Enter (blank or spaces) drops focus, so whatever is typed next goes nowhere
+- Severity: Minor
+- Found: 2026-10-01, Phase 16 (qa-017)
+- Steps to reproduce: Life page → click the trunk to open the Bucket List → type "Skydive" without clicking. Then click the "Add something to your bucket list…" field, paste five spaces, press Enter, then type "Rapid" and press Enter.
+- Expected: the field has focus when the popover opens (it is the popover's only text field), and a rejected Enter keeps focus in the field, as an accepted one does ("type, Enter, type, Enter" is how `_addItem` is designed to be used).
+- Actual: on open, the typed "Skydive" is lost: nothing has focus (`qa/shots/p16-004-typed-nofocus.png`). After the rejected Enter, `FocusManager.instance.primaryFocus` is the popover's `FocusScopeNode`; the spaces stay in the field with the hint hidden, and Ctrl+A / Delete, a CRLF paste, "Rapid" and five Enters all went nowhere (`p16-014-after-fail.png`). No row was added and nothing says why.
+- Notes: `_BucketListPopupState._addItem` returns early for a blank title before the `_newItemFocusNode.requestFocus()` that restores focus after an accepted submit, while `onSubmitted` has already unfocused the field. Same family as BUG-026 / BUG-050 / BUG-117 (focus lost after a rejected Enter). Scatter was on.
+
+### BUG-137 [Phase 16] Bucket list items can't be completed or renamed from the keyboard, and Tab leaves the popover for an off-screen page and the title bar
+- Severity: Minor
+- Found: 2026-10-01, Phase 16 (qa-017)
+- Steps to reproduce: Vim off. Open the Bucket List (107 items), click the add field, press Tab repeatedly and read `primaryFocus` after each (rect + widget ancestry over the VM service). Then from the add field press Shift+Tab repeatedly. Then press Tab twice and Enter.
+- Expected: the popover traps focus while it is open; each row's completion circle and title are reachable, Space/Enter completes an item (opening the note prompt) and Enter on a title renames it.
+- Actual: Tab goes add field → "+" button → a 53×32 button inside the **Study page** (not on screen; `StudyPage` in its ancestry) → two `GlassButton`s and a 56×56 button that belong to no visible page → a title-bar button at y = −25 (BUG-086). Shift+Tab reaches only the rows' ✕ delete buttons. The completion circles (a bare `GestureDetector`) and the tap-to-rename title are never reached, so completing or renaming an item needs the mouse. Enter on the off-screen Study button had no visible effect and wrote nothing. Focus is invisible throughout (BUG-009).
+- Notes: on the Life page itself Tab never moves (focus stays on a scope wrapping the canvas), so the bucket list and the stat popups can't be opened from the keyboard at all; see the BUG-009 note. Esc closes the popover (Vim off); with Vim ON Esc only leaves Insert mode and the popover stays (consistent with the Vim dialog rule).
+
+### BUG-138 [Phase 16] Nothing on the Life page shows where the bucket list is: the HLD's swing and bubble aren't drawn, and the only way in is clicking the bare trunk
+- Severity: Minor
+- Found: 2026-10-01, Phase 16 (qa-017)
+- Steps to reproduce: open the Life page and look for the bucket list.
+- Expected: LIFE_TRACKER.md: "On the right side of the tree there should be a swing … In the swing will be a bubble", and "If the user clicks on the bubble it should also animate a popup" (the bucket list). Hovering the bubble expands it and raises its glow.
+- Actual: there is no swing, bubble or other object on the tree (`qa/shots/p16-001-nobirth.png`, `p16-030-tree-birth.png`). The bucket list opens from a click anywhere on the trunk and branches (`_TreeHoverRegion`), which only shows a click cursor and a whole-tree glow on hover. Nothing on the page names or hints at a bucket list, so a user who hasn't read the code won't find it.
+- Notes: the page's class comment describes "a figure resting on the trunk that opens the bucket list", and `lib/features/life_tracker/life_tree_figure.dart` (`lifeTreeFigureRect`, the figure painter) exists, but nothing references that file: the figure is never drawn. Other HLD differences, not logged separately: the stat is "Kilometres Travelled Around the Sun" (HLD: miles), labels on leader lines replace hover-only one-word captions under blossoms. Unused file noticed, not touched.
+
+### BUG-139 [Phase 16] Fallen leaves pile up into a vertical column at the right (and left) edge of the ground
+- Severity: Cosmetic
+- Found: 2026-10-01, Phase 16 (qa-017)
+- Steps to reproduce: set a birth date (Settings → Pages → Birth date: June 15, 1990, 1,893 weeks), open the Life page, look at the bottom-right corner of the ground. Repeat with January 1, 1900 (all 4,160 leaves down).
+- Expected: the pile thins out toward the edges ("thinning out steadily toward the edges", per the code comment).
+- Actual: a narrow pink pillar of leaves stacked on top of one another stands at the far right of the ground, and a smaller one at the far left (`qa/shots/p16-030-tree-birth.png`, bottom-right corner; much taller with all leaves down, `p16-037-1900-tree.png`; also at the minimum size, `p16-043-min.png`).
+- Notes: `groundPositionFor` (`life_tree_canvas.dart`) draws x from a normal distribution around the trunk base (σ = 0.22 of the width) and then clamps it to [0.04, 0.96], so every leaf in the tails lands on exactly the same x. With the trunk at ~0.61 about 5.6% of fallen leaves (~100 at 1,893 weeks, ~230 at 4,160) share x = 0.96. Scatter was on.
+
+### BUG-140 [Phase 16] A long bucket-list title is cut after two lines with no ellipsis, so the rest can't be read
+- Severity: Cosmetic
+- Found: 2026-10-01, Phase 16 (qa-017)
+- Steps to reproduce: Bucket List → paste a 300-character title ("Lxxx…xZ") → Enter.
+- Expected: the full title wraps (the row grows, as it does for a note), or the cut is marked with an ellipsis and the full text is available on hover.
+- Actual: the row shows two lines (~88 characters) and stops; the end of the title ("…Z") is never shown and there's no ellipsis, so it looks like the whole title (`qa/shots/p16-014-after-fail.png`, `p16-015-crlf-rapid.png`). Only clicking it (rename mode) shows the rest. SQLite has all 300 characters.
+- Notes: the title sits in a fixed-height `SizedBox(height: _kTitleLineHeight)` in `_BucketListRow`. CJK/Arabic/emoji titles render correctly.
+
+### BUG-141 [Phase 16] Life page numbers are frozen at the moment the page was last rebuilt: heartbeats and kilometres don't move, and a revisit shows old figures
+- Severity: Minor
+- Found: 2026-10-01, Phase 16 (qa-017)
+- Steps to reproduce: set the birth date (June 15, 1990) at 21:38:51, go to the Life page at 21:39:30 and read Heartbeats / Kilometres. Then hover any stat label and read them again.
+- Expected: figures that are "computed live" (HLD) reflect the current time when the page is shown, and day-based ones (Weeks Left, Sleep, Full Moons) change when the day changes.
+- Actual: the page showed 1,336,396,460 heartbeats and 34,112,474,210 km, the values for 21:38 (expected at 21:39: 1,336,396,530 / 34,112,475,997, one minute later). Hovering a label rebuilt the page and the numbers jumped to the current minute (1,336,396,600). With no hover the figures never change, even while a stat popup is open.
+- Notes: `now` is taken inside the page's `LayoutBuilder` and nothing schedules a rebuild (no timer, no day-change listener), and the Life page is kept alive between visits, so its labels stay at whatever minute it last built. Voyager runs all day from the tray (launch at login), so day-based stats can be a day or more stale until the user hovers something; the minute-level drift alone is harmless. The values themselves were exact against a hand calculation every time they were refreshed (see TEST_PLAN Phase 16).
+
+### BUG-142 [Phase 16] At the minimum window size the Kilometres value runs off the right edge of the canvas
+- Severity: Cosmetic
+- Found: 2026-10-01, Phase 16 (qa-017)
+- Steps to reproduce: birth date June 15, 1990; `place 0 0 1440 1040` (720×520 logical); Life page.
+- Expected: every stat label fits inside the canvas (wrapped or scaled down).
+- Actual: the label reads "34,112,486,718 k", with the "m" cut off by the canvas's rounded frame (`qa/shots/p16-043-min.png`). At 2000×1100 and maximized it fits. The other labels fit at every size tried.
+- Notes: right-side labels are positioned at their anchor with a width of `min(230, 21% of the canvas)`; the value's 17 characters are wider than what is left. Scatter was on.
+
+### BUG-143 [Phase 16] Birth date picker: Enter in the typed-date field does nothing
+- Severity: Minor
+- Found: 2026-10-01, Phase 16 (qa-017)
+- Steps to reproduce: Settings → Pages → Birth date → click the pencil to switch to typing → Ctrl+A → type `06/15/1990` → Enter.
+- Expected: Enter accepts the date and closes the picker, like OK (or at least moves the header to the typed date).
+- Actual: nothing happens: the dialog stays open and the header still reads "Sun, Jan 1" (`qa/shots/p16-028-set.png`); only a click on OK saves it (`settings_table.birth_date` = `1990-06-15T00:00:00.000 -04:00`). A future date is refused with "Out of range." (correct), and 01/01/1900 and today are accepted.
+- Notes: this is the stock Material `showDatePicker` (Settings page), not the app's `DateSelectorPopover` (BUG-111). The Birth date row itself isn't reachable by Tab (BUG-009). The birth date is stored as local midnight and kept the same day across a restart and a cold re-login.
+
+<!-- Last ID: BUG-143. -->

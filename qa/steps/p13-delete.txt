@@ -1,0 +1,16 @@
+# P13: delete the duplicated row (today, first row) -> Undo; delete again without undo.
+activate
+click 900 525 right
+wait 700
+click 1025 738
+wait 900
+move 1500 65
+shot p13-16-del-toast
+click 1663 65
+wait 1500
+shot p13-17-undone
+click 900 525 right
+wait 700
+click 1025 738
+wait 9500
+shot p13-18-deleted

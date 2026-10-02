@@ -1,0 +1,31 @@
+# P13: first expense via the Enter chain, then a deposit via clicks + Ctrl+Enter. Modal is open (Ctrl+Alt+F), amount focused.
+activate
+type 12.34
+key enter
+type Walmart
+key enter
+type Toothpaste
+key enter
+type #groceries
+wait 500
+shot p13-03-filled
+key enter
+wait 1500
+shot p13-04-after-expense
+hotkey ctrl+alt+f
+wait 1200
+click 1740 566
+wait 400
+type 1000
+click 1440 813
+wait 300
+type Employer
+click 1440 941
+type Paycheque
+click 1440 1069
+type pay, salary
+wait 400
+shot p13-05-deposit-filled
+key ctrl+enter
+wait 1500
+shot p13-06-after-deposit

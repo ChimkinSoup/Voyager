@@ -78,7 +78,7 @@ class RankingsMapView extends ConsumerStatefulWidget {
 }
 
 class _RankingsMapViewState extends ConsumerState<RankingsMapView>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const _fitPadding = EdgeInsets.all(56);
   static const _fitMaxZoom = 16.0;
 
@@ -91,6 +91,18 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
   /// soft the push, so it is switched off for this.
   static const _glideFriction = 0.0025;
   static const _glideId = 'glide';
+
+  static const _flyId = 'fly';
+  late final AnimationController _fly;
+
+  /// The flight [_fly] is on: the camera at a point along it, from 0 to 1,
+  /// and where it ends.
+  ({
+    ({LatLng center, double zoom}) Function(double t) at,
+    LatLng center,
+    double zoom,
+  })?
+  _flight;
 
   final _map = MapController();
 
@@ -169,6 +181,7 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
         widget.loading && _initialViewport == null && _savedDevice == null;
     _glide = AnimationController.unbounded(vsync: this)
       ..addListener(_glideStep);
+    _fly = AnimationController(vsync: this)..addListener(_flyStep);
     if (!_fitPending) _openOnDeviceIfNew();
   }
 
@@ -255,13 +268,82 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
   }
 
   /// Moves to the device at [point] and marks it, unless the map has closed
-  /// or been touched since it was asked to. Whether it moved.
+  /// or been touched since it was asked to. Whether it moved. The Locate
+  /// button flies there; opening the map jumps.
   bool _showDevice(LatLng point, {required bool ask}) {
     if (!mounted || _touched) return false;
     setState(() => _devicePoint = point);
-    final zoom = _map.camera.zoom;
-    _map.move(point, ask && zoom > _locateZoom ? zoom : _locateZoom);
+    if (!ask) {
+      _map.move(point, _locateZoom);
+      return true;
+    }
+    // A fresh fix arriving mid-flight keeps the zoom the flight was headed to.
+    final zoom = _fly.isAnimating ? _flight!.zoom : _map.camera.zoom;
+    _flyTo(point, zoom > _locateZoom ? zoom : _locateZoom);
     return true;
+  }
+
+  /// Takes the camera to [center] at [zoom] along van Wijk and Nuij's smooth
+  /// zoom-and-pan, the path d3's interpolateZoom follows. A hop nearby is a
+  /// brief, unhurried slide; a long way zooms out, crosses quickly and zooms
+  /// back in, taking a little longer.
+  void _flyTo(LatLng center, double zoom) {
+    final camera = _map.camera;
+    // Positions in world pixels at zoom 0, and the view's width in them.
+    final from = camera.projectAtZoom(camera.center, 0);
+    final delta = camera.projectAtZoom(center, 0) - from;
+    final width = camera.nonRotatedSize.width;
+    final w0 = width / math.pow(2, camera.zoom);
+    final w1 = width / math.pow(2, zoom);
+    final d = delta.distance;
+    // The path's length, and the share of [delta] travelled and view width
+    // at a distance s along it.
+    final double length;
+    final ({double u, double w}) Function(double s) along;
+    if (d < 1e-12) {
+      length = math.log(w1 / w0) / math.sqrt2;
+      along = (s) => (u: 0, w: w0 * math.exp(math.sqrt2 * s));
+    } else {
+      final r0 = -_asinh((w1 * w1 - w0 * w0 + 4 * d * d) / (4 * w0 * d));
+      final r1 = -_asinh((w1 * w1 - w0 * w0 - 4 * d * d) / (4 * w1 * d));
+      length = (r1 - r0) / math.sqrt2;
+      along = (s) => (
+        u: w0 / (2 * d) * (_cosh(r0) * _tanh(math.sqrt2 * s + r0) - _sinh(r0)),
+        w: w0 * _cosh(r0) / _cosh(math.sqrt2 * s + r0),
+      );
+    }
+    if (length.abs() < 1e-3) {
+      _map.move(center, zoom);
+      return;
+    }
+    _flight = (
+      at: (t) {
+        final step = along(Curves.easeInOut.transform(t) * length);
+        return (
+          center: camera.unprojectAtZoom(from + delta * step.u, 0),
+          zoom: math.log(width / step.w) / math.ln2,
+        );
+      },
+      center: center,
+      zoom: zoom,
+    );
+    // The length grows with the log of the distance, so a far flight lasts
+    // a little longer but crosses each screen much faster.
+    _fly
+      ..duration = Duration(
+        milliseconds: (300 + 120 * length.abs()).clamp(300, 2200).round(),
+      )
+      ..forward(from: 0);
+  }
+
+  void _flyStep() {
+    final flight = _flight;
+    if (flight == null) return;
+    // Lands exactly where it was sent, whatever the rounding along the way.
+    final at = _fly.value == 1
+        ? (center: flight.center, zoom: flight.zoom)
+        : flight.at(_fly.value);
+    _map.move(at.center, at.zoom, id: _flyId);
   }
 
   List<LatLng> get _points => [
@@ -270,9 +352,12 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
         LatLng(location.latitude, location.longitude),
   ];
 
-  MapOptions _options(BuildContext context) => MapOptions(
+  MapOptions _options(BuildContext context, double minZoom) => MapOptions(
+    // While entries are loading, the pins so far are some categories' and not
+    // others': the fit owed once they arrive is the only one.
     initialCameraFit:
-        _initialPoints.isEmpty ||
+        _fitPending ||
+            _initialPoints.isEmpty ||
             _initialViewport != null ||
             _savedDevice != null
         ? null
@@ -284,8 +369,11 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
     initialCenter: _initialViewport != null
         ? LatLng(_initialViewport.latitude, _initialViewport.longitude)
         : _savedDevice ?? const LatLng(20, 0),
-    initialZoom:
-        _initialViewport?.zoom ?? (_savedDevice != null ? _locateZoom : 2),
+    initialZoom: math.max(
+      minZoom,
+      _initialViewport?.zoom ?? (_savedDevice != null ? _locateZoom : 2),
+    ),
+    minZoom: minZoom,
     maxZoom: rankingsMapMaxZoom,
     // The style's own land colour, so a tile still loading is not a hole.
     backgroundColor: Theme.of(context).colorScheme.surface,
@@ -306,6 +394,7 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
     // this frame, as a provider cannot be written while the tree is torn down.
     if (_unsavedViewport != null) Future.microtask(_saveViewport);
     _glide.dispose();
+    _fly.dispose();
     _selected.dispose();
     _map.dispose();
     super.dispose();
@@ -314,6 +403,7 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
   void _onPointerDown(PointerDownEvent event) {
     _touched = true;
     _glide.stop();
+    _fly.stop();
     // A second finger is a pinch, which ends as one and never glides.
     if (_dragPointer != null) return;
     _dragPointer = event.pointer;
@@ -338,8 +428,10 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
       case MapEventSource.mapController:
         // The zoom buttons, Fit and a focused location take the camera over.
         if (event is! MapEventMove || event.id != _glideId) _glide.stop();
+        if (event is! MapEventMove || event.id != _flyId) _fly.stop();
       default:
         _glide.stop();
+        _fly.stop();
     }
   }
 
@@ -627,6 +719,9 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
         .where((entry) => entry.parent.locations.isEmpty)
         .length;
 
+    // Watched here: the map itself is built at layout, inside its builder.
+    final showZoom = ref.watch(rankingMapShowZoomProvider);
+
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -640,75 +735,97 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
             cursor: _overName ? SystemMouseCursors.click : MouseCursor.defer,
             onHover: (event) => _onHover(event.localPosition),
             onExit: (_) => _onHover(null),
-            child: FlutterMap(
-              mapController: _map,
-              options: _options(context),
-              children: [
-                RankingsTileLayer(
-                  key: _tiles,
-                  pins: [
-                    for (final entry in widget.entries)
-                      for (final location in entry.parent.locations)
-                        (
-                          point: LatLng(location.latitude, location.longitude),
-                          title: entry.parent.title,
-                        ),
-                  ],
-                ),
-                if (_devicePoint case final point?)
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        point: point,
-                        width: 16,
-                        height: 16,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: theme.colorScheme.primary,
-                            border: Border.all(color: Colors.white, width: 2.5),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                blurRadius: 3,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final minZoom = rankingsMapMinZoomAt(constraints.maxWidth);
+                // A wider map raises the floor, which the camera only meets
+                // on its next move: meet it now.
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted && _map.camera.zoom < minZoom) {
+                    _map.move(_map.camera.center, minZoom);
+                  }
+                });
+                return FlutterMap(
+                  mapController: _map,
+                  options: _options(context, minZoom),
+                  children: [
+                    RankingsTileLayer(
+                      key: _tiles,
+                      pins: [
+                        for (final entry in widget.entries)
+                          for (final location in entry.parent.locations)
+                            (
+                              point: LatLng(
+                                location.latitude,
+                                location.longitude,
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                MarkerClusterLayerWidget(
-                  options: MarkerClusterLayerOptions(
-                    markers: _pins,
-                    maxClusterRadius: 44,
-                    size: const Size(38, 38),
-                    padding: _fitPadding,
-                    // A pressed cluster zooms until its pins part. At the
-                    // package's own 17, close pins took a second press.
-                    maxZoom: rankingsMapMaxZoom,
-                    // The package moves the camera and only then brings the
-                    // pins out, half a second each, the first easing to a
-                    // crawl and the second starting from one: a visible wait
-                    // between the two.
-                    animationsOptions: const AnimationsOptions(
-                      fitBound: Duration(milliseconds: 300),
-                      fitBoundCurves: Curves.easeInOut,
-                      zoom: Duration(milliseconds: 200),
-                      spiderfy: Duration(milliseconds: 200),
-                      fadeInCurve: Curves.easeOut,
-                      clusterExpandCurve: Curves.easeOut,
-                      spiderifyCurve: Curves.easeOut,
+                              title: entry.parent.title,
+                            ),
+                      ],
                     ),
-                    showPolygon: false,
-                    // The pins take their own taps, right-clicks and long-presses.
-                    markerChildBehavior: true,
-                    builder: (context, markers) =>
-                        _ClusterBubble(count: markers.length),
-                  ),
-                ),
-                if (ref.watch(rankingMapShowZoomProvider)) const _ZoomReadout(),
-              ],
+                    if (_devicePoint case final point?)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: point,
+                            width: 16,
+                            height: 16,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: theme.colorScheme.primary,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2.5,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.3),
+                                    blurRadius: 3,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    MarkerClusterLayerWidget(
+                      // The layer reads the floor, rounded up, once: it is
+                      // built anew when a resize moves that, or a floor
+                      // lowered under it leaves every pin out of a cluster.
+                      key: ValueKey(minZoom.ceil()),
+                      options: MarkerClusterLayerOptions(
+                        markers: _pins,
+                        maxClusterRadius: 44,
+                        size: const Size(38, 38),
+                        padding: _fitPadding,
+                        // A pressed cluster zooms until its pins part. At the
+                        // package's own 17, close pins took a second press.
+                        maxZoom: rankingsMapMaxZoom,
+                        // The package moves the camera and only then brings the
+                        // pins out, half a second each, the first easing to a
+                        // crawl and the second starting from one: a visible wait
+                        // between the two.
+                        animationsOptions: const AnimationsOptions(
+                          fitBound: Duration(milliseconds: 300),
+                          fitBoundCurves: Curves.easeInOut,
+                          zoom: Duration(milliseconds: 200),
+                          spiderfy: Duration(milliseconds: 200),
+                          fadeInCurve: Curves.easeOut,
+                          clusterExpandCurve: Curves.easeOut,
+                          spiderifyCurve: Curves.easeOut,
+                        ),
+                        showPolygon: false,
+                        // The pins take their own taps, right-clicks and long-presses.
+                        markerChildBehavior: true,
+                        builder: (context, markers) =>
+                            _ClusterBubble(count: markers.length),
+                      ),
+                    ),
+                    if (showZoom) const _ZoomReadout(),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -1141,3 +1258,10 @@ class _EntryPickerState extends State<_EntryPicker> {
     );
   }
 }
+
+double _cosh(double x) => (math.exp(x) + math.exp(-x)) / 2;
+double _sinh(double x) => (math.exp(x) - math.exp(-x)) / 2;
+double _tanh(double x) => _sinh(x) / _cosh(x);
+
+/// Exact for large [x] of either sign, where `log(x + sqrt(x² + 1))` is not.
+double _asinh(double x) => x.sign * math.log(x.abs() + math.sqrt(x * x + 1));

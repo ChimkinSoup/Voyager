@@ -1,0 +1,39 @@
+# P13: Ctrl+F ledger search. Each query replaces the previous (Ctrl+F selects the text).
+activate
+key ctrl+f
+wait 600
+shot p13-s00-open
+type walmart
+wait 700
+shot p13-s01-walmart
+key ctrl+f
+type #groc
+wait 700
+shot p13-s02-tag
+key ctrl+f
+type 7.3
+wait 700
+shot p13-s03-amount
+key ctrl+f
+type costco thai
+wait 700
+shot p13-s04-two-tokens
+key ctrl+f
+type $1,000
+wait 700
+shot p13-s05-dollar
+key ctrl+f
+type zzzqqq
+wait 700
+shot p13-s06-nomatch
+key ctrl+f
+type EMPLOYER pay
+wait 700
+shot p13-s07-case
+key ctrl+f
+type #
+wait 700
+shot p13-s08-barehash
+key esc
+wait 700
+shot p13-s09-closed

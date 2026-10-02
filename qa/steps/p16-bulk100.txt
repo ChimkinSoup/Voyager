@@ -1,0 +1,304 @@
+activate
+click 1355 1353
+type Bulk item 001
+key enter
+wait 120
+type Bulk item 002
+key enter
+wait 120
+type Bulk item 003
+key enter
+wait 120
+type Bulk item 004
+key enter
+wait 120
+type Bulk item 005
+key enter
+wait 120
+type Bulk item 006
+key enter
+wait 120
+type Bulk item 007
+key enter
+wait 120
+type Bulk item 008
+key enter
+wait 120
+type Bulk item 009
+key enter
+wait 120
+type Bulk item 010
+key enter
+wait 120
+type Bulk item 011
+key enter
+wait 120
+type Bulk item 012
+key enter
+wait 120
+type Bulk item 013
+key enter
+wait 120
+type Bulk item 014
+key enter
+wait 120
+type Bulk item 015
+key enter
+wait 120
+type Bulk item 016
+key enter
+wait 120
+type Bulk item 017
+key enter
+wait 120
+type Bulk item 018
+key enter
+wait 120
+type Bulk item 019
+key enter
+wait 120
+type Bulk item 020
+key enter
+wait 120
+type Bulk item 021
+key enter
+wait 120
+type Bulk item 022
+key enter
+wait 120
+type Bulk item 023
+key enter
+wait 120
+type Bulk item 024
+key enter
+wait 120
+type Bulk item 025
+key enter
+wait 120
+type Bulk item 026
+key enter
+wait 120
+type Bulk item 027
+key enter
+wait 120
+type Bulk item 028
+key enter
+wait 120
+type Bulk item 029
+key enter
+wait 120
+type Bulk item 030
+key enter
+wait 120
+type Bulk item 031
+key enter
+wait 120
+type Bulk item 032
+key enter
+wait 120
+type Bulk item 033
+key enter
+wait 120
+type Bulk item 034
+key enter
+wait 120
+type Bulk item 035
+key enter
+wait 120
+type Bulk item 036
+key enter
+wait 120
+type Bulk item 037
+key enter
+wait 120
+type Bulk item 038
+key enter
+wait 120
+type Bulk item 039
+key enter
+wait 120
+type Bulk item 040
+key enter
+wait 120
+type Bulk item 041
+key enter
+wait 120
+type Bulk item 042
+key enter
+wait 120
+type Bulk item 043
+key enter
+wait 120
+type Bulk item 044
+key enter
+wait 120
+type Bulk item 045
+key enter
+wait 120
+type Bulk item 046
+key enter
+wait 120
+type Bulk item 047
+key enter
+wait 120
+type Bulk item 048
+key enter
+wait 120
+type Bulk item 049
+key enter
+wait 120
+type Bulk item 050
+key enter
+wait 120
+type Bulk item 051
+key enter
+wait 120
+type Bulk item 052
+key enter
+wait 120
+type Bulk item 053
+key enter
+wait 120
+type Bulk item 054
+key enter
+wait 120
+type Bulk item 055
+key enter
+wait 120
+type Bulk item 056
+key enter
+wait 120
+type Bulk item 057
+key enter
+wait 120
+type Bulk item 058
+key enter
+wait 120
+type Bulk item 059
+key enter
+wait 120
+type Bulk item 060
+key enter
+wait 120
+type Bulk item 061
+key enter
+wait 120
+type Bulk item 062
+key enter
+wait 120
+type Bulk item 063
+key enter
+wait 120
+type Bulk item 064
+key enter
+wait 120
+type Bulk item 065
+key enter
+wait 120
+type Bulk item 066
+key enter
+wait 120
+type Bulk item 067
+key enter
+wait 120
+type Bulk item 068
+key enter
+wait 120
+type Bulk item 069
+key enter
+wait 120
+type Bulk item 070
+key enter
+wait 120
+type Bulk item 071
+key enter
+wait 120
+type Bulk item 072
+key enter
+wait 120
+type Bulk item 073
+key enter
+wait 120
+type Bulk item 074
+key enter
+wait 120
+type Bulk item 075
+key enter
+wait 120
+type Bulk item 076
+key enter
+wait 120
+type Bulk item 077
+key enter
+wait 120
+type Bulk item 078
+key enter
+wait 120
+type Bulk item 079
+key enter
+wait 120
+type Bulk item 080
+key enter
+wait 120
+type Bulk item 081
+key enter
+wait 120
+type Bulk item 082
+key enter
+wait 120
+type Bulk item 083
+key enter
+wait 120
+type Bulk item 084
+key enter
+wait 120
+type Bulk item 085
+key enter
+wait 120
+type Bulk item 086
+key enter
+wait 120
+type Bulk item 087
+key enter
+wait 120
+type Bulk item 088
+key enter
+wait 120
+type Bulk item 089
+key enter
+wait 120
+type Bulk item 090
+key enter
+wait 120
+type Bulk item 091
+key enter
+wait 120
+type Bulk item 092
+key enter
+wait 120
+type Bulk item 093
+key enter
+wait 120
+type Bulk item 094
+key enter
+wait 120
+type Bulk item 095
+key enter
+wait 120
+type Bulk item 096
+key enter
+wait 120
+type Bulk item 097
+key enter
+wait 120
+type Bulk item 098
+key enter
+wait 120
+type Bulk item 099
+key enter
+wait 120
+type Bulk item 100
+key enter
+wait 120
+wait 1500
+shot p16-016-bulk100

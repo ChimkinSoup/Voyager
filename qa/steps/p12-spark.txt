@@ -1,0 +1,29 @@
+activate
+click 2481 864
+wait 1500
+shot p12-42-sparkpop
+key ctrl+a
+type 180
+key enter
+wait 1200
+click 2622 864
+wait 1500
+key ctrl+a
+type 175
+key enter
+wait 1200
+click 2269 864
+wait 1500
+key ctrl+a
+type 500
+key enter
+wait 1200
+click 1917 864
+wait 1500
+key ctrl+a
+type 10
+key enter
+wait 1500
+move 1500 1700
+wait 500
+shot p12-43-spark

@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'dart:ui';
 
+import 'package:collection/collection.dart' show mergeSort;
 import 'package:flutter/painting.dart';
 
 import '../constants.dart';
@@ -44,7 +45,13 @@ import 'text_wrapper.dart';
 /// And the labels of a theme layer whose metadata sets `overlay` are placed
 /// with the rest but left out of [paint]: they are handed over in [overlaid]
 /// for the caller to draw over the tiles itself, which can then leave some
-/// out, draw one differently and tell which one a point is on.
+/// out, draw one differently and tell which one a point is on. A point label
+/// of such a layer that found no room is handed over too, marked unplaced,
+/// so the caller can still show where it is. One whose point is outside the
+/// source tile is not: the tile it is in lays it out.
+///
+/// A layer's labels are placed in the order of its `symbol-sort-key`, lowest
+/// first, where upstream took the tile's own order.
 class LabelLayout {
   final List<_Label> _labels;
 
@@ -61,6 +68,10 @@ class LabelLayout {
               painter: label.painter,
               corner: label.at + label.translation,
               bounds: label.bounds,
+              placed: label.placed,
+              rotation: label.rotation,
+              layer: label.layer,
+              sortKey: label.sortKey,
             ),
       ];
 
@@ -121,8 +132,11 @@ class LabelLayout {
       Offset at,
       double rotation,
       String name,
-      bool overlaid,
-    ) {
+      String layer,
+      double sortKey,
+      bool overlaid, {
+      bool keepUnplaced = false,
+    }) {
       final quad = SymbolLineRenderer.textSpace(
         at & renderer.size,
         renderer.translation,
@@ -131,8 +145,9 @@ class LabelLayout {
         space.margin,
       );
       final text = renderer.symbol.text;
-      if (!space.canOccupyQuad(text, quad)) return false;
-      space.occupyQuad(text, quad);
+      final fits = space.canOccupyQuad(text, quad);
+      if (!fits && !keepUnplaced) return false;
+      if (fits) space.occupyQuad(text, quad);
       labels.add(
         _Label(
           renderer.painter!,
@@ -141,10 +156,13 @@ class LabelLayout {
           rotation,
           quadBounds(quad),
           name,
+          layer,
+          sortKey,
           overlaid,
+          fits,
         ),
       );
-      return true;
+      return fits;
     }
 
     for (final layer in layers) {
@@ -154,20 +172,36 @@ class LabelLayout {
       // Where each name along a line has been put, to keep its repeats apart
       // across the features a street is split into.
       final placed = <String, List<Offset>>{};
-      for (final resolved in tileset.resolver.resolveFeatures(
-        layer.selector,
-        zoom.truncate(),
-      )) {
+      EvaluationContext evaluationOf(TileFeature feature) => EvaluationContext(
+        () => feature.properties,
+        feature.type,
+        logger,
+        zoom: zoom,
+        zoomScaleFactor: 1.0,
+        hasImage: (_) => false,
+      );
+      final features = tileset.resolver
+          .resolveFeatures(layer.selector, zoom.truncate())
+          .toList();
+      final keys = <TileFeature, double>{};
+      if (layout.sortKey case final sortKey?) {
+        double keyOf(TileFeature feature) =>
+            sortKey.evaluate(evaluationOf(feature)) ?? double.infinity;
+        keys.addAll({
+          for (final resolved in features)
+            resolved.feature: keyOf(resolved.feature),
+        });
+        // Stable, so features of one key keep the tile's order.
+        mergeSort(
+          features,
+          compare: (a, b) => keys[a.feature]!.compareTo(keys[b.feature]!),
+        );
+      }
+      for (final resolved in features) {
         final feature = resolved.feature;
         final toPixels = side / resolved.layer.extent;
-        final evaluation = EvaluationContext(
-          () => feature.properties,
-          feature.type,
-          logger,
-          zoom: zoom,
-          zoomScaleFactor: 1.0,
-          hasImage: (_) => false,
-        );
+        final evaluation = evaluationOf(feature);
+        final sortKey = keys[feature] ?? 0.0;
         final text = layout.text!.text.evaluate(evaluation);
         if (text == null || text.isEmpty) continue;
 
@@ -180,7 +214,17 @@ class LabelLayout {
           );
           if (renderer == null) continue;
           for (final point in feature.points) {
-            place(renderer, point * toPixels, 0.0, text, overlaid);
+            final at = point * toPixels;
+            place(
+              renderer,
+              at,
+              0.0,
+              text,
+              layer.id,
+              sortKey,
+              overlaid,
+              keepUnplaced: overlaid && bounds.contains(at),
+            );
           }
         } else if (feature.type == TileFeatureType.linestring) {
           final name = TextAbbreviator().abbreviate(text);
@@ -211,7 +255,15 @@ class LabelLayout {
                 final rotation = upright
                     ? 0.0
                     : SymbolLineRenderer.drawnAngle(tangent.angle);
-                if (place(renderer, at, rotation, name, overlaid)) {
+                if (place(
+                  renderer,
+                  at,
+                  rotation,
+                  name,
+                  layer.id,
+                  sortKey,
+                  overlaid,
+                )) {
                   others.add(at);
                 }
               }
@@ -246,12 +298,21 @@ class LabelLayout {
 /// A label of a [LabelLayout]: its [text] on one line, the point it is
 /// anchored [at] and the box it was given, margin included, as [bounds].
 /// [painter] painted at [corner] draws it, for a label that is not turned.
+/// One not [placed] found no room: [bounds] is the box it would have taken.
+/// A label along a line is turned by [rotation] about [at], counter-clockwise
+/// in radians as [LabelLayout.paint] turns it, and [bounds] is the upright
+/// box around it turned. [layer] is the theme layer it is from, and
+/// [sortKey] its `symbol-sort-key` there, or 0 for a layer without one.
 typedef PlacedLabel = ({
   String text,
   Offset at,
   TextPainter painter,
   Offset corner,
   Rect bounds,
+  bool placed,
+  double rotation,
+  String layer,
+  double sortKey,
 });
 
 /// The source layers [theme]'s labels are read from, at any zoom: all of a
@@ -305,8 +366,17 @@ class _Label {
   /// The text unwrapped.
   final String text;
 
+  /// The id of the theme layer it is from.
+  final String layer;
+
+  /// Its `symbol-sort-key` — see [PlacedLabel].
+  final double sortKey;
+
   /// Whether it is left to the caller to draw — see [LabelLayout.overlaid].
   final bool overlaid;
+
+  /// Whether it found room. Only an [overlaid] one may not have.
+  final bool placed;
 
   _Label(
     this.painter,
@@ -315,6 +385,9 @@ class _Label {
     this.rotation,
     this.bounds,
     this.text,
+    this.layer,
+    this.sortKey,
     this.overlaid,
+    this.placed,
   );
 }

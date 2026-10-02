@@ -1,0 +1,45 @@
+# Phase 14: undo the budget delete, then add budgets food / eve / future / "dining out" / #fun
+activate
+click 1632 65
+wait 1500
+shot p14-19-budget-undone
+click 2769 786
+wait 1500
+type food
+key enter
+type 50
+key enter
+wait 1500
+click 2769 786
+wait 1500
+type eve
+key enter
+type 20
+key enter
+wait 1500
+click 2769 786
+wait 1500
+type future
+key enter
+type 50
+key enter
+wait 1500
+click 2769 786
+wait 1500
+type dining out
+key enter
+type 80
+wait 400
+shot p14-20-budget-space
+key enter
+wait 1500
+click 2769 786
+wait 1500
+type ##fun #x
+key enter
+type 12
+wait 400
+shot p14-21-budget-hash
+key enter
+wait 1500
+shot p14-22-budgets

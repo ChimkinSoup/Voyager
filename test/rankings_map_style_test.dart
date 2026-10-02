@@ -218,6 +218,27 @@ void main() {
     expect(poi['layout']['text-font'], ['IosevkaAile']);
     expect(poi['layout']['text-size'], 12);
     expect(_paint(style, 0, 'text-color'), _paint(style, 1, 'line-color'));
+    // Placed best known first, where they crowd.
+    expect(poi['layout']['symbol-sort-key'], ['get', 'rank']);
+  });
+
+  test('every label is left out of the tiles, for the map to draw', () {
+    final style = _styled([
+      {
+        'id': 'place_city',
+        'type': 'symbol',
+        'layout': {'text-field': '{name}', 'text-size': 10},
+        'paint': {'text-color': 'rgba(0,0,0,1)'},
+      },
+      {
+        'id': 'road',
+        'type': 'line',
+        'paint': {'line-color': 'rgba(0,0,0,1)'},
+      },
+    ]);
+    final [label, road] = (style['layers'] as List).cast<Map>();
+    expect(label['metadata'], {'overlay': true});
+    expect(road['metadata'], isNull);
   });
 
   test('each palette gets its own style id, so cached tiles never cross', () {

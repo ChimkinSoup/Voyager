@@ -1,0 +1,27 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final j = Journal(id: 'p12-journal', createdAt: now, updatedAt: now, version: 1, name: 'P12');
+await jr.upsertJournal(j); r.pushJournal(j);
+final specs = <List<Object?>>[];
+for (var d = 5; d <= 12; d++) { specs.add(['dst-$d', DateTime(2026, 3, d, 10), 'Mar $d', 'one two three', d - 4]); }
+for (var d = 1; d <= 5; d++) { specs.add(['jun-$d', DateTime(2026, 6, d, 10), 'Jun $d', 'alpha beta', d + 3]); }
+specs.add(['b-sep29', DateTime(2026, 9, 29, 12), 'Sep 29', 'x', 2]);
+specs.add(['b-sep30a', DateTime(2026, 9, 30, 9), 'Sep 30 morning', 'x', 9]);
+specs.add(['b-sep30b', DateTime(2026, 9, 30, 23, 30), 'Sep 30 late', 'x', 10]);
+specs.add(['b-oct1', DateTime(2026, 10, 1, 0, 15), 'Oct 1 early', 'x', null]);
+specs.add(['ws-aug10', DateTime(2026, 8, 10, 10), 'Whitespace only', '  \n\t  ', 0]);
+specs.add(['md-aug11', DateTime(2026, 8, 11, 10), 'Markdown', '**bold** word - dash  multiple   spaces\nnewline', 1]);
+specs.add(['del-aug12', DateTime(2026, 8, 12, 10), 'Deleted', 'deleted words here', 3]);
+specs.add(['title-aug13', DateTime(2026, 8, 13, 10), 'Title words not counted', '', 4]);
+for (final s in specs) {
+  final d = (s[1] as DateTime).toUtc();
+  final en = JournalEntry(id: 'p12-${s[0]}', createdAt: now, updatedAt: now, version: 1, journalId: 'p12-journal', title: s[2] as String, body: s[3] as String, entryDate: d, timestamp: d, mood: s[4] as int?, weatherIcon: 'sunny', tags: const []);
+  await jr.upsertEntry(en); r.pushJournalEntryNow(en);
+}
+await jr.softDeleteEntry('p12-del-aug12');
+final dr = c.read(dreamRepositoryProvider);
+final y = DateTime(2026, 9, 30, 8).toUtc();
+final de = DreamEntry(id: 'p12-dream-real', createdAt: now, updatedAt: now, version: 1, title: 'Real dream', body: 'I dreamt of trees', entryDate: y, tags: const []);
+await dr.upsertEntry(de); r.pushDreamEntryNow(de);
+debugPrint('P12 seeded ${specs.length} journal specs');

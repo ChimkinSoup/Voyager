@@ -249,6 +249,8 @@ class ThemeReader {
       text: _toTextLayout(layout),
       icon: _toIconLayout(layout),
       spacing: _toDoubleExpression(layout?['symbol-spacing']),
+      // VOYAGER PATCH: read for LabelLayout.
+      sortKey: _toDoubleExpression(layout?['symbol-sort-key']),
     );
   }
 

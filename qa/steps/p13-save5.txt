@@ -1,0 +1,33 @@
+# P13: save the pasted $1,234.50, then 1.999 with Ctrl+Enter x5 fast (duplicates?), then 1.005.
+activate
+click 1440 813
+type PasteStore
+key ctrl+enter
+wait 1200
+hotkey ctrl+alt+f
+wait 1200
+type 1.999
+key enter
+type Round
+key enter
+type five fast saves
+key enter
+type #edge
+key ctrl+enter
+key ctrl+enter
+key ctrl+enter
+key ctrl+enter
+key ctrl+enter
+wait 1500
+hotkey ctrl+alt+f
+wait 1200
+type 1.005
+key enter
+type Round
+key enter
+type half cent
+key enter
+type #edge
+key enter
+wait 1500
+shot p13-45-after-saves

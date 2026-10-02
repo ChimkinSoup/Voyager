@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -384,65 +385,93 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              FlutterMap(
-                                mapController: _map,
-                                options: MapOptions(
-                                  initialCenter:
-                                      pin ?? widget.near ?? const LatLng(20, 0),
-                                  initialZoom: pin != null
-                                      ? _pinZoom
-                                      : widget.near != null
-                                      ? 12
-                                      : 2,
-                                  maxZoom: rankingsMapMaxZoom,
-                                  backgroundColor: theme.colorScheme.surface,
-                                  onTap: (_, point) {
-                                    _setPin(point);
-                                    unawaited(_reverseGeocode());
-                                  },
-                                ),
-                                children: [
-                                  RankingsTileLayer(
-                                    pins: [
-                                      if (pin != null) (point: pin, title: ''),
-                                    ],
-                                  ),
-                                  if (pin != null)
-                                    MarkerLayer(
-                                      markers: [
-                                        Marker(
-                                          point: pin,
-                                          width: _pinSize,
-                                          height: _pinSize,
-                                          child: RawGestureDetector(
-                                            gestures: {
-                                              _PinDragRecognizer:
-                                                  GestureRecognizerFactoryWithHandlers<
-                                                    _PinDragRecognizer
-                                                  >(
-                                                    _PinDragRecognizer.new,
-                                                    (recognizer) => recognizer
-                                                      ..onUpdate = _dragPin
-                                                      ..onEnd = (_) =>
-                                                          unawaited(
-                                                            _reverseGeocode(),
-                                                          ),
+                              LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final minZoom = rankingsMapMinZoomAt(
+                                    constraints.maxWidth,
+                                  );
+                                  // A wider map raises the floor, which the
+                                  // camera only meets on its next move: meet
+                                  // it now.
+                                  WidgetsBinding.instance.addPostFrameCallback((
+                                    _,
+                                  ) {
+                                    if (mounted && _map.camera.zoom < minZoom) {
+                                      _map.move(_map.camera.center, minZoom);
+                                    }
+                                  });
+                                  return FlutterMap(
+                                    mapController: _map,
+                                    options: MapOptions(
+                                      initialCenter:
+                                          pin ??
+                                          widget.near ??
+                                          const LatLng(20, 0),
+                                      initialZoom: math.max(
+                                        minZoom,
+                                        pin != null
+                                            ? _pinZoom
+                                            : widget.near != null
+                                            ? 12
+                                            : 2,
+                                      ),
+                                      minZoom: minZoom,
+                                      maxZoom: rankingsMapMaxZoom,
+                                      backgroundColor:
+                                          theme.colorScheme.surface,
+                                      onTap: (_, point) {
+                                        _setPin(point);
+                                        unawaited(_reverseGeocode());
+                                      },
+                                    ),
+                                    children: [
+                                      RankingsTileLayer(
+                                        pins: [
+                                          if (pin != null)
+                                            (point: pin, title: ''),
+                                        ],
+                                      ),
+                                      if (pin != null)
+                                        MarkerLayer(
+                                          markers: [
+                                            Marker(
+                                              point: pin,
+                                              width: _pinSize,
+                                              height: _pinSize,
+                                              child: RawGestureDetector(
+                                                gestures: {
+                                                  _PinDragRecognizer:
+                                                      GestureRecognizerFactoryWithHandlers<
+                                                        _PinDragRecognizer
+                                                      >(
+                                                        _PinDragRecognizer.new,
+                                                        (
+                                                          recognizer,
+                                                        ) => recognizer
+                                                          ..onUpdate = _dragPin
+                                                          ..onEnd = (_) =>
+                                                              unawaited(
+                                                                _reverseGeocode(),
+                                                              ),
+                                                      ),
+                                                },
+                                                child: FittedBox(
+                                                  child: SizedBox.square(
+                                                    dimension:
+                                                        RankingsMapPin.size,
+                                                    child: RankingsMapPin(
+                                                      color: widget.accent,
+                                                      selected: true,
+                                                    ),
                                                   ),
-                                            },
-                                            child: FittedBox(
-                                              child: SizedBox.square(
-                                                dimension: RankingsMapPin.size,
-                                                child: RankingsMapPin(
-                                                  color: widget.accent,
-                                                  selected: true,
                                                 ),
                                               ),
                                             ),
-                                          ),
+                                          ],
                                         ),
-                                      ],
-                                    ),
-                                ],
+                                    ],
+                                  );
+                                },
                               ),
                               const Positioned(
                                 right: 4,

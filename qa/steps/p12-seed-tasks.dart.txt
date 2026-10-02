@@ -1,0 +1,20 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final tr = c.read(todoRepositoryProvider);
+final list = TodoListModel(id: 'p12-list', createdAt: now, updatedAt: now, version: 1, name: 'P12 Tasks');
+await tr.upsertList(list); r.pushTodoList(list);
+final specs = <List<Object?>>[
+  ['p12-t1', 'T1 open', false, null],
+  ['p12-t2', 'T2 done', true, null],
+  ['p12-t3', 'T3 parent open', false, null],
+  ['p12-s1', 'S1 sub open', false, 'p12-t3'],
+  ['p12-s2', 'S2 sub done', true, 'p12-t3'],
+];
+for (final s in specs) {
+  final t = TodoTask(id: s[0] as String, createdAt: now, updatedAt: now, version: 1, listId: 'p12-list', title: s[1] as String, completed: s[2] as bool, completedAt: (s[2] as bool) ? now : null, parentTaskId: s[3] as String?);
+  await tr.upsertTask(t); await r.pushTodoTaskNow(t);
+}
+final dr = c.read(dreamRepositoryProvider);
+final de = DreamEntry(id: 'p12-dream-blank', createdAt: now, updatedAt: now, version: 1, title: '', body: '', entryDate: now, tags: const []);
+await dr.upsertEntry(de); r.pushDreamEntryNow(de);
+debugPrint('P12 tasks seeded');

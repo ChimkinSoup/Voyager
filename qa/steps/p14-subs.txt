@@ -1,0 +1,89 @@
+# Phase 14: subscriptions of every billing period (qa-018). Starts with the Netflix sheet open (Oct 15).
+activate
+click 1440 1371
+wait 1500
+# Gym weekly, due today
+click 2769 458
+wait 1500
+type Gym
+key enter
+type 10
+click 1745 648
+wait 700
+click 1554 743
+wait 600
+shot p14-27-gym
+click 1440 1371
+wait 1500
+# Insurance quarterly, due tomorrow
+click 2769 458
+wait 1500
+type Insurance
+key enter
+type 300
+click 1745 648
+wait 700
+click 1554 1031
+wait 600
+click 1920 934
+wait 900
+click 2520 1030
+wait 900
+shot p14-28-insurance
+click 1440 1371
+wait 1500
+# Domain yearly, next week
+click 2769 458
+wait 1500
+type Domain
+key enter
+type 12
+click 1745 648
+wait 700
+click 1554 1127
+wait 600
+click 1920 934
+wait 900
+click 2690 1030
+wait 900
+shot p14-29-domain
+click 1440 1371
+wait 1500
+# Rent31 monthly anchored Aug 31 2026
+click 2769 458
+wait 1500
+type Rent31
+key enter
+type 1000
+click 1920 934
+wait 900
+click 1870 1139
+wait 500
+click 1870 1139
+wait 500
+shot p14-30-aug
+click 1950 1670
+wait 900
+shot p14-31-rent31
+click 1440 1371
+wait 1500
+# Biweekly anchored Sep 21 2026
+click 2769 458
+wait 1500
+type Biweekly
+key enter
+type 20
+click 1745 648
+wait 700
+click 1554 839
+wait 600
+click 1920 934
+wait 900
+click 1870 1139
+wait 500
+click 1950 1500
+wait 900
+shot p14-32-biweekly
+click 1440 1371
+wait 1500
+shot p14-33-radar

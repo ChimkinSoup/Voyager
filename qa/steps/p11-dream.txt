@@ -1,0 +1,42 @@
+activate
+key esc
+click 1500 72
+key ctrl+a
+key backspace
+type /dream
+wait 900
+shot p11-60-dreamscope
+type dreamonly
+wait 800
+shot p11-61-dreamonly
+key ctrl+a
+type notekeyword
+wait 800
+shot p11-62-notekw
+key ctrl+a
+type pelicanberry
+wait 800
+shot p11-63-pelican
+key ctrl+a
+type #lucid
+wait 900
+shot p11-64-lucidtag
+key ctrl+a
+type marmotfern
+wait 800
+shot p11-65-marmot
+key esc
+wait 800
+shot p11-66-afteresc
+type /dream pelicanberry
+wait 900
+shot p11-67-handoff
+key ctrl+a
+key backspace
+wait 300
+key backspace
+wait 800
+shot p11-68-backspace-exit
+type /dreamscape
+wait 800
+shot p11-69-dreamscape

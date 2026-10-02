@@ -22,8 +22,8 @@ abstract class VectorTileController {
   /// the caller to draw over it — those of theme layers whose metadata sets
   /// `overlay` — in the pixels of a 256 pixel tile, with [tile]'s corner
   /// among them as `origin`. Every tile cut from one source tile answers
-  /// with the same list. Null for a tile at or under the provider's last
-  /// zoom, or before the layer is built.
+  /// with the same list. Null before the layer is built, or for a tile whose
+  /// data is neither cached nor reachable.
   Future<({List<PlacedLabel> labels, Offset origin})?> overlaidLabels(
       TileIdentity tile);
 }

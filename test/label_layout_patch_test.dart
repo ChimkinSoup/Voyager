@@ -130,6 +130,64 @@ void main() {
     expect(tiles.buffer.asUint8List().every((byte) => byte == 0), isTrue);
   });
 
+  test('a street\'s name is handed over turned along it', () {
+    final theme = ThemeReader().read({
+      'version': 8,
+      'id': 'street-overlay',
+      'sources': {
+        'default': {'type': 'vector'},
+      },
+      'layers': [
+        {
+          'id': 'streets',
+          'type': 'symbol',
+          'source': 'default',
+          'source-layer': 'street',
+          'metadata': {'overlay': true},
+          'layout': {
+            'text-field': '{name}',
+            'text-size': 10,
+            'symbol-placement': 'line',
+          },
+          'paint': {'text-color': 'rgba(0,0,0,1)'},
+        },
+      ],
+    });
+    final layout = LabelLayout(
+      theme: theme,
+      zoom: _zoom,
+      scale: _scale,
+      sources: {
+        'default': TileData(
+          layers: [
+            TileDataLayer(
+              name: 'street',
+              extent: 4096,
+              features: [
+                TileDataFeature(
+                  type: TileFeatureType.linestring,
+                  properties: {'name': 'Name'},
+                  geometry: null,
+                  points: null,
+                  // Down and to the right at 45 degrees, in layout pixels
+                  // from (200, 200) to (600, 600).
+                  lines: [
+                    TileLine(const [Point(800, 800), Point(2400, 2400)]),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      },
+    );
+
+    final label = layout.overlaid.first;
+    expect(label.layer, 'streets');
+    expect(label.rotation.abs(), closeTo(pi / 4, 1e-6));
+    expect(label.placed, isTrue);
+  });
+
   test('a street\'s name repeats along it, across tile edges', () async {
     // 1024 long at a spacing of 350: twice, at 256 and 768 — each on an edge.
     final layout = _layout(line: const [Offset(0, 356), Offset(1024, 356)]);
@@ -199,5 +257,86 @@ void main() {
       isTrue,
     );
     expect(_layout(point: const Offset(300, 100)).overlaid, isEmpty);
+  });
+
+  group('an overlay layer that crowds', () {
+    /// A layout of overlay points, each `(name, rank, at)` in layout pixels,
+    /// in the tile's order, placed by rank.
+    LabelLayout crowd(List<(String, int, Offset)> points) => LabelLayout(
+      theme: ThemeReader().read({
+        'version': 8,
+        'id': 'crowd',
+        'sources': {
+          'default': {'type': 'vector'},
+        },
+        'layers': [
+          {
+            'id': 'food',
+            'type': 'symbol',
+            'source': 'default',
+            'source-layer': 'poi',
+            'metadata': {'overlay': true},
+            'layout': {
+              'text-field': '{name}',
+              'text-size': 10,
+              'symbol-sort-key': ['get', 'rank'],
+            },
+            'paint': {'text-color': 'rgba(0,0,0,1)'},
+          },
+        ],
+      }),
+      zoom: _zoom,
+      scale: _scale,
+      sources: {
+        'default': TileData(
+          layers: [
+            TileDataLayer(
+              name: 'poi',
+              extent: 4096,
+              features: [
+                for (final (name, rank, at) in points)
+                  TileDataFeature(
+                    type: TileFeatureType.point,
+                    properties: {'name': name, 'rank': rank},
+                    geometry: null,
+                    points: [Point(at.dx * 4, at.dy * 4)],
+                    lines: null,
+                  ),
+              ],
+            ),
+          ],
+        ),
+      },
+    );
+
+    test("gives the room to the best ranked, whatever the tile's order", () {
+      final layout = crowd([
+        ('Corner Cafe', 40, const Offset(300, 100)),
+        ('Famous Diner', 2, const Offset(304, 102)),
+      ]);
+
+      final placed = {
+        for (final label in layout.overlaid) label.text: label.placed,
+      };
+      expect(placed, {'Famous Diner': true, 'Corner Cafe': false});
+    });
+
+    test('hands over the one without room, where it is', () {
+      final layout = crowd([
+        ('Famous Diner', 2, const Offset(300, 100)),
+        ('Corner Cafe', 40, const Offset(304, 102)),
+      ]);
+
+      final unplaced = layout.overlaid.singleWhere((label) => !label.placed);
+      expect(unplaced.text, 'Corner Cafe');
+      expect(unplaced.at, const Offset(304, 102));
+    });
+
+    test('leaves one outside the tile to the tile it is in', () {
+      // In the source tile's buffer: past its right edge.
+      final layout = crowd([('Next Door', 1, const Offset(1030, 100))]);
+
+      expect(layout.overlaid, isEmpty);
+    });
   });
 }

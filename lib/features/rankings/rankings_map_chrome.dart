@@ -26,15 +26,25 @@ final _baseStyleProvider = FutureProvider<Map<String, dynamic>>(
 /// own maximum, so a map allowed further would show only its background.
 const rankingsMapMaxZoom = 20.0;
 
+/// The furthest out a rankings map [width] wide zooms: the world just fills
+/// it, so no place shows twice side by side.
+double rankingsMapMinZoomAt(double width) => math.log(width / 256) / math.ln2;
+
 /// Geoapify's vector tiles, drawn in the app's own colours and font: land in
 /// the theme's surface, everything on it a shade toward the theme's ink, water
 /// and major roads leaning toward the accent, and every label in the app font. Vector rather
 /// than raster because a raster tile arrives with its colours and lettering
 /// already painted in.
 ///
-/// The names of places to eat and drink are not in the tiles: they are drawn
-/// over them here, so one under a pin, or under the title a pin carries, can
-/// be left out, and one can be lit and pressed — see [RankingsTileLayerState].
+/// No name is in the tiles: they are drawn over them here, each the same size
+/// on screen at any zoom, where a tile's own would grow and shrink with it
+/// between whole zooms. A place to eat or drink shows its name once there is
+/// room for it, and before that a dot once there is room for that — see
+/// [planFoodLabels] — so zooming in only ever brings one out, never puts one
+/// back. Its dot shows the name while the mouse is over it, and name and dot
+/// are pressed alike — see [RankingsTileLayerState]. Both are left out under
+/// a pin, or under the title a pin carries. Streets', places' and water's
+/// names make way for them, and for each other.
 ///
 /// Draws nothing without a key — the caller shows the unavailable state.
 class RankingsTileLayer extends ConsumerStatefulWidget {
@@ -81,18 +91,224 @@ TextStyle rankingsMapTitleStyle(ThemeData theme) =>
 /// label was laid out for.
 typedef _Name = ({vtr.PlacedLabel label, Offset corner});
 
+/// A dot's radius on screen, and how near the mouse must come to it.
+const _dotRadius = 3.5;
+const _dotReach = 8.0;
+
+/// The room a dot keeps around itself, on screen, from names and other dots.
+const _dotGap = 2.5;
+
+/// The zoom from which every dot shows, room or not: places a dot apart
+/// there share a building, and no closer camera would part them.
+const _allDotsZoom = 19.0;
+
+/// The furthest out a place to eat or drink's name is laid out for: the
+/// style's `poi_food_major` starts at [rankingsMapNameZoom], which the
+/// camera rounds to from half a zoom further out.
+const _foodFloor = rankingsMapNameZoom - 0.5;
+
+/// When each place to eat or drink of [labels] shows its dot and its name:
+/// from the zoom `dot` and the zoom `name` on, the name taking the dot's
+/// place. Each label is its point in the pixels of [zoom], the box its name
+/// takes around that point, and its sort key, the lowest first.
+///
+/// The best known claim their room first. A name shows from the zoom on
+/// which it runs into no better known name shown at that zoom or any closer
+/// one; a dot, of [dot]'s size, from the zoom on which it runs into no name
+/// and no better known dot. Both are worked out for every zoom at once, as
+/// the names keep their size on screen while their points spread apart, so
+/// one that shows at a zoom shows at every zoom closer in. A name or a dot
+/// that runs into another only further out than [floor] shows from there.
+@visibleForTesting
+List<({double dot, double name})> planFoodLabels(
+  List<({Offset at, Rect box, double key})> labels, {
+  required int zoom,
+  required Rect dot,
+  double floor = _foodFloor,
+}) {
+  final count = labels.length;
+  final order = List.generate(count, (i) => i)
+    ..sort((a, b) {
+      final (x, y) = (labels[a], labels[b]);
+      return x.key != y.key
+          ? x.key.compareTo(y.key)
+          : x.at.dx != y.at.dx
+          ? x.at.dx.compareTo(y.at.dx)
+          : x.at.dy != y.at.dy
+          ? x.at.dy.compareTo(y.at.dy)
+          : a.compareTo(b);
+    });
+  final names = List.filled(count, floor);
+  final dots = List.filled(count, floor);
+  if (count == 0) return const [];
+
+  // Two boxes only meet further out than [floor] once their points are
+  // this far apart, at [zoom]: a grid of cells this size finds the rest.
+  var widest = dot.width;
+  var tallest = dot.height;
+  for (final label in labels) {
+    widest = math.max(widest, label.box.width);
+    tallest = math.max(tallest, label.box.height);
+  }
+  final reach = math.pow(2, zoom - floor).toDouble();
+  final cellWidth = 2 * widest * reach;
+  final cellHeight = 2 * tallest * reach;
+  final grid = <(int, int), List<int>>{};
+  (int, int) cellOf(Offset at) =>
+      ((at.dx / cellWidth).floor(), (at.dy / cellHeight).floor());
+  for (var i = 0; i < count; i++) {
+    (grid[cellOf(labels[i].at)] ??= []).add(i);
+  }
+  Iterable<int> near(int i) sync* {
+    final (x, y) = cellOf(labels[i].at);
+    for (var dx = -1; dx <= 1; dx++) {
+      for (var dy = -1; dy <= 1; dy++) {
+        yield* grid[(x + dx, y + dy)] ?? const <int>[];
+      }
+    }
+  }
+
+  final rankOf = List.filled(count, 0);
+  for (var rank = 0; rank < count; rank++) {
+    rankOf[order[rank]] = rank;
+  }
+  for (final i in order) {
+    var from = floor;
+    for (final j in near(i)) {
+      if (rankOf[j] >= rankOf[i]) continue;
+      final apart = _apartFrom(
+        labels,
+        i,
+        labels[i].box,
+        j,
+        labels[j].box,
+        zoom,
+      );
+      if (apart > names[j]) from = math.max(from, apart);
+    }
+    names[i] = from;
+  }
+  // After every name, which a dot makes way for, better known or not.
+  for (final i in order) {
+    var from = floor;
+    for (final j in near(i)) {
+      if (j == i) continue;
+      final apart = _apartFrom(labels, i, dot, j, labels[j].box, zoom);
+      if (apart > names[j]) from = math.max(from, apart);
+      // A better known dot, which shows from dots[j] until its name does.
+      if (rankOf[j] < rankOf[i] && dots[j] < names[j]) {
+        final until = math.min(
+          _apartFrom(labels, i, dot, j, dot, zoom),
+          names[j],
+        );
+        if (until > dots[j]) from = math.max(from, until);
+      }
+    }
+    dots[i] = from;
+  }
+  return [for (var i = 0; i < count; i++) (dot: dots[i], name: names[i])];
+}
+
+/// The zoom from which [a] around label [i]'s point and [b] around label
+/// [j]'s stop meeting as the camera comes in, their points spreading apart
+/// from where they are at [zoom] while the boxes keep their size. Minus
+/// infinity for two that never meet.
+double _apartFrom(
+  List<({Offset at, Rect box, double key})> labels,
+  int i,
+  Rect a,
+  int j,
+  Rect b,
+  int zoom,
+) {
+  final apart = labels[j].at - labels[i].at;
+  // Where [b]'s point may sit from [a]'s, on screen, for the two to meet.
+  final meet = Rect.fromLTRB(
+    a.left - b.right,
+    a.top - b.bottom,
+    a.right - b.left,
+    a.bottom - b.top,
+  );
+  // The spread, on screen over [zoom]'s pixels, over which they meet.
+  var low = 0.0;
+  var high = double.infinity;
+  for (final (along, min, max) in [
+    (apart.dx, meet.left, meet.right),
+    (apart.dy, meet.top, meet.bottom),
+  ]) {
+    if (along == 0) {
+      if (min >= 0 || max <= 0) return double.negativeInfinity;
+      continue;
+    }
+    final (from, to) = along > 0
+        ? (min / along, max / along)
+        : (max / along, min / along);
+    low = math.max(low, from);
+    high = math.min(high, to);
+  }
+  if (high <= low) return double.negativeInfinity;
+  return zoom + math.log(high) / math.ln2;
+}
+
+/// Whether [name] is a place to eat or drink's — the style's `poi_food`
+/// layers — rather than a street's, a place's or water's.
+bool _isFood(_Name name) => name.label.layer.startsWith('poi');
+
+/// The point [name] is anchored to, in its layout's pixels.
+Offset _anchorOf(_Name name) => name.corner + name.label.at;
+
+/// What [name] takes on the map, in its layout's pixels at [scale] from them
+/// to the camera's: its text, or for one that found no room, its dot. Both
+/// keep their size on screen, so they take less of the layout the closer
+/// the camera is.
+Rect _boxOf(_Name name, double scale) {
+  final anchor = _anchorOf(name);
+  if (!name.label.placed) {
+    return Rect.fromCircle(center: anchor, radius: _dotReach / scale);
+  }
+  final box = name.label.bounds.shift(-name.label.at);
+  return Rect.fromLTRB(
+    anchor.dx + box.left / scale,
+    anchor.dy + box.top / scale,
+    anchor.dx + box.right / scale,
+    anchor.dy + box.bottom / scale,
+  );
+}
+
+/// [name] drawn as its text when [placed], or else as its dot, whatever
+/// room the layout found for it.
+_Name _drawnAs(_Name name, {required bool placed}) => (
+  label: (
+    text: name.label.text,
+    at: name.label.at,
+    painter: name.label.painter,
+    corner: name.label.corner,
+    bounds: name.label.bounds,
+    placed: placed,
+    rotation: name.label.rotation,
+    layer: name.label.layer,
+    sortKey: name.label.sortKey,
+  ),
+  corner: name.corner,
+);
+
+/// A place to eat or drink's name, and the zooms from which its dot and its
+/// name show — see [planFoodLabels].
+typedef _Planned = ({_Name name, double dot, double text});
+
 class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
   final _controller = VectorTileController();
 
-  /// The names laid out for the tiles last on screen, and the whole zoom
-  /// those were drawn at. Kept while the next are fetched, as the tiles are.
-  ({int zoom, List<_Name> names})? _names;
+  /// The names laid out for the tiles last on screen, the whole zoom those
+  /// were drawn at, and when the places to eat or drink among them show.
+  /// Kept while the next are fetched, as the tiles are.
+  ({int zoom, List<_Name> names, List<_Planned> food})? _names;
 
   /// Which tiles [_names] was last asked for.
   String? _asked;
 
   /// What the last build drew, for [nameAt]: the camera, and the names left
-  /// once the pins had taken their room.
+  /// once the pins and each other had taken their room.
   MapCamera? _camera;
   List<_Name> _drawn = const [];
 
@@ -102,7 +318,8 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
   /// The size of each of the pins' titles, by its text.
   final _titleSizes = <String, Size>{};
 
-  /// The name drawn over [point] and the place it names, or null.
+  /// The place to eat or drink's name or dot drawn over [point] and the place
+  /// it names, or null.
   ({String text, LatLng point})? nameAt(LatLng point) {
     final name = _drawnAt(point);
     return name == null
@@ -110,7 +327,7 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
         : (
             text: name.label.text,
             point: _camera!.unprojectAtZoom(
-              name.corner + name.label.at,
+              _anchorOf(name),
               _names!.zoom.toDouble(),
             ),
           );
@@ -129,8 +346,16 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
     final names = _names;
     if (camera == null || names == null) return null;
     final at = camera.projectAtZoom(point, names.zoom.toDouble());
-    for (final name in _drawn) {
-      if (name.label.bounds.shift(name.corner).contains(at)) return name;
+    final scale = math.pow(2, camera.zoom - names.zoom).toDouble();
+    // A dot first: one that lost its room lies under a name that won it.
+    for (final placed in [false, true]) {
+      for (final name in _drawn) {
+        if (_isFood(name) &&
+            name.label.placed == placed &&
+            _boxOf(name, scale).contains(at)) {
+          return name;
+        }
+      }
     }
     return null;
   }
@@ -170,7 +395,32 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
       }
     }
     if (!mounted || asked != _asked) return;
-    setState(() => _names = (zoom: zoom, names: names));
+    final food = [
+      for (final name in names)
+        if (_isFood(name)) name,
+    ];
+    final plan = planFoodLabels(
+      [
+        for (final name in food)
+          (
+            at: _anchorOf(name),
+            box: name.label.bounds.shift(-name.label.at),
+            key: name.label.sortKey,
+          ),
+      ],
+      zoom: zoom,
+      dot: Rect.fromCircle(center: Offset.zero, radius: _dotRadius + _dotGap),
+    );
+    setState(
+      () => _names = (
+        zoom: zoom,
+        names: names,
+        food: [
+          for (var i = 0; i < food.length; i++)
+            (name: food[i], dot: plan[i].dot, text: plan[i].name),
+        ],
+      ),
+    );
   }
 
   /// What [camera] shows, in the world's pixels at [zoom].
@@ -183,12 +433,15 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
     );
   }
 
-  /// The names of [names] on screen that no pin of the map sits on and no
-  /// pin's title runs over.
-  List<_Name> _clearOfPins(
+  /// The names and dots of [names] on screen at the camera's zoom, at the
+  /// size they are drawn: a place to eat or drink's as [planFoodLabels]
+  /// planned it — every dot from [_allDotsZoom] — where no pin of the map
+  /// sits on it and no pin's title runs over it; then any other name that
+  /// runs into none drawn before it.
+  List<_Name> _visible(
     BuildContext context,
     MapCamera camera,
-    ({int zoom, List<_Name> names}) names,
+    ({int zoom, List<_Name> names, List<_Planned> food}) names,
   ) {
     final zoom = names.zoom.toDouble();
     // The names are laid out at a whole zoom and stretched to the camera's.
@@ -228,17 +481,40 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
     // A name is centred on its place, and so is the pin of an entry made of
     // it: the pin's own disc is the room the pin takes.
     final disc = RankingsMapPin.size / 2 / scale;
-    return [
-      for (final name in names.names)
-        if (name.label.bounds.shift(name.corner) case final box
-            when box.overlaps(view) &&
-                !pins.any(
-                  (pin) =>
-                      (name.corner + name.label.at - pin.at).distance < disc ||
-                      pin.title.overlaps(box),
-                ))
-          name,
-    ];
+    bool underPin(_Name name, Rect box) => pins.any(
+      (pin) =>
+          (_anchorOf(name) - pin.at).distance < disc || pin.title.overlaps(box),
+    );
+    final drawn = <_Name>[];
+    final taken = <Rect>[];
+    final everyDot = camera.zoom >= _allDotsZoom;
+    for (final planned in names.food) {
+      final text = camera.zoom >= planned.text;
+      if (!text && !everyDot && camera.zoom < planned.dot) continue;
+      final name = _drawnAs(planned.name, placed: text);
+      final box = _boxOf(name, scale);
+      if (!box.overlaps(view) || underPin(name, box)) continue;
+      taken.add(
+        text
+            ? box
+            : Rect.fromCircle(
+                center: _anchorOf(name),
+                radius: (_dotRadius + _dotGap) / scale,
+              ),
+      );
+      drawn.add(name);
+    }
+    // In the layout's order, which places the names that matter most first.
+    // Laid out at a whole zoom, they only run into each other on a camera
+    // further out than that.
+    for (final name in names.names) {
+      if (_isFood(name) || !name.label.placed) continue;
+      final box = _boxOf(name, scale);
+      if (!box.overlaps(view) || taken.any(box.overlaps)) continue;
+      taken.add(box);
+      drawn.add(name);
+    }
+    return drawn;
   }
 
   @override
@@ -295,24 +571,19 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
     // The zoom the tiles on screen are drawn at, and so lay their names out
     // at.
     final zoom = camera.zoom.round();
-    if (zoom < rankingsMapNameZoom) {
-      _asked = null;
-      _names = null;
-    } else {
-      final view = _viewAt(camera, zoom);
-      unawaited(
-        _ask(
-          theme,
-          zoom,
-          view.left ~/ 256,
-          view.top ~/ 256,
-          view.right ~/ 256,
-          view.bottom ~/ 256,
-        ),
-      );
-    }
+    final view = _viewAt(camera, zoom);
+    unawaited(
+      _ask(
+        theme,
+        zoom,
+        view.left ~/ 256,
+        view.top ~/ 256,
+        view.right ~/ 256,
+        view.bottom ~/ 256,
+      ),
+    );
     final names = _names;
-    _drawn = names == null ? const [] : _clearOfPins(context, camera, names);
+    _drawn = names == null ? const [] : _visible(context, camera, names);
 
     return Stack(
       fit: StackFit.expand,
@@ -325,8 +596,12 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
                 size: Size.infinite,
                 painter: _NamesPainter(
                   names: _drawn,
-                  lit: _lit,
+                  // Only while it is drawn as it was lit: a zoom with the
+                  // mouse still moves no hover, and may since have turned
+                  // it from a dot to a name, hidden it, or laid it out anew.
+                  lit: _drawn.contains(_lit) ? _lit : null,
                   litColor: scheme.primary,
+                  backing: scheme.surface,
                   scale: math.pow(2, camera.zoom - names.zoom).toDouble(),
                   origin: camera.pixelOrigin,
                 ),
@@ -366,12 +641,15 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
   }
 }
 
-/// Draws [names] where the tiles would have, and [lit] in [litColor].
+/// Draws [names] where the tiles would have, over a dot for each that found
+/// no room, and [lit] in [litColor] — one without room by its dot, on
+/// [backing] so it reads over the names around it.
 class _NamesPainter extends CustomPainter {
   const _NamesPainter({
     required this.names,
     required this.lit,
     required this.litColor,
+    required this.backing,
     required this.scale,
     required this.origin,
   });
@@ -379,6 +657,7 @@ class _NamesPainter extends CustomPainter {
   final List<_Name> names;
   final _Name? lit;
   final Color litColor;
+  final Color backing;
 
   /// From the pixels the names were laid out in to the camera's, and the
   /// camera's corner in those.
@@ -387,23 +666,60 @@ class _NamesPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Dots under names: past the zoom where every dot shows, one may sit
+    // under a name, which must still read.
     for (final name in names) {
-      final at = (name.corner + name.label.corner) * scale - origin;
-      canvas
-        ..save()
-        ..translate(at.dx, at.dy)
-        ..scale(scale);
-      if (name == lit) {
-        // The painter carries the map's own colour; only its shape is kept.
-        canvas.saveLayer(
-          null,
-          Paint()..colorFilter = ColorFilter.mode(litColor, BlendMode.srcIn),
+      if (!name.label.placed) {
+        canvas.drawCircle(
+          _anchorOf(name) * scale - origin,
+          _dotRadius,
+          Paint()
+            ..color = name == lit
+                ? litColor
+                // The tiles' renderer sets a label's colour as its paint.
+                : name.label.painter.text?.style?.foreground?.color ?? litColor,
         );
       }
-      name.label.painter.paint(canvas, Offset.zero);
-      if (name == lit) canvas.restore();
-      canvas.restore();
     }
+    for (final name in names) {
+      if (name.label.placed) _paintName(canvas, name);
+    }
+    // Over the others, which it would have collided with.
+    if (lit case final lit? when !lit.label.placed) {
+      final painter = lit.label.painter;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          (_anchorOf(lit) * scale - origin + _offsetOf(lit)) & painter.size,
+          const Radius.circular(3),
+        ).inflate(3),
+        Paint()..color = backing,
+      );
+      _paintName(canvas, lit);
+    }
+  }
+
+  /// From [name]'s anchor to its text's corner, before it is turned. The
+  /// layout's own pixels are the screen's: the text is not stretched.
+  static Offset _offsetOf(_Name name) => name.label.corner - name.label.at;
+
+  /// Paints [name] at its size in the layout, wherever the camera's zoom
+  /// puts its anchor, turned about the anchor as the layout turned it.
+  void _paintName(Canvas canvas, _Name name) {
+    final at = _anchorOf(name) * scale - origin;
+    canvas
+      ..save()
+      ..translate(at.dx, at.dy);
+    if (name.label.rotation != 0) canvas.rotate(-name.label.rotation);
+    if (name == lit) {
+      // The painter carries the map's own colour; only its shape is kept.
+      canvas.saveLayer(
+        null,
+        Paint()..colorFilter = ColorFilter.mode(litColor, BlendMode.srcIn),
+      );
+    }
+    name.label.painter.paint(canvas, _offsetOf(name));
+    if (name == lit) canvas.restore();
+    canvas.restore();
   }
 
   @override
@@ -411,6 +727,7 @@ class _NamesPainter extends CustomPainter {
       old.names != names ||
       old.lit != lit ||
       old.litColor != litColor ||
+      old.backing != backing ||
       old.scale != scale ||
       old.origin != origin;
 }

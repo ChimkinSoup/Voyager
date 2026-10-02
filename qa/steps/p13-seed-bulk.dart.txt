@@ -1,0 +1,14 @@
+final now = DateTime.now().toUtc();
+final t0 = DateTime.now();
+final fr = c.read(financeRepositoryProvider);
+final stores = <String?>['Walmart', 'Costco', 'Target', 'Amazon', 'Cafe', null];
+final tagSets = <List<String>>[['groceries'], ['food', 'thai'], ['travel'], ['bulk'], <String>[]];
+final sw = Stopwatch()..start();
+for (var i = 0; i < 1000; i++) {
+  final dep = i % 13 == 0;
+  final at = DateTime(t0.year, t0.month, t0.day - 2 - (i * 7) % 900, 8 + i % 10, i % 60);
+  await fr.upsertTransaction(FinancialTransaction(id: 'p13-b-' + i.toString().padLeft(4, '0'), createdAt: now, updatedAt: now, version: 0, type: dep ? TransactionType.deposit : TransactionType.expense, amountCents: 50 + (i * 37) % 9000, occurredAt: at, origin: dep ? 'BulkPay' : stores[i % 6], note: 'bulk ' + i.toString(), tags: dep ? const ['pay'] : tagSets[i % 5]));
+}
+debugPrint('P13BULK ms ' + sw.elapsedMilliseconds.toString());
+c.invalidate(transactionsProvider);
+c.invalidate(tagColorsProvider);

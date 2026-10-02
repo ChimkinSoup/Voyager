@@ -1,0 +1,18 @@
+final now = DateTime.now().toUtc();
+final t0 = DateTime.now();
+final fr = c.read(financeRepositoryProvider);
+final stores = <String?>['Walmart', 'Costco', 'Target', null];
+final tagSets = <List<String>>[['groceries'], ['food', 'thai'], ['travel'], <String>[]];
+FinancialTransaction mk(String id, TransactionType type, int cents, DateTime at, String? origin, String? note, List<String> tags) => FinancialTransaction(id: id, createdAt: now, updatedAt: now, version: 0, type: type, amountCents: cents, occurredAt: at, origin: origin, note: note, tags: tags);
+for (var i = 1; i < 120; i++) {
+  final at = DateTime(t0.year, t0.month, t0.day - i, 12, 0);
+  await fr.upsertTransaction(mk('p13-s-' + i.toString().padLeft(3, '0'), TransactionType.expense, 100 + i * 7, at, stores[i % 4], 'seed ' + i.toString(), tagSets[i % 4]));
+  if (i % 10 == 0) { await fr.upsertTransaction(mk('p13-d-' + i.toString().padLeft(3, '0'), TransactionType.deposit, 50000, DateTime(t0.year, t0.month, t0.day - i, 9, 0), 'Employer', 'pay ' + i.toString(), const ['pay'])); }
+}
+await fr.upsertTransaction(mk('p13-future-oct15', TransactionType.expense, 9999, DateTime(2026, 10, 15, 12, 0), 'FutureStore', 'future this month', const ['future']));
+await fr.upsertTransaction(mk('p13-future-nov5', TransactionType.deposit, 20000, DateTime(2026, 11, 5, 12, 0), 'FutureSource', 'future next month', const ['future']));
+await fr.upsertTransaction(mk('p13-old-2016', TransactionType.expense, 1111, DateTime(2016, 10, 1, 12, 0), 'OldStore', 'ten years old', const ['old']));
+await fr.upsertTransaction(mk('p13-jan1', TransactionType.deposit, 12345, DateTime(2026, 1, 1, 12, 0), 'NewYear', 'jan 1 deposit', const ['ytd']));
+await fr.upsertTransaction(mk('p13-dec31', TransactionType.expense, 5555, DateTime(2025, 12, 31, 12, 0), 'YearEnd', 'dec 31 expense', const ['ytd']));
+c.invalidate(transactionsProvider);
+c.invalidate(tagColorsProvider);

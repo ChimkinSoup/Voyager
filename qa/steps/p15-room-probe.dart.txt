@@ -1,0 +1,10 @@
+final fr = c.read(financeRepositoryProvider);
+final rooms = await fr.listContributionRooms();
+final events = await fr.listAssetRoomEvents();
+final room = rooms.first;
+String f(RoomYearSummary s) => 'year ' + s.year.toString() + ' cap ' + s.capacityCents.toString() + ' used ' + s.usedCents.toString() + ' rem ' + s.remainingCents.toString();
+debugPrint('P15PROBE events ' + events.length.toString() + ' baseline ' + room.baselineAsOf.toIso8601String());
+debugPrint('P15PROBE today      ' + f(roomYearSummary(room, events, now: DateTime.now())));
+debugPrint('P15PROBE dec31-2026 ' + f(roomYearSummary(room, events, now: DateTime(2026, 12, 31, 23, 30))));
+debugPrint('P15PROBE jan02-2027 ' + f(roomYearSummary(room, events, now: DateTime(2027, 1, 2, 12))));
+debugPrint('P15PROBE jan02-2028 ' + f(roomYearSummary(room, events, now: DateTime(2028, 1, 2, 12))));

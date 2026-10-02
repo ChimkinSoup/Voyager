@@ -111,6 +111,8 @@ extension _DefaultLayerExtension on DefaultLayer {
     names.addProperties(style.symbolLayout?.icon?.icon);
     names.addProperties(style.symbolLayout?.icon?.anchor);
     names.addProperties(style.symbolLayout?.icon?.opacity);
+    // VOYAGER PATCH: LabelLayout orders a layer's labels by it.
+    names.addProperties(style.symbolLayout?.sortKey);
     return names.whereType<String>().toSet();
   }
 }

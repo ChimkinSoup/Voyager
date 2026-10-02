@@ -94,7 +94,18 @@ class SymbolLayout {
   /// distance between repeats of a label along a line, for LabelLayout.
   final Expression<double>? spacing;
 
-  SymbolLayout({required this.placement, this.text, this.icon, this.spacing});
+  /// VOYAGER PATCH: `symbol-sort-key`, which upstream did not read — the
+  /// order LabelLayout places a layer's labels in, lowest first, so the
+  /// labels that win the room are the ones that matter most.
+  final Expression<double>? sortKey;
+
+  SymbolLayout({
+    required this.placement,
+    this.text,
+    this.icon,
+    this.spacing,
+    this.sortKey,
+  });
 }
 
 class IconLayout {

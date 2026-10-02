@@ -1,0 +1,50 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final sq = (await jr.listJournals()).firstWhere((j) => j.name == 'Search QA').id;
+final q = String.fromCharCode(34);
+final dI = String.fromCharCode(0x130);
+final specs = <List<String>>[
+  ['Beach day', 'I went to the beach with friends.'],
+  ['Deep match', List.filled(400, 'filler').join(' ') + ' quokkafish appears here near the end.'],
+  ['Case test', 'MixedCase XYLOPHONE word'],
+  ['Accents', 'Coffee at the caf' + String.fromCharCode(0xE9) + ' was na' + String.fromCharCode(0xEF) + 've fun'],
+  [dI + dI + dI + ' ab', 'Trip to ' + dI + 'stanbul then ab'],
+  ['Turk snippet', List.filled(40, dI).join() + ' quokkaturk tail of the body'],
+  ['Specials', 'Progress 100% done, snake_case_name, a.b*c (paren) [bracket] ' + q + 'quoted phrase' + q + ' C++ back' + String.fromCharCode(92) + 'slash 50_50 \$dollar ^caret ?question'],
+  ['Emphasis', 'This has **boldword** and foo**bar** and ==marked== text'],
+  ['Tags entry', 'Tagged #Work and #multi-tag and #alpha and #projectalpha'],
+  [String.fromCharCodes([0x6771, 0x4EAC, 0x65C5, 0x884C]), 'Arabic ' + String.fromCharCodes([0x645, 0x631, 0x62D, 0x628, 0x627]) + ' emoji ' + String.fromCharCodes([0x1F600]) + ' cjkentry'],
+  ['T' * 300, 'Long title entry body longtitleword'],
+  ['', 'untitled body with marmotfern'],
+  ['Hidden CR', 'line1' + String.fromCharCodes([13, 10]) + 'line2 crlfword'],
+  ['Hyphens', 're-entry pre-war post_war'],
+];
+final tagsFor = (String b) => RegExp(r'#(\w+(?:-\w+)*)').allMatches(b).map((m) => m.group(1)!).toSet().toList();
+var n = 0;
+for (final s in specs) {
+  final d = DateTime(2026, 9, 1 + n, 10).toUtc();
+  final en = JournalEntry(id: 'p11-kw-${n.toString().padLeft(2, '0')}', createdAt: now, updatedAt: now, version: 1, journalId: sq, title: s[0], body: s[1], entryDate: d, timestamp: d, mood: 5, weatherIcon: 'sunny', tags: tagsFor(s[1]));
+  await jr.upsertEntry(en); r.pushJournalEntryNow(en); n++;
+}
+final vocab = ['river', 'mountain', 'coffee', 'meeting', 'walk', 'book', 'garden', 'train', 'rain', 'friend', 'project', 'music', 'dinner', 'tired', 'happy', 'code', 'run', 'city', 'ocean', 'letter'];
+for (var i = 0; i < 600; i++) {
+  final words = List.generate(80, (k) => vocab[(i * 7 + k * 3) % vocab.length]).join(' ');
+  final d = DateTime(2025, 1, 1).add(Duration(hours: i * 13)).toUtc();
+  final en = JournalEntry(id: 'p11-bulk-${i.toString().padLeft(3, '0')}', createdAt: now, updatedAt: now, version: 1, journalId: i.isEven ? sq : '__legacy__', title: 'Bulk ${i.toString().padLeft(3, '0')}', body: 'commonword rareword${i % 50}x $words', entryDate: d, timestamp: d, mood: i % 11, weatherIcon: 'cloudy', tags: const []);
+  await jr.upsertEntry(en); r.pushJournalEntryNow(en);
+}
+final dr = c.read(dreamRepositoryProvider);
+final dspecs = <List<String?>>[
+  ['Flying dream', 'I was flying over the #ocean dreamonly', 'notekeyword secret'],
+  ['Second dream', 'A pelicanberry grew in the hallway', null],
+  ['Lucid one', 'Became #Lucid and calm dreamonly', null],
+  ['', 'Untitled dream body with marmotfern', null],
+];
+var m = 0;
+for (final s in dspecs) {
+  final d = now.subtract(Duration(days: m + 1));
+  final de = DreamEntry(id: 'p11-dream-$m', createdAt: now, updatedAt: now, version: 1, title: s[0]!, body: s[1]!, notes: s[2], entryDate: d, tags: tagsFor(s[1]!));
+  await dr.upsertEntry(de); r.pushDreamEntryNow(de); m++;
+}
+debugPrint('P11 seeded ${specs.length} kw + 600 bulk + ${dspecs.length} dreams');

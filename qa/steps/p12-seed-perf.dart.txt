@@ -1,0 +1,18 @@
+final now = DateTime.now().toUtc();
+final repo = c.read(trackerRepositoryProvider);
+final specs = <List<Object?>>[['p12-perf-heat', 'Perf5y heat', TrackerStyle.independent], ['p12-perf-line', 'Perf5y line', TrackerStyle.consecutive]];
+var n = 0;
+for (final s in specs) {
+  final t = StatisticTracker(id: s[0] as String, createdAt: now, updatedAt: now, version: 1, name: s[1] as String, type: TrackerType.integer, cadence: TrackerCadence.daily, trackingStyle: s[2] as TrackerStyle, sortOrder: 50);
+  await repo.upsertTracker(t);
+  var day = DateTime(2021, 10, 1);
+  final end = DateTime(2026, 9, 30);
+  var i = 0;
+  while (!day.isAfter(end)) {
+    final v = TrackerValue(id: trackerValueId(t.id, day), trackerId: t.id, periodStart: day, intValue: ((i * 37) % 101).toDouble(), createdAt: now, updatedAt: now, version: 1);
+    await repo.upsertValue(v);
+    day = DateTime(day.year, day.month, day.day + 1);
+    i++; n++;
+  }
+}
+debugPrint('P12 perf seeded ' + n.toString());

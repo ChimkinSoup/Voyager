@@ -9,6 +9,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -705,7 +706,7 @@ void main() {
       await openMap(tester);
       // There at once, not fitted to the pin while the fix is awaited.
       expect(mapCamera(tester).center, const LatLng(41, -75));
-      expect(mapCamera(tester).zoom, 16);
+      expect(mapCamera(tester).zoom, 18.75);
 
       fresh.complete(const LatLng(40, -74));
       await settleMap(tester);
@@ -746,6 +747,56 @@ void main() {
       fresh.complete(const LatLng(40.5, -74.5));
       await settleMap(tester);
       expect(mapCamera(tester).center, const LatLng(40.5, -74.5));
+    });
+
+    mapTest('Locate flies: a far hop zooms out on the way and lasts longer '
+        'than a near one', (tester) async {
+      LatLng? recent;
+      final fresh = Completer<LatLng>();
+      fakeDevice(tester, recent: () => recent, fresh: () => fresh.future);
+      await pumpRankingsPage(tester, seed: seedOnePin);
+      await openMap(tester);
+
+      // Returns how many 50 ms frames the flight to [to] took, and the
+      // lowest zoom it passed through.
+      Future<({int frames, double lowest})> fly(LatLng to) async {
+        recent = to;
+        final start = mapCamera(tester).zoom;
+        await tester.tap(find.byTooltip('Show my location'));
+        var frames = 0;
+        var lowest = start;
+        while (mapCamera(tester).center != to && frames < 100) {
+          await tester.pump(const Duration(milliseconds: 50));
+          lowest = math.min(lowest, mapCamera(tester).zoom);
+          frames++;
+        }
+        expect(mapCamera(tester).zoom, 18.75);
+        return (frames: frames, lowest: lowest);
+      }
+
+      final far = await fly(const LatLng(42, -76));
+      expect(far.frames, greaterThan(1));
+      expect(far.lowest, lessThan(16));
+      final near = await fly(const LatLng(42.0005, -76.0005));
+      expect(near.frames, greaterThan(1));
+      expect(near.frames, lessThan(far.frames));
+      expect(near.lowest, greaterThan(18));
+      fresh.complete(const LatLng(42.0005, -76.0005));
+    });
+
+    mapTest('zoom out stops where the world fills the map', (tester) async {
+      await pumpRankingsPage(tester, seed: seedOnePin);
+      await openMap(tester);
+      for (var i = 0; i < 25; i++) {
+        await tester.tap(find.byTooltip('Zoom out'));
+        await tester.pump();
+      }
+      await settleMap(tester);
+      final camera = mapCamera(tester);
+      expect(
+        256 * math.pow(2, camera.zoom),
+        closeTo(camera.nonRotatedSize.width, 1e-6),
+      );
     });
 
     mapTest('zoom stops where the tiles do', (tester) async {
@@ -939,6 +990,34 @@ void main() {
       expect(
         (await storedParents(harness.db)).single.locations.single.address,
         '1 Reverse Street',
+      );
+    });
+
+    mapTest('the dialog map zooms out only until the world fills it', (
+      tester,
+    ) async {
+      await openEntry(tester);
+      await tester.tap(find.text('Add location'));
+      await tester.pumpAndSettle();
+      final map = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(FlutterMap),
+      );
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(pointer.hover(tester.getCenter(map)));
+      for (var i = 0; i < 10; i++) {
+        await tester.sendEventToBinding(pointer.scroll(const Offset(0, 500)));
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      final camera = MapCamera.of(
+        tester.element(
+          find.descendant(of: map, matching: find.byType(RankingsTileLayer)),
+        ),
+      );
+      expect(
+        256 * math.pow(2, camera.zoom),
+        closeTo(camera.nonRotatedSize.width, 1e-6),
       );
     });
 
@@ -1161,6 +1240,69 @@ void main() {
     expect(harness.container.read(rankingMapFocusProvider), isNull);
   });
 
+  mapTest('pins still cluster at the world view after the map narrows', (
+    tester,
+  ) async {
+    // 2560 wide, the floor is log2(10): the cluster layer starts at 4.
+    tester.view.physicalSize = const Size(2560, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final cache = Directory.systemTemp.createTempSync('voyager_map_tiles');
+    addTearDown(() => cache.deleteSync(recursive: true));
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (call) async => cache.path,
+    );
+    final db = AppDatabase.inMemory();
+    addTearDown(db.close);
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
+        weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+        geoapifyClientProvider.overrideWithValue(fakeGeoapify()),
+        rankingMapTileProviderProvider.overrideWithValue(_BlankTiles()),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(settingsProvider.future);
+    final category = makeCategory();
+    final entry = makeParent(
+      categoryId: category.id,
+      title: 'Lazeez',
+      locations: [branch(0), branch(1), branch(2)],
+    );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: RankingsMapView(
+              entries: [(parent: entry, category: category)],
+              scope: const [],
+              createIn: const [],
+              selectedParentId: null,
+              onOpen: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // 1000 wide, the floor drops to about 1.97; then out to 2.
+    tester.view.physicalSize = const Size(1000, 800);
+    await tester.pumpAndSettle();
+    tester
+        .widget<FlutterMap>(find.byType(FlutterMap))
+        .mapController!
+        .move(const LatLng(43.48, -80.5), 2);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RankingsMapPin), findsNothing);
+    expect(find.text('3'), findsOneWidget);
+  });
+
   mapTest('a map opened before its entries arrive fits them once they do', (
     tester,
   ) async {
@@ -1223,6 +1365,82 @@ void main() {
     await tester.pumpAndSettle();
     expect(center().latitude, closeTo(branch(0).latitude, 0.001));
     expect(center().longitude, closeTo(branch(0).longitude, 0.001));
+  });
+
+  mapTest('a map opened with only some categories loaded fits once, when all '
+      'are', (tester) async {
+    tester.view.physicalSize = const Size(1000, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final cache = Directory.systemTemp.createTempSync('voyager_map_tiles');
+    addTearDown(() => cache.deleteSync(recursive: true));
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (call) async => cache.path,
+    );
+    final db = AppDatabase.inMemory();
+    addTearDown(db.close);
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
+        weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+        geoapifyClientProvider.overrideWithValue(fakeGeoapify()),
+        rankingMapTileProviderProvider.overrideWithValue(_BlankTiles()),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(settingsProvider.future);
+    final category = makeCategory();
+    final loaded = (
+      parent: makeParent(
+        categoryId: category.id,
+        title: 'Lazeez',
+        locations: [branch(0)],
+      ),
+      category: category,
+    );
+    final pending = (
+      parent: makeParent(
+        categoryId: category.id,
+        title: 'Mozy',
+        locations: [branch(5)],
+      ),
+      category: category,
+    );
+
+    Widget map({required bool loading}) => UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: Scaffold(
+          body: RankingsMapView(
+            entries: loading ? [loaded] : [loaded, pending],
+            scope: const [],
+            createIn: const [],
+            selectedParentId: null,
+            onOpen: (_) {},
+            loading: loading,
+          ),
+        ),
+      ),
+    );
+    MapCamera camera() => tester
+        .widget<FlutterMap>(find.byType(FlutterMap))
+        .mapController!
+        .camera;
+
+    await tester.pumpWidget(map(loading: true));
+    await tester.pumpAndSettle();
+    // Not fitted to the one category in yet: close in on its lone pin, only
+    // to pull out again when the rest arrive.
+    expect(camera().center.latitude, closeTo(20, 0.01));
+    expect(camera().zoom, 2);
+
+    await tester.pumpWidget(map(loading: false));
+    await tester.pumpAndSettle();
+    final middle = (branch(0).latitude + branch(5).latitude) / 2;
+    expect(camera().center.latitude, closeTo(middle, 0.01));
+    expect(camera().zoom, lessThan(16));
   });
 
   group('All categories', () {

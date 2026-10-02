@@ -101,7 +101,9 @@ dev_dependencies:
 # lib/src/model/transform/tile_clip.dart and
 # lib/src/features/label_layout.dart, with renderer.dart, text_renderer.dart,
 # themes/style.dart and themes/theme_reader.dart (marked VOYAGER PATCH);
-# 7.0.0-beta.1 has the same bugs. Re-apply them if upgrading past 6.1.0, and
+# 7.0.0-beta.1 has the same bugs. It also reads `symbol-sort-key`, which
+# upstream ignores, so the best ranked restaurant names win the room
+# (style.dart, theme_reader.dart, model/tile_factory.dart, label_layout.dart). Re-apply them if upgrading past 6.1.0, and
 # drop this override once upstream fixes them.
 #
 # flutter_map shows each tile of a new zoom as soon as it loads, beside the
