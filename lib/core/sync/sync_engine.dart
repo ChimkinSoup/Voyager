@@ -530,8 +530,4 @@ class LazyLoadService {
   Future<List<JournalEntry>> loadRecentEntries({int limit = 30}) {
     return _journalRepository.listEntries(limit: limit);
   }
-
-  Future<List<JournalEntry>> loadHistoricalEntries({required DateTime before}) {
-    return _journalRepository.listEntries(to: before);
-  }
 }

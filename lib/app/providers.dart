@@ -1088,13 +1088,6 @@ final journalListEntriesProvider =
       return repo.listEntries(journalId: scope);
     });
 
-final historicalJournalEntriesProvider = FutureProvider.family((
-  ref,
-  DateTime before,
-) {
-  return ref.watch(lazyLoadProvider).loadHistoricalEntries(before: before);
-});
-
 final allDreamEntriesProvider = FutureProvider((ref) {
   ref.keepAlive();
   return ref
@@ -1745,6 +1738,7 @@ final _secondaryDataProviders = <ProviderOrFamily>[
   bucketListItemsProvider,
   tagColorsProvider,
   customWordsProvider,
+  customQuotesProvider,
   flaggedWordsProvider,
   ..._jobDataProviders,
   ..._rankingDataProviders,

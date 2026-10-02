@@ -202,5 +202,21 @@ void main() {
         ['Mine'],
       );
     });
+
+    test('a quote a pull wrote joins the pool without a restart', () async {
+      // BUG-059: the pool was read empty before the first pull on a new
+      // database, and nothing re-read it once the pull had filled the table.
+      expect((await container.read(quotePoolProvider.future)).length, 2);
+      final now = utcNow();
+      await repo.upsertCustomQuote(
+        CustomQuote(id: 'q1', text: 'Mine', createdAt: now, updatedAt: now),
+        recordLocalActivity: false,
+      );
+      invalidateAllDataProvidersIn(container);
+      expect(
+        (await container.read(quotePoolProvider.future)).map((q) => q.text),
+        contains('Mine'),
+      );
+    });
   });
 }

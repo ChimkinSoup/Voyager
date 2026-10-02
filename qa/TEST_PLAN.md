@@ -91,7 +91,7 @@ For each phase, besides its specific flows, tick this sweep. Copy it into the ph
 | 14 | Finance B: categories, budgets, subscriptions & finance analytics | Done |
 | 15 | Finance C: goals, assets & contribution room | Done |
 | 16 | Life tracker | Done |
-| 17 | LeetCode A: dashboard, problems & review deck | Not Started |
+| 17 | LeetCode A: dashboard, problems & review deck | Done |
 | 18 | LeetCode B: sessions, cram, scratch pad & cheat sheet | Not Started |
 | 19A | Rankings core | Not Started |
 | 19B | Rankings: locations & map | Not Started (needs the map feature merged; see its section) |
@@ -584,17 +584,39 @@ Keep this table and each phase's **Status** line in sync.
   - `life_tree_figure.dart` is unused (BUG-138 note).
 
 ## Phase 17 — LeetCode A: dashboard, problems & review deck
-- **Status:** Not Started
+- **Status:** Done (2026-10-01 → 2026-10-02, build `ee71eec`, account qa-019). Bugs: BUG-144 (Major); BUG-145, BUG-146, BUG-147, BUG-148, BUG-149, BUG-150 (Minor); BUG-151, BUG-152, BUG-153, BUG-154 (Cosmetic). Notes added to BUG-021, BUG-110, BUG-133.
 - **Scope:** dashboard (progress rings, activity calendar/chart/bubble, recent completions, tag matrix), track modal (+ device-local draft), problem detail view, review deck view, search popover, NeetCode 150 view (Settings), type highlighting. **MANUAL-ONLY:** LeetCode username sync; clicking out-links. **Deferred:** sessions/cram/scratch/cheat sheet → P18.
 - **HLD docs:** LEETCODE_TRACKER.md, NEETCODE150.md, LEETCODE_TYPE_HIGHLIGHT_HLD.md
+- **Method:** UI via `voy.ps1` (step files `qa/steps/p17-*.txt`); 36 problems and 12 review-log rows seeded through the app's repository with `evalc.ps1` (`p17-seed.dart.txt`, `p17-seed-logs.dart.txt`) to get dates, difficulties, tags and SRS states; expected figures from a scratch `expect.py` (30-day window, tags, due count by local day); row snapshot around the cold re-login (scratch `snap.py`); Tab stops read over the VM service (scratch `tabwalk.ps1`). The session ran across local midnight, which is how BUG-147 was seen.
 - **Flows:**
-  - [ ] Empty state; track problems (each difficulty, tags, notes); edit; delete → undo
-  - [ ] Track modal draft survives close/reopen and restart
-  - [ ] Dashboard numbers vs SQL; activity calendar after tracking on several dates
-  - [ ] Review deck lists due problems per the SRS rules
-  - [ ] Search popover finds problems
-- **Failure cases:** duplicate problem, huge notes with code, invalid URL field.
-- **Skipped/blocked:** username sync (MANUAL-ONLY).
+  - [x] Empty state: rings "0 / 4069", "0/968", "0/2122", "0/979", "0 / 150", "No problems tracked yet", "No tags yet"; deck "0 problems · 0 due", Study and Cram disabled, "Nothing tracked yet / Track a problem". Track with no username opens a blank form with no lookup. Tracked through the UI: Easy "Two Sum" with every field and Python code, a Hard draft, a 300-char name with a 5,007-char description, a CJK/Arabic/emoji problem with a 202-line code block, a CRLF name. Edit (difficulty, tag, example, second solution in Java, Ctrl+Enter): `version` +1, `solved_at` and `created_at` kept, feed, rings, card and tag matrix update at once. Delete: confirm dialog (Esc cancels, Enter confirms) → "Deleted …" toast → Undo restores (`version` 2 → 3). Reset progress works but has no confirm or Undo (BUG-146). Copy code puts the first solution on the clipboard ("Code copied"). **The form opens unfocused (BUG-145); Esc in Edit discards changes silently (BUG-144).**
+  - [x] Draft (new problems only): written to `leetcode_track_draft.json` within a second of the last key; survives the X, `stop.ps1` mid-edit and a relaunch (name, non-numeric ID, tags, description, Hard, a blank example row); removed on Save and by Clear draft. **Its toast says "Couldn't refresh" although nothing was looked up (BUG-152).**
+  - [x] Dashboard numbers vs SQL: total and per-difficulty rings, NeetCode ring (11 distinct titles, case-insensitive, a duplicate "Two Sum" counted once, a title with stray spaces counted), "Last 30 days" legend (Easy / Medium / Hard / Reviewed) and curve, tag matrix counts: all equal to SQL after the seed, after an edit, a delete, an undo and four new problems. Year calendar: solves bucketed by local day (23:30 on Sep 30 → Sep 30; 23:30 on Dec 31 2025 → 2025), review-only days get a dot and no tint, a tombstoned review isn't counted, hover bubble per day, legend chips filter chart and calendar, ‹ › change year. **Figures don't roll over at midnight until a rebuild (BUG-147).**
+  - [x] Review deck: "37 problems · 19 due" = SQL (never reviewed + due time passed); grid order new → learning → review; mastery ring colours; days-until-due on the front; flip on click (back: algorithm, T/S, "+1 more"); same right-click menu as the feed. Search matches front and back (a back-only hit turns the tile), is case-insensitive, ignores notes and code; difficulty pills, tag popover (AND across tags), "N problems of T · M due", "No matches / Clear filters" (clears field, pills and tags). Study / Cram enabled per the count (sessions themselves: P18).
+  - [ ] Search popover (the magnifier in the form, "Search LeetCode"): **not exercised**, it queries leetcode.com. See Skipped.
+  - [x] Type highlighting (Java, in the form): `Solution`, `String`, `T`, `HashMap`, `Character`, `Integer` amber; `MAX_VALUE` and `UUID` plain; `// see ListNode` stays a comment. Matches LEETCODE_TYPE_HIGHLIGHT_HLD.md §4.2 (whose status line still says "design (not implemented)").
+  - [x] Settings → Pages → LeetCode: "LeetCode username: Not set — Track will open with blank fields"; "View NeetCode 150" off hides the ring, on shows it again (synced setting).
+  - [x] Inbox: one row "LeetCode · 23 problems due", equal to the deck.
+- **Failure cases:** duplicate problem: saved with no warning, both dashboard rows get a small duplicate marker (by design per the code). Name empty / spaces only → "A problem name is required", focus kept. ID accepts any text ("abc-12x", shown as "#abc-12x"; lead). 300-char name: ellipsis on the feed row, two lines + ellipsis on the tile, wrapped in full in the detail view. 5,007-char description and a 10,107-char / 202-line code block saved whole and render in the detail view. Tabs in Notes kept. CJK / Arabic / emoji in name and tags fine apart from BUG-154. CRLF in name and ID keeps the line break (BUG-110 note). Case-different tags kept apart (BUG-148). Double-click on Save → one row. There is no URL field: the link is derived from the name (out-links not clicked).
+- **Five-dimension sweep:**
+  - D1 functional: flows above.
+  - D2 data: every create / edit / delete / undo / reset in SQLite at once; outbox 0 after each step. `stop.ps1` → `launch.ps1`: 37 problems, edits and the draft all there, dashboard correct. Cold re-login (`reset.ps1 -Force` → `launch.ps1` → `login.ps1`): 41 problems and 12 review-log rows (one tombstoned), 0 missing / extra / changed; dashboard and deck right without a restart; settings came back.
+  - D3 visual: maximized, 2000×1100 and 1440×1040 in Dark + Scatter: BUG-150 at the minimum size. Light spot-check of dashboard, deck, form, expanded chart, detail view: BUG-153; back to Dark. No `EXCEPTION CAUGHT` / `RenderFlex overflowed` in `run-20261001-234351`, `run-20261002-000746`; `voyager_errors.log` got only an APP START line.
+  - D4 keyboard: Ctrl+Enter saves; Tab order sensible up to Explanation, where it stops (BUG-149); Space selects a difficulty pill; Esc closes the tag popover, the expanded chart, the detail view and the delete dialog; right-click menus ignore keys (BUG-133 note). Vim ON: Normal mode in the deck search (edits drive the filter; caret misdrawn, BUG-151) and in the form's fields; Esc never closes the form (consistent with P3). Vim turned back off.
+  - D5 failures: see Failure cases; `stop.ps1` mid-edit (draft kept); Retrack on a new problem with no username → "Add your LeetCode username in Settings first" and nothing changes.
+- **Test data:** qa-019, see PROGRESS.md §2.
+- **Skipped/blocked:**
+  - Username sync and out-links (MANUAL-ONLY): the two rings that open a browser, "Open on LeetCode" (menu and detail view).
+  - **"Search LeetCode" popover and Retrack on an existing problem**: both send the typed title to leetcode.com (`searchByTitle` / `fetchBySlug`), so they were treated as MANUAL-ONLY and not run. For Juno to decide whether a couple of read-only title searches are acceptable. Note that opening the dashboard already makes one automatic request for the question counts (the "/ 4069" denominators).
+  - Force offline (P26). Trash listing of a deleted problem (P24). Study / Cram sessions and the session display menu's toggles (P18).
+- **Leads:**
+  - The form's Search magnifier scrolls with the content while the cheat-sheet and close icons stay pinned, so the three icons overlap once the form is scrolled a little (`qa/shots/p17-006-filled.png`, top right).
+  - The tag popover inserts a "Clear N" button above the list after the first tick, so every row moves down under the pointer.
+  - In the 30-day chart, two series with the same value on the same day draw on top of each other (only one colour visible).
+  - "Reset progress" and "Clear draft" give feedback only indirectly; saving a problem shows no toast.
+  - In the code box `<>` renders as a single diamond glyph (font ligature).
+  - Once, after a restart, the "Valid Anagram" tile was showing its back without having been clicked in that run; not reproduced.
+  - A back-only search hit turns its tile, but a tile flipped by hand stays on its back when the search matches its front.
 
 ## Phase 18 — LeetCode B: sessions, cram, scratch pad & cheat sheet
 - **Status:** Not Started

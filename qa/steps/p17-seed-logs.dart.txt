@@ -1,0 +1,12 @@
+final repo = c.read(leetCodeRepositoryProvider);
+final sync = c.read(remoteSyncServiceProvider);
+final times = [DateTime(2026, 9, 30, 23, 30), DateTime(2026, 9, 27, 10, 0), DateTime(2026, 9, 27, 11, 0), DateTime(2026, 9, 27, 12, 0), DateTime(2026, 10, 1, 9, 0), DateTime(2026, 10, 1, 9, 5), DateTime(2026, 10, 1, 9, 10), DateTime(2026, 10, 1, 9, 15), DateTime(2026, 10, 1, 0, 5), DateTime(2026, 9, 1, 12, 0), DateTime(2026, 8, 14, 12, 0), DateTime(2025, 12, 31, 23, 45)];
+for (var i = 0; i < times.length; i++) {
+  final log = LeetCodeReviewLog(id: 'p17-log-' + i.toString().padLeft(2, '0'), problemId: 'p17-s-02', grade: StudyGrade.values[i % StudyGrade.values.length], reviewedAt: times[i].toUtc());
+  await repo.logReview(log);
+  sync.pushLeetCodeReviewLog(log);
+}
+await repo.softDeleteReviewLog('p17-log-07');
+final t = await repo.getReviewLog('p17-log-07');
+if (t != null) sync.pushLeetCodeReviewLog(t);
+c.invalidate(leetcodeReviewLogProvider);

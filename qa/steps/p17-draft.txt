@@ -1,0 +1,23 @@
+# Phase 17: Track modal open at place 200 100 2000 1100. Empty save with the name focused, then a draft, close, reopen.
+activate
+click 700 160
+key ctrl+enter
+wait 600
+shot p17-065-name-required
+type Draft Problem
+click 1590 160
+type abc-12x
+click 332 262
+click 900 370
+type #Draft, tag2 #draft #tag2
+click 900 540
+type draft body line one\nline two
+click 1785 700
+wait 500
+shot p17-066-draft-filled
+click 1902 81
+wait 1200
+shot p17-067-draft-closed
+click 1852 1019
+wait 1500
+shot p17-068-draft-reopened

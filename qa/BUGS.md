@@ -258,6 +258,7 @@ Entry format:
 - Expected: per AUTOCORRECT.md §1 ("obvious typos" only, "conservative"), the word becomes the one the user meant (`little`, `people`, `never`, `could`, …), or stays as typed with a squiggle when that's not certain.
 - Actual: each is replaced, with no prompt, by a different, wrong word: `litt`, `peop`, `nerv`, `cud`, `shul`, `wth`, `cause`, `dr`, `qu.` (read back from the field). The replaced word is a valid dictionary entry, so it no longer squiggles and the mistake is easy to miss. Backspace right after the correction reverts it (§7.2 works), and `wtih`→`with`, `jsut`→`just`, `knwo`→`know`, `thnig`→`thing` are corrected properly.
 - Notes: cases `ac-*` in `qa/steps/p4-ac1.tsv` (run with `qa/harness/vimcase.ps1`; Vim OFF). Two causes combine. (1) The cascade tries transpose and delete before insert (AUTOCORRECT.md §3.1), so a word with one *missing* letter (the most common typo) is corrected by whichever transpose/delete lands on any dictionary entry first. (2) The bundled list (`assets/dictionary_en.txt`, 65,026 lines) is full of fragments and rare words that make those landings likely: 490 one- or two-letter entries (`dr`, `lk`, `bl`, `ll`, `ve`, `qu`, …) and words like `litt`, `peop`, `shul`, `cud`, `wth`, `nerv`. An offline emulation of the cascade over the dictionary (scratch script, same transpose→delete→insert rule): dropping one letter from each of the 3,000 most frequent words (length ≥ 4) gives 6,777 right corrections, 3,428 wrong ones (2,538 via delete, 890 via transpose) and 2,352 left alone. The emulation matched every in-app case tried. Also the lead from Phase 3 ("qux." → "qu."). The Settings → Editing → Autocorrect subtitle itself promises a fix "only when one dictionary word is a single swapped, missing or extra letter away". The right-click suggestions show the same bias: for `littl` they list `litte`, `litt`, then `little` (`qa/shots/p4-rclick2.png`), and the Flag popover for `neve` prefills "Always replace with" as `nave`.
+- Notes (2026-10-01, Phase 17): correctly spelled plurals are rewritten too, because the bundled list lacks them. Typed into the LeetCode Track form's Description and Explanation: "integers nums … indices" was saved as "integer num … indies" (`qa/shots/p17-006-filled.png`; SQLite `description`). `integers`, `nums` and `indices` are not in `assets/dictionary_en.txt`; `integer`, `num` and `indies` are. Problem statements typed by hand are changed in meaning with no prompt.
 
 ### BUG-022 [Phase 4] Common misspellings are in the bundled dictionary, so they are never flagged or corrected ("teh", "recieve", "seperate", "definately")
 - Severity: Minor
@@ -1007,6 +1008,7 @@ Entry format:
 - Expected: a one-line field flattens the paste to "Line1 Line2" (or keeps the first line only) and saves what it shows.
 - Actual: the field and the ledger row show "Line1" (`qa/shots/p13-crlf-sheet.png`); SQLite `origin` = `4C696E65310A4C696E6532` ("Line1\nLine2"). The Analytics store breakdown lists it as "Line1" as well (`p13-filter2-sheet.png`), so the hidden second line makes it a different store from a real "Line1".
 - Notes: same family as BUG-017 (there a hidden `\r` stays; here the `\r` is gone and the `\n` stays). Note and Tags weren't checked for this.
+- Notes (2026-10-02, Phase 17): the LeetCode Track form's one-line "Problem name" and "ID" fields do the same: pasting "line1 CRLF line2" saved `title` and `question_frontend_id` as `6C696E65310A6C696E6532` ("line1\nline2"). The dashboard row shows only "line1", the Review Deck tile shows both lines and "#line1" (`qa/shots/p17-083-dash-long.png`, `p17-086-deck-long.png`). The Tags field splits on the break (two tags), which is fine.
 
 ### BUG-111 [Phase 13] Transaction date can't be chosen from the keyboard: the picker opens, but no key selects a day
 - Severity: Minor
@@ -1194,6 +1196,7 @@ Entry format:
 - Expected: Esc closes the menu; the arrow keys and Enter choose an item; a click outside only closes it.
 - Actual: the menu stays open after Esc, twice (`qa/shots/p15-85-menu-esc.png`, `p15-87-menu-esc2.png`), and after Down + Enter (`p15-88-menu-keys.png`). The click outside closed the menu and opened "Edit subscription" for the bill under the pointer in the same click (`p15-86-menu-clickaway.png`). In an earlier run a click meant for the row landed on the still-open menu's "Delete" and removed a $2,000.00 contribution (how BUG-132 was found).
 - Notes: `ContextMenuRegion` is the app-wide right-click menu (asset rows, bills, budgets, ledger rows), so this likely holds everywhere; only the Finance ledger and the asset rows were tried here. Part of the BUG-009 family (nothing on a page is reachable by keyboard), but Esc not closing a popup is new.
+- Notes (2026-10-01, Phase 17): confirmed on the LeetCode dashboard rows and Review Deck tiles (Open details… / Edit… / Open on LeetCode / Copy code / Reset progress / Delete): Esc, Down and Enter do nothing while the menu is open (`qa/shots/p17-026-menu-esc.png`, `p17-027-menu-keys.png`). Here a stray dismissing click can land on "Reset progress" (BUG-146) or flip the tile under it.
 
 ### BUG-134 [Phase 15] Deleting a contribution room takes one click, has no confirmation or Undo, and the room isn't in Trash, so it can't be brought back
 - Severity: Major
@@ -1276,4 +1279,92 @@ Entry format:
 - Actual: nothing happens: the dialog stays open and the header still reads "Sun, Jan 1" (`qa/shots/p16-028-set.png`); only a click on OK saves it (`settings_table.birth_date` = `1990-06-15T00:00:00.000 -04:00`). A future date is refused with "Out of range." (correct), and 01/01/1900 and today are accepted.
 - Notes: this is the stock Material `showDatePicker` (Settings page), not the app's `DateSelectorPopover` (BUG-111). The Birth date row itself isn't reachable by Tab (BUG-009). The birth date is stored as local midnight and kept the same day across a restart and a cold re-login.
 
-<!-- Last ID: BUG-143. -->
+### BUG-144 [Phase 17] Editing a tracked problem: Esc (or the close X) throws away every change with no warning, and edits have no draft
+- Severity: Major
+- Found: 2026-10-02, Phase 17 (qa-019, build `ee71eec`)
+- Steps to reproduce: Vim off. LeetCode → Review Deck → right-click the "Two Sum" tile → Edit… → click Description, type ` EDITED-NOT-SAVED` at the end → press Esc.
+- Expected: a "Discard changes?" confirmation, or the same local draft the new-problem form keeps (closing that form and reopening it brings the text back).
+- Actual: the form closes at once (`qa/shots/p17-087-edit-dirty.png` → `p17-088-edit-esc.png`). SQLite: the description and `version` 0 are unchanged, and nothing was written to `leetcode_track_draft.json`. Reopening Edit shows the saved text. A long write-up (explanation, a pasted solution, a second solution) typed into an existing problem is lost to one stray Esc; this form is where code and notes are added to a problem after it was first tracked.
+- Notes: `showLeetCodeTrackModal` passes `draft: null` for an edit ("a draft belongs to the create flow only") and the sheet's Esc / X / `Navigator.pop` have no dirty check. Same class as BUG-084 (Search entry dialog). With Vim ON, Esc only leaves Insert mode and never closes the form, so there the loss needs the X. Scatter was on.
+
+### BUG-145 [Phase 17] The Track / Edit form opens with nothing focused: typing goes nowhere, and Ctrl+Enter does nothing until a field is clicked
+- Severity: Minor
+- Found: 2026-10-01, Phase 17 (qa-019)
+- Steps to reproduce: LeetCode (no username set) → Track (or Review Deck → "Track a problem"). Without clicking, type `Two Sum`, then press Ctrl+Enter.
+- Expected: "Problem name" has focus when the form opens (it is the only required field, and a rejected save focuses it), and Ctrl+Enter reports "A problem name is required".
+- Actual: the name stays empty (`qa/shots/p17-004-typed-nofocus.png`) and Ctrl+Enter shows no message (`p17-005-empty-save.png`). After clicking the name field, Ctrl+Enter on an empty or spaces-only name shows the red "A problem name is required" and keeps focus there (`p17-065-name-required.png`), and a filled form saves.
+- Notes: the title `VoyagerTextField` has no `autofocus`; `CtrlEnterToSubmitScope` only hears keys from a focused descendant. Same family as BUG-136. Tab order once a field is focused: name → ID → Search LeetCode → Easy / Medium / Hard → Retrack → Tags → Description → Add example → Add solution → Algorithm → Time → Space → Explanation (see BUG-149); Space on a difficulty pill selects it; focus is invisible throughout (BUG-009).
+
+### BUG-146 [Phase 17] "Reset progress" wipes a problem's review history in one click: no confirmation, no toast, no Undo
+- Severity: Minor
+- Found: 2026-10-01, Phase 17 (qa-019)
+- Steps to reproduce: a problem reviewed three times (interval 3 days, `review_count` 3). Dashboard or Review Deck → right-click it → Reset progress.
+- Expected: a confirmation or a toast with Undo, as Delete (the item directly below it in the same menu) has both.
+- Actual: the menu closes and nothing else is shown (`qa/shots/p17-036-reset.png`). SQLite: `interval` 0, `ease` 2.5, `review_count` 0, `due_at` = now, `version` +1. The interval and ease it had can't be brought back.
+- Notes: `leetCodeProblemMenuItems` calls `resetLeetCodeProgress` directly. The item is disabled for a never-reviewed problem (correct). Same pattern as BUG-120 / BUG-127 / BUG-135 (one-click destructive actions).
+
+### BUG-147 [Phase 17] LeetCode day-based figures don't roll over at midnight: "Last 30 days" and the tiles' days-until-due stay on yesterday until something rebuilds them
+- Severity: Minor
+- Found: 2026-10-02, Phase 17 (qa-019)
+- Steps to reproduce: 37 problems, one of them (Hard) solved on Sep 2, some due "tomorrow" at 10:00. Leave the LeetCode Dashboard open and untouched from 23:54 on Oct 1 until after midnight; read the "Last 30 days" card. Then move the pointer onto the card.
+- Expected: after midnight the window is Sep 3 – Oct 2: the Sep 2 solve drops out (Hard 7 → 6) and a new, empty day appears at the right; a tile due later today reads "0", not "1".
+- Actual: at 12:01 AM and 12:02 AM the card still read 7 / 6 / 7 / 8 with the Sep 2 – Oct 1 curve (`qa/shots/p17-041-before-midnight.png`, `p17-042-after-midnight.png`, `p17-043-after-midnight-real.png`). Hovering the card rebuilt it: 7 / 6 / 6 / 8 and the curve shifted a day (`p17-044-midnight-hover.png`); leaving and re-entering the page shows the same (`p17-045-midnight-revisit.png`). On the Review Deck, tiles due Oct 2 10:00 still showed "1" at 12:02 AM (`p17-046-deck-after-midnight.png`, Min Stack) and "0" after a hover (`p17-050-tile-menu.png`). The "N due" count is taken the same way (at build time), so a problem that comes due while the deck is open isn't counted until a rebuild.
+- Notes: same cause as BUG-141 (Life page): `DateTime.now()` is read during build and nothing schedules a rebuild; the page is kept alive between visits and Voyager runs all day from the tray. Values were exact against SQL whenever they were rebuilt.
+
+### BUG-148 [Phase 17] LeetCode tags differing only by case are kept as separate tags
+- Severity: Minor
+- Found: 2026-10-02, Phase 17 (qa-019)
+- Steps to reproduce: Track → name `Draft Problem v2` → Tags `#Draft, tag2 #draft #tag2` → Save.
+- Expected: one tag per name regardless of case (the field already removes the repeated `tag2`), or the second spelling folded into the first.
+- Actual: `tags_json` = `["Draft","tag2","draft"]`. The dashboard's tag matrix shows `#Draft (1)` and `#draft (1)` as two pills (`qa/shots/p17-083-dash-long.png`), the tile and the feed row show both chips, and the Review Deck's tag filter lists both; a filter on one misses problems tagged with the other.
+- Notes: `_parsedTags` de-duplicates with an exact-case `Set`; the matrix and the filter compare exact strings. Same family as BUG-115 (budget tags). Non-ASCII tags are kept whole here (`#東京テスト`, `#café`), unlike BUG-063.
+
+### BUG-149 [Phase 17] Track / Edit form: Tab stops at Explanation, so the code box, Notes and Save can't be reached from the keyboard
+- Severity: Minor
+- Found: 2026-10-02, Phase 17 (qa-019)
+- Steps to reproduce: Vim off. Open Edit on any problem, click "Problem name", press Tab 14 times, then 2 more (focused widget read over the VM service after each key).
+- Expected: Tab continues from Explanation to the language pills, the code box, Notes and Save (or a documented key leaves the field).
+- Actual: focus goes name → ID → Search → Easy → Medium → Hard → Retrack → Tags → Description → Add example → Add solution → Algorithm → Time → Space → Explanation, and every further Tab stays on Explanation (rect 63,596 1314×66 three times in a row). Shift+Tab walks back. The language selector, Strip, the code editor, Notes, a second solution's fields and the Save button are mouse-only; Ctrl+Enter still saves.
+- Notes: deliberate in `_SolutionFields` (`Shortcuts { Tab: DoNothingIntent }` around the Explanation field, "so a stray press mid-write-up doesn't jump to the language pills"), but it blocks forward traversal entirely. Compare BUG-058 (journal body swallows Tab).
+
+### BUG-150 [Phase 17] At the minimum window size the LeetCode dashboard's problem feed is one row tall, and the Track button covers the tag matrix
+- Severity: Minor
+- Found: 2026-10-02, Phase 17 (qa-019, 41 problems)
+- Steps to reproduce: `place 0 0 1440 1040` (720×520 logical). LeetCode → Dashboard.
+- Expected: the recent-completions feed keeps a usable height (the rings or the card scroll away, or the page scrolls as a whole).
+- Actual: rings, then the "Last 30 days" card, then a feed viewport about 120 px tall showing exactly one problem ("line1"), then the tag matrix, whose right side sits under the floating Track button (`qa/shots/p17-092-min-dash.png`). The feed scrolls inside that one-row window. At 2000×1100 and maximized the layout is fine.
+- Notes: below 700 logical px the activity card takes a row of its own, and below 720 the tag matrix takes `min(160, half)` of what is left (`leetcode_dashboard.dart`), leaving the feed the remainder. At this size the form's language row also shows only python … go; "rust" and "C#" are cut off beside Strip (`p17-097-min-modal-bottom.png`). Scatter was on.
+
+### BUG-151 [Phase 17] Vim Normal mode in the Review Deck search field: the block caret is drawn about three characters to the left of the real position, over the magnifier icon
+- Severity: Cosmetic
+- Found: 2026-10-02, Phase 17 (qa-019, Vim ON)
+- Steps to reproduce: Settings → Editing → Vim keybindings ON. LeetCode → Review Deck → click "Search problems", type `zebra3`, Esc, `0`, `x`; then `dd`, `i`, `Seed problem 2`, Esc, `x`.
+- Expected: the block caret sits on the character the next command acts on.
+- Actual: after `0` the block is drawn on top of the magnifier icon, left of the text (`qa/shots/p17-109-vim-search.png`, `p17-110-vim-search2.png`; with the field empty it covers the icon, `p17-111-vim-dd.png`). After the second sequence the field reads "Seed problem " with the block drawn over the "l" of "problem" while the real caret is at the end (`p17-112-vim-x.png`). The commands themselves act at the right place (`0x` removed the "z"; the filter followed every edit: 7 of 41, then 41, then 25 of 41).
+- Notes: the field has an `InputDecoration.prefixIcon`; `VimTextOverlay` appears to lay its caret out from the field's left edge without the icon's width. Fields without a prefix icon (the form's name and Description) draw it correctly (`p17-113-vim-modal-normal.png`). Not checked: other fields with a prefix icon elsewhere in the app.
+
+### BUG-152 [Phase 17] With no LeetCode username, reopening a saved draft says "Couldn't refresh — showing your draft", and "Clear draft" answers "Add your LeetCode username in Settings first"
+- Severity: Cosmetic
+- Found: 2026-10-02, Phase 17 (qa-019, username not set)
+- Steps to reproduce: Track → type a name → close with X → Track again. Then click "Clear draft" on the toast.
+- Expected: with no username nothing was looked up, so the toast says "Picked up your draft" (the wording the resumed case already has); Clear draft just empties the form.
+- Actual: a warning-icon toast "Couldn't refresh — showing your draft" every time the draft is reopened (`qa/shots/p17-068-draft-reopened.png`, after a restart `p17-071-restart-draft.png`), which reads as a network failure. Clear draft empties the form and deletes the draft file, and shows a second warning toast, "Add your LeetCode username in Settings first" (`p17-118-clear-draft.png`).
+- Notes: `startLeetCodeTrackFlow` maps "no lookup result" (which includes "no username, no lookup made") to `resumedAfterFetchFailure`; `_clearDraftAndStartNew` always runs `_fetchLatestSubmission`, whose no-username branch reports that message. The draft itself works: it survived closing the form, `stop.ps1` mid-edit (written within 1 s of the last key) and a relaunch, kept a blank example row and the difficulty, and was removed on Save.
+
+### BUG-153 [Phase 17] Light theme: the "Medium" difficulty label is yellow on cream, and the Track button lets the tile under it show through
+- Severity: Cosmetic
+- Found: 2026-10-02, Phase 17 (qa-019, Light)
+- Steps to reproduce: Settings → Appearance → Light. LeetCode → Dashboard, then Review Deck.
+- Expected: difficulty labels as readable as Easy (teal) and Hard (red) are; the floating button is opaque enough to read.
+- Actual: "Medium" is pale yellow text on a pale yellow chip over the cream page, on feed rows, tiles, the ring caption and the detail view (`qa/shots/p17-100-light-dash.png`, `p17-101-light-deck.png`, `p17-104-light-detail.png`). The one-count pills in the tag matrix and the "NeetCode" caption are also faint. On the deck the Track button is translucent, so "#hash-table" from the tile behind it runs through the word "Track" (`p17-101-light-deck.png`, bottom right).
+- Notes: `colorForLeetCodeDifficulty` is one colour per tier for both themes. The form, the expanded chart and the calendar read fine in Light (`p17-102-light-modal.png`, `p17-103-light-expanded.png`).
+
+### BUG-154 [Phase 17] Tag matrix: a right-to-left tag shows its count before the "#": "#(1) مرحبا"
+- Severity: Cosmetic
+- Found: 2026-10-02, Phase 17 (qa-019)
+- Steps to reproduce: track a problem with an Arabic tag (`#مرحبا`). Look at the dashboard's tag matrix.
+- Expected: "#مرحبا (1)", with the count at the end like every other pill.
+- Actual: the pill reads "#(1) مرحبا" (`qa/shots/p17-083-dash-long.png`, both themes). The feed row's chip and the tile show the tag correctly.
+- Notes: the pill is one string `#tag (n)`; the bidi algorithm places the neutral "(1)" inside the right-to-left run. CJK, emoji and accented tags are fine.
+
+<!-- Last ID: BUG-154. -->

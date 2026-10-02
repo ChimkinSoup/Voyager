@@ -1,0 +1,8 @@
+# Phase 17: finish the Java solution typed into Solution 2 (text contains ';', so it needs `run`).
+activate
+type ;\nint MAX_VALUE = 1; UUID u = null; // see ListNode\nreturn true;
+wait 700
+shot p17-032-java
+key ctrl+enter
+wait 1500
+shot p17-033-edit-saved

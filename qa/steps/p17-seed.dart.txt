@@ -1,0 +1,16 @@
+final repo = c.read(leetCodeRepositoryProvider);
+final sync = c.read(remoteSyncServiceProvider);
+final now = DateTime.now().toUtc();
+final titles = ['Valid Anagram', 'Group Anagrams', '3Sum', 'Min Stack', 'Car Fleet', 'Binary Search', 'Valid Palindrome', 'Contains Duplicate', 'valid sudoku', ' Koko Eating Bananas ', 'Two Sum'];
+final tagSets = [['array', 'hash-table'], ['dp'], ['graph', 'bfs'], ['two-pointers', 'array'], <String>[], ['dp', 'binary-search']];
+for (var i = 0; i < 36; i++) {
+  final solvedLocal = i == 0 ? DateTime(2026, 9, 30, 23, 30) : i == 1 ? DateTime(2025, 12, 31, 23, 30) : i == 2 ? DateTime(2026, 9, 2, 0, 10) : DateTime(2026, 10, 1, 12, 0).subtract(Duration(days: (i ~/ 2) * 3));
+  final s = i % 6;
+  final interval = s == 0 ? 0.0 : s == 1 ? 0.0069 : s == 2 ? 3.0 : s == 3 ? 1.0 : s == 4 ? 10.0 : 60.0;
+  final reviewCount = s == 0 ? 0 : s == 1 ? 1 : s == 2 ? 3 : s == 3 ? 2 : s == 4 ? 4 : 7;
+  final DateTime? dueAt = s == 0 ? null : s == 1 ? now.subtract(const Duration(hours: 1)) : s == 2 ? DateTime(2026, 9, 30, 9, 0).toUtc() : s == 3 ? DateTime(2026, 10, 2, 10, 0).toUtc() : s == 4 ? DateTime(2026, 10, 6, 10, 0).toUtc() : DateTime(2026, 11, 10, 10, 0).toUtc();
+  final p = LeetCodeProblem(id: 'p17-s-' + i.toString().padLeft(2, '0'), createdAt: now, updatedAt: now, title: i < titles.length ? titles[i] : 'Seed problem ' + i.toString(), questionFrontendId: (100 + i).toString(), difficulty: LeetCodeDifficulty.values[i % 3], tags: tagSets[(i ~/ 2) % 6], description: 'Seed description ' + i.toString() + ' with keyword zebra' + i.toString(), solutions: [LeetCodeSolution(algorithm: 'algo quokka' + i.toString(), timeComplexity: 'O(n)', spaceComplexity: 'O(1)', explanation: 'explain ' + i.toString(), code: 'print(' + i.toString() + ')', notes: 'note narwhal' + i.toString())], solvedAt: solvedLocal.toUtc(), interval: interval, ease: 2.5, dueAt: dueAt, reviewCount: reviewCount);
+  await repo.upsertProblem(p);
+  sync.pushLeetCodeProblem(p);
+}
+c.invalidate(leetcodeProblemsProvider);

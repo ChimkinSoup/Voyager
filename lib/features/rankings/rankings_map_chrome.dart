@@ -479,12 +479,18 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
       ));
     }
     // A name is centred on its place, and so is the pin of an entry made of
-    // it: the pin's own disc is the room the pin takes.
+    // it: the pin's own disc is the room the pin takes. A neighbour's name is
+    // under it too once its box reaches into the disc.
     final disc = RankingsMapPin.size / 2 / scale;
-    bool underPin(_Name name, Rect box) => pins.any(
-      (pin) =>
-          (_anchorOf(name) - pin.at).distance < disc || pin.title.overlaps(box),
-    );
+    bool underPin(_Name name, Rect box) => pins.any((pin) {
+      final nearest = Offset(
+        pin.at.dx.clamp(box.left, box.right).toDouble(),
+        pin.at.dy.clamp(box.top, box.bottom).toDouble(),
+      );
+      return (_anchorOf(name) - pin.at).distance < disc ||
+          (nearest - pin.at).distance < disc ||
+          pin.title.overlaps(box);
+    });
     final drawn = <_Name>[];
     final taken = <Rect>[];
     final everyDot = camera.zoom >= _allDotsZoom;

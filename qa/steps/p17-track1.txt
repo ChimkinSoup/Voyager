@@ -1,0 +1,26 @@
+# Phase 17: Track modal open (create). Empty save, then "Two Sum" Easy with every field.
+activate
+key ctrl+enter
+wait 600
+shot p17-005-empty-save
+type Two Sum
+wait 300
+click 2360 181
+type 1
+click 135 283
+click 1400 391
+type #array #hash-table
+click 1400 560
+type Given an array of integers nums and an integer target, return indices of the two numbers that add up to target.
+click 1400 940
+type One pass with a hash map of value to index.
+click 760 1087
+type O(n)
+click 2100 1087
+type O(n)
+click 1400 1255
+type For each number look up target minus it in the map; if present return both indices, else store it.
+click 1400 1600
+type class Solution:\ndef twoSum(self, nums, target):\nseen = {}\nfor i, n in enumerate(nums):\nif target - n in seen:\nreturn [seen[target - n], i]
+wait 600
+shot p17-006-filled
