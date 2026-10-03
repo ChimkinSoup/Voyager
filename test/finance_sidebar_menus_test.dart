@@ -308,9 +308,14 @@ void main() {
       await tester.pumpAndSettle();
 
       final logged = (await harness.repo.listTransactions()).firstWhere(
-        (t) => t.origin == 'Netflix',
+        (t) => t.amountCents == 1599,
       );
-      expect(logged.note, isNull, reason: 'the bill names the store only');
+      expect(
+        logged.origin,
+        isNull,
+        reason: 'a bill with no store files the expense with none',
+      );
+      expect(logged.note, isNull);
       expect(logged.type, TransactionType.expense);
       expect(logged.amountCents, 1599);
       expect(logged.tags, isEmpty);
@@ -329,6 +334,30 @@ void main() {
         ),
       );
       expect(after.nextDue(DateTime.now()).isAfter(paidDue), isTrue);
+    });
+
+    testWidgets("Log payment carries the bill's store and note", (
+      tester,
+    ) async {
+      final harness = await pumpDashboard(tester);
+      final bill = (await harness.repo.getSubscription('sub-1'))!;
+      await harness.repo.upsertSubscription(
+        bill.copyWith(store: 'Streaming Co', note: 'Family plan'),
+      );
+      harness.container.invalidate(subscriptionsProvider);
+      await tester.pumpAndSettle();
+
+      await openMenuOn(tester, find.text('Netflix'));
+      await tester.tap(find.text('Log payment'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      final logged = (await harness.repo.listTransactions()).firstWhere(
+        (t) => t.amountCents == 1599,
+      );
+      expect(logged.origin, 'Streaming Co');
+      expect(logged.note, 'Family plan');
     });
   });
 }

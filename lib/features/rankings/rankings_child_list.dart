@@ -353,6 +353,13 @@ class _ChildRowState extends ConsumerState<_ChildRow>
     final child = widget.child;
     final score = shownScore;
     final scored = score != null;
+    final hasImages =
+        widget.category.imagesOnChild &&
+        (ref
+                .watch(rankingDocumentIdsWithImagesProvider.settled)
+                .valueOrNull
+                ?.contains(child.id) ??
+            false);
 
     return ContextMenuRegion(
       itemsBuilder: () => [
@@ -432,6 +439,17 @@ class _ChildRowState extends ConsumerState<_ChildRow>
                             style: theme.textTheme.bodyMedium,
                           ),
                         ),
+                        if (hasImages) ...[
+                          const SizedBox(width: 6),
+                          Tooltip(
+                            message: 'Has images',
+                            child: Icon(
+                              PhosphorIconsRegular.image,
+                              size: 14,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                         const SizedBox(width: 8),
                         // A fixed slot, and a dash rather than nothing in it:
                         // the numbers down the list stay in a column, and an

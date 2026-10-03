@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
@@ -837,7 +838,7 @@ class _FilterMenu extends ConsumerWidget {
         // Absent on the All categories map: 5- and 10-point scales share no
         // range to filter by.
         if (category != null) ...[
-          ..._scoreRange(theme, category, filters),
+          ..._scoreRange(theme, ref, category, filters),
           const Divider(height: 1),
         ],
         _CheckTile(
@@ -891,14 +892,20 @@ class _FilterMenu extends ConsumerWidget {
   /// The score slider and its label, on [category]'s scale.
   List<Widget> _scoreRange(
     ThemeData theme,
+    WidgetRef ref,
     RankingCategory category,
     RankingFilters filters,
   ) {
     final max = category.parentScoreMax.toDouble();
+    final step = rankingScoreStep(category.parentScorePrecision);
     // Clamped: a range set before the scale was lowered would otherwise hand
     // RangeSlider values past its max, which it asserts against.
-    final end = math.min(filters.scoreMax ?? max, max);
-    final start = math.min(filters.scoreMin ?? 0, end);
+    (double, double) bounds(RankingFilters filters) {
+      final end = math.min(filters.scoreMax ?? max, max);
+      return (math.min(filters.scoreMin ?? 0, end), end);
+    }
+
+    final (start, end) = bounds(filters);
     // The slider lands on `max * k / divisions`, which in floating point is
     // often a hair off the stored grid — 1.4000000000000001 against 1.4 — and
     // the filter compares exactly, so an entry sitting on the bound fell out.
@@ -906,6 +913,14 @@ class _FilterMenu extends ConsumerWidget {
       value,
       scoreMax: category.parentScoreMax,
       precision: category.parentScorePrecision,
+    );
+    void write(RankingFilters filters, double low, double high) => onChanged(
+      filters.copyWith(
+        scoreMin: low,
+        scoreMax: high,
+        clearScoreMin: low == 0,
+        clearScoreMax: high == max,
+      ),
     );
 
     return [
@@ -916,29 +931,53 @@ class _FilterMenu extends ConsumerWidget {
           style: theme.textTheme.labelSmall,
         ),
       ),
-      RangeSlider(
-        values: RangeValues(start, end),
-        min: 0,
-        max: max,
-        // One division per step of the entry overall's precision, so a
-        // bound the slider can reach is always a score an entry can hold
-        // (§8.4).
-        divisions:
-            (category.parentScoreMax /
-                    rankingScoreStep(category.parentScorePrecision))
-                .round(),
-        onChanged: (values) {
-          final low = snap(values.start);
-          final high = snap(values.end);
-          onChanged(
-            filters.copyWith(
-              scoreMin: low,
-              scoreMax: high,
-              clearScoreMin: low == 0,
-              clearScoreMax: high == max,
-            ),
-          );
-        },
+      LayoutBuilder(
+        builder: (context, constraints) => Listener(
+          // The wheel steps whichever thumb is on the pointer's side of the
+          // midpoint between them, so a thumb wheeled far from the pointer
+          // keeps answering it.
+          onPointerSignal: (event) {
+            if (event is! PointerScrollEvent) return;
+            // Registering resolves the notch in the slider's favour, so the
+            // tag list below does not scroll as well.
+            GestureBinding.instance.pointerSignalResolver.register(event, (
+              resolved,
+            ) {
+              final scroll = resolved as PointerScrollEvent;
+              if (scroll.scrollDelta.dy == 0) return;
+              final delta = scroll.scrollDelta.dy < 0 ? step : -step;
+              // Read afresh: several notches can land before a rebuild.
+              final current = ref.read(rankingFiltersProvider);
+              final (low, high) = bounds(current);
+              // The track is inset from either edge by half the default
+              // overlay — the slider is unthemed here.
+              final inset =
+                  const RoundSliderOverlayShape()
+                      .getPreferredSize(true, true)
+                      .width /
+                  2;
+              final midpoint =
+                  inset +
+                  (low + high) / 2 / max * (constraints.maxWidth - 2 * inset);
+              if (scroll.localPosition.dx < midpoint) {
+                write(current, snap((low + delta).clamp(0, high)), high);
+              } else {
+                write(current, low, snap((high + delta).clamp(low, max)));
+              }
+            });
+          },
+          child: RangeSlider(
+            values: RangeValues(start, end),
+            min: 0,
+            max: max,
+            // One division per step of the entry overall's precision, so a
+            // bound the slider can reach is always a score an entry can hold
+            // (§8.4).
+            divisions: (category.parentScoreMax / step).round(),
+            onChanged: (values) =>
+                write(filters, snap(values.start), snap(values.end)),
+          ),
+        ),
       ),
     ];
   }

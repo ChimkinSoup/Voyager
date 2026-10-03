@@ -2641,6 +2641,7 @@ Map<String, dynamic> subscriptionToFirestore(Subscription subscription) => {
   'paidThroughDate': _dateToFirestore(subscription.paidThroughDate),
   'colorValue': subscription.colorValue,
   'note': subscription.note,
+  'store': subscription.store,
   'createdAt': _dateToFirestoreRequired(subscription.createdAt),
   'updatedAt': _dateToFirestoreRequired(subscription.updatedAt),
   'version': subscription.version,
@@ -2685,6 +2686,9 @@ Subscription mergeSubscriptionFromRemote(
         local?.colorValue ??
         0xFF7C9EFF,
     note: data['note'] as String?,
+    // Keyed on presence: a document written before the field existed says
+    // nothing about the store, but one written after it says so even when null.
+    store: data.containsKey('store') ? data['store'] as String? : local?.store,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

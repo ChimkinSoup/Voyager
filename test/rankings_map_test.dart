@@ -23,6 +23,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/geoapify_client.dart';
@@ -37,6 +38,8 @@ import 'package:voyager/features/rankings/rankings_location_preview.dart';
 import 'package:voyager/features/rankings/rankings_locations_section.dart';
 import 'package:voyager/features/rankings/rankings_map_chrome.dart';
 import 'package:voyager/features/rankings/rankings_map_view.dart';
+import 'package:voyager/features/rankings/rankings_offline_maps.dart';
+import 'package:voyager/features/rankings/rankings_offline_maps_dialogs.dart';
 import 'package:voyager/features/rankings/rankings_page.dart';
 import 'package:voyager/features/rankings/rankings_providers.dart';
 import 'package:voyager/features/rankings/rankings_row.dart';
@@ -1869,5 +1872,127 @@ void main() {
       expect(created.locations, hasLength(1));
       await settleMap(tester);
     });
+
+    mapTest('where two titles meet, the better share of its scale keeps it', (
+      tester,
+    ) async {
+      await pumpRankingsPage(
+        tester,
+        seed: (repo) async {
+          final restaurants = makeCategory();
+          final cafes = makeCategory(
+            name: 'Cafes',
+            parentScoreMax: 10,
+            colorValue: 0xFFFF8A65,
+          );
+          await repo.upsertCategory(restaurants.copyWith(sortOrder: 0));
+          await repo.upsertCategory(cafes.copyWith(sortOrder: 1));
+          // Side by side, a few pixels apart at the name zoom: their titles
+          // run over each other there.
+          await repo.upsertParent(
+            makeParent(
+              categoryId: restaurants.id,
+              title: 'Lazeez',
+              score: 4.9,
+              locations: [branch(0)],
+            ),
+          );
+          final next = branch(1);
+          await repo.upsertParent(
+            makeParent(
+              categoryId: cafes.id,
+              title: 'Smile Tiger',
+              score: 6,
+              locations: [
+                RankingLocation(
+                  id: next.id,
+                  latitude: branch(0).latitude,
+                  longitude: branch(0).longitude + 0.0003,
+                  address: next.address,
+                  sortOrder: next.sortOrder,
+                ),
+              ],
+            ),
+          );
+        },
+      );
+      await openAll(tester);
+
+      final layer =
+          find
+                  .byType(RankingsTileLayer)
+                  .evaluate()
+                  .firstWhere((element) => !_inPreview(element))
+                  .widget
+              as RankingsTileLayer;
+      double titleFrom(String title) =>
+          layer.pins.singleWhere((pin) => pin.title == title).titleFrom;
+      // 4.9 of 5 beats 6 of 10, though 6 is the larger number: its title
+      // shows first.
+      expect(titleFrom('Lazeez'), lessThan(titleFrom('Smile Tiger')));
+    });
+  });
+
+  mapTest('the area to download follows the dialog as the window resizes', (
+    tester,
+  ) async {
+    final harness = await pumpRankingsPage(
+      tester,
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(categoryId: category.id, title: 'Lazeez'),
+        );
+      },
+    );
+    // Opens where the Rankings map was left, so it looks for no device.
+    harness.container.read(rankingMapViewportProvider.notifier).state = (
+      latitude: 43.47,
+      longitude: -80.5,
+      zoom: 12,
+    );
+    unawaited(
+      showRankingOfflineDownloadDialog(
+        tester.element(find.byType(RankingsPage)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final dialog = find.byType(AlertDialog);
+    String shownCount() => tester
+        .widgetList<Text>(
+          find.descendant(of: dialog, matching: find.byType(Text)),
+        )
+        .map((text) => text.data ?? '')
+        .singleWhere((data) => data.endsWith(' tiles'));
+    String countOnScreen() {
+      final camera = MapCamera.of(
+        find
+            .descendant(of: dialog, matching: find.byType(RankingsTileLayer))
+            .evaluate()
+            .single,
+      );
+      final network = harness.container.read(rankingMapNetworkTilesProvider)!;
+      final count = rankingOfflineTileCount(
+        camera.visibleBounds,
+        network.minimumZoom,
+        network.maximumZoom,
+      );
+      return '$count tiles';
+    }
+
+    final before = shownCount();
+    expect(before, countOnScreen());
+
+    // A shorter window squeezes the map, showing less without moving it.
+    tester.view.physicalSize = const Size(1600, 520);
+    await tester.pumpAndSettle();
+
+    expect(countOnScreen(), isNot(before));
+    expect(shownCount(), countOnScreen());
+
+    await tester.tap(find.widgetWithText(GlassButton, 'Cancel'));
+    await tester.pumpAndSettle();
   });
 }

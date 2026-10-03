@@ -50,9 +50,9 @@ double rankingsMapMinZoomAt(double width) => math.log(width / 256) / math.ln2;
 class RankingsTileLayer extends ConsumerStatefulWidget {
   const RankingsTileLayer({super.key, this.pins = const []});
 
-  /// The map's pins and the title each carries under it, which the names
-  /// make way for.
-  final List<({LatLng point, String title})> pins;
+  /// The map's pins and the title each carries under it from the zoom
+  /// `titleFrom` on, which the names make way for.
+  final List<({LatLng point, String title, double titleFrom})> pins;
 
   @override
   ConsumerState<RankingsTileLayer> createState() => RankingsTileLayerState();
@@ -67,6 +67,80 @@ const rankingsMapNameZoom = 15;
 const rankingsMapTitleWidth = 96.0;
 const rankingsMapTitleLines = 2;
 const rankingsMapTitleDrop = 17.0;
+
+/// The room [title] takes under a pin, drawn in [style] at [scaler].
+Size rankingsMapTitleSize(String title, TextStyle style, TextScaler scaler) {
+  final painter = TextPainter(
+    text: TextSpan(text: title, style: style),
+    textAlign: TextAlign.center,
+    textDirection: TextDirection.ltr,
+    textScaler: scaler,
+    maxLines: rankingsMapTitleLines,
+    ellipsis: '…',
+  )..layout(maxWidth: rankingsMapTitleWidth);
+  final size = painter.size;
+  painter.dispose();
+  return size;
+}
+
+/// The zoom from which each of [pins]' titles shows, infinity for one with
+/// none: from [rankingsMapNameZoom], once it runs over no pin's disc and no
+/// better placed pin's title showing then. Each pin is its point in the
+/// pixels of [zoom], its title's size, and its sort key, the lowest first.
+/// The titles keep their size on screen while the points spread apart, so
+/// one that shows at a zoom shows at every zoom closer in.
+List<double> planPinTitles(
+  List<({Offset at, Size title, double key})> pins, {
+  required int zoom,
+}) {
+  final count = pins.length;
+  final labels = [
+    for (final pin in pins)
+      (
+        at: pin.at,
+        box: Rect.fromLTWH(
+          -pin.title.width / 2,
+          rankingsMapTitleDrop,
+          pin.title.width,
+          pin.title.height,
+        ),
+        key: pin.key,
+      ),
+  ];
+  final order = List.generate(count, (i) => i)
+    ..sort((a, b) {
+      final (x, y) = (labels[a], labels[b]);
+      return x.key != y.key
+          ? x.key.compareTo(y.key)
+          : x.at.dx != y.at.dx
+          ? x.at.dx.compareTo(y.at.dx)
+          : x.at.dy != y.at.dy
+          ? x.at.dy.compareTo(y.at.dy)
+          : a.compareTo(b);
+    });
+  final disc = Rect.fromCircle(
+    center: Offset.zero,
+    radius: RankingsMapPin.size / 2,
+  );
+  final from = List.filled(count, double.infinity);
+  final planned = <int>[];
+  for (final i in order) {
+    if (pins[i].title.isEmpty) continue;
+    final box = labels[i].box;
+    var shows = rankingsMapNameZoom.toDouble();
+    for (var j = 0; j < count; j++) {
+      if (j == i) continue;
+      shows = math.max(shows, _apartFrom(labels, i, box, j, disc, zoom));
+    }
+    for (final j in planned) {
+      final apart = _apartFrom(labels, i, box, j, labels[j].box, zoom);
+      if (apart > from[j]) shows = math.max(shows, apart);
+    }
+    from[i] = shows;
+    planned.add(i);
+  }
+  return from;
+}
 
 /// Drawn without a box, so it is ringed in the land's colour to stand off
 /// the roads it crosses.
@@ -453,21 +527,12 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
     for (final pin in widget.pins) {
       final at = camera.projectAtZoom(pin.point, zoom);
       if (!view.inflate(rankingsMapTitleWidth / scale).contains(at)) continue;
-      final size = pin.title.isEmpty || camera.zoom < rankingsMapNameZoom
+      final size = pin.title.isEmpty || camera.zoom < pin.titleFrom
           ? Size.zero
-          : _titleSizes.putIfAbsent(pin.title, () {
-              final painter = TextPainter(
-                text: TextSpan(text: pin.title, style: style),
-                textAlign: TextAlign.center,
-                textDirection: TextDirection.ltr,
-                textScaler: scaler,
-                maxLines: rankingsMapTitleLines,
-                ellipsis: '…',
-              )..layout(maxWidth: rankingsMapTitleWidth);
-              final size = painter.size;
-              painter.dispose();
-              return size;
-            });
+          : _titleSizes.putIfAbsent(
+              pin.title,
+              () => rankingsMapTitleSize(pin.title, style, scaler),
+            );
       pins.add((
         at: at,
         title: Rect.fromLTWH(
@@ -755,6 +820,41 @@ class RankingsMapAttribution extends StatelessWidget {
         style: theme.textTheme.labelSmall?.copyWith(
           fontSize: 9,
           color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+/// One of the small square buttons over a map: zoom, locate and the like.
+class RankingsMapButton extends StatelessWidget {
+  const RankingsMapButton({
+    super.key,
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: theme.colorScheme.surface.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(8),
+        elevation: 1,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.all(7),
+            child: Icon(icon, size: 14),
+          ),
         ),
       ),
     );

@@ -51,6 +51,7 @@ Future<bool> deleteSubscriptionWithUndo({
           paidThroughDate: subscription.paidThroughDate,
           colorValue: subscription.colorValue,
           note: subscription.note,
+          store: subscription.store,
         ),
       );
       container.invalidate(subscriptionsProvider);

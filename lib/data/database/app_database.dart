@@ -366,6 +366,7 @@ class SubscriptionsTable extends Table {
   IntColumn get colorValue =>
       integer().withDefault(const Constant(0xFF7C9EFF))();
   TextColumn get note => text().nullable()();
+  TextColumn get store => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -1943,7 +1944,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 136;
+  int get schemaVersion => 137;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3472,6 +3473,14 @@ class AppDatabase extends _$AppDatabase {
           calendarEventsTable.doneMarks,
         );
         await _foldCalendarDoneDatesColumn(migrator);
+      }
+      if (from < 137) {
+        await _addColumnIfNotExists(
+          migrator,
+          'subscriptions_table',
+          subscriptionsTable,
+          subscriptionsTable.store,
+        );
       }
     },
   );

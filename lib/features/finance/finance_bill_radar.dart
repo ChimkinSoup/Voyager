@@ -143,9 +143,10 @@ Future<void> logSubscriptionPayment(
       amountCents: sub.amountCents,
       // No tags invented from the name: a bill is not a tag, and a guessed
       // one would quietly land in every budget and breakdown built on tags.
-      // The bill is who got paid, so it is the store; the note is left for
-      // the user.
-      origin: sub.name,
+      // Store and note come straight from the bill; a bill with no store
+      // files the expense with none rather than guessing one from the name.
+      origin: sub.store,
+      note: sub.note,
       occurredAt: DateTime.now(),
     ),
     onSaved: () async {
@@ -212,6 +213,7 @@ class _SubscriptionTile extends ConsumerWidget {
         anchorDueDate: DateTime(today.year, today.month, today.day),
         colorValue: subscription.colorValue,
         note: subscription.note,
+        store: subscription.store,
       ),
     );
     container.invalidate(subscriptionsProvider);

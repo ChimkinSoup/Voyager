@@ -129,6 +129,7 @@ class Subscription extends SoftDeletable {
     this.paidThroughDate,
     this.colorValue = 0xFF7C9EFF,
     this.note,
+    this.store,
   });
 
   final String name;
@@ -142,6 +143,9 @@ class Subscription extends SoftDeletable {
   final DateTime? paidThroughDate;
   final int colorValue;
   final String? note;
+
+  /// Who gets paid, carried onto the expense that Log payment files.
+  final String? store;
 
   /// Total cost across a full year at this cadence.
   int get annualCents => annualCentsFor(amountCents, period);
@@ -178,6 +182,7 @@ class Subscription extends SoftDeletable {
     DateTime? paidThroughDate,
     int? colorValue,
     String? note,
+    String? store,
     DateTime? updatedAt,
     DateTime? deletedAt,
     int? version,
@@ -198,6 +203,7 @@ class Subscription extends SoftDeletable {
       paidThroughDate: paidThroughDate ?? this.paidThroughDate,
       colorValue: colorValue ?? this.colorValue,
       note: note ?? this.note,
+      store: store ?? this.store,
     );
   }
 }

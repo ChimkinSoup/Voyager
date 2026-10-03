@@ -18,6 +18,8 @@ import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/services/finance_origins.dart';
+import 'package:voyager/features/finance/finance_origin_field.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 
@@ -60,7 +62,9 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
   late final TextEditingController _nameController;
   late final TextEditingController _amountController;
   late final TextEditingController _noteController;
+  late final TextEditingController _storeController;
   final _amountFocusNode = FocusNode();
+  final _storeFocusNode = FocusNode();
   final _noteFocusNode = FocusNode();
   late BillingPeriod _period;
   late DateTime _dueDate;
@@ -88,6 +92,7 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
           : (existing.amountCents / 100).toStringAsFixed(2),
     );
     _noteController = TextEditingController(text: existing?.note ?? '');
+    _storeController = TextEditingController(text: existing?.store ?? '');
     _period = existing?.period ?? BillingPeriod.monthly;
     final base = existing?.anchorDueDate ?? DateTime.now();
     _dueDate = DateTime(base.year, base.month, base.day);
@@ -101,7 +106,9 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
     _nameController.dispose();
     _amountController.dispose();
     _noteController.dispose();
+    _storeController.dispose();
     _amountFocusNode.dispose();
+    _storeFocusNode.dispose();
     _noteFocusNode.dispose();
     super.dispose();
   }
@@ -207,6 +214,7 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
         note: _noteController.text.trim().isEmpty
             ? null
             : _noteController.text.trim(),
+        store: trimToNull(_storeController.text),
       );
       await repo.upsertSubscription(subscription);
       // Through the container, not `ref`: the invalidate has to land even
@@ -347,7 +355,7 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
                           errorText: _amountError,
                         ),
                         // Past the Billing dropdown: the chain is text only.
-                        onSubmitted: (_) => _noteFocusNode.requestFocus(),
+                        onSubmitted: (_) => _storeFocusNode.requestFocus(),
                       ),
                     ),
                   ),
@@ -389,6 +397,23 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
                     ),
                   );
                 },
+              ),
+              const SizedBox(height: 16),
+              // The same vocabulary as the transaction sheet's Store, since
+              // Log payment files it there.
+              FinanceOriginField(
+                controller: _storeController,
+                focusNode: _storeFocusNode,
+                origins: recentTransactionOrigins(
+                  ref.watch(transactionsProvider.settled).valueOrNull ??
+                      const [],
+                  TransactionType.expense,
+                  DateTime.now(),
+                ),
+                label: 'Store',
+                hintText: 'Netflix',
+                accentColor: accent,
+                onSubmitted: (_) => _noteFocusNode.requestFocus(),
               ),
               const SizedBox(height: 16),
               VoyagerTextField(

@@ -461,7 +461,11 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
                                           key: _tiles,
                                           pins: [
                                             if (pin != null)
-                                              (point: pin, title: ''),
+                                              (
+                                                point: pin,
+                                                title: '',
+                                                titleFrom: double.infinity,
+                                              ),
                                           ],
                                         ),
                                         if (pin != null)

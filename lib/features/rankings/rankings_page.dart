@@ -1065,6 +1065,15 @@ class _Row extends ConsumerWidget {
     final hasImages =
         category.imagesOnParent ||
         (category.imagesOnChild && children.isNotEmpty);
+    // Unknown until the set first loads; left clickable then, where the
+    // gallery's own "no images" notice still covers an empty entry.
+    final withImages = ref
+        .read(rankingDocumentIdsWithImagesProvider.settled)
+        .valueOrNull;
+    final galleryEmpty =
+        withImages != null &&
+        !withImages.contains(parent.id) &&
+        !children.any((child) => withImages.contains(child.id));
 
     return [
       if (!readOnly)
@@ -1102,6 +1111,7 @@ class _Row extends ConsumerWidget {
         ContextMenuItem(
           label: 'Open gallery',
           icon: PhosphorIconsRegular.images,
+          enabled: !galleryEmpty,
           onTap: () => showRankingsEntryGallery(
             context,
             ref,

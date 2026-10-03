@@ -132,7 +132,8 @@ class _RankingLocationPreviewState
                   children: [
                     RankingsTileLayer(
                       pins: [
-                        for (final point in points) (point: point, title: ''),
+                        for (final point in points)
+                          (point: point, title: '', titleFrom: double.infinity),
                       ],
                     ),
                     MarkerLayer(

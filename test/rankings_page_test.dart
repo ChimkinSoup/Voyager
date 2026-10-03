@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/media/media_service.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
@@ -2155,6 +2156,46 @@ void main() {
       );
     });
 
+    testWidgets('a child row marks the units that have images', (
+      tester,
+    ) async {
+      late String withImageId;
+      await pumpRankingsPage(
+        tester,
+        seed: (repo) async {
+          final category = makeCategory().copyWith(
+            imagesOnParent: false,
+            imagesOnChild: true,
+          );
+          await repo.upsertCategory(category);
+          final parent = makeParent(categoryId: category.id, title: 'Andor');
+          await repo.upsertParent(parent);
+          final child = makeChild(parentId: parent.id, name: 'ep 1');
+          withImageId = child.id;
+          await repo.upsertChild(child);
+          await repo.upsertChild(
+            makeChild(parentId: parent.id, name: 'ep 2', sortOrder: 1),
+          );
+        },
+        extraOverrides: [
+          rankingDocumentIdsWithImagesProvider.overrideWith(
+            (ref) async => {withImageId},
+          ),
+        ],
+      );
+
+      await tester.tap(rowTitle('Andor'));
+      await tester.pumpAndSettle();
+
+      final marks = inPanel(find.byIcon(PhosphorIconsRegular.image));
+      expect(marks, findsOneWidget);
+      final rowOf = find.ancestor(of: marks, matching: find.byType(Row)).first;
+      expect(
+        find.descendant(of: rowOf, matching: find.text('ep 1')),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('a field note and an unentered tag survive leaving the entry', (
       tester,
     ) async {
@@ -2351,6 +2392,61 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.byType(RangeSlider), findsOneWidget);
+    });
+
+    testWidgets('the wheel steps the thumb on its side of the midpoint', (
+      tester,
+    ) async {
+      late RankingCategory category;
+      final harness = await pumpRankingsPage(
+        tester,
+        seed: (repo) async {
+          category = makeCategory();
+          await repo.upsertCategory(category);
+          await repo.upsertParent(
+            makeParent(categoryId: category.id, title: 'Andor', score: 4),
+          );
+        },
+      );
+      final step = rankingScoreStep(category.parentScorePrecision);
+      await tester.tap(find.text('Filter'));
+      await tester.pumpAndSettle();
+
+      final slider = tester.getRect(find.byType(RangeSlider));
+      Future<void> wheel(double x, {required bool up}) async {
+        final pointer = TestPointer(1, PointerDeviceKind.mouse);
+        await tester.sendEventToBinding(
+          pointer.hover(Offset(x, slider.center.dy)),
+        );
+        await tester.sendEventToBinding(
+          pointer.scroll(Offset(0, up ? -40 : 40)),
+        );
+        await tester.pump();
+      }
+
+      RankingFilters filters() =>
+          harness.container.read(rankingFiltersProvider);
+
+      for (var i = 0; i < 5; i++) {
+        await wheel(slider.left + 2, up: true);
+      }
+      expect(filters().scoreMin, closeTo(5 * step, 1e-9));
+      expect(filters().scoreMax, isNull);
+
+      // The left thumb has moved away from the pointer; the pointer is still
+      // left of the midpoint, so the left thumb keeps answering.
+      await wheel(slider.left + 2, up: true);
+      expect(filters().scoreMin, closeTo(6 * step, 1e-9));
+
+      await wheel(slider.right - 2, up: false);
+      expect(filters().scoreMin, closeTo(6 * step, 1e-9));
+      expect(filters().scoreMax, closeTo(5 - step, 1e-9));
+
+      // Wheeling back to the floor clears the bound rather than storing 0.
+      for (var i = 0; i < 10; i++) {
+        await wheel(slider.left + 2, up: false);
+      }
+      expect(filters().scoreMin, isNull);
     });
   });
 }

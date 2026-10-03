@@ -27,7 +27,6 @@ import 'package:voyager/features/rankings/rankings_icons.dart';
 import 'package:voyager/features/rankings/rankings_location_dialog.dart';
 import 'package:voyager/features/rankings/rankings_locations_section.dart';
 import 'package:voyager/features/rankings/rankings_map_chrome.dart';
-import 'package:voyager/features/rankings/rankings_offline_maps_dialogs.dart';
 import 'package:voyager/features/rankings/rankings_providers.dart';
 import 'package:voyager/features/rankings/rankings_score_input.dart';
 
@@ -149,6 +148,16 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
   /// it has open: a press on that would close it and open it again. The open
   /// entry is listened for rather than built in, so opening one keeps them.
   late List<Marker> _pins = _markers();
+
+  /// When each pin's title shows, by its marker's key — see [planPinTitles] —
+  /// and the entries and title style it was planned for.
+  ({
+    List<RankingMapEntry> entries,
+    TextStyle style,
+    TextScaler scaler,
+    Map<String, double> from,
+  })?
+  _titles;
   late final _selected = ValueNotifier(widget.selectedParentId);
 
   Timer? _viewportSave;
@@ -693,6 +702,49 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
         ),
   ];
 
+  Map<String, double> _titlesFrom(ThemeData theme, TextScaler scaler) {
+    final style = rankingsMapTitleStyle(theme);
+    final titles = _titles;
+    if (titles != null &&
+        identical(titles.entries, widget.entries) &&
+        titles.style == style &&
+        titles.scaler == scaler) {
+      return titles.from;
+    }
+    final keys = <String>[];
+    final pins = <({Offset at, Size title, double key})>[];
+    for (final entry in widget.entries) {
+      final parent = entry.parent;
+      final title = parent.title.isEmpty
+          ? Size.zero
+          : rankingsMapTitleSize(parent.title, style, scaler);
+      for (final location in parent.locations) {
+        keys.add('${parent.id}/${location.id}');
+        pins.add((
+          at: const Epsg3857().latLngToOffset(
+            LatLng(location.latitude, location.longitude),
+            rankingsMapNameZoom.toDouble(),
+          ),
+          title: title,
+          // The best scored keeps its title, the unscored last. Scores are
+          // compared as a share of their category's scale.
+          key: parent.isRanked
+              ? -parent.overallScore! / entry.category.parentScoreMax
+              : double.infinity,
+        ));
+      }
+    }
+    final plan = planPinTitles(pins, zoom: rankingsMapNameZoom);
+    final from = {for (var i = 0; i < keys.length; i++) keys[i]: plan[i]};
+    _titles = (
+      entries: widget.entries,
+      style: style,
+      scaler: scaler,
+      from: from,
+    );
+    return from;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -741,6 +793,7 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
   }
 
   Widget _mapStack(ThemeData theme, int withoutLocation, bool showZoom) {
+    final titlesFrom = _titlesFrom(theme, MediaQuery.textScalerOf(context));
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -764,85 +817,93 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
                     _map.move(_map.camera.center, minZoom);
                   }
                 });
-                return FlutterMap(
-                  mapController: _map,
-                  options: _options(context, minZoom),
-                  children: [
-                    RankingsTileLayer(
-                      key: _tiles,
-                      pins: [
-                        for (final entry in widget.entries)
-                          for (final location in entry.parent.locations)
-                            (
-                              point: LatLng(
-                                location.latitude,
-                                location.longitude,
-                              ),
-                              title: entry.parent.title,
-                            ),
-                      ],
-                    ),
-                    if (_devicePoint case final point?)
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: point,
-                            width: 16,
-                            height: 16,
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: theme.colorScheme.primary,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 2.5,
+                return _TitlesFrom(
+                  from: titlesFrom,
+                  child: FlutterMap(
+                    mapController: _map,
+                    options: _options(context, minZoom),
+                    children: [
+                      RankingsTileLayer(
+                        key: _tiles,
+                        pins: [
+                          for (final entry in widget.entries)
+                            for (final location in entry.parent.locations)
+                              (
+                                point: LatLng(
+                                  location.latitude,
+                                  location.longitude,
                                 ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.3),
-                                    blurRadius: 3,
-                                  ),
-                                ],
+                                title: entry.parent.title,
+                                titleFrom:
+                                    titlesFrom['${entry.parent.id}/${location.id}'] ??
+                                    double.infinity,
                               ),
-                            ),
-                          ),
                         ],
                       ),
-                    MarkerClusterLayerWidget(
-                      // The layer reads the floor, rounded up, once: it is
-                      // built anew when a resize moves that, or a floor
-                      // lowered under it leaves every pin out of a cluster.
-                      key: ValueKey(minZoom.ceil()),
-                      options: MarkerClusterLayerOptions(
-                        markers: _pins,
-                        maxClusterRadius: 44,
-                        size: const Size(38, 38),
-                        padding: _fitPadding,
-                        // A pressed cluster zooms until its pins part. At the
-                        // package's own 17, close pins took a second press.
-                        maxZoom: rankingsMapMaxZoom,
-                        // The package moves the camera and only then brings the
-                        // pins out, half a second each, the first easing to a
-                        // crawl and the second starting from one: a visible wait
-                        // between the two.
-                        animationsOptions: const AnimationsOptions(
-                          fitBound: Duration(milliseconds: 300),
-                          fitBoundCurves: Curves.easeInOut,
-                          zoom: Duration(milliseconds: 200),
-                          spiderfy: Duration(milliseconds: 200),
-                          fadeInCurve: Curves.easeOut,
-                          clusterExpandCurve: Curves.easeOut,
-                          spiderifyCurve: Curves.easeOut,
+                      if (_devicePoint case final point?)
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: point,
+                              width: 16,
+                              height: 16,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: theme.colorScheme.primary,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2.5,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.3,
+                                      ),
+                                      blurRadius: 3,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        showPolygon: false,
-                        // The pins take their own taps, right-clicks and long-presses.
-                        markerChildBehavior: true,
-                        builder: (context, markers) =>
-                            _ClusterBubble(count: markers.length),
+                      MarkerClusterLayerWidget(
+                        // The layer reads the floor, rounded up, once: it is
+                        // built anew when a resize moves that, or a floor
+                        // lowered under it leaves every pin out of a cluster.
+                        key: ValueKey(minZoom.ceil()),
+                        options: MarkerClusterLayerOptions(
+                          markers: _pins,
+                          maxClusterRadius: 44,
+                          size: const Size(38, 38),
+                          padding: _fitPadding,
+                          // A pressed cluster zooms until its pins part. At the
+                          // package's own 17, close pins took a second press.
+                          maxZoom: rankingsMapMaxZoom,
+                          // The package moves the camera and only then brings the
+                          // pins out, half a second each, the first easing to a
+                          // crawl and the second starting from one: a visible wait
+                          // between the two.
+                          animationsOptions: const AnimationsOptions(
+                            fitBound: Duration(milliseconds: 300),
+                            fitBoundCurves: Curves.easeInOut,
+                            zoom: Duration(milliseconds: 200),
+                            spiderfy: Duration(milliseconds: 200),
+                            fadeInCurve: Curves.easeOut,
+                            clusterExpandCurve: Curves.easeOut,
+                            spiderifyCurve: Curves.easeOut,
+                          ),
+                          showPolygon: false,
+                          // The pins take their own taps, right-clicks and long-presses.
+                          markerChildBehavior: true,
+                          builder: (context, markers) =>
+                              _ClusterBubble(count: markers.length),
+                        ),
                       ),
-                    ),
-                    if (showZoom) const _ZoomReadout(),
-                  ],
+                      if (showZoom) const _ZoomReadout(),
+                    ],
+                  ),
                 );
               },
             ),
@@ -891,37 +952,28 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _MapButton(
+                RankingsMapButton(
                   tooltip: 'Zoom in',
                   icon: PhosphorIconsRegular.plus,
                   onPressed: () => _zoomBy(1),
                 ),
                 const SizedBox(height: 4),
-                _MapButton(
+                RankingsMapButton(
                   tooltip: 'Zoom out',
                   icon: PhosphorIconsRegular.minus,
                   onPressed: () => _zoomBy(-1),
                 ),
                 const SizedBox(height: 4),
-                _MapButton(
+                RankingsMapButton(
                   tooltip: 'Fit all pins',
                   icon: PhosphorIconsRegular.cornersOut,
                   onPressed: _fit,
                 ),
                 const SizedBox(height: 4),
-                _MapButton(
+                RankingsMapButton(
                   tooltip: 'Show my location',
                   icon: PhosphorIconsRegular.crosshair,
                   onPressed: () => _locate(ask: true),
-                ),
-                const SizedBox(height: 4),
-                _MapButton(
-                  tooltip: 'Download this area for offline use',
-                  icon: PhosphorIconsRegular.downloadSimple,
-                  onPressed: () => showRankingOfflineDownloadDialog(
-                    context,
-                    _map.camera.visibleBounds,
-                  ),
                 ),
               ],
             ),
@@ -954,10 +1006,10 @@ class _Pin extends StatelessWidget {
     final parent = entry.parent;
     final title = parent.title.isEmpty ? 'Untitled' : parent.title;
     final pin = _pin(context, title);
-    if (parent.title.isEmpty ||
-        MapCamera.of(context).zoom < rankingsMapNameZoom) {
-      return pin;
-    }
+    final titleFrom =
+        _TitlesFrom.of(context)['${parent.id}/${location.id}'] ??
+        double.infinity;
+    if (MapCamera.of(context).zoom < titleFrom) return pin;
     // Under the pin and outside its box, so the title takes no presses and
     // the pin stays centred on its point.
     return Stack(
@@ -1009,6 +1061,19 @@ class _Pin extends StatelessWidget {
       ),
     );
   }
+}
+
+/// When each pin's title shows, by its marker's key — see [planPinTitles].
+class _TitlesFrom extends InheritedWidget {
+  const _TitlesFrom({required this.from, required super.child});
+
+  final Map<String, double> from;
+
+  static Map<String, double> of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_TitlesFrom>()!.from;
+
+  @override
+  bool updateShouldNotify(_TitlesFrom oldWidget) => from != oldWidget.from;
 }
 
 /// Pins too close to tell apart at this zoom, as a count. Neutral rather than
@@ -1086,39 +1151,6 @@ class _ZoomReadout extends StatelessWidget {
           child: Text(
             'Zoom ${MapCamera.of(context).zoom.toStringAsFixed(2)}',
             style: theme.textTheme.labelSmall,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MapButton extends StatelessWidget {
-  const _MapButton({
-    required this.tooltip,
-    required this.icon,
-    required this.onPressed,
-  });
-
-  final String tooltip;
-  final IconData icon;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: theme.colorScheme.surface.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(8),
-        elevation: 1,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.all(7),
-            child: Icon(icon, size: 14),
           ),
         ),
       ),

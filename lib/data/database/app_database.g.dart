@@ -18990,6 +18990,15 @@ class $SubscriptionsTableTable extends SubscriptionsTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _storeMeta = const VerificationMeta('store');
+  @override
+  late final GeneratedColumn<String> store = GeneratedColumn<String>(
+    'store',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -19045,6 +19054,7 @@ class $SubscriptionsTableTable extends SubscriptionsTable
     paidThroughDate,
     colorValue,
     note,
+    store,
     createdAt,
     updatedAt,
     version,
@@ -19126,6 +19136,12 @@ class $SubscriptionsTableTable extends SubscriptionsTable
         note.isAcceptableOrUnknown(data['note']!, _noteMeta),
       );
     }
+    if (data.containsKey('store')) {
+      context.handle(
+        _storeMeta,
+        store.isAcceptableOrUnknown(data['store']!, _storeMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -19195,6 +19211,10 @@ class $SubscriptionsTableTable extends SubscriptionsTable
         DriftSqlType.string,
         data['${effectivePrefix}note'],
       ),
+      store: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -19230,6 +19250,7 @@ class SubscriptionsTableData extends DataClass
   final DateTime? paidThroughDate;
   final int colorValue;
   final String? note;
+  final String? store;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -19243,6 +19264,7 @@ class SubscriptionsTableData extends DataClass
     this.paidThroughDate,
     required this.colorValue,
     this.note,
+    this.store,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -19262,6 +19284,9 @@ class SubscriptionsTableData extends DataClass
     map['color_value'] = Variable<int>(colorValue);
     if (!nullToAbsent || note != null) {
       map['note'] = Variable<String>(note);
+    }
+    if (!nullToAbsent || store != null) {
+      map['store'] = Variable<String>(store);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -19284,6 +19309,9 @@ class SubscriptionsTableData extends DataClass
           : Value(paidThroughDate),
       colorValue: Value(colorValue),
       note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      store: store == null && nullToAbsent
+          ? const Value.absent()
+          : Value(store),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -19307,6 +19335,7 @@ class SubscriptionsTableData extends DataClass
       paidThroughDate: serializer.fromJson<DateTime?>(json['paidThroughDate']),
       colorValue: serializer.fromJson<int>(json['colorValue']),
       note: serializer.fromJson<String?>(json['note']),
+      store: serializer.fromJson<String?>(json['store']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -19325,6 +19354,7 @@ class SubscriptionsTableData extends DataClass
       'paidThroughDate': serializer.toJson<DateTime?>(paidThroughDate),
       'colorValue': serializer.toJson<int>(colorValue),
       'note': serializer.toJson<String?>(note),
+      'store': serializer.toJson<String?>(store),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -19341,6 +19371,7 @@ class SubscriptionsTableData extends DataClass
     Value<DateTime?> paidThroughDate = const Value.absent(),
     int? colorValue,
     Value<String?> note = const Value.absent(),
+    Value<String?> store = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -19356,6 +19387,7 @@ class SubscriptionsTableData extends DataClass
         : this.paidThroughDate,
     colorValue: colorValue ?? this.colorValue,
     note: note.present ? note.value : this.note,
+    store: store.present ? store.value : this.store,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -19379,6 +19411,7 @@ class SubscriptionsTableData extends DataClass
           ? data.colorValue.value
           : this.colorValue,
       note: data.note.present ? data.note.value : this.note,
+      store: data.store.present ? data.store.value : this.store,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -19397,6 +19430,7 @@ class SubscriptionsTableData extends DataClass
           ..write('paidThroughDate: $paidThroughDate, ')
           ..write('colorValue: $colorValue, ')
           ..write('note: $note, ')
+          ..write('store: $store, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -19415,6 +19449,7 @@ class SubscriptionsTableData extends DataClass
     paidThroughDate,
     colorValue,
     note,
+    store,
     createdAt,
     updatedAt,
     version,
@@ -19432,6 +19467,7 @@ class SubscriptionsTableData extends DataClass
           other.paidThroughDate == this.paidThroughDate &&
           other.colorValue == this.colorValue &&
           other.note == this.note &&
+          other.store == this.store &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -19448,6 +19484,7 @@ class SubscriptionsTableCompanion
   final Value<DateTime?> paidThroughDate;
   final Value<int> colorValue;
   final Value<String?> note;
+  final Value<String?> store;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -19462,6 +19499,7 @@ class SubscriptionsTableCompanion
     this.paidThroughDate = const Value.absent(),
     this.colorValue = const Value.absent(),
     this.note = const Value.absent(),
+    this.store = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -19477,6 +19515,7 @@ class SubscriptionsTableCompanion
     this.paidThroughDate = const Value.absent(),
     this.colorValue = const Value.absent(),
     this.note = const Value.absent(),
+    this.store = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -19498,6 +19537,7 @@ class SubscriptionsTableCompanion
     Expression<DateTime>? paidThroughDate,
     Expression<int>? colorValue,
     Expression<String>? note,
+    Expression<String>? store,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -19513,6 +19553,7 @@ class SubscriptionsTableCompanion
       if (paidThroughDate != null) 'paid_through_date': paidThroughDate,
       if (colorValue != null) 'color_value': colorValue,
       if (note != null) 'note': note,
+      if (store != null) 'store': store,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -19530,6 +19571,7 @@ class SubscriptionsTableCompanion
     Value<DateTime?>? paidThroughDate,
     Value<int>? colorValue,
     Value<String?>? note,
+    Value<String?>? store,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -19545,6 +19587,7 @@ class SubscriptionsTableCompanion
       paidThroughDate: paidThroughDate ?? this.paidThroughDate,
       colorValue: colorValue ?? this.colorValue,
       note: note ?? this.note,
+      store: store ?? this.store,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -19580,6 +19623,9 @@ class SubscriptionsTableCompanion
     if (note.present) {
       map['note'] = Variable<String>(note.value);
     }
+    if (store.present) {
+      map['store'] = Variable<String>(store.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -19609,6 +19655,7 @@ class SubscriptionsTableCompanion
           ..write('paidThroughDate: $paidThroughDate, ')
           ..write('colorValue: $colorValue, ')
           ..write('note: $note, ')
+          ..write('store: $store, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -57955,6 +58002,7 @@ typedef $$SubscriptionsTableTableCreateCompanionBuilder =
       Value<DateTime?> paidThroughDate,
       Value<int> colorValue,
       Value<String?> note,
+      Value<String?> store,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -57971,6 +58019,7 @@ typedef $$SubscriptionsTableTableUpdateCompanionBuilder =
       Value<DateTime?> paidThroughDate,
       Value<int> colorValue,
       Value<String?> note,
+      Value<String?> store,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -58024,6 +58073,11 @@ class $$SubscriptionsTableTableFilterComposer
 
   ColumnFilters<String> get note => $composableBuilder(
     column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get store => $composableBuilder(
+    column: $table.store,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -58097,6 +58151,11 @@ class $$SubscriptionsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get store => $composableBuilder(
+    column: $table.store,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -58159,6 +58218,9 @@ class $$SubscriptionsTableTableAnnotationComposer
   GeneratedColumn<String> get note =>
       $composableBuilder(column: $table.note, builder: (column) => column);
 
+  GeneratedColumn<String> get store =>
+      $composableBuilder(column: $table.store, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -58220,6 +58282,7 @@ class $$SubscriptionsTableTableTableManager
                 Value<DateTime?> paidThroughDate = const Value.absent(),
                 Value<int> colorValue = const Value.absent(),
                 Value<String?> note = const Value.absent(),
+                Value<String?> store = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -58234,6 +58297,7 @@ class $$SubscriptionsTableTableTableManager
                 paidThroughDate: paidThroughDate,
                 colorValue: colorValue,
                 note: note,
+                store: store,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -58250,6 +58314,7 @@ class $$SubscriptionsTableTableTableManager
                 Value<DateTime?> paidThroughDate = const Value.absent(),
                 Value<int> colorValue = const Value.absent(),
                 Value<String?> note = const Value.absent(),
+                Value<String?> store = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -58264,6 +58329,7 @@ class $$SubscriptionsTableTableTableManager
                 paidThroughDate: paidThroughDate,
                 colorValue: colorValue,
                 note: note,
+                store: store,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

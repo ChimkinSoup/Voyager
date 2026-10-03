@@ -1404,6 +1404,7 @@ class _FeedRowState extends ConsumerState<_FeedRow>
             paidThroughDate: bill.paidThroughDate,
             colorValue: bill.colorValue,
             note: bill.note,
+            store: bill.store,
           ),
         );
         container.invalidate(subscriptionsProvider);
