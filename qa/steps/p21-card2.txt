@@ -1,0 +1,20 @@
+activate
+click 420 690
+wait 900
+shot p21-029-tile-flipped
+click 2437 429
+wait 900
+type Bad $\frac{1}{$ latex and $x^$
+click 1292 880
+type Back $\undefinedcmd{x}$ and $$ empty and $\sqrt{2$
+wait 500
+key ctrl+enter
+wait 1200
+shot p21-030-bad-latex-tiles
+click 2437 429
+wait 900
+type esc test unsaved front
+wait 300
+key esc
+wait 900
+shot p21-031-after-esc

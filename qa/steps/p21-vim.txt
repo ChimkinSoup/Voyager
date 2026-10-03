@@ -1,0 +1,14 @@
+activate
+click 2437 540
+wait 900
+type vim front text
+wait 300
+key esc
+wait 500
+shot p21-121-vim-esc1
+key x
+wait 400
+shot p21-122-vim-x
+key esc
+wait 700
+shot p21-123-vim-esc2

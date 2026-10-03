@@ -226,6 +226,7 @@ Entry format:
 - Notes (2026-09-30, Phase 7): the multi-line journal body keeps them too. Pasting 200 CRLF-terminated lines (13,090 chars) into the body saved 200 `\r` characters (`instr(body, char(13))` = 63, the first line end). It renders normally (`qa/shots/p7-86-long.png`); caret behaviour at those line ends wasn't checked.
 - Notes (2026-10-01, Phase 16): the Bucket List add field too. Pasting "line1`\r\n`line2" + Enter saved the title `'line1\rline2'` (11 chars), shown as "line1line2" (`qa/shots/p16-015-crlf-rapid.png`).
 - Notes (2026-09-30, Phase 9): the To-Do composer too (Vim off). Pasting "CRLF line1`\r\n`line2" + Enter created a task titled `'CRLF line1\rline2'` (16 chars); the row shows "CRLF line1line2", words run together (`qa/shots/p9-70-failtitles.png`). The `\n` was dropped, the `\r` kept.
+- Notes (2026-10-02, Phase 19A): the Rankings entry Title too. Pasting "line1`\r\n`line2" saved `'line1\rline2'` (11 chars) in `ranking_parents_table.title`.
 
 ### BUG-018 [Phase 3] Vim `yy` moves the caret to the start of the line; in a one-line field `p` then pastes after the first character
 - Severity: Minor
@@ -1197,6 +1198,7 @@ Entry format:
 - Actual: the menu stays open after Esc, twice (`qa/shots/p15-85-menu-esc.png`, `p15-87-menu-esc2.png`), and after Down + Enter (`p15-88-menu-keys.png`). The click outside closed the menu and opened "Edit subscription" for the bill under the pointer in the same click (`p15-86-menu-clickaway.png`). In an earlier run a click meant for the row landed on the still-open menu's "Delete" and removed a $2,000.00 contribution (how BUG-132 was found).
 - Notes: `ContextMenuRegion` is the app-wide right-click menu (asset rows, bills, budgets, ledger rows), so this likely holds everywhere; only the Finance ledger and the asset rows were tried here. Part of the BUG-009 family (nothing on a page is reachable by keyboard), but Esc not closing a popup is new.
 - Notes (2026-10-01, Phase 17): confirmed on the LeetCode dashboard rows and Review Deck tiles (Open details… / Edit… / Open on LeetCode / Copy code / Reset progress / Delete): Esc, Down and Enter do nothing while the menu is open (`qa/shots/p17-026-menu-esc.png`, `p17-027-menu-keys.png`). Here a stray dismissing click can land on "Reset progress" (BUG-146) or flip the tile under it.
+- Notes (2026-10-02, Phase 19A): confirmed on Rankings entry rows (Pin / Status / Clear score / Open gallery / Delete) and episode rows: Esc leaves the menu open (`qa/shots/p19-066-menu-esc.png`).
 
 ### BUG-134 [Phase 15] Deleting a contribution room takes one click, has no confirmation or Undo, and the room isn't in Trash, so it can't be brought back
 - Severity: Major
@@ -1302,6 +1304,7 @@ Entry format:
 - Expected: a confirmation or a toast with Undo, as Delete (the item directly below it in the same menu) has both.
 - Actual: the menu closes and nothing else is shown (`qa/shots/p17-036-reset.png`). SQLite: `interval` 0, `ease` 2.5, `review_count` 0, `due_at` = now, `version` +1. The interval and ease it had can't be brought back.
 - Notes: `leetCodeProblemMenuItems` calls `resetLeetCodeProgress` directly. The item is disabled for a never-reviewed problem (correct). Same pattern as BUG-120 / BUG-127 / BUG-135 (one-click destructive actions).
+- Notes (P22, 2026-10-02): the Study card menu's Reset progress is the same, on the deck grid and mid-session. In a session (debug deck, "Fundamental limit of calculus [#12]", interval 0.5 / ease 2.3 / `review_count` 2) one click wrote interval 0 / ease 2.5 / count 0 / due now, sent the card to the back of the round, and also cleared the session's whole Previous-card history: the undo and redo arrows went grey, so the grades made earlier in the round can no longer be taken back either (`qa/shots/p22-087-reset-menu.png`, `p22-088-after-reset.png`; by design per the `_clearHistory` comment, but nothing tells the user).
 
 ### BUG-147 [Phase 17] LeetCode day-based figures don't roll over at midnight: "Last 30 days" and the tiles' days-until-due stay on yesterday until something rebuilds them
 - Severity: Minor
@@ -1367,4 +1370,419 @@ Entry format:
 - Actual: the pill reads "#(1) مرحبا" (`qa/shots/p17-083-dash-long.png`, both themes). The feed row's chip and the tile show the tag correctly.
 - Notes: the pill is one string `#tag (n)`; the bidi algorithm places the neutral "(1)" inside the right-to-left run. CJK, emoji and accented tags are fine.
 
-<!-- Last ID: BUG-154. -->
+### BUG-155 [Phase 18] Resuming a LeetCode Study round under a deck filter drops the rest of the round: back on the full deck it resumes with only what the filter left and ends "Session complete" with problems still due
+- Severity: Minor
+- Found: 2026-10-02, Phase 18 (qa-019, build `a991189`)
+- Steps to reproduce: Review Deck unfiltered ("41 problems · 20 due") → Study → leave with ✕ (checkpoint: 20 remaining). Type `Valid` in the deck search ("3 problems of 41 · 3 due") → Study: the toast says "Resuming your previous session · 3 left" (correct per SESSION_RESUME_HLD §9). Grade one (Space, G), leave with ✕. Clear the search ("41 problems · 19 due") → Study. Grade the remaining cards.
+- Expected: back on the full deck the round still holds every due problem it had (the 17 the filter hid plus the 2 left), or at least the problems still due that the round never reached come back as newcomers.
+- Actual: the toast says "Resuming your previous session · 2 left" while the deck header says 19 due (`qa/shots/p18-021-unfiltered-resume.png`, `p18-020-unfiltered-deck.png`). After two grades the page shows "Session complete" (`p18-022-complete.png`), and the deck still reads "41 problems · 17 due" (`p18-023-deck-after-complete.png`). Opening Study again starts a fresh round of 17 with no toast (`p18-024-fresh-study.png`). The checkpoint after the filtered visit held `remainingQueue` = 2 ids and `sourceIds` = 20 ids.
+- Notes: `_hydrate` (`leetcode_session_page.dart`) keeps only the remaining ids inside the current filter, then writes the round back; the ids the filter hid are gone from `remainingQueue` but stay in `sourceIds`, so a later unfiltered resume treats them as already known and never re-adds them as newcomers. Nothing is lost on disk (they stay due and a new round picks them up), but the completion screen tells the user they're done while 17 problems are due. Cram is likely the same (`_hydrate` there filters buckets by the pool too; not checked).
+
+### BUG-156 [Phase 18] Scratch pad: once `C` puts the caret in the pad, no key gives the keyboard back to the card, so flipping and grading need the mouse
+- Severity: Minor
+- Found: 2026-10-02, Phase 18 (qa-019, Vim off, "Enable scratch code" on)
+- Steps to reproduce: Review Deck → Study. Press `C` (the pad focuses and expands), type something, click the margin to collapse the editor. Press Space. Press Esc, then Space. Press Tab, Shift+Tab. Read `FocusManager.instance.primaryFocus` after each.
+- Expected: a key that leaves the pad (Esc with Vim off, as in the other fields of the app; with Vim on, Esc in Normal mode or a documented chord), after which Space flips and the grading keys grade again, so a keyboard-only session can go card → `C` → code → back to the card. TEST_PLAN P18 lists "C focuses it; Esc leaves it".
+- Actual: after the collapse the focus is still `leetCodeScratchPad`, and Space types spaces into the code instead of flipping (`qa/shots/p18-033-space-after-collapse.png`). Esc leaves focus in the pad (Space again adds a space, `p18-034-esc-then-space.png`); Tab indents the line by four spaces and Shift+Tab dedents it, focus unchanged. The checkpoint shows each of these as edits (`…space test` → `…space test  ` → line dedented with six trailing spaces). Only a mouse click on the card takes focus away (`p18-035-click-card.png`, focus back on the route's scope).
+- Notes: by design the expanded editor ignores Esc (LEETCODE_SCRATCH_PAD.md: "not Escape (reserved for Vim)"), and `StudyKeyboardShortcuts._enabled` bails while a text field has focus, which is what keeps the grading keys out of the editor; nothing defines the way back. The session wraps its subtree in `FocusTraversalGroup(descendantsAreTraversable: false)`, and the code editor claims Tab for indentation. Part of the BUG-009 keyboard family; Scatter was on.
+
+### BUG-157 [Phase 18] Clicking the empty part of the scratch editor drops its focus, and then the keys typed for the code flip, grade and undo cards, including behind the fullscreen editor
+- Severity: Major
+- Found: 2026-10-02, Phase 18 (qa-019, Vim off, scratch on)
+- Steps to reproduce: (a) Collapsed pad: Study → on a card's front, click inside the pad below its last line of code (e.g. the middle of the empty editor area) and type `# second pad`. (b) Fullscreen editor: press `C` (or click the pad's "Expand" strip), then click in the editor below the code (or anywhere in its empty area) and press `U`; then Space, `G`. Read `primaryFocus` after the click and the review log after the keys.
+- Expected: a click anywhere in the editor puts the caret there (or at the end of the text), and while the fullscreen editor is up nothing reaches the session (LEETCODE_SCRATCH_PAD.md: "While expanded: disable `StudyKeyboardShortcuts` grading/cram handlers"; "Grading and cram swipe explicitly blocked until collapsed").
+- Actual: the click leaves `primaryFocus` on the route's `FocusScopeNode`, not the editor (a click on a line of code does focus it). (a) Typing `# second pad`: the space flipped the card, `e` (the Easy key) graded "Seed problem 32" Easy, `c` opened the *next* problem's pad fullscreen and "ond pad" went into that pad (`qa/shots/p18-037-undo-pad.png`: "passond pad" in Seed problem 26). (b) With the fullscreen editor showing Seed problem 26, `U` undid the grade of Seed problem 32 behind it (problem back to interval 3, `version` 4, its review-log row tombstoned), and Space + `G` then graded Seed problem 32 "Good" (new log row 06:08:30) while the screen still showed only problem 26's editor (`p18-041-undo-behind-overlay.png`, `p18-042-grade-behind-overlay.png`). Nothing on screen shows that a grade happened.
+- Notes: `StudyKeyboardShortcuts` is passed `suppressed:` only for the cheat sheet; `scratchHasSessionInput` (which covers the expanded editor) gates the grading *buttons* and the cram swipe but not the key handler, and `_enabled()`'s `ModalRoute.isCurrent` / `isTextInputFocused` tests both pass once the editor has lost focus, because the overlay is on the root navigator above the shell branch (the case the `suppressed` doc comment describes). SRS writes are real (interval, ease, due date, review log, synced); Undo can repair them only if the user notices. Opening via the "Expand" strip focuses the editor, and typed keys go into the code as they should.
+- Notes (same day, Cram): with Cram's editor open (`C`) and its empty area clicked, → is correctly blocked (`_decide` checks `scratchHasSessionInput`), but `U` stepped back the last decision behind the overlay (checkpoint `decided` 2 → 1, `undoneCram` 0 → 1; `qa/shots/p18-086-cram-overlay-keys.png` still shows only the editor). Undo/redo don't check the flag. With the cheat sheet open instead, →, Space and `U` were all ignored (correct).
+
+### BUG-158 [Phase 18] Cheat sheet "New tab" dialog: Enter on an empty name does nothing visible and drops focus, and a click on a highlighting chip drops it too, so the name typed next goes nowhere and Enter can't save
+- Severity: Minor
+- Found: 2026-10-02, Phase 18 (qa-019)
+- Steps to reproduce: LeetCode → Cheat sheet → Edit → "+ Tab" (the Name field has focus). Press Enter. Type `Java`. Then click the Name field, type `Java`, click the "python" chip, press Enter.
+- Expected: an empty name shows a message and keeps the caret in Name; after picking a chip, Enter (or Ctrl+Enter) saves the tab, as it would from the field.
+- Actual: after the empty Enter there is no message and the field loses focus (its label drops back into the box, `qa/shots/p18-055-empty-tab.png`); the `Java` typed next goes nowhere and the java chip click selects only the chip (`p18-056-java-enter.png`). After a chip click `primaryFocus` is the dialog's `FocusScopeNode`, and Enter does nothing (`p18-057-after-chip-enter.png`); only the Save button saves (`leet_code_cheat_tabs_table`: one row "Java", `python`).
+- Notes: same family as BUG-026 / BUG-050 / BUG-117 / BUG-136 (focus lost after a rejected Enter or a chip click). Scatter was on.
+
+### BUG-159 [Phase 18] Grading keys can be bound to the same letter: Settings accepts Easy = F while Fail is F, and then F always grades Fail
+- Severity: Minor
+- Found: 2026-10-02, Phase 18 (qa-019)
+- Steps to reproduce: Settings → Pages → Study → "Grade: Easy" → press `F` (Fail is already `F`). Then LeetCode → Review Deck → Study → Space → `F`.
+- Expected: the picker refuses a letter another grade already uses (or swaps the two, or warns), so each grade keeps a key.
+- Actual: the dialog closes and the list reads Fail F, Hard H, Good C, Easy F (`qa/shots/p18-092-dup-key.png`; `settings_table` `F|H|C|F`). In a session `F` on the back graded Fail (review log `p17-s-02 fail` 06:28:20); Easy has no working key. Nothing on the grading row shows the bound keys, so the clash isn't visible anywhere. The setting syncs, so it reaches every device.
+- Notes: the picker (`_pickCalendarKey`, Settings → Pages) only takes a letter and saves it; `StudyKeyboardShortcuts._handleGradeKey` checks Fail, Hard, Good, Easy in that order, so the earlier grade wins. Applies to the Study page's sessions too (same keys). Binding a grade to `C` works as LEETCODE_SCRATCH_PAD.md documents: on the front `C` opens the pad, on the back it grades.
+
+### BUG-160 [Phase 18] Code editor line numbers break past line 999: four-digit numbers wrap onto two rows and the gutter drifts out of step with the code
+- Severity: Cosmetic
+- Found: 2026-10-02, Phase 18 (qa-019)
+- Steps to reproduce: Cram (scratch on) → `C` → in the fullscreen editor Ctrl+A, paste 2,000 lines (`line_N = N  # tab-indented`, tab-indented) → Ctrl+End.
+- Expected: the gutter reads 1970, 1971, … beside lines 1970, 1971, … (the gutter widens for four digits).
+- Actual: beside `line_1970` … `line_2000` the gutter reads 148, 5, 148, 6, 148, 7, …, 150, 0 (`qa/shots/p18-103-2000-end.png`, zoom in `p18-102-2000-lines.png`): each four-digit number is split over two rows ("1485" → "148" / "5"), so from line 1000 on every number is drawn on two rows and the column runs ~485 lines behind the code. The code itself is intact (checkpoint: 71,785 characters, 1,999 newlines) and editing stayed responsive (paste and scroll in under 3 s, debug build).
+- Notes: the gutter is part of `LeetCodeCodeSurface`, which the Track form's code box and the detail view share, so a saved solution over 999 lines would show the same; not checked there. The pasted tab characters arrived as four spaces each (0 tabs in the stored pad), presumably by design for a code editor.
+
+### BUG-161 [Phase 19A] Rankings "New category" dialog: Enter on an empty name drops focus with no message, and after a colour or icon click neither Enter nor Ctrl+Enter creates the category
+- Severity: Minor
+- Found: 2026-10-02, Phase 19A (qa-020, build `a991189`)
+- Steps to reproduce: Rankings (no categories) → Create a category (the Name field has focus). Press Enter. Type `Shows`. Then click the Name field, type `Shows`, click a colour swatch (or an icon), press Enter, then Ctrl+Enter.
+- Expected: an empty name shows a message and keeps the caret in Name; after picking a colour or icon, Enter or Ctrl+Enter creates the category (the code comment says the dialog's Enter scope is there for exactly the "no field focused" case).
+- Actual: after the empty Enter there is no message and the field loses focus (label back inside the box, `qa/shots/p19-005-picked.png`); `Shows` typed next goes nowhere. After a swatch click `primaryFocus` is the dialog route's `FocusScopeNode`, and Enter and Ctrl+Enter both do nothing (`p19-006-created.png`, `p19-007-ctrlenter.png`: the dialog is still open with "Shows" in the field). Only a click on Create saves it.
+- Notes: `_submit` returns silently on an empty name; `EnterToSubmitScope` / `CtrlEnterToSubmitScope` only hear keys from a focused descendant, and the swatch click leaves focus on the route scope above them. Same family as BUG-050 / BUG-117 / BUG-158. The "New entry" and "New field" prompts differ: an empty Enter there closes the dialog. Scatter was on.
+
+### BUG-162 [Phase 19A] "Average from episodes" ignores the two scales: episodes scored out of 5 average straight onto an entry scored out of 10 (4.5 and 3 give 3.8 / 10)
+- Severity: Major
+- Found: 2026-10-02, Phase 19A (qa-020)
+- Steps to reproduce: category "Shows" with Child units on, Entry scale **out of 10** (step Tenths), Episode scale **out of 5** (the default). Entry "Breaking Bad" scored 8; episodes "Pilot" 4.5 and "Ep 2" 3, "Ep 3" unscored. In the panel click the calculator beside "Episodes" (tooltip "Average from 2 scored episodes").
+- Expected: the mean keeps its position on the scale: 3.75 of 5 → 7.5 of 10 (the Rescale action in the same sheet does convert between scales), or the button is unavailable / warns when the scales differ.
+- Actual: the entry's overall score becomes **3.8** out of 10 (`ranking_parents_table.overall_score` 8.0 → 3.8; `qa/shots/p19-042-calc.png`: hero average 3.8, four stars of ten). Two well-liked episodes turn the show into a poor one, and the previous 8 is overwritten with no confirmation and no Undo.
+- Notes: `rankingAverageFromChildren` takes the plain mean of `child.overallScore` and rounds it with the parent's `scoreMax` / precision; `childScoreMax` is never read (`ranking_queries.dart`, called from `rankings_edit_panel.dart` and `RankingsActions.averageFromChildren`). With equal scales the result is right. A new category defaults to 5 / 5, so this needs one of the two scales changed, but the two are separate settings on purpose. Excluding the unscored episode is correct.
+
+### BUG-163 [Phase 19A] Scrolling the Rankings list with the pointer over the score column changes scores: the wheel stops scrolling and nudges whichever entry's number lands under the pointer, with no toast and no Undo
+- Severity: Major
+- Found: 2026-10-02, Phase 19A (qa-020; category on a 10-point scale, step Tenths, 20 entries)
+- Steps to reproduce: Rankings → a category with more entries than fit. Rest the pointer in the column of score numbers at the right of the rows, between two rows or on a queued row's status chip (window 2600×1640: x ≈ 2222, y ≈ 830). Turn the mouse wheel down ten notches to scroll the list.
+- Expected: the list scrolls; scores change only on a deliberate action.
+- Actual: the list scrolled for four notches, "Seed show 08" then arrived under the pointer and the remaining six notches lowered its score from 5 to 4.4 (`ranking_parents_table.overall_score` 5.0 → 4.4, `version` +6, synced; `qa/shots/p19-064-scroll-over-numbers.png`). Nothing is shown: no popover, no toast, no Undo, and the row re-sorts to its new place. With the pointer directly on a number the list doesn't scroll at all: three notches on "Seed show 02" (10) made it 9.9 and moved it from #1 to #3 (`p19-063-wheel-scroll.png`). On an unscored row one notch gives it a score (midpoint ± one step: "Seed show 16" `-` → 5.1) and moves it from the Queue into Ranked (`p19-062-wheel.png`).
+- Notes: wheel-to-nudge with an immediate commit is what RANKINGS_SCORE_INPUT_HLD.md §6.2 specifies; the problem is that the number sits inside a scrolling list, takes the wheel away from it, and commits without any trace. The same control is on template fields and episode rows in the (scrolling) editor panel. In Whole or Half step a single notch is a full 1 or 0.5. Scatter was on.
+
+### BUG-164 [Phase 19A] Adding an image to a queued entry leaves it Queued, although the HLD lists "add image" among the edits that start an entry
+- Severity: Minor
+- Found: 2026-10-02, Phase 19A (qa-020)
+- Steps to reproduce: a queued entry ("Seed show 12"). Open its panel, click Notes (type nothing) and paste an image (Ctrl+V with a PNG on the clipboard), or use "Add images".
+- Expected: RANKINGS.md §3.4: "any edit except title and tags (add child, edit notes, add image, change custom field, etc.) promotes queued → inProgress".
+- Actual: the image is attached (thumbnail in the panel, cover on the row, one live `media_references_table` row) and the entry stays `queued` (`qa/shots/p19-144-queued-image.png`). The same happened with the file picker on a ranked entry (no status to change there). Typing in Notes, adding an episode, scoring a field or changing the created date each did promote it (`queued` → `inProgress` in SQLite), and a tag-only edit correctly did not.
+- Notes: per RANKINGS_PARENT_TAGS_HLD.md, `_promotesToInProgress` looks at `notes`, `fieldValues` and `createdAt` on the parent row; a gallery attach writes only a media reference and never saves the parent. Either the HLD or the app is out of date. Scatter was on.
+
+### BUG-165 [Phase 19A] The floating "Add" button sits on top of the open editor panel: it covers the episode scores, the "Add episode" field and field star strips at every window size
+- Severity: Cosmetic
+- Found: 2026-10-02, Phase 19A (qa-020)
+- Steps to reproduce: Rankings → a category with child units → open any entry (the panel opens on the right) → scroll the panel.
+- Expected: the page's Add button doesn't cover the panel's own controls (it moves left of the panel, or the panel has bottom padding).
+- Actual: the button stays in the bottom-right corner over the panel. It hides the score of whichever episode row is behind it (`qa/shots/p19-170-cold-panel.png`: "Seed ep 09" shows only the tops of its digits), the right end of the "Add Episode" field (`p19-155-max-list.png`), and a template field's stars (`p19-154-odd-list.png` at 2000×1100, `p19-152-min-panel.png` at 1440×1040). The covered score can't be clicked there; the panel has to be scrolled to move the row out from under it.
+- Notes: at the minimum window size the panel also lies over the right half of the list, hiding every row's score and status chip while it is open (`p19-152-min-panel.png`). Light theme: the button is translucent there too (same as BUG-153). Scatter was on.
+
+### BUG-166 [Phase 19A] Rankings scores can't be set from the keyboard: Tab skips every score number, and the panel has no key to close it
+- Severity: Minor
+- Found: 2026-10-02, Phase 19A (qa-020, Vim off)
+- Steps to reproduce: open an entry's panel, click Title, press Tab repeatedly (focused widget read over the VM service after each key). Then press Esc.
+- Expected: the overall score, each field's score and each episode's score are Tab stops that Enter or Space opens (the popover itself is fully keyboard-driven: typing, Enter, Esc); Esc with nothing to cancel closes the panel.
+- Actual: Tab goes close X → Title → each tag chip → Add a tag → Queued → In progress → field Notes → field Notes → Notes → image strip → episode sort → Add episode. The overall score number, the field score numbers and the episode score slots are never focused, so a score needs the mouse. Enter on a focused tag chip deletes that tag at once (toast "Deleted "thai"" with Undo, `qa/shots/p19-156-enter-on-score.png`), which is easy to do by accident since focus is invisible (BUG-009). Esc does nothing in the panel; the close X is the only way out (reachable with Shift+Tab from Title).
+- Notes: RANKINGS_UI.md §14 puts keyboard shortcuts out of scope, and RANKINGS_SCORE_INPUT_HLD.md §11 asks only for a semantic label on the number. Notes here doesn't swallow Tab (unlike BUG-058 / BUG-149). Right-click menus on entries and episodes ignore Esc (BUG-133; `p19-066-menu-esc.png`).
+
+### BUG-167 [Phase 19B] "Add location" dialog opens with the keyboard on the map, not the input: typing a place name goes nowhere, and after a suggestion is clicked Ctrl+Enter doesn't add it
+- Severity: Minor
+- Found: 2026-10-02, Phase 19B (qa-020, build `a991189`, map key passed, Vim off)
+- Steps to reproduce: Rankings → a category with Locations on → open an entry → Add location. Without clicking, type `lazeez`. Then click the input, type `lazeez waterloo`, click the first suggestion, press Ctrl+Enter.
+- Expected: the "Place name or Google Maps link" input has focus when the dialog opens (the field is built with `autofocus: true`, and TEST_PLAN 19B D4 expects "input autofocused"); after choosing a suggestion, Ctrl+Enter adds the location, as the dialog's `CtrlEnterToSubmitScope` intends.
+- Actual: the typed text appears nowhere (`qa/shots/p19b-012-lazeez.png` before the click: the field still shows its hint). `FocusManager.instance.primaryFocus` right after the dialog opens is `FocusNode(FlutterMap)`, rect 426,299–866,539: the dialog's small map, not the field. After a click in the field the search works. After clicking a suggestion the pin and address appear (`p19b-014-picked.png`), `primaryFocus` is the dialog route's `FocusScopeNode`, and Ctrl+Enter does nothing; only a click on Add adds it.
+- Notes: `FlutterMap` takes focus when it mounts, after the field's autofocus. The suggestion rows are `InkWell`s outside the field, so a click on one leaves focus on the route scope, above `CtrlEnterToSubmitScope` (same family as BUG-117 / BUG-158 / BUG-161). Plain Enter never submits here (only Ctrl+Enter is wired), and the suggestions can't be walked with the arrow keys (see the Phase 19B D4 notes). Scatter was on.
+
+- Notes (same day): the map's "New entry here" dialog is the same: neither Title nor the place input has focus (`primaryFocus` = `FlutterMap`), so a title typed straight away goes nowhere (`qa/shots/p19b-112-tray-back.png`: "TrayTest" was typed, Title is empty). Launched without a map key the dialog has no map, and there the input is focused and Ctrl+Enter adds (`p19b-118-nokey-sheet.png`), which points at the map taking the focus. Keyboard reach with a key: Down / Up do nothing in the suggestion list; Tab from the input reaches the first suggestion and Enter chooses it (`p19b-082-tab-enter.png`), after which focus returns to the input and Ctrl+Enter works. Esc closes the dialog.
+
+### BUG-168 [Phase 19B] The map opens on this device's location at street level instead of fitting the pins, and the last viewport isn't kept across a restart (RANKINGS_MAP_HLD §3 / §7.1 say otherwise)
+- Severity: Minor
+- Found: 2026-10-02, Phase 19B (qa-020, build `a991189`, Windows location service on)
+- Steps to reproduce: a category with Locations on and pins a few hundred metres to a few kilometres from the PC (one pin 244 m away; later 7 pins across Waterloo, and 204 pins). Switch to Map. Then press Fit, pan somewhere, quit Voyager (`stop.ps1`), launch, open Rankings (the category reopens in Map view).
+- Expected: HLD §3 "Initial view: fit visible pins; with none, the last viewport on this device"; §7.1 "last viewport persists per device"; TEST_PLAN 19B "the first open fits the visible pins".
+- Actual: the first map of every run jumps to the device's position at zoom 18.75 (a few streets) with a blue dot, whatever pins exist: with one pin 244 m away the map showed no pin at all (`qa/shots/p19b-016-map.png`); after the restart Cafes (7 pins) opened on the same street corner with none of them in view (`p19b-098-restart.png`); on a wiped install with no saved position the map drew for about a second and then jumped there (`p19b-124-cold-cafes-sheet.png`). The viewport left before the restart is gone. Within one run the map does reopen where it was left, and Fit works.
+- Notes: deliberate in the code (`_openOnDeviceIfNew`, `rankingMapViewportProvider`: "Not stored: the next launch opens on the device again"; `settings_table.rankings_device_latitude / _longitude`, device-local, not synced), and a fourth map button "Show my location" exists; none of it is in the HLD, whose non-goals list "Device GPS or 'near me'". The opening locate never asks for permission; it uses what Windows already allows. The pins-out-of-view result is what a user sees on every launch unless every entry is near where they sit. The view choice (List / Map) did persist across the restart and came back after a cold re-login. Screenshots of the map therefore show where the PC is. Scatter was on.
+
+### BUG-169 [Phase 19B] Opening or moving the rankings map logs uncaught "Cancelled" errors into `voyager_errors.log`
+- Severity: Minor
+- Found: 2026-10-02, Phase 19B (qa-020)
+- Steps to reproduce: wiped install, sign in, Rankings → a category with Locations on → Map (the map draws, then jumps to the device position, BUG-168). Or: with the map open, press Fit, click a cluster, use a pin's Rate… and the Locations row click (camera moves) over a few minutes.
+- Expected: no unhandled errors; a tile request dropped because the camera moved on is not an error.
+- Actual: `[ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: Cancelled` in the run log, and an `uncaught: Cancelled` entry in `Documents\voyager_errors.log` (14:08:58 at the first map open; again 15:29:40). Counts: 8 in `run-20261002-140353.log` (first open + about 80 minutes of map use), 4 in `run-20261002-160908.log` within seconds of the first map open after a cold re-login, 0 in the three runs where the map opened straight on a saved device position or wasn't moved much (`-155055`, `-160655` no key, `-161629` legacy). Nothing visible goes wrong: tiles and pins draw.
+- Notes: no stack is printed. The timing fits tile loads being cancelled when the camera jumps (`VectorTileLayer` with `concurrency: 16`); not confirmed in code. The app's own error log is the one Juno reads for real problems, so these are noise there.
+
+### BUG-170 [Phase 19B] Pasted links: any website's URL containing `@lat,lng` is accepted as a location, while Google's own `…/maps/search/?api=1&query=lat,lng` form is refused
+- Severity: Minor
+- Found: 2026-10-02, Phase 19B (qa-020)
+- Steps to reproduce: Add location → paste `https://example.com/@43.47,-80.53`. Then paste `https://www.google.com/maps/search/?api=1&query=43.4643,-80.5204`.
+- Expected: the input is labelled "Place name or Google Maps link": a non-Google URL gets "Couldn't find a location in that link" (or a search), and a Google Maps link that carries coordinates is read.
+- Actual: the example.com link drops a pin at 43.47, −80.53 with the address "81 Seagram Drive, Waterloo…" and Add enabled (`qa/shots/p19b-084-pastes-sheet.png`, top right). The `api=1&query=` link shows "Couldn't find a location in that link" (same sheet, third tile), although its coordinates are in plain sight. The four shapes in HLD §6.2 all parse (`/place/…!3d!4d` with the name offered as the title, `@lat,lng`, `?q=lat,lng`, `ll=`), a percent-encoded name decodes ("Café Pyrus"), out-of-range numbers and a link with no coordinates are refused, and nothing of the link is stored (`locations_json` holds only id, coordinates, address, label, order).
+- Notes: `parseGoogleMapsLink` never looks at the host, and reads only the `q` and `ll` parameters. Fixtures and the parser's answers: `qa/steps/p19b-links.txt`. A made-up `maps.app.goo.gl` id fails cleanly with the same message; a real short link wasn't tried (needs one from Juno).
+
+### BUG-171 [Phase 19B] Add location: after a paste that fails, the pin and address of the previous attempt stay with Add enabled; and an over-long search says "Search needs a connection"
+- Severity: Minor
+- Found: 2026-10-02, Phase 19B (qa-020)
+- Steps to reproduce: Add location → paste a link that parses (a pin and address appear). Select all and paste a link that doesn't (`https://www.google.com/maps/@95.0,-200.0,15z`, or a 5,000-character `/place/xxxx…` link). Then select all and paste 5,000 characters of plain text.
+- Expected: when the input no longer resolves, the dialog doesn't offer the earlier place as if it belonged to it (pin cleared or Add disabled), and a search the provider rejects says so rather than blaming the connection.
+- Actual: the red "Couldn't find a location in that link" shows above the earlier pin, its address "81 Seagram Drive, Waterloo…" and an enabled Add (`qa/shots/p19b-084-pastes-sheet.png`, bottom row, first two tiles); Add or Ctrl+Enter would add the old point. The 5,000-character text shows "Search needs a connection" while online (third tile); the debounce and the request-order guard held (one answer, no stale list).
+- Notes: by design the pin is kept so a result can be nudged, and an error only sets `_error`; `_search` maps every exception (here an HTTP error for the over-long query) to the connection message. A dropped pin at ±85° / 180° is accepted and stored (address empty, shown as coordinates), and a right-click above the top edge of the world picks a point outside the map (86.8° N), which is then stored too (lead).
+
+### BUG-172 [Phase 19B] The map's right-click menu cuts its second item off: "Add this location to an existi…"
+- Severity: Cosmetic
+- Found: 2026-10-02, Phase 19B (qa-020)
+- Steps to reproduce: Rankings → Map → right-click an empty part of the map.
+- Expected: the full label "Add this location to an existing entry…" (the menu widens, or the label is shorter).
+- Actual: "Add this location to an existi…" at every window size and in both the category map and All categories (`qa/shots/p19b-028-mapmenu.png`, `p19b-074-all-mapmenu.png`, `p19b-129-offline-menu.png`).
+- Notes: the shared context menu has a fixed width; the pin menu's labels fit. The menus don't close on Esc (BUG-133).
+
+### BUG-173 [Phase 19B] "Fit all pins" can leave a pin under the map's own buttons, and at the minimum window size it can leave pins outside the view
+- Severity: Cosmetic
+- Found: 2026-10-02, Phase 19B (qa-020; category "Cafes" with one location at 85° N, 180° E and the rest in Waterloo)
+- Steps to reproduce: Map → press Fit (third map button) maximized; then `place 0 0 1440 1040` and press Fit.
+- Expected: every pin visible and clear of the zoom / Fit / location buttons.
+- Actual: maximized, the easternmost pin lands on top of the "−" and Fit buttons (`qa/shots/p19b-103-light-fit.png`: "7.5" over the buttons; also `p19b-086-extreme-fit.png` at the panel's edge). At the minimum size no pin is in view after Fit (`p19b-109-min-all.png`): the map can't zoom out further than one world width, so the pair can't both be shown and the view ends up between them.
+- Notes: Fit uses a flat 56 px padding; the button column is 12 px from the right edge. With ordinary data (pins in one city) Fit frames everything with room to spare (`p19b-018-fit.png`). Scatter was on.
+
+### BUG-174 [Phase 20] Jobs smart paste cuts a link longer than 500 characters at character 500 and stores the broken URL silently
+- Severity: Minor
+- Found: 2026-10-02, Phase 20 (qa-021, build `a991189`)
+- Steps to reproduce: Jobs → Add → click the empty Application URL field → paste `https://jobs.example.com/apply?token=` + 560 × `a` + `&end=1` (603 chars). Save.
+- Expected: the whole link (JOBS_SMART_PASTE_HLD §16: the budget "can never end halfway through a link").
+- Actual: the field holds exactly 500 characters and `job_applications_table.application_url` stores 500 (`&end=1` and the rest of the token gone), no message (`qa/shots/p20-017-long-url.png`). Over the parser (`qa/steps/p20-parse.py`), `T https://example.com/` + 600 × `p` gives no URL at all.
+- Notes: `_withinBudget` cuts back to the last whitespace; a link with no whitespace before the cut is chopped. Tracking-laden posting URLs over 500 chars are common. Also from the parser run: `(https://example.com/x)` gives no URL (leading `(` not stripped).
+
+### BUG-175 [Phase 20] The table's duplicate warning fires on a shared posting URL, not on the same company + title as JOBS.md specifies
+- Severity: Minor
+- Found: 2026-10-02, Phase 20 (qa-021)
+- Steps to reproduce: row "vis / QA Engineer" (no URL) → right-click → Duplicate.
+- Expected: JOBS.md §3.2 / §7.3 / AC 6: a soft warning on rows with the same company (case-insensitive) and title.
+- Actual: two identical rows, no marker (`qa/shots/p20-025-dup-warning.png`). The marker (tooltip "Another application links to the same posting URL") appeared only once two rows shared `https://example.com/dup` (`p20-069-panel-edits.png`).
+- Notes: `jobs_table.dart` `isDuplicate` doc: "Another row links to the same posting URL". Either the HLD or the app is out of date.
+
+### BUG-176 [Phase 20] Deleting a pipeline stage has no Undo and isn't in Trash, although "Recently deleted" sits in the same sheet
+- Severity: Minor
+- Found: 2026-10-02, Phase 20 (qa-021)
+- Steps to reproduce: Jobs → Manage → Stages → trash on "Applied" (3 applications) → Delete. Then Recently deleted.
+- Expected: an Undo toast or a Trash row, like applications (whose delete gets both).
+- Actual: the stage is soft-deleted (`job_stages_table.deleted_at` set), no toast (`qa/shots/p20-035-stage-deleted.png`), and Recently deleted says "Nothing from Jobs in the trash" (`p20-039-recently-deleted.png`). The 3 applications become orphans. Every remaining stage without its own colour also changes colour (hues follow list position: Online Assessment purple → blue, Accepted → orange), so the whole pipeline re-colours after an add or a delete.
+- Notes: the confirm dialog explains the orphaning well. Workaround: re-add a stage with the same name.
+
+### BUG-177 [Phase 20] Company suggestions can never be removed: a typo company stays in the typeahead forever
+- Severity: Minor
+- Found: 2026-10-02, Phase 20 (qa-021)
+- Steps to reproduce: Track an application with company `vis` (typed, Visa was suggested). Look for a way to remove `vis` from the suggestions (Manage sheet, typeahead, Settings).
+- Expected: JOBS.md §4.4 / AC 4 "deleting a suggestion leaves apps intact".
+- Actual: no control anywhere; `JobsActions.deleteCompany` exists but nothing calls it (grep over `lib/`). `vis` is listed first in every empty Company dropdown (`qa/shots/p20-010-dup-url.png`).
+
+### BUG-178 [Phase 20] Jobs edit panel: emptying Company or Title shows a blank field but keeps the old value with no message, and Esc doesn't close the panel
+- Severity: Minor
+- Found: 2026-10-02, Phase 20 (qa-021)
+- Steps to reproduce: open a row's panel, select all in Title, Backspace; same for Company; press Esc twice.
+- Expected: "A role title is required" (as in the Track form), or the old value restored on leaving the field; Esc closes the panel.
+- Actual: both fields stay empty on screen (`qa/shots/p20-070-panel-esc.png`), SQLite keeps "vis" / "QA Engineer" and the table shows them; nothing says the edit was refused. Esc does nothing; only the X closes the panel.
+- Notes: same pattern as the P19A Rankings title lead.
+
+### BUG-179 [Phase 20] Jobs dialogs lose keyboard focus after a click: New category after a colour click, the Track form after "From clipboard ✕" or "Start over"
+- Severity: Minor
+- Found: 2026-10-02, Phase 20 (qa-021)
+- Steps to reproduce: Manage → Categories → New category, type `Fintech`, click a swatch, press Enter, then Ctrl+Enter. Separately: Add with a link on the clipboard → click the "From clipboard" ✕ (or "Start over" on a draft) → type.
+- Expected: Enter / Ctrl+Enter create the category; after the chip or Start over the caret is in Company.
+- Actual: `primaryFocus` is the route's `FocusScopeNode` in all three; the category dialog stays open (`qa/shots/p20-044-cat-after-swatch.png`), typed text goes nowhere.
+- Notes: same family as BUG-117 / BUG-158 / BUG-161. New stage: an empty Enter closes the dialog; a duplicate name ("applied") shows a toast and closes it, losing the typed name.
+- Notes (same day, second session): Settings → Experience snippets → Add / Edit experience: after a click on the warning strip's "Details", `primaryFocus` is the route's `FocusScopeNode` and Ctrl+Enter does nothing (`qa/shots/p20-113-after-ctrlenter.png`); only the Save button saves. The editor and the Job application profile dialog otherwise behave: Name / LinkedIn autofocused, Enter in Name moves to Description, Tab walks Description → Details → Cancel → Save, Esc never discards the editor's text (only Cancel does).
+
+### BUG-180 [Phase 20] Renaming a stage silently turns its applications into orphans; only delete warns
+- Severity: Minor
+- Found: 2026-10-02, Phase 20 (qa-021)
+- Steps to reproduce: Manage → Stages → pencil on "Interview" (1 application) → `Onsite` → Enter.
+- Expected: either the application follows the renamed stage, or the dialog says what will happen (the delete dialog does: "will keep … and show as an orphan stage").
+- Actual: "Onsite 0 applications"; the application keeps "Interview" as a muted italic orphan chip (`qa/shots/p20-033-renamed.png`). No warning in the rename dialog (`p20-032-rename.png`).
+- Notes: matches the code comment in `renameStage` and JOBS.md §4.2 for history; whether current statuses should be stranded isn't stated.
+
+### BUG-181 [Phase 20] With the editor panel open, the Jobs table cuts the date and status: "Oct 2, 2…", "Sep 30, …", "Interv…"
+- Severity: Cosmetic
+- Found: 2026-10-02, Phase 20 (qa-021, window 2600×1640)
+- Steps to reproduce: open any row's panel.
+- Expected: dates and status capsules readable.
+- Actual: `qa/shots/p20-019-panel.png`, `p20-072-date-changed.png`. The Notes column keeps its width meanwhile. Not yet checked at maximized / min size.
+- Notes (same day, second session): at the minimum size (1440×1040) the table is cut without the panel too: the "Company" header breaks mid-word ("Compan" / "y"), "Date applied" wraps, dates read "Oct 2…" / "Sep 3…" and status capsules "Ap…" / "Int…" (`qa/shots/p20-147-min-header.png`).
+
+### BUG-182 [Phase 20] Date picker: when today is the selected day, the "Today" chip and the selected day number are unreadable
+- Severity: Cosmetic
+- Found: 2026-10-02, Phase 20 (qa-021, Dark + Scatter)
+- Steps to reproduce: Jobs panel → date pill (date = today).
+- Actual: "Today" is dark grey on a grey chip and the "2" is grey on the grey selection disc (`qa/shots/p20-071-datepicker.png`).
+- Notes: shared `DateSelectorPopover`; likely the same on other pages.
+
+- Notes added (P20): BUG-133: the Jobs row menu ignores Esc (`qa/shots/p20-023-menu-esc.png`). BUG-051: the Trash "Restored …" toast from Jobs stayed for 14+ minutes.
+
+### BUG-183 [Phase 20] Jobs header: status chips past the row's width are hidden and can't be reached with a mouse ("Interview 1" never shows, even maximized)
+- Severity: Minor
+- Found: 2026-10-02, Phase 20 (qa-021, build `a991189`; 304 applications over 6 statuses, profile icons and 3 experience chips set)
+- Steps to reproduce: maximize; Jobs. Statuses in use: Phone Screen, Online Assessment, Onsite, Rejected, Applied (orphan), Interview (orphan). Wheel over the chip row; drag across it.
+- Expected: every status's count is visible (JOBS.md §3.1 / §8.2) and each chip's filter can be clicked, or the row shows that more chips exist and lets them be reached.
+- Actual: the row ends inside "Applied 2" (its right border is cut), and "Interview 1" is not visible at all (`qa/shots/p20-148-seeded-max.png`, `p20-152-chips-drag.png`). The row is a horizontal `SingleChildScrollView`: the mouse wheel doesn't move it and a mouse drag doesn't either, so there is no way to see or filter by the last status. No fade or "+1" says anything is missing.
+- Notes: the chips share the header row with the profile icons, experience chips and sparkline; with those set the chip area at 1440 logical px holds five chips. At 2000×1100 it holds two and a half: the third is cut mid-count ("Onsite 6…", `qa/shots/p20-155-odd-size.png`), and four statuses can't be seen. A trackpad or Shift+wheel may scroll it (not available to the harness). Scatter was on.
+
+### BUG-184 [Phase 20] Experience chips are cut to their first word even maximized, and no tooltip names them: chips with a shared prefix ("Acme - …") can't be told apart
+- Severity: Minor
+- Found: 2026-10-02, Phase 20 (qa-021, build `a991189`)
+- Steps to reproduce: Settings → Pages → Experience snippets: add "Initech - QA", "Acme - SWE Intern", "Globex - Backend SWE" (plus more). Maximize; Jobs. Hover a chip for two seconds; hover the LinkedIn icon.
+- Expected: JOBS.md §3.5 / snippets HLD §7.3: names ellipsize "on the chip (cap 160px); the tooltip carries the name"; §3.4: the icon-only profile buttons carry "the slot name in a tooltip". A 17-character name fits in 160 px.
+- Actual: every chip reads "Initech -…", "Acme - …", "Globex -…" at 2880×1800 while the header has free space to the left of the icons (`qa/shots/p20-129-header-max.png`, `p20-145-header-after-reorder.png`). No tooltip appears on the chips or on the LinkedIn / Portfolio icons (`p20-132-tooltip2.png`, `p20-133-linkedin-tooltip.png`; the VM-service frame grab `p20-134-linkedin-vmshot.png` agrees). Two snippets named "Acme - SWE Intern" and "Acme - Backend SWE" would show as two identical "Acme - …" chips; the only way to know which copies what is to click and read the toast.
+- Notes: the chips' `Tooltip` widgets exist (`jobs_header.dart`, "Copy <name>"), but `voyager_app.dart` wraps the whole app in `TooltipVisibility(visible: false)`, so no tooltip shows anywhere; JOBS.md and the snippets HLD were written assuming they do. The chip budget comes from the half-row the chips share with the 140 px sparkline floor (§7.4 revision). At the minimum size all chips move into the caret menu, which lists full names, as designed (`p20-147-min-header.png`). Copying itself is exact (empty description → empty clipboard, 5,000 characters, LF line ends, toast names the snippet). Scatter was on.
+
+### BUG-185 [Phase 21] Study "New folder / New deck / Rename" dialog: an empty Enter does nothing, says nothing and drops keyboard focus
+- Severity: Minor
+- Found: 2026-10-02, Phase 21 (qa-022, build `a991189`)
+- Steps to reproduce: Study → New folder (name field autofocused) → press Enter with the field empty. Then type `Math`.
+- Expected: a message ("Name can't be empty") with the caret still in the field, or Save disabled.
+- Actual: nothing visible happens (`qa/shots/p21-003-empty-enter.png`), `primaryFocus` becomes the route's `FocusScopeNode`, and the typed text goes nowhere until the field is clicked. Whitespace + Ctrl+Enter keeps focus (also silent).
+- Notes: `study_name_modal.dart` `_submit` returns silently on an empty name; the field's `onSubmitted` unfocuses it. Same family as BUG-050 / BUG-161 / BUG-179.
+
+### BUG-186 [Phase 21] Study card editor: Esc closes it and throws away the typed front/back with no confirm, no draft (new and existing cards)
+- Severity: Major
+- Found: 2026-10-02, Phase 21 (qa-022)
+- Steps to reproduce: (a) a deck → Add card → type `esc test unsaved front` → Esc. (b) right-click a card → Edit… → append ` EDITED` to Front → Esc.
+- Expected: Esc asks before discarding, or keeps the text (the Jobs snippet editor never discards on Esc; the HLDs ask for no silent loss).
+- Actual: the sheet closes at once in both cases; `study_cards_table` has no new row for (a) and the old front for (b) (`qa/shots/p21-031-after-esc.png`, `p21-034-edit-esc.png`). No draft file exists for study cards, so a long card is lost to one key press. The X button does the same.
+- Notes (P22, 2026-10-02): mid-session Edit… opens the same editor; for an existing card no field is focused on open, and Esc with nothing typed only closed it. See BUG-194 for keys reaching the session behind it.
+- Notes: same pattern as BUG-084 (Search dialog) and BUG-144 (LeetCode form). With Vim ON the editor is safe: Esc goes to Normal and a second Esc keeps the sheet open (`qa/shots/p21-cs11.png`); the loss is Vim OFF only.
+
+### BUG-187 [Phase 21] Card editor preview doesn't follow typing: a new card never shows one, an edited card keeps showing the text it opened with
+- Severity: Minor
+- Found: 2026-10-02, Phase 21 (qa-022)
+- Steps to reproduce: (a) Add card, type `What is $\int_0^1 x^2 dx$ ?` in Front. (b) Edit an existing card with `$` in its text, append ` EDITED x`.
+- Expected: STUDY_IMAGES.md "Editor": "a layout preview under each side when that side has text and/or images", so LaTeX can be checked before studying.
+- Actual: (a) no preview at all (`qa/shots/p21-025-editor-typed.png`); (b) the preview line under Front still reads the opening text without " EDITED x" (`p21-035-edit-typed.png`). Only reopening the card refreshes it.
+- Notes: `_CardSide` builds the preview from `controller.text` at build time and only when the text has a `$` (or images exist); the sheet deliberately doesn't rebuild per keystroke (comment in `build`). Invalid LaTeX (`$\frac{1}{$`, `$\undefinedcmd{x}$`, `$$`) renders as raw text on the tile, no crash, no error marker, so a typo is only seen on the tile or in a session.
+
+### BUG-188 [Phase 21] Deleting a Study deck or a whole folder tree has no Undo toast, unlike deleting a card or unlinking a deck
+- Severity: Minor
+- Found: 2026-10-02, Phase 21 (qa-022)
+- Steps to reproduce: Study → right-click folder "Math" (2 subfolders, 2 decks, 3 cards) → Delete → Delete. Separately: right-click deck "Nested" → Delete → Delete.
+- Expected: the usual "Deleted … / Undo" toast (card delete and Unlink both offer one; TEST_PLAN P21 "Delete folder with decks → undo").
+- Actual: the tree disappears with no toast (`qa/shots/p21-089-nested-deleted.png`, `p21-098-math-deleted.png`). Recovery works only through Settings → Data → Trash, which lists "Folder "Math" · 2 folders · 2 decks · 3 cards" and restores all of it, including the deleted deck's Docker → Nested link (`p21-102-trash.png`; SQL matched). The folder confirm counts subfolders and decks but not the cards it takes with it ("2 subfolders, 2 decks"; the deck confirm does name its cards).
+- Notes: `deleteStudyFolder` / `deleteStudyDeck` (`study_actions.dart`) don't call `softDeleteWithUndo`. The "Restored …" toasts from Trash then stick (BUG-051) and cover the hub's "Study N due" button.
+
+### BUG-189 [Phase 21] Study keyboard gaps: the import "Skipped N lines" dialog ignores Enter, and no key leaves a deck back to the library
+- Severity: Minor
+- Found: 2026-10-02, Phase 21 (qa-022)
+- Steps to reproduce: (a) Import cards with a paste that has malformed lines → Ctrl+Enter → "Skipped 4 lines" dialog → Enter. (b) Tab to a deck tile on the library, Enter (opens it), then Esc, Alt+Left, Backspace.
+- Expected: (a) Enter (or Esc) dismisses the OK dialog; (b) some key returns to the library or parent folder.
+- Actual: (a) nothing happens; the OK button isn't focused, so the next mouse click anywhere only dismisses the dialog (here that swallowed the first click of a navigation sequence and a 500-card import landed in the wrong deck) (`qa/shots/p21-052-after-ok.png`). (b) the deck stays open (`p21-118-esc-in-deck.png`, `p21-119-altleft.png`); the only keyboard route is Tab back to the breadcrumb.
+- Notes: the library itself is keyboard-reachable (Tab walks the hub button, Root crumb, each tile and its ⋯ button; Enter opens a tile). Focus rings are invisible app-wide (BUG-009).
+
+### BUG-190 [Phase 21] Cards imported together show in a scrambled order that changes between rebuilds
+- Severity: Cosmetic
+- Found: 2026-10-02, Phase 21 (qa-022)
+- Steps to reproduce: Import 500 lines `Bulk Q000|Bulk A000` … `Bulk Q499|Bulk A499` into a deck; look at the grid; duplicate or move a few cards; look again.
+- Expected: paste order (or any stable order).
+- Actual: the grid reads "dup, dup, Bulk Q161, Bulk Q001, Bulk Q002…" and ends "…Q498, Bulk Q329" (`qa/shots/p21-054-imported500.png`, `p21-056-bottom.png`); after a duplicate the third slot was Q162, after a move Q164 (`p21-093-duplicated.png`, `p21-096-moved.png`).
+- Notes: every imported card gets the same `createdAt` (one `utcNow()` for the batch) and the same `dueAt`, so `sortStudyCardsByMastery` ties on every key and `List.sort` (not stable) decides.
+
+### BUG-191 [Phase 21] A 300-character deck name in "Included in:" fills two full-width lines; at the minimum size the floating "+" covers the last library tile
+- Severity: Cosmetic
+- Found: 2026-10-02, Phase 21 (qa-022)
+- Steps to reproduce: rename a deck that links others to a 300-character name; open a deck it includes. Separately, at 1440×1040 open the library with 8 items.
+- Expected: the name ellipsized like on the tiles; the last tile clear of the button.
+- Actual: "Included in:" wraps the whole name over two lines and pushes the deck header down (`qa/shots/p21-121-vim-esc1.png`, earlier `p21-117-enter-tile.png`); at the minimum size the "+" sits on the bottom-right tile's corner (`p21-cs13.png`, right half).
+- Notes: tiles ellipsize the same name correctly. Scatter was on.
+
+- Notes added (P21): BUG-133: the Study folder / deck / card right-click menus ignore Esc (`qa/shots/p21-022-menu-esc.png`). BUG-186: Esc also closes the Import sheet and drops a pasted list with no confirm (`p21-125-import-esc.png`); images added to an existing card in the editor stay attached after Esc while its text edits are dropped (an unsaved *new* card's image references are removed, as designed). BUG-051: the Trash "Restored Folder/Deck" toasts stuck over the Study page for 25+ minutes.
+
+### BUG-192 [Phase 22] A resumed deck session still serves cards that were graded in another session meanwhile: the card is reviewed twice and its schedule pushed further out
+- Severity: Minor
+- Found: 2026-10-02, Phase 22 (qa-022, build `a991189` + uncommitted Rankings changes)
+- Steps to reproduce: deck "Nested" (2 new cards, "Study 2 due") → Study → ✕ straight away (checkpoint: 2 remaining). Open deck "Lxxx…Z", which links Nested → Study → the first card is Nested's "vim front tex" → Space, G → ✕. Back on Nested the header reads "2 cards · 1 due" and the button "Study 1 due". Click it.
+- Expected: the resumed round leaves out cards that are no longer due (graded elsewhere since), or at least the toast count matches the button's "1 due".
+- Actual: the toast says "Resuming your previous session · 2 left" and the first card is "vim front tex", the card just graded Good (`qa/shots/p22-022-nested-1due.png`, `p22-023-nested-resume.png`). Grading it Good again writes a second review-log row 31 s after the first and moves it from interval 1.0 / due Oct 4 to interval 2.5 / due Oct 5, `review_count` 2 (`p22-025-nested-after-regrade.png`): the card counts as reviewed twice today and its next review is pushed out on the strength of a repeat seen minutes later.
+- Notes: `_hydrate` (`study_session_page.dart`) keeps every remaining id that still exists in the deck's roster; SESSION_RESUME_HLD §6 only asks to drop deleted ids. A deck session's `cardIds` is the whole roster (`effectiveIds`), so nothing re-checks due-ness. The Hub's round is safe by accident: its `cardIds` are the due ids at open, so a card graded elsewhere drops out there. Any card shared between two scopes (a linked deck, the Hub vs a deck) can hit this.
+- Notes (same day, second route: a kill inside the 400 ms checkpoint debounce): debug deck session resumed with 16 left → Space, G on "Schrödinger … [#6]" → `Stop-Process voyager` ~150 ms later. The grade is on disk (review log 02:33:42.27, interval 0.5 → 1.15) but the checkpoint kept its 02:33:38 copy. After relaunch the deck reads "14 due", the toast "15 left", and the first card is the already-graded #6, with previews computed from its new interval (1d / 3d / 3d) (`qa/shots/p22-044-debug-deck-14.png`, `p22-045-resume-after-kill.png`). That grade also left the history: U undid the grade before it (#13, tombstoned 02:34:52), so the #6 grade can't be taken back. HLD §9 "App pause mid-grade" covers a pause, not a kill; the due re-check above would cover both.
+
+### BUG-193 [Phase 22] "Study this linked subset" shares the parent deck's resume slot: a subset never started says "Resuming your previous session", and finishing it throws away the parent's unfinished round
+- Severity: Minor
+- Found: 2026-10-02, Phase 22 (qa-022)
+- Steps to reproduce: deck "Sys 東京 مرحبا 😀 café" (links Lxxx…Z and AWS; "Study 510 due") → Study → ✕ (checkpoint `deck:<Sys>` holds the 510-card round). Right-click the Lxxx…Z placeholder → Study this linked subset. Grade its 4 cards, Done. Study on Sys again.
+- Expected: the subset is its own round (no toast the first time); the parent's 510-card round is still there to resume, with its order and its undo history.
+- Actual: the subset opens with "Resuming your previous session · 4 left" although no subset session was ever started (`qa/shots/p22-029-subset-session.png`, right after `p22-027-sys-session.png`). Finishing it clears the shared file (`studySession__deck_<Sys>.json` gone), and Sys's Study then opens a fresh round with no toast, reshuffled (first card Bulk Q225 instead of Bulk Q177; `p22-031-sys-after-subset.png`).
+- Notes: both entries use `frameDeckId` = the parent, so both get scope `deck:<parent>` (`study_session_page.dart` `scopeKey`); SESSION_RESUME_HLD §4.1 only separates Hub from deck. Going the other way, a subset left unfinished is offered back as the parent's full round (the hydrate appends every other due card as "newcomers"). The same collision exists between a deck's own Study (its effective set, with linked decks) and the linked-deck popup's Study on that deck (its own cards only): both are `deck:<child>`; and for Cram (`deck:<id>` for both). Grades already made are never lost, only the round and its Previous-card history. Same family as LeetCode's BUG-155.
+
+### BUG-194 [Phase 22] Keys pressed while the card editor is open over a Study / Cram session drive the session behind it: Space flips, grade keys grade, arrows pass or fail cram cards
+- Severity: Major
+- Found: 2026-10-02, Phase 22 (qa-022)
+- Steps to reproduce: (a) deck "Algebra" → Study → right-click the card → Edit…. The editor opens with no field focused (existing card). Press Space, then G. Close the editor with its ✕. (b) Algebra → Cram → right-click the card → Edit… → press → twice (the Front field showed the focus border here) → close the editor.
+- Expected: while the editor is up the session ignores the keyboard (as it does for a focused text field and for the image lightbox); Space / letters / arrows act on the editor or nothing.
+- Actual: (a) behind the dimmed editor the card flips and G grades it Good: the counter drops to "New 2", the session moves to the next card while the editor still shows "latex $x^2$" (`qa/shots/p22-068-editor-space-g.png`), and `study_review_log_table` gets a `good` row at 02:41:09 for that card. (b) the bucket bar moves two cards into "familiar" behind the editor (`p22-072-cram-editor-keys.png`, `p22-073-cram-after-editor.png`). Earlier, typing ` SESSIONEDIT` into the just-opened editor (expecting it to land in Front) went nowhere and left the card behind flipped (`p22-060-session-editor.png`, `p22-061-after-esc.png`). Esc alone is safe (closes the editor only, `p22-066-esc-only.png`).
+- Notes: an edit dialog is exactly where a user types, and with no field focused on open (`autofocus: widget.existing == null`) the first letters go straight to the grading keys: a word with F / H / G / E grades the card underneath, silently. `StudyKeyboardShortcuts._enabled` and the cram `_handleArrowKey` ask `ModalRoute.of(context).isCurrent`; the editor (`showVoyagerModal`) appears to sit on the root navigator, which leaves the session's shell-branch route "current" (the widget's own doc names this trap for the lightbox and the LeetCode cheat sheet). The card menu's Delete confirm ("Delete this card?") does the same: Space there flipped the card behind it and lit the grading row (`p22-077-confirm-space.png`). The stray grade can be taken back with U after closing the editor. Same family as BUG-157 (LeetCode scratch editor).
+
+### BUG-195 [Phase 22] Toasts sit on top of the session's "New / Learning / Review" counter: the resume toast hides it for 10 s on every resumed round, a stuck Trash toast for good
+- Severity: Cosmetic
+- Found: 2026-10-02, Phase 22 (qa-022, window 2600×1640)
+- Steps to reproduce: open any deck's Study with an unfinished round behind it; or restore anything from Settings → Data → Trash first (BUG-051), then open a Study session.
+- Expected: the counter (STUDY.md "At the top of the canvas display a minimalist counter") stays readable.
+- Actual: the resume toast covers the whole counter while it shows (`qa/shots/p22-012-resume-toast.png`, `p22-045-resume-after-kill.png`), which is the moment the user wants to know how much is left; a "Restored …" toast from Trash sits over "New … Learning …" for the rest of the run, leaving only "Review 0" visible (`p22-084-del-toast.png`, `p22-088-after-reset.png`). A delete toast then stacks below and covers the top of the card (`p22-084-del-toast.png`).
+- Notes: the resume toast gives "· N left", so the count is partly carried there; the New / Learning / Review split isn't.
+
+### BUG-196 [Phase 22] The resume toast outlives its session: after leaving, its "Start over" still works from the deck page or another session and silently throws the saved round away
+- Severity: Minor
+- Found: 2026-10-02, Phase 22 (qa-022)
+- Steps to reproduce: a deck with an unfinished Study round (debug deck, "12 left"). Study → the resume toast appears → ✕ within its 10 s. On the deck page the toast is still showing; click its Start over. Open Study again.
+- Expected: the toast belongs to the session and goes with it (SESSION_RESUME_HLD §7: Start over is offered "on that toast" while the round is open); a Start over from outside it does nothing, or at least says what it did.
+- Actual: the toast stays over the deck header with a live Start over (`qa/shots/p22-111-stale2.png`); clicking it deletes `studySession__deck_<id>.json` with no feedback (`p22-112-stale2-after.png`), and Study then opens a fresh round with no toast and grey undo / redo arrows (`p22-113-after-stale-study.png`): the round's order and its Previous-card history are gone. The same stale toast also stacked over the Cram page after a Study visit, two "Resuming your previous session" toasts at once (12 left / 30 left) with nothing saying which session each belongs to (`qa/shots/p22-108-light-cram.png`).
+- Notes: `_startOver` awaits `_checkpoint.discard()` before its `mounted` check, so a disposed page still clears the file. Grades already made are kept; only the round is lost.
+
+### BUG-197 [Phase 22] A card deleted mid-session and brought back from Trash never rejoins the round: the session ends "Session complete" with that card still due
+- Severity: Minor
+- Found: 2026-10-02, Phase 22 (qa-022)
+- Steps to reproduce: deck "Algebra" (3 new cards) → Study → right-click the card → Delete → Delete (let the toast's Undo pass). Leave with ✕. Settings → Data → Trash → Restore that card. Back on Algebra ("3 cards · 3 due") → Study → grade what the round offers.
+- Expected: the restored card is back in the round, as it is after the toast's Undo (which re-queues it at the head; checked, `qa/shots/p22-085-after-undo2.png`), or at least it joins as a newcomer on the next resume.
+- Actual: the resumed round says "2 left"; after two grades it shows "Session complete" while the deck reads "3 cards · 1 due" with "$ rac{a}{b}$" still due and never seen (`p22-119-alg-complete.png`, `p22-120-alg-deck-after.png`). Opening Study again starts a fresh round of 1.
+- Notes: the deleted id was dropped from `remainingQueue` but stays in the checkpoint's `sourceIds`, so `_hydrate` counts it as known and doesn't add it as a newcomer; the code comment on `_requeueRestoredCard` names the same "can never re-admit a card it has lost" trap for the in-session path. Same family as BUG-155 (LeetCode, filter). Nothing is lost on disk.
+
+### BUG-198 [Phase 23] After a restart with a workout in progress, Voyager ignores every click and key and keeps more than a CPU core busy until the workout ends; the window can't even be brought back from the taskbar
+- Severity: Blocker
+- Found: 2026-10-02, Phase 23 (qa-023, build `a991189` + uncommitted Rankings changes; Dark + Scatter)
+- Steps to reproduce: Workout → plan any exercise on today → Start today → complete a set → collapse to the island (or leave it expanded). `stop.ps1` → `launch.ps1` (a normal quit and relaunch). The island comes back ("Back Squat • 0 lb • 8|3"). Click anything: the island, a rail item, a button.
+- Expected: the workout resumes (WORKOUT_TRACKER.md: the island persists; the controller's doc: "persisting it … is what lets the floating island survive an app restart mid-workout") and the app works normally.
+- Actual: no click does anything, anywhere in the app: island tap, the expanded panel's collapse caret and Complete set, the nav rail (`qa/shots/p23-036-set3drop.png`, `p23-037-island-tap2.png`, `p23-040-click-test.png`, `p23-044-click-after-relaunch.png`). Ctrl+Tab does nothing either (`p23-045-key-after-relaunch.png`). Juno's own mouse clicks failed the same way. After Juno minimised the window it could not be restored: the taskbar button and Alt+Tab didn't bring it up, while Win32 reported it visible, not iconic, maximised. The process stays "Responding", the Dart VM answers evaluations, and the frame keeps painting (the clock ticks in PrintWindow captures). Voyager used ~1 core or more the whole time (490 s CPU in the first ~6.5 min after launch, then ~170 s in ~3.5 min, ~1 GB working set), against **0.15 cores** a minute later with no workout live. A `pointerRouter` global route hooked over the VM service logged **no pointer events at all** for a click during the stuck state; the first event it saw was the `PointerRemovedEvent` after the workout ended. A hit test at the island's position resolves to the island's InkWell, so nothing in Flutter covers it. It reproduced on two separate relaunches (23:23 and 23:34). Ending the workout over the VM service (`workoutSessionControllerProvider.notifier.finish()`) restored input **at once, without a restart**: the next rail click navigated (`p23-046-click-no-live.png`), and the CPU dropped.
+- Notes: the only way out is to end the workout, and that can't be done from the UI in this state (Finish needs a click), so a user is locked out of the whole app for as long as a workout is in progress, and the workout stays live across further restarts. Before the first restart, the same workout started in this session took clicks normally on every page. The steady CPU load points to something rebuilding or animating every frame in the restored-session path (candidates read, not proven: `WorkoutOverlay` publishes `topChromeInset` from a post-frame callback on every build, which rebuilds the toast overlay; the island's `AnimatedBuilder` on the rest controller), busy enough that Windows input (clicks, keys, the taskbar restore) never gets through while VM-service requests still do. Not checked: whether a workout started fresh (not restored) also raises CPU this much (measured below in this phase if possible), and whether it depends on the rest timer having run before the restart (it had, with a 15 s rest).
+
+### BUG-199 [Phase 23] Weight and reps can only be set with a mouse: the number wheels take no keyboard focus or keys, in the target editor, the sets-and-drops editor and the live workout
+- Severity: Minor
+- Found: 2026-10-02, Phase 23 (qa-023)
+- Steps to reproduce: Workout → right-click a planned card → Edit target everywhere. Press Tab repeatedly and watch `primaryFocus` (scratch `tabwalk.ps1`). Try arrow keys / Page Up/Down.
+- Expected: the two values the dialog exists to set can be reached and changed from the keyboard (TEST_PLAN D4; a focused wheel stepping on ↑/↓ or a typed value).
+- Actual: Tab cycles Sets field → Cancel → Save → Sets field and never lands on either wheel; the dialog opens with nothing focused. `VoyagerNumberWheel` has no `Focus` / key handling, so the weight and reps wheels can't be focused or moved without a mouse wheel or drag. The same wheels are the only input for weight/reps in "Edit sets and drops" and in the expanded live workout, so logging a set at anything other than the planned numbers needs a mouse. (The History log and the exercise detail view do have typed fields, so a finished workout can be corrected by keyboard afterwards.)
+- Notes: Enter in the Sets field saves (checked); Esc cancels. Not Vim-specific. Placing exercises on days is also drag-only (no menu item or key to add a library exercise to a day), so building a plan needs a mouse too.
+
+### BUG-200 [Phase 23] The workout island sits on top of page controls: it hides the planner's History / "+ Exercise" / cycle-length buttons, the Search field and the Analytics "Best Streak" chip
+- Severity: Minor
+- Found: 2026-10-02, Phase 23 (qa-023, Dark + Scatter)
+- Steps to reproduce: start any workout and collapse it to the island. Visit Workout (Week and Split), Search, Analytics, Settings, at maximized and at the minimum size (`place 0 0 1440 1040`).
+- Expected: the island "persists regardless of the page" (WORKOUT_TRACKER.md) without covering controls; pages make room for it (the code already publishes its height as `topChromeInset` for toasts).
+- Actual: it's drawn over the top centre of every page, and whatever is there can't be clicked (a click expands the workout instead). Maximized: Workout → Split hides "+ Exercise", History and most of "Resume workout" (`qa/shots/p23-063-split.png`); Week hides the end of "Resume workout" (`p23-051-planner-kg.png`); Analytics hides the "Best Streak" chip's title (`p23-069-analytics.png`); Settings sits in the tab row (`p23-028-settings-workout.png`). Minimum size: Workout → Split hides "Active plan / Make active" and the whole cycle-length stepper (− N-day +), so the cycle length can't be changed while a workout is live (`p23-073-min-workout.png`); Search hides most of the query field (`p23-072-min-analytics.png`). It also covers the top border of the Journal Title field and the Finance hero.
+- Notes: the island is above modal barriers too (it stays bright over the History dialog's scrim, `p23-052-history.png`).
+
+### BUG-201 [Phase 23] After shrinking an exercise's set count, the live workout parks on a completed set: Complete set does nothing and the wheels rewrite that logged set
+- Severity: Minor
+- Found: 2026-10-02, Phase 23 (qa-023)
+- Steps to reproduce: start a workout whose first exercise has 5 sets. Complete sets 1 and 2. In the Sets field type 1 and press Enter.
+- Expected: the two completed sets are kept (they are) and the wheels move on to the next set still to do (the next exercise), as they do after completing the last set normally.
+- Actual: "Set 2 of 2" stays current, showing the completed set's 130 lb in the accent colour (`qa/shots/p23-022-sets1.png`). Complete set looks enabled but does nothing (`p23-023-complete-noop.png`); the only way on is the exercise strip. Turning a wheel there silently changes the logged weight of the completed set (130 → 127.5 lb written to `workout_set_logs_table`, version bumped; `p23-024-edit-completed.png`).
+- Notes: `setCurrentExerciseSetCount` lands on "this exercise's first set still to do, else its last", so with every remaining set done it parks on a done one; `completeCurrentSet` returns early for a completed set. Related observations: typing 25 sets is clamped to 20 silently; 0 or empty is reverted silently.
+
+### BUG-202 [Phase 23] The rest countdown is invisible in the expanded workout: it only appears on the collapsed island, and touching a wheel cancels it silently
+- Severity: Minor
+- Found: 2026-10-02, Phase 23 (qa-023)
+- Steps to reproduce: Settings → Pages → Rest timer between sets ON (15 s). Start a workout, keep it expanded, press Complete set.
+- Expected: the user resting between sets in the active view can see the countdown (it's the view where the next set is dialled in).
+- Actual: nothing in the expanded view changes (`qa/shots/p23-032-resting.png`); the countdown and draining border only show after collapsing to the island (0:12 → 0:06, `p23-033/034`). `active_workout_view.dart` never reads `restEndsAt`, and the wheels' `onInteraction` calls `cancelRest`, so a rest the user can't see is also ended by the first wheel touch without any sign.
+- Notes: HLD describes the rest only on the pill, so this is a gap rather than a contradiction. The rest isn't persisted (in-memory timer), so a restart also drops it (expected for a countdown).
+
+### BUG-203 [Phase 23] Exercises can't be reordered within a planned day: a drop on the same day is ignored, so a day's order is fixed to the order cards were added
+- Severity: Minor
+- Found: 2026-10-02, Phase 23 (qa-023)
+- Steps to reproduce: drag two library exercises onto Tue (A then B). Drag B's card above A within Tue.
+- Expected: B moves above A (TEST_PLAN P23 "add exercises to days; reorder"; the day's order is the order the live workout walks).
+- Actual: nothing changes; `workout_plan_entries_table` keeps sort_order A=0, B=1 (`qa/shots/p23-062-reorder.png`). `movePlanEntry` returns early when the target day equals the source day. The only way to reorder is to remove cards and re-add them in the new order (or reorder the strip in each live session, which doesn't touch the plan).
+- Notes: moving a card to another day works and appends it at the end.
+
+### BUG-204 [Phase 23] Starter exercises that were planned or lifted but never edited are lost on a new device or after a wipe: plan cards vanish and their logged sets show as "No sets"
+- Severity: Blocker
+- Found: 2026-10-03, Phase 23 (qa-023)
+- Steps to reproduce: fresh account → Workout. Drag the starter "Pull-up" onto Mon (don't edit its target) and the starter "Deadlift" / "Lat Pulldown" onto split days. Start Mon's workout, complete a Pull-up set, Finish. Also edit one other starter (e.g. Bench Press target) so at least one exercise reaches the cloud. Let the outbox drain to 0. Cold re-login (`guard.ps1` → `reset.ps1 -Force` → `launch.ps1` → `login.ps1`), i.e. what any second device or reinstall does.
+- Expected: the library, the planned days and the history come back as they were.
+- Actual: `exercises_table` comes back with **4 of 20** rows: only the exercises that had been edited or created (Bench Press, Back Squat, the two UI-made ones). The 16 untouched starters are gone, including the three that were planned and lifted. The planner shows "Wed · 1 exercise" with an empty column (Pull-up's entry points at a missing exercise), the split's Day 1 / Day 4 the same, and the library lists only 4 cards (`qa/shots/p23-095-cold-planner.png`). History lists the Pull-up workout as "No sets · 1 of 3 sets · 0 kg" (`p23-096-cold-history.png`): its 3 set logs came back (32 of 32 rows) but nothing can name or show them, and the exercise's detail view / sparkline can't be opened. The starters are not re-seeded either (the library isn't empty). Plans, entries, sessions and set logs otherwise matched the pre-wipe snapshot exactly (scratch `snap.py`).
+- Notes: by design an untouched starter (version 0) is never uploaded (`ensureSeeded` writes with `recordLocalActivity: false`; Dev's full sync check skips such rows by name, `full_sync_check.dart`: "a wipe loses nothing the next seeding does not put back"). That assumption fails twice: `ensureSeeded` only seeds when the exercise table is completely empty, so one pulled exercise suppresses it; and seeds get fresh random ids, so even a re-seed wouldn't match the ids that plan entries and set logs reference. Placing a starter on a day or lifting it doesn't bump its version, so it stays "untouched". The Dev page's "Check, then quit (before a wipe)" would therefore report it safe to wipe. Every new user who plans with the starter library and doesn't edit targets is exposed on their second device.
+
+### BUG-205 [Phase 23] Cosmetic: the kg weight wheel labels 1.25 kg steps as "1.3", "3.8" …; a 300-character exercise name fills the live view and pushes the other exercises out of its strip
+- Severity: Cosmetic
+- Found: 2026-10-03, Phase 23 (qa-023)
+- Steps to reproduce: (a) Settings → Weight unit kg; open any workout's wheels. (b) Create an exercise with a 300-character one-word name, plan it with a second exercise, start that day.
+- Expected: (a) the wheel shows the value it stores (1.25, 3.75); (b) a long name is truncated like on the cards.
+- Actual: (a) rows read 0 / 1.3 / 2.5 / 3.8 / 5 (`qa/shots/p23-079-finish-confirm.png`, `p23-088-long-active.png`); picking "1.3" stores 1.25 kg (`formatDisplay` rounds to one decimal). (b) the title wraps over 10 lines, the panel scales everything down to fit, and the exercise strip's first chip spans the full width so the second exercise and "+ Exercise" are off-screen with no visible way to scroll (`p23-088-long-active.png`).
+
+<!-- Last ID: BUG-205. -->

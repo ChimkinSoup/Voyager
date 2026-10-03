@@ -2,7 +2,10 @@
 # logging to qa/logs/run-<timestamp>.log, and waits until the Dart VM service
 # is up (its ws:// URI goes to qa/logs/vm_uri.txt for vm.dart).
 # The first build after a code change takes a few minutes.
-param([int]$TimeoutSec = 900)
+# The Geoapify map key is read from <repo>\dart_defines.json (git-ignored,
+# outside qa/) and passed as a --dart-define; it is never written to qa/.
+# -NoMapKey launches without it (Phase 19B "no key" checks).
+param([int]$TimeoutSec = 900, [switch]$NoMapKey)
 $ErrorActionPreference = 'Stop'
 $qa = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $repo = Split-Path -Parent $qa
@@ -13,7 +16,14 @@ Remove-Item (Join-Path $logs 'vm_uri.txt') -ErrorAction SilentlyContinue
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $log = Join-Path $logs "run-$stamp.log"
 $err = Join-Path $logs "run-$stamp.err.log"
-Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', 'flutter run -d windows --debug' `
+$run = 'flutter run -d windows --debug'
+$definesFile = Join-Path $repo 'dart_defines.json'
+if (-not $NoMapKey -and (Test-Path -LiteralPath $definesFile)) {
+  $mapKey = (Get-Content -Raw -LiteralPath $definesFile | ConvertFrom-Json).GEOAPIFY_API_KEY
+  if ($mapKey -match '^[A-Za-z0-9]+$') { $run += " --dart-define=GEOAPIFY_API_KEY=$mapKey" }
+}
+if ($run -match 'GEOAPIFY') { 'map key: passed' } else { 'map key: NOT passed' }
+Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', $run `
   -WorkingDirectory $repo -WindowStyle Hidden -RedirectStandardOutput $log -RedirectStandardError $err | Out-Null
 $deadline = (Get-Date).AddSeconds($TimeoutSec)
 while ((Get-Date) -lt $deadline) {

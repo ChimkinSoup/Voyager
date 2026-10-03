@@ -1,0 +1,48 @@
+final now = DateTime.now().toUtc();
+final rr = c.read(rankingRepositoryProvider);
+final r = c.read(remoteSyncServiceProvider);
+final cats = await rr.listCategories();
+final cat = cats.firstWhere((x) => x.name == 'Shows');
+final story = cat.parentTemplate.firstWhere((f) => f.label == 'Story').id;
+final scores = <double?>[10, 10, 10, 9, 8.4, 8.4, 8.3, 7.5, 5, 0.1, null, null, null, null, null, null, null];
+final tags = <List<String>>[['thai'], ['thai', 'crime'], [], ['horror', 'crime', 'drama', 'slow-burn'], [], ['thai'], [], [], ['horror'], [], ['thai'], [], [], [], [], [], []];
+final ps = <RankingParent>[];
+for (var i = 0; i < scores.length; i++) {
+  final id = 'p19-s-' + i.toString().padLeft(2, '0');
+  final ranked = scores[i] != null;
+  ps.add(RankingParent(
+    id: id,
+    createdAt: now.subtract(Duration(days: 40 - i * 2)),
+    updatedAt: now.subtract(Duration(minutes: 100 - i)),
+    version: 1,
+    categoryId: cat.id,
+    title: 'Seed show ' + i.toString().padLeft(2, '0'),
+    overallScore: scores[i],
+    notes: i == 12 ? 'only a note tag #thai here' : (i == 6 ? 'zebracorn finale #finale' : ''),
+    tags: tags[i],
+    status: (i == 13 || i == 14) ? RankingStatus.inProgress : RankingStatus.queued,
+    starred: i == 8 || i == 15,
+    queueSortOrder: i,
+    fieldValues: (ranked && i % 2 == 0) ? {story: RankingFieldValue(score: (i + 1).toDouble(), notes: 'story note ' + i.toString())} : const {},
+  ));
+}
+ps.add(RankingParent(id: 'p19-s-long', createdAt: now, updatedAt: now, version: 1, categoryId: cat.id, title: 'L' + ('x' * 298) + 'Z', overallScore: 6, tags: const ['a-very-long-structured-tag-name-that-goes-on', 'second', 'third']));
+ps.add(RankingParent(id: 'p19-s-intl', createdAt: now, updatedAt: now, version: 1, categoryId: cat.id, title: 'Intl ' + String.fromCharCodes([0x6771, 0x4EAC, 0x30C6, 0x30B9, 0x30C8, 0x20, 0x645, 0x631, 0x62D, 0x628, 0x627, 0x20, 0x1F600, 0x1F680, 0x20, 0x63, 0x61, 0x66, 0xE9]), overallScore: 6));
+for (final p in ps) { await rr.upsertParent(p); }
+await r.pushRankingParentsBatch(ps);
+final cs = <RankingChild>[];
+for (var i = 0; i < 12; i++) {
+  cs.add(RankingChild(id: 'p19-c-' + i.toString().padLeft(2, '0'), createdAt: now, updatedAt: now, version: 1, parentId: 'p19-s-00', name: 'Seed ep ' + (12 - i).toString().padLeft(2, '0'), overallScore: i < 8 ? (i % 5) + 0.5 : null, notes: i == 3 ? 'child note quokkaword' : '', sortOrder: i));
+}
+for (final ch in cs) { await rr.upsertChild(ch); }
+await r.pushRankingChildrenBatch(cs);
+final bulk = RankingCategory(id: 'p19-cat-bulk', createdAt: now, updatedAt: now, version: 1, name: 'Bulk 200', colorValue: 0xFF7FC8A9, sortOrder: 1);
+await rr.upsertCategory(bulk);
+r.pushRankingCategory(bulk);
+final bs = <RankingParent>[];
+for (var i = 0; i < 200; i++) {
+  bs.add(RankingParent(id: 'p19-b-' + i.toString().padLeft(3, '0'), createdAt: now.subtract(Duration(hours: i)), updatedAt: now.subtract(Duration(seconds: i)), version: 1, categoryId: bulk.id, title: 'Bulk item ' + i.toString().padLeft(3, '0'), overallScore: i < 150 ? (i % 11) * 0.5 : null, tags: [ 'tag' + (i % 7).toString() ], queueSortOrder: i));
+}
+for (final p in bs) { await rr.upsertParent(p); }
+await r.pushRankingParentsBatch(bs);
+invalidateRankingProvidersIn(c);

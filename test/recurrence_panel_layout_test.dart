@@ -9,6 +9,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
@@ -16,9 +17,10 @@ import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/features/calendar/calendar_event_panel.dart';
 
 import 'fakes/fake_weather_api_client.dart';
+import 'narrow_window_harness.dart' show loadRealFonts;
 
 /// Mirrors `_CalendarPageState._eventPopupWidth`.
-const double kEventPopupWidth = 344.0;
+const double kEventPopupWidth = 384.0;
 
 Future<ProviderContainer> _container(WidgetTester tester) async {
   final db = AppDatabase.inMemory();
@@ -52,10 +54,11 @@ CalendarEvent worstCaseEvent({
     updatedAt: now,
     calendarId: 'c1',
     title: 'Offsite',
-    // Multi-day *and* timed: the date pill shows a range and the time pill is
-    // present, which is the widest row 2 can be.
-    start: DateTime(2026, 11, 28, 10, 30),
-    end: DateTime(2026, 12, 2, 17, 45),
+    // Multi-day *and* timed, with two-digit days and hours on both ends: the
+    // date pill shows a range and the time pill is present, which is the
+    // widest row 2 can be.
+    start: DateTime(2026, 11, 28, 12, 45),
+    end: DateTime(2026, 12, 12, 23, 45),
     isFullDay: false,
     recurrence: recurrence,
   );
@@ -71,6 +74,8 @@ Future<void> _pumpPanel(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
+        // The app theme is what sets the app font on the pills.
+        theme: VoyagerTheme.dark(),
         home: Scaffold(
           body: Center(
             child: SizedBox(
@@ -83,6 +88,7 @@ Future<void> _pumpPanel(
                   initialCalendarId: 'c1',
                   onSave: (_) {},
                   onCancel: () {},
+                  onToggleDone: () async {},
                 ),
               ),
             ),
@@ -101,6 +107,9 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
+    // The real glyph widths: the test font's square glyphs would measure a
+    // different row than the one users see.
+    await loadRealFonts(tester);
     final container = await _container(tester);
     await _pumpPanel(tester, container, event: worstCaseEvent());
 
@@ -126,6 +135,13 @@ void main() {
       tester.getRect(dateRange).right,
       lessThanOrEqualTo(repeatRect.left + 1),
     );
+
+    // The pills scroll rather than overflow, so a row that does not fit hides
+    // the end time instead of failing a layout check. It must not need to.
+    final pills = tester.state<ScrollableState>(
+      find.ancestor(of: dateRange, matching: find.byType(Scrollable)),
+    );
+    expect(pills.position.maxScrollExtent, 0);
   });
 
   testWidgets('the repeat button reads as on for a repeating event and off for '

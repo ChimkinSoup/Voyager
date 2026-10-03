@@ -1,0 +1,33 @@
+final repo = c.read(jobRepositoryProvider);
+final sync = c.read(remoteSyncServiceProvider);
+final seasons = await repo.listSeasons();
+final fall = seasons.firstWhere((s) => s.name == 'Fall 2026').id;
+final winter = seasons.firstWhere((s) => s.name == 'Winter 2027').id;
+final statuses = ['Phone Screen', 'Online Assessment', 'Onsite', 'Rejected'];
+final companies = ['Acme Corp', 'acme corp', 'ACME CORP', 'Globex', 'Initech', 'Umbrella', 'Hooli', 'Pied Piper', 'Stark', 'Wayne', 'Wonka', 'Cyberdyne', 'Tyrell', 'Soylent', 'Vandelay', 'Dunder', 'Oscorp', 'Aperture', 'Black Mesa', 'Gringotts', 'Monarch', 'Massive', 'Nakatomi', 'Weyland', 'Zorg'];
+final now = DateTime.now();
+var n = 0;
+for (var i = 0; i < 300; i++) {
+  final id = 'p20-b-' + i.toString().padLeft(3, '0');
+  final ts = now.toUtc().subtract(Duration(seconds: i));
+  final seasonIds = i % 10 == 0 ? [fall] : (i % 15 == 0 ? [winter] : <String>[]);
+  final a = JobApplication(
+    id: id,
+    createdAt: ts,
+    updatedAt: ts,
+    company: companies[i % companies.length],
+    title: 'Bulk role ' + i.toString().padLeft(3, '0'),
+    status: statuses[i % statuses.length],
+    dateApplied: jobCalendarDay(now.subtract(Duration(days: i % 45))),
+    notes: i % 20 == 0 ? 'bulk note #bulk' : null,
+    seasonIds: seasonIds,
+  );
+  final e = JobStatusEvent(id: id + '-ev', applicationId: id, fromStatus: null, toStatus: a.status, changedAt: ts, createdAt: ts, updatedAt: ts);
+  await repo.writeApplication(a, events: [e], registerCompany: a.company);
+  sync.pushJobApplication(a);
+  sync.pushJobStatusEvent(e);
+  n++;
+}
+c.invalidate(jobApplicationsProvider);
+c.invalidate(jobCompaniesProvider);
+debugPrint('P20SEED wrote ' + n.toString());

@@ -9,10 +9,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
 import 'package:vector_tile_renderer/vector_tile_renderer.dart' as vtr;
-import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/features/rankings/rankings_map_style.dart';
+import 'package:voyager/features/rankings/rankings_offline_maps.dart';
 import 'package:voyager/features/rankings/rankings_providers.dart';
 
 /// The base style every map is recoloured from — see [voyagerMapStyle].
@@ -567,9 +567,9 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
 
   @override
   Widget build(BuildContext context) {
-    final client = ref.watch(geoapifyClientProvider);
+    final network = ref.watch(rankingMapNetworkTilesProvider);
     final base = ref.watch(_baseStyleProvider).valueOrNull;
-    if (client == null || base == null) return const SizedBox.shrink();
+    if (network == null || base == null) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     final theme = _themeFor(base, scheme);
     final camera = _camera = MapCamera.of(context);
@@ -594,7 +594,7 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        _tiles(theme, client.apiKey),
+        _tiles(theme, network),
         if (names != null)
           MobileLayerTransformer(
             child: IgnorePointer(
@@ -618,22 +618,21 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
     );
   }
 
-  Widget _tiles(vtr.Theme theme, String apiKey) {
+  Widget _tiles(vtr.Theme theme, VectorTileProvider network) {
     return VectorTileLayer(
       controller: _controller,
       theme: theme,
       tileProviders: TileProviders({
         'default':
             ref.watch(rankingMapTileProviderProvider) ??
-            NetworkVectorTileProvider(
-              urlTemplate:
-                  'https://maps.geoapify.com/v1/tile/vector/{z}/{x}/{y}.pbf'
-                  '?apiKey=$apiKey',
-              maximumZoom: 14,
+            RankingOfflineFirstTiles(
+              network,
+              ref.read(rankingOfflineAreasProvider.notifier),
             ),
       }),
       // Viewed tiles are kept on disk, so a revisited area draws offline and
-      // spends no credits. A month: a street map does not go stale between
+      // spends no credits. Downloaded areas are apart from this and never
+      // expire. A month: a street map does not go stale between
       // visits.
       fileCacheTtl: const Duration(days: 30),
       // Rendered tiles are stored per palette, so each theme fills it anew.

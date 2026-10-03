@@ -24,6 +24,7 @@ import 'package:voyager/domain/services/calendar_recurrence_editing.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/scope_switcher.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -34,6 +35,7 @@ import 'package:voyager/features/calendar/calendar_grid.dart';
 import 'package:voyager/features/calendar/calendar_keyboard_shortcuts.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
 import 'package:voyager/features/calendar/calendar_event_delete.dart';
+import 'package:voyager/features/calendar/calendar_event_done.dart';
 import 'package:voyager/features/calendar/calendar_import_dialog.dart';
 import 'package:voyager/features/calendar/calendar_manage_sheet.dart';
 import 'package:voyager/features/calendar/calendar_todo_panel.dart';
@@ -190,8 +192,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   bool _skipWeekEntryFade = false;
 
   // Wide enough for the widest row 2 can get — a multi-day date range, a time
-  // range, and the pinned repeat button — without the pills having to scroll.
-  static const _eventPopupWidth = 344.0;
+  // range, and the pinned repeat and bell buttons — without the pills having
+  // to scroll. Guarded by recurrence_panel_layout_test.dart.
+  static const _eventPopupWidth = 384.0;
   static const _baseZoomDuration = Duration(milliseconds: 600);
   static const _baseWeekMorphDuration = Duration(milliseconds: 600);
   static const _baseChainedMorphDuration = Duration(milliseconds: 400);
@@ -597,6 +600,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
         onCancel: () {
           if (Navigator.of(ctx).canPop()) Navigator.of(ctx).pop();
         },
+        onToggleDone: event == null
+            ? null
+            : () => _toggleEventDone(event, occurrenceDay),
       ),
     );
     // Popup closed for any reason (save, cancel, barrier tap).
@@ -765,8 +771,29 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   }
 
   Future<void> _saveSidebarEvent(Map<String, dynamic> result) async {
-    final event = _sidebarEvent;
     final occurrenceDay = _sidebarOccurrenceDay;
+    final repo = ref.read(calendarRepositoryProvider);
+    // Re-read: the row may have been marked done from the open panel, and
+    // rebuilding from the copy the panel opened with would undo that. A
+    // toggle still being written is waited for, or the read would miss it.
+    final opened = _sidebarEvent;
+    await _doneToggles;
+    final event = opened == null
+        ? null
+        : await repo.getEvent(opened.id) ?? opened;
+    // Deleted on another device while the panel was open: saving onto the
+    // deleted row would drop the edit without a word.
+    if (event != null && event.isDeleted) {
+      if (!mounted) return;
+      showVoyagerToast(
+        context,
+        message:
+            'This event was deleted on another device, so the edit '
+            "wasn't saved",
+      );
+      _resetSidebar();
+      return;
+    }
     final now = utcNow();
     // The panel was handed an occurrence view, so its start/end are expressed
     // at [occurrenceDay], not at the series anchor. The scope decides whether
@@ -795,19 +822,22 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             createdAt: now,
             updatedAt: now,
           )
-        : event.copyWith(
-            calendarId: result['calendarId'] as String?,
-            title: result['title'] as String,
-            start: result['start'] as DateTime,
-            end: result['end'] as DateTime,
-            isFullDay: result['isFullDay'] as bool,
-            colorValue: result['colorValue'] as int,
-            notes: result['notes'] as String,
-            recurrence:
-                result['recurrence'] as RecurrenceRule? ?? RecurrenceRule.none,
+        : carryDoneAcrossRepeatChange(
+            event,
+            occurrenceDay ?? event.start,
+            event.copyWith(
+              calendarId: result['calendarId'] as String?,
+              title: result['title'] as String,
+              start: result['start'] as DateTime,
+              end: result['end'] as DateTime,
+              isFullDay: result['isFullDay'] as bool,
+              colorValue: result['colorValue'] as int,
+              notes: result['notes'] as String,
+              recurrence:
+                  result['recurrence'] as RecurrenceRule? ??
+                  RecurrenceRule.none,
+            ),
           );
-
-    final repo = ref.read(calendarRepositoryProvider);
 
     // Closing the popup by clicking away saves too, so without this an event
     // the user only opened to look at would be rewritten, re-pushed to
@@ -931,7 +961,16 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       ];
     }
     final event = entry.event!;
+    final day = entry.day ?? _focused;
+    final isDone = calendarEventDoneOn(event, day);
     return [
+      ContextMenuItem(
+        label: isDone ? 'Mark as not done' : 'Mark as done',
+        icon: isDone
+            ? PhosphorIconsRegular.circle
+            : PhosphorIconsRegular.checkCircle,
+        onTap: () => unawaited(_toggleEventDone(event, day)),
+      ),
       ContextMenuItem(
         label: 'Change color',
         icon: PhosphorIconsRegular.palette,
@@ -1001,6 +1040,28 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       occurrenceDay: day ?? _focused,
       onConfirmed: () async => mounted,
     );
+  }
+
+  /// The latest done toggle, finished or not.
+  ///
+  /// Each toggle reads the row, flips it and writes it back, so two running at
+  /// once — or a toggle and a save — would both read the same row and the
+  /// second write would undo the first. Toggles queue behind this, and a save
+  /// waits for it.
+  Future<void> _doneToggles = Future.value();
+
+  Future<void> _toggleEventDone(CalendarEvent event, DateTime day) {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final toggle = _doneToggles.then(
+      (_) => toggleCalendarEventDone(
+        container: container,
+        event: event,
+        occurrenceDay: day,
+      ),
+    );
+    // A toggle that failed must not hold up the ones queued after it.
+    _doneToggles = toggle.catchError((Object _) {});
+    return toggle;
   }
 
   Future<void> _deleteTodoTask(CalendarTodoMarker marker) async {

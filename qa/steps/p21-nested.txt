@@ -1,0 +1,19 @@
+activate
+click 292 63
+wait 1200
+click 1852 517
+wait 1500
+shot p21-066-nested-deck
+click 2437 472
+wait 900
+type nested card front
+click 1292 880
+type nested card back
+key ctrl+enter
+wait 1200
+shot p21-067-nested-card
+click 292 63
+wait 1200
+click 2317 517
+wait 1500
+shot p21-068-sd-counts

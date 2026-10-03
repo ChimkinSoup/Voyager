@@ -15,6 +15,10 @@ import 'package:voyager/domain/models/journal_models.dart' show kDefaultMood;
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/settings_models.dart'
     show JobExperienceSnippet, Snippet, defaultPetalColor;
+import 'package:voyager/domain/models/calendar_models.dart'
+    show CalendarDoneMark;
+import 'package:voyager/domain/services/calendar_recurrence.dart'
+    show decodeExceptionDates, encodeDoneMarks;
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/domain/services/periodic_prompt_service.dart'
     show weeklyTrackerStorageAnchor;
@@ -277,6 +281,12 @@ class CalendarEventsTable extends Table {
   /// series it came from, and the occurrence start it stands in for.
   TextColumn get recurrenceParentId => text().nullable()();
   DateTimeColumn get recurrenceDate => dateTime().nullable()();
+
+  /// Marked done as a whole — see [CalendarEvent.isDone].
+  BoolColumn get isDone => boolean().withDefault(const Constant(false))();
+
+  /// A series' done marks as JSON — see [encodeDoneMarks].
+  TextColumn get doneMarks => text().withDefault(const Constant(''))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -1933,7 +1943,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 134;
+  int get schemaVersion => 136;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3443,6 +3453,26 @@ class AppDatabase extends _$AppDatabase {
           settingsTable.rankingsDeviceLongitude,
         );
       }
+      if (from < 135) {
+        await _addColumnIfNotExists(
+          migrator,
+          'calendar_events_table',
+          calendarEventsTable,
+          calendarEventsTable.isDone,
+        );
+      }
+      // 135 kept a series' done occurrences as a bare date list, which two
+      // devices' edits could only overwrite; 136 keeps a timestamped mark per
+      // date so they merge.
+      if (from < 136) {
+        await _addColumnIfNotExists(
+          migrator,
+          'calendar_events_table',
+          calendarEventsTable,
+          calendarEventsTable.doneMarks,
+        );
+        await _foldCalendarDoneDatesColumn(migrator);
+      }
     },
   );
 
@@ -3762,6 +3792,32 @@ class AppDatabase extends _$AppDatabase {
         updates: {leetCodeProblemsTable},
       );
     }
+  }
+
+  /// Rewrites v135's `done_dates` list into `done_marks`, each date marked
+  /// done as of the row's last update, then drops the old column.
+  Future<void> _foldCalendarDoneDatesColumn(Migrator migrator) async {
+    if (!await _columnExists('calendar_events_table', 'done_dates')) return;
+    final rows = await customSelect(
+      'SELECT id, done_dates, updated_at FROM calendar_events_table '
+      "WHERE done_dates <> ''",
+    ).get();
+    for (final row in rows) {
+      final at = row.read<DateTime>('updated_at').toUtc();
+      await customStatement(
+        'UPDATE calendar_events_table SET done_marks = ? WHERE id = ?',
+        [
+          encodeDoneMarks({
+            for (final date in decodeExceptionDates(
+              row.read<String>('done_dates'),
+            ))
+              date: CalendarDoneMark(done: true, at: at),
+          }),
+          row.read<String>('id'),
+        ],
+      );
+    }
+    await migrator.dropColumn(calendarEventsTable, 'done_dates');
   }
 
   /// Skips ADD COLUMN when the local DB already has it (e.g. after branch churn,

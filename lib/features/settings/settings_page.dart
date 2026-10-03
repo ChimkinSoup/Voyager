@@ -30,6 +30,7 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/notifications/notification_history_dialog.dart';
+import 'package:voyager/features/rankings/rankings_offline_maps_dialogs.dart';
 import 'package:voyager/features/settings/account_section.dart';
 import 'package:voyager/features/settings/backup_list_dialog.dart';
 import 'package:voyager/features/trash/trash_dialog.dart';
@@ -781,6 +782,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                             : null,
                       ),
                       const _MediaStorageTile(),
+                      const RankingOfflineMapsTile(),
                       const SizedBox(height: 16),
                       Text(
                         'Backup & Restore',

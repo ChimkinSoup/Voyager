@@ -1,0 +1,14 @@
+activate
+click 1543 99
+wait 800
+place 100 40 2600 1640
+wait 1200
+click 292 63
+wait 1200
+click 921 517
+wait 1500
+click 2112 429
+wait 900
+key ctrl+v
+wait 1000
+shot p21-050-import-mixed

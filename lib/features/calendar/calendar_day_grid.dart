@@ -389,16 +389,47 @@ const calendarEventCornerRadius = 9.0;
 /// clip can be deflated by the exact same amount the border paints inward.
 const _cellBorderWidth = 1.0;
 
+/// Outline width of a done event, drawn hollow instead of filled.
+const calendarEventHollowBorderWidth = 1.5;
+
+/// The fill behind an event, or with [hollow] (a done event) just its outline.
+///
+/// A hollow outline leaves out any side whose corners are both square: those
+/// are the sides where a multi-day bar runs on into the next cell, and an edge
+/// there would draw a seam through the middle of one event.
 BoxDecoration calendarEventFillDecoration(
   Color base, {
   double alpha = calendarEventBarFillAlpha,
   BorderRadius? borderRadius,
+  bool hollow = false,
 }) {
+  if (hollow) {
+    const square = Radius.zero;
+    final side = BorderSide(color: base, width: calendarEventHollowBorderWidth);
+    final r = borderRadius;
+    final openLeft = r != null && r.topLeft == square && r.bottomLeft == square;
+    final openRight =
+        r != null && r.topRight == square && r.bottomRight == square;
+    return BoxDecoration(
+      borderRadius: borderRadius,
+      border: Border(
+        top: side,
+        bottom: side,
+        left: openLeft ? BorderSide.none : side,
+        right: openRight ? BorderSide.none : side,
+      ),
+    );
+  }
   return BoxDecoration(
     color: base.withValues(alpha: alpha),
     borderRadius: borderRadius,
   );
 }
+
+/// Title colour over [calendarEventFillDecoration]: legible on the fill, or the
+/// event's own colour when [hollow] leaves nothing behind the text.
+Color calendarEventLabelColor(Color base, {bool hollow = false}) =>
+    hollow ? base : onColorLabel(base);
 
 Color calendarTitleAccentColor(BuildContext context, {Color? accentColor}) =>
     accentColor ?? Theme.of(context).colorScheme.primary;
@@ -1670,6 +1701,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
     bool roundRight = true,
   }) {
     final color = paletteColor(event.colorValue, context);
+    final done = calendarEventDoneOn(event, date);
 
     final leftRadius = roundLeft ? calendarEventCornerRadius : 0.0;
     final rightRadius = roundRight ? calendarEventCornerRadius : 0.0;
@@ -1681,6 +1713,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
           left: Radius.circular(leftRadius),
           right: Radius.circular(rightRadius),
         ),
+        hollow: done,
       ),
       child: showText && textOpacity > 0
           ? Align(
@@ -1696,7 +1729,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
                     style: AppFonts.style(
                       fontSize: eventFontSize * expandT.clamp(0.6, 1.0),
                       height: 1,
-                      color: onColorLabel(color),
+                      color: calendarEventLabelColor(color, hollow: done),
                     ),
                   ),
                 ),
@@ -2125,7 +2158,9 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final event in events)
+          for (final (event, done) in [
+            for (final e in events) (e, calendarEventDoneOn(e, day)),
+          ])
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               child: calendarEntryContextMenu(
@@ -2144,6 +2179,7 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
                     decoration: calendarEventFillDecoration(
                       paletteColor(event.colorValue, context),
                       borderRadius: BorderRadius.circular(6),
+                      hollow: done,
                     ),
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -2153,8 +2189,9 @@ class CalendarDayOverflowEventsPopover extends StatelessWidget {
                       style: AppFonts.style(
                         fontSize: 11,
                         height: 1,
-                        color: onColorLabel(
+                        color: calendarEventLabelColor(
                           paletteColor(event.colorValue, context),
+                          hollow: done,
                         ),
                       ),
                     ),
@@ -2254,6 +2291,7 @@ class CalendarDayEventBar extends StatelessWidget {
       bottomRight: Radius.circular(isEnd ? bottomRadius : 0.0),
     );
     final eventColor = paletteColor(event.colorValue, context);
+    final done = calendarEventDoneOn(event, date);
 
     return Stack(
       clipBehavior: Clip.none,
@@ -2284,6 +2322,7 @@ class CalendarDayEventBar extends StatelessWidget {
               decoration: calendarEventFillDecoration(
                 eventColor,
                 borderRadius: borderRadius,
+                hollow: done,
               ),
               alignment: Alignment.centerLeft,
               child: isStart
@@ -2294,7 +2333,10 @@ class CalendarDayEventBar extends StatelessWidget {
                       style: AppFonts.style(
                         fontSize: fontSize,
                         height: 1,
-                        color: onColorLabel(eventColor),
+                        color: calendarEventLabelColor(
+                          eventColor,
+                          hollow: done,
+                        ),
                       ),
                     )
                   : null,

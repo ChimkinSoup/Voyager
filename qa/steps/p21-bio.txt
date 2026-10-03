@@ -1,0 +1,12 @@
+activate
+key esc
+wait 600
+shot p21-015-after-esc
+click 2494 1541
+wait 600
+click 2333 1211
+wait 700
+type Bio
+key enter
+wait 900
+shot p21-016-with-bio

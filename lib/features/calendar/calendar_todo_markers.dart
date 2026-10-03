@@ -512,6 +512,7 @@ class CalendarWeekEventBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = paletteColor(event.colorValue, context).withAlpha(255);
+    final done = calendarEventDoneOn(event, day ?? event.start);
 
     final (bridgeLeft, bridgeRight) = calendarWeekEventBridges(
       event,
@@ -572,6 +573,7 @@ class CalendarWeekEventBlock extends StatelessWidget {
                 color,
                 alpha: calendarEventBarFillAlpha,
                 borderRadius: borderRadius,
+                hollow: done,
               ),
               child: showText
                   ? Text(
@@ -580,7 +582,7 @@ class CalendarWeekEventBlock extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 10,
-                        color: onColorLabel(color),
+                        color: calendarEventLabelColor(color, hollow: done),
                       ),
                     )
                   : const SizedBox.shrink(),

@@ -1,0 +1,50 @@
+final now = DateTime.now().toUtc();
+final rr = c.read(rankingRepositoryProvider);
+final r = c.read(remoteSyncServiceProvider);
+final cats = await rr.listCategories();
+final cat = cats.firstWhere((x) => x.name == 'Restaurants');
+final ps = <RankingParent>[];
+for (var i = 0; i < 200; i++) {
+  final spot = i % 40;
+  final lat = 43.440 + (spot ~/ 8) * 0.012 + (i ~/ 40) * 0.0006;
+  final lng = -80.560 + (spot % 8) * 0.010 + (i ~/ 40) * 0.0008;
+  final id = 'p19b-m-' + i.toString().padLeft(3, '0');
+  ps.add(RankingParent(
+    id: id,
+    createdAt: now.subtract(Duration(hours: i)),
+    updatedAt: now.subtract(Duration(seconds: i)),
+    version: 1,
+    categoryId: cat.id,
+    title: 'Map item ' + i.toString().padLeft(3, '0'),
+    overallScore: i < 150 ? (i % 11) * 0.5 : null,
+    notes: i == 160 ? 'note zebracorn' : '',
+    tags: ['tag' + (i % 7).toString()],
+    status: (i >= 150 && i < 170) ? RankingStatus.inProgress : RankingStatus.queued,
+    queueSortOrder: i,
+    locations: i >= 190 ? const [] : [RankingLocation(id: id + '-loc', latitude: lat, longitude: lng, address: 'Spot ' + spot.toString() + ' Seed Street, Waterloo, ON', label: i % 10 == 0 ? 'Label ' + i.toString() : '')],
+  ));
+}
+ps.add(RankingParent(
+  id: 'p19b-chain',
+  createdAt: now,
+  updatedAt: now,
+  version: 1,
+  categoryId: cat.id,
+  title: 'Chain Tims',
+  overallScore: 4.5,
+  tags: const ['chain'],
+  locations: [for (var b = 0; b < 10; b++) RankingLocation(id: 'p19b-chain-loc-' + b.toString(), latitude: 43.42 + b * 0.011, longitude: -80.60 + b * 0.013, address: 'Tim Hortons, Branch ' + b.toString() + ' Road, Waterloo, ON', label: b < 3 ? 'Branch ' + b.toString() : '', sortOrder: b)],
+));
+for (final p in ps) { await rr.upsertParent(p); }
+await r.pushRankingParentsBatch(ps);
+final cafes = RankingCategory(id: 'p19b-cat-cafes', createdAt: now, updatedAt: now, version: 1, name: 'Cafes', colorValue: 0xFF7FC8A9, iconKey: 'star', sortOrder: 3, parentScoreMax: 10, parentScorePrecision: RankingScorePrecision.tenths, locationEnabled: true);
+await rr.upsertCategory(cafes);
+r.pushRankingCategory(cafes);
+final cs = <RankingParent>[];
+final cscores = <double?>[7.5, 7.2, 10, 0, null];
+for (var i = 0; i < 5; i++) {
+  cs.add(RankingParent(id: 'p19b-cafe-' + i.toString(), createdAt: now, updatedAt: now, version: 1, categoryId: cafes.id, title: 'Cafe ' + i.toString(), overallScore: cscores[i], tags: [i < 2 ? 'tag1' : 'cafeonly'], queueSortOrder: i, locations: [RankingLocation(id: 'p19b-cafe-loc-' + i.toString(), latitude: 43.455 + i * 0.004, longitude: -80.515 + i * 0.006, address: 'Cafe Lane ' + i.toString() + ', Waterloo, ON')]));
+}
+for (final p in cs) { await rr.upsertParent(p); }
+await r.pushRankingParentsBatch(cs);
+invalidateRankingProvidersIn(c);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/domain/services/recurrence_engine.dart';
 
 /// Which slice of a series an edit or delete applies to.
@@ -130,6 +131,9 @@ RecurrenceEditResult editRecurringEvent({
         externalId: master.externalId,
         recurrenceParentId: master.id,
         recurrenceDate: occurrence,
+        // The occurrence it replaces may have been marked done; that belongs
+        // to this row now, since the master no longer draws that day.
+        isDone: calendarEventDoneOn(master, occurrence),
       );
       return RecurrenceEditResult(
         upserts: [
@@ -167,6 +171,15 @@ RecurrenceEditResult editRecurringEvent({
           for (final d in master.exceptionDates)
             if (!DateUtils.dateOnly(d.toLocal()).isBefore(occurrence)) d,
         ],
+        // Split the same way: each half keeps the done marks on its own side,
+        // and the tail's slide with it when the edit moved the date.
+        doneMarks: _shiftDoneMarks({
+          for (final entry in master.doneMarks.entries)
+            if (!entry.key.isBefore(occurrence)) entry.key: entry.value,
+        }, recurrenceRebaseShiftDays(edited, occurrence)),
+        // Set when the edit also stopped the tail repeating; see
+        // [carryDoneAcrossRepeatChange].
+        isDone: edited.isDone,
       );
       return RecurrenceEditResult(
         upserts: [
@@ -176,6 +189,10 @@ RecurrenceEditResult editRecurringEvent({
               for (final d in master.exceptionDates)
                 if (DateUtils.dateOnly(d.toLocal()).isBefore(occurrence)) d,
             ],
+            doneMarks: {
+              for (final entry in master.doneMarks.entries)
+                if (entry.key.isBefore(occurrence)) entry.key: entry.value,
+            },
             clearRecurrenceEndDate: false,
           ),
           tail,
@@ -248,6 +265,8 @@ CalendarEvent rebaseToAnchor(
             for (final date in edited.exceptionDates)
               addDays(DateUtils.dateOnly(date.toLocal()), shift),
           ],
+    // Done marks name occurrences in the pattern too, so they slide with it.
+    doneMarks: _shiftDoneMarks(edited.doneMarks, shift),
     bumpVersion: false,
   );
 }
@@ -260,3 +279,81 @@ CalendarEvent rebaseToAnchor(
 int recurrenceRebaseShiftDays(CalendarEvent edited, DateTime occurrenceDate) =>
     epochDay(DateUtils.dateOnly(edited.start.toLocal())) -
     epochDay(DateUtils.dateOnly(occurrenceDate));
+
+/// [marks] slid [shift] days, as they have to be written.
+///
+/// A date the slide leaves is kept as not done rather than dropped: done marks
+/// merge date by date across devices, so a dropped date would come back from
+/// any device still holding the old mark, and land on whichever occurrence the
+/// slid pattern now puts there.
+Map<DateTime, CalendarDoneMark> _shiftDoneMarks(
+  Map<DateTime, CalendarDoneMark> marks,
+  int shift,
+) {
+  if (shift == 0) return marks;
+  final at = DateTime.now().toUtc();
+  final shifted = {
+    for (final entry in marks.entries)
+      if (entry.value.done)
+        addDays(entry.key, shift): CalendarDoneMark(done: true, at: at),
+  };
+  return {
+    for (final entry in marks.entries)
+      if (entry.value.done && !shifted.containsKey(entry.key))
+        entry.key: CalendarDoneMark(done: false, at: at),
+    ...shifted,
+  };
+}
+
+/// [event] with the occurrence starting on [occurrenceDate] marked [done].
+///
+/// A row that does not repeat (a one-off or a detached occurrence) has only
+/// one occurrence, so [CalendarEvent.isDone] flips. A series only ever marks
+/// the one occurrence, in [CalendarEvent.doneMarks].
+CalendarEvent setCalendarEventDone(
+  CalendarEvent event,
+  DateTime occurrenceDate, {
+  required bool done,
+}) {
+  if (!event.recurrence.repeats) return event.copyWith(isDone: done);
+  return event.copyWith(
+    doneMarks: {
+      ...event.doneMarks,
+      DateUtils.dateOnly(occurrenceDate): CalendarDoneMark(
+        done: done,
+        at: DateTime.now().toUtc(),
+      ),
+    },
+  );
+}
+
+/// [edited] with its done state carried over when a save starts or stops it
+/// repeating.
+///
+/// A row that does not repeat is done by [CalendarEvent.isDone] and a series by
+/// [CalendarEvent.doneMarks], each ignoring the other. Without this, turning a
+/// done one-off into a series, or a series into a one-off, would quietly drop
+/// the done state the user was looking at. [before] is the row the editor was
+/// opened on and [occurrenceDay] the occurrence it showed.
+CalendarEvent carryDoneAcrossRepeatChange(
+  CalendarEvent before,
+  DateTime occurrenceDay,
+  CalendarEvent edited,
+) {
+  final wasSeries = before.recurrence.repeats;
+  if (wasSeries == edited.recurrence.repeats) return edited;
+  final done = calendarEventDoneOn(before, occurrenceDay);
+  if (wasSeries) return edited.copyWith(isDone: done, bumpVersion: false);
+  if (!done) return edited.copyWith(isDone: false, bumpVersion: false);
+  return edited.copyWith(
+    isDone: false,
+    doneMarks: {
+      ...edited.doneMarks,
+      DateUtils.dateOnly(edited.start.toLocal()): CalendarDoneMark(
+        done: true,
+        at: DateTime.now().toUtc(),
+      ),
+    },
+    bumpVersion: false,
+  );
+}

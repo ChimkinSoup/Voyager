@@ -1,0 +1,15 @@
+activate
+click 292 63
+wait 1200
+click 456 517
+wait 1200
+click 921 517
+wait 1500
+click 2112 429
+wait 900
+key ctrl+v
+wait 2000
+shot p21-053-import500
+key ctrl+enter
+wait 8000
+shot p21-054-imported500

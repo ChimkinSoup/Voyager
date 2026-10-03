@@ -5612,9 +5612,16 @@ class RemoteSyncService {
       resolveCrdt: false,
       apply: (id, data, {required fromCrdt}) async {
         final local = await _calendarRepository.getEvent(id);
+        final merged = mergeCalendarEventFromRemote(data, id, local: local);
         await _calendarRepository.upsertEvent(
-          mergeCalendarEventFromRemote(data, id, local: local),
-          recordLocalActivity: false,
+          merged,
+          // A done mark this device holds that the cloud copy lacks, or holds
+          // older, goes back up: uploads merge into the document key by key,
+          // so another device's stale copy of a date can have overwritten it.
+          recordLocalActivity: !mapEquals(
+            merged.doneMarks,
+            calendarDoneMarksFromFirestore(data),
+          ),
         );
       },
     );

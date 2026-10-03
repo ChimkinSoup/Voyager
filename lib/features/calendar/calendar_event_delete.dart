@@ -87,6 +87,8 @@ Future<void> restoreCalendarEvents(
         exceptionDates: event.exceptionDates,
         recurrenceParentId: event.recurrenceParentId,
         recurrenceDate: event.recurrenceDate,
+        isDone: event.isDone,
+        doneMarks: event.doneMarks,
       ),
     );
   }

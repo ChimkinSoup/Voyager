@@ -1,0 +1,13 @@
+activate
+click 2437 429
+wait 900
+shot p21-024-editor-new
+type What is $\int_0^1 x^2 dx$ ?
+key tab
+wait 300
+type It is $\frac{1}{3}$ and $x_{0}$
+wait 600
+shot p21-025-editor-typed
+key ctrl+enter
+wait 1200
+shot p21-026-after-save

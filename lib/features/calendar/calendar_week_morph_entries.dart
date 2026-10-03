@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/theme/palette_color.dart';
-import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
@@ -41,6 +40,7 @@ class CalendarWeekMorphEntry {
     this.week,
     this.monthFontSize = 0,
     this.monthOpacity = 1,
+    this.done = false,
   });
 
   final String id;
@@ -57,6 +57,9 @@ class CalendarWeekMorphEntry {
 
   /// Opacity at the month end — faded on adjacent-month days.
   final double monthOpacity;
+
+  /// The event's occurrence on this day is done, so it is drawn hollow.
+  final bool done;
 }
 
 /// Content clip of the month cell at [monthCellRect] — what hides the parts
@@ -256,14 +259,17 @@ List<CalendarWeekMorphEntry> calendarWeekMorphEntries({
   final byId = {for (final e in events) e.id: e};
   for (final key in {...monthPills.keys, ...weekPills.keys}) {
     final at = key.lastIndexOf('@');
+    final column = int.parse(key.substring(at + 1));
+    final event = byId[key.substring(0, at)];
     final monthPill = monthPills[key];
     final weekPill = weekPills[key];
     entries.add(
       CalendarWeekMorphEntry(
         id: key,
-        column: int.parse(key.substring(at + 1)),
+        column: column,
         timed: weekPill?.$2 ?? false,
-        event: byId[key.substring(0, at)],
+        event: event,
+        done: event != null && calendarEventDoneOn(event, weekDates[column]),
         month: monthPill?.$1,
         week: weekPill?.$1,
         monthFontSize: monthPill?.$2 ?? 0,
@@ -380,6 +386,7 @@ class CalendarWeekMorphEntriesLayer extends StatelessWidget {
         : _CalendarWeekMorphPillBody(
             key: ValueKey('week-morph-${entry.id}'),
             event: entry.event!,
+            done: entry.done,
             radius: radius,
             styleT: styleT,
             titleOpacity: switch ((
@@ -419,6 +426,7 @@ class _CalendarWeekMorphPillBody extends StatelessWidget {
   const _CalendarWeekMorphPillBody({
     super.key,
     required this.event,
+    required this.done,
     required this.radius,
     required this.styleT,
     required this.titleOpacity,
@@ -426,6 +434,7 @@ class _CalendarWeekMorphPillBody extends StatelessWidget {
   });
 
   final CalendarEvent event;
+  final bool done;
   final BorderRadius radius;
   final double styleT;
   final double titleOpacity;
@@ -434,7 +443,7 @@ class _CalendarWeekMorphPillBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = paletteColor(event.colorValue, context).withAlpha(255);
-    final labelColor = onColorLabel(color);
+    final labelColor = calendarEventLabelColor(color, hollow: done);
     final base = DefaultTextStyle.of(context).style;
     final style = TextStyle.lerp(
       base.merge(
@@ -444,7 +453,11 @@ class _CalendarWeekMorphPillBody extends StatelessWidget {
       styleT,
     );
     return DecoratedBox(
-      decoration: calendarEventFillDecoration(color, borderRadius: radius),
+      decoration: calendarEventFillDecoration(
+        color,
+        borderRadius: radius,
+        hollow: done,
+      ),
       child: titleOpacity <= 0
           ? const SizedBox.expand()
           : LayoutBuilder(

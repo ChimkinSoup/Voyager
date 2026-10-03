@@ -1,0 +1,18 @@
+activate
+click 600 358
+key ctrl+a
+key delete
+type class Solution {
+key enter
+type int x = 1; // line comment
+key enter
+type /* block comment */ int y = 2;
+key enter
+type String s = "http://keep.me"; // tail
+key enter
+type }
+wait 600
+shot p18-048-before-strip
+click 2454 135
+wait 900
+shot p18-049-after-strip

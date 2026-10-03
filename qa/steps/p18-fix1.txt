@@ -1,0 +1,14 @@
+activate
+click 1500 340
+key ctrl+a
+type list.add(e);
+click 1500 430
+key ctrl+a
+type Appends to the back. Then use list.get(i) to read it.
+wait 1200
+click 2727 1014
+wait 700
+shot p18-069-section-deleted
+move 1500 65
+wait 300
+shot p18-070-section-toast

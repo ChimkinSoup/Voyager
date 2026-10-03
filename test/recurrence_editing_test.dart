@@ -324,6 +324,33 @@ void main() {
       expect(result.upserts.last.exceptionDates, [d(2026, 3, 30)]);
     });
 
+    test('a split that also moves the date slides the tail done marks', () {
+      final marked = series(start: d(2026, 3, 2, 9), end: d(2026, 3, 2, 10))
+          .copyWith(
+            doneMarks: {
+              d(2026, 3, 23): CalendarDoneMark(
+                done: true,
+                at: DateTime.utc(2026, 3, 1),
+              ),
+            },
+          );
+      // Mondays from Mar 16 become Tuesdays.
+      final edited = occurrenceView(
+        marked,
+        d(2026, 3, 16),
+      ).copyWith(start: d(2026, 3, 17, 9), end: d(2026, 3, 17, 10));
+      final result = editRecurringEvent(
+        master: marked,
+        edited: edited,
+        occurrenceDate: d(2026, 3, 16),
+        scope: RecurrenceEditScope.thisAndFuture,
+        newId: fakeNewId,
+      );
+      final tail = result.upserts.last;
+      expect(calendarEventDoneOn(tail, d(2026, 3, 24)), isTrue);
+      expect(calendarEventDoneOn(tail, d(2026, 3, 17)), isFalse);
+    });
+
     test('all events rewrites the series row in place', () {
       final edited = master.copyWith(title: 'Retro');
       final result = editRecurringEvent(

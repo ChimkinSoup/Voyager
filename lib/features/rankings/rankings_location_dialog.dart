@@ -114,7 +114,11 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
   final _input = TextEditingController();
   final _title = TextEditingController();
   final _map = MapController();
+  final _tiles = GlobalKey<RankingsTileLayerState>();
   Timer? _debounce;
+
+  /// Whether the mouse is over a place to eat or drink's name or dot.
+  var _overName = false;
 
   LatLng? _pin;
   String _address = '';
@@ -216,6 +220,29 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
     }
     _setPin(LatLng(place.latitude, place.longitude));
     unawaited(_reverseGeocode());
+  }
+
+  /// A press on a place to eat or drink's name or dot puts the pin on that
+  /// place, and names a new entry after it if it has no title yet. Anywhere
+  /// else, the pin goes where pressed.
+  void _onTap(LatLng point) {
+    final name = _tiles.currentState?.nameAt(point);
+    if (name != null && widget.withTitle && _title.text.trim().isEmpty) {
+      _title.text = name.text;
+    }
+    _setPin(name?.point ?? point);
+    unawaited(_reverseGeocode());
+  }
+
+  /// Lights the place under the mouse at [position], if any; null once the
+  /// mouse has left the map.
+  void _onHover(Offset? position) {
+    final over =
+        _tiles.currentState?.light(
+          position == null ? null : _map.camera.screenOffsetToLatLng(position),
+        ) ??
+        false;
+    if (over != _overName) setState(() => _overName = over);
   }
 
   void _setPin(LatLng point, {String address = ''}) {
@@ -385,93 +412,102 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              LayoutBuilder(
-                                builder: (context, constraints) {
-                                  final minZoom = rankingsMapMinZoomAt(
-                                    constraints.maxWidth,
-                                  );
-                                  // A wider map raises the floor, which the
-                                  // camera only meets on its next move: meet
-                                  // it now.
-                                  WidgetsBinding.instance.addPostFrameCallback((
-                                    _,
-                                  ) {
-                                    if (mounted && _map.camera.zoom < minZoom) {
-                                      _map.move(_map.camera.center, minZoom);
-                                    }
-                                  });
-                                  return FlutterMap(
-                                    mapController: _map,
-                                    options: MapOptions(
-                                      initialCenter:
-                                          pin ??
-                                          widget.near ??
-                                          const LatLng(20, 0),
-                                      initialZoom: math.max(
-                                        minZoom,
-                                        pin != null
-                                            ? _pinZoom
-                                            : widget.near != null
-                                            ? 12
-                                            : 2,
+                              MouseRegion(
+                                cursor: _overName
+                                    ? SystemMouseCursors.click
+                                    : MouseCursor.defer,
+                                onHover: (event) =>
+                                    _onHover(event.localPosition),
+                                onExit: (_) => _onHover(null),
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    final minZoom = rankingsMapMinZoomAt(
+                                      constraints.maxWidth,
+                                    );
+                                    // A wider map raises the floor, which the
+                                    // camera only meets on its next move: meet
+                                    // it now.
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback((_) {
+                                          if (mounted &&
+                                              _map.camera.zoom < minZoom) {
+                                            _map.move(
+                                              _map.camera.center,
+                                              minZoom,
+                                            );
+                                          }
+                                        });
+                                    return FlutterMap(
+                                      mapController: _map,
+                                      options: MapOptions(
+                                        initialCenter:
+                                            pin ??
+                                            widget.near ??
+                                            const LatLng(20, 0),
+                                        initialZoom: math.max(
+                                          minZoom,
+                                          pin != null || widget.near != null
+                                              ? _pinZoom
+                                              : 2,
+                                        ),
+                                        minZoom: minZoom,
+                                        maxZoom: rankingsMapMaxZoom,
+                                        backgroundColor:
+                                            theme.colorScheme.surface,
+                                        onTap: (_, point) => _onTap(point),
                                       ),
-                                      minZoom: minZoom,
-                                      maxZoom: rankingsMapMaxZoom,
-                                      backgroundColor:
-                                          theme.colorScheme.surface,
-                                      onTap: (_, point) {
-                                        _setPin(point);
-                                        unawaited(_reverseGeocode());
-                                      },
-                                    ),
-                                    children: [
-                                      RankingsTileLayer(
-                                        pins: [
-                                          if (pin != null)
-                                            (point: pin, title: ''),
-                                        ],
-                                      ),
-                                      if (pin != null)
-                                        MarkerLayer(
-                                          markers: [
-                                            Marker(
-                                              point: pin,
-                                              width: _pinSize,
-                                              height: _pinSize,
-                                              child: RawGestureDetector(
-                                                gestures: {
-                                                  _PinDragRecognizer:
-                                                      GestureRecognizerFactoryWithHandlers<
-                                                        _PinDragRecognizer
-                                                      >(
-                                                        _PinDragRecognizer.new,
-                                                        (
-                                                          recognizer,
-                                                        ) => recognizer
-                                                          ..onUpdate = _dragPin
-                                                          ..onEnd = (_) =>
-                                                              unawaited(
-                                                                _reverseGeocode(),
-                                                              ),
+                                      children: [
+                                        RankingsTileLayer(
+                                          key: _tiles,
+                                          pins: [
+                                            if (pin != null)
+                                              (point: pin, title: ''),
+                                          ],
+                                        ),
+                                        if (pin != null)
+                                          MarkerLayer(
+                                            markers: [
+                                              Marker(
+                                                point: pin,
+                                                width: _pinSize,
+                                                height: _pinSize,
+                                                child: RawGestureDetector(
+                                                  gestures: {
+                                                    _PinDragRecognizer:
+                                                        GestureRecognizerFactoryWithHandlers<
+                                                          _PinDragRecognizer
+                                                        >(
+                                                          _PinDragRecognizer
+                                                              .new,
+                                                          (
+                                                            recognizer,
+                                                          ) => recognizer
+                                                            ..onUpdate =
+                                                                _dragPin
+                                                            ..onEnd = (_) =>
+                                                                unawaited(
+                                                                  _reverseGeocode(),
+                                                                ),
+                                                        ),
+                                                  },
+                                                  child: FittedBox(
+                                                    child: SizedBox.square(
+                                                      dimension:
+                                                          RankingsMapPin.size,
+                                                      child: RankingsMapPin(
+                                                        color: widget.accent,
+                                                        selected: true,
                                                       ),
-                                                },
-                                                child: FittedBox(
-                                                  child: SizedBox.square(
-                                                    dimension:
-                                                        RankingsMapPin.size,
-                                                    child: RankingsMapPin(
-                                                      color: widget.accent,
-                                                      selected: true,
                                                     ),
                                                   ),
                                                 ),
                                               ),
-                                            ),
-                                          ],
-                                        ),
-                                    ],
-                                  );
-                                },
+                                            ],
+                                          ),
+                                      ],
+                                    );
+                                  },
+                                ),
                               ),
                               const Positioned(
                                 right: 4,

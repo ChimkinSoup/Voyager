@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
@@ -2303,6 +2304,18 @@ Map<String, dynamic> calendarEventToFirestore(CalendarEvent event) => {
   'exceptionDates': encodeExceptionDates(event.exceptionDates),
   'recurrenceParentId': event.recurrenceParentId,
   'recurrenceDate': _dateToFirestore(event.recurrenceDate),
+  'isDone': event.isDone,
+  // Left out rather than sent empty: uploads merge into the stored document
+  // key by key, so the marks of several devices accumulate there, and an
+  // empty map would be written over all of them.
+  if (event.doneMarks.isNotEmpty)
+    'doneMarks': {
+      for (final entry in event.doneMarks.entries)
+        calendarDateKey(entry.key): {
+          'done': entry.value.done,
+          'at': _dateToFirestoreRequired(entry.value.at),
+        },
+    },
   'createdAt': _dateToFirestoreRequired(event.createdAt),
   'updatedAt': _dateToFirestoreRequired(event.updatedAt),
   'version': event.version,
@@ -2314,12 +2327,41 @@ CalendarEvent mergeCalendarEventFromRemote(
   String id, {
   CalendarEvent? local,
 }) {
+  // Merged whichever copy of the rest of the row wins: two devices marking
+  // different occurrences each hold a mark the other lacks.
+  final doneMarks = mergeDoneMarks(
+    local?.doneMarks ?? const {},
+    calendarDoneMarksFromFirestore(data),
+  );
   if (!_remoteRecordWins(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
   )) {
-    return local!;
+    if (mapEquals(doneMarks, local!.doneMarks)) return local;
+    return CalendarEvent(
+      id: local.id,
+      createdAt: local.createdAt,
+      updatedAt: local.updatedAt,
+      version: local.version,
+      deletedAt: local.deletedAt,
+      calendarId: local.calendarId,
+      title: local.title,
+      start: local.start,
+      end: local.end,
+      isFullDay: local.isFullDay,
+      colorValue: local.colorValue,
+      notes: local.notes,
+      source: local.source,
+      externalId: local.externalId,
+      recurrence: local.recurrence,
+      recurrenceEndDate: local.recurrenceEndDate,
+      exceptionDates: local.exceptionDates,
+      recurrenceParentId: local.recurrenceParentId,
+      recurrenceDate: local.recurrenceDate,
+      isDone: local.isDone,
+      doneMarks: doneMarks,
+    );
   }
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
   return CalendarEvent(
@@ -2360,6 +2402,8 @@ CalendarEvent mergeCalendarEventFromRemote(
     recurrenceDate:
         parseFirestoreDate(data['recurrenceDate']) ??
         (data.containsKey('recurrenceDate') ? null : local?.recurrenceDate),
+    isDone: data['isDone'] as bool? ?? local?.isDone ?? false,
+    doneMarks: doneMarks,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -2368,6 +2412,31 @@ CalendarEvent mergeCalendarEventFromRemote(
     version: parseVersion(data),
     deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
   );
+}
+
+/// The done marks in a stored calendar event document.
+///
+/// A document last written by a v135 build carries a bare `doneDates` list
+/// instead; those dates read as marked done when the document was.
+Map<DateTime, CalendarDoneMark> calendarDoneMarksFromFirestore(
+  Map<String, dynamic> data,
+) {
+  final stored = data['doneMarks'];
+  if (stored is Map) {
+    return {
+      for (final entry in stored.entries)
+        if (parseCalendarDateKey(entry.key as String) case final day?)
+          if (parseFirestoreDate((entry.value as Map)['at']) case final at?)
+            day: CalendarDoneMark(done: entry.value['done'] == true, at: at),
+    };
+  }
+  final legacy = data['doneDates'];
+  if (legacy is! String || legacy.isEmpty) return const {};
+  final at = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return {
+    for (final day in decodeExceptionDates(legacy))
+      day: CalendarDoneMark(done: true, at: at),
+  };
 }
 
 Map<String, dynamic> trackerToFirestore(StatisticTracker tracker) => {

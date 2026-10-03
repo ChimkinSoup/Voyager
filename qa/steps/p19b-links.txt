@@ -1,0 +1,15 @@
+# Phase 19B link fixtures: one per shape in RANKINGS_MAP_HLD.md 6.2, then the failure shapes.
+# name<TAB>link<TAB>expected (lat, lng, name)
+place	https://www.google.com/maps/place/Nick+and+Nat's+Uptown+21/@43.4668,-80.5239,17z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d43.4665432!4d-80.5225678!16s	43.4665432, -80.5225678, Nick and Nat's Uptown 21
+viewport	https://www.google.com/maps/@43.4723,-80.5449,15z	43.4723, -80.5449, no name
+q	https://maps.google.com/?q=43.4643,-80.5204	43.4643, -80.5204, no name
+ll	https://maps.google.com/maps?ll=43.4516,-80.4925&z=16	43.4516, -80.4925, no name
+short	https://maps.app.goo.gl/QaVoyagerNoSuchLink19B	(made-up id: must fail cleanly; a real short link needs Juno)
+encoded-name	https://www.google.com/maps/place/Caf%C3%A9+Pyrus/@43.45,-80.49,17z/data=!3d43.4512!4d-80.4931	43.4512, -80.4931, Café Pyrus
+q-text	https://www.google.com/maps?q=Lazeez+Shawarma+Waterloo	none
+search-api	https://www.google.com/maps/search/?api=1&query=43.4643,-80.5204	43.4643, -80.5204 (Google's documented URL form; not in the HLD)
+no-coords	https://www.google.com/maps/place/Somewhere	none
+non-google	https://example.com/@43.47,-80.53	none expected (not a Google link)
+out-of-range	https://www.google.com/maps/@95.0,-200.0,15z	none
+extreme	https://www.google.com/maps/@85.0,180.0,3z	85, 180
+antimeridian	https://www.google.com/maps/@-85.0,-180.0,3z	-85, -180

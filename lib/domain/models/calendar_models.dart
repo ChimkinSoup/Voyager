@@ -103,6 +103,8 @@ class CalendarEvent extends SoftDeletable {
     this.exceptionDates = const [],
     this.recurrenceParentId,
     this.recurrenceDate,
+    this.isDone = false,
+    this.doneMarks = const {},
   });
 
   final String calendarId;
@@ -140,6 +142,24 @@ class CalendarEvent extends SoftDeletable {
   /// series that this row replaces. Paired with [recurrenceParentId].
   final DateTime? recurrenceDate;
 
+  /// A row that does not repeat (a one-off or a detached occurrence) is done.
+  /// Ignored on a series, whose occurrences are marked in [doneMarks].
+  final bool isDone;
+
+  /// The done state of a series' occurrences, keyed by occurrence start
+  /// (date-only, local). Ignored on a row that does not repeat.
+  ///
+  /// An unmarked occurrence keeps its entry, as not done: devices merge these
+  /// date by date, newest mark winning, and an unmark has to be able to win
+  /// over an older mark from another device.
+  final Map<DateTime, CalendarDoneMark> doneMarks;
+
+  /// Occurrence starts currently marked done in [doneMarks].
+  Iterable<DateTime> get doneDates => [
+    for (final entry in doneMarks.entries)
+      if (entry.value.done) entry.key,
+  ];
+
   /// Whether this row is a single occurrence detached from a series.
   bool get isRecurrenceOverride => recurrenceParentId != null;
 
@@ -160,6 +180,8 @@ class CalendarEvent extends SoftDeletable {
     bool clearRecurrenceParentId = false,
     DateTime? recurrenceDate,
     bool clearRecurrenceDate = false,
+    bool? isDone,
+    Map<DateTime, CalendarDoneMark>? doneMarks,
     bool bumpVersion = true,
   }) {
     return CalendarEvent(
@@ -188,8 +210,27 @@ class CalendarEvent extends SoftDeletable {
       recurrenceDate: clearRecurrenceDate
           ? null
           : (recurrenceDate ?? this.recurrenceDate),
+      isDone: isDone ?? this.isDone,
+      doneMarks: doneMarks ?? this.doneMarks,
     );
   }
+}
+
+/// Whether one occurrence of a series is done, and when that was last set.
+class CalendarDoneMark {
+  const CalendarDoneMark({required this.done, required this.at});
+
+  final bool done;
+
+  /// UTC. What a merge between two devices' marks for one date compares.
+  final DateTime at;
+
+  @override
+  bool operator ==(Object other) =>
+      other is CalendarDoneMark && other.done == done && other.at == at;
+
+  @override
+  int get hashCode => Object.hash(done, at);
 }
 
 enum EventSource { local, google }

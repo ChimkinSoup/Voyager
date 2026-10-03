@@ -1,0 +1,20 @@
+final repo = c.read(leetCodeRepositoryProvider);
+final sync = c.read(remoteSyncServiceProvider);
+final now = DateTime.now().toUtc();
+final all = await repo.listProblems();
+final minStack = all.firstWhere((p) => p.id == 'p17-s-03');
+final javaCode = 'class MinStack {\n    private Deque<Integer> st = new ArrayDeque<>();\n    int count;\n    private int helper(int x) {\n        return x * 2;\n    }\n    public MinStack() {\n        count = 0;\n    }\n    public void push(int val) {\n        st.push(helper(val));\n    }\n    public int getMin() {\n        return st.peek();\n    }\n}';
+final ms = minStack.copyWith(solutions: [LeetCodeSolution(algorithm: 'two stacks', codeLanguage: 'java', code: javaCode)]);
+await repo.upsertProblem(ms);
+sync.pushLeetCodeProblem(ms);
+final twoSum = all.firstWhere((p) => p.id == 'p17-s-10');
+final pyCode = 'class Solution:\n    def __init__(self):\n        self.cache = {}\n    def __repr__(self):\n        return "S"\n    def _helper(self, n):\n        return n\n    def build(self, nums):\n        return {}\n    def twoSum(self, nums, target):\n        seen = {}\n        return [0, 1]\n\ndef top_level(x):\n    return x';
+final ts = twoSum.copyWith(solutions: [LeetCodeSolution(algorithm: 'hash map', codeLanguage: 'python', code: pyCode)], dueAt: now.subtract(const Duration(minutes: 5)));
+await repo.upsertProblem(ts);
+sync.pushLeetCodeProblem(ts);
+for (var i = 0; i < 90; i++) {
+  final p = LeetCodeProblem(id: 'p18-bulk-' + i.toString().padLeft(2, '0'), createdAt: now, updatedAt: now, title: 'Bulk due ' + i.toString().padLeft(2, '0'), questionFrontendId: (500 + i).toString(), difficulty: LeetCodeDifficulty.values[i % 3], tags: ['bulk'], description: 'Bulk description ' + i.toString(), solutions: [LeetCodeSolution(algorithm: 'algo bulk' + i.toString(), code: 'print(' + i.toString() + ')')], solvedAt: now.subtract(Duration(days: i)), interval: 0.0, ease: 2.5, reviewCount: 0);
+  await repo.upsertProblem(p);
+  sync.pushLeetCodeProblem(p);
+}
+c.invalidate(leetcodeProblemsProvider);

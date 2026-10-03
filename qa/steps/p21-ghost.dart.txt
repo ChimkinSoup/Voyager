@@ -1,0 +1,7 @@
+final now = DateTime.now().toUtc();
+final repo = c.read(studyRepositoryProvider);
+await repo.upsertFolder(StudyFolder(id: 'p21-ghost-folder', createdAt: now, updatedAt: now, name: 'Ghost folder', parentFolderId: 'p21-missing-parent'));
+await repo.upsertDeck(StudyDeck(id: 'p21-ghost-deck', createdAt: now, updatedAt: now, name: 'Ghost deck', parentFolderId: 'p21-missing-parent'));
+c.invalidate(studyFoldersProvider);
+c.invalidate(studyDecksProvider);
+c.invalidate(studyAllDecksProvider);

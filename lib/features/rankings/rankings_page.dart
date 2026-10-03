@@ -22,10 +22,16 @@ import 'package:voyager/features/rankings/rankings_header.dart';
 import 'package:voyager/features/rankings/rankings_icons.dart';
 import 'package:voyager/features/rankings/rankings_manage_sheet.dart';
 import 'package:voyager/features/rankings/rankings_map_view.dart';
+import 'package:voyager/features/rankings/rankings_location_preview.dart';
 import 'package:voyager/features/rankings/rankings_providers.dart';
 import 'package:voyager/features/rankings/rankings_row.dart';
 import 'package:voyager/features/sync/sync_conflict_banner.dart';
 import 'package:voyager/core/widgets/scroll_offset_isolate.dart';
+
+/// Whether [category] is showing its map rather than its list.
+bool _showsMap(RankingCategory category, AppSettings? settings) =>
+    category.locationEnabled &&
+    (settings?.rankingsMapViewCategories.contains(category.id) ?? false);
 
 /// Personal ranking lists: categories of entries, split into what has a score
 /// and what does not.
@@ -170,15 +176,26 @@ class _RankingsPageState extends ConsumerState<RankingsPage>
         : categories.where((c) => c.id == selectedId).firstOrNull ??
               active.firstOrNull;
 
+    // The map is inset as a rounded card; the Add button floats inside its
+    // corner rather than straddling it.
+    final mapView =
+        category != null &&
+        _showsMap(category, ref.watch(settingsProvider).valueOrNull);
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: category == null || category.isArchived
           ? null
-          : GlassButton(
-              tooltip: 'Add an entry',
-              label: 'Add',
-              icon: const Icon(PhosphorIconsRegular.plus),
-              onPressed: () => _createParent(category),
+          : Padding(
+              padding: mapView
+                  ? const EdgeInsets.only(right: 16, bottom: 12)
+                  : EdgeInsets.zero,
+              child: GlassButton(
+                tooltip: 'Add an entry',
+                label: 'Add',
+                icon: const Icon(PhosphorIconsRegular.plus),
+                onPressed: () => _createParent(category),
+              ),
             ),
       body: SafeArea(
         child: categoriesAsync.when(
@@ -367,9 +384,7 @@ class _CategoryBody extends ConsumerWidget {
     final collapsedIds =
         settings?.rankingsCollapsedQueueCategories ?? const <String>[];
     final queueCollapsed = collapsedIds.contains(category.id);
-    final mapView =
-        category.locationEnabled &&
-        (settings?.rankingsMapViewCategories.contains(category.id) ?? false);
+    final mapView = _showsMap(category, settings);
 
     return Column(
       children: [
@@ -475,6 +490,15 @@ class _CategoryBody extends ConsumerWidget {
               parents,
               childrenByParent,
               mapShowing: mapView,
+              // The map opens where the preview was, the panel still open.
+              onShowOnMap: (location) {
+                ref.read(rankingMapViewportProvider.notifier).state = (
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                  zoom: RankingLocationPreview.zoom,
+                );
+                _setMapView(ref, settings, true);
+              },
             ),
           ),
         ),
@@ -504,6 +528,7 @@ class _CategoryBody extends ConsumerWidget {
     List<RankingParent> parents,
     Map<String, List<RankingChild>> childrenByParent, {
     required bool mapShowing,
+    required ValueChanged<RankingLocation> onShowOnMap,
   }) {
     final selected = parents
         .where((parent) => parent.id == selectedParentId)
@@ -517,6 +542,7 @@ class _CategoryBody extends ConsumerWidget {
       tagSuggestions: rankingTagSuggestions(parents),
       readOnly: category.isArchived,
       mapShowing: mapShowing,
+      onShowOnMap: onShowOnMap,
       onClose: onClosePanel,
     );
   }
@@ -574,7 +600,6 @@ class _AllCategoriesBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final settings = ref.watch(settingsProvider.settled).valueOrNull;
     final hidden = settings?.rankingsMapHiddenCategories ?? const <String>[];
     final visible = [
@@ -735,17 +760,14 @@ class _AllCategoriesBody extends ConsumerWidget {
             listMinWidth: EditSidePanelMetrics.rankingsListMinWidth,
             storedWidth: storedPanelWidth,
             onWidthCommitted: onPanelWidthCommitted,
-            list: ColoredBox(
-              color: theme.colorScheme.surface,
-              child: RankingsMapView(
-                key: const ValueKey('rankings-map-all'),
-                entries: entries,
-                scope: scope,
-                createIn: visible,
-                selectedParentId: selectedParentId,
-                onOpen: onOpenPanel,
-                loading: loading,
-              ),
+            list: RankingsMapView(
+              key: const ValueKey('rankings-map-all'),
+              entries: entries,
+              scope: scope,
+              createIn: visible,
+              selectedParentId: selectedParentId,
+              onOpen: onOpenPanel,
+              loading: loading,
             ),
             panel: selected == null
                 ? null

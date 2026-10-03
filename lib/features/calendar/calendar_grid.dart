@@ -7,6 +7,7 @@ import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/features/calendar/calendar_day_grid.dart';
 import 'package:voyager/features/calendar/calendar_day_entries.dart';
 import 'package:voyager/features/calendar/calendar_todo_markers.dart';
@@ -325,7 +326,7 @@ class DayHourGrid extends StatelessWidget {
         ],
         if (fullDayEvents.isNotEmpty) ...[
           ...fullDayEvents.map(
-            (event) => _DayEventTile(event: event, allDay: true),
+            (event) => _DayEventTile(event: event, day: day, allDay: true),
           ),
           const SizedBox(height: 8),
         ],
@@ -373,7 +374,7 @@ class DayHourGrid extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             for (final event in slotEvents)
-                              _DayEventTile(event: event),
+                              _DayEventTile(event: event, day: day),
                           ],
                         ),
                       ),
@@ -1037,9 +1038,14 @@ class _YearGrid extends StatelessWidget {
 }
 
 class _DayEventTile extends StatelessWidget {
-  const _DayEventTile({required this.event, this.allDay = false});
+  const _DayEventTile({
+    required this.event,
+    required this.day,
+    this.allDay = false,
+  });
 
   final CalendarEvent event;
+  final DateTime day;
   final bool allDay;
 
   @override
@@ -1051,6 +1057,7 @@ class _DayEventTile extends StatelessWidget {
         paletteColor(event.colorValue, context),
         alpha: calendarDayEventTileFillAlpha,
         borderRadius: BorderRadius.circular(8),
+        hollow: calendarEventDoneOn(event, day),
       ),
       child: Row(
         children: [

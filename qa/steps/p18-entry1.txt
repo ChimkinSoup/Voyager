@@ -1,0 +1,11 @@
+activate
+click 578 325
+type add
+click 1500 340
+type list.add(e);
+click 2520 340
+type O(1) amortized
+click 1500 440
+type Appends to the back. Then use list.get(i) to read it.
+wait 1500
+shot p18-061-entry-filled

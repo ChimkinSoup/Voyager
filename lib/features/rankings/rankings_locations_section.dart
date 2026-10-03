@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/prompt_name_dialog.dart';
@@ -9,6 +10,7 @@ import 'package:voyager/core/widgets/scroll_offset_isolate.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/features/rankings/rankings_actions.dart';
 import 'package:voyager/features/rankings/rankings_location_dialog.dart';
+import 'package:voyager/features/rankings/rankings_location_preview.dart';
 import 'package:voyager/features/rankings/rankings_providers.dart';
 
 /// The editor panel's Locations section: the entry's places in their saved
@@ -25,6 +27,7 @@ class RankingLocationsSection extends ConsumerWidget {
     required this.parent,
     required this.accent,
     required this.mapShowing,
+    this.onShowOnMap,
     this.readOnly = false,
   });
 
@@ -34,10 +37,14 @@ class RankingLocationsSection extends ConsumerWidget {
   /// Whether a map is open beside the panel, which is where a typed place
   /// name is then searched around.
   final bool mapShowing;
+
+  /// Opens the map on a location, from a press on the preview in list view.
+  final ValueChanged<RankingLocation>? onShowOnMap;
   final bool readOnly;
 
   /// Where a search starts: the open map's centre, else the entry's first
-  /// location, else wherever the map was last left on this device.
+  /// location, else wherever the map was last left in this run of the app,
+  /// else where the device was last found.
   LatLng? _near(WidgetRef ref) {
     final viewport = ref.read(rankingMapViewportProvider);
     final last = viewport == null
@@ -45,7 +52,8 @@ class RankingLocationsSection extends ConsumerWidget {
         : LatLng(viewport.latitude, viewport.longitude);
     if (mapShowing && last != null) return last;
     final first = parent.locations.firstOrNull;
-    return first == null ? last : LatLng(first.latitude, first.longitude);
+    if (first != null) return LatLng(first.latitude, first.longitude);
+    return last ?? ref.read(rankingDeviceLocationProvider);
   }
 
   Future<void> _add(BuildContext context, WidgetRef ref) async {
@@ -113,6 +121,20 @@ class RankingLocationsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (locations.isNotEmpty &&
+            ref.watch(geoapifyClientProvider) != null) ...[
+          RankingLocationPreview(
+            parent: parent,
+            accent: accent,
+            // Beside an open map, a press pans it there, as a row's does.
+            onTap: mapShowing
+                ? (location) =>
+                      ref.read(rankingMapFocusProvider.notifier).state =
+                          location
+                : onShowOnMap,
+          ),
+          const SizedBox(height: 8),
+        ],
         if (locations.isNotEmpty)
           // Nested in the panel's scroll view — see [ScrollOffsetIsolate].
           ScrollOffsetIsolate(

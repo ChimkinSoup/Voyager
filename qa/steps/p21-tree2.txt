@@ -1,0 +1,42 @@
+activate
+click 456 517
+wait 1200
+click 2494 1541
+wait 600
+click 2333 1314
+wait 700
+type Midterm 1
+key enter
+wait 900
+shot p21-011-calc
+click 292 270
+wait 1200
+click 2494 1541
+wait 600
+click 2333 1314
+wait 700
+type System Design
+key enter
+wait 900
+click 2494 1541
+wait 600
+click 2333 1314
+wait 700
+type Docker
+key enter
+wait 900
+click 2494 1541
+wait 600
+click 2333 1314
+wait 700
+type AWS
+key enter
+wait 900
+click 2494 1541
+wait 600
+click 2333 1314
+wait 700
+type Nested
+key enter
+wait 900
+shot p21-012-root

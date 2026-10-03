@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:latlong2/latlong.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
@@ -41,6 +45,47 @@ final rankingMapViewportProvider = StateProvider<RankingsMapViewport?>(
 final rankingMapShowZoomProvider = StateProvider<bool>(
   (ref) => DevFlags.showRankingsMapZoom,
 );
+
+/// Where the device was last found in this run of the app — by a map, or by
+/// the editor's preview — for the preview to measure distances from. Null
+/// until it is found.
+final rankingDevicePointProvider = StateProvider<LatLng?>((ref) => null);
+
+/// When [findRankingDevice] last got a fresh fix in this run of the app. Null
+/// until it has.
+final rankingDeviceFoundAtProvider = StateProvider<DateTime?>((ref) => null);
+
+/// Where the device was last found: in this run, else on an earlier one. Null
+/// when it never has been.
+final rankingDeviceLocationProvider = Provider<LatLng?>((ref) {
+  final saved = ref.watch(
+    settingsProvider.select((s) => s.valueOrNull?.rankingsDeviceLocation),
+  );
+  return ref.watch(rankingDevicePointProvider) ??
+      (saved == null ? null : LatLng(saved.latitude, saved.longitude));
+});
+
+/// A fresh fix of the device, or throws when none comes within 15 seconds.
+/// Saved for a later run to start from, and published to
+/// [rankingDevicePointProvider] and [rankingDeviceFoundAtProvider]. [read] is
+/// a `Ref`'s or a container's.
+Future<LatLng> findRankingDevice(
+  T Function<T>(ProviderListenable<T> provider) read,
+) async {
+  final position = await Geolocator.getCurrentPosition(
+    locationSettings: const LocationSettings(timeLimit: Duration(seconds: 15)),
+  );
+  unawaited(
+    read(settingsRepositoryProvider).saveRankingsDeviceLocation((
+      latitude: position.latitude,
+      longitude: position.longitude,
+    )),
+  );
+  final point = LatLng(position.latitude, position.longitude);
+  read(rankingDevicePointProvider.notifier).state = point;
+  read(rankingDeviceFoundAtProvider.notifier).state = DateTime.now();
+  return point;
+}
 
 /// A location the open map should pan to — a row clicked in the editor's
 /// Locations section. The map clears it once it has moved.

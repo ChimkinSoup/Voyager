@@ -1,0 +1,11 @@
+activate
+click 788 585
+wait 1500
+shot p21-061-sd-two-links
+click 292 63
+wait 1200
+click 1386 517
+wait 1500
+click 2288 429
+wait 900
+shot p21-062-docker-link-modal

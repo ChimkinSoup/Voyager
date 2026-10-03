@@ -1,0 +1,18 @@
+activate
+key esc
+wait 400
+click 2494 1541
+wait 600
+click 2333 1211
+wait 700
+type Calc
+key enter
+wait 900
+click 2494 1541
+wait 600
+click 2333 1314
+wait 700
+type Algebra
+key enter
+wait 900
+shot p21-010-math-contents

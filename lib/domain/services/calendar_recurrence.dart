@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/services/recurrence_engine.dart';
@@ -32,6 +34,10 @@ class NormalizedCalendarEvent {
       exceptionDays = {
         for (final d in event.exceptionDates)
           epochDay(DateUtils.dateOnly(d.toLocal())),
+      },
+      doneDays = {
+        for (final d in event.doneDates)
+          epochDay(DateUtils.dateOnly(d.toLocal())),
       };
 
   final CalendarEvent event;
@@ -47,6 +53,9 @@ class NormalizedCalendarEvent {
 
   /// Skipped occurrence starts, as epoch day numbers for cheap lookup.
   final Set<int> exceptionDays;
+
+  /// Occurrence starts marked done, as epoch day numbers.
+  final Set<int> doneDays;
 
   /// Span of one occurrence in whole days (0 for a single-day event).
   int get durationDays => epochDay(endLocal) - epochDay(startLocal);
@@ -128,6 +137,29 @@ DateTime? calendarOccurrenceStartOn(CalendarEvent event, DateTime day) =>
       DateUtils.dateOnly(day.toLocal()),
     );
 
+/// Whether the occurrence of [event] that covers [day] is marked done.
+///
+/// A row that does not repeat is done or not as a whole, by
+/// [CalendarEvent.isDone]. A series goes by the occurrence covering [day], and
+/// is not done on a day no occurrence covers.
+bool calendarEventDoneOn(CalendarEvent event, DateTime day) {
+  if (!event.recurrence.repeats) return event.isDone;
+  if (event.doneMarks.isEmpty) return false;
+  final n = _normalizedCache[event] ??= NormalizedCalendarEvent(event);
+  final occurrence = _coveringOccurrenceStart(
+    n,
+    DateUtils.dateOnly(day.toLocal()),
+  );
+  return occurrence != null && n.doneDays.contains(epochDay(occurrence));
+}
+
+/// One [NormalizedCalendarEvent] per event instance, for
+/// [calendarEventDoneOn] and [nextCalendarOccurrence]: views ask the first
+/// about every pill on every cell, and on every frame of a morph, and a
+/// reminder check asks the second up to a thousand times per event. Events are immutable, so an entry never goes stale,
+/// and the expando lets go of it along with the event.
+final _normalizedCache = Expando<NormalizedCalendarEvent>();
+
 /// How many occurrence starts [nextCalendarOccurrence] will step over before
 /// giving up.
 ///
@@ -146,9 +178,13 @@ const int _occurrenceScanLimit = 500;
 /// that is permanently over — which is exactly how repeating events used to
 /// fall out of the notification feed.
 ///
-/// Skips exception dates, stops at [CalendarEvent.recurrenceEndDate], and
-/// carries the whole span forward, so a multi-day occurrence still counts as
-/// current until its last day is over. Returns null when nothing is left.
+/// Skips exception dates and occurrences marked done, stops at
+/// [CalendarEvent.recurrenceEndDate], and carries the whole span forward, so a
+/// multi-day occurrence still counts as current until its last day is over.
+/// Returns null when nothing is left.
+///
+/// Its callers are the notification feed and the reminder schedule, and a done
+/// occurrence is one neither should surface.
 ({DateTime start, DateTime end})? nextCalendarOccurrence(
   CalendarEvent event,
   DateTime from,
@@ -156,10 +192,11 @@ const int _occurrenceScanLimit = 500;
   final localStart = event.start.toLocal();
   final localEnd = event.end.toLocal();
   if (!event.recurrence.repeats) {
+    if (event.isDone) return null;
     return localEnd.isBefore(from) ? null : (start: localStart, end: localEnd);
   }
 
-  final n = NormalizedCalendarEvent(event);
+  final n = _normalizedCache[event] ??= NormalizedCalendarEvent(event);
   final until = n.untilLocal;
   final span = n.durationDays;
   final fromDay = DateUtils.dateOnly(from.toLocal());
@@ -176,6 +213,7 @@ const int _occurrenceScanLimit = 500;
     if (until != null && day.isAfter(until)) return null;
     cursor = day;
     if (n.exceptionDays.contains(epochDay(day))) continue;
+    if (n.doneDays.contains(epochDay(day))) continue;
     // Slid by whole calendar days rather than by a Duration, so an occurrence
     // on the far side of a DST change keeps the series' wall-clock time.
     final shift = epochDay(day) - epochDay(n.startLocal);
@@ -246,12 +284,7 @@ String encodeExceptionDates(List<DateTime> dates) {
   if (dates.isEmpty) return '';
   final seen = <String>{};
   for (final date in dates) {
-    final d = DateUtils.dateOnly(date.toLocal());
-    seen.add(
-      '${d.year.toString().padLeft(4, '0')}-'
-      '${d.month.toString().padLeft(2, '0')}-'
-      '${d.day.toString().padLeft(2, '0')}',
-    );
+    seen.add(calendarDateKey(date));
   }
   final sorted = seen.toList()..sort();
   return sorted.join(',');
@@ -261,15 +294,67 @@ List<DateTime> decodeExceptionDates(String? value) {
   if (value == null || value.isEmpty) return const [];
   final out = <DateTime>[];
   for (final token in value.split(',')) {
-    final trimmed = token.trim();
-    if (trimmed.isEmpty) continue;
-    final parts = trimmed.split('-');
-    if (parts.length != 3) continue;
-    final year = int.tryParse(parts[0]);
-    final month = int.tryParse(parts[1]);
-    final day = int.tryParse(parts[2]);
-    if (year == null || month == null || day == null) continue;
-    out.add(DateTime(year, month, day));
+    if (parseCalendarDateKey(token.trim()) case final day?) out.add(day);
   }
   return out;
+}
+
+/// [day] as the `yyyy-MM-dd` key exception dates and done marks are stored
+/// under.
+String calendarDateKey(DateTime day) {
+  final d = DateUtils.dateOnly(day.toLocal());
+  return '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+}
+
+/// The date a [calendarDateKey] names, or null for a malformed key.
+DateTime? parseCalendarDateKey(String key) {
+  final parts = key.split('-');
+  if (parts.length != 3) return null;
+  final year = int.tryParse(parts[0]);
+  final month = int.tryParse(parts[1]);
+  final day = int.tryParse(parts[2]);
+  if (year == null || month == null || day == null) return null;
+  return DateTime(year, month, day);
+}
+
+/// Encodes done marks as JSON: `{"yyyy-MM-dd": {"done": bool, "at": ISO}}`.
+String encodeDoneMarks(Map<DateTime, CalendarDoneMark> marks) => jsonEncode({
+  for (final entry in marks.entries)
+    calendarDateKey(entry.key): {
+      'done': entry.value.done,
+      'at': entry.value.at.toUtc().toIso8601String(),
+    },
+});
+
+Map<DateTime, CalendarDoneMark> decodeDoneMarks(String? value) {
+  if (value == null || value.isEmpty) return const {};
+  final marks = <DateTime, CalendarDoneMark>{};
+  for (final entry in (jsonDecode(value) as Map<String, dynamic>).entries) {
+    final day = parseCalendarDateKey(entry.key);
+    final mark = entry.value as Map<String, dynamic>;
+    final at = DateTime.tryParse(mark['at'] as String? ?? '');
+    if (day == null || at == null) continue;
+    marks[day] = CalendarDoneMark(done: mark['done'] == true, at: at.toUtc());
+  }
+  return marks;
+}
+
+/// [a] and [b] merged date by date, the newer mark winning; [a]'s on a tie.
+///
+/// How two devices' done marks for one series come together: marking and
+/// unmarking different occurrences on each never loses either.
+Map<DateTime, CalendarDoneMark> mergeDoneMarks(
+  Map<DateTime, CalendarDoneMark> a,
+  Map<DateTime, CalendarDoneMark> b,
+) {
+  final merged = {...a};
+  for (final entry in b.entries) {
+    final mine = merged[entry.key];
+    if (mine == null || entry.value.at.isAfter(mine.at)) {
+      merged[entry.key] = entry.value;
+    }
+  }
+  return merged;
 }

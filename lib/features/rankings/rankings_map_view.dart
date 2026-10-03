@@ -27,6 +27,7 @@ import 'package:voyager/features/rankings/rankings_icons.dart';
 import 'package:voyager/features/rankings/rankings_location_dialog.dart';
 import 'package:voyager/features/rankings/rankings_locations_section.dart';
 import 'package:voyager/features/rankings/rankings_map_chrome.dart';
+import 'package:voyager/features/rankings/rankings_offline_maps_dialogs.dart';
 import 'package:voyager/features/rankings/rankings_providers.dart';
 import 'package:voyager/features/rankings/rankings_score_input.dart';
 
@@ -84,6 +85,12 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
 
   /// A few streets around the device, for Locate and an empty map's opening.
   static const _locateZoom = 18.75;
+
+  /// How long a fix stands in for the device when a map opens. Within it, a
+  /// map marks where the device was found rather than find it again, which
+  /// takes up to 15 seconds and writes settings: switching categories, or
+  /// showing an entry on the map, would otherwise do both every time.
+  static const _fixFresh = Duration(minutes: 10);
 
   /// How hard the map brakes after a push: it glides `speed / 6` pixels, so
   /// a gentle 800 px/s push travels ~130 px and a hard 3000 px/s one ~500.
@@ -162,27 +169,25 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
   late final RankingsMapViewport? _initialViewport = ref.read(
     rankingMapViewportProvider,
   );
+
+  /// Where the device was last found, in this run or an earlier one, if
+  /// anywhere: marked on every map until it is found afresh.
+  late final LatLng? _lastDevice = ref.read(rankingDeviceLocationProvider);
   late final LatLng? _savedDevice = _initialViewport != null
       ? null
-      : switch (ref
-            .read(settingsProvider)
-            .valueOrNull
-            ?.rankingsDeviceLocation) {
-          final saved? => LatLng(saved.latitude, saved.longitude),
-          null => null,
-        };
+      : _lastDevice;
 
   @override
   void initState() {
     super.initState();
     _container = ProviderScope.containerOf(context, listen: false);
-    _devicePoint = _savedDevice;
+    _devicePoint = _lastDevice;
     _fitPending =
         widget.loading && _initialViewport == null && _savedDevice == null;
     _glide = AnimationController.unbounded(vsync: this)
       ..addListener(_glideStep);
     _fly = AnimationController(vsync: this)..addListener(_flyStep);
-    if (!_fitPending) _openOnDeviceIfNew();
+    if (!_fitPending) _findDeviceOnOpen();
   }
 
   @override
@@ -198,15 +203,20 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _fit();
       });
-      _openOnDeviceIfNew();
+      _findDeviceOnOpen();
     }
   }
 
-  /// The first map of a run opens on the device, if it may already be found.
-  void _openOnDeviceIfNew() {
-    if (_initialViewport != null) return;
+  /// Finds the device, if it may already be found and was not found in the
+  /// last [_fixFresh], to mark it. The first map of a run also opens there; a
+  /// later one stays where the last was left.
+  void _findDeviceOnOpen() {
     // Without a key there is no map mounted for the controller to move.
     if (ref.read(geoapifyClientProvider) == null) return;
+    final foundAt = ref.read(rankingDeviceFoundAtProvider);
+    if (foundAt != null && DateTime.now().difference(foundAt) < _fixFresh) {
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _locate(ask: false);
     });
@@ -245,20 +255,7 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
             ask: ask,
           );
         }
-        final position = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            timeLimit: Duration(seconds: 15),
-          ),
-        );
-        unawaited(
-          _container
-              .read(settingsRepositoryProvider)
-              .saveRankingsDeviceLocation((
-                latitude: position.latitude,
-                longitude: position.longitude,
-              )),
-        );
-        _showDevice(LatLng(position.latitude, position.longitude), ask: ask);
+        _showDevice(await findRankingDevice(_container.read), ask: ask);
         return;
       }
     } catch (_) {
@@ -267,12 +264,14 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
     if (ask && !found) showVoyagerToastIn(overlay, message: problem);
   }
 
-  /// Moves to the device at [point] and marks it, unless the map has closed
-  /// or been touched since it was asked to. Whether it moved. The Locate
-  /// button flies there; opening the map jumps.
+  /// Marks the device at [point] and moves there, unless the map has been
+  /// touched since it was asked to, or opened where the last was left.
+  /// Whether it moved. The Locate button flies there; opening the map jumps.
   bool _showDevice(LatLng point, {required bool ask}) {
-    if (!mounted || _touched) return false;
+    if (!mounted) return false;
     setState(() => _devicePoint = point);
+    _container.read(rankingDevicePointProvider.notifier).state = point;
+    if (_touched || (!ask && _initialViewport != null)) return false;
     if (!ask) {
       _map.move(point, _locateZoom);
       return true;
@@ -722,6 +721,26 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
     // Watched here: the map itself is built at layout, inside its builder.
     final showZoom = ref.watch(rankingMapShowZoomProvider);
 
+    // Inset from the page's gutters and rounded like a card, so the map sits
+    // in the page rather than filling it edge to edge.
+    final radius = BorderRadius.circular(18);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      child: DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          border: Border.all(color: theme.dividerColor),
+        ),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: _mapStack(theme, withoutLocation, showZoom),
+        ),
+      ),
+    );
+  }
+
+  Widget _mapStack(ThemeData theme, int withoutLocation, bool showZoom) {
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -894,6 +913,15 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
                   tooltip: 'Show my location',
                   icon: PhosphorIconsRegular.crosshair,
                   onPressed: () => _locate(ask: true),
+                ),
+                const SizedBox(height: 4),
+                _MapButton(
+                  tooltip: 'Download this area for offline use',
+                  icon: PhosphorIconsRegular.downloadSimple,
+                  onPressed: () => showRankingOfflineDownloadDialog(
+                    context,
+                    _map.camera.visibleBounds,
+                  ),
                 ),
               ],
             ),

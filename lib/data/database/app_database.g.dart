@@ -5023,6 +5023,31 @@ class $CalendarEventsTableTable extends CalendarEventsTable
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _isDoneMeta = const VerificationMeta('isDone');
+  @override
+  late final GeneratedColumn<bool> isDone = GeneratedColumn<bool>(
+    'is_done',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_done" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _doneMarksMeta = const VerificationMeta(
+    'doneMarks',
+  );
+  @override
+  late final GeneratedColumn<String> doneMarks = GeneratedColumn<String>(
+    'done_marks',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -5085,6 +5110,8 @@ class $CalendarEventsTableTable extends CalendarEventsTable
     exceptionDates,
     recurrenceParentId,
     recurrenceDate,
+    isDone,
+    doneMarks,
     createdAt,
     updatedAt,
     version,
@@ -5209,6 +5236,18 @@ class $CalendarEventsTableTable extends CalendarEventsTable
         ),
       );
     }
+    if (data.containsKey('is_done')) {
+      context.handle(
+        _isDoneMeta,
+        isDone.isAcceptableOrUnknown(data['is_done']!, _isDoneMeta),
+      );
+    }
+    if (data.containsKey('done_marks')) {
+      context.handle(
+        _doneMarksMeta,
+        doneMarks.isAcceptableOrUnknown(data['done_marks']!, _doneMarksMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -5309,6 +5348,14 @@ class $CalendarEventsTableTable extends CalendarEventsTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}recurrence_date'],
       ),
+      isDone: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_done'],
+      )!,
+      doneMarks: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}done_marks'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -5360,6 +5407,12 @@ class CalendarEventsTableData extends DataClass
   /// series it came from, and the occurrence start it stands in for.
   final String? recurrenceParentId;
   final DateTime? recurrenceDate;
+
+  /// Marked done as a whole — see [CalendarEvent.isDone].
+  final bool isDone;
+
+  /// A series' done marks as JSON — see [encodeDoneMarks].
+  final String doneMarks;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -5380,6 +5433,8 @@ class CalendarEventsTableData extends DataClass
     required this.exceptionDates,
     this.recurrenceParentId,
     this.recurrenceDate,
+    required this.isDone,
+    required this.doneMarks,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -5411,6 +5466,8 @@ class CalendarEventsTableData extends DataClass
     if (!nullToAbsent || recurrenceDate != null) {
       map['recurrence_date'] = Variable<DateTime>(recurrenceDate);
     }
+    map['is_done'] = Variable<bool>(isDone);
+    map['done_marks'] = Variable<String>(doneMarks);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -5445,6 +5502,8 @@ class CalendarEventsTableData extends DataClass
       recurrenceDate: recurrenceDate == null && nullToAbsent
           ? const Value.absent()
           : Value(recurrenceDate),
+      isDone: Value(isDone),
+      doneMarks: Value(doneMarks),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -5479,6 +5538,8 @@ class CalendarEventsTableData extends DataClass
         json['recurrenceParentId'],
       ),
       recurrenceDate: serializer.fromJson<DateTime?>(json['recurrenceDate']),
+      isDone: serializer.fromJson<bool>(json['isDone']),
+      doneMarks: serializer.fromJson<String>(json['doneMarks']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -5504,6 +5565,8 @@ class CalendarEventsTableData extends DataClass
       'exceptionDates': serializer.toJson<String>(exceptionDates),
       'recurrenceParentId': serializer.toJson<String?>(recurrenceParentId),
       'recurrenceDate': serializer.toJson<DateTime?>(recurrenceDate),
+      'isDone': serializer.toJson<bool>(isDone),
+      'doneMarks': serializer.toJson<String>(doneMarks),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -5527,6 +5590,8 @@ class CalendarEventsTableData extends DataClass
     String? exceptionDates,
     Value<String?> recurrenceParentId = const Value.absent(),
     Value<DateTime?> recurrenceDate = const Value.absent(),
+    bool? isDone,
+    String? doneMarks,
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -5553,6 +5618,8 @@ class CalendarEventsTableData extends DataClass
     recurrenceDate: recurrenceDate.present
         ? recurrenceDate.value
         : this.recurrenceDate,
+    isDone: isDone ?? this.isDone,
+    doneMarks: doneMarks ?? this.doneMarks,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -5591,6 +5658,8 @@ class CalendarEventsTableData extends DataClass
       recurrenceDate: data.recurrenceDate.present
           ? data.recurrenceDate.value
           : this.recurrenceDate,
+      isDone: data.isDone.present ? data.isDone.value : this.isDone,
+      doneMarks: data.doneMarks.present ? data.doneMarks.value : this.doneMarks,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -5616,6 +5685,8 @@ class CalendarEventsTableData extends DataClass
           ..write('exceptionDates: $exceptionDates, ')
           ..write('recurrenceParentId: $recurrenceParentId, ')
           ..write('recurrenceDate: $recurrenceDate, ')
+          ..write('isDone: $isDone, ')
+          ..write('doneMarks: $doneMarks, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -5625,7 +5696,7 @@ class CalendarEventsTableData extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     calendarId,
     title,
@@ -5641,11 +5712,13 @@ class CalendarEventsTableData extends DataClass
     exceptionDates,
     recurrenceParentId,
     recurrenceDate,
+    isDone,
+    doneMarks,
     createdAt,
     updatedAt,
     version,
     deletedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5665,6 +5738,8 @@ class CalendarEventsTableData extends DataClass
           other.exceptionDates == this.exceptionDates &&
           other.recurrenceParentId == this.recurrenceParentId &&
           other.recurrenceDate == this.recurrenceDate &&
+          other.isDone == this.isDone &&
+          other.doneMarks == this.doneMarks &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -5688,6 +5763,8 @@ class CalendarEventsTableCompanion
   final Value<String> exceptionDates;
   final Value<String?> recurrenceParentId;
   final Value<DateTime?> recurrenceDate;
+  final Value<bool> isDone;
+  final Value<String> doneMarks;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -5709,6 +5786,8 @@ class CalendarEventsTableCompanion
     this.exceptionDates = const Value.absent(),
     this.recurrenceParentId = const Value.absent(),
     this.recurrenceDate = const Value.absent(),
+    this.isDone = const Value.absent(),
+    this.doneMarks = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -5731,6 +5810,8 @@ class CalendarEventsTableCompanion
     this.exceptionDates = const Value.absent(),
     this.recurrenceParentId = const Value.absent(),
     this.recurrenceDate = const Value.absent(),
+    this.isDone = const Value.absent(),
+    this.doneMarks = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -5758,6 +5839,8 @@ class CalendarEventsTableCompanion
     Expression<String>? exceptionDates,
     Expression<String>? recurrenceParentId,
     Expression<DateTime>? recurrenceDate,
+    Expression<bool>? isDone,
+    Expression<String>? doneMarks,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -5781,6 +5864,8 @@ class CalendarEventsTableCompanion
       if (recurrenceParentId != null)
         'recurrence_parent_id': recurrenceParentId,
       if (recurrenceDate != null) 'recurrence_date': recurrenceDate,
+      if (isDone != null) 'is_done': isDone,
+      if (doneMarks != null) 'done_marks': doneMarks,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -5805,6 +5890,8 @@ class CalendarEventsTableCompanion
     Value<String>? exceptionDates,
     Value<String?>? recurrenceParentId,
     Value<DateTime?>? recurrenceDate,
+    Value<bool>? isDone,
+    Value<String>? doneMarks,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -5827,6 +5914,8 @@ class CalendarEventsTableCompanion
       exceptionDates: exceptionDates ?? this.exceptionDates,
       recurrenceParentId: recurrenceParentId ?? this.recurrenceParentId,
       recurrenceDate: recurrenceDate ?? this.recurrenceDate,
+      isDone: isDone ?? this.isDone,
+      doneMarks: doneMarks ?? this.doneMarks,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -5883,6 +5972,12 @@ class CalendarEventsTableCompanion
     if (recurrenceDate.present) {
       map['recurrence_date'] = Variable<DateTime>(recurrenceDate.value);
     }
+    if (isDone.present) {
+      map['is_done'] = Variable<bool>(isDone.value);
+    }
+    if (doneMarks.present) {
+      map['done_marks'] = Variable<String>(doneMarks.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -5919,6 +6014,8 @@ class CalendarEventsTableCompanion
           ..write('exceptionDates: $exceptionDates, ')
           ..write('recurrenceParentId: $recurrenceParentId, ')
           ..write('recurrenceDate: $recurrenceDate, ')
+          ..write('isDone: $isDone, ')
+          ..write('doneMarks: $doneMarks, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -52104,6 +52201,8 @@ typedef $$CalendarEventsTableTableCreateCompanionBuilder =
       Value<String> exceptionDates,
       Value<String?> recurrenceParentId,
       Value<DateTime?> recurrenceDate,
+      Value<bool> isDone,
+      Value<String> doneMarks,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -52127,6 +52226,8 @@ typedef $$CalendarEventsTableTableUpdateCompanionBuilder =
       Value<String> exceptionDates,
       Value<String?> recurrenceParentId,
       Value<DateTime?> recurrenceDate,
+      Value<bool> isDone,
+      Value<String> doneMarks,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -52215,6 +52316,16 @@ class $$CalendarEventsTableTableFilterComposer
 
   ColumnFilters<DateTime> get recurrenceDate => $composableBuilder(
     column: $table.recurrenceDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDone => $composableBuilder(
+    column: $table.isDone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get doneMarks => $composableBuilder(
+    column: $table.doneMarks,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -52323,6 +52434,16 @@ class $$CalendarEventsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isDone => $composableBuilder(
+    column: $table.isDone,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get doneMarks => $composableBuilder(
+    column: $table.doneMarks,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -52414,6 +52535,12 @@ class $$CalendarEventsTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get isDone =>
+      $composableBuilder(column: $table.isDone, builder: (column) => column);
+
+  GeneratedColumn<String> get doneMarks =>
+      $composableBuilder(column: $table.doneMarks, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -52485,6 +52612,8 @@ class $$CalendarEventsTableTableTableManager
                 Value<String> exceptionDates = const Value.absent(),
                 Value<String?> recurrenceParentId = const Value.absent(),
                 Value<DateTime?> recurrenceDate = const Value.absent(),
+                Value<bool> isDone = const Value.absent(),
+                Value<String> doneMarks = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -52506,6 +52635,8 @@ class $$CalendarEventsTableTableTableManager
                 exceptionDates: exceptionDates,
                 recurrenceParentId: recurrenceParentId,
                 recurrenceDate: recurrenceDate,
+                isDone: isDone,
+                doneMarks: doneMarks,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -52529,6 +52660,8 @@ class $$CalendarEventsTableTableTableManager
                 Value<String> exceptionDates = const Value.absent(),
                 Value<String?> recurrenceParentId = const Value.absent(),
                 Value<DateTime?> recurrenceDate = const Value.absent(),
+                Value<bool> isDone = const Value.absent(),
+                Value<String> doneMarks = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -52550,6 +52683,8 @@ class $$CalendarEventsTableTableTableManager
                 exceptionDates: exceptionDates,
                 recurrenceParentId: recurrenceParentId,
                 recurrenceDate: recurrenceDate,
+                isDone: isDone,
+                doneMarks: doneMarks,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

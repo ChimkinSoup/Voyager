@@ -1,0 +1,9 @@
+activate
+click 1292 880
+wait 300
+type It is $\frac{1}{3}$ and $x_{0}$
+wait 800
+shot p21-027-editor-both
+key ctrl+enter
+wait 1200
+shot p21-028-after-save

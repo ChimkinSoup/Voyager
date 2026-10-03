@@ -48,6 +48,7 @@ class RankingsEditPanel extends ConsumerStatefulWidget {
     required this.onClose,
     this.readOnly = false,
     this.mapShowing = false,
+    this.onShowOnMap,
   });
 
   final RankingParent parent;
@@ -67,6 +68,9 @@ class RankingsEditPanel extends ConsumerStatefulWidget {
   /// Whether the map is open beside the panel — see
   /// [RankingLocationsSection.mapShowing].
   final bool mapShowing;
+
+  /// Opens the map on a location, from the Locations section's preview.
+  final ValueChanged<RankingLocation>? onShowOnMap;
 
   @override
   ConsumerState<RankingsEditPanel> createState() => _RankingsEditPanelState();
@@ -420,6 +424,7 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                       parent: _current,
                       accent: accent,
                       mapShowing: widget.mapShowing,
+                      onShowOnMap: widget.onShowOnMap,
                       readOnly: widget.readOnly,
                     ),
                   ],

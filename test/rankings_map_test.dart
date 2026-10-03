@@ -30,8 +30,10 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/features/rankings/rankings_actions.dart';
 import 'package:voyager/features/rankings/rankings_edit_panel.dart';
 import 'package:voyager/features/rankings/rankings_header.dart';
+import 'package:voyager/features/rankings/rankings_location_preview.dart';
 import 'package:voyager/features/rankings/rankings_locations_section.dart';
 import 'package:voyager/features/rankings/rankings_map_chrome.dart';
 import 'package:voyager/features/rankings/rankings_map_view.dart';
@@ -244,8 +246,15 @@ Future<void> openMap(WidgetTester tester) async {
   await settleMap(tester);
 }
 
-List<RankingsMapPin> pins(WidgetTester tester) =>
-    tester.widgetList<RankingsMapPin>(find.byType(RankingsMapPin)).toList();
+/// Whether [element] is in the editor's preview rather than the map or the
+/// location dialog — the page's helpers below mean the big map.
+bool _inPreview(Element element) =>
+    element.findAncestorWidgetOfExactType<RankingLocationPreview>() != null;
+
+List<RankingsMapPin> pins(WidgetTester tester) => [
+  for (final element in find.byType(RankingsMapPin).evaluate())
+    if (!_inPreview(element)) element.widget as RankingsMapPin,
+];
 
 Future<List<RankingParent>> storedParents(AppDatabase db) async {
   final repo = DriftRankingRepository(db);
@@ -266,8 +275,9 @@ Finder dialogAdd() =>
     find.descendant(of: find.byType(AlertDialog), matching: find.text('Add'));
 
 /// The page map's camera.
-MapCamera mapCamera(WidgetTester tester) =>
-    MapCamera.of(tester.element(find.byType(RankingsTileLayer).first));
+MapCamera mapCamera(WidgetTester tester) => MapCamera.of(
+  find.byType(RankingsTileLayer).evaluate().firstWhere((e) => !_inPreview(e)),
+);
 
 /// The device's location, answered in-process with permission granted:
 /// [recent] gives the fix the system already holds, or null for none — which
@@ -729,6 +739,56 @@ void main() {
       expect(mapCamera(tester).center, left);
     });
 
+    mapTest('a map opened later in the run still shows where the device is, '
+        'without moving there, and finds it again once the fix is '
+        '10 minutes old', (tester) async {
+      LatLng? deviceDot() => tester
+          .widgetList<MarkerLayer>(find.byType(MarkerLayer))
+          .expand((layer) => layer.markers)
+          .where((marker) => marker.width == 16)
+          .firstOrNull
+          ?.point;
+      var fix = const LatLng(40, -74);
+      var lookups = 0;
+      fakeDevice(
+        tester,
+        recent: () => null,
+        fresh: () async {
+          lookups++;
+          return fix;
+        },
+      );
+      await pumpRankingsPage(tester, seed: seedOnePin);
+      await openMap(tester);
+      expect(deviceDot(), const LatLng(40, -74));
+      expect(lookups, 1);
+
+      await tester.drag(find.byType(FlutterMap), const Offset(-300, 0));
+      await settleMap(tester);
+      final left = mapCamera(tester).center;
+      Future<void> reopen() async {
+        await tester.tap(find.widgetWithText(InkWell, 'List'));
+        await tester.pumpAndSettle();
+        await openMap(tester);
+      }
+
+      // Within 10 minutes: the last fix stands, and no lookup is made.
+      fix = const LatLng(40.001, -74.001);
+      await reopen();
+      expect(deviceDot(), const LatLng(40, -74));
+      expect(lookups, 1);
+      expect(mapCamera(tester).center, left);
+
+      ProviderScope.containerOf(
+        tester.element(find.byType(FlutterMap)),
+      ).read(rankingDeviceFoundAtProvider.notifier).state = DateTime.now()
+          .subtract(const Duration(minutes: 11));
+      await reopen();
+      expect(deviceDot(), const LatLng(40.001, -74.001));
+      expect(lookups, 2);
+      expect(mapCamera(tester).center, left);
+    });
+
     mapTest('Locate shows the fix the system holds at once, then a fresh '
         'one', (tester) async {
       final fresh = Completer<LatLng>();
@@ -843,6 +903,208 @@ void main() {
       of: find.byType(AlertDialog),
       matching: find.byType(TextField),
     );
+
+    MapCamera previewCamera(WidgetTester tester) => MapCamera.of(
+      tester.element(
+        find.descendant(
+          of: find.byType(RankingLocationPreview),
+          matching: find.byType(RankingsTileLayer),
+        ),
+      ),
+    );
+
+    mapTest('previews a chain at the branch nearest the device', (
+      tester,
+    ) async {
+      fakeDevice(
+        tester,
+        recent: () => null,
+        fresh: () async => const LatLng(43.501, -80.481),
+      );
+      await openEntry(tester, locations: [branch(0), branch(1), branch(2)]);
+      expect(find.byType(RankingLocationPreview), findsOneWidget);
+      expect(
+        previewCamera(tester).center,
+        LatLng(branch(2).latitude, branch(2).longitude),
+      );
+      expect(find.text('Nearest of 3'), findsOneWidget);
+      final selected = tester
+          .widgetList<RankingsMapPin>(
+            find.descendant(
+              of: find.byType(RankingLocationPreview),
+              matching: find.byType(RankingsMapPin),
+            ),
+          )
+          .where((pin) => pin.selected);
+      expect(selected, hasLength(1));
+    });
+
+    mapTest('with no device location, previews the first location', (
+      tester,
+    ) async {
+      await openEntry(tester, locations: [branch(0), branch(1)]);
+      expect(
+        previewCamera(tester).center,
+        LatLng(branch(0).latitude, branch(0).longitude),
+      );
+      expect(find.textContaining('Nearest of'), findsNothing);
+    });
+
+    mapTest('a press on the preview opens the map there, panel still open', (
+      tester,
+    ) async {
+      fakeDevice(
+        tester,
+        recent: () => null,
+        fresh: () async => const LatLng(43.501, -80.481),
+      );
+      await openEntry(tester, locations: [branch(0), branch(1), branch(2)]);
+      await tester.tap(find.byType(RankingLocationPreview));
+      await tester.pumpAndSettle();
+      expect(find.byType(RankingsMapView), findsOneWidget);
+      expect(find.byType(RankingsEditPanel), findsOneWidget);
+      final camera = mapCamera(tester);
+      expect(camera.center, LatLng(branch(2).latitude, branch(2).longitude));
+      expect(camera.zoom, RankingLocationPreview.zoom);
+    });
+
+    LatLng at(RankingLocation location) =>
+        LatLng(location.latitude, location.longitude);
+
+    mapTest('beside the open map, a press on the preview pans the map there', (
+      tester,
+    ) async {
+      await openEntry(tester, locations: [branch(0), branch(1)]);
+      await openMap(tester);
+      expect(find.byType(RankingsEditPanel), findsOneWidget);
+      expect(find.byType(RankingLocationPreview), findsOneWidget);
+      await tester.drag(find.byType(RankingsMapView), const Offset(-300, 0));
+      await settleMap(tester);
+      expect(mapCamera(tester).center, isNot(at(branch(0))));
+      await tester.tap(find.byType(RankingLocationPreview));
+      await tester.pumpAndSettle();
+      expect(mapCamera(tester).center, at(branch(0)));
+      // Still in map view, and the request is spent.
+      expect(find.byType(RankingsMapView), findsOneWidget);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(RankingsMapView)),
+      );
+      expect(container.read(rankingMapFocusProvider), isNull);
+    });
+
+    mapTest('follows the entry live: a closer branch added, the shown one '
+        'moved away, then removed, then every location gone', (tester) async {
+      // Nearest to branch(1) of 0, 1 and 4.
+      fakeDevice(
+        tester,
+        recent: () => null,
+        fresh: () async => const LatLng(43.481, -80.499),
+      );
+      final harness = await openEntry(
+        tester,
+        locations: [branch(0), branch(4)],
+      );
+      final parentId = (await storedParents(harness.db)).single.id;
+      final actions = RankingsActions.detached(harness.container);
+      Future<void> settle() async {
+        await tester.pumpAndSettle();
+        await tester.pump();
+      }
+
+      expect(previewCamera(tester).center, at(branch(0)));
+      expect(find.text('Nearest of 2'), findsOneWidget);
+
+      // A closer branch, added: the preview goes to it, and counts it.
+      await actions.addLocation(
+        parentId,
+        latitude: branch(1).latitude,
+        longitude: branch(1).longitude,
+        address: 'added',
+      );
+      await settle();
+      expect(previewCamera(tester).center, at(branch(1)));
+      expect(find.text('Nearest of 3'), findsOneWidget);
+
+      // The shown branch moved far off: the next nearest takes over.
+      final added = (await storedParents(
+        harness.db,
+      )).single.locations.singleWhere((l) => l.address == 'added');
+      await actions.updateLocation(
+        parentId,
+        added.copyWith(latitude: 44.5, longitude: -79.5),
+      );
+      await settle();
+      expect(previewCamera(tester).center, at(branch(0)));
+
+      // A far branch moved right next to the device: it takes over.
+      await actions.updateLocation(
+        parentId,
+        branch(4).copyWith(latitude: 43.4811, longitude: -80.4991),
+      );
+      await settle();
+      expect(previewCamera(tester).center, const LatLng(43.4811, -80.4991));
+
+      // Removed: back to the next nearest.
+      await actions.removeLocation(parentId, branch(4).id);
+      await settle();
+      expect(previewCamera(tester).center, at(branch(0)));
+      expect(find.text('Nearest of 2'), findsOneWidget);
+
+      // Down to one: no count to show.
+      await actions.removeLocation(parentId, added.id);
+      await settle();
+      expect(previewCamera(tester).center, at(branch(0)));
+      expect(find.textContaining('Nearest of'), findsNothing);
+
+      // None left: no preview, and nothing thrown.
+      await actions.removeLocation(parentId, branch(0).id);
+      await settle();
+      expect(find.byType(RankingLocationPreview), findsNothing);
+
+      // The first location back: the preview with it.
+      await actions.addLocation(
+        parentId,
+        latitude: branch(2).latitude,
+        longitude: branch(2).longitude,
+        address: 'again',
+      );
+      await settle();
+      expect(previewCamera(tester).center, at(branch(2)));
+    });
+
+    mapTest('without the device, follows the first location in the entry '
+        'order', (tester) async {
+      final harness = await openEntry(
+        tester,
+        locations: [branch(0), branch(1)],
+      );
+      final parentId = (await storedParents(harness.db)).single.id;
+      await RankingsActions.detached(
+        harness.container,
+      ).reorderLocations(parentId, [branch(1).id, branch(0).id]);
+      await tester.pumpAndSettle();
+      await tester.pump();
+      expect(previewCamera(tester).center, at(branch(1)));
+    });
+
+    mapTest('the device found by Locate on the map recentres the preview', (
+      tester,
+    ) async {
+      LatLng? recent;
+      final fresh = Completer<LatLng>();
+      fakeDevice(tester, recent: () => recent, fresh: () => fresh.future);
+      await openEntry(tester, locations: [branch(0), branch(3)]);
+      await openMap(tester);
+      // No fix yet: the first location.
+      expect(previewCamera(tester).center, at(branch(0)));
+      recent = const LatLng(43.521, -80.459); // by branch(3)
+      await tester.tap(find.byTooltip('Show my location'));
+      await tester.pumpAndSettle();
+      await tester.pump();
+      expect(previewCamera(tester).center, at(branch(3)));
+      expect(find.text('Nearest of 2'), findsOneWidget);
+      fresh.complete(const LatLng(43.521, -80.459));
+    });
 
     mapTest('adds a place found by name', (tester) async {
       final requests = <Uri>[];

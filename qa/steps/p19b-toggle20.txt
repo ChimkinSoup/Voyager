@@ -1,0 +1,45 @@
+activate
+click 2151 230
+wait 60
+click 1998 230
+wait 60
+click 2151 230
+wait 60
+click 1998 230
+wait 60
+click 2151 230
+wait 60
+click 1998 230
+wait 60
+click 2151 230
+wait 60
+click 1998 230
+wait 60
+click 2151 230
+wait 60
+click 1998 230
+wait 60
+click 2151 230
+wait 60
+click 1998 230
+wait 60
+click 2151 230
+wait 60
+click 1998 230
+wait 60
+click 2151 230
+wait 60
+click 1998 230
+wait 60
+click 2151 230
+wait 60
+click 1998 230
+wait 60
+click 2151 230
+wait 60
+click 1998 230
+wait 60
+click 2151 230
+wait 4000
+move 600 1500
+shot p19b-111-toggle20

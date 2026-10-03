@@ -1,0 +1,14 @@
+activate
+click 326 104
+wait 900
+click 563 1699
+wait 900
+type Sliding window
+click 572 327
+wait 900
+click 1500 340
+type while r < n: r += 1
+click 1500 440
+type Grow right, shrink left when invalid. getOrDefault helps here.
+wait 1500
+shot p18-071-patterns-filled

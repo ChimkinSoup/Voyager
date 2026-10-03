@@ -1,0 +1,6 @@
+activate
+key ctrl+a
+key backspace
+place 0 0 1440 1040
+wait 1500
+shot p21-131-min-workbench

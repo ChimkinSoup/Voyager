@@ -28,6 +28,7 @@ import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/core/reminders/reminder_engine.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
+import 'package:voyager/domain/services/calendar_recurrence.dart';
 import 'package:voyager/features/notifications/reminder_bell_button.dart';
 
 /// Geometry of the floating close ✕ and the gap the form leaves under it.
@@ -56,6 +57,7 @@ class CalendarEventPanel extends ConsumerStatefulWidget {
     required this.onCancel,
     this.focusTitleOnOpen = false,
     this.initialIsFullDay = true,
+    this.onToggleDone,
   });
 
   final CalendarEvent? event;
@@ -65,6 +67,10 @@ class CalendarEventPanel extends ConsumerStatefulWidget {
   final ValueChanged<Map<String, dynamic>> onSave;
   final VoidCallback onCancel;
   final bool focusTitleOnOpen;
+
+  /// Marks the open occurrence done or not done, straight away rather than on
+  /// save. Null for a new event, which has nothing to mark yet.
+  final Future<void> Function()? onToggleDone;
 
   /// All-day setting for a *new* event; ignored when [event] is non-null.
   ///
@@ -102,6 +108,9 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
   /// The bell as it will be saved; null is off. Committed with the rest of the
   /// form, so discarding the panel discards a bell change too.
   int? _reminderOffset;
+
+  /// Whether the open occurrence is done; null for a new event.
+  bool? _isDone;
   bool _intentionalDiscard = false;
   bool _closingAfterSave = false;
   late final FocusNode _allDayFocusNode;
@@ -199,7 +208,20 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     _calendarId = e?.calendarId ?? widget.initialCalendarId;
     _colorValue = e?.colorValue ?? _defaultEventColor(_calendarId);
     _recurrence = e?.recurrence ?? RecurrenceRule.none;
+    _isDone = _doneState(e);
     _scheduleTitleFocusIfNeeded();
+  }
+
+  /// [event] is the occurrence view the page opened, so its start is the
+  /// occurrence's own day.
+  bool? _doneState(CalendarEvent? event) =>
+      event == null ? null : calendarEventDoneOn(event, event.start);
+
+  Future<void> _toggleDone() async {
+    await widget.onToggleDone!();
+    final fresh = await ref.read(calendarRepositoryProvider).getEvent(_eventId);
+    if (!mounted || fresh == null) return;
+    setState(() => _isDone = calendarEventDoneOn(fresh, widget.event!.start));
   }
 
   /// Default color for a new event: the color of the calendar it's being
@@ -242,6 +264,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       _calendarId = e?.calendarId ?? widget.initialCalendarId;
       _colorValue = e?.colorValue ?? _defaultEventColor(_calendarId);
       _recurrence = e?.recurrence ?? RecurrenceRule.none;
+      _isDone = _doneState(e);
       _titleError = null;
     }
     if (widget.focusTitleOnOpen && !oldWidget.focusTitleOnOpen) {
@@ -790,16 +813,39 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
               ),
               const SizedBox(height: 10),
               // ── Row 5: cancel / save ──────────────────────────────────
-              Row(
-                children: [
-                  GlassButton(
-                    onPressed: _discard,
-                    label: 'Cancel',
-                    dense: true,
-                  ),
-                  const Spacer(),
-                  GlassButton(onPressed: _submit, label: 'Save', dense: true),
-                ],
+              //
+              // Stretched to one height: the done button is icon-only, and an
+              // icon runs a pixel shorter than a line of label text.
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    GlassButton(
+                      onPressed: _discard,
+                      label: 'Cancel',
+                      dense: true,
+                    ),
+                    const Spacer(),
+                    // Here rather than with the repeat and bell in row 2: a
+                    // multi-day timed event already fills that row, and this
+                    // row is empty between its two buttons.
+                    if (_isDone != null && widget.onToggleDone != null) ...[
+                      GlassButton(
+                        onPressed: _toggleDone,
+                        tooltip: _isDone! ? 'Mark as not done' : 'Mark as done',
+                        dense: true,
+                        icon: Icon(
+                          _isDone!
+                              ? PhosphorIconsFill.checkCircle
+                              : PhosphorIconsRegular.checkCircle,
+                        ),
+                        iconColor: _isDone! ? accent : null,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    GlassButton(onPressed: _submit, label: 'Save', dense: true),
+                  ],
+                ),
               ),
             ],
           ),
