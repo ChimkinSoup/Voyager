@@ -23,11 +23,15 @@ const preRestorePrefix = 'voyager_prerestore_';
 const _stamp =
     r'(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})([+-])(\d{2})(\d{2})';
 
+/// `<prefix>2026-09-24_18-25-30-0400.zip`, with [prefix] matched literally.
+RegExp backupNamePattern(String prefix) =>
+    RegExp('^${RegExp.escape(prefix)}$_stamp\\.zip\$');
+
 /// `voyager_auto_2026-09-24_18-25-30-0400.zip`.
-final autoBackupNamePattern = RegExp('^$autoBackupPrefix$_stamp\.zip\$');
+final autoBackupNamePattern = backupNamePattern(autoBackupPrefix);
 
 /// `voyager_prerestore_2026-09-24_18-25-30-0400.zip`.
-final preRestoreNamePattern = RegExp('^$preRestorePrefix$_stamp\.zip\$');
+final preRestoreNamePattern = backupNamePattern(preRestorePrefix);
 
 /// The file-name stamp for [capturedAt], e.g. `2026-09-24_18-25-30-0400`.
 String backupTimestamp(DateTime capturedAt) {
@@ -92,6 +96,27 @@ int backupAgeDays(DateTime capturedAt, DateTime todayLocal) {
   final from = DateTime.utc(captured.year, captured.month, captured.day);
   final to = DateTime.utc(todayLocal.year, todayLocal.month, todayLocal.day);
   return to.difference(from).inDays;
+}
+
+/// A time a backup state file stored, or null if it holds none.
+DateTime? parseBackupTime(Object? value) =>
+    value is String ? DateTime.tryParse(value) : null;
+
+/// `2026-09-24` for [time]'s local date — sorts the same as the dates.
+String backupDayKey(DateTime time) {
+  final t = time.toLocal();
+  return '${t.year.toString().padLeft(4, '0')}-'
+      '${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')}';
+}
+
+/// `today`, `yesterday` or `N days ago`, by [backupAgeDays].
+String backupAgoLabel(DateTime capturedAt, DateTime now) {
+  final age = backupAgeDays(capturedAt, now);
+  return switch (age) {
+    <= 0 => 'today',
+    1 => 'yesterday',
+    _ => '$age days ago',
+  };
 }
 
 /// The ages, in days, at which a backup takes over the weekly and monthly

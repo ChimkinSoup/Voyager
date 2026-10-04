@@ -20,3 +20,11 @@ String trackerValueId(String trackerId, DateTime periodStart) {
   final day = periodStart.day.toString().padLeft(2, '0');
   return '${trackerId}_${periodStart.year}-$month-$day';
 }
+
+/// Stable identifier for one device's net change to a counter on [day].
+///
+/// One row per device rather than per day: each device only ever adds to its
+/// own row, so two devices tapping the same day offline can't overwrite each
+/// other's taps when the higher version wins the merge.
+String counterAdjustmentId(String trackerId, DateTime day, String deviceId) =>
+    '${trackerValueId(trackerId, day)}_$deviceId';

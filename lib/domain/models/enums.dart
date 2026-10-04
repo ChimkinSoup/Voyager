@@ -1,4 +1,6 @@
-enum TrackerType { integer, boolean, enumType }
+/// - [counter]: a running total changed only by −1 / +1 steps, stored as
+///   per-day changes (`CounterAdjustment`) rather than as tracker values.
+enum TrackerType { integer, boolean, enumType, counter }
 
 /// Direction of a financial ledger transaction.
 /// - [expense]: money flowing out (rendered in the main accent color).

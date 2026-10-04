@@ -35,3 +35,7 @@ final revealRequestProvider = StateProvider<RevealRequest?>((ref) => null);
 /// tiles look for it when they first mount as well as when it changes, and
 /// set it back to false once they have scrolled into view.
 final revealAutoBackupRequestProvider = StateProvider<bool>((ref) => false);
+
+/// The same for Settings' folder-backup section, set by the inbox's folder
+/// backup rows and by a click on a folder backup's OS notification.
+final revealFolderBackupsRequestProvider = StateProvider<bool>((ref) => false);

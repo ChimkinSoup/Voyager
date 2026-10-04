@@ -1,0 +1,1 @@
+final fr = c.read(financeRepositoryProvider); await fr.softDeleteTransaction('p24-tx'); await Future.delayed(const Duration(milliseconds: 30)); await fr.softDeleteSubscription('p24-sub');

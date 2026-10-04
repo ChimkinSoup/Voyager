@@ -1,0 +1,8 @@
+final r = c.read(remoteSyncServiceProvider);
+final tr = c.read(todoRepositoryProvider);
+final tasks = await tr.listTasks('p26-list');
+var n = 0;
+for (final t in tasks) { if (!t.id.startsWith('p26-task-')) continue; final u = t.copyWith(notes: 'drain note ' + t.id, version: t.version + 1); await tr.upsertTask(u); r.pushTodoTaskInBackground(u); n++; }
+c.invalidate(todoListsProvider);
+debugPrint('P26 notes ' + n.toString());
+

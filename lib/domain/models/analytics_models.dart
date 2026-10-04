@@ -1,9 +1,11 @@
 import 'dart:math' as math;
 
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/soft_deletable.dart';
+import 'package:voyager/domain/services/periodic_prompt_service.dart';
 
 /// Distinguishes "argument omitted" from "argument passed as null" in the
 /// `copyWith`s below.
@@ -97,6 +99,8 @@ class StatisticTracker extends SoftDeletable {
 
   /// The resolved visualisation style, applying defaults.
   TrackerStyle? get effectiveTrackingStyle {
+    // A counter is always drawn as a sparkline of its running total.
+    if (type == TrackerType.counter) return TrackerStyle.consecutive;
     if (type != TrackerType.integer) return null;
     return trackingStyle ?? TrackerStyle.independent;
   }
@@ -362,6 +366,118 @@ class TrackerValue extends SoftDeletable {
           : enumValue as String?,
     );
   }
+}
+
+/// One device's net change to a counter tracker on one local day.
+///
+/// A counter's value is never stored: the value on day D is the sum of every
+/// live row dated on or before D. See [counterSeriesValues].
+class CounterAdjustment extends SoftDeletable {
+  const CounterAdjustment({
+    required super.id,
+    required super.createdAt,
+    required super.updatedAt,
+    super.version,
+    super.deletedAt,
+    required this.trackerId,
+    required this.day,
+    required this.deviceId,
+    required this.delta,
+  });
+
+  final String trackerId;
+
+  /// Local midnight of the day the change counts for.
+  final DateTime day;
+  final String deviceId;
+  final int delta;
+}
+
+/// The running total of [adjustments] through the end of [day].
+int counterTotalThrough(List<CounterAdjustment> adjustments, DateTime day) {
+  final last = DateTime(day.year, day.month, day.day);
+  var total = 0;
+  for (final adjustment in adjustments) {
+    if (adjustment.deletedAt != null) continue;
+    final d = adjustment.day;
+    if (!DateTime(d.year, d.month, d.day).isAfter(last)) {
+      total += adjustment.delta;
+    }
+  }
+  return total;
+}
+
+/// Each day's net change across every device, keyed by local midnight. Days
+/// whose changes cancel out are kept, at 0.
+Map<DateTime, int> counterDailyChanges(List<CounterAdjustment> adjustments) {
+  final byDay = <DateTime, int>{};
+  for (final adjustment in adjustments) {
+    if (adjustment.deletedAt != null) continue;
+    final d = adjustment.day;
+    final day = DateTime(d.year, d.month, d.day);
+    byDay[day] = (byDay[day] ?? 0) + adjustment.delta;
+  }
+  return byDay;
+}
+
+/// Derives a counter tracker's plotted values from its [adjustments]: one
+/// [TrackerValue] per [StatisticTracker.cadence] period, holding the running
+/// total at the period's last day — or at [today], for the current period.
+///
+/// Every period from the one holding the earlier of the first change and the
+/// tracker's creation day through the current one gets a value, so the
+/// sparkline never interpolates across a quiet stretch. Like the virtual
+/// trackers' series, the ids are synthetic and never written.
+List<TrackerValue> counterSeriesValues(
+  StatisticTracker tracker,
+  List<CounterAdjustment> adjustments, {
+  required DateTime today,
+}) {
+  final todayDay = DateTime(today.year, today.month, today.day);
+  final byDay = counterDailyChanges(adjustments);
+  final created = tracker.createdAt.toLocal();
+  var first = DateTime(created.year, created.month, created.day);
+  for (final day in byDay.keys) {
+    if (day.isBefore(first)) first = day;
+  }
+  final days = byDay.keys.toList()..sort();
+
+  final periods = PeriodicPromptService();
+  DateTime next(DateTime start) => switch (tracker.cadence) {
+    TrackerCadence.daily => addCalendarDays(start, 1),
+    TrackerCadence.weekly => addCalendarDays(start, 7),
+    TrackerCadence.monthly => DateTime(start.year, start.month + 1, 1),
+    TrackerCadence.yearly => DateTime(start.year + 1, 1, 1),
+  };
+
+  final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  final values = <TrackerValue>[];
+  final current = periods.trackerPeriodStartFor(todayDay, tracker.cadence);
+  var period = periods.trackerPeriodStartFor(first, tracker.cadence);
+  var total = 0;
+  var i = 0;
+  while (!period.isAfter(current)) {
+    final following = next(period);
+    final lastDay = following.isAfter(todayDay)
+        ? todayDay
+        : addCalendarDays(following, -1);
+    while (i < days.length && !days[i].isAfter(lastDay)) {
+      total += byDay[days[i]]!;
+      i++;
+    }
+    values.add(
+      TrackerValue(
+        id: '${tracker.id}:${period.year}-${period.month}-${period.day}',
+        trackerId: tracker.id,
+        periodStart: period,
+        intValue: total.toDouble(),
+        createdAt: epoch,
+        updatedAt: epoch,
+      ),
+    );
+    period = following;
+  }
+  return values;
 }
 
 /// Derives the virtual "Journal Entries" tracker's values from [entries]:

@@ -2571,6 +2571,57 @@ TrackerValue mergeTrackerValueFromRemote(
   );
 }
 
+/// `day` travels as a `yyyy-MM-dd` date rather than an instant: local
+/// midnight is a different instant in every time zone, and a device a few
+/// hours east would otherwise read another device's change as the day before.
+Map<String, dynamic> counterAdjustmentToFirestore(
+  CounterAdjustment adjustment,
+) => {
+  'id': adjustment.id,
+  'trackerId': adjustment.trackerId,
+  'day': calendarDateKey(adjustment.day),
+  'deviceId': adjustment.deviceId,
+  'delta': adjustment.delta,
+  'createdAt': _dateToFirestoreRequired(adjustment.createdAt),
+  'updatedAt': _dateToFirestoreRequired(adjustment.updatedAt),
+  'version': adjustment.version,
+  'deletedAt': _dateToFirestore(adjustment.deletedAt),
+};
+
+CounterAdjustment mergeCounterAdjustmentFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  CounterAdjustment? local,
+}) {
+  if (!_remoteRecordWins(
+    data,
+    localVersion: local?.version,
+    localUpdatedAt: local?.updatedAt,
+  )) {
+    return local!;
+  }
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return CounterAdjustment(
+    id: id,
+    trackerId: data['trackerId'] as String? ?? local?.trackerId ?? '',
+    day:
+        (data['day'] is String
+            ? parseCalendarDateKey(data['day'] as String)
+            : null) ??
+        local?.day ??
+        DateTime(remoteUpdated.year, remoteUpdated.month, remoteUpdated.day),
+    deviceId: data['deviceId'] as String? ?? local?.deviceId ?? '',
+    delta: (data['delta'] as num?)?.toInt() ?? local?.delta ?? 0,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
+
 Map<String, dynamic> transactionToFirestore(FinancialTransaction tx) => {
   'id': tx.id,
   'type': tx.type.name,

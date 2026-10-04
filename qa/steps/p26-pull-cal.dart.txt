@@ -1,0 +1,8 @@
+final repo = c.read(calendarRepositoryProvider);
+final cals = await repo.listCalendars();
+final legacy = cals.firstWhere((x) => x.id == '__legacy_calendar__');
+final now = DateTime.now().toUtc();
+final renamed = Calendar(id: legacy.id, createdAt: legacy.createdAt, updatedAt: now, version: legacy.version + 1, name: 'P26 Pull Rename', colorValue: legacy.colorValue);
+await repo.upsertCalendar(renamed);
+await c.read(remoteSyncServiceProvider).pushRecords('calendars', [renamed]);
+debugPrint('P26 PULLCAL from ' + legacy.name + ' v' + legacy.version.toString() + ' at ' + DateTime.now().toIso8601String());

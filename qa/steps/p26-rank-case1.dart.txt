@@ -1,0 +1,14 @@
+final rr = c.read(rankingRepositoryProvider);
+final r = c.read(remoteSyncServiceProvider);
+final repo = c.read(syncRepositoryProvider);
+final base = (await rr.getParent('p26-rp'))!;
+final remote = base.copyWith(locations: base.locations.where((l) => l.id != 'p26-loc-y').toList(), bumpVersion: true);
+await Future.delayed(const Duration(milliseconds: 1500));
+final x = RankingLocation(id: 'p26-loc-x', latitude: 43.6426, longitude: -79.3871, address: 'King St W, Toronto', label: 'King St', sortOrder: 2);
+final local = base.copyWith(locations: [...base.locations, x], bumpVersion: true);
+await rr.upsertParent(local);
+r.pushRankingParent(local);
+invalidateAllDataProvidersIn(c);
+await Future.delayed(const Duration(seconds: 4));
+await repo.upsertDocument('ranking_parents', 'p26-rp', rankingParentToFirestore(remote));
+debugPrint('P26 RCASE1 remote stamps ' + encodeRankingFieldStamps(remote.fieldUpdatedAt) + ' local stamps ' + encodeRankingFieldStamps(local.fieldUpdatedAt));

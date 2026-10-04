@@ -1,0 +1,1 @@
+final t = c.read(trashServiceProvider); final it = (await t.list()).firstWhere((i) => i.id == 'p24-rp-2'); await t.restore(it); invalidateAllDataProvidersIn(c);

@@ -820,6 +820,7 @@ class _TrashItemDetail extends ConsumerWidget {
       TrackerType.integer => 'Number',
       TrackerType.boolean => 'Yes / no',
       TrackerType.enumType => 'Choice',
+      TrackerType.counter => 'Counter',
     };
     return [
       _meta(context, [

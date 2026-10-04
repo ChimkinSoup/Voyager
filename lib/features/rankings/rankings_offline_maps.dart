@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/dev/dev_flags.dart';
 
 /// The most tiles one area may hold. Each is a request against the Geoapify
 /// key, so a download stays a city or so — about 120 km across.
@@ -18,13 +19,33 @@ const rankingOfflineMaxTiles = 5000;
 final rankingMapNetworkTilesProvider = Provider<VectorTileProvider?>((ref) {
   final client = ref.watch(geoapifyClientProvider);
   if (client == null) return null;
-  return NetworkVectorTileProvider(
+  return _ForceOfflineAwareTiles(
     urlTemplate:
         'https://maps.geoapify.com/v1/tile/vector/{z}/{x}/{y}.pbf'
         '?apiKey=${client.apiKey}',
     maximumZoom: 14,
   );
 });
+
+/// Fails each request the way an unreachable host does while
+/// [DevFlags.forceOffline] is on.
+class _ForceOfflineAwareTiles extends NetworkVectorTileProvider {
+  _ForceOfflineAwareTiles({
+    required super.urlTemplate,
+    required super.maximumZoom,
+  });
+
+  @override
+  Future<Uint8List> provide(TileIdentity tile) async {
+    if (DevFlags.forceOffline) {
+      throw ProviderException(
+        message: 'DevFlags.forceOffline',
+        retryable: Retryable.retry,
+      );
+    }
+    return super.provide(tile);
+  }
+}
 
 /// Where downloaded areas are kept: a folder each, holding `area.json` and
 /// its tiles as `z/x/y.pbf`. Tests point it at a temporary folder.

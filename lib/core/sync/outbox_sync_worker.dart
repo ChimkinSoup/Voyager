@@ -563,6 +563,11 @@ class OutboxSyncWorker {
           DriftTrackerRepository(_db).getValue,
           trackerValueToFirestore,
         );
+      case FirestoreCollections.counterAdjustments:
+        return byId(
+          DriftTrackerRepository(_db).getAdjustment,
+          counterAdjustmentToFirestore,
+        );
       case FirestoreCollections.transactions:
         return fromList(
           await DriftFinanceRepository(

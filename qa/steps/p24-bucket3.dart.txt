@@ -1,0 +1,3 @@
+final now = DateTime.now().toUtc(); final r = c.read(remoteSyncServiceProvider);
+for (var i = 1; i <= 3; i++) { final b = BucketListItem(id: 'p24-bk-$i', title: 'P24 Bucket $i', note: 'note $i', sortOrder: 10 + i, createdAt: now, updatedAt: now, version: 1); await c.read(bucketListRepositoryProvider).upsertItem(b); await r.pushRecords(FirestoreCollections.bucketListItems, [b]); }
+invalidateAllDataProvidersIn(c);

@@ -1,0 +1,3 @@
+final items = await c.read(trashServiceProvider).list(); final n = DateTime.now().toUtc();
+for (final i in items) { debugPrint('TRASH ' + i.kind.collection + '/' + i.id + ' | ' + trashItemLabel(i) + ' | ' + trashItemDetail(i, n) + ' | members=' + i.members.map((m) => m.id).join(',')); }
+debugPrint('TRASH count=' + items.length.toString());

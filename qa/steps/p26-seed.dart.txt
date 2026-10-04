@@ -1,0 +1,30 @@
+final now = DateTime.now().toUtc();
+final today = DateTime.now();
+final sw = Stopwatch()..start();
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final j = Journal(id: 'p26-journal', createdAt: now, updatedAt: now, version: 1, name: 'P26 Journal');
+await jr.upsertJournal(j); r.pushJournal(j);
+for (var i = 0; i < 300; i++) { final en = JournalEntry(id: 'p26-je-' + i.toString().padLeft(3, '0'), createdAt: now, updatedAt: now, version: 1, journalId: 'p26-journal', title: 'P26 entry ' + i.toString().padLeft(3, '0'), body: 'P26 bulk body ' + i.toString() + ' lorem ipsum dolor sit amet', entryDate: DateTime(today.year, today.month, today.day - 1 - i)); await jr.upsertEntry(en); r.pushJournalEntryNow(en); }
+debugPrint('P26SEED journal ms ' + sw.elapsedMilliseconds.toString());
+final tr = c.read(todoRepositoryProvider);
+final list = TodoListModel(id: 'p26-list', createdAt: now, updatedAt: now, version: 1, name: 'P26 List');
+await tr.upsertList(list); r.pushTodoList(list);
+for (var i = 0; i < 300; i++) { final t = TodoTask(id: 'p26-task-' + i.toString().padLeft(3, '0'), createdAt: now, updatedAt: now, version: 1, listId: 'p26-list', title: 'P26 task ' + i.toString().padLeft(3, '0'), sortOrder: i * 1000); await tr.upsertTask(t); r.pushTodoTaskNow(t); }
+debugPrint('P26SEED todo ms ' + sw.elapsedMilliseconds.toString());
+final repo = c.read(trackerRepositoryProvider);
+final t = StatisticTracker(id: 'p26-trk', createdAt: now, updatedAt: now, version: 1, name: 'P26 Daily', type: TrackerType.integer, cadence: TrackerCadence.daily, trackingStyle: TrackerStyle.independent, sortOrder: 50);
+await repo.upsertTracker(t);
+var day = DateTime(today.year, today.month, today.day - 3000);
+for (var i = 0; i < 3000; i++) { final v = TrackerValue(id: t.id + '_' + day.year.toString() + '-' + day.month.toString().padLeft(2, '0') + '-' + day.day.toString().padLeft(2, '0'), trackerId: t.id, periodStart: day, intValue: ((i * 37) % 101).toDouble(), createdAt: now, updatedAt: now, version: 1); await repo.upsertValue(v); day = DateTime(day.year, day.month, day.day + 1); }
+debugPrint('P26SEED tracker ms ' + sw.elapsedMilliseconds.toString());
+final cr = c.read(calendarRepositoryProvider);
+final cals = await cr.listCalendars();
+final legacy = cals.firstWhere((x) => x.id == '__legacy_calendar__');
+final renamed = Calendar(id: legacy.id, createdAt: legacy.createdAt, updatedAt: DateTime.now().toUtc(), version: legacy.version + 1, name: 'P26 Renamed Cal', colorValue: 0xFFE91E63);
+await cr.upsertCalendar(renamed);
+await r.pushRecords('calendars', [renamed]);
+final s = await c.read(settingsRepositoryProvider).getSettings();
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(accentColor: 0xFFA6D189, weekStartsOnMonday: false, showQuotes: false, hiddenNavPages: <String>[]));
+invalidateAllDataProvidersIn(c);
+debugPrint('P26SEED done ms ' + sw.elapsedMilliseconds.toString());

@@ -45,16 +45,11 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
     _timeSelected = !widget.optionalTime || widget.initialHasTime;
 
     if (widget.optionalTime && !widget.initialHasTime) {
-      final now = DateTime.now();
-      int m = now.minute;
-      int roundedMinute = m < 15 ? 0 : (m < 45 ? 30 : 0);
-      int roundedHour = now.hour + (m >= 45 ? 1 : 0);
       _currentDateTime = DateTime(
         _currentDateTime.year,
         _currentDateTime.month,
         _currentDateTime.day,
-        roundedHour,
-        roundedMinute,
+        12,
       );
     }
 

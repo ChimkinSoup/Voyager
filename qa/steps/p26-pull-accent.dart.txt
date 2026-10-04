@@ -1,0 +1,5 @@
+final sr = c.read(settingsRepositoryProvider);
+final s = await sr.getSettings();
+debugPrint('P26 PULLSET before accent ' + s.accentColor.toString() + ' quotes ' + s.showQuotes.toString() + ' wsm ' + s.weekStartsOnMonday.toString());
+await sr.saveSettings(s.copyWith(accentColor: 0xFF00BCD4));
+debugPrint('P26 PULLSET saved ' + DateTime.now().toIso8601String());

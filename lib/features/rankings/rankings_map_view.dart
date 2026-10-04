@@ -516,6 +516,12 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
     );
   }
 
+  /// Centres the map on [point], zoomed in at least as far as a fit would.
+  void _focus(LatLng point) {
+    final zoom = _map.camera.zoom;
+    _map.move(point, zoom < _fitMaxZoom ? _fitMaxZoom : zoom);
+  }
+
   void _zoomBy(double delta) =>
       _map.move(_map.camera.center, _map.camera.zoom + delta);
 
@@ -587,7 +593,9 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
       longitude: pick.longitude,
       address: pick.address,
     );
-    if (mounted) widget.onOpen(created.id);
+    if (!mounted) return;
+    _focus(LatLng(pick.latitude, pick.longitude));
+    widget.onOpen(created.id);
   }
 
   Future<void> _addToExisting(LatLng point) async {
@@ -597,6 +605,10 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
     final entry = await _pickEntry(context, widget.scope);
     if (entry == null) return;
     var address = '';
+    // The address lookup alone can take seconds, with nothing on the map yet.
+    final toast = client == null
+        ? null
+        : showVoyagerToastIn(overlay, message: 'Adding location…');
     try {
       address =
           await client?.reverseGeocode(point.latitude, point.longitude) ?? '';
@@ -610,11 +622,22 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
       longitude: point.longitude,
       address: address,
     );
+    if (mounted) _focus(point);
     if (!added) {
-      showVoyagerToastIn(
-        overlay,
-        message: 'This entry already has a location here',
-      );
+      if (toast != null) {
+        toast.update(
+          message: 'This entry already has a location here',
+          icon: PhosphorIconsRegular.info,
+          dwell: const Duration(seconds: 4),
+        );
+      } else {
+        showVoyagerToastIn(
+          overlay,
+          message: 'This entry already has a location here',
+        );
+      }
+    } else {
+      toast?.dismiss();
     }
   }
 
@@ -754,11 +777,7 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
       if (location == null) return;
       // Without a key there is no map mounted for the controller to move.
       if (ref.read(geoapifyClientProvider) != null) {
-        final zoom = _map.camera.zoom;
-        _map.move(
-          LatLng(location.latitude, location.longitude),
-          zoom < _fitMaxZoom ? _fitMaxZoom : zoom,
-        );
+        _focus(LatLng(location.latitude, location.longitude));
       }
       ref.read(rankingMapFocusProvider.notifier).state = null;
     });
@@ -1009,7 +1028,12 @@ class _Pin extends StatelessWidget {
     final titleFrom =
         _TitlesFrom.of(context)['${parent.id}/${location.id}'] ??
         double.infinity;
-    if (MapCamera.of(context).zoom < titleFrom) return pin;
+    // Spread out of a cluster, it has room its point does not: a pin sharing
+    // a spot with another never earns its title by zooming.
+    if (!MarkerSpiderfied.of(context) &&
+        MapCamera.of(context).zoom < titleFrom) {
+      return pin;
+    }
     // Under the pin and outside its box, so the title takes no presses and
     // the pin stays centred on its point.
     return Stack(

@@ -1,5 +1,6 @@
 // The Geoapify client's request shape and its one piece of policy: amenities
-// first, untyped only when that finds nothing (RANKINGS_MAP_HLD.md §6.1).
+// preferred, untyped only when that finds nothing (RANKINGS_MAP_HLD.md §6.1).
+// Both are asked at once.
 
 import 'dart:convert';
 
@@ -28,7 +29,11 @@ void main() {
       apiKey: 'k',
       httpClient: MockClient((request) async {
         requests.add(request.url);
-        return _results([_ennio]);
+        return request.url.queryParameters.containsKey('type')
+            ? _results([_ennio])
+            : _results([
+                {'name': 'Untyped junk', 'lat': 0, 'lon': 0},
+              ]);
       }),
     );
 
@@ -38,8 +43,12 @@ void main() {
       longitude: -80.5204,
     );
 
-    final query = requests.single.queryParameters;
-    expect(requests.single.path, '/v1/geocode/autocomplete');
+    expect(requests, hasLength(2));
+    final amenities = requests.singleWhere(
+      (uri) => uri.queryParameters.containsKey('type'),
+    );
+    final query = amenities.queryParameters;
+    expect(amenities.path, '/v1/geocode/autocomplete');
     expect(query['text'], 'ennio');
     expect(query['type'], 'amenity');
     // Geoapify takes longitude first.
@@ -52,7 +61,7 @@ void main() {
     expect(places.single.longitude, -80.5260427);
   });
 
-  test('an empty amenity search is repeated untyped, once', () async {
+  test('an empty amenity search falls back to the untyped one', () async {
     final requests = <Uri>[];
     final client = GeoapifyClient(
       apiKey: 'k',
@@ -78,10 +87,12 @@ void main() {
     );
 
     expect(requests, hasLength(2));
-    expect(requests.last.queryParameters.containsKey('type'), isFalse);
-    // Still inside the radius: the retry widens what is searched for, not
+    final untyped = requests.singleWhere(
+      (uri) => !uri.queryParameters.containsKey('type'),
+    );
+    // Still inside the radius: the fallback widens what is searched for, not
     // where.
-    expect(requests.last.queryParameters['filter'], isNotNull);
+    expect(untyped.queryParameters['filter'], isNotNull);
     // A result with no name of its own is called by its first address line.
     expect(places.single.name, '12 Main Road');
   });
@@ -103,8 +114,11 @@ void main() {
       everywhere: true,
     );
 
-    expect(requests.single.queryParameters.containsKey('filter'), isFalse);
-    expect(requests.single.queryParameters['bias'], isNotNull);
+    expect(requests, hasLength(2));
+    for (final uri in requests) {
+      expect(uri.queryParameters.containsKey('filter'), isFalse);
+      expect(uri.queryParameters['bias'], isNotNull);
+    }
   });
 
   test('reverse geocoding returns the formatted address', () async {

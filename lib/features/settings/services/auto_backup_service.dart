@@ -316,7 +316,7 @@ class AutoBackupService extends ChangeNotifier {
 
   Future<void> _runIfDue(DateTime now) async {
     await _updateState((s) {
-      final today = _dayKey(now);
+      final today = backupDayKey(now);
       final opened = [...?(s['openedDays'] as List?)?.cast<String>()];
       if (opened.isEmpty || opened.last != today) opened.add(today);
       s['openedDays'] = opened.length > 10
@@ -581,13 +581,13 @@ class AutoBackupService extends ChangeNotifier {
     final autos = entries.where((e) => !e.isSnapshot).toList();
     final enabled = state['enabled'] != false;
 
-    final lastSuccess = _parse(state['lastSuccessAt']);
+    final lastSuccess = parseBackupTime(state['lastSuccessAt']);
     final lastAttemptFailed = _lastAttemptFailed(state);
     final damaged = [...?(state['recheckDamaged'] as List?)];
     final unchecked = [...?(state['recheckUnchecked'] as List?)];
     final opened = [...?(state['openedDays'] as List?)?.cast<String>()];
     final newest = autos.isEmpty ? null : autos.first.capturedAt;
-    final todayKey = _dayKey(now);
+    final todayKey = backupDayKey(now);
 
     // An open day after the newest backup and before today: the app ran then
     // and still did not back up.
@@ -595,11 +595,11 @@ class AutoBackupService extends ChangeNotifier {
         newest != null &&
         opened.any(
           (d) =>
-              d.compareTo(_dayKey(newest.toLocal())) > 0 &&
+              d.compareTo(backupDayKey(newest.toLocal())) > 0 &&
               d.compareTo(todayKey) < 0,
         );
 
-    final autoDays = {for (final e in autos) _dayKey(e.capturedAt.toLocal())};
+    final autoDays = {for (final e in autos) backupDayKey(e.capturedAt.toLocal())};
     final lastTwo = opened.length < 2
         ? const <String>[]
         : opened.sublist(opened.length - 2);
@@ -618,7 +618,7 @@ class AutoBackupService extends ChangeNotifier {
       health = (
         AutoBackupHealth.off,
         'Automatic backups are off · '
-            '${newest == null ? 'no backups yet' : 'last backup ${_ago(newest, now)}'}',
+            '${newest == null ? 'no backups yet' : 'last backup ${backupAgoLabel(newest, now)}'}',
       );
     } else if (lastAttemptFailed) {
       health = (
@@ -639,7 +639,7 @@ class AutoBackupService extends ChangeNotifier {
     } else if (missedDay) {
       health = (
         AutoBackupHealth.attention,
-        'No backup since ${_ago(newest, now)}',
+        'No backup since ${backupAgoLabel(newest, now)}',
       );
     } else if (newest == null && lastSuccess == null) {
       health = (
@@ -695,25 +695,6 @@ String _iso(DateTime time) => time.toUtc().toIso8601String();
 bool _lastAttemptFailed(Map<String, dynamic> state) =>
     state['lastAttemptFailed'] == true;
 
-DateTime? _parse(Object? value) =>
-    value is String ? DateTime.tryParse(value) : null;
-
-/// `2026-09-24` for [time]'s local date — sorts the same as the dates.
-String _dayKey(DateTime time) {
-  final t = time.toLocal();
-  return '${t.year.toString().padLeft(4, '0')}-'
-      '${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')}';
-}
-
-String _ago(DateTime capturedAt, DateTime now) {
-  final age = backupAgeDays(capturedAt, now);
-  return switch (age) {
-    <= 0 => 'today',
-    1 => 'yesterday',
-    _ => '$age days ago',
-  };
-}
-
 String _hhmm(DateTime time) {
   final t = time.toLocal();
   return '${t.hour.toString().padLeft(2, '0')}:'
@@ -722,7 +703,7 @@ String _hhmm(DateTime time) {
 
 /// "today 09:14", "yesterday 22:30", "3 days ago 08:00".
 String _describeTime(DateTime capturedAt, DateTime now) =>
-    '${_ago(capturedAt, now)} ${_hhmm(capturedAt)}';
+    '${backupAgoLabel(capturedAt, now)} ${_hhmm(capturedAt)}';
 
 /// The list's age label (§7.1): "Yesterday", "3 days ago",
 /// "Weekly · 9 days ago", "Monthly · 34 days ago", "Before restore · today
@@ -732,7 +713,7 @@ String backupAgeLabel(BackupFileEntry entry, DateTime now) {
   if (entry.isSnapshot) {
     return 'Before restore · ${_describeTime(entry.capturedAt, now)}';
   }
-  final ago = _ago(entry.capturedAt, now);
+  final ago = backupAgoLabel(entry.capturedAt, now);
   final label = '${ago[0].toUpperCase()}${ago.substring(1)}';
   if (age >= retentionTiers[1]) return 'Monthly · $ago';
   if (age >= retentionTiers[0]) return 'Weekly · $ago';

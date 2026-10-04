@@ -1945,6 +1945,11 @@ class RemoteSyncService {
           documentIds: documentIds,
           documentData: documentData,
         );
+      case FirestoreCollections.counterAdjustments:
+        return pullCounterAdjustments(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
       case FirestoreCollections.transactions:
         return pullTransactions(
           documentIds: documentIds,
@@ -5172,6 +5177,28 @@ class RemoteSyncService {
     }
   }
 
+  /// Uploads counter changes after a second without another tap on the same
+  /// row, rather than once per tap: a burst of ten taps is ten writes to one
+  /// document, and only the last of them needs to reach the server. Flushed
+  /// with every other pending upload on teardown.
+  void pushCounterAdjustments(List<Object> records) {
+    const collection = FirestoreCollections.counterAdjustments;
+    for (final record in records) {
+      final document = _recordDocument(collection, record);
+      if (document == null) continue;
+      _scheduleRemoteUpload(collection, document.id, () async {
+        _markSelfEcho(collection, document.id, document.payload);
+        await _syncEngine.syncDocumentsImmediately(
+          collection: collection,
+          payloadsByDocumentId: {
+            _firestoreDocumentId(collection, document.id): document.payload,
+          },
+          logOperation: false,
+        );
+      });
+    }
+  }
+
   /// Uploads rows the trash just restored or erased (`TRASH_HLD.md`).
   ///
   /// The collections with a character-operation log can't go out as a bare
@@ -5497,6 +5524,9 @@ class RemoteSyncService {
       case FirestoreCollections.trackerValues:
         if (record is! TrackerValue) return null;
         return (id: record.id, payload: trackerValueToFirestore(record));
+      case FirestoreCollections.counterAdjustments:
+        if (record is! CounterAdjustment) return null;
+        return (id: record.id, payload: counterAdjustmentToFirestore(record));
       case FirestoreCollections.transactions:
         if (record is! FinancialTransaction) return null;
         return (id: record.id, payload: transactionToFirestore(record));
@@ -5640,6 +5670,28 @@ class RemoteSyncService {
         final local = await _trackerRepository.getTracker(id);
         await _trackerRepository.upsertTracker(
           mergeTrackerFromRemote(data, id, local: local),
+          recordLocalActivity: false,
+        );
+      },
+    );
+  }
+
+  /// Counter rows live outside `tracker_values`, so the weekly re-anchoring
+  /// in [pullTrackerValues] never sees them: a weekly counter's changes stay
+  /// on the days they were made.
+  Future<bool> pullCounterAdjustments({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.counterAdjustments,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _trackerRepository.getAdjustment(id);
+        await _trackerRepository.upsertAdjustment(
+          mergeCounterAdjustmentFromRemote(data, id, local: local),
           recordLocalActivity: false,
         );
       },
@@ -6380,7 +6432,7 @@ class RemoteSyncService {
         pullRankingChildren,
       ]),
       _inOrder([pullCalendars, pullCalendarEvents]),
-      _inOrder([pullTrackers, pullTrackerValues]),
+      _inOrder([pullTrackers, pullTrackerValues, pullCounterAdjustments]),
       _inOrder([
         pullTransactions,
         pullSubscriptions,
@@ -6697,6 +6749,7 @@ class LiveSyncController {
     FirestoreCollections.calendarEvents,
     FirestoreCollections.trackers,
     FirestoreCollections.trackerValues,
+    FirestoreCollections.counterAdjustments,
     FirestoreCollections.transactions,
     FirestoreCollections.subscriptions,
     FirestoreCollections.budgets,

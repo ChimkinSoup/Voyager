@@ -1,0 +1,10 @@
+final rr = c.read(rankingRepositoryProvider);
+final now = DateTime.now().toUtc();
+final cat = RankingCategory(id: 'p26-cat', createdAt: now, updatedAt: now, version: 1, name: 'P26 Map Cat', colorValue: 0xFF4CAF50, locationEnabled: true);
+await rr.upsertCategory(cat);
+final a = RankingLocation(id: 'p26-loc-a', latitude: 43.6487, longitude: -79.3963, address: 'Queen St W, Toronto', label: 'Queen St', sortOrder: 0);
+final y = RankingLocation(id: 'p26-loc-y', latitude: 43.6777, longitude: -79.6248, address: 'Pearson Airport', label: 'Airport', sortOrder: 1);
+final p = RankingParent(id: 'p26-rp', createdAt: now, updatedAt: now, version: 1, categoryId: 'p26-cat', title: 'P26 Branch Place', overallScore: 4.0, locations: [a, y]);
+await rr.upsertParent(p);
+invalidateAllDataProvidersIn(c);
+debugPrint('P26 RANKSEED done');

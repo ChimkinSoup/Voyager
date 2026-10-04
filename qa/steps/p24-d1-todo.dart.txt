@@ -1,0 +1,7 @@
+final r = c.read(remoteSyncServiceProvider);
+final tr = c.read(todoRepositoryProvider);
+await softDeleteTaskWithSubtasks(c, (await tr.getTask('p24-task-a'))!);
+await Future.delayed(const Duration(milliseconds: 30));
+await softDeleteTaskWithSubtasks(c, (await tr.getTask('p24-task-b1'))!);
+await Future.delayed(const Duration(milliseconds: 30));
+final cr = c.read(calendarRepositoryProvider); await cr.softDeleteEvent('p24-ev-one');

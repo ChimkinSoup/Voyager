@@ -1,0 +1,1 @@
+final dre = c.read(dreamRepositoryProvider); await dre.softDeleteEntry('p24-dream'); final dt = await dre.getEntry('p24-dream'); if (dt != null) c.read(remoteSyncServiceProvider).pushDreamEntryNow(dt);

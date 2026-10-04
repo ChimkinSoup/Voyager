@@ -1,0 +1,3 @@
+await RankingsActions.detached(c).deleteChild('p24-rc-1');
+await Future.delayed(const Duration(milliseconds: 50));
+await RankingsActions.detached(c).deleteParent('p24-rp-1');

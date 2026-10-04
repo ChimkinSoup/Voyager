@@ -160,6 +160,12 @@ class _ChangePasswordDialogState extends ConsumerState<_ChangePasswordDialog> {
         GlassButton(
           dense: true,
           onPressed: _loading ? null : _submit,
+          icon: _loading
+              ? const SizedBox.square(
+                  dimension: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : null,
           label: 'Change',
         ),
       ],

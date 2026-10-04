@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
@@ -359,17 +360,26 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
                       child: Stack(
                         children: [
                           Positioned.fill(
-                            child: VoyagerTextField(
-                              controller: _controller,
-                              focusNode: _focus,
-                              accentColor: accent,
-                              maxLines: null,
-                              expands: true,
-                              keyboardType: TextInputType.multiline,
-                              decoration: const InputDecoration(
-                                hintText: 'Write something…',
+                            child: CallbackShortcuts(
+                              bindings: {
+                                const SingleActivator(
+                                  LogicalKeyboardKey.enter,
+                                  control: true,
+                                ): () =>
+                                    unawaited(_floaters.dismiss()),
+                              },
+                              child: VoyagerTextField(
+                                controller: _controller,
+                                focusNode: _focus,
+                                accentColor: accent,
+                                maxLines: null,
+                                expands: true,
+                                keyboardType: TextInputType.multiline,
+                                decoration: const InputDecoration(
+                                  hintText: 'Write something…',
+                                ),
+                                onChanged: _handleChanged,
                               ),
-                              onChanged: _handleChanged,
                             ),
                           ),
                           Positioned(

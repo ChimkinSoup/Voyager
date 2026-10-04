@@ -338,6 +338,27 @@ class TrackerValuesTable extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// A counter tracker's changes: one device's net change on one day. See
+/// `CounterAdjustment`.
+@TableIndex(
+  name: 'idx_counter_adjustments_tracker_day',
+  columns: {#trackerId, #day},
+)
+class CounterAdjustmentsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get trackerId => text()();
+  DateTimeColumn get day => dateTime()();
+  TextColumn get deviceId => text()();
+  IntColumn get delta => integer()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 class TransactionsTable extends Table {
   TextColumn get id => text()();
   TextColumn get type => text()();
@@ -1884,6 +1905,7 @@ class LeetCodeCheatEntriesTable extends Table {
     CalendarEventsTable,
     TrackersTable,
     TrackerValuesTable,
+    CounterAdjustmentsTable,
     SettingsTable,
     TagColorsTable,
     SyncConflictsTable,
@@ -1944,7 +1966,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 137;
+  int get schemaVersion => 138;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3480,6 +3502,15 @@ class AppDatabase extends _$AppDatabase {
           'subscriptions_table',
           subscriptionsTable,
           subscriptionsTable.store,
+        );
+      }
+      if (from < 138) {
+        await migrator.createTable(counterAdjustmentsTable);
+        // Declared via @TableIndex, so createAll() covers fresh databases;
+        // existing ones need it made here.
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_counter_adjustments_tracker_day '
+          'ON counter_adjustments_table (tracker_id, day)',
         );
       }
     },

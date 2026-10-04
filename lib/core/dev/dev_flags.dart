@@ -1,3 +1,5 @@
+import 'dart:io';
+
 class DevFlags {
   static bool verboseSync = false;
   static bool showTimeSelectorHitboxes = false;
@@ -14,10 +16,18 @@ class DevFlags {
   // Highlights each segment of the tree trunk, roots, and branches in distinct
   // glowing debug colors and labels.
   static bool showLifeTreeSegmentDebug = false;
-  // Makes the connectivity probe throw, so the shell offline badge (and the
-  // reconnect→resume-sync path) run through the same failure streak they
-  // would against an unreachable Firestore. Session-only; not persisted.
+  // Cuts the app off from the network without touching the PC's: the Dev page
+  // toggle also disables Firestore's network, and the connectivity probe,
+  // media storage, Geoapify search and map tiles fail via
+  // [throwIfForcedOffline]. Weather and sign-in are not cut. Session-only;
+  // not persisted.
   static bool forceOffline = false;
+
+  /// Throws what an unreachable host would, while [forceOffline] is on.
+  static void throwIfForcedOffline() {
+    if (forceOffline) throw const SocketException('DevFlags.forceOffline');
+  }
+
   // Shows the rankings map's current zoom level over the map.
   static bool showRankingsMapZoom = false;
 }

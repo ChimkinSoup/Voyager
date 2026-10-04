@@ -33,6 +33,7 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
+import 'package:voyager/features/analytics/counter_controls.dart';
 import 'package:voyager/features/analytics/mood_trend_card.dart';
 import 'package:voyager/features/analytics/sparkline_touch.dart';
 import 'package:voyager/features/analytics/stat_number_format.dart';
@@ -160,7 +161,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     final analytics = ref.watch(analyticsServiceProvider);
     final prompt = ref.watch(periodicPromptServiceProvider);
 
-    return trackersAsync.when(
+    final body = trackersAsync.when(
       data: (trackers) => entriesAsync.when(
         data: (entries) {
           final words = entries.fold<int>(
@@ -228,14 +229,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               ),
               const SizedBox(height: 12),
               const MoodTrendCard(),
-              // ── Toolbar + tracker grid ────────────────────────────────
+              // ── Tracker grid ──────────────────────────────────────────
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _AnalyticsToolbar(
-                    onCreateTracker: () => _createTracker(context, ref),
-                  ),
-                  const SizedBox(height: 12),
                   if (gridTrackers.isEmpty)
                     const _EmptyTrackersCard()
                   else
@@ -253,7 +250,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                     ),
                 ],
               ),
-              const SizedBox(height: 32),
+              // Clears the floating New tracker button.
+              const SizedBox(height: 80),
             ],
           );
         },
@@ -262,6 +260,16 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       ),
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('$e')),
+    );
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: GlassButton(
+        tooltip: 'New tracker',
+        label: 'New tracker',
+        icon: const Icon(PhosphorIconsRegular.plus),
+        onPressed: () => _createTracker(context, ref),
+      ),
+      body: body,
     );
   }
 
@@ -278,12 +286,21 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 
   Future<void> _createTracker(BuildContext context, WidgetRef ref) async {
-    final tracker = await showVoyagerDialog<StatisticTracker>(
+    final result = await showVoyagerDialog<_TrackerDialogResult>(
       context: context,
       builder: (_) => const _TrackerDialog(),
     );
-    if (tracker == null) return;
-    await ref.read(trackerRepositoryProvider).upsertTracker(tracker);
+    if (result == null) return;
+    final repository = ref.read(trackerRepositoryProvider);
+    if (result.tracker.type == TrackerType.counter) {
+      await repository.createCounter(
+        result.tracker,
+        startingValue: result.startingValue,
+        deviceId: ref.read(deviceIdProvider),
+      );
+    } else {
+      await repository.upsertTracker(result.tracker);
+    }
     ref.invalidate(trackersProvider);
   }
 }
@@ -492,31 +509,6 @@ class _TasksDialog extends ConsumerWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Analytics Toolbar — view mode toggle, tracker selector, new tracker button
-// ---------------------------------------------------------------------------
-
-class _AnalyticsToolbar extends StatelessWidget {
-  const _AnalyticsToolbar({required this.onCreateTracker});
-
-  final VoidCallback onCreateTracker;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        GlassButton(
-          onPressed: onCreateTracker,
-          icon: const Icon(PhosphorIconsRegular.plus, size: 16),
-          label: 'New tracker',
-          dense: true,
-        ),
-      ],
     );
   }
 }
@@ -1153,14 +1145,11 @@ class _SparklineRow extends ConsumerWidget {
                         .toList();
                     DateTime periodStartOf(DateTime date) => promptService
                         .trackerPeriodStartFor(date, tracker.cadence);
-                    final dataMax = spots
-                        .map((s) => s.y)
-                        .fold<double>(1, (m, y) => y > m ? y : m);
                     // Round the axis out to whole steps so the compact tile shows
                     // three evenly spaced, round gridlines instead of an arbitrary
                     // 15% headroom above the peak.
-                    final yStep = niceAxisStep(dataMax, _sparklineGridLines);
-                    final maxY = yStep * (_sparklineGridLines - 1);
+                    final (minY: minY, maxY: maxY, step: yStep) =
+                        _sparklineYAxis(spots, _sparklineGridLines);
                     // fl_chart lays the axis titles out *around* the plot
                     // (`FlTitlesData.allSidesPadding`), so the plot area is this
                     // widget's box inset by whatever each axis reserves — top and
@@ -1168,7 +1157,11 @@ class _SparklineRow extends ConsumerWidget {
                     // because the hover bubble maps the touched spot back to a
                     // pixel position and has to do it with the very numbers the
                     // chart drew with.
-                    final leftReserved = axisReservedSize(maxY, 9, 8);
+                    final leftReserved = axisReservedSize(
+                      -minY > maxY ? minY : maxY,
+                      9,
+                      8,
+                    );
                     const bottomReserved = 26.0;
                     // Pinned to the window rather than left to fl_chart to infer
                     // from the data, for the same reason: an inferred domain the
@@ -1253,7 +1246,7 @@ class _SparklineRow extends ConsumerWidget {
                             ),
                             minX: minX,
                             maxX: maxX,
-                            minY: 0,
+                            minY: minY,
                             maxY: maxY,
                             // Vertical gridlines sit on period starts, which
                             // fl_chart's fixed-interval grid can't place.
@@ -1263,8 +1256,9 @@ class _SparklineRow extends ConsumerWidget {
                                 for (final x in gridXs)
                                   VerticalLine(
                                     x: x,
-                                    color: theme.colorScheme.outline
-                                        .withValues(alpha: 0.1),
+                                    color: theme.colorScheme.outline.withValues(
+                                      alpha: 0.1,
+                                    ),
                                     strokeWidth: 1,
                                   ),
                               ],
@@ -1370,6 +1364,7 @@ class _SparklineRow extends ConsumerWidget {
                           spots: spots,
                           minX: minX,
                           maxX: maxX,
+                          minY: minY,
                           maxY: maxY,
                           leftReserved: leftReserved,
                           bottomReserved: bottomReserved,
@@ -1393,6 +1388,31 @@ class _SparklineRow extends ConsumerWidget {
                   error: (_, __) => const SizedBox.expand(),
                 ),
               ),
+              // A counter's running total, changed for today. The buttons
+              // claim their own presses, so neither reaches [_StatTile]'s
+              // popup-and-drag layer behind them.
+              if (tracker.type == TrackerType.counter) ...[
+                const SizedBox(width: 8),
+                Center(
+                  child: CounterStepper(
+                    value:
+                        valuesAsync.valueOrNull?.lastOrNull?.intValue
+                            ?.round() ??
+                        0,
+                    color: color,
+                    textStyle: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    iconSize: 18,
+                    onStep: switch (ref.watch(counterStepProvider)) {
+                      final step? => (delta) {
+                        unawaited(step(tracker.id, DateTime.now(), delta));
+                      },
+                      null => null,
+                    },
+                  ),
+                ),
+              ],
               const SizedBox(width: 12),
               // Right: Edit Button
               Align(
@@ -1406,14 +1426,15 @@ class _SparklineRow extends ConsumerWidget {
                   padding: EdgeInsets.zero,
                   constraints: kMinTouchTarget,
                   onPressed: () async {
-                    final updated = await showVoyagerDialog<StatisticTracker>(
-                      context: context,
-                      builder: (_) => _TrackerDialog(tracker: tracker),
-                    );
+                    final updated =
+                        await showVoyagerDialog<_TrackerDialogResult>(
+                          context: context,
+                          builder: (_) => _TrackerDialog(tracker: tracker),
+                        );
                     if (updated == null) return;
                     await ref
                         .read(trackerRepositoryProvider)
-                        .upsertTracker(updated);
+                        .upsertTracker(updated.tracker);
                     ref.invalidate(trackersProvider);
                   },
                 ),
@@ -1986,7 +2007,7 @@ class _HeatmapRow extends ConsumerWidget {
                         constraints: const BoxConstraints(),
                         onPressed: () async {
                           final updated =
-                              await showVoyagerDialog<StatisticTracker>(
+                              await showVoyagerDialog<_TrackerDialogResult>(
                                 context: context,
                                 builder: (_) =>
                                     _TrackerDialog(tracker: tracker),
@@ -1994,7 +2015,7 @@ class _HeatmapRow extends ConsumerWidget {
                           if (updated == null) return;
                           await ref
                               .read(trackerRepositoryProvider)
-                              .upsertTracker(updated);
+                              .upsertTracker(updated.tracker);
                           ref.invalidate(trackersProvider);
                         },
                       ),
@@ -2229,6 +2250,9 @@ void _openSparklinePeriodEditor({
   // heatmap path carries this guard as `readOnly`; the sparkline path, which
   // is where the "Best Streak" and "Words" chips open, had none at all.
   if (tracker.isDefault) return;
+  // A counter changes only by − and +; its points are derived running totals,
+  // and at weekly or coarser resolution one doesn't even name a single day.
+  if (tracker.type == TrackerType.counter) return;
   final spots = response?.lineBarSpots;
   if (spots == null || spots.isEmpty) return;
   // Both measured before the bubble is dismissed below — [_hide]'s
@@ -2336,6 +2360,7 @@ Widget _sparklineHoverBubble({
   required List<FlSpot> spots,
   required double minX,
   required double maxX,
+  required double minY,
   required double maxY,
   required double leftReserved,
   required double bottomReserved,
@@ -2364,12 +2389,20 @@ Widget _sparklineHoverBubble({
           // `spot.y` is the curve's own value at the touched day, which is the
           // recorded number on a logged day and the interpolated one between
           // logged days — exactly the fallback [_sparklineValueReading] wants.
-          final reading = _sparklineValueReading(
-            tracker: tracker,
-            value: resolved.value,
-            interpolatedY: spot.y,
-            onRecordedDay: resolved.onRecordedDay,
-          );
+          // A counter's point is the running total for its whole period, so it
+          // reads as that total anywhere in the period, with the period's net
+          // change beside it.
+          final reading = tracker.type == TrackerType.counter
+              ? (
+                  label: _counterPeriodLabel(values, resolved.value),
+                  isEstimate: false,
+                )
+              : _sparklineValueReading(
+                  tracker: tracker,
+                  value: resolved.value,
+                  interpolatedY: spot.y,
+                  onRecordedDay: resolved.onRecordedDay,
+                );
           final valueLabel = reading.label;
           // Anchored to the *touched point on the curve*, never to the
           // pointer. Both identify the same period, but only the spot holds
@@ -2387,7 +2420,10 @@ Widget _sparklineHoverBubble({
               leftReserved +
               (spanX == 0 ? 0.0 : (spot.x - minX) / spanX * plotWidth);
           final spotDy =
-              plotHeight - (maxY == 0 ? 0.0 : spot.y / maxY * plotHeight);
+              plotHeight -
+              (maxY == minY
+                  ? 0.0
+                  : (spot.y - minY) / (maxY - minY) * plotHeight);
           // The bubble always sits above the point, never below.
           //
           // It used to flip below whenever there wasn't room above, which on a
@@ -2641,6 +2677,27 @@ const _sparklineDataBarIndex = 1;
 /// ~96px of plot height, so more than three lines reads as noise; the popup
 /// has the room to be read as a real chart.
 const _sparklineGridLines = 3;
+
+/// A sparkline's y-axis: [lines] round gridlines up from 0 or, once a
+/// counter has gone below zero, up from the round step under its lowest
+/// point.
+({double minY, double maxY, double step}) _sparklineYAxis(
+  List<FlSpot> spots,
+  int lines,
+) {
+  final dataMax = spots.map((s) => s.y).fold<double>(1, math.max);
+  final dataMin = spots.map((s) => s.y).fold<double>(0, math.min);
+  if (dataMin >= 0) {
+    final step = niceAxisStep(dataMax, lines);
+    return (minY: 0, maxY: step * (lines - 1), step: step);
+  }
+  // Sized for one interval fewer than drawn, so rounding the floor down by up
+  // to a step can't leave the top short of the peak.
+  final step = niceAxisStep(dataMax - dataMin, lines - 1);
+  final minY = (dataMin / step).floorToDouble() * step;
+  return (minY: minY, maxY: minY + step * (lines - 1), step: step);
+}
+
 const _sparklineDetailGridLines = 6;
 
 /// Periods the grid tile's sparkline spans, and how many periods apart its
@@ -2655,9 +2712,8 @@ const _sparklineLabelStep = 10;
 /// the label stands for.
 String _sparklineAxisDate(DateTime date, TrackerCadence cadence) =>
     switch (cadence) {
-      TrackerCadence.daily || TrackerCadence.weekly => DateFormat(
-        'MMM d',
-      ).format(date),
+      TrackerCadence.daily ||
+      TrackerCadence.weekly => DateFormat('MMM d').format(date),
       // "Sep '26", not "Sep 26": the bare year reads as a day of the month.
       TrackerCadence.monthly => DateFormat("MMM ''yy").format(date),
       TrackerCadence.yearly => DateFormat('yyyy').format(date),
@@ -2875,6 +2931,17 @@ String? _hoverValueLabel({
   );
 }
 
+/// `12 (+3)`: a counter period's running total and its net change, taken
+/// from the period before it in [series] — every period has a value, so the
+/// previous entry is the previous period.
+String? _counterPeriodLabel(List<TrackerValue> series, TrackerValue? value) {
+  final total = value?.intValue?.round();
+  if (total == null) return null;
+  final index = series.indexOf(value!);
+  final previous = index > 0 ? series[index - 1].intValue?.round() ?? 0 : 0;
+  return '$total (${formatCounterChange(total - previous)})';
+}
+
 /// Background fill for the heatmap/sparkline hover bubble.
 ///
 /// This used to reuse the calendar's panel tone, which is only 8% opaque —
@@ -2935,7 +3002,7 @@ String _trackerStatLabel(double value) =>
 String? _tooltipValueLabel(TrackerType type, TrackerValue? value) {
   if (value == null) return null;
   return switch (type) {
-    TrackerType.integer =>
+    TrackerType.integer || TrackerType.counter =>
       value.intValue == null ? null : formatTrackerNumber(value.intValue!),
     TrackerType.boolean =>
       value.boolValue == true ? 'Completed' : 'Not completed',
@@ -3442,6 +3509,8 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
     TrackerType.integer => _intController.text.trim() != _initialInt.trim(),
     TrackerType.boolean => _boolValue != _initialBool,
     TrackerType.enumType => _enumValue != _initialEnum,
+    // Never opened for a counter — see [_openSparklinePeriodEditor].
+    TrackerType.counter => false,
   };
 
   /// Key on the editor's content only (no frame/decoration of its own) —
@@ -3946,6 +4015,9 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
           activeColor: accent,
           onChanged: (v) => setState(() => _boolValue = v),
         );
+      // Never opened for a counter — see [_openSparklinePeriodEditor].
+      case TrackerType.counter:
+        return const SizedBox.shrink();
       case TrackerType.enumType:
         final options = widget.tracker.enumOptions;
         return VoyagerDropdownButtonFormField<String>(
@@ -4065,6 +4137,10 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
         boolVal = _boolValue;
       case TrackerType.enumType:
         enumVal = _enumValue;
+      // Never opened for a counter — see [_openSparklinePeriodEditor].
+      case TrackerType.counter:
+        if (mounted) Navigator.of(context).pop();
+        return;
     }
 
     final repo = ref.read(trackerRepositoryProvider);
@@ -4255,12 +4331,12 @@ Future<void> _editTracker(
   WidgetRef ref,
   StatisticTracker tracker,
 ) async {
-  final updated = await showVoyagerDialog<StatisticTracker>(
+  final updated = await showVoyagerDialog<_TrackerDialogResult>(
     context: context,
     builder: (_) => _TrackerDialog(tracker: tracker),
   );
   if (updated == null) return;
-  await ref.read(trackerRepositoryProvider).upsertTracker(updated);
+  await ref.read(trackerRepositoryProvider).upsertTracker(updated.tracker);
   ref.invalidate(trackersProvider);
 }
 
@@ -4459,8 +4535,25 @@ class _DetailStatisticsSection extends ConsumerWidget {
       return _section(theme, rows);
     }
 
+    // A counter's values are derived too, one running total for every period
+    // since creation (see [counterSeriesValues]), so a count and streaks would
+    // count graph points rather than changes.
+    if (tracker.type == TrackerType.counter) {
+      final totals = values.map((v) => v.intValue ?? 0).toList();
+      final average = totals.reduce((a, b) => a + b) / totals.length;
+      final highest = totals.reduce((a, b) => a > b ? a : b);
+      final lowest = totals.reduce((a, b) => a < b ? a : b);
+      rows.addAll([
+        _row(context, 'Average', formatTrackerNumber(average)),
+        _row(context, 'Highest', _trackerStatLabel(highest)),
+        _row(context, 'Lowest', _trackerStatLabel(lowest)),
+      ]);
+      return _section(theme, rows);
+    }
+
     switch (tracker.type) {
       case TrackerType.integer:
+      case TrackerType.counter:
         rows.add(
           _row(context, 'Entries logged', compactNumberLabel(values.length)),
         );
@@ -4637,6 +4730,25 @@ class _TrackerStatisticsDialog extends ConsumerWidget {
       );
     }
 
+    // A counter has a derived running total for every period since creation
+    // (see [counterSeriesValues]), so counts, streaks and logged dates would
+    // describe graph points rather than changes.
+    if (tracker.type == TrackerType.counter) {
+      final totals = values.map((v) => v.intValue ?? 0).toList();
+      final average = totals.reduce((a, b) => a + b) / totals.length;
+      final highest = totals.reduce((a, b) => a > b ? a : b);
+      final lowest = totals.reduce((a, b) => a < b ? a : b);
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _row(context, 'Average', formatTrackerNumber(average)),
+          _row(context, 'Highest', _trackerStatLabel(highest)),
+          _row(context, 'Lowest', _trackerStatLabel(lowest)),
+        ],
+      );
+    }
+
     // Unique recorded periods (date-only), oldest first — the basis for both
     // the "entries logged" count and the date range.
     final periods =
@@ -4694,6 +4806,7 @@ class _TrackerStatisticsDialog extends ConsumerWidget {
           _row(context, 'Times completed', compactNumberLabel(completed)),
         );
       case TrackerType.enumType:
+      case TrackerType.counter:
         break;
     }
 
@@ -4761,7 +4874,8 @@ class _StatisticDetailPopup extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final settings = ref.watch(settingsProvider.settled).value ?? const AppSettings();
+    final settings =
+        ref.watch(settingsProvider.settled).value ?? const AppSettings();
     final color = paletteColor(tracker.colorValue, context);
 
     // The same widget the Calendar page uses for its own period navigation, so
@@ -4832,7 +4946,7 @@ class _StatisticDetailPopup extends ConsumerWidget {
                         constraints: kMinTouchTarget,
                         onPressed: () async {
                           final updated =
-                              await showVoyagerDialog<StatisticTracker>(
+                              await showVoyagerDialog<_TrackerDialogResult>(
                                 context: context,
                                 builder: (_) =>
                                     _TrackerDialog(tracker: tracker),
@@ -4840,7 +4954,7 @@ class _StatisticDetailPopup extends ConsumerWidget {
                           if (updated == null) return;
                           await ref
                               .read(trackerRepositoryProvider)
-                              .upsertTracker(updated);
+                              .upsertTracker(updated.tracker);
                           ref.invalidate(trackersProvider);
                         },
                       ),
@@ -4888,6 +5002,16 @@ class _StatisticDetailBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (tracker.type == TrackerType.counter) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ConsecutiveCalendarChart(tracker: tracker, analytics: analytics),
+          const SizedBox(height: 20),
+          _CounterDetail(tracker: tracker),
+        ],
+      );
+    }
     if (tracker.effectiveTrackingStyle == TrackerStyle.consecutive) {
       return _ConsecutiveCalendarChart(tracker: tracker, analytics: analytics);
     }
@@ -4902,6 +5026,327 @@ class _StatisticDetailBody extends StatelessWidget {
       ),
       _ => _YearHeatmapCalendar(tracker: tracker, analytics: analytics),
     };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Counter calendar and log
+// ---------------------------------------------------------------------------
+
+/// A counter's day-by-day view: a month calendar of daily changes, whatever
+/// the graph resolution, since changes are stored per day. Selecting today or
+/// a past day gives it − and +, which is how past days are changed. Beside it,
+/// the log: one erasable row per day whose changes didn't cancel out.
+class _CounterDetail extends ConsumerStatefulWidget {
+  const _CounterDetail({required this.tracker});
+
+  final StatisticTracker tracker;
+
+  @override
+  ConsumerState<_CounterDetail> createState() => _CounterDetailState();
+}
+
+class _CounterDetailState extends ConsumerState<_CounterDetail> {
+  static const _cellHeight = 52.0;
+  static const _logWidth = 260.0;
+
+  late DateTime _month;
+  late DateTime _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = dateOnly(DateTime.now());
+    _month = DateTime(_selected.year, _selected.month);
+  }
+
+  Future<void> _erase(DateTime day) async {
+    final trackerId = widget.tracker.id;
+    // Read up front: the popup can close before the erase lands, and the
+    // toast offering the undo outlives it.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final repository = container.read(trackerRepositoryProvider);
+    final deviceId = container.read(deviceIdProvider);
+    var erased = 0;
+    await softDeleteWithUndo(
+      overlay: overlay,
+      message: 'Erased ${DateFormat.yMMMd().format(day)}',
+      delete: () async {
+        erased = await repository.eraseCounterDay(
+          trackerId,
+          day,
+          deviceId: deviceId,
+        );
+        container.invalidate(counterAdjustmentsProvider(trackerId));
+      },
+      restore: () async {
+        if (erased == 0) return;
+        await repository.adjustCounter(
+          trackerId: trackerId,
+          day: day,
+          deviceId: deviceId,
+          delta: erased,
+        );
+        container.invalidate(counterAdjustmentsProvider(trackerId));
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = paletteColor(widget.tracker.colorValue, context);
+    final adjustments =
+        ref
+            .watch(counterAdjustmentsProvider(widget.tracker.id).settled)
+            .valueOrNull ??
+        const <CounterAdjustment>[];
+    final changes = counterDailyChanges(adjustments);
+    final weekStartsMonday =
+        ref.watch(settingsProvider.settled).value?.weekStartsOnMonday ?? true;
+    final step = ref.watch(counterStepProvider);
+    final today = dateOnly(DateTime.now());
+    final gridDates = monthGridDates(
+      _month,
+      weekStartsMonday: weekStartsMonday,
+    );
+    // The grid's days are consecutive, so one scan for the total before the
+    // first of them and a running sum covers every cell.
+    final first = gridDates.first;
+    var running = counterTotalThrough(
+      adjustments,
+      DateTime(first.year, first.month, first.day - 1),
+    );
+    final totals = <DateTime, int>{
+      for (final day in gridDates) day: running += changes[day] ?? 0,
+    };
+
+    final calendar = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            IconButton(
+              icon: const Icon(PhosphorIconsRegular.caretLeft, size: 16),
+              tooltip: 'Previous month',
+              onPressed: () => setState(
+                () => _month = DateTime(_month.year, _month.month - 1),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                DateFormat.yMMMM().format(_month),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleSmall?.copyWith(color: color),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(PhosphorIconsRegular.caretRight, size: 16),
+              tooltip: 'Next month',
+              onPressed: () => setState(
+                () => _month = DateTime(_month.year, _month.month + 1),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        WeekdayHeaderRow(
+          weekStartsMonday: weekStartsMonday,
+          labelStyle: calendarWeekdayLabelStyle(
+            context,
+            fontSize: MonthDayCellStyle.compact.fontSize,
+          ),
+        ),
+        const SizedBox(height: 4),
+        for (final week in _weeks(gridDates))
+          Row(
+            children: [
+              for (final day in week)
+                Expanded(
+                  child: _dayCell(
+                    context,
+                    day: day,
+                    change: changes[day] ?? 0,
+                    total: totals[day]!,
+                    isFuture: day.isAfter(today),
+                    color: color,
+                  ),
+                ),
+            ],
+          ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                DateFormat.yMMMEd().format(_selected),
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+            CounterStepper(
+              value:
+                  totals[_selected] ??
+                  counterTotalThrough(adjustments, _selected),
+              color: color,
+              textStyle: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+              onStep: step == null
+                  ? null
+                  : (delta) =>
+                        unawaited(step(widget.tracker.id, _selected, delta)),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final logDays = [
+      for (final entry in changes.entries)
+        if (entry.value != 0) entry.key,
+    ]..sort((a, b) => b.compareTo(a));
+    final log = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'HISTORY',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            letterSpacing: 1.0,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (logDays.isEmpty)
+          Text(
+            'No changes yet.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          )
+        else
+          // Lazily built and bounded: a counter used daily for years has a
+          // row for every one of those days.
+          SizedBox(
+            height: 6 * _cellHeight + 40,
+            child: ListView.builder(
+              itemCount: logDays.length,
+              itemBuilder: (context, i) {
+                final day = logDays[i];
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        DateFormat.yMMMd().format(day),
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
+                    Text(
+                      formatCounterChange(changes[day]!),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(PhosphorIconsRegular.trash, size: 16),
+                      // No confirmation: the erase offers an undo instead.
+                      tooltip: 'Erase this day',
+                      visualDensity: VisualDensity.compact,
+                      // Disabled with the steppers until the device id is
+                      // known: the erase is written to this device's row.
+                      onPressed: step == null
+                          ? null
+                          : () => unawaited(_erase(day)),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+      ],
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 2 * _logWidth + 24) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [calendar, const SizedBox(height: 20), log],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: calendar),
+            const SizedBox(width: 24),
+            SizedBox(width: _logWidth, child: log),
+          ],
+        );
+      },
+    );
+  }
+
+  static Iterable<List<DateTime>> _weeks(List<DateTime> days) sync* {
+    for (var i = 0; i < days.length; i += 7) {
+      yield days.sublist(i, i + 7);
+    }
+  }
+
+  Widget _dayCell(
+    BuildContext context, {
+    required DateTime day,
+    required int change,
+    required int total,
+    required bool isFuture,
+    required Color color,
+  }) {
+    final theme = Theme.of(context);
+    final inMonth = day.month == _month.month;
+    return Opacity(
+      opacity: isFuture
+          ? 0.35
+          : inMonth
+          ? 1
+          : calendarAdjacentMonthTextOpacity,
+      child: InkWell(
+        // Future days can't be changed, so they can't be selected either.
+        onTap: isFuture ? null : () => setState(() => _selected = day),
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          height: _cellHeight,
+          margin: const EdgeInsets.all(1),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            color: change == 0 ? null : color.withValues(alpha: 0.12),
+            border: Border.all(
+              color: day == _selected ? color : Colors.transparent,
+              width: 1.5,
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('${day.day}', style: theme.textTheme.labelSmall),
+              Text(
+                change == 0 ? '' : formatCounterChange(change),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+              Text(
+                isFuture ? '' : '$total',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontSize: 9,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -5000,16 +5445,19 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
         DateTime periodStartOf(DateTime date) =>
             promptService.trackerPeriodStartFor(date, tracker.cadence);
 
-        final dataMax = spots.isEmpty
-            ? 1.0
-            : spots.map((s) => s.y).fold<double>(1, math.max);
         // The popup has the height to carry a full six-line scale.
-        final yStep = niceAxisStep(dataMax, _sparklineDetailGridLines);
-        final maxY = yStep * (_sparklineDetailGridLines - 1);
+        final (minY: minY, maxY: maxY, step: yStep) = _sparklineYAxis(
+          spots,
+          _sparklineDetailGridLines,
+        );
         // See the matching note on the grid sparkline: the plot area is the
         // chart's box inset by what the axis titles reserve, and the hover
         // bubble maps spots to pixels with these same numbers.
-        final leftReserved = axisReservedSize(maxY, 12, 10);
+        final leftReserved = axisReservedSize(
+          -minY > maxY ? minY : maxY,
+          12,
+          10,
+        );
         const bottomReserved = 32.0;
 
         // One reading per period, not one per day — see
@@ -5085,7 +5533,7 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
                   ),
                   minX: 0,
                   maxX: totalDays.toDouble(),
-                  minY: 0,
+                  minY: minY,
                   maxY: maxY,
                   gridData: FlGridData(
                     show: true,
@@ -5162,6 +5610,7 @@ class _ConsecutiveCalendarChart extends ConsumerWidget {
                 spots: spots,
                 minX: 0,
                 maxX: totalDays.toDouble(),
+                minY: minY,
                 maxY: maxY,
                 leftReserved: leftReserved,
                 bottomReserved: bottomReserved,
@@ -6033,6 +6482,10 @@ const _kTrackerFieldPadding = EdgeInsets.symmetric(
 /// otherwise sit flush against one another with nothing to group them.
 const _kTrackerOptionGap = 8.0;
 
+/// What [_TrackerDialog] returns. [startingValue] is only ever non-zero for a
+/// new counter.
+typedef _TrackerDialogResult = ({StatisticTracker tracker, int startingValue});
+
 class _TrackerDialog extends ConsumerStatefulWidget {
   const _TrackerDialog({this.tracker});
 
@@ -6046,6 +6499,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
   late final TextEditingController _nameController;
   late final TextEditingController _defaultIntController;
   late final TextEditingController _capController;
+  final _startingValueController = TextEditingController(text: '0');
   final _lowerFocusNode = FocusNode();
   final _upperFocusNode = FocusNode();
   final List<TextEditingController> _optionControllers = [];
@@ -6108,6 +6562,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
     _nameController.dispose();
     _defaultIntController.dispose();
     _capController.dispose();
+    _startingValueController.dispose();
     _lowerFocusNode.dispose();
     _upperFocusNode.dispose();
     for (final controller in _optionControllers) {
@@ -6126,6 +6581,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
   Widget build(BuildContext context) {
     final enumOptions = _enumOptions;
     final accent = paletteColor(_colorValue, context);
+    final canSubmit = !_waitingForDeviceId(ref.watch(deviceIdProvider));
     final dialog = AlertDialog(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
@@ -6174,11 +6630,19 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                 ),
               ],
               const SizedBox(height: 12),
+              // A counter's type is fixed both ways: one can only be created
+              // as a counter, and never converted to or from one.
               VoyagerDropdownButtonFormField<TrackerType>(
                 initialValue: _type,
                 accentColor: accent,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: TrackerType.values
+                    .where(
+                      (type) =>
+                          widget.tracker == null ||
+                          (type == TrackerType.counter) ==
+                              (widget.tracker!.type == TrackerType.counter),
+                    )
                     .map(
                       (type) => DropdownMenuItem(
                         value: type,
@@ -6186,8 +6650,31 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                       ),
                     )
                     .toList(),
-                onChanged: (value) => setState(() => _type = value ?? _type),
+                onChanged: widget.tracker?.type == TrackerType.counter
+                    ? null
+                    : (value) => setState(() => _type = value ?? _type),
               ),
+              // Only when creating: afterwards the starting value is just the
+              // creation day's row in the counter's log.
+              if (_type == TrackerType.counter && widget.tracker == null) ...[
+                const SizedBox(height: 12),
+                VoyagerTextField(
+                  controller: _startingValueController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    signed: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^-?\d*')),
+                  ],
+                  accentColor: accent,
+                  decoration: const InputDecoration(
+                    labelText: 'Starting value',
+                    isDense: true,
+                    contentPadding: _kTrackerFieldPadding,
+                  ),
+                  onSubmitted: (_) => _submit(),
+                ),
+              ],
               // TrackingStyle only for integers
               if (_type == TrackerType.integer) ...[
                 const SizedBox(height: 12),
@@ -6229,7 +6716,13 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
               VoyagerDropdownButtonFormField<TrackerCadence>(
                 initialValue: _cadence,
                 accentColor: accent,
-                decoration: const InputDecoration(labelText: 'Cadence'),
+                // A counter's changes are stored per day whatever this says;
+                // it only sets how many points the graph has.
+                decoration: InputDecoration(
+                  labelText: _type == TrackerType.counter
+                      ? 'Graph resolution'
+                      : 'Cadence',
+                ),
                 items: TrackerCadence.values
                     .map(
                       (cadence) => DropdownMenuItem(
@@ -6498,7 +6991,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
           dense: true,
         ),
         GlassButton(
-          onPressed: _submit,
+          onPressed: canSubmit ? _submit : null,
           label: widget.tracker != null ? 'Save' : 'Create',
           color: accent,
           dense: true,
@@ -6507,6 +7000,14 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
     );
     return CtrlEnterToSubmitScope(onSubmit: _submit, child: dialog);
   }
+
+  /// A new counter's starting value is a row keyed by this device's id, so
+  /// creating one before the id resolves would write it under the placeholder
+  /// every device shares — see [counterStepProvider].
+  bool _waitingForDeviceId(String deviceId) =>
+      _type == TrackerType.counter &&
+      widget.tracker == null &&
+      deviceId == kUnresolvedDeviceId;
 
   List<String> get _enumOptions => _optionControllers
       .map((controller) => controller.text.trim())
@@ -6551,6 +7052,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
   }
 
   void _submit() {
+    if (_waitingForDeviceId(ref.read(deviceIdProvider))) return;
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       setState(() => _nameError = 'Title cannot be empty');
@@ -6603,39 +7105,43 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
       }
     }
     final now = utcNow();
-    Navigator.pop(
-      context,
-      StatisticTracker(
-        id: widget.tracker?.id ?? newId(),
-        name: name,
-        type: _type,
-        cadence: _cadence,
-        colorValue: _colorValue,
-        showOnCalendar: _showOnCalendar,
-        integerCap: _type == TrackerType.integer && _hasCap
-            ? int.tryParse(_capController.text.trim())
-            : null,
-        defaultInt: int.tryParse(_defaultIntController.text.trim()) ?? 0,
-        defaultBool: _defaultBool,
-        enumOptions: enumOptions,
-        defaultEnumOption: _defaultEnumOption,
-        // Only set trackingStyle for integer type; null for others
-        trackingStyle: _type == TrackerType.integer ? _trackingStyle : null,
-        starred: widget.tracker?.starred ?? false,
-        sortOrder: widget.tracker?.sortOrder ?? 0,
-        createdAt: widget.tracker?.createdAt ?? now,
-        updatedAt: now,
-        // An edit is a new revision of the tracker, not a brand-new one.
-        // Resetting to 0 shipped a rename at v0 against a remote that every
-        // star toggle and drag-reorder had already advanced, so the next pull
-        // discarded it and restored the old name, colour, cadence and limits.
-        version: (widget.tracker?.version ?? 0) + 1,
-        // Carried, not dropped: editing a tracker another device deleted
-        // would otherwise resurrect it locally and leave the two disagreeing
-        // about whether it exists.
-        deletedAt: widget.tracker?.deletedAt,
-      ),
+    final tracker = StatisticTracker(
+      id: widget.tracker?.id ?? newId(),
+      name: name,
+      type: _type,
+      cadence: _cadence,
+      colorValue: _colorValue,
+      showOnCalendar: _showOnCalendar,
+      integerCap: _type == TrackerType.integer && _hasCap
+          ? int.tryParse(_capController.text.trim())
+          : null,
+      defaultInt: int.tryParse(_defaultIntController.text.trim()) ?? 0,
+      defaultBool: _defaultBool,
+      enumOptions: enumOptions,
+      defaultEnumOption: _defaultEnumOption,
+      // Only set trackingStyle for integer type; null for others
+      trackingStyle: _type == TrackerType.integer ? _trackingStyle : null,
+      starred: widget.tracker?.starred ?? false,
+      sortOrder: widget.tracker?.sortOrder ?? 0,
+      createdAt: widget.tracker?.createdAt ?? now,
+      updatedAt: now,
+      // An edit is a new revision of the tracker, not a brand-new one.
+      // Resetting to 0 shipped a rename at v0 against a remote that every
+      // star toggle and drag-reorder had already advanced, so the next pull
+      // discarded it and restored the old name, colour, cadence and limits.
+      version: (widget.tracker?.version ?? 0) + 1,
+      // Carried, not dropped: editing a tracker another device deleted
+      // would otherwise resurrect it locally and leave the two disagreeing
+      // about whether it exists.
+      deletedAt: widget.tracker?.deletedAt,
     );
+    final _TrackerDialogResult result = (
+      tracker: tracker,
+      startingValue: _type == TrackerType.counter && widget.tracker == null
+          ? int.tryParse(_startingValueController.text.trim()) ?? 0
+          : 0,
+    );
+    Navigator.pop(context, result);
   }
 }
 
@@ -6648,5 +7154,6 @@ String _typeLabel(TrackerType type) {
     TrackerType.integer => 'Number',
     TrackerType.boolean => 'Boolean',
     TrackerType.enumType => 'Dropdown',
+    TrackerType.counter => 'Counter',
   };
 }

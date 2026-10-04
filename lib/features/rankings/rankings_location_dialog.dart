@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -112,6 +113,7 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
   static const _pinSize = 26.0;
 
   final _input = TextEditingController();
+  final _inputFocus = FocusNode();
   final _title = TextEditingController();
   final _map = MapController();
   final _tiles = GlobalKey<RankingsTileLayerState>();
@@ -126,10 +128,46 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
   List<GeoapifyPlace> _suggestions = const [];
   bool _offerEverywhere = false;
 
+  /// Every saved entry, for the matches listed while Geoapify is still
+  /// answering. Empty until read.
+  List<RankingParent> _saved = const [];
+
+  /// Saved entries' locations whose title holds the typed text, listed above
+  /// [_suggestions].
+  List<GeoapifyPlace> _savedMatches = const [];
+
+  static const _maxSavedMatches = 3;
+
   /// Bumped by every search and every geocode, so an answer that arrives
   /// after a newer question was asked is dropped.
   var _searchRequest = 0;
   var _geocodeRequest = 0;
+
+  /// The search or short link waiting on the network, if any. Anything that
+  /// drops its answer bumps [_searchRequest] past it, which takes the spinner
+  /// down with it.
+  int? _pendingSearch;
+  bool get _searching => _pendingSearch == _searchRequest;
+
+  /// The same for the address being looked up for the pin.
+  int? _pendingGeocode;
+  bool get _geocoding => _pendingGeocode == _geocodeRequest;
+
+  /// What the list shows: saved matches first, then the places Geoapify found
+  /// that aren't one of them.
+  List<GeoapifyPlace> get _listed => [
+    ..._savedMatches,
+    for (final place in _suggestions)
+      if (!_savedMatches.any((saved) => _samePlace(saved, place))) place,
+  ];
+
+  static bool _samePlace(GeoapifyPlace a, GeoapifyPlace b) =>
+      const Distance().as(
+        LengthUnit.Meter,
+        LatLng(a.latitude, a.longitude),
+        LatLng(b.latitude, b.longitude),
+      ) <=
+      rankingDuplicateLocationMeters;
 
   GeoapifyClient? get _client => ref.read(geoapifyClientProvider);
 
@@ -140,12 +178,55 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
     _address = widget.initialAddress;
     _title.text = widget.initialTitle;
     if (_pin != null && _address.isEmpty) unawaited(_reverseGeocode());
+    unawaited(_loadSaved());
+  }
+
+  Future<void> _loadSaved() async {
+    final categories = await ref.read(rankingCategoriesProvider.future);
+    final saved = [
+      for (final category in categories)
+        ...await ref.read(rankingParentsProvider(category.id).future),
+    ];
+    if (mounted) _saved = saved;
+  }
+
+  /// The saved locations [text] names, nearest [_LocationDialog.near] first,
+  /// leaving out those this entry already has.
+  List<GeoapifyPlace> _matchSaved(String text) {
+    final query = text.trim().toLowerCase();
+    final near = widget.near;
+    final matches = [
+      for (final parent in _saved)
+        if (parent.title.toLowerCase().contains(query))
+          for (final location in parent.locations)
+            if (!rankingHasLocationNear(
+              widget.existing,
+              location.latitude,
+              location.longitude,
+            ))
+              (
+                name: parent.title,
+                address: location.address,
+                latitude: location.latitude,
+                longitude: location.longitude,
+              ),
+    ];
+    if (near != null) {
+      double away(GeoapifyPlace place) => const Distance().as(
+        LengthUnit.Meter,
+        near,
+        LatLng(place.latitude, place.longitude),
+      );
+      matches.sort((a, b) => away(a).compareTo(away(b)));
+    }
+    return matches.take(_maxSavedMatches).toList();
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _input.dispose();
+    _inputFocus.dispose();
     _title.dispose();
     _map.dispose();
     super.dispose();
@@ -154,14 +235,21 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
   void _onInputChanged(String text) {
     _debounce?.cancel();
     _searchRequest++;
+    final link = looksLikeLink(text);
     setState(() {
       _error = null;
       _suggestions = const [];
       _offerEverywhere = false;
+      // Undebounced: they are read from memory, and shown while Geoapify is
+      // still on its way.
+      _savedMatches =
+          link || _client == null || text.trim().length < _minSearchLength
+          ? const []
+          : _matchSaved(text);
     });
     // Debounced like a search: a link typed or edited by hand would otherwise
     // be resolved, and refused, once per character.
-    if (looksLikeLink(text)) {
+    if (link) {
       _debounce = Timer(_searchDebounce, () => unawaited(_resolveLink(text)));
       return;
     }
@@ -169,10 +257,18 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
     _debounce = Timer(_searchDebounce, () => unawaited(_search()));
   }
 
+  /// Enter runs the search or link still waiting out its debounce at once.
+  void _onInputSubmitted(String text) {
+    if (!(_debounce?.isActive ?? false)) return;
+    _debounce!.cancel();
+    unawaited(looksLikeLink(text) ? _resolveLink(text) : _search());
+  }
+
   Future<void> _search({bool everywhere = false}) async {
     final client = _client;
     if (client == null) return;
     final request = ++_searchRequest;
+    setState(() => _pendingSearch = request);
     final List<GeoapifyPlace> places;
     try {
       places = await client.searchPlaces(
@@ -183,14 +279,24 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
       );
     } catch (_) {
       if (!mounted || request != _searchRequest) return;
-      setState(() => _error = 'Search needs a connection');
+      setState(() {
+        _pendingSearch = null;
+        _error = 'Search needs a connection';
+      });
       return;
     }
     if (!mounted || request != _searchRequest) return;
+    _suggestions = places;
+    final listed = _listed;
+    // A single match is the place meant: pick it, so Ctrl+Enter alone saves.
+    if (listed.length == 1) {
+      _pickPlace(listed.single);
+      return;
+    }
     setState(() {
-      _suggestions = places;
-      _offerEverywhere = places.isEmpty && !everywhere && widget.near != null;
-      _error = places.isEmpty
+      _pendingSearch = null;
+      _offerEverywhere = listed.isEmpty && !everywhere && widget.near != null;
+      _error = listed.isEmpty
           ? 'No places found. Paste a Google Maps link or drop a pin.'
           : null;
     });
@@ -201,18 +307,25 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
     var link = text.trim();
     final uri = Uri.tryParse(link);
     if (uri != null && isGoogleMapsShortLink(uri)) {
+      setState(() => _pendingSearch = request);
       try {
         link = '${await ref.read(googleMapsShortLinkResolverProvider)(uri)}';
       } catch (_) {
         if (!mounted || request != _searchRequest) return;
-        setState(() => _error = 'Short links need a connection');
+        setState(() {
+          _pendingSearch = null;
+          _error = 'Short links need a connection';
+        });
         return;
       }
       if (!mounted || request != _searchRequest) return;
     }
     final place = parseGoogleMapsLink(link);
     if (place == null) {
-      setState(() => _error = "Couldn't find a location in that link");
+      setState(() {
+        _pendingSearch = null;
+        _error = "Couldn't find a location in that link";
+      });
       return;
     }
     if (widget.withTitle && _title.text.trim().isEmpty && place.name != null) {
@@ -220,6 +333,15 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
     }
     _setPin(LatLng(place.latitude, place.longitude));
     unawaited(_reverseGeocode());
+  }
+
+  /// Pins a searched [place], and names a new entry after it if it has no
+  /// title yet.
+  void _pickPlace(GeoapifyPlace place) {
+    if (widget.withTitle && _title.text.trim().isEmpty) {
+      _title.text = place.name;
+    }
+    _setPin(LatLng(place.latitude, place.longitude), address: place.address);
   }
 
   /// A press on a place to eat or drink's name or dot puts the pin on that
@@ -256,6 +378,7 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
       _address = address;
       _error = null;
       _suggestions = const [];
+      _savedMatches = const [];
       _offerEverywhere = false;
     });
     if (_client != null) {
@@ -273,14 +396,21 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
     final pin = _pin;
     if (client == null || pin == null) return;
     final request = ++_geocodeRequest;
+    setState(() => _pendingGeocode = request);
     final String address;
     try {
       address = await client.reverseGeocode(pin.latitude, pin.longitude);
     } catch (_) {
+      if (mounted && request == _geocodeRequest) {
+        setState(() => _pendingGeocode = null);
+      }
       return;
     }
     if (!mounted || request != _geocodeRequest) return;
-    setState(() => _address = address);
+    setState(() {
+      _pendingGeocode = null;
+      _address = address;
+    });
   }
 
   void _dragPin(DragUpdateDetails details) {
@@ -297,6 +427,9 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
   }
 
   void _submit() {
+    // With places still listed, the first — the nearest — is the one meant.
+    final listed = _listed;
+    if (listed.isNotEmpty) _pickPlace(listed.first);
     final pin = _pin;
     if (pin == null) return;
     final title = _title.text.trim();
@@ -340,45 +473,94 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
                   LabeledTextField(
                     label: 'Title',
                     controller: _title,
+                    autofocus: true,
                     accentColor: widget.accent,
+                    // Left to its default Enter takes the focus out of the
+                    // field, up above the scope that hears Ctrl+Enter.
+                    onEditingComplete: () {},
                   ),
                   const SizedBox(height: 12),
                 ],
-                LabeledTextField(
-                  label: hasKey
-                      ? 'Place name or Google Maps link'
-                      : 'Google Maps link',
-                  controller: _input,
-                  autofocus: true,
-                  accentColor: widget.accent,
-                  onChanged: _onInputChanged,
-                ),
-                for (final place in _suggestions.take(5))
-                  InkWell(
-                    onTap: () => _setPin(
-                      LatLng(place.latitude, place.longitude),
-                      address: place.address,
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    LabeledTextField(
+                      label: hasKey
+                          ? 'Place name or Google Maps link'
+                          : 'Google Maps link',
+                      controller: _input,
+                      focusNode: _inputFocus,
+                      autofocus: !widget.withTitle,
+                      accentColor: widget.accent,
+                      onChanged: _onInputChanged,
+                      onSubmitted: _onInputSubmitted,
+                      // Left to its default Enter takes the focus out of the
+                      // field, up above the scope that hears Ctrl+Enter.
+                      onEditingComplete: () {},
                     ),
+                    if (_searching)
+                      Positioned(
+                        top: 0,
+                        bottom: 0,
+                        right: 14,
+                        child: IgnorePointer(
+                          child: Center(
+                            child: SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: widget.accent,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                for (final place in _listed.take(5))
+                  InkWell(
+                    onTap: () {
+                      _pickPlace(place);
+                      // The row goes with the list, and the focus with it,
+                      // up above the scope that hears Ctrl+Enter.
+                      _inputFocus.requestFocus();
+                    },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 6,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          Text(
-                            place.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  place.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                                Text(
+                                  place.address,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: muted,
+                                ),
+                              ],
+                            ),
                           ),
-                          Text(
-                            place.address,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: muted,
-                          ),
+                          // One of your own entries, not a Geoapify find.
+                          if (_savedMatches.contains(place))
+                            Tooltip(
+                              message: 'Saved entry',
+                              child: Icon(
+                                PhosphorIconsRegular.bookmarkSimple,
+                                size: 14,
+                                color: muted?.color,
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -454,6 +636,14 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
                                         maxZoom: rankingsMapMaxZoom,
                                         backgroundColor:
                                             theme.colorScheme.surface,
+                                        // Left to its default the map takes
+                                        // the focus from the field above.
+                                        interactionOptions:
+                                            const InteractionOptions(
+                                              keyboardOptions: KeyboardOptions(
+                                                autofocus: false,
+                                              ),
+                                            ),
                                         onTap: (_, point) => _onTap(point),
                                       ),
                                       children: [
@@ -524,16 +714,32 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
                       : const RankingsMapUnavailable(),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  pin == null
-                      ? hasKey
-                            ? 'Click the map to drop a pin.'
-                            : 'Paste a link with coordinates in it.'
-                      : _address.isNotEmpty
-                      ? _address
-                      : '${pin.latitude.toStringAsFixed(5)}, '
-                            '${pin.longitude.toStringAsFixed(5)}',
-                  style: muted,
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        pin == null
+                            ? hasKey
+                                  ? 'Click the map to drop a pin.'
+                                  : 'Paste a link with coordinates in it.'
+                            : _address.isNotEmpty
+                            ? _address
+                            : '${pin.latitude.toStringAsFixed(5)}, '
+                                  '${pin.longitude.toStringAsFixed(5)}',
+                        style: muted,
+                      ),
+                    ),
+                    if (_geocoding) ...[
+                      const SizedBox(width: 8),
+                      SizedBox.square(
+                        dimension: 12,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          color: widget.accent,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),

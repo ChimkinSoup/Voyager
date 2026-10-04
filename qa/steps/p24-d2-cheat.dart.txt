@@ -1,0 +1,1 @@
+await LeetCodeCheatActions.detached(c).deleteEntry('p24-cent-1');

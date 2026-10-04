@@ -73,6 +73,15 @@ class RankingLocationsSection extends ConsumerWidget {
       longitude: pick.longitude,
       address: pick.address,
     );
+    // Beside an open map, it pans to the new place.
+    if (mapShowing && context.mounted) {
+      ref.read(rankingMapFocusProvider.notifier).state = RankingLocation(
+        id: '',
+        latitude: pick.latitude,
+        longitude: pick.longitude,
+        address: pick.address,
+      );
+    }
   }
 
   Future<void> _edit(

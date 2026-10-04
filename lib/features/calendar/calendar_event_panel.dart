@@ -151,7 +151,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       if (event is! KeyDownEvent) return KeyEventResult.ignored;
       if (event.logicalKey == LogicalKeyboardKey.enter &&
           !isSubmitChord(event)) {
-        setState(() => _isFullDay = !_isFullDay);
+        _toggleFullDay();
         return KeyEventResult.handled;
       }
       return KeyEventResult.ignored;
@@ -210,6 +210,19 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     _recurrence = e?.recurrence ?? RecurrenceRule.none;
     _isDone = _doneState(e);
     _scheduleTitleFocusIfNeeded();
+  }
+
+  /// An all-day event starts at midnight, so switching it to timed would
+  /// show 12:00 AM; start it at noon instead, keeping its length.
+  void _toggleFullDay() {
+    setState(() {
+      _isFullDay = !_isFullDay;
+      if (!_isFullDay && _start.hour == 0 && _start.minute == 0) {
+        const noon = Duration(hours: 12);
+        _start = _start.add(noon);
+        _end = _end.add(noon);
+      }
+    });
   }
 
   /// [event] is the occurrence view the page opened, so its start is the
@@ -578,7 +591,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                     offset: const Offset(2, 0),
                     child: IconButton(
                       focusNode: _allDayFocusNode,
-                      onPressed: () => setState(() => _isFullDay = !_isFullDay),
+                      onPressed: _toggleFullDay,
                       tooltip: _isFullDay ? 'All day (on)' : 'All day (off)',
                       padding: EdgeInsets.zero,
                       constraints: kMinTouchTarget,

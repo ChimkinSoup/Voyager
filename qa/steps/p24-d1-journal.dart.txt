@@ -1,0 +1,5 @@
+final r = c.read(remoteSyncServiceProvider);
+await softDeleteJournalEntry(c, 'p24-je-0');
+await Future.delayed(const Duration(milliseconds: 30));
+final dre = c.read(dreamRepositoryProvider); await dre.softDeleteEntry('p24-dream'); final dt = await dre.getEntry('p24-dream'); if (dt != null) r.pushDreamEntryNow(dt);
+await Future.delayed(const Duration(milliseconds: 30));

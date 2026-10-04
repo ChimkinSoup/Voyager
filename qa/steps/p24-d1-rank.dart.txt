@@ -1,0 +1,5 @@
+final r = c.read(remoteSyncServiceProvider);
+await Future.delayed(const Duration(milliseconds: 30));
+await RankingsActions.detached(c).deleteChild('p24-rc-2');
+await Future.delayed(const Duration(milliseconds: 30));
+await RankingsActions.detached(c).deleteParent('p24-rp-2');

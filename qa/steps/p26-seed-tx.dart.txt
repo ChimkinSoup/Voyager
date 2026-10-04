@@ -1,0 +1,8 @@
+final now = DateTime.now().toUtc();
+final t0 = DateTime.now();
+final fr = c.read(financeRepositoryProvider);
+for (var i = 0; i < 300; i++) {
+  await fr.upsertTransaction(FinancialTransaction(id: 'p26-tx-' + i.toString().padLeft(3, '0'), createdAt: now, updatedAt: now, version: 0, type: TransactionType.expense, amountCents: 100 + i, occurredAt: DateTime(t0.year, t0.month, t0.day - 1 - i % 60, 12), origin: 'DrainStore', note: 'drain ' + i.toString(), tags: const ['drain']));
+}
+c.invalidate(transactionsProvider);
+debugPrint('P26 tx seeded');

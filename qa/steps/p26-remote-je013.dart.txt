@@ -1,0 +1,15 @@
+final repo = c.read(syncRepositoryProvider);
+final jr = c.read(journalRepositoryProvider);
+final local = await jr.getEntry('p26-je-013');
+final remote = await repo.getDocument('journal_entries', 'p26-je-013');
+final now = DateTime.now().toUtc();
+final payload = Map<String, dynamic>.from(remote!);
+payload['body'] = 'P26 bulk body 13 lorem ipsum dolor sit amet REMOTEF';
+payload['version'] = (local!.version > (remote['version'] as num).toInt() ? local.version : (remote['version'] as num).toInt()) + 1;
+payload['updatedAt'] = now.toIso8601String();
+final opId = 'p26-devB_p26-je-013_' + now.microsecondsSinceEpoch.toString() + '_15';
+final bytes = const JSONMessageCodec().encodeMessage(payload)!;
+final encoded = String.fromCharCodes(bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes));
+await repo.appendOperation(SyncOperation(id: opId, documentId: 'p26-je-013', sequence: 15, payload: encoded, deviceId: 'p26-devB', timestamp: now));
+await repo.upsertDocument('journal_entries', 'p26-je-013', payload);
+debugPrint('P26 REMOTEB wrote v' + payload['version'].toString() + ' local v' + local.version.toString() + ' localbody ' + local.body);

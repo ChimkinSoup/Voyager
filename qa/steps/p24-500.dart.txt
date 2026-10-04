@@ -1,0 +1,8 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final fr = c.read(financeRepositoryProvider); final r = c.read(remoteSyncServiceProvider);
+final txs = <FinancialTransaction>[for (var i = 0; i < 500; i++) FinancialTransaction(id: 'p24-bulk-' + i.toString().padLeft(3, '0'), createdAt: now, updatedAt: now, version: 1, type: TransactionType.expense, amountCents: 100 + i, occurredAt: t0.subtract(Duration(hours: i)), origin: 'BulkStore', note: 'bulk trash ' + i.toString(), tags: const ['p24bulk'])];
+for (final t in txs) { await fr.upsertTransaction(t); }
+await r.pushRecords(FirestoreCollections.transactions, txs);
+final sw = Stopwatch()..start();
+for (final t in txs) { await fr.softDeleteTransaction(t.id); }
+debugPrint('P24BULK deleted 500 in ' + sw.elapsedMilliseconds.toString() + ' ms');
+invalidateAllDataProvidersIn(c);

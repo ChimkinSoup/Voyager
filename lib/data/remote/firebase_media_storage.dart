@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/domain/repositories/media_storage.dart';
 import 'package:voyager/domain/services/media_ingest.dart';
 
@@ -23,6 +24,7 @@ class FirebaseMediaStorage implements MediaStorage {
 
   @override
   Future<void> upload(String path, Uint8List bytes, String mimeType) async {
+    DevFlags.throwIfForcedOffline();
     try {
       await _storage
           .ref(path)
@@ -34,6 +36,7 @@ class FirebaseMediaStorage implements MediaStorage {
 
   @override
   Future<Uint8List> download(String path) async {
+    DevFlags.throwIfForcedOffline();
     try {
       // The cap is the ingest input limit: nothing this app uploaded can be
       // larger, so a response that would exceed it is not one of ours.
@@ -51,6 +54,7 @@ class FirebaseMediaStorage implements MediaStorage {
 
   @override
   Future<void> delete(String path) async {
+    DevFlags.throwIfForcedOffline();
     try {
       await _storage.ref(path).delete();
     } on FirebaseException catch (error) {

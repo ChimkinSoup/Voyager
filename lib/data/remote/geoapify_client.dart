@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:voyager/core/dev/dev_flags.dart';
 
 /// One place a search returned.
 typedef GeoapifyPlace = ({
@@ -25,14 +26,16 @@ class GeoapifyClient {
   /// everywhere. Bias alone lets same-named places in other countries in.
   static const searchRadiusMeters = 30000;
 
-  static const requestTimeout = Duration(seconds: 10);
+  /// Geoapify alone can take over 10 s to answer on a healthy connection.
+  static const requestTimeout = Duration(seconds: 20);
 
   /// Places matching [text], nearest [latitude]/[longitude] first.
   ///
-  /// Amenities only at first: an untyped search fills its misses with junk.
-  /// When that finds nothing the search is repeated untyped, which is what
-  /// lets a typed street address through. [everywhere] drops the radius, and
-  /// so does having no point to search around.
+  /// Amenities only by preference: an untyped search fills its misses with
+  /// junk. When that finds nothing the untyped results are used, which is
+  /// what lets a typed street address through. Both are asked at once, since
+  /// each takes seconds. [everywhere] drops the radius, and so does having no
+  /// point to search around.
   Future<List<GeoapifyPlace>> searchPlaces(
     String text, {
     required double? latitude,
@@ -64,8 +67,12 @@ class GeoapifyClient {
       ];
     }
 
-    final amenities = await search(amenityOnly: true);
-    return amenities.isNotEmpty ? amenities : search(amenityOnly: false);
+    final amenities = search(amenityOnly: true);
+    final anything = search(amenityOnly: false)
+      // Unawaited whenever amenities are found, and its failure with them.
+      ..ignore();
+    final found = await amenities;
+    return found.isNotEmpty ? found : anything;
   }
 
   /// The formatted address at a point, or `''` when the provider knows none.
@@ -81,6 +88,7 @@ class GeoapifyClient {
     String path,
     Map<String, String> query,
   ) async {
+    DevFlags.throwIfForcedOffline();
     final uri = Uri.https('api.geoapify.com', path, {
       ...query,
       'format': 'json',
@@ -106,6 +114,7 @@ class GeoapifyClient {
 /// Read off the `Location` header rather than followed: the target page is
 /// never wanted, only its address.
 Future<Uri?> resolveGoogleMapsShortLink(Uri link, http.Client client) async {
+  DevFlags.throwIfForcedOffline();
   final request = http.Request('GET', link)..followRedirects = false;
   final response = await client
       .send(request)

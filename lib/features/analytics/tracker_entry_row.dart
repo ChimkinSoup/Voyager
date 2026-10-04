@@ -11,6 +11,7 @@ import 'package:voyager/core/widgets/notification_urgency_dot.dart';
 import 'package:voyager/core/widgets/voyager_dropdown_button.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/features/analytics/counter_controls.dart';
 
 /// A single tracker's inline entry editor for [date] — name and a
 /// type-specific input (integer/boolean/enum, colored to the tracker's own
@@ -161,6 +162,9 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.tracker.type == TrackerType.counter) {
+      return _buildCounterRow(context);
+    }
     final valuesAsync = ref.watch(
       trackerValuesProvider(widget.tracker.id).settled,
     );
@@ -253,8 +257,64 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
     );
   }
 
+  /// `[−] total [+]` for [TrackerEntryRow.date]: the running total through
+  /// that day, and each press saved at once rather than held for the
+  /// section's Save — a counter has nothing typed to commit. Never urgent,
+  /// since there's no value for a day to be missing.
+  Widget _buildCounterRow(BuildContext context) {
+    final theme = Theme.of(context);
+    final adjustments =
+        ref
+            .watch(counterAdjustmentsProvider(widget.tracker.id).settled)
+            .valueOrNull ??
+        const <CounterAdjustment>[];
+    final step = ref.watch(counterStepProvider);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Text(
+              widget.tracker.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: SizedBox(
+              height: _editorHeight,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: CounterStepper(
+                  value: counterTotalThrough(adjustments, widget.date),
+                  color: paletteColor(widget.tracker.colorValue, context),
+                  textStyle: theme.textTheme.bodySmall?.copyWith(fontSize: 13),
+                  iconSize: 12,
+                  onStep: step == null
+                      ? null
+                      : (delta) => step(widget.tracker.id, widget.date, delta),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6 + _trailingSlotWidth),
+        ],
+      ),
+    );
+  }
+
   Widget _buildEditor(TrackerValue? existing, ThemeData theme, Color accent) {
     switch (widget.tracker.type) {
+      // Built by [_buildCounterRow] instead.
+      case TrackerType.counter:
+        return const SizedBox.shrink();
       case TrackerType.integer:
         final cap = widget.tracker.integerCap;
         final minVal = widget.tracker.defaultInt;

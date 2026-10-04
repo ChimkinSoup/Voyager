@@ -109,14 +109,19 @@ class DevPage extends ConsumerWidget {
         SwitchListTile(
           title: const Text('Force offline'),
           subtitle: const Text(
-            'Make the Firestore connectivity probe fail so the shell offline '
-            'badge (and reconnect sync) follow the real failure streak. Takes '
-            'two failed probes — up to a minute for the next one, then ~10s.',
+            'Cut Firestore, media storage, place search and map tiles off '
+            'from the network, as if this device were offline. The offline '
+            'badge takes two failed probes — up to a minute for the next '
+            'one, then ~10s.',
           ),
           value: ref.watch(devForceOfflineProvider),
           onChanged: (v) {
             DevFlags.forceOffline = v;
             ref.read(devForceOfflineProvider.notifier).state = v;
+            final firestore = ref.read(firestoreProvider);
+            unawaited(
+              v ? firestore.disableNetwork() : firestore.enableNetwork(),
+            );
           },
         ),
         SwitchListTile(

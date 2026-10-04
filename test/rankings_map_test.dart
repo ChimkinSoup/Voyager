@@ -109,7 +109,8 @@ RankingParent makeParent({
 );
 
 /// Geoapify, answered in-process: one place for any search containing
-/// `ennio`, nothing for anything else, and one address for every point.
+/// `ennio`, two for `pasta`, nothing for anything else, and one address for
+/// every point.
 GeoapifyClient fakeGeoapify({List<Uri>? requests}) => GeoapifyClient(
   apiKey: 'test-key',
   httpClient: MockClient((request) async {
@@ -125,6 +126,21 @@ GeoapifyClient fakeGeoapify({List<Uri>? requests}) => GeoapifyClient(
               'formatted': '384 King Street North, Waterloo',
               'lat': 43.4833807,
               'lon': -80.5260427,
+            },
+          ]
+        : (request.url.queryParameters['text'] ?? '').contains('pasta')
+        ? [
+            {
+              'name': "Ennio's Pasta House",
+              'formatted': '384 King Street North, Waterloo',
+              'lat': 43.4833807,
+              'lon': -80.5260427,
+            },
+            {
+              'name': 'Pasta Bar',
+              'formatted': '1 Pasta Lane, Waterloo',
+              'lat': 43.47,
+              'lon': -80.52,
             },
           ]
         : const <Map<String, dynamic>>[];
@@ -164,12 +180,42 @@ GeoapifyClient heldGeoapify(List<Completer<String>> reverse) => GeoapifyClient(
   }),
 );
 
+/// Geoapify with every search held until [held] completes, then finding two
+/// pasta places. Addresses answer at once.
+GeoapifyClient heldSearchGeoapify(Completer<void> held) => GeoapifyClient(
+  apiKey: 'test-key',
+  httpClient: MockClient((request) async {
+    final reverse = request.url.path.endsWith('/reverse');
+    if (!reverse) await held.future;
+    return http.Response(
+      jsonEncode({
+        'results': reverse
+            ? [
+                {'formatted': '1 Reverse Street'},
+              ]
+            : [
+                for (final name in ['Pasta Bar', 'Pasta Hut'])
+                  {
+                    'name': name,
+                    'formatted': '1 Pasta Lane, Waterloo',
+                    'lat': 43.47,
+                    'lon': -80.52,
+                  },
+              ],
+      }),
+      200,
+      headers: {'content-type': 'application/json; charset=utf-8'},
+    );
+  }),
+);
+
 Future<({AppDatabase db, ProviderContainer container})> pumpRankingsPage(
   WidgetTester tester, {
   required Future<void> Function(DriftRankingRepository repo) seed,
   GeoapifyClient? geoapify,
   bool withKey = true,
   RankingsDeviceLocation? deviceLocation,
+  Future<Uri?> Function(Uri link)? shortLinks,
 }) async {
   // The tile cache asks the platform for a temporary directory, and a widget
   // test has no plugin behind that channel.
@@ -203,10 +249,11 @@ Future<({AppDatabase db, ProviderContainer container})> pumpRankingsPage(
       ),
       rankingMapTileProviderProvider.overrideWithValue(_BlankTiles()),
       googleMapsShortLinkResolverProvider.overrideWithValue(
-        (link) async => Uri.parse(
-          'https://www.google.com/maps/place/Short+Link+Cafe/'
-          'data=!3d43.5!4d-80.5',
-        ),
+        shortLinks ??
+            (link) async => Uri.parse(
+              'https://www.google.com/maps/place/Short+Link+Cafe/'
+              'data=!3d43.5!4d-80.5',
+            ),
       ),
     ],
   );
@@ -608,6 +655,21 @@ void main() {
     await tester.tap(find.text('New entry here'));
     await tester.pumpAndSettle();
 
+    // The title can be typed straight away; the dialog's map doesn't take
+    // the focus.
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(
+              of: labeledField('Title'),
+              matching: find.byType(EditableText),
+            ),
+          )
+          .focusNode
+          .hasFocus,
+      isTrue,
+    );
+
     // The clicked point is reverse-geocoded into the dialog.
     expect(find.text('1 Reverse Street'), findsOneWidget);
     // A title is required.
@@ -634,6 +696,243 @@ void main() {
       created.id,
     );
     expect(pins(tester), hasLength(2));
+    await settleMap(tester);
+  });
+
+  mapTest('a name with one match is picked, so Ctrl+Enter alone adds the '
+      'entry', (tester) async {
+    final harness = await pumpRankingsPage(
+      tester,
+      geoapify: fakeGeoapify(),
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Lazeez',
+            locations: [branch(0)],
+          ),
+        );
+      },
+    );
+    await openMap(tester);
+
+    final map = tester.getRect(find.byType(RankingsMapView));
+    await tester.tapAt(
+      map.center + const Offset(200, 120),
+      buttons: kSecondaryButton,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New entry here'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      labeledField('Place name or Google Maps link'),
+      'ennio',
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+
+    final created = (await storedParents(
+      harness.db,
+    )).singleWhere((parent) => parent.title == "Ennio's Pasta House");
+    final location = created.locations.single;
+    expect(location.latitude, 43.4833807);
+    expect(location.longitude, -80.5260427);
+    expect(location.address, '384 King Street North, Waterloo');
+    await settleMap(tester);
+  });
+
+  mapTest('a spinner shows in the place field while a search is out', (
+    tester,
+  ) async {
+    final held = Completer<void>();
+    await pumpRankingsPage(
+      tester,
+      geoapify: heldSearchGeoapify(held),
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Lazeez',
+            locations: [branch(0)],
+          ),
+        );
+      },
+    );
+    await openMap(tester);
+
+    final map = tester.getRect(find.byType(RankingsMapView));
+    await tester.tapAt(
+      map.center + const Offset(200, 120),
+      buttons: kSecondaryButton,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New entry here'));
+    await tester.pumpAndSettle();
+    final field = labeledField('Place name or Google Maps link');
+    await tester.enterText(field, 'pasta');
+    final spinner = find.byType(CircularProgressIndicator);
+    // Still inside the debounce: nothing has been asked yet.
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(spinner, findsNothing);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(spinner, findsOneWidget);
+    // Over the right end of the field.
+    final fieldRect = tester.getRect(
+      find.widgetWithText(LabeledTextField, 'Place name or Google Maps link'),
+    );
+    final spinnerRect = tester.getRect(spinner);
+    expect(spinnerRect.right, lessThan(fieldRect.right));
+    expect(spinnerRect.left, greaterThan(fieldRect.center.dx));
+    expect(spinnerRect.center.dy, closeTo(fieldRect.center.dy, 1));
+
+    held.complete();
+    await tester.pumpAndSettle();
+    expect(spinner, findsNothing);
+    expect(find.text('Pasta Bar'), findsOneWidget);
+    await settleMap(tester);
+  });
+
+  mapTest('Enter searches at once and keeps the field, so Ctrl+Enter adds '
+      'the entry', (tester) async {
+    final harness = await pumpRankingsPage(
+      tester,
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Lazeez',
+            locations: [branch(0)],
+          ),
+        );
+      },
+    );
+    await openMap(tester);
+
+    final map = tester.getRect(find.byType(RankingsMapView));
+    await tester.tapAt(
+      map.center + const Offset(200, 120),
+      buttons: kSecondaryButton,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New entry here'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      labeledField('Place name or Google Maps link'),
+      'ennio',
+    );
+    // Before the debounce would have searched.
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    await tester.pump();
+    expect(find.text("Ennio's Pasta House"), findsOneWidget);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+
+    final created = (await storedParents(
+      harness.db,
+    )).singleWhere((parent) => parent.title == "Ennio's Pasta House");
+    expect(created.locations.single.latitude, 43.4833807);
+    await settleMap(tester);
+  });
+
+  mapTest('Enter in the title keeps the field, so Ctrl+Enter adds the entry', (
+    tester,
+  ) async {
+    final harness = await pumpRankingsPage(
+      tester,
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Lazeez',
+            locations: [branch(0)],
+          ),
+        );
+      },
+    );
+    await openMap(tester);
+
+    final map = tester.getRect(find.byType(RankingsMapView));
+    await tester.tapAt(
+      map.center + const Offset(200, 120),
+      buttons: kSecondaryButton,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New entry here'));
+    await tester.pumpAndSettle();
+    await tester.enterText(labeledField('Title'), 'Matter');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+
+    expect(
+      (await storedParents(harness.db)).where((p) => p.title == 'Matter'),
+      hasLength(1),
+    );
+    await settleMap(tester);
+  });
+
+  mapTest('Ctrl+Enter with places listed adds the first of them', (
+    tester,
+  ) async {
+    final harness = await pumpRankingsPage(
+      tester,
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Lazeez',
+            locations: [branch(0)],
+          ),
+        );
+      },
+    );
+    await openMap(tester);
+
+    final map = tester.getRect(find.byType(RankingsMapView));
+    await tester.tapAt(
+      map.center + const Offset(200, 120),
+      buttons: kSecondaryButton,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New entry here'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      labeledField('Place name or Google Maps link'),
+      'pasta',
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.text('Pasta Bar'), findsOneWidget);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+
+    final created = (await storedParents(
+      harness.db,
+    )).singleWhere((parent) => parent.title == "Ennio's Pasta House");
+    expect(created.locations.single.latitude, 43.4833807);
+    expect(created.locations.single.address, '384 King Street North, Waterloo');
     await settleMap(tester);
   });
 
@@ -688,6 +987,52 @@ void main() {
     expect(ennio.locations.single.address, '1 Reverse Street');
     // Pinning a place is not starting it.
     expect(ennio.status, RankingStatus.queued);
+    expect(pins(tester), hasLength(2));
+    await settleMap(tester);
+  });
+
+  mapTest('a toast spins while the added point waits on its address', (
+    tester,
+  ) async {
+    final reverse = <Completer<String>>[];
+    await pumpRankingsPage(
+      tester,
+      geoapify: heldGeoapify(reverse),
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Lazeez',
+            locations: [branch(0)],
+          ),
+        );
+        await repo.upsertParent(
+          makeParent(categoryId: category.id, title: 'Ennio'),
+        );
+      },
+    );
+    await openMap(tester);
+
+    final map = tester.getRect(find.byType(RankingsMapView));
+    await tester.tapAt(
+      map.center + const Offset(200, 120),
+      buttons: kSecondaryButton,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add this location to an existing entry…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ennio'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(reverse, hasLength(1));
+    expect(find.text('Adding location…'), findsOneWidget);
+    expect(pins(tester), hasLength(1));
+
+    reverse.single.complete('1 Found Street');
+    await tester.pumpAndSettle();
+    expect(find.text('Adding location…'), findsNothing);
     expect(pins(tester), hasLength(2));
     await settleMap(tester);
   });
@@ -1123,13 +1468,21 @@ void main() {
       // Under three characters spends no credit.
       expect(requests, isEmpty);
 
-      await tester.enterText(dialogInput(), 'ennio');
+      await tester.enterText(dialogInput(), 'pasta');
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();
-      expect(requests, hasLength(1));
-      await tester.tap(find.text("Ennio's Pasta House"));
+      // Amenities and the untyped fallback, asked at once.
+      expect(requests, hasLength(2));
+      // A mouse click, which takes the focus off the field as on desktop.
+      await tester.tap(
+        find.text("Ennio's Pasta House"),
+        kind: PointerDeviceKind.mouse,
+      );
       await tester.pumpAndSettle();
-      await tester.tap(dialogAdd());
+      // Clicking a suggestion leaves the keyboard where Ctrl+Enter adds it.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       await tester.pumpAndSettle();
 
       final parent = (await storedParents(harness.db)).single;
@@ -1213,6 +1566,138 @@ void main() {
       )).single.locations.single;
       expect(location.latitude, 43.5);
       expect(location.longitude, -80.5);
+    });
+
+    mapTest('a spinner shows in the field while a short link is followed', (
+      tester,
+    ) async {
+      final followed = Completer<Uri?>();
+      await pumpRankingsPage(
+        tester,
+        shortLinks: (_) => followed.future,
+        seed: (repo) async {
+          final category = makeCategory();
+          await repo.upsertCategory(category);
+          await repo.upsertParent(
+            makeParent(categoryId: category.id, title: 'Ennio'),
+          );
+        },
+      );
+      await tester.tap(find.byType(RankingsRow));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add location'));
+      await tester.pumpAndSettle();
+      final spinner = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(CircularProgressIndicator),
+      );
+
+      await tester.enterText(dialogInput(), 'https://maps.app.goo.gl/AbCd123');
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(spinner, findsOneWidget);
+
+      followed.complete(
+        Uri.parse(
+          'https://www.google.com/maps/place/Short+Link+Cafe/'
+          'data=!3d43.5!4d-80.5',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(spinner, findsNothing);
+      expect(find.text('1 Reverse Street'), findsOneWidget);
+    });
+
+    mapTest('saved entries that match are listed before Geoapify answers', (
+      tester,
+    ) async {
+      final held = Completer<void>();
+      final harness = await pumpRankingsPage(
+        tester,
+        geoapify: heldSearchGeoapify(held),
+        seed: (repo) async {
+          final category = makeCategory();
+          await repo.upsertCategory(category);
+          await repo.upsertParent(
+            makeParent(categoryId: category.id, title: 'Ennio'),
+          );
+          await repo.upsertParent(
+            makeParent(
+              categoryId: category.id,
+              title: 'Pasta Palace',
+              locations: [branch(3)],
+            ),
+          );
+        },
+      );
+      await tester.tap(find.widgetWithText(RankingsRow, 'Ennio'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add location'));
+      await tester.pumpAndSettle();
+      final dialog = find.byType(AlertDialog);
+      Finder inDialog(Finder finder) =>
+          find.descendant(of: dialog, matching: finder);
+
+      await tester.enterText(dialogInput(), 'pasta');
+      await tester.pump();
+      // Not even waiting out the debounce, let alone Geoapify.
+      expect(inDialog(find.text('Pasta Palace')), findsOneWidget);
+      expect(inDialog(find.byTooltip('Saved entry')), findsOneWidget);
+      expect(inDialog(find.text('Pasta Bar')), findsNothing);
+
+      held.complete();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      // Geoapify's finds follow, under it.
+      expect(
+        tester.getTopLeft(inDialog(find.text('Pasta Palace'))).dy,
+        lessThan(tester.getTopLeft(inDialog(find.text('Pasta Bar'))).dy),
+      );
+      await tester.tap(
+        inDialog(find.text('Pasta Palace')),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(dialogAdd());
+      await tester.pumpAndSettle();
+
+      final location = (await storedParents(
+        harness.db,
+      )).singleWhere((parent) => parent.title == 'Ennio').locations.single;
+      expect(location.latitude, branch(3).latitude);
+      expect(location.longitude, branch(3).longitude);
+      expect(location.address, branch(3).address);
+    });
+
+    mapTest('an entry is not offered its own locations', (tester) async {
+      await pumpRankingsPage(
+        tester,
+        seed: (repo) async {
+          final category = makeCategory();
+          await repo.upsertCategory(category);
+          await repo.upsertParent(
+            makeParent(
+              categoryId: category.id,
+              title: 'Pasta Palace',
+              locations: [branch(3)],
+            ),
+          );
+        },
+      );
+      await tester.tap(find.byType(RankingsRow));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add location'));
+      await tester.pumpAndSettle();
+      await tester.enterText(dialogInput(), 'pasta');
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byTooltip('Saved entry'),
+        ),
+        findsNothing,
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
     });
 
     mapTest('a link with no location in it adds nothing', (tester) async {
@@ -1349,11 +1834,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pumpAndSettle();
       expect(reverse, hasLength(1));
-      // ...when a searched place is picked instead.
+      // ...when a searched place, the only match, is picked instead.
       await tester.enterText(dialogInput(), 'ennio');
       await tester.pump(const Duration(milliseconds: 400));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text("Ennio's Pasta House"));
       await tester.pumpAndSettle();
       reverse.single.complete('Somewhere Else Entirely');
       await tester.pumpAndSettle();
@@ -1364,6 +1847,58 @@ void main() {
       expect(
         (await storedParents(harness.db)).single.locations.single.address,
         '384 King Street North, Waterloo',
+      );
+    });
+
+    mapTest('a spinner shows by the pin while its address is looked up', (
+      tester,
+    ) async {
+      final reverse = <Completer<String>>[];
+      await openEntry(tester, geoapify: heldGeoapify(reverse));
+      await tester.tap(find.text('Add location'));
+      await tester.pumpAndSettle();
+      final spinner = find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(CircularProgressIndicator),
+      );
+      expect(spinner, findsNothing);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(FlutterMap),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(reverse, hasLength(1));
+      expect(spinner, findsOneWidget);
+
+      reverse.single.complete('1 Found Street');
+      await tester.pumpAndSettle();
+      expect(spinner, findsNothing);
+      expect(find.text('1 Found Street'), findsOneWidget);
+    });
+
+    mapTest('a failed address lookup takes its spinner down', (tester) async {
+      final reverse = <Completer<String>>[];
+      await openEntry(tester, geoapify: heldGeoapify(reverse));
+      await tester.tap(find.text('Add location'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(FlutterMap),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      reverse.single.completeError(Exception('offline'));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsNothing,
       );
     });
 
@@ -1566,6 +2101,46 @@ void main() {
 
     expect(find.byType(RankingsMapPin), findsNothing);
     expect(find.text('3'), findsOneWidget);
+  });
+
+  mapTest('pins spread out of a cluster that zoom cannot part show their '
+      'titles', (tester) async {
+    await pumpRankingsPage(
+      tester,
+      seed: (repo) async {
+        final category = makeCategory();
+        await repo.upsertCategory(category);
+        // Two entries at the very same spot: no zoom ever parts them.
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Lazeez',
+            locations: [branch(0)],
+          ),
+        );
+        await repo.upsertParent(
+          makeParent(
+            categoryId: category.id,
+            title: 'Ennio',
+            locations: [branch(0)],
+          ),
+        );
+      },
+    );
+    await openMap(tester);
+    expect(pins(tester), isEmpty);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(RankingsMapView),
+        matching: find.text('2'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(pins(tester), hasLength(2));
+    expect(find.text('Lazeez'), findsOneWidget);
+    expect(find.text('Ennio'), findsOneWidget);
   });
 
   mapTest('a map opened before its entries arrive fits them once they do', (

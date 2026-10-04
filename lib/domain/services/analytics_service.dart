@@ -44,6 +44,7 @@ class AnalyticsService {
       case TrackerType.boolean:
         return value.boolValue == true ? 1 : 0;
       case TrackerType.integer:
+      case TrackerType.counter:
         if (maxInPeriod == 0) return 0;
         final cap = tracker.integerCap ?? maxInPeriod;
         final singleValue =
@@ -124,6 +125,9 @@ class AnalyticsService {
     final knownSpots = knownX
         .map((x) => (x: x.toDouble(), y: dayMap[x]!))
         .toList();
+    // 0 unless a reading went below it — only a counter's can — so the curve
+    // between two negative readings isn't flattened onto the baseline.
+    final minY = knownSpots.map((s) => s.y).fold<double>(0, math.min);
 
     // Cardinal tangent helper (tension = 0 → Catmull-Rom)
     ({double dx, double dy}) tangentAt(int i) {
@@ -199,7 +203,7 @@ class AnalyticsService {
       final p1 = knownSpots[segIdx + 1];
       final dx = p1.x - p0.x;
       final t = dx <= 0 ? 0.0 : (day - p0.x) / dx;
-      final y = hermite(segIdx, t).clamp(0.0, maxY);
+      final y = hermite(segIdx, t).clamp(minY, maxY);
       result.add(FlSpot(day.toDouble(), y));
     }
 

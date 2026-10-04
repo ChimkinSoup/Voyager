@@ -41,6 +41,10 @@ abstract final class FirestoreCollections {
   static const calendarEvents = 'calendar_events';
   static const trackers = 'trackers';
   static const trackerValues = 'tracker_values';
+
+  /// A counter tracker's changes, one document per device per day — see
+  /// `CounterAdjustment`.
+  static const counterAdjustments = 'counter_adjustments';
   static const transactions = 'transactions';
   static const subscriptions = 'subscriptions';
   static const budgets = 'budgets';
@@ -132,6 +136,7 @@ abstract final class FirestoreCollections {
     calendarEvents,
     trackers,
     trackerValues,
+    counterAdjustments,
     transactions,
     subscriptions,
     budgets,

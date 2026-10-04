@@ -7670,6 +7670,568 @@ class TrackerValuesTableCompanion
   }
 }
 
+class $CounterAdjustmentsTableTable extends CounterAdjustmentsTable
+    with TableInfo<$CounterAdjustmentsTableTable, CounterAdjustmentsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CounterAdjustmentsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _trackerIdMeta = const VerificationMeta(
+    'trackerId',
+  );
+  @override
+  late final GeneratedColumn<String> trackerId = GeneratedColumn<String>(
+    'tracker_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dayMeta = const VerificationMeta('day');
+  @override
+  late final GeneratedColumn<DateTime> day = GeneratedColumn<DateTime>(
+    'day',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deltaMeta = const VerificationMeta('delta');
+  @override
+  late final GeneratedColumn<int> delta = GeneratedColumn<int>(
+    'delta',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    trackerId,
+    day,
+    deviceId,
+    delta,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'counter_adjustments_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CounterAdjustmentsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('tracker_id')) {
+      context.handle(
+        _trackerIdMeta,
+        trackerId.isAcceptableOrUnknown(data['tracker_id']!, _trackerIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_trackerIdMeta);
+    }
+    if (data.containsKey('day')) {
+      context.handle(
+        _dayMeta,
+        day.isAcceptableOrUnknown(data['day']!, _dayMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dayMeta);
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    if (data.containsKey('delta')) {
+      context.handle(
+        _deltaMeta,
+        delta.isAcceptableOrUnknown(data['delta']!, _deltaMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deltaMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CounterAdjustmentsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CounterAdjustmentsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      trackerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tracker_id'],
+      )!,
+      day: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}day'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      delta: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}delta'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $CounterAdjustmentsTableTable createAlias(String alias) {
+    return $CounterAdjustmentsTableTable(attachedDatabase, alias);
+  }
+}
+
+class CounterAdjustmentsTableData extends DataClass
+    implements Insertable<CounterAdjustmentsTableData> {
+  final String id;
+  final String trackerId;
+  final DateTime day;
+  final String deviceId;
+  final int delta;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const CounterAdjustmentsTableData({
+    required this.id,
+    required this.trackerId,
+    required this.day,
+    required this.deviceId,
+    required this.delta,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['tracker_id'] = Variable<String>(trackerId);
+    map['day'] = Variable<DateTime>(day);
+    map['device_id'] = Variable<String>(deviceId);
+    map['delta'] = Variable<int>(delta);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  CounterAdjustmentsTableCompanion toCompanion(bool nullToAbsent) {
+    return CounterAdjustmentsTableCompanion(
+      id: Value(id),
+      trackerId: Value(trackerId),
+      day: Value(day),
+      deviceId: Value(deviceId),
+      delta: Value(delta),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory CounterAdjustmentsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CounterAdjustmentsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      trackerId: serializer.fromJson<String>(json['trackerId']),
+      day: serializer.fromJson<DateTime>(json['day']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      delta: serializer.fromJson<int>(json['delta']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'trackerId': serializer.toJson<String>(trackerId),
+      'day': serializer.toJson<DateTime>(day),
+      'deviceId': serializer.toJson<String>(deviceId),
+      'delta': serializer.toJson<int>(delta),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  CounterAdjustmentsTableData copyWith({
+    String? id,
+    String? trackerId,
+    DateTime? day,
+    String? deviceId,
+    int? delta,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => CounterAdjustmentsTableData(
+    id: id ?? this.id,
+    trackerId: trackerId ?? this.trackerId,
+    day: day ?? this.day,
+    deviceId: deviceId ?? this.deviceId,
+    delta: delta ?? this.delta,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  CounterAdjustmentsTableData copyWithCompanion(
+    CounterAdjustmentsTableCompanion data,
+  ) {
+    return CounterAdjustmentsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      trackerId: data.trackerId.present ? data.trackerId.value : this.trackerId,
+      day: data.day.present ? data.day.value : this.day,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      delta: data.delta.present ? data.delta.value : this.delta,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CounterAdjustmentsTableData(')
+          ..write('id: $id, ')
+          ..write('trackerId: $trackerId, ')
+          ..write('day: $day, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('delta: $delta, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    trackerId,
+    day,
+    deviceId,
+    delta,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CounterAdjustmentsTableData &&
+          other.id == this.id &&
+          other.trackerId == this.trackerId &&
+          other.day == this.day &&
+          other.deviceId == this.deviceId &&
+          other.delta == this.delta &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class CounterAdjustmentsTableCompanion
+    extends UpdateCompanion<CounterAdjustmentsTableData> {
+  final Value<String> id;
+  final Value<String> trackerId;
+  final Value<DateTime> day;
+  final Value<String> deviceId;
+  final Value<int> delta;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const CounterAdjustmentsTableCompanion({
+    this.id = const Value.absent(),
+    this.trackerId = const Value.absent(),
+    this.day = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.delta = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CounterAdjustmentsTableCompanion.insert({
+    required String id,
+    required String trackerId,
+    required DateTime day,
+    required String deviceId,
+    required int delta,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       trackerId = Value(trackerId),
+       day = Value(day),
+       deviceId = Value(deviceId),
+       delta = Value(delta),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<CounterAdjustmentsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? trackerId,
+    Expression<DateTime>? day,
+    Expression<String>? deviceId,
+    Expression<int>? delta,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (trackerId != null) 'tracker_id': trackerId,
+      if (day != null) 'day': day,
+      if (deviceId != null) 'device_id': deviceId,
+      if (delta != null) 'delta': delta,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CounterAdjustmentsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? trackerId,
+    Value<DateTime>? day,
+    Value<String>? deviceId,
+    Value<int>? delta,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return CounterAdjustmentsTableCompanion(
+      id: id ?? this.id,
+      trackerId: trackerId ?? this.trackerId,
+      day: day ?? this.day,
+      deviceId: deviceId ?? this.deviceId,
+      delta: delta ?? this.delta,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (trackerId.present) {
+      map['tracker_id'] = Variable<String>(trackerId.value);
+    }
+    if (day.present) {
+      map['day'] = Variable<DateTime>(day.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (delta.present) {
+      map['delta'] = Variable<int>(delta.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CounterAdjustmentsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('trackerId: $trackerId, ')
+          ..write('day: $day, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('delta: $delta, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $SettingsTableTable extends SettingsTable
     with TableInfo<$SettingsTableTable, SettingsTableData> {
   @override
@@ -49617,6 +50179,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $TrackersTableTable trackersTable = $TrackersTableTable(this);
   late final $TrackerValuesTableTable trackerValuesTable =
       $TrackerValuesTableTable(this);
+  late final $CounterAdjustmentsTableTable counterAdjustmentsTable =
+      $CounterAdjustmentsTableTable(this);
   late final $SettingsTableTable settingsTable = $SettingsTableTable(this);
   late final $TagColorsTableTable tagColorsTable = $TagColorsTableTable(this);
   late final $SyncConflictsTableTable syncConflictsTable =
@@ -49736,6 +50300,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'idx_todo_tasks_parent_task_id',
     'CREATE INDEX idx_todo_tasks_parent_task_id ON todo_tasks_table (parent_task_id)',
   );
+  late final Index idxCounterAdjustmentsTrackerDay = Index(
+    'idx_counter_adjustments_tracker_day',
+    'CREATE INDEX idx_counter_adjustments_tracker_day ON counter_adjustments_table (tracker_id, day)',
+  );
   late final Index idxReminderDeliveryLogsStateId = Index(
     'idx_reminder_delivery_logs_state_id',
     'CREATE INDEX idx_reminder_delivery_logs_state_id ON reminder_delivery_logs_table (delivery_state_id)',
@@ -49791,6 +50359,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     calendarEventsTable,
     trackersTable,
     trackerValuesTable,
+    counterAdjustmentsTable,
     settingsTable,
     tagColorsTable,
     syncConflictsTable,
@@ -49848,6 +50417,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     idxJournalEntriesQuoteUse,
     idxTodoTasksListId,
     idxTodoTasksParentTaskId,
+    idxCounterAdjustmentsTrackerDay,
     idxReminderDeliveryLogsStateId,
     idxWorkoutSetLogsSessionId,
     idxWorkoutSetLogsExerciseId,
@@ -53542,6 +54112,301 @@ typedef $$TrackerValuesTableTableProcessedTableManager =
         >,
       ),
       TrackerValuesTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$CounterAdjustmentsTableTableCreateCompanionBuilder =
+    CounterAdjustmentsTableCompanion Function({
+      required String id,
+      required String trackerId,
+      required DateTime day,
+      required String deviceId,
+      required int delta,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$CounterAdjustmentsTableTableUpdateCompanionBuilder =
+    CounterAdjustmentsTableCompanion Function({
+      Value<String> id,
+      Value<String> trackerId,
+      Value<DateTime> day,
+      Value<String> deviceId,
+      Value<int> delta,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$CounterAdjustmentsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $CounterAdjustmentsTableTable> {
+  $$CounterAdjustmentsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get trackerId => $composableBuilder(
+    column: $table.trackerId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get day => $composableBuilder(
+    column: $table.day,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get delta => $composableBuilder(
+    column: $table.delta,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CounterAdjustmentsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $CounterAdjustmentsTableTable> {
+  $$CounterAdjustmentsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get trackerId => $composableBuilder(
+    column: $table.trackerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get day => $composableBuilder(
+    column: $table.day,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get delta => $composableBuilder(
+    column: $table.delta,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CounterAdjustmentsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CounterAdjustmentsTableTable> {
+  $$CounterAdjustmentsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get trackerId =>
+      $composableBuilder(column: $table.trackerId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get day =>
+      $composableBuilder(column: $table.day, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<int> get delta =>
+      $composableBuilder(column: $table.delta, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$CounterAdjustmentsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CounterAdjustmentsTableTable,
+          CounterAdjustmentsTableData,
+          $$CounterAdjustmentsTableTableFilterComposer,
+          $$CounterAdjustmentsTableTableOrderingComposer,
+          $$CounterAdjustmentsTableTableAnnotationComposer,
+          $$CounterAdjustmentsTableTableCreateCompanionBuilder,
+          $$CounterAdjustmentsTableTableUpdateCompanionBuilder,
+          (
+            CounterAdjustmentsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $CounterAdjustmentsTableTable,
+              CounterAdjustmentsTableData
+            >,
+          ),
+          CounterAdjustmentsTableData,
+          PrefetchHooks Function()
+        > {
+  $$CounterAdjustmentsTableTableTableManager(
+    _$AppDatabase db,
+    $CounterAdjustmentsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CounterAdjustmentsTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$CounterAdjustmentsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$CounterAdjustmentsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> trackerId = const Value.absent(),
+                Value<DateTime> day = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<int> delta = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CounterAdjustmentsTableCompanion(
+                id: id,
+                trackerId: trackerId,
+                day: day,
+                deviceId: deviceId,
+                delta: delta,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String trackerId,
+                required DateTime day,
+                required String deviceId,
+                required int delta,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CounterAdjustmentsTableCompanion.insert(
+                id: id,
+                trackerId: trackerId,
+                day: day,
+                deviceId: deviceId,
+                delta: delta,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CounterAdjustmentsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CounterAdjustmentsTableTable,
+      CounterAdjustmentsTableData,
+      $$CounterAdjustmentsTableTableFilterComposer,
+      $$CounterAdjustmentsTableTableOrderingComposer,
+      $$CounterAdjustmentsTableTableAnnotationComposer,
+      $$CounterAdjustmentsTableTableCreateCompanionBuilder,
+      $$CounterAdjustmentsTableTableUpdateCompanionBuilder,
+      (
+        CounterAdjustmentsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $CounterAdjustmentsTableTable,
+          CounterAdjustmentsTableData
+        >,
+      ),
+      CounterAdjustmentsTableData,
       PrefetchHooks Function()
     >;
 typedef $$SettingsTableTableCreateCompanionBuilder =
@@ -73513,6 +74378,11 @@ class $AppDatabaseManager {
       $$TrackersTableTableTableManager(_db, _db.trackersTable);
   $$TrackerValuesTableTableTableManager get trackerValuesTable =>
       $$TrackerValuesTableTableTableManager(_db, _db.trackerValuesTable);
+  $$CounterAdjustmentsTableTableTableManager get counterAdjustmentsTable =>
+      $$CounterAdjustmentsTableTableTableManager(
+        _db,
+        _db.counterAdjustmentsTable,
+      );
   $$SettingsTableTableTableManager get settingsTable =>
       $$SettingsTableTableTableManager(_db, _db.settingsTable);
   $$TagColorsTableTableTableManager get tagColorsTable =>

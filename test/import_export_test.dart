@@ -547,6 +547,17 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       updatedAt: now,
     ),
   );
+  await trackerRepo.upsertAdjustment(
+    CounterAdjustment(
+      id: 'counter-adjustment-1',
+      trackerId: 'tracker-1',
+      day: DateTime(2026, 10, 3),
+      deviceId: 'device-1',
+      delta: 3,
+      createdAt: now,
+      updatedAt: now,
+    ),
+  );
   await financeRepo.upsertCategory(
     FinanceCategory(
       id: 'category-1',
@@ -1207,6 +1218,7 @@ void main() {
         'calendar_events_table',
         'trackers_table',
         'tracker_values_table',
+        'counter_adjustments_table',
         'transactions_table',
         'subscriptions_table',
         'budgets_table',

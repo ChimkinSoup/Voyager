@@ -1,0 +1,12 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final tr = c.read(todoRepositoryProvider); final r = c.read(remoteSyncServiceProvider); final rr = c.read(reminderRepositoryProvider);
+final due = DateTime(t0.year, t0.month, t0.day, t0.hour, t0.minute).add(const Duration(minutes: 7)); final dueC = DateTime(t0.year, t0.month, t0.day, t0.hour, t0.minute).add(const Duration(minutes: 4));
+final a = TodoTask(id: 'p24-bell-a', createdAt: now, updatedAt: now, version: 1, listId: 'p24-list', title: 'P24 bell A control', dueDate: due, dueDateSetAt: now);
+final b = TodoTask(id: 'p24-bell-b', createdAt: now, updatedAt: now, version: 1, listId: 'p24-list', title: 'P24 bell B restore early', dueDate: due, dueDateSetAt: now);
+final cc = TodoTask(id: 'p24-bell-c', createdAt: now, updatedAt: now, version: 1, listId: 'p24-list', title: 'P24 bell C restore late', dueDate: dueC, dueDateSetAt: now);
+for (final t in [a, b, cc]) { await tr.upsertTask(t); await r.pushTodoTaskNow(t); await setEntityReminder(rr, kind: ReminderSourceKind.todo, entityId: t.id, offsetMinutes: 0); }
+debugPrint('P24BELL due ' + due.toString() + ' dueC ' + dueC.toString());
+await Future.delayed(const Duration(seconds: 2));
+await softDeleteTaskWithSubtasks(c, (await tr.getTask('p24-bell-b'))!);
+await softDeleteTaskWithSubtasks(c, (await tr.getTask('p24-bell-c'))!);
+invalidateAllDataProvidersIn(c);
+debugPrint('P24BELL seeded and deleted B C');

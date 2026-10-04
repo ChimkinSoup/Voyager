@@ -1974,6 +1974,190 @@ class DriftTrackerRepository implements TrackerRepository {
   }
 
   @override
+  Future<List<CounterAdjustment>> listAdjustments(
+    String trackerId, {
+    bool includeDeleted = false,
+  }) async {
+    final rows =
+        await (_db.select(_db.counterAdjustmentsTable)..where(
+              (t) => includeDeleted
+                  ? t.trackerId.equals(trackerId)
+                  : t.trackerId.equals(trackerId) & t.deletedAt.isNull(),
+            ))
+            .get();
+    return rows.map(_mapAdjustment).toList();
+  }
+
+  @override
+  Future<CounterAdjustment?> getAdjustment(String id) async {
+    final row = await (_db.select(
+      _db.counterAdjustmentsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapAdjustment(row);
+  }
+
+  @override
+  Future<void> upsertAdjustment(
+    CounterAdjustment adjustment, {
+    bool recordLocalActivity = true,
+  }) async {
+    await _db
+        .into(_db.counterAdjustmentsTable)
+        .insertOnConflictUpdate(
+          CounterAdjustmentsTableCompanion(
+            id: Value(adjustment.id),
+            trackerId: Value(adjustment.trackerId),
+            day: Value(adjustment.day),
+            deviceId: Value(adjustment.deviceId),
+            delta: Value(adjustment.delta),
+            createdAt: Value(adjustment.createdAt),
+            updatedAt: Value(adjustment.updatedAt),
+            version: Value(adjustment.version),
+            deletedAt: Value(adjustment.deletedAt),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncedWrites?.notifyOne(
+        FirestoreCollections.counterAdjustments,
+        adjustment,
+      );
+    }
+  }
+
+  @override
+  Future<void> adjustCounter({
+    required String trackerId,
+    required DateTime day,
+    required String deviceId,
+    required int delta,
+  }) async {
+    final id = await _addCounterDelta(
+      trackerId: trackerId,
+      day: day,
+      deviceId: deviceId,
+      delta: delta,
+    );
+    await _notifyAdjustment(id);
+  }
+
+  /// Adds [delta] to the row for this tracker, day and device, without telling
+  /// the sync layer — so [createCounter] can do it inside its transaction.
+  Future<String> _addCounterDelta({
+    required String trackerId,
+    required DateTime day,
+    required String deviceId,
+    required int delta,
+  }) async {
+    final date = DateTime(day.year, day.month, day.day);
+    final id = counterAdjustmentId(trackerId, date, deviceId);
+    final now = utcNow();
+    final table = _db.counterAdjustmentsTable;
+    // One statement, not a read-modify-write: taps arriving faster than a
+    // round-trip would otherwise each read the same delta and lose all but
+    // the last.
+    await _db
+        .into(table)
+        .insert(
+          CounterAdjustmentsTableCompanion.insert(
+            id: id,
+            trackerId: trackerId,
+            day: date,
+            deviceId: deviceId,
+            delta: delta,
+            createdAt: now,
+            updatedAt: now,
+            version: const Value(1),
+          ),
+          onConflict: DoUpdate.withExcluded(
+            (old, excluded) => CounterAdjustmentsTableCompanion.custom(
+              // An erased row starts again from this tap rather than bringing
+              // the erased amount back with it.
+              delta: CaseWhenExpression(
+                cases: [
+                  CaseWhen(
+                    old.deletedAt.isNull(),
+                    then: old.delta + excluded.delta,
+                  ),
+                ],
+                orElse: excluded.delta,
+              ),
+              deletedAt: const Constant(null),
+              version: old.version + const Constant(1),
+              updatedAt: excluded.updatedAt,
+            ),
+          ),
+        );
+    return id;
+  }
+
+  Future<void> _notifyAdjustment(String id) async {
+    final written = await getAdjustment(id);
+    if (written != null) {
+      _syncedWrites?.notifyOne(
+        FirestoreCollections.counterAdjustments,
+        written,
+      );
+    }
+  }
+
+  @override
+  Future<void> createCounter(
+    StatisticTracker tracker, {
+    required int startingValue,
+    required String deviceId,
+  }) async {
+    String? adjustmentId;
+    await _db.transaction(() async {
+      await upsertTracker(tracker, recordLocalActivity: false);
+      if (startingValue == 0) return;
+      final created = tracker.createdAt.toLocal();
+      adjustmentId = await _addCounterDelta(
+        trackerId: tracker.id,
+        day: DateTime(created.year, created.month, created.day),
+        deviceId: deviceId,
+        delta: startingValue,
+      );
+    });
+    // After the commit, not inside the transaction: the uploads this starts
+    // run in the zone they were started from, and a failure recorded after the
+    // transaction closed hit Drift's "Transaction used after it was closed".
+    _syncedWrites?.notifyOne(FirestoreCollections.trackers, tracker);
+    if (adjustmentId case final id?) await _notifyAdjustment(id);
+  }
+
+  @override
+  Future<int> eraseCounterDay(
+    String trackerId,
+    DateTime day, {
+    required String deviceId,
+  }) async {
+    var erased = 0;
+    String? adjustmentId;
+    await _db.transaction(() async {
+      for (final adjustment in await listAdjustments(trackerId)) {
+        if (adjustment.day.year == day.year &&
+            adjustment.day.month == day.month &&
+            adjustment.day.day == day.day) {
+          erased += adjustment.delta;
+        }
+      }
+      if (erased == 0) return;
+      // Offset in this device's own row rather than tombstoning every
+      // device's: a device whose unsynced tap met a tombstone of its row at
+      // the same version would lose either the tap or the erase.
+      adjustmentId = await _addCounterDelta(
+        trackerId: trackerId,
+        day: day,
+        deviceId: deviceId,
+        delta: -erased,
+      );
+    });
+    // After the commit, so the upload never carries a write that rolled back.
+    if (adjustmentId case final id?) await _notifyAdjustment(id);
+    return erased;
+  }
+
+  @override
   Future<void> purgeExpiredDeleted(DateTime now) async {
     final cutoff = _policy.purgeCutoff(now);
     await (_db.delete(_db.trackersTable)..where(
@@ -1986,6 +2170,16 @@ class DriftTrackerRepository implements TrackerRepository {
           (t) =>
               _expired(t.deletedAt, cutoff) &
               _notOwedUpload(_db, FirestoreCollections.trackerValues, t.id),
+        ))
+        .go();
+    await (_db.delete(_db.counterAdjustmentsTable)..where(
+          (t) =>
+              _expired(t.deletedAt, cutoff) &
+              _notOwedUpload(
+                _db,
+                FirestoreCollections.counterAdjustments,
+                t.id,
+              ),
         ))
         .go();
   }
@@ -2014,6 +2208,19 @@ class DriftTrackerRepository implements TrackerRepository {
     version: row.version,
     deletedAt: row.deletedAt,
   );
+
+  CounterAdjustment _mapAdjustment(CounterAdjustmentsTableData row) =>
+      CounterAdjustment(
+        id: row.id,
+        trackerId: row.trackerId,
+        day: row.day,
+        deviceId: row.deviceId,
+        delta: row.delta,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        version: row.version,
+        deletedAt: row.deletedAt,
+      );
 
   TrackerValue _mapValue(TrackerValuesTableData row) => TrackerValue(
     id: row.id,

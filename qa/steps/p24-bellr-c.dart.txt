@@ -1,0 +1,1 @@
+final t = c.read(trashServiceProvider); final it = (await t.list()).firstWhere((i) => i.id == 'p24-bell-c'); await t.restore(it); invalidateAllDataProvidersIn(c); debugPrint('P24BELL restored c at ' + DateTime.now().toString());

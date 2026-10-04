@@ -33,7 +33,9 @@ import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_host.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/notifications/reminder_sticky_stack.dart';
+import 'package:voyager/features/settings/services/folder_backup_service.dart';
 import 'package:voyager/features/settings/snippets_dialog.dart';
+import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/routing/app_router.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -73,6 +75,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       }),
     );
     ref.read(autoBackupServiceProvider).start();
+    if (isWindows) ref.read(folderBackupServiceProvider).start();
     _selectionOnResume.install();
     WindowsKeyboardReconciler.instance.install();
     if (desktopWindowChromeActive) {
@@ -125,6 +128,13 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   void _focusReminder(String sourceKey) {
     if (desktopWindowChromeActive) {
       unawaited(ref.read(floaterControllerProvider).showMainWindow());
+    }
+    // A folder backup's size-drop alert shares the notifier; its click opens
+    // the folder-backup section instead (FOLDER_BACKUP_HLD.md §10.2).
+    if (sourceKey.startsWith(FolderBackupService.notificationKeyPrefix)) {
+      ref.read(revealFolderBackupsRequestProvider.notifier).state = true;
+      ref.read(routerProvider).go('/settings');
+      return;
     }
     ref.read(reminderEngineProvider).focus(sourceKey);
   }

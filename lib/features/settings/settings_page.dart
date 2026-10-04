@@ -33,6 +33,7 @@ import 'package:voyager/features/notifications/notification_history_dialog.dart'
 import 'package:voyager/features/rankings/rankings_offline_maps_dialogs.dart';
 import 'package:voyager/features/settings/account_section.dart';
 import 'package:voyager/features/settings/backup_list_dialog.dart';
+import 'package:voyager/features/settings/folder_backup_section.dart';
 import 'package:voyager/features/trash/trash_dialog.dart';
 import 'package:voyager/features/settings/custom_quotes_dialog.dart';
 import 'package:voyager/features/settings/services/auto_backup_service.dart';
@@ -75,7 +76,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     // A reveal requested before Settings opened: start on the tab holding
     // the backup tiles so they mount and answer it themselves. Otherwise
     // wherever the user left Settings last time, even in an earlier run.
-    initialIndex: ref.read(revealAutoBackupRequestProvider)
+    initialIndex:
+        ref.read(revealAutoBackupRequestProvider) ||
+            ref.read(revealFolderBackupsRequestProvider)
         ? _dataTab
         : math.max(0, _settingsTabs.indexOf(SettingsTabMemory.lastTab ?? '')),
   );
@@ -97,6 +100,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   @override
   Widget build(BuildContext context) {
     ref.listen<bool>(revealAutoBackupRequestProvider, (_, next) {
+      if (next) _tabs.animateTo(_dataTab);
+    });
+    ref.listen<bool>(revealFolderBackupsRequestProvider, (_, next) {
       if (next) _tabs.animateTo(_dataTab);
     });
     final settingsAsync = ref.watch(settingsProvider.settled);
@@ -800,6 +806,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                         onTap: () => showTrashDialog(context),
                       ),
                       const _AutoBackupTiles(),
+                      if (isWindows) const FolderBackupSection(),
                       ListTile(
                         title: const Text('Export Backup'),
                         subtitle: const Text(

@@ -35,7 +35,9 @@ import 'package:voyager/features/calendar/calendar_event_delete.dart';
 import 'package:voyager/features/finance/finance_bill_radar.dart';
 import 'package:voyager/features/finance/finance_subscription_modal.dart';
 import 'package:voyager/features/notifications/scheduled_reminders_section.dart';
+import 'package:voyager/features/settings/folder_backup_list_dialog.dart';
 import 'package:voyager/features/settings/services/auto_backup_service.dart';
+import 'package:voyager/features/settings/services/folder_backup_service.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/core/text/prose_editing_controller.dart';
@@ -95,6 +97,7 @@ class _NotificationInboxPopoverState
                 onShowHidden: () => _hiddenKey.currentState?.reveal(),
               ),
               const _BackupAlertSection(),
+              const _FolderBackupAlertSection(),
               const _PinnedNotesSection(),
               const ScheduledRemindersSection(),
               const _FeedSection(),
@@ -1102,6 +1105,111 @@ class _BackupAlertSection extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Folder backups that need the user (FOLDER_BACKUP_HLD.md §8.4): one row
+/// per source whose folder shrank (Review) or whose backups are failing.
+///
+/// Derived from the service's status, like [_BackupAlertSection], so it has
+/// no dismissal: a row goes when the hold is acknowledged or a check
+/// succeeds. A click opens Settings at the folder-backup section; the buttons
+/// claim their own taps first.
+class _FolderBackupAlertSection extends ConsumerWidget {
+  const _FolderBackupAlertSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final service = ref.watch(folderBackupServiceProvider);
+    final alerts = [
+      for (final s in service.status?.sources ?? const [])
+        if (s.alert != null) s,
+    ];
+    if (alerts.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        for (final status in alerts)
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              final router = GoRouter.of(context);
+              ref.read(revealFolderBackupsRequestProvider.notifier).state =
+                  true;
+              Navigator.of(context).pop();
+              router.go('/settings');
+            },
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Row(
+                children: [
+                  Icon(
+                    PhosphorIconsRegular.warningCircle,
+                    size: 20,
+                    color: status.alert == FolderBackupAlert.review
+                        ? theme.colorScheme.error
+                        : Colors.amber,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          status.alert == FolderBackupAlert.review
+                              ? '${status.source.name} shrank'
+                              : '${status.source.name} backups failing',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                        Text(
+                          status.detail,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (status.alert == FolderBackupAlert.review) ...[
+                    GlassButton(
+                      dense: true,
+                      label: 'Show backups',
+                      onPressed: () {
+                        // The popover closes first; the list opens over the
+                        // app on the root navigator, which outlives it.
+                        final root = Navigator.of(
+                          context,
+                          rootNavigator: true,
+                        ).context;
+                        Navigator.of(context).pop();
+                        showFolderBackupListDialog(
+                          root,
+                          sourceId: status.source.id,
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    GlassButton(
+                      dense: true,
+                      label: 'This was intentional',
+                      onPressed: () => service.acceptDrop(status.source.id),
+                    ),
+                  ] else
+                    GlassButton(
+                      dense: true,
+                      label: status.health == FolderBackupHealth.backingUp
+                          ? 'Retrying…'
+                          : 'Retry',
+                      onPressed: status.health == FolderBackupHealth.backingUp
+                          ? null
+                          : () => service.backUpNow(status.source.id),
+                    ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -2237,10 +2345,14 @@ class _AnalyticsSectionState extends ConsumerState<_AnalyticsSection> {
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         child: trackersAsync.when(
           data: (trackers) {
+            // A counter's cadence only sets its graph's resolution; its
+            // changes are always per day, so it's listed whatever it is.
             final daily = trackers
                 .where(
                   (t) =>
-                      t.cadence == TrackerCadence.daily && t.deletedAt == null,
+                      (t.cadence == TrackerCadence.daily ||
+                          t.type == TrackerType.counter) &&
+                      t.deletedAt == null,
                 )
                 .toList();
             if (daily.isEmpty) {

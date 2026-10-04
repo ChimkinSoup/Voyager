@@ -300,6 +300,43 @@ abstract class TrackerRepository {
   });
   Future<void> softDeleteValue(String id);
 
+  /// A counter tracker's change rows, one per device per day.
+  Future<List<CounterAdjustment>> listAdjustments(
+    String trackerId, {
+    bool includeDeleted = false,
+  });
+  Future<CounterAdjustment?> getAdjustment(String id);
+  Future<void> upsertAdjustment(
+    CounterAdjustment adjustment, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Adds [delta] to [deviceId]'s change for [trackerId] on [day], atomically.
+  /// An erased row starts again from [delta] rather than coming back.
+  Future<void> adjustCounter({
+    required String trackerId,
+    required DateTime day,
+    required String deviceId,
+    required int delta,
+  });
+
+  /// Saves a new counter tracker, and its [startingValue] as this device's
+  /// change on the creation day when it isn't 0, in one transaction.
+  Future<void> createCounter(
+    StatisticTracker tracker, {
+    required int startingValue,
+    required String deviceId,
+  });
+
+  /// Brings [trackerId]'s net change on [day] to 0 by adding its negation to
+  /// [deviceId]'s row, so no device ever writes another's. Returns the amount
+  /// erased; the undo adds it back with [adjustCounter].
+  Future<int> eraseCounterDay(
+    String trackerId,
+    DateTime day, {
+    required String deviceId,
+  });
+
   Future<void> purgeExpiredDeleted(DateTime now);
 }
 

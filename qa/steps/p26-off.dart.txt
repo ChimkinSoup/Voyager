@@ -1,0 +1,1 @@
+DevFlags.forceOffline = true; c.read(devForceOfflineProvider.notifier).state = true; await c.read(firestoreProvider).disableNetwork(); debugPrint('P26 OFFLINE ON ' + DateTime.now().toIso8601String());

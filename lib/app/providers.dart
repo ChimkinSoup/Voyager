@@ -22,6 +22,8 @@ import 'package:voyager/core/dev/journal_debug_logger.dart';
 import 'package:voyager/core/dev/remote_sync_compare_service.dart';
 import 'package:voyager/core/dev/sync_compare_logger.dart';
 import 'package:voyager/core/dev/warmup_tracker.dart';
+import 'package:voyager/core/reminders/reminder_engine.dart';
+import 'package:voyager/core/reminders/reminder_os_notifier.dart';
 import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
 import 'package:voyager/core/snippets/snippet_index.dart';
 import 'package:voyager/core/spellcheck/autocorrect_enabled_scope.dart';
@@ -81,6 +83,7 @@ import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/settings/services/auto_backup_service.dart';
+import 'package:voyager/features/settings/services/folder_backup_service.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
 import 'package:voyager/features/settings/services/color_replacement_service.dart';
 import 'package:voyager/features/settings/services/data_export_service.dart';
@@ -449,6 +452,31 @@ final autoBackupServiceProvider = ChangeNotifierProvider<AutoBackupService>((
   );
 });
 
+/// Scheduled backups of user-chosen folders — FOLDER_BACKUP_HLD.md. Windows
+/// only; started by [VoyagerApp]. Read lazily for the same reason as
+/// [autoBackupServiceProvider].
+final folderBackupServiceProvider = ChangeNotifierProvider<FolderBackupService>(
+  (ref) {
+    return FolderBackupService(
+      // Device-local, beside Voyager's own backups' state (§10.1).
+      directory: () async => Directory(
+        p.join((await getApplicationSupportDirectory()).path, 'folder_backups'),
+      ),
+      freeBytes: (path) => ref.read(mediaFileStoreProvider).freeBytesAt(path),
+      notify: (key, title, body) => ref
+          .read(reminderOsNotifierProvider)
+          .showNow(
+            PlannedReminderAlert(
+              sourceKey: key,
+              title: title,
+              body: body,
+              fireAt: DateTime.now(),
+            ),
+          ),
+    );
+  },
+);
+
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return FirebaseAuthRepository(FirebaseAuth.instance);
 });
@@ -652,6 +680,10 @@ final remoteSyncServiceProvider = Provider<RemoteSyncService>((ref) {
   // replays now.
   final syncedWrites = ref.watch(syncedWriteNotifierProvider);
   syncedWrites.onWrite = (collection, records) {
+    if (collection == FirestoreCollections.counterAdjustments) {
+      service.pushCounterAdjustments(records);
+      return;
+    }
     unawaited(service.pushRecords(collection, records));
   };
   // Cleared before a rebuild installs the next service's handler, so a
@@ -1716,6 +1748,7 @@ final _secondaryDataProviders = <ProviderOrFamily>[
   calendarTodoMarkersProvider,
   trackersProvider,
   trackerValuesProvider,
+  counterAdjustmentsProvider,
   transactionsProvider,
   subscriptionsProvider,
   budgetsProvider,
@@ -2005,7 +2038,36 @@ final trackerValuesProvider = FutureProvider.family((
   if (trackerId == kWorkedOutTrackerId) {
     return workedOutTrackerValues(await ref.watch(workoutDaysProvider.future));
   }
+  // Selected, not watched whole: only the fields the counter series reads, so
+  // a star toggle or a reorder doesn't refetch every tracker's values.
+  final counter = await ref.watch(
+    trackersProvider.selectAsync((trackers) {
+      for (final t in trackers) {
+        if (t.id == trackerId && t.type == TrackerType.counter) {
+          return (cadence: t.cadence, createdAt: t.createdAt);
+        }
+      }
+      return null;
+    }),
+  );
+  if (counter != null) {
+    final trackers = await ref.read(trackersProvider.future);
+    final tracker = trackers.firstWhere((t) => t.id == trackerId);
+    final adjustments = await ref.watch(
+      counterAdjustmentsProvider(trackerId).future,
+    );
+    return counterSeriesValues(tracker, adjustments, today: DateTime.now());
+  }
   return ref.watch(trackerRepositoryProvider).listValues(trackerId);
+});
+
+/// A counter tracker's live change rows. See [CounterAdjustment].
+final counterAdjustmentsProvider = FutureProvider.family((
+  ref,
+  String trackerId,
+) {
+  ref.keepAlive();
+  return ref.watch(trackerRepositoryProvider).listAdjustments(trackerId);
 });
 
 /// App-scoped invalidator for one tracker's cached values, safe to call after
@@ -2035,8 +2097,12 @@ final pendingStatEntriesProvider = FutureProvider<int>((ref) async {
   final trackers = await ref.watch(trackersProvider.future);
   final today = DateTime.now();
   final todayLocal = DateTime(today.year, today.month, today.day);
+  // Counters are never "due": there's no value for a day to be missing.
   final dailyTrackers = trackers.where(
-    (t) => t.cadence == TrackerCadence.daily && t.deletedAt == null,
+    (t) =>
+        t.cadence == TrackerCadence.daily &&
+        t.type != TrackerType.counter &&
+        t.deletedAt == null,
   );
   var pending = 0;
   for (final tracker in dailyTrackers) {
@@ -2226,7 +2292,13 @@ final notificationBadgeStateProvider = Provider<NotificationUrgency?>((ref) {
   final backupsFailing = ref.watch(
     autoBackupServiceProvider.select((s) => s.status?.failing ?? false),
   );
+  final folderBackupAlert = ref.watch(
+    folderBackupServiceProvider.select(
+      (s) => s.status?.sources.any((source) => source.alert != null) ?? false,
+    ),
+  );
   if (backupsFailing ||
+      folderBackupAlert ||
       feed.any((i) => i.urgency == NotificationUrgency.important)) {
     return NotificationUrgency.important;
   }

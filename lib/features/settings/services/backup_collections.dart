@@ -648,6 +648,31 @@ List<BackupCollection> buildBackupCollections({
       },
     ),
     BackupCollection(
+      name: FirestoreCollections.counterAdjustments,
+      // Walks the trackers for the same reason as the values above.
+      read: () async => [
+        for (final tracker in await trackerRepository.listTrackers(
+          includeDeleted: true,
+        ))
+          for (final adjustment in await trackerRepository.listAdjustments(
+            tracker.id,
+            includeDeleted: true,
+          ))
+            BackupRecord(
+              id: adjustment.id,
+              data: counterAdjustmentToFirestore(adjustment),
+            ),
+      ],
+      restore: (id, data) async {
+        final adjustment = mergeCounterAdjustmentFromRemote(data, id);
+        await trackerRepository.upsertAdjustment(
+          adjustment,
+          recordLocalActivity: false,
+        );
+        return adjustment;
+      },
+    ),
+    BackupCollection(
       name: FirestoreCollections.financeCategories,
       read: () async => [
         for (final category in await financeRepository.listCategories(

@@ -31,6 +31,30 @@ class MarkerClusterLayer extends StatefulWidget {
   State<MarkerClusterLayer> createState() => _MarkerClusterLayerState();
 }
 
+// VOYAGER PATCH: upstream gives a marker's child no way to tell it has been
+// spread out of a cluster too tight to part by zooming.
+/// Whether the markers under it are spread out of a cluster that could not be
+/// parted by zooming.
+class MarkerSpiderfied extends InheritedWidget {
+  const MarkerSpiderfied({
+    required this.spiderfied,
+    required super.child,
+    super.key,
+  });
+
+  final bool spiderfied;
+
+  static bool of(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<MarkerSpiderfied>()
+          ?.spiderfied ??
+      false;
+
+  @override
+  bool updateShouldNotify(MarkerSpiderfied oldWidget) =>
+      spiderfied != oldWidget.spiderfied;
+}
+
 class _MarkerClusterLayerState extends State<MarkerClusterLayer>
     with TickerProviderStateMixin {
   late MapCalculator _mapCalculator;
@@ -181,6 +205,7 @@ class _MarkerClusterLayerState extends State<MarkerClusterLayer>
     required AnimationController controller,
     required Translate translate,
     Fade? fade,
+    bool spiderfied = false,
   }) {
     return MapWidget(
       size: Size(marker.width, marker.height),
@@ -194,13 +219,17 @@ class _MarkerClusterLayerState extends State<MarkerClusterLayer>
               alignment: marker.alignment,
             ),
       key: marker.key ?? ObjectKey(marker.marker),
-      child: MarkerWidget(
-        marker: marker,
-        markerChildBehavior: widget.options.markerChildBehavior,
-        onTap: _onMarkerTap(marker),
-        onDoubleTap: _onMarkerDoubleTap(marker),
-        onHover: (bool value) => _onMarkerHover(marker, value),
-        buildOnHover: widget.options.popupOptions?.buildPopupOnHover ?? false,
+      child: MarkerSpiderfied(
+        spiderfied: spiderfied,
+        child: MarkerWidget(
+          marker: marker,
+          markerChildBehavior: widget.options.markerChildBehavior,
+          onTap: _onMarkerTap(marker),
+          onDoubleTap: _onMarkerDoubleTap(marker),
+          onHover: (bool value) => _onMarkerHover(marker, value),
+          buildOnHover:
+              widget.options.popupOptions?.buildPopupOnHover ?? false,
+        ),
       ),
     );
   }
@@ -546,6 +575,7 @@ class _MarkerClusterLayerState extends State<MarkerClusterLayer>
             point: points[i]!,
             curve: widget.options.animationsOptions.spiderifyCurve,
           ),
+          spiderfied: true,
         ),
       );
     }

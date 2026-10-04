@@ -1,0 +1,9 @@
+final r = c.read(remoteSyncServiceProvider);
+await Future.delayed(const Duration(milliseconds: 30));
+final fr = c.read(financeRepositoryProvider);
+await fr.softDeleteTransaction('p24-tx'); await Future.delayed(const Duration(milliseconds: 30));
+await fr.softDeleteSubscription('p24-sub'); await Future.delayed(const Duration(milliseconds: 30));
+await fr.softDeleteBudget('p24-budget'); await Future.delayed(const Duration(milliseconds: 30));
+await fr.softDeleteCategory('p24-fcat'); await Future.delayed(const Duration(milliseconds: 30));
+await fr.softDeleteAsset('p24-asset'); await Future.delayed(const Duration(milliseconds: 30));
+await fr.softDeleteSavingsGoal('p24-goal'); await Future.delayed(const Duration(milliseconds: 30));

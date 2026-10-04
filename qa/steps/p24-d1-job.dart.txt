@@ -1,0 +1,3 @@
+final r = c.read(remoteSyncServiceProvider);
+await Future.delayed(const Duration(milliseconds: 30));
+await JobsActions.detached(c).deleteApplication((await c.read(jobRepositoryProvider).getApplication('p24-job'))!);
