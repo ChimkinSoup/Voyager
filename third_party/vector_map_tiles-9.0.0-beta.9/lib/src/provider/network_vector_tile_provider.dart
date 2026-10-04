@@ -35,13 +35,18 @@ class NetworkVectorTileProvider extends VectorTileProvider {
       this.minimumZoom = 1})
       : _urlProvider = _UrlProvider(urlTemplate);
 
+  /// VOYAGER PATCH: one client for every tile. Upstream made one per request
+  /// and closed it after, so each tile opened its own connection and paid a
+  /// TCP and TLS handshake: ~95 ms a tile against Geoapify where a kept-alive
+  /// connection took ~30. Idle connections close themselves after 15 s.
+  final _client = RetryClient(Client());
+
   @override
   Future<Uint8List> provide(TileIdentity tile) async {
     _checkTile(tile);
     final uri = Uri.parse(_urlProvider.url(tile));
-    final client = RetryClient(Client());
     try {
-      final response = await client.get(uri, headers: httpHeaders);
+      final response = await _client.get(uri, headers: httpHeaders);
       if (response.statusCode == 200) {
         return response.bodyBytes;
       }
@@ -55,8 +60,6 @@ class NetworkVectorTileProvider extends VectorTileProvider {
               : Retryable.none);
     } on ClientException catch (e) {
       throw ProviderException(message: e.message, retryable: Retryable.retry);
-    } finally {
-      client.close();
     }
   }
 

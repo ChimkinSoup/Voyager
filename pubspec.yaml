@@ -139,6 +139,9 @@ dev_dependencies:
 # controller hands them over (vector_tile_controller.dart, tile_loader.dart,
 # with the renderer's label_layout.dart), so the rankings map draws
 # restaurant names itself, hides one under a pin and lets one be pressed.
+# And upstream fetches each tile on a client of its own, a new connection
+# and TLS handshake every time; the local copy keeps one client
+# (lib/src/provider/network_vector_tile_provider.dart).
 # Re-apply them if upgrading past
 # 9.0.0-beta.9.
 #

@@ -729,7 +729,9 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
     final style = rankingsMapTitleStyle(theme);
     final titles = _titles;
     if (titles != null &&
-        identical(titles.entries, widget.entries) &&
+        // The page hands over a new list on every build of its own, such as
+        // opening an entry, with the same entries in it.
+        listEquals(titles.entries, widget.entries) &&
         titles.style == style &&
         titles.scaler == scaler) {
       return titles.from;

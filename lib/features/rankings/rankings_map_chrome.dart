@@ -123,21 +123,54 @@ List<double> planPinTitles(
     radius: RankingsMapPin.size / 2,
   );
   final from = List.filled(count, double.infinity);
-  final planned = <int>[];
+  if (count == 0) return from;
+
+  // Only a pin or title met closer in than [rankingsMapNameZoom] holds a
+  // title back, and two boxes meet there only within the furthest either
+  // reaches from its point, scaled to [zoom]: a grid of cells twice that
+  // finds them, rather than every pin against every other.
+  var reachX = disc.right;
+  var reachY = disc.bottom;
+  for (final label in labels) {
+    reachX = math.max(reachX, math.max(-label.box.left, label.box.right));
+    reachY = math.max(reachY, math.max(-label.box.top, label.box.bottom));
+  }
+  final spread = math.pow(2, zoom - rankingsMapNameZoom).toDouble();
+  final cellWidth = 2 * reachX * spread;
+  final cellHeight = 2 * reachY * spread;
+  final grid = <(int, int), List<int>>{};
+  (int, int) cellOf(Offset at) =>
+      ((at.dx / cellWidth).floor(), (at.dy / cellHeight).floor());
+  for (var i = 0; i < count; i++) {
+    (grid[cellOf(labels[i].at)] ??= []).add(i);
+  }
+  Iterable<int> near(int i) sync* {
+    final (x, y) = cellOf(labels[i].at);
+    for (var dx = -1; dx <= 1; dx++) {
+      for (var dy = -1; dy <= 1; dy++) {
+        yield* grid[(x + dx, y + dy)] ?? const <int>[];
+      }
+    }
+  }
+
+  final rankOf = List.filled(count, 0);
+  for (var rank = 0; rank < count; rank++) {
+    rankOf[order[rank]] = rank;
+  }
   for (final i in order) {
     if (pins[i].title.isEmpty) continue;
     final box = labels[i].box;
     var shows = rankingsMapNameZoom.toDouble();
-    for (var j = 0; j < count; j++) {
+    for (final j in near(i)) {
       if (j == i) continue;
       shows = math.max(shows, _apartFrom(labels, i, box, j, disc, zoom));
-    }
-    for (final j in planned) {
-      final apart = _apartFrom(labels, i, box, j, labels[j].box, zoom);
-      if (apart > from[j]) shows = math.max(shows, apart);
+      // A better placed title, planned already.
+      if (rankOf[j] < rankOf[i]) {
+        final apart = _apartFrom(labels, i, box, j, labels[j].box, zoom);
+        if (apart > from[j]) shows = math.max(shows, apart);
+      }
     }
     from[i] = shows;
-    planned.add(i);
   }
   return from;
 }
@@ -389,8 +422,10 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
   /// The name under the mouse — see [light].
   _Name? _lit;
 
-  /// The size of each of the pins' titles, by its text.
+  /// The size of each of the pins' titles, by its text, and the style and
+  /// scale they were measured in.
   final _titleSizes = <String, Size>{};
+  ({TextStyle style, TextScaler scaler})? _titleSizesIn;
 
   /// The place to eat or drink's name or dot drawn over [point] and the place
   /// it names, or null.
@@ -523,6 +558,12 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
     final view = _viewAt(camera, names.zoom);
     final style = rankingsMapTitleStyle(Theme.of(context));
     final scaler = MediaQuery.textScalerOf(context);
+    // Measured afresh only for a new style or scale: the camera moving, which
+    // rebuilds this every frame, changes neither.
+    if (_titleSizesIn != (style: style, scaler: scaler)) {
+      _titleSizes.clear();
+      _titleSizesIn = (style: style, scaler: scaler);
+    }
     final pins = <({Offset at, Rect title})>[];
     for (final pin in widget.pins) {
       final at = camera.projectAtZoom(pin.point, zoom);
@@ -586,18 +627,6 @@ class RankingsTileLayerState extends ConsumerState<RankingsTileLayer> {
       drawn.add(name);
     }
     return drawn;
-  }
-
-  @override
-  void didUpdateWidget(RankingsTileLayer oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _titleSizes.clear();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _titleSizes.clear();
   }
 
   /// The theme last built and the colours it was built from. Reading a style
