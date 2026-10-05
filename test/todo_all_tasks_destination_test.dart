@@ -45,6 +45,23 @@ void main() {
     expect(added.single.listId, isNot(legacyTodoListId));
   });
 
+  testWidgets('adding a task next to a user list creates no "To-do" list', (
+    tester,
+  ) async {
+    final db = await pumpTodoPage(tester, active: 3, done: 1);
+
+    await tester.enterText(find.byType(TextField).first, 'Buy milk');
+    await tester.tap(find.text('Add'));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+
+    // BUG-012: the built-in list was created on the first add, stayed empty
+    // and hidden, and a new device then opened on it.
+    final lists = await DriftTodoRepository(db).listLists();
+    expect(lists.map((l) => l.id), [todoHarnessListId]);
+  });
+
   testWidgets('the composer names the list a new task will land in', (
     tester,
   ) async {

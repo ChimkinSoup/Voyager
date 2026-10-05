@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/motion/modal_scrim_observer.dart';
@@ -90,19 +91,27 @@ final routerProvider = Provider<GoRouter>((ref) {
       final loggingIn = state.matchedLocation == '/login';
       if (!auth.isAuthenticated && !loggingIn) return '/login';
       if (auth.isAuthenticated && loggingIn) {
-        final settings = await settingsRepo.getSettings();
-        // A hidden page, or one this build leaves out, falls back to the
-        // first page in the rail.
-        return startupPathFor(settings, switch (settings.startupPageMode) {
-          StartupPageMode.lastSeen => settings.lastSeenNavPage,
-          StartupPageMode.custom => settings.customStartupPage,
-          StartupPageMode.first => null,
-        });
+        return startupRedirectPath = startupPathOf(
+          await settingsRepo.getSettings(),
+        );
       }
       return null;
     },
   );
 });
+
+/// The page the last sign-in redirect opened. The startup pull moves the user
+/// on from it if the pulled settings name another page (BUG-011).
+String? startupRedirectPath;
+
+/// The page to open on launch or sign-in. A hidden page, or one this build
+/// leaves out, falls back to the first page in the rail.
+String startupPathOf(AppSettings settings) =>
+    startupPathFor(settings, switch (settings.startupPageMode) {
+      StartupPageMode.lastSeen => settings.lastSeenNavPage,
+      StartupPageMode.custom => settings.customStartupPage,
+      StartupPageMode.first => null,
+    });
 
 /// Rebuilds [child] from scratch after a backup restore.
 ///

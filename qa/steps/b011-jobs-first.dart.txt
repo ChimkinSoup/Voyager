@@ -1,0 +1,6 @@
+final s = await c.read(settingsRepositoryProvider).getSettings();
+final order = [for (final d in getOrderedDestinations(s, shellDestinations)) d.dest.path];
+order.remove('/jobs'); order.insert(0, '/jobs');
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(navPageOrder: order));
+final after = await c.read(settingsRepositoryProvider).getSettings();
+debugPrint('B011 order=${after.navPageOrder} mode=${after.startupPageMode.name}');

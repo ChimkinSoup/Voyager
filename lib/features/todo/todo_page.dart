@@ -1008,13 +1008,17 @@ class _TodoPageState extends ConsumerState<TodoPage>
     super.dispose();
   }
 
-  /// Creates the built-in list if it is missing, and returns the current lists
-  /// straight from the repository — the caller needs a set that is guaranteed
-  /// to include anything just created, which the provider may not have yet.
+  /// Creates the built-in list if there are no lists at all, and returns the
+  /// current lists straight from the repository — the caller needs a set that
+  /// is guaranteed to include anything just created, which the provider may
+  /// not have yet.
+  ///
+  /// Not whenever the built-in list alone is missing: next to the user's own
+  /// lists it stayed empty and hidden, and a new device opened on it (BUG-012).
   Future<List<TodoListModel>> _ensureDefaultList() async {
     final repo = ref.read(todoRepositoryProvider);
     var lists = await repo.listLists();
-    if (!lists.any((list) => list.id == legacyTodoListId)) {
+    if (lists.isEmpty) {
       final now = utcNow();
       final list = TodoListModel(
         id: legacyTodoListId,

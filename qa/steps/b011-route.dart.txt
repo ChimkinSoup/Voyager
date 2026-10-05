@@ -1,0 +1,1 @@
+debugPrint('B011 route=${c.read(routerProvider).routerDelegate.currentConfiguration.uri.path} opened=$startupRedirectPath t=${DateTime.now().toIso8601String()}');

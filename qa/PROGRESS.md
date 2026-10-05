@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 034.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 035.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -153,6 +153,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-031@example.com | 2026-10-05 (BUG-006/007/008 re-check) | New account, signed up by keyboard only. Weather location "Chicago, Illinois, US" (saved during the BUG-008 check; it started with none). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-032@example.com | 2026-10-05 (BUG-226 check) | Empty apart from its default calendar and this device's registration. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-033@example.com | 2026-10-05 (code-review fixes: BUG-006 follow-up, shared Settings reveal) | Signed up by keyboard only, after one refused sign-in and one password reset request (no mail is delivered to example.com). No weather location. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-034@example.com | 2026-10-05 (BUG-011 re-check) | New account. Nav order with Jobs first (`navPageOrder` starts `/jobs`); startup mode "First page". Dark + Scatter; Vim off. | Password `qavoyager2026`. Cold sign-in done twice (once with the BUG-011 fix, once without). |
 
 ---
 

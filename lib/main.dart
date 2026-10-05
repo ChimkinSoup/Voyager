@@ -407,6 +407,19 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
           // the pull, and on an empty device kept an empty answer until the
           // app restarted (BUG-010, BUG-043).
           invalidateAllDataProvidersFrom(ref);
+          // The redirect chose the startup page from the settings before the
+          // pull: on an empty device, the defaults (BUG-011). Moved only while
+          // the user is still on the page it opened.
+          final opened = startupRedirectPath;
+          final startupPath = startupPathOf(
+            await ref.read(settingsRepositoryProvider).getSettings(),
+          );
+          if (!mounted || session != _authSession) return;
+          if (opened != null &&
+              startupPath != opened &&
+              router.routerDelegate.currentConfiguration.uri.path == opened) {
+            router.go(startupPath);
+          }
         },
         localRefresh: () async {
           await lazy.loadRecentEntries();
