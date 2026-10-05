@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:voyager/core/spellcheck/autocorrect_engine.dart';
+import 'package:voyager/core/spellcheck/word_token.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/text/prose_markup.dart';
 
@@ -306,7 +307,7 @@ class AutocorrectSession {
     if (textController.value.text != restored.text) return false;
     _lastCorrection = null;
     _typedToken = null;
-    _suppressed.add(record.typo.toLowerCase());
+    _suppressed.add(normalizeCustomWord(record.typo));
     flashListenable.value = null;
     return true;
   }
@@ -540,7 +541,7 @@ class AutocorrectSession {
 
     final word = text.substring(token.start, token.end);
     if (isAllCapsToken(word)) return;
-    final lower = word.toLowerCase();
+    final lower = normalizeCustomWord(word);
     if (_suppressed.contains(lower)) return;
     if (isSnippetTrigger(lower)) return;
 

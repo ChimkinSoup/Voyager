@@ -35,7 +35,7 @@ The checker is `VoyagerSpellCheckService`: a bundled set union a user set.
 
 | Layer | Behavior |
 | --- | --- |
-| Bundled list | `assets/dictionary_en.txt` (~65k lines). Loaded once via `dictionaryProvider` / `loadDictionaryFromAssets`, kept alive, warmed at shell start. |
+| Bundled list | `assets/dictionary_en.txt` (~93k lines, built from SCOWL by `tool/build_dictionary.py`). Loaded once via `dictionaryProvider` / `loadDictionaryFromAssets`, kept alive, warmed at shell start. |
 | Custom words | `CustomWord` rows. The **word string is the primary key** and the Firestore document id. |
 | Add | `addCustomWord` — trim, lowercase, upsert. Called only from the spell-check popup. |
 | Remove | `removeCustomWord` — tombstones the row so the removal syncs. **No UI calls it.** |
@@ -84,7 +84,7 @@ What would actually be expensive is mounting 65k list rows. The dialog never doe
 
 Fallback if search is still janky in practice: keep empty-search = custom only, and require at least **2 characters** before querying the bundled set. Do not drop bundled search from the product without measuring.
 
-**As built — the list is not alphabetical.** `assets/dictionary_en.txt` is ordered by descending frequency (`you`, `i`, `the` … `emese`, `xerxos`), and `loadDictionaryFromAssets` builds a `LinkedHashSet`, so that order is already in memory. `searchDictionary` ranks by it instead of sorting:
+**As built — the list is not alphabetical.** `assets/dictionary_en.txt` is ordered by descending frequency (`you`, `i`, `the` …), with the words that have no frequency rank after them A–Z (… `zyrtec`, `zzz`), and `loadDictionaryFromAssets` builds a `LinkedHashSet`, so that order is already in memory. `searchDictionary` ranks by it instead of sorting:
 
 - `s` answers with `so`, `she`, `some` rather than the alphabetically first `sa`, `saab`, `saag` — a far better answer to "is this word in here?"
 - No sort. Sorting the 65k set measured **32 ms**, which is a dropped frame on the dialog's open animation.

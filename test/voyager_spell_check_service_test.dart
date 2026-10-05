@@ -68,6 +68,12 @@ void main() {
       expect(_flaggedWords("dog's", service.checkTextSync("dog's")), ["dog's"]);
     });
 
+    test('a curly apostrophe is looked up as a straight one', () {
+      final curly = String.fromCharCode(0x2019);
+      final service = _serviceWith({"didn't", 'dog'});
+      expect(service.checkTextSync('didn${curly}t dog${curly}s'), isEmpty);
+    });
+
     test('one letter is a long enough base', () {
       // `mind your p's and q's`.
       final service = _serviceWith({'p', 'q', 'and', 'mind', 'your'});
@@ -381,14 +387,14 @@ void main() {
         return text.substring(0, pos) + text.substring(pos + len);
       } else {
         // Insert a single character at a random position (simulates
-        // mid-word typing). Digits and apostrophes are in the alphabet
-        // because they are what decides where a run begins and ends: a
-        // window widened without them re-tokenizes half of `xm6's` and
-        // disagrees with the full pass. Backticks, `$`, spaces and newlines
+        // mid-word typing). Digits and apostrophes (straight and curly) are
+        // in the alphabet because they are what decides where a run begins
+        // and ends: a window widened without them re-tokenizes half of
+        // `xm6's` and disagrees with the full pass. Backticks, `$`, spaces and newlines
         // decide where an exclusion zone opens and closes, so an edit far
         // from a word can still change whether that word is checked.
         final pos = rng.nextInt(text.length + 1);
-        const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789'`\$ \n";
+        const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789'\u2019`\$ \n";
         final ch = alphabet[rng.nextInt(alphabet.length)];
         return text.substring(0, pos) + ch + text.substring(pos);
       }

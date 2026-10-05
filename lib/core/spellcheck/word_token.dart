@@ -6,7 +6,12 @@
 /// expression rather than two copies: an entry the tokenizer can never emit
 /// (`well-known`, `voyager2`, two words) would sit in the dictionary doing
 /// nothing, and the user would have no way to tell.
-final RegExp wordTokenPattern = RegExp(r"[A-Za-z]+(?:'[A-Za-z]+)*");
+///
+/// The apostrophe can be straight or curly (`’`, U+2019, which smart-quote
+/// keyboards and pasted text produce). Taking only the straight one split
+/// `didn’t` into `didn` and `t`. [normalizeCustomWord] folds the curly one to
+/// straight, which is how the dictionary spells it.
+final RegExp wordTokenPattern = RegExp("[A-Za-z]+(?:['\u2019][A-Za-z]+)*");
 
 /// The maximal run [tokenizeWords] scans for: [wordTokenPattern] widened to
 /// admit digits, so an alphanumeric arrives as one run instead of as the
@@ -16,7 +21,7 @@ final RegExp wordTokenPattern = RegExp(r"[A-Za-z]+(?:'[A-Za-z]+)*");
 /// Scanning for letters alone made `3D` present as the word `D`, and `XM6's`
 /// as `XM` and `s` — three squiggles under things nobody misspelled, because a
 /// digit ended one token and started the next.
-final RegExp wordRunPattern = RegExp(r"[A-Za-z0-9]+(?:'[A-Za-z0-9]+)*");
+final RegExp wordRunPattern = RegExp("[A-Za-z0-9]+(?:['\u2019][A-Za-z0-9]+)*");
 
 final RegExp _digit = RegExp(r'[0-9]');
 
@@ -31,8 +36,10 @@ bool runHasDigit(String run) => _digit.hasMatch(run);
 
 final RegExp _wholeWordToken = RegExp('^${wordTokenPattern.pattern}\$');
 
-/// How a dictionary entry is stored and looked up: trimmed and lowercased.
-String normalizeCustomWord(String raw) => raw.trim().toLowerCase();
+/// How a dictionary entry is stored and looked up: trimmed, lowercased, and
+/// with a curly apostrophe made straight.
+String normalizeCustomWord(String raw) =>
+    raw.trim().toLowerCase().replaceAll('\u2019', "'");
 
 /// Whether [word] is a single word token — letters, with apostrophes allowed
 /// between them so `don't` is legal. Expects an already-normalized word.

@@ -58,7 +58,7 @@ The right-click menu only offers spell actions when `misspellingAtCursor` finds 
 
 `DICTIONARY.md` §1 and the bundled row in `dictionary_dialog.dart` say there is no blocklist. Remove only tombstones a custom extra. A bundled word that is also custom stays allowed after the custom row is removed.
 
-Autocorrect (`AUTOCORRECT.md`) never rewrites a known word, and only rewrites an unknown token when one of transpose / delete / insert has exactly one dictionary hit. A wrong letter is not in that model (`then` / `than`).
+Autocorrect (`AUTOCORRECT.md`) never rewrites a known word, and only rewrites an unknown token when transpose / delete / insert together have exactly one dictionary hit. A wrong letter is not in that model (`then` / `than`).
 
 Flagging a word removes it from `known`, which is the only thing that makes the cascade willing to look at it. What happens next depends on that word, not on a special "flagged" autocorrect mode. See §5.4.
 

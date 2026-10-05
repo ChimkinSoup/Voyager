@@ -1929,7 +1929,7 @@ final tagColorsProvider = FutureProvider<Map<String, int>>((ref) async {
   };
 });
 
-/// Bundled default spellcheck dictionary (~65k common English words).
+/// Bundled default spellcheck dictionary (~93k English words, from SCOWL).
 final dictionaryProvider = FutureProvider<Set<String>>((ref) {
   ref.keepAlive();
   return loadDictionaryFromAssets();

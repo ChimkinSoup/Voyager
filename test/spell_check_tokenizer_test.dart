@@ -17,6 +17,13 @@ void main() {
     expect(words, ["don't", 'stop']);
   });
 
+  test('a curly apostrophe holds a contraction together too', () {
+    final text = 'didn${String.fromCharCode(0x2019)}t stop';
+    final ranges = tokenizeWords(text);
+    final words = [for (final r in ranges) text.substring(r.start, r.end)];
+    expect(words, [text.substring(0, 6), 'stop']);
+  });
+
   test('excludes tokens inside a #tag span', () {
     final text = 'remember #madeupword for later';
     final ranges = tokenizeWords(text);

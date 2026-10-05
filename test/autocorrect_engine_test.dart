@@ -37,10 +37,11 @@ void main() {
       expect(autocorrectFor('wth', {'with', 'wath'}), isNull);
     });
 
-    test('transposition beats a deletion that would also have worked', () {
-      // `tehn` transposes to `then` and deletes to `ten`. The cascade stops at
-      // the first step that answers, so the transposition wins.
-      expect(autocorrectFor('tehn', {'then', 'ten'}), 'then');
+    test('a deletion and an insertion that both work correct nothing', () {
+      // BUG-021: `bcause` deletes to `cause` and inserts to `because`. Trying
+      // deletion first picked `cause`; pooled, it is two words, so neither.
+      expect(autocorrectFor('bcause', {'cause', 'because'}), isNull);
+      expect(autocorrectFor('tehn', {'then', 'ten'}), isNull);
     });
 
     test('a substituted letter is never corrected', () {
@@ -77,6 +78,11 @@ void main() {
 
     test('apostrophes ride along in the token', () {
       expect(autocorrectFor("dont'", {"don't"}), "don't");
+    });
+
+    test('a curly apostrophe is a straight one to the dictionary', () {
+      final curly = String.fromCharCode(0x2019);
+      expect(autocorrectFor('didn${curly}t', {"didn't", 'didn'}), isNull);
     });
 
     test('nothing known at all corrects nothing', () {
@@ -181,6 +187,11 @@ void main() {
 
     test('an apostrophe between letters stays in the token', () {
       expect(autocorrectTokenAt("don't", 5), const TextRange(start: 0, end: 5));
+    });
+
+    test('a curly apostrophe between letters stays in the token', () {
+      final text = 'didn${String.fromCharCode(0x2019)}t';
+      expect(autocorrectTokenAt(text, 6), const TextRange(start: 0, end: 6));
     });
 
     test('an apostrophe at the edge is punctuation, not part of the word', () {

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/spellcheck/autocorrect_session.dart';
+import 'package:voyager/core/spellcheck/word_token.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/flag_word_popover.dart';
 import 'package:voyager/core/widgets/quick_add_snippet.dart';
@@ -117,13 +118,16 @@ class _TextFieldContextMenuState extends ConsumerState<TextFieldContextMenu> {
     widget.editableTextState.hideToolbar();
   }
 
-  /// The flagged word under the cursor, lowercased, or null.
+  /// The flagged word under the cursor, normalized, or null.
   String? get _flaggedWord {
     final range = widget.span?.range;
     if (range == null) return null;
-    final word = widget.editableTextState.widget.controller.text
-        .substring(range.start, range.end)
-        .toLowerCase();
+    final word = normalizeCustomWord(
+      widget.editableTextState.widget.controller.text.substring(
+        range.start,
+        range.end,
+      ),
+    );
     return ref.read(voyagerSpellCheckServiceProvider).isFlagged(word)
         ? word
         : null;
@@ -134,9 +138,12 @@ class _TextFieldContextMenuState extends ConsumerState<TextFieldContextMenu> {
   /// stops there rather than gaining a redundant custom row.
   Future<void> _addToDictionary() async {
     final range = widget.span!.range;
-    final word = widget.editableTextState.widget.controller.text
-        .substring(range.start, range.end)
-        .toLowerCase();
+    final word = normalizeCustomWord(
+      widget.editableTextState.widget.controller.text.substring(
+        range.start,
+        range.end,
+      ),
+    );
     final repo = ref.read(settingsRepositoryProvider);
     final wasFlagged = _flaggedWord != null;
     if (wasFlagged) await repo.unflagWord(word);

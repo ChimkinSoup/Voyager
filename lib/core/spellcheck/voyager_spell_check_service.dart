@@ -141,7 +141,7 @@ class VoyagerSpellCheckService implements SpellCheckService {
     final spans = <SuggestionSpan>[];
     for (final range in tokenizeWords(text)) {
       final word = text.substring(range.start, range.end);
-      final lower = word.toLowerCase();
+      final lower = normalizeCustomWord(word);
       if (isKnownWord(lower, known)) continue;
       spans.add(_spanFor(range, lower, includeSuggestions: includeSuggestions));
     }
@@ -227,7 +227,7 @@ class VoyagerSpellCheckService implements SpellCheckService {
         continue;
       }
       final word = newText.substring(absRange.start, absRange.end);
-      final lower = word.toLowerCase();
+      final lower = normalizeCustomWord(word);
       if (isKnownWord(lower, known)) continue;
       spans.add(
         _spanFor(absRange, lower, includeSuggestions: includeSuggestions),
@@ -260,7 +260,7 @@ class VoyagerSpellCheckService implements SpellCheckService {
     final start = span.range.start.clamp(0, text.length);
     final end = span.range.end.clamp(start, text.length);
     if (start >= end) return span;
-    final lower = text.substring(start, end).toLowerCase();
+    final lower = normalizeCustomWord(text.substring(start, end));
     return SuggestionSpan(span.range, _suggestionsFor(lower));
   }
 
@@ -372,7 +372,7 @@ class VoyagerSpellCheckService implements SpellCheckService {
   /// `[A-Za-z']` pattern) or a `#tag` ([journalTagPattern], hyphens included so
   /// a multi-word tag isn't cut at one) — used to widen a changed region out to
   /// whole-token boundaries before re-tokenizing just that window.
-  static final _boundaryChar = RegExp(r"[A-Za-z0-9_#'-]");
+  static final _boundaryChar = RegExp("[A-Za-z0-9_#'\u2019-]");
 
   /// Capped so a pathological run of boundary characters with no real word
   /// break (never happens in real prose) can't make a single edit scan an

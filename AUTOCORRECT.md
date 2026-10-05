@@ -60,14 +60,17 @@ Related: `lib/core/spellcheck/` (especially `spell_check_suggestions.dart`, `voy
 
 Reuse the Norvig-style generator in `spell_check_suggestions.dart`, but **split candidates by operation** and apply a strict cascade. **Replace** (wrong letter) is never an allowed autocorrect path.
 
-### 3.1 Cascade (per-step uniqueness)
+### 3.1 Cascade (one pool, one answer)
 
-For the completed token `T` (lowercased for lookup):
+For the completed token `T` (lowercased for lookup), pool every:
 
-1. **Transpose** — every adjacent swap of `T`. If **exactly one** result ∈ `known`, use it.
-2. **Delete** — delete one character from `T`. If **exactly one** result ∈ `known`, use it.
-3. **Insert** — insert `a`–`z` at each position. If **exactly one** result ∈ `known`, use it.
-4. Otherwise → **no autocorrect** (squiggle + right-click suggestions unchanged).
+1. **Transpose** — every adjacent swap of `T`.
+2. **Delete** — delete one character from `T`.
+3. **Insert** — insert `a`–`z` at each position.
+
+If **exactly one** distinct word in the pool ∈ `known`, use it. Otherwise → **no autocorrect** (squiggle + right-click suggestions unchanged).
+
+The steps used to be tried in turn, each needing its own unique answer. That let an earlier step answer before a later one could show the typo was ambiguous: `bcause` → `cause` (delete) without ever seeing `because` (insert). See BUG-021.
 
 No frequency tiebreaker in v1.
 
@@ -344,6 +347,7 @@ Clicking into an existing word and **only deleting** characters (no insertions) 
 | Date | Decision |
 | --- | --- |
 | 2026-08-31 | Transpose → delete → insert cascade with per-step uniqueness; no frequency fallback. |
+| 2026-10-05 | **Superseded:** the three steps are pooled and must have one answer between them (§3.1). Per-step uniqueness rewrote missing-letter typos into whatever an earlier step landed on (`bcause` → `cause`, BUG-021). Fewer typos are corrected (`teh`, `jsut` now only squiggle); far fewer are corrected wrongly. |
 | 2026-08-31 | Snippet expansion before autocorrect on Space/Tab; mutual isolation after. |
 | 2026-08-31 | iOS revert on immediate backspace; suppression per typo string per field until unfocus. |
 | 2026-08-31 | Global toggle default on; visual flash; search fields excluded; inline code excluded. |

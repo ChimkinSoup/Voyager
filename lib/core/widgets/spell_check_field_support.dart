@@ -195,7 +195,7 @@ SuggestionSpan? misspellingAtCursor(
   // The same shape a dictionary entry has to have: a token the flag can be
   // stored and looked up under (`FLAGGED_WORDS.md` §11, hyphens and digits).
   if (!isCustomWordToken(normalizeCustomWord(word))) return null;
-  if (!service.knownWords.contains(word.toLowerCase())) return null;
+  if (!service.knownWords.contains(normalizeCustomWord(word))) return null;
   return (range: range, word: word);
 }
 

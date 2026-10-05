@@ -82,25 +82,31 @@ bool isInPendingCloser(String text, int tokenEnd, int offset) {
 
 /// The correction for [token], or null when there isn't an unambiguous one.
 ///
-/// The cascade is transpose → delete → insert, and each step must find
+/// Transpositions, deletions and insertions are pooled, and the pool must hold
 /// **exactly one** known word or the whole thing gives up (AUTOCORRECT.md
-/// §3.1). Substituting one letter for another is not in the model at all:
+/// §3.1). Pooled rather than tried in turn: a cascade that stopped at the
+/// first step with an answer rewrote `bcause` to `cause`, because the deletion
+/// step answered before the insertion that finds `because` was ever tried.
+/// Substituting one letter for another is not in the model at all:
 /// `from` → `form`, `then` → `than` and `cat` → `car` are all a single
 /// replacement apart, and each is a word the user might well have meant.
 ///
 /// Uniqueness is counted over distinct *results*, not distinct edits — two
 /// deletions of the same doubled letter produce one candidate word, not two.
 String? autocorrectFor(String token, Set<String> known) {
-  final lower = token.toLowerCase();
+  final lower = normalizeCustomWord(token);
   if (lower.length < kMinAutocorrectLength) return null;
   // A word the dictionary already knows is not a typo, whatever else it is
   // one edit away from (AUTOCORRECT.md §4.5) — including a possessive, which
   // the bundled list has no entries for and which `dogs` sits one deletion
   // away from.
   if (isKnownWord(lower, known)) return null;
-  return _onlyKnown(_transpositions(lower), known) ??
-      _onlyKnown(_deletions(lower), known) ??
-      _onlyKnown(_insertions(lower), known);
+  return _onlyKnown(
+    _transpositions(
+      lower,
+    ).followedBy(_deletions(lower)).followedBy(_insertions(lower)),
+    known,
+  );
 }
 
 /// First-letter case preservation, and nothing else (AUTOCORRECT.md §2).
@@ -188,7 +194,7 @@ TextRange? autocorrectTokenAt(String text, int offset) {
     final unit = text.codeUnitAt(start - 1);
     if (_isLetter(unit)) {
       start--;
-    } else if (unit == 0x27 &&
+    } else if (_isApostrophe(unit) &&
         start >= 2 &&
         _isLetter(text.codeUnitAt(start - 2))) {
       start -= 2;
@@ -201,7 +207,7 @@ TextRange? autocorrectTokenAt(String text, int offset) {
     final unit = text.codeUnitAt(end);
     if (_isLetter(unit)) {
       end++;
-    } else if (unit == 0x27 &&
+    } else if (_isApostrophe(unit) &&
         end + 1 < text.length &&
         _isLetter(text.codeUnitAt(end + 1))) {
       end += 2;
@@ -257,9 +263,13 @@ bool isInAlphanumericRun(String text, int start, int end) {
 
 /// A character `wordRunPattern` can carry: a letter, a digit, or the
 /// apostrophe that holds `XM6's` together as one run.
-bool _isRunChar(int unit) => _isLetter(unit) || _isDigit(unit) || unit == 0x27;
+bool _isRunChar(int unit) =>
+    _isLetter(unit) || _isDigit(unit) || _isApostrophe(unit);
 
 bool _isDigit(int unit) => unit >= 0x30 && unit <= 0x39;
+
+/// Straight or curly, as `wordTokenPattern` takes either.
+bool _isApostrophe(int unit) => unit == 0x27 || unit == 0x2019;
 
 final RegExp _unicodeLetter = RegExp(r'[\p{L}\p{M}]', unicode: true);
 

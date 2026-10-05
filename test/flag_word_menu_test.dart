@@ -225,6 +225,25 @@ void main() {
       // Allow wins does not mean a redundant custom row for a bundled word.
       expect(await repo.getCustomWords(), isEmpty);
     });
+
+    testWidgets('a flagged word typed with a curly apostrophe is still the '
+        'flagged word', (tester) async {
+      // The flag is stored as `didn't`; the text has `didn’t`. The squiggle
+      // already folds the apostrophe, so the menu has to as well, or Stop
+      // flagging turns into Add to dictionary and the flag never clears.
+      await repo.flagWord("didn't");
+      await pumpField(
+        tester,
+        text: 'didn${String.fromCharCode(0x2019)}t mind',
+        dictionary: {"didn't", 'mind'},
+      );
+      await rightClick(tester);
+      await tester.tap(find.text('Stop flagging'));
+      await tester.pumpAndSettle();
+
+      expect(await repo.getFlaggedWords(), isEmpty);
+      expect(await repo.getCustomWords(), isEmpty);
+    });
   });
 
   group('the popover', () {
