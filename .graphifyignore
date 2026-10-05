@@ -1,0 +1,12 @@
+# Ignore raw data and mocks
+*.json
+*.geojson
+*.csv
+*.log
+
+# Ignore build artifacts and caches
+dist/
+build/
+.cache/
+.dart_tool/
+node_modules/
