@@ -451,10 +451,9 @@ packages:
   firebase_storage:
     dependency: "direct main"
     description:
-      name: firebase_storage
-      sha256: f732bbcd82d21cfbe49b6fe5f4c50334f5f3660a151f004f58da388f8e39e6d3
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/firebase_storage-13.4.3"
+      relative: true
+    source: path
     version: "13.4.3"
   firebase_storage_platform_interface:
     dependency: transitive

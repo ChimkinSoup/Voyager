@@ -232,7 +232,43 @@ List<JournalEntry> sortJournalEntriesNewestFirst(
   return sorted;
 }
 
-final _firstSentenceExp = RegExp(r'^(.+?[.!?])(?:\s|$)');
+final _sentenceEndExp = RegExp(r'[.!?](?=\s|$)');
+final _whitespaceExp = RegExp(r'\s');
+final _digitsExp = RegExp(r'^\d+$');
+final _initialExp = RegExp(r'^[A-Z]$');
+final _dottedExp = RegExp(r'^\p{L}(\.\p{L})+$', unicode: true);
+const _titleAbbreviations = {
+  'mr',
+  'mrs',
+  'ms',
+  'dr',
+  'prof',
+  'st',
+  'jr',
+  'sr',
+  'vs',
+};
+
+/// Where the first sentence of [text]'s first line ends, or null when that
+/// line has no sentence end. A period doesn't end one after a list number
+/// that opens the line (`1. apple`), a capital initial (`J. R. R.`), a dotted
+/// abbreviation of single letters (`3 p.m.`, `e.g.`) or a title
+/// (`Dr. Smith`). So `응.` and `airbnb.com.` still end one.
+int? _firstSentenceEnd(String text) {
+  final lineEnd = text.indexOf('\n');
+  final line = lineEnd < 0 ? text : text.substring(0, lineEnd);
+  for (final match in _sentenceEndExp.allMatches(line)) {
+    if (match.start == 0) continue;
+    if (line[match.start] != '.') return match.end;
+    final wordStart = line.lastIndexOf(_whitespaceExp, match.start) + 1;
+    final word = line.substring(wordStart, match.start);
+    if (wordStart == 0 && _digitsExp.hasMatch(word)) continue;
+    if (_initialExp.hasMatch(word) || _dottedExp.hasMatch(word)) continue;
+    if (_titleAbbreviations.contains(word.toLowerCase())) continue;
+    return match.end;
+  }
+  return null;
+}
 
 String firstSentencePreview(String body) {
   final trimmed = body.trim();
@@ -247,10 +283,7 @@ String firstSentencePreview(String body) {
   // [proseSlice] can resolve emphasis against the whole body and take out the
   // delimiter a cut through `**bold**` would otherwise show the reader raw
   // (EMPHASIS_FORMATTING.md §5.3).
-  final match = _firstSentenceExp.firstMatch(trimmed);
-  // Group 1's length is its end offset: the pattern is anchored at `^`, so it
-  // starts at 0. [Match] exposes no per-group offsets.
-  var end = match != null ? match.group(1)!.length : trimmed.indexOf('\n');
+  var end = _firstSentenceEnd(trimmed) ?? trimmed.indexOf('\n');
   if (end < 0) end = trimmed.length;
   end = trimmed.substring(0, end).trimRight().length;
   if (end <= 120) return proseSlice(trimmed, 0, end);

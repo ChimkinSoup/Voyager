@@ -418,10 +418,7 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
                         padding: overlayPadding,
                         child: _TagHighlightLayer(
                           text: text,
-                          span: (spanBuilder ?? flatProseSpan)(
-                            text,
-                            baseStyle,
-                          ),
+                          span: (spanBuilder ?? flatProseSpan)(text, baseStyle),
                           style: baseStyle,
                           strutStyle: strutStyle,
                           textDirection: textDirection,
@@ -538,9 +535,10 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     // The one clip for the field and every layer over it, at the border: the
     // layers don't clip themselves, and a multi-line field's own text and
     // caret paint past its viewport. Everything a multi-line field paints out
-    // there is text scrolled out of the viewport, so it fades into the fill
-    // instead of being cut off square under the label.
-    final clipped = spellcheckOn
+    // there is text scrolled out of the viewport, so under a label it fades
+    // into the fill; with no label it is cut off square at the border, which
+    // reads flush (BUG-029).
+    final clipped = spellcheckOn && hasLabel
         ? FieldEdgeFade(padding: overlayPadding, child: field)
         : ClipRect(child: field);
     // Always wrap while Vim is on, not only in Visual — see

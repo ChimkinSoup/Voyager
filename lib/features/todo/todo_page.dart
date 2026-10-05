@@ -1068,7 +1068,8 @@ class _TodoPageState extends ConsumerState<TodoPage>
     final notifier = ref.read(todoCaptureDraftProvider.notifier);
     final draft = notifier.state;
     final title = draft.title;
-    if (title.isNotEmpty && _taskController.text.isEmpty) {
+    final carried = title.isNotEmpty && _taskController.text.isEmpty;
+    if (carried) {
       _taskController.value = TextEditingValue(
         text: title,
         selection: TextSelection.collapsed(offset: title.length),
@@ -1090,7 +1091,24 @@ class _TodoPageState extends ConsumerState<TodoPage>
       }
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _taskFocusNode.requestFocus();
+      if (!mounted) return;
+      // A one-line field selects all of its text when it gains focus on
+      // desktop, and the first keystroke would replace the carried draft
+      // (BUG-033). Put the caret back at its end once focus lands; this
+      // listener is added after the field's own, so it runs after that
+      // select-all.
+      if (carried && !_taskFocusNode.hasFocus) {
+        void caretToEnd() {
+          _taskFocusNode.removeListener(caretToEnd);
+          if (!_taskFocusNode.hasFocus) return;
+          _taskController.selection = TextSelection.collapsed(
+            offset: _taskController.text.length,
+          );
+        }
+
+        _taskFocusNode.addListener(caretToEnd);
+      }
+      _taskFocusNode.requestFocus();
     });
   }
 

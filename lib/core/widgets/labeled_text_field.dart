@@ -516,9 +516,10 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
       // The one clip for the field and every layer over it, at the border:
       // the layers don't clip themselves, and a multi-line field's own text
       // and caret paint past its viewport. Everything a multi-line field
-      // paints out there is text scrolled out of the viewport, so it fades
-      // into the fill instead of being cut off square under the label.
-      field = spellcheckOn
+      // paints out there is text scrolled out of the viewport, so under a
+      // label it fades into the fill; with no label it is cut off square at
+      // the border, which reads flush (BUG-029).
+      field = spellcheckOn && showLabel
           ? FieldEdgeFade(padding: overlayPadding, child: field)
           : ClipRect(child: field);
     }

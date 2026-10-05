@@ -29,6 +29,8 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
+import 'package:voyager/features/hotkeys/hotkey_service.dart';
+import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:voyager/features/notifications/notification_history_dialog.dart';
 import 'package:voyager/features/rankings/rankings_offline_maps_dialogs.dart';
 import 'package:voyager/features/settings/account_section.dart';
@@ -114,6 +116,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       if (next) _tabs.animateTo(_pagesTab);
     });
     final settingsAsync = ref.watch(settingsProvider.settled);
+    final takenHotkeys = ref.watch(unavailableHotkeysProvider);
 
     return settingsAsync.when(
       data: (settings) => Column(
@@ -336,25 +339,39 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                       if (isWindows) ...[
                         ListTile(
                           title: const Text('Journal hotkey'),
-                          subtitle: Text(
+                          subtitle: _HotkeySubtitle(
                             '${settings.journalHotkey}\n'
                             'Avoid Ctrl+Shift combos that browsers use (e.g. Chrome DevTools).',
+                            taken: takenHotkeys.contains(
+                              QuickCaptureKind.journal,
+                            ),
                           ),
                         ),
                         ListTile(
                           title: const Text('To-do hotkey'),
-                          subtitle: Text(
+                          subtitle: _HotkeySubtitle(
                             '${settings.todoHotkey}\n'
                             'Default is $defaultTodoHotkey so Chrome Ctrl+Shift+T still works.',
+                            taken: takenHotkeys.contains(QuickCaptureKind.todo),
                           ),
                         ),
                         ListTile(
                           title: const Text('Finance hotkey'),
-                          subtitle: Text(settings.financeHotkey),
+                          subtitle: _HotkeySubtitle(
+                            settings.financeHotkey,
+                            taken: takenHotkeys.contains(
+                              QuickCaptureKind.finance,
+                            ),
+                          ),
                         ),
                         ListTile(
                           title: const Text('Reminder hotkey'),
-                          subtitle: Text(settings.reminderHotkey),
+                          subtitle: _HotkeySubtitle(
+                            settings.reminderHotkey,
+                            taken: takenHotkeys.contains(
+                              QuickCaptureKind.reminder,
+                            ),
+                          ),
                         ),
                         const _LaunchAtLoginTile(),
                       ],
@@ -2002,6 +2019,34 @@ class _LeetCodeUsernameDialogState extends State<_LeetCodeUsernameDialog> {
         ),
         GlassButton(onPressed: _submit, label: 'Save', dense: true),
       ],
+    );
+  }
+}
+
+/// A global hotkey's combo, with a notice when another app holds it, so it
+/// does nothing in Voyager until that app lets go.
+class _HotkeySubtitle extends StatelessWidget {
+  const _HotkeySubtitle(this.text, {required this.taken});
+
+  final String text;
+  final bool taken;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!taken) return Text(text);
+    return Text.rich(
+      TextSpan(
+        text: '$text\n',
+        children: [
+          TextSpan(
+            text:
+                'Another app is using this shortcut, so it does nothing in '
+                'Voyager. Close that app and come back to Voyager to pick it '
+                'up.',
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ],
+      ),
     );
   }
 }

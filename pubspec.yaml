@@ -86,6 +86,14 @@ dev_dependencies:
 # upgrading firebase_auth past 6.5.3, and drop this override once upstream
 # fixes it.
 #
+# firebase_storage's Windows plugin has the same bug for its task events:
+# every upload's progress and completion events reached the engine from the
+# Firebase Storage SDK's worker threads, which logged a non-platform-thread
+# channel error per upload (BUG-032; 13.6.0 still does it). The local copy
+# sends them through the same platform-thread dispatcher, in
+# windows/firebase_storage_plugin.cpp (marked VOYAGER PATCH). Re-apply it if
+# upgrading past 13.4.3, and drop this override once upstream fixes it.
+#
 # vector_tile_renderer draws a street name whose exact text box collides
 # with another label anyway, at its estimated position and without reserving
 # the space, so street names overlap on the rankings map; it reserves a
@@ -154,6 +162,8 @@ dev_dependencies:
 dependency_overrides:
   firebase_auth:
     path: third_party/firebase_auth-6.5.3
+  firebase_storage:
+    path: third_party/firebase_storage-13.4.3
   flutter_map:
     path: third_party/flutter_map-8.3.2
   flutter_map_marker_cluster:

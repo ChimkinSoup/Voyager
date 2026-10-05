@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:voyager/app/account_admission.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/app/voyager_app.dart';
@@ -115,7 +116,7 @@ class VoyagerBootstrap extends ConsumerStatefulWidget {
 }
 
 class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, WindowListener {
   late final HotkeyService _hotkeys;
   Timer? _postAuthWarmupTimer;
   Timer? _weatherRefreshTimer;
@@ -143,6 +144,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     super.initState();
     _hotkeys = createHotkeyService();
     WidgetsBinding.instance.addObserver(this);
+    if (desktopWindowChromeActive) windowManager.addListener(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
   }
 
@@ -261,13 +263,14 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     DevFlags.disableCache = settings.devDisableCache;
     try {
       final floaters = ref.read(floaterControllerProvider);
-      await _hotkeys.register(
+      final taken = await _hotkeys.register(
         journalHotkey: settings.journalHotkey,
         todoHotkey: settings.todoHotkey,
         financeHotkey: settings.financeHotkey,
         reminderHotkey: settings.reminderHotkey,
         onHotkey: floaters.onHotkey,
       );
+      if (mounted) ref.read(unavailableHotkeysProvider.notifier).state = taken;
     } catch (error, stackTrace) {
       FlutterError.reportError(
         FlutterErrorDetails(
@@ -529,9 +532,25 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     }
   }
 
+  /// A hotkey another app held is tried again each time the window comes
+  /// back, so closing that app and returning to Voyager frees it (BUG-034).
+  /// The window's own focus, not [didChangeAppLifecycleState]: on Windows
+  /// that never reports `resumed` here.
+  @override
+  void onWindowFocus() => unawaited(_retryTakenHotkeys());
+
+  Future<void> _retryTakenHotkeys() async {
+    if (!mounted) return;
+    final unavailable = ref.read(unavailableHotkeysProvider.notifier);
+    if (unavailable.state.isEmpty) return;
+    final taken = await _hotkeys.retryTaken();
+    if (mounted) unavailable.state = taken;
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    if (desktopWindowChromeActive) windowManager.removeListener(this);
     _postAuthWarmupTimer?.cancel();
     _weatherRefreshTimer?.cancel();
     _hotkeys.dispose();

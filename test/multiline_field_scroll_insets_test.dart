@@ -331,6 +331,43 @@ void main() {
     expect(_anyTinted(pixels, above, _selection), isFalse);
   });
 
+  testWidgets(
+    'with no label, scrolled text reaches the top border unfaded (BUG-029)',
+    (tester) async {
+      final controller = TextEditingController(text: _longText);
+      final focusNode = FocusNode();
+      addTearDown(controller.dispose);
+      addTearDown(focusNode.dispose);
+      final boundaryKey = GlobalKey();
+
+      await tester.pumpWidget(
+        _harness(
+          boundaryKey: boundaryKey,
+          field: TagHighlightedTextField(
+            controller: controller,
+            focusNode: focusNode,
+            expands: true,
+            style: const TextStyle(fontSize: 16, height: 1.5, color: _text),
+          ),
+        ),
+      );
+      // Half a line: the first line straddles the 12px top padding.
+      _position(tester).jumpTo(12);
+      await tester.pump();
+
+      final pixels = await _pixels(tester, boundaryKey);
+      // The band nearest the border, where a fade left only a faint ghost of
+      // the line. Exact colour: the glyphs arrive at full strength.
+      final strip = Rect.fromLTRB(
+        _field.left + 16,
+        _field.top + 3,
+        _field.left + 120,
+        _field.top + 7,
+      );
+      expect(_any(pixels, strip, _text), isTrue);
+    },
+  );
+
   for (final vim in [false, true]) {
     testWidgets(
       'the ${vim ? 'Vim block' : 'insert'} caret on the last line stays '
