@@ -15,14 +15,6 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
-class _StubAuthRepository implements AuthRepository {
-  @override
-  String? get currentUserId => 'user-1';
-
-  @override
-  noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
 FirebaseException firestoreError(String code) =>
     FirebaseException(plugin: 'cloud_firestore', code: code);
 
@@ -35,7 +27,7 @@ void main() {
     worker = OutboxSyncWorker(
       db,
       FakeFirebaseFirestore(),
-      _StubAuthRepository(),
+      () => 'user-1',
     );
   });
 
@@ -172,7 +164,7 @@ void main() {
     final worker = OutboxSyncWorker(
       db,
       firestore,
-      _StubAuthRepository(),
+      () => 'user-1',
       yieldDelay: Duration.zero,
     );
 
@@ -213,7 +205,7 @@ void main() {
     final worker = OutboxSyncWorker(
       db,
       firestore,
-      _StubAuthRepository(),
+      () => 'user-1',
       yieldDelay: Duration.zero,
     );
     final since = DateTime.now().toUtc().subtract(const Duration(minutes: 1));
@@ -265,7 +257,7 @@ void main() {
     final worker = OutboxSyncWorker(
       db,
       firestore,
-      _StubAuthRepository(),
+      () => 'user-1',
       yieldDelay: Duration.zero,
     );
     await worker.enqueue(
@@ -287,7 +279,7 @@ void main() {
     final worker = OutboxSyncWorker(
       db,
       firestore,
-      _StubAuthRepository(),
+      () => 'user-1',
       yieldDelay: Duration.zero,
     );
 
@@ -328,7 +320,7 @@ void main() {
     final worker = OutboxSyncWorker(
       db,
       firestore,
-      _StubAuthRepository(),
+      () => 'user-1',
       yieldDelay: Duration.zero,
     );
     const count = firestoreWriteChunkSize + 5;
@@ -387,7 +379,7 @@ void main() {
       final worker = OutboxSyncWorker(
         db,
         firestore,
-        _StubAuthRepository(),
+        () => 'user-1',
         yieldDelay: Duration.zero,
         writeGate: gate,
       );
@@ -450,7 +442,7 @@ void main() {
     OutboxSyncWorker(
       db,
       firestore,
-      _StubAuthRepository(),
+      () => 'user-1',
       yieldDelay: Duration.zero,
       writeGate: gate,
     );
@@ -471,7 +463,7 @@ void main() {
     await OutboxSyncWorker(
       db,
       firestore,
-      _StubAuthRepository(),
+      () => 'user-1',
       writeGate: gate,
     ).enqueue(
       collection: FirestoreCollections.transactions,

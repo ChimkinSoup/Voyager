@@ -11,14 +11,6 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
-class _StubAuthRepository implements AuthRepository {
-  @override
-  String? get currentUserId => 'user-1';
-
-  @override
-  noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
 void main() {
   late AppDatabase db;
 
@@ -30,7 +22,7 @@ void main() {
     final worker = OutboxSyncWorker(
       db,
       firestore,
-      _StubAuthRepository(),
+      () => 'user-1',
       yieldDelay: Duration.zero,
     );
     final at = DateTime.utc(2026, 9, 1);

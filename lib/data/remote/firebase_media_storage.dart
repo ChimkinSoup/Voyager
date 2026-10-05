@@ -12,15 +12,26 @@ import 'package:voyager/domain/services/media_ingest.dart';
 /// here, so the app and its Storage live in the same project by
 /// construction.
 class FirebaseMediaStorage implements MediaStorage {
-  FirebaseMediaStorage({FirebaseStorage? storage, FirebaseAuth? auth})
-    : _storage = storage ?? FirebaseStorage.instance,
-      _auth = auth ?? FirebaseAuth.instance;
+  /// [currentUid] names the account whose prefix this reads and writes; the
+  /// app passes the admitted one (`AuthNotifier.userId`). Without it, Firebase
+  /// Auth's current user.
+  FirebaseMediaStorage({
+    FirebaseStorage? storage,
+    FirebaseAuth? auth,
+    String? Function()? currentUid,
+  }) : _storage = storage ?? FirebaseStorage.instance,
+       _auth = auth ?? FirebaseAuth.instance,
+       _currentUid = currentUid;
 
   final FirebaseStorage _storage;
   final FirebaseAuth _auth;
+  final String? Function()? _currentUid;
 
   @override
-  String? get currentUid => _auth.currentUser?.uid;
+  String? get currentUid {
+    final currentUid = _currentUid;
+    return currentUid == null ? _auth.currentUser?.uid : currentUid();
+  }
 
   @override
   Future<void> upload(String path, Uint8List bytes, String mimeType) async {

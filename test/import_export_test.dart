@@ -1815,7 +1815,7 @@ void main() {
       OutboxSyncWorker.initialize(
         db,
         mockFirestore,
-        fakeAuth,
+        () => fakeAuth.currentUserId,
         yieldDelay: Duration.zero,
       );
       await OutboxSyncWorker.instance.startDraining();
@@ -1875,7 +1875,7 @@ void main() {
         OutboxSyncWorker.initialize(
           db,
           fakeFirestore,
-          fakeAuth,
+          () => fakeAuth.currentUserId,
           yieldDelay: Duration.zero,
         );
         await OutboxSyncWorker.instance.startDraining();
@@ -1996,7 +1996,7 @@ void main() {
         OutboxSyncWorker.initialize(
           db,
           fakeFirestore,
-          fakeAuth,
+          () => fakeAuth.currentUserId,
           yieldDelay: Duration.zero,
         );
         await OutboxSyncWorker.instance.startDraining();
@@ -2053,7 +2053,7 @@ void main() {
         OutboxSyncWorker.initialize(
           db,
           fakeFirestore,
-          fakeAuth,
+          () => fakeAuth.currentUserId,
           yieldDelay: Duration.zero,
         );
 

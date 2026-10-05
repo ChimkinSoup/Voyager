@@ -84,6 +84,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ],
     redirect: (context, state) async {
+      // An account restored at launch is not signed in until it is admitted:
+      // waiting here keeps the login page from flashing up meanwhile.
+      if (auth.isSettling) await auth.settled;
       final loggingIn = state.matchedLocation == '/login';
       if (!auth.isAuthenticated && !loggingIn) return '/login';
       if (auth.isAuthenticated && loggingIn) {

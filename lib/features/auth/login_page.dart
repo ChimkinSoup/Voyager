@@ -97,6 +97,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    // A signed-in account is checked against this device's local data before
+    // it is let in, which can take a while (a wipe, a drain to finish) — and
+    // must not be started over by a second sign-in meanwhile.
+    return ValueListenableBuilder<bool>(
+      valueListenable: ref.watch(authNotifierProvider).settlingListenable,
+      builder: (context, settling, _) =>
+          _buildForm(context, busy: _loading || settling),
+    );
+  }
+
+  Widget _buildForm(BuildContext context, {required bool busy}) {
     final showGoogleSignIn = !isWindows || isGoogleOAuthReadyForDesktop;
 
     return Scaffold(
@@ -117,7 +128,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   LabeledTextField(
                     label: 'Email',
                     controller: _emailController,
-                    enabled: !_loading,
+                    enabled: !busy,
                     onSubmitted: (_) => _submit(),
                   ),
                   const SizedBox(height: 12),
@@ -125,7 +136,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     label: 'Password',
                     controller: _passwordController,
                     obscureText: true,
-                    enabled: !_loading,
+                    enabled: !busy,
                     onSubmitted: (_) => _submit(),
                   ),
                   if (!_isSignUp) ...[
@@ -133,7 +144,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: GlassButton(
-                        onPressed: _loading ? null : _resetPassword,
+                        onPressed: busy ? null : _resetPassword,
                         label: 'Forgot password?',
                       ),
                     ),
@@ -159,8 +170,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ],
                   const SizedBox(height: 24),
                   GlassButton(
-                    onPressed: _loading ? null : _submit,
-                    child: _loading
+                    onPressed: busy ? null : _submit,
+                    child: busy
                         ? const SizedBox(
                             width: 20,
                             height: 20,
@@ -171,13 +182,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   const SizedBox(height: 8),
                   if (showGoogleSignIn) ...[
                     GlassButton(
-                      onPressed: _loading ? null : _googleSignIn,
+                      onPressed: busy ? null : _googleSignIn,
                       label: 'Continue with Google',
                     ),
                     const SizedBox(height: 8),
                   ],
                   GlassButton(
-                    onPressed: _loading
+                    onPressed: busy
                         ? null
                         : () => setState(() {
                             _isSignUp = !_isSignUp;

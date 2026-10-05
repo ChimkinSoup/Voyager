@@ -128,6 +128,15 @@ class AutoBackupService extends ChangeNotifier {
   /// Null until the first read of the directory completes.
   AutoBackupStatus? get status => _status;
 
+  /// Completes once no backup or snapshot is being written — before the
+  /// local data is wiped, so an export already under way finishes with the
+  /// data it started on.
+  Future<void> get idle async {
+    while (_running != null) {
+      await _running;
+    }
+  }
+
   /// Clears crash leftovers, renames backups still carrying the old UTC
   /// names, and schedules the checks: once shortly after startup, then hourly
   /// — which also covers a desktop left open past midnight, sleep, and

@@ -12,7 +12,6 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/firestore_sync_repository.dart'
     show FirestoreSyncRepository, firestoreWriteChunkSize;
 import 'package:voyager/data/repositories/drift_repositories.dart';
-import 'package:voyager/domain/repositories/repositories.dart';
 
 /// Re-uploads one document through the app's ordinary save path — see
 /// [OutboxSyncWorker.pushDocument].
@@ -30,7 +29,7 @@ class OutboxSyncWorker {
   OutboxSyncWorker(
     this._db,
     this._firestore,
-    this._authRepo, {
+    this._userId, {
     this.yieldDelay = const Duration(seconds: 2),
     this.pushDocument,
     this.beforeDrain,
@@ -46,7 +45,13 @@ class OutboxSyncWorker {
 
   final AppDatabase _db;
   final FirebaseFirestore _firestore;
-  final AuthRepository _authRepo;
+
+  /// The account the queued rows upload to: the app passes the admitted one
+  /// (`AuthNotifier.userId`). The rows carry no account of their own, so
+  /// Firebase's current user would be wrong whenever the signed-in account is
+  /// not yet the owner of the local data — it would deliver the previous
+  /// account's queued edits into its cloud copy (BUG-005).
+  final String? Function() _userId;
   final Duration yieldDelay;
 
   /// Bounds the writes this worker hands Firestore — see [FirestoreWriteGate].
@@ -108,7 +113,7 @@ class OutboxSyncWorker {
     if (!reopened) return;
     // Nothing to drain for a user who isn't there, and `startDraining` would
     // only break on the same check.
-    if (_authRepo.currentUserId == null) return;
+    if (_userId() == null) return;
     // Idempotent — a drain already running simply keeps going.
     unawaited(startDraining());
   }
@@ -131,7 +136,7 @@ class OutboxSyncWorker {
   static void initialize(
     AppDatabase db,
     FirebaseFirestore firestore,
-    AuthRepository authRepo, {
+    String? Function() userId, {
     Duration yieldDelay = const Duration(seconds: 2),
     OutboxDocumentPusher? pushDocument,
     Future<void> Function()? beforeDrain,
@@ -140,7 +145,7 @@ class OutboxSyncWorker {
     _instance = OutboxSyncWorker(
       db,
       firestore,
-      authRepo,
+      userId,
       yieldDelay: yieldDelay,
       pushDocument: pushDocument,
       beforeDrain: beforeDrain,
@@ -170,12 +175,18 @@ class OutboxSyncWorker {
     return true;
   }
 
+  /// Completes once no drain is running — before the local data is wiped,
+  /// so a round already under way can't re-queue a row into the empty store.
+  Future<void> get idle => _drain?.future ?? Future.value();
+  Completer<void>? _drain;
+
   Future<void> startDraining() async {
     if (_isDraining) return;
     _isDraining = true;
+    final drain = _drain = Completer<void>();
 
     try {
-      if (_authRepo.currentUserId != null) {
+      if (_userId() != null) {
         try {
           await beforeDrain?.call();
         } catch (error, stackTrace) {
@@ -189,7 +200,7 @@ class OutboxSyncWorker {
         }
       }
       while (true) {
-        final userId = _authRepo.currentUserId;
+        final userId = _userId();
         if (userId == null) {
           // User not logged in, stop draining.
           break;
@@ -387,6 +398,7 @@ class OutboxSyncWorker {
       print("Outbox drain paused due to error: $e");
     } finally {
       _isDraining = false;
+      drain.complete();
     }
   }
 

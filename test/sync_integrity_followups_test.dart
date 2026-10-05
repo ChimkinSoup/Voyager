@@ -25,14 +25,6 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
-class _StubAuthRepository implements AuthRepository {
-  @override
-  String? get currentUserId => 'user-1';
-
-  @override
-  noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
 /// Holds the first batch write until released.
 class _HoldFirstBatchSyncRepository extends InMemorySyncRepository {
   final release = Completer<void>();
@@ -148,7 +140,7 @@ void main() {
         OutboxSyncWorker.initialize(
           db,
           FakeFirebaseFirestore(),
-          _StubAuthRepository(),
+          () => 'user-1',
           yieldDelay: Duration.zero,
         );
         final service = _buildService(
@@ -209,7 +201,7 @@ void main() {
       worker = OutboxSyncWorker(
         db,
         FakeFirebaseFirestore(),
-        _StubAuthRepository(),
+        () => 'user-1',
         yieldDelay: Duration.zero,
         pushDocument:
             (collection, documentId, {forceCrdtOverwrite = false}) async {
@@ -254,7 +246,7 @@ void main() {
       await OutboxSyncWorker(
         db,
         FakeFirebaseFirestore(),
-        _StubAuthRepository(),
+        () => 'user-1',
       ).enqueue(
         collection: FirestoreCollections.journalEntries,
         documentId: 'owed',

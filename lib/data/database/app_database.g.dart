@@ -10143,6 +10143,17 @@ class $SettingsTableTable extends SettingsTable
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _localOwnerUidMeta = const VerificationMeta(
+    'localOwnerUid',
+  );
+  @override
+  late final GeneratedColumn<String> localOwnerUid = GeneratedColumn<String>(
+    'local_owner_uid',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -10296,6 +10307,7 @@ class $SettingsTableTable extends SettingsTable
     updatedAt,
     fieldUpdatedAtJson,
     syncBackfillVersion,
+    localOwnerUid,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -11629,6 +11641,15 @@ class $SettingsTableTable extends SettingsTable
         ),
       );
     }
+    if (data.containsKey('local_owner_uid')) {
+      context.handle(
+        _localOwnerUidMeta,
+        localOwnerUid.isAcceptableOrUnknown(
+          data['local_owner_uid']!,
+          _localOwnerUidMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -12242,6 +12263,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.int,
         data['${effectivePrefix}sync_backfill_version'],
       )!,
+      localOwnerUid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_owner_uid'],
+      ),
     );
   }
 
@@ -12511,6 +12536,11 @@ class SettingsTableData extends DataClass
   /// run — see `FirestoreCollections.syncBackfillVersion`. Device-local, so it
   /// stays out of [settingsSyncPayload].
   final int syncBackfillVersion;
+
+  /// The account whose data this device's local store holds — see
+  /// `LocalAccountStore`. Device-local, so it stays out of
+  /// [settingsSyncPayload]. Null on a store no account has claimed yet.
+  final String? localOwnerUid;
   const SettingsTableData({
     required this.id,
     required this.accentColor,
@@ -12663,6 +12693,7 @@ class SettingsTableData extends DataClass
     this.updatedAt,
     this.fieldUpdatedAtJson,
     required this.syncBackfillVersion,
+    this.localOwnerUid,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -13018,6 +13049,9 @@ class SettingsTableData extends DataClass
       map['field_updated_at_json'] = Variable<String>(fieldUpdatedAtJson);
     }
     map['sync_backfill_version'] = Variable<int>(syncBackfillVersion);
+    if (!nullToAbsent || localOwnerUid != null) {
+      map['local_owner_uid'] = Variable<String>(localOwnerUid);
+    }
     return map;
   }
 
@@ -13275,6 +13309,9 @@ class SettingsTableData extends DataClass
           ? const Value.absent()
           : Value(fieldUpdatedAtJson),
       syncBackfillVersion: Value(syncBackfillVersion),
+      localOwnerUid: localOwnerUid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(localOwnerUid),
     );
   }
 
@@ -13631,6 +13668,7 @@ class SettingsTableData extends DataClass
       syncBackfillVersion: serializer.fromJson<int>(
         json['syncBackfillVersion'],
       ),
+      localOwnerUid: serializer.fromJson<String?>(json['localOwnerUid']),
     );
   }
   @override
@@ -13904,6 +13942,7 @@ class SettingsTableData extends DataClass
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'fieldUpdatedAtJson': serializer.toJson<String?>(fieldUpdatedAtJson),
       'syncBackfillVersion': serializer.toJson<int>(syncBackfillVersion),
+      'localOwnerUid': serializer.toJson<String?>(localOwnerUid),
     };
   }
 
@@ -14059,6 +14098,7 @@ class SettingsTableData extends DataClass
     Value<DateTime?> updatedAt = const Value.absent(),
     Value<String?> fieldUpdatedAtJson = const Value.absent(),
     int? syncBackfillVersion,
+    Value<String?> localOwnerUid = const Value.absent(),
   }) => SettingsTableData(
     id: id ?? this.id,
     accentColor: accentColor ?? this.accentColor,
@@ -14338,6 +14378,9 @@ class SettingsTableData extends DataClass
         ? fieldUpdatedAtJson.value
         : this.fieldUpdatedAtJson,
     syncBackfillVersion: syncBackfillVersion ?? this.syncBackfillVersion,
+    localOwnerUid: localOwnerUid.present
+        ? localOwnerUid.value
+        : this.localOwnerUid,
   );
   SettingsTableData copyWithCompanion(SettingsTableCompanion data) {
     return SettingsTableData(
@@ -14792,6 +14835,9 @@ class SettingsTableData extends DataClass
       syncBackfillVersion: data.syncBackfillVersion.present
           ? data.syncBackfillVersion.value
           : this.syncBackfillVersion,
+      localOwnerUid: data.localOwnerUid.present
+          ? data.localOwnerUid.value
+          : this.localOwnerUid,
     );
   }
 
@@ -14982,7 +15028,8 @@ class SettingsTableData extends DataClass
           ..write('showWorkoutStatistics: $showWorkoutStatistics, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('fieldUpdatedAtJson: $fieldUpdatedAtJson, ')
-          ..write('syncBackfillVersion: $syncBackfillVersion')
+          ..write('syncBackfillVersion: $syncBackfillVersion, ')
+          ..write('localOwnerUid: $localOwnerUid')
           ..write(')'))
         .toString();
   }
@@ -15140,6 +15187,7 @@ class SettingsTableData extends DataClass
     updatedAt,
     fieldUpdatedAtJson,
     syncBackfillVersion,
+    localOwnerUid,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -15321,7 +15369,8 @@ class SettingsTableData extends DataClass
           other.showWorkoutStatistics == this.showWorkoutStatistics &&
           other.updatedAt == this.updatedAt &&
           other.fieldUpdatedAtJson == this.fieldUpdatedAtJson &&
-          other.syncBackfillVersion == this.syncBackfillVersion);
+          other.syncBackfillVersion == this.syncBackfillVersion &&
+          other.localOwnerUid == this.localOwnerUid);
 }
 
 class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
@@ -15476,6 +15525,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<DateTime?> updatedAt;
   final Value<String?> fieldUpdatedAtJson;
   final Value<int> syncBackfillVersion;
+  final Value<String?> localOwnerUid;
   const SettingsTableCompanion({
     this.id = const Value.absent(),
     this.accentColor = const Value.absent(),
@@ -15628,6 +15678,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.updatedAt = const Value.absent(),
     this.fieldUpdatedAtJson = const Value.absent(),
     this.syncBackfillVersion = const Value.absent(),
+    this.localOwnerUid = const Value.absent(),
   });
   SettingsTableCompanion.insert({
     this.id = const Value.absent(),
@@ -15781,6 +15832,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.updatedAt = const Value.absent(),
     this.fieldUpdatedAtJson = const Value.absent(),
     this.syncBackfillVersion = const Value.absent(),
+    this.localOwnerUid = const Value.absent(),
   });
   static Insertable<SettingsTableData> custom({
     Expression<int>? id,
@@ -15934,6 +15986,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<DateTime>? updatedAt,
     Expression<String>? fieldUpdatedAtJson,
     Expression<int>? syncBackfillVersion,
+    Expression<String>? localOwnerUid,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -16193,6 +16246,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
         'field_updated_at_json': fieldUpdatedAtJson,
       if (syncBackfillVersion != null)
         'sync_backfill_version': syncBackfillVersion,
+      if (localOwnerUid != null) 'local_owner_uid': localOwnerUid,
     });
   }
 
@@ -16348,6 +16402,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<DateTime?>? updatedAt,
     Value<String?>? fieldUpdatedAtJson,
     Value<int>? syncBackfillVersion,
+    Value<String?>? localOwnerUid,
   }) {
     return SettingsTableCompanion(
       id: id ?? this.id,
@@ -16576,6 +16631,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       updatedAt: updatedAt ?? this.updatedAt,
       fieldUpdatedAtJson: fieldUpdatedAtJson ?? this.fieldUpdatedAtJson,
       syncBackfillVersion: syncBackfillVersion ?? this.syncBackfillVersion,
+      localOwnerUid: localOwnerUid ?? this.localOwnerUid,
     );
   }
 
@@ -17203,6 +17259,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     if (syncBackfillVersion.present) {
       map['sync_backfill_version'] = Variable<int>(syncBackfillVersion.value);
     }
+    if (localOwnerUid.present) {
+      map['local_owner_uid'] = Variable<String>(localOwnerUid.value);
+    }
     return map;
   }
 
@@ -17393,7 +17452,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('showWorkoutStatistics: $showWorkoutStatistics, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('fieldUpdatedAtJson: $fieldUpdatedAtJson, ')
-          ..write('syncBackfillVersion: $syncBackfillVersion')
+          ..write('syncBackfillVersion: $syncBackfillVersion, ')
+          ..write('localOwnerUid: $localOwnerUid')
           ..write(')'))
         .toString();
   }
@@ -54625,6 +54685,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<DateTime?> updatedAt,
       Value<String?> fieldUpdatedAtJson,
       Value<int> syncBackfillVersion,
+      Value<String?> localOwnerUid,
     });
 typedef $$SettingsTableTableUpdateCompanionBuilder =
     SettingsTableCompanion Function({
@@ -54779,6 +54840,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<DateTime?> updatedAt,
       Value<String?> fieldUpdatedAtJson,
       Value<int> syncBackfillVersion,
+      Value<String?> localOwnerUid,
     });
 
 class $$SettingsTableTableFilterComposer
@@ -55549,6 +55611,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<int> get syncBackfillVersion => $composableBuilder(
     column: $table.syncBackfillVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localOwnerUid => $composableBuilder(
+    column: $table.localOwnerUid,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -56331,6 +56398,11 @@ class $$SettingsTableTableOrderingComposer
     column: $table.syncBackfillVersion,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get localOwnerUid => $composableBuilder(
+    column: $table.localOwnerUid,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SettingsTableTableAnnotationComposer
@@ -57099,6 +57171,11 @@ class $$SettingsTableTableAnnotationComposer
     column: $table.syncBackfillVersion,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get localOwnerUid => $composableBuilder(
+    column: $table.localOwnerUid,
+    builder: (column) => column,
+  );
 }
 
 class $$SettingsTableTableTableManager
@@ -57312,6 +57389,7 @@ class $$SettingsTableTableTableManager
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<String?> fieldUpdatedAtJson = const Value.absent(),
                 Value<int> syncBackfillVersion = const Value.absent(),
+                Value<String?> localOwnerUid = const Value.absent(),
               }) => SettingsTableCompanion(
                 id: id,
                 accentColor: accentColor,
@@ -57470,6 +57548,7 @@ class $$SettingsTableTableTableManager
                 updatedAt: updatedAt,
                 fieldUpdatedAtJson: fieldUpdatedAtJson,
                 syncBackfillVersion: syncBackfillVersion,
+                localOwnerUid: localOwnerUid,
               ),
           createCompanionCallback:
               ({
@@ -57649,6 +57728,7 @@ class $$SettingsTableTableTableManager
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<String?> fieldUpdatedAtJson = const Value.absent(),
                 Value<int> syncBackfillVersion = const Value.absent(),
+                Value<String?> localOwnerUid = const Value.absent(),
               }) => SettingsTableCompanion.insert(
                 id: id,
                 accentColor: accentColor,
@@ -57807,6 +57887,7 @@ class $$SettingsTableTableTableManager
                 updatedAt: updatedAt,
                 fieldUpdatedAtJson: fieldUpdatedAtJson,
                 syncBackfillVersion: syncBackfillVersion,
+                localOwnerUid: localOwnerUid,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

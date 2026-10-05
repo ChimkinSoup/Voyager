@@ -36,6 +36,7 @@ import 'package:voyager/core/sync/connectivity_status.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_write_gate.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
+import 'package:voyager/core/sync/local_account_store.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/domain/services/character_op_session.dart';
 import 'package:voyager/core/sync/sync_activity.dart';
@@ -47,6 +48,7 @@ import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/data/database/app_database.dart';
+import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/widgets/geometric_texture.dart';
 import 'package:voyager/core/widgets/geometric_texture_settings.dart';
@@ -261,7 +263,10 @@ final mediaFileStoreProvider = Provider<MediaFileStore>((ref) {
 });
 
 final mediaStorageProvider = Provider<MediaStorage>((ref) {
-  return FirebaseMediaStorage();
+  // The admitted account, for the reason [syncRepositoryProvider] gives.
+  return FirebaseMediaStorage(
+    currentUid: () => ref.read(authNotifierProvider).userId,
+  );
 });
 
 /// The media module's front door — see [MediaService].
@@ -442,10 +447,9 @@ final autoBackupServiceProvider = ChangeNotifierProvider<AutoBackupService>((
 ) {
   return AutoBackupService(
     // App-private and never under Documents, which OneDrive may be syncing
-    // (§8.1).
-    directory: () async => Directory(
-      p.join((await getApplicationSupportDirectory()).path, 'backups'),
-    ),
+    // (§8.1). One folder per account, so each lists, restores and rotates
+    // only backups of its own data.
+    directory: () => ref.read(localAccountStoreProvider).backupsDirectory(),
     exporter: () => ref.read(dataExportServiceProvider),
     importer: () => ref.read(dataImportServiceProvider),
     freeBytes: (path) => ref.read(mediaFileStoreProvider).freeBytesAt(path),
@@ -481,9 +485,29 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return FirebaseAuthRepository(FirebaseAuth.instance);
 });
 
+/// Checks a signed-in account against the owner of this device's local data
+/// before it is let in — see `admitAccount`. Null admits at once: only the
+/// app overrides it, so a test reading [authNotifierProvider] never reaches
+/// the database through it, let alone wipes one.
+final accountAdmissionProvider = Provider<AccountAdmission?>((ref) => null);
+
 final authNotifierProvider = ChangeNotifierProvider<AuthNotifier>((ref) {
-  return AuthNotifier(ref.watch(authRepositoryProvider));
+  return AuthNotifier(
+    ref.watch(authRepositoryProvider),
+    admit: ref.watch(accountAdmissionProvider),
+  );
 });
+
+final localAccountStoreProvider = Provider<LocalAccountStore>((ref) {
+  return LocalAccountStore(
+    ref.watch(databaseProvider),
+    dataDirectory: appDataDirectory,
+    backupsRoot: _backupsRoot,
+  );
+});
+
+Future<Directory> _backupsRoot() async =>
+    Directory(p.join((await getApplicationSupportDirectory()).path, 'backups'));
 
 final deviceIdProvider = StateProvider<String>((ref) => _fallbackDeviceId);
 
@@ -528,11 +552,10 @@ final firestoreProvider = Provider<FirebaseFirestore>(
 );
 
 final syncRepositoryProvider = Provider<SyncRepository>((ref) {
-  // Watched for its rebuilds: [authRepositoryProvider] is one object for the
-  // life of the app, so watching only it froze a signed-out launch on the
-  // no-op repository even after signing in, and the pull fetched nothing.
-  ref.watch(authNotifierProvider.select((auth) => auth.isAuthenticated));
-  final uid = ref.watch(authRepositoryProvider).currentUserId;
+  // The admitted account, not Firebase's current user: until the admission
+  // has made the local data this account's, syncing it would pull into, and
+  // push from, another account's store.
+  final uid = ref.watch(authNotifierProvider.select((auth) => auth.userId));
   if (uid == null) return NoOpSyncRepository();
   final repository = FirestoreSyncRepository(
     ref.watch(firestoreProvider),

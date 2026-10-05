@@ -2,17 +2,17 @@
 
 ## Summary (Final Review, 2026-10-05)
 
-The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10-04, on builds `e3f10f5` → `1a0039b` (plus uncommitted lib changes; each entry names its build). This log has **224 entries** (BUG-001 … BUG-224), of which **1 is a duplicate** (BUG-043 → BUG-010), so **223 distinct defects**. The Final Review checked every Blocker and Major for exact duplicates and found only that one. Same-pattern bugs in different components were left separate, because each has its own code path and fix: the Esc-discards-typing trio BUG-084 / BUG-144 / BUG-186, and the session-keys-behind-an-overlay pair BUG-157 / BUG-194. BUG-004 is related to BUG-010 but survived its fix.
+The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10-04, on builds `e3f10f5` → `1a0039b` (plus uncommitted lib changes; each entry names its build). This log has **225 entries** (BUG-001 … BUG-225), of which **1 is a duplicate** (BUG-043 → BUG-010), so **224 distinct defects**. BUG-225 was found after the audit, while fixing BUG-005. The Final Review checked every Blocker and Major for exact duplicates and found only that one. Same-pattern bugs in different components were left separate, because each has its own code path and fix: the Esc-discards-typing trio BUG-084 / BUG-144 / BUG-186, and the session-keys-behind-an-overlay pair BUG-157 / BUG-194. BUG-004 is related to BUG-010 but survived its fix.
 
 ### Counts by severity
 
 | Severity | Logged | Fixed + verified in the app | Open |
 |---|--:|--:|--:|
 | Blocker | 7 | 2 (BUG-001, BUG-003) | 5 |
-| Major | 28 | 4 (BUG-002 (see caveat), BUG-004, BUG-010, BUG-043 (dup)) | 24 |
+| Major | 29 | 4 (BUG-002 (see caveat), BUG-004, BUG-010, BUG-043 (dup)) | 25 |
 | Minor | 142 | 2 (BUG-044, BUG-167) | 140 |
 | Cosmetic | 47 | 0 | 47 |
-| **Total** | **224** | **8** | **216** |
+| **Total** | **225** | **8** | **217** |
 
 "Fixed" means re-tested in the running app by a phase re-check or FV (TEST_PLAN.md "Fix verification"). "Open" means no fix was recorded, so each entry stands as it was last observed. Unit-test-only claims don't count as fixed.
 
@@ -56,7 +56,8 @@ The phase is the tag in each entry's title, i.e. where the bug was found. BUG-00
 | 25 Settings & data | · | 2 | 3 | 3 | 8 |
 | 26 Sync & offline | · | 2 | 4 | 1 | 7 |
 | FV | · | 1 | 2 | · | 3 |
-| **Total** | **7** | **28** | **142** | **47** | **224** |
+| BUG-005 fix | · | 1 | · | · | 1 |
+| **Total** | **7** | **29** | **142** | **47** | **225** |
 
 ### All Blockers
 
@@ -194,6 +195,13 @@ Entry format:
   - Merely signing in as B uploads nothing: a cold pull of B without edits came back empty.
   - Once B edits A's entry, the entry goes to B's cloud copy. After the cold pull, B has the entry (same id `bf4bf6fd…`, title "new entry title") but its body is only " EDITED-BY-003": A's original text is missing. Its journal (`__legacy__`) wasn't uploaded, so the entry is an orphan that the Journal page doesn't show.
 - Notes: this is a privacy leak between accounts on a shared PC, plus data corruption in the target account (the operation log seems to hold only B's edit, not A's base text; suspected, not verified). No account-switch handling was found in `lib/` (no grep hits for a previous-uid check or local wipe on sign-out). This is also why the QA harness wipes local data at every session end (PROGRESS.md §1), and it matches the risk named there for Juno's real account. Screenshots `qa/shots/p1-qa003-after.png` (B sees A's entry), `p1-qa003-cold.png` (after the cold pull). qa-003's cloud copy now holds this orphan entry.
+- Notes (2026-10-05, the outbox case, confirmed before the fix): a queued outbox row uploads to whoever is signed in when the drain runs, since the rows carry no account and `OutboxSyncWorker` read `currentUserId` at drain time. A test with A's queued transaction, A signing out and B signing in, then a drain, wrote it to B's `transactions` collection with no edit by B.
+- Notes (2026-10-05, fixed in the working tree, uncommitted):
+  - Change: the local store records its owner (`settings_table.local_owner_uid`, schema 140). Every sign-in goes through `admitAccount` (`lib/app/account_admission.dart`) before `AuthNotifier` reports it signed in. The same account keeps everything, unowned data is claimed by the first account to sign in, and a different account gets the store wiped first (`LocalAccountStore.wipeFor`: every table, the settings row reset except its device-local columns, media, drafts, session checkpoints, notification history). If the previous account has unsynced changes (outbox rows, or images not in Storage), "Discard unsynced changes?" asks first; Cancel keeps the data and signs the new account out.
+  - The outbox, the sync repository and media Storage now use the admitted account (`AuthNotifier.userId`), not Firebase's current user, so nothing syncs while the admission is deciding. Automatic backups live in `backups/<uid>/`, and older ones move to the account that claims the data.
+  - Sign-out itself still leaves the data on disk (not shown, not synced), so the same account signing back in loses nothing.
+  - Tests: `test/account_switch_test.dart` (7) and `test/local_owner_migration_test.dart`. Six of the seven fail without the admission.
+- Notes (2026-10-05, verified in the running app, debug build `9d2c863` + this change): A = qa-002 (pulled its entry `bf4bf6fd…`, owner recorded), then a queued outbox row for that entry and sign-out (`evalc`). B = new account qa-030: the dialog appeared ("1 change(s)"), and the local data was still A's while it was open. "Discard and sign in" left an empty Journal for B (`qa/shots/b005-after.png`), with owner = B, outbox 0, and backups split into one folder per uid. A read-only snapshot of qa-030's Firestore held only its own default calendar and device registration (no journals or entries). The first attempt found a bug (the dialog reading the router through the admission's ref, a Riverpod circular dependency); it failed safely (B signed out, nothing wiped) and is fixed.
 
 ### BUG-006 [Phase 1] Login page is only partly keyboard-operable: no initial focus, invisible button focus, buttons ignore Enter/Space
 - Severity: Minor
@@ -2038,4 +2046,12 @@ Entry format:
 - Actual: (1) Role title "z", Application URL **`https://mailto:hr@acme.com`**; the row's menu offers "Open application URL", which would open `https://acme.com` with `mailto:hr` as userinfo (not clicked, MANUAL-ONLY). (2) Title "w", URL `https://javascript:void` stored; its menu has no Open (the URI doesn't parse). (3) No URL, but Role title is the whole raw string `[y](javascript:alert(1))` (`qa/shots/fv9-add2.png`, `fv9-add3.png`, `fv9-add4.png`, `fv9-menu1.png`, `fv9-menu2.png`; SQL `job_applications_table.application_url`). `[x](file:///C:/Windows)` worked as intended: title "x", no URL (`fv9-add1.png`).
 - Notes: `normalizeJobUrl` (`lib/features/jobs/job_clipboard_parser.dart` ~L130) only recognises a scheme followed by `://`; anything else gets `https://` prepended, so `mailto:`, `tel:`, `javascript:` and `data:` targets become https URLs. Case (3): `_markdownLink` stops at the first `)`, so a target with parentheses doesn't match and the whole string falls through to the title. The unit tests cover `file://` targets only. No script or file path can be launched this way; the risk is a misleading "Open" on a link that was never a web page.
 
-<!-- Last ID: BUG-224. -->
+### BUG-225 [BUG-005 fix] Signing out while the outbox is uploading journal entries deletes their queued uploads without sending them
+- Severity: Major
+- Found: 2026-10-05, while fixing BUG-005 (unit test only, working tree on `9d2c863`)
+- Steps to reproduce: `test/outbox_sign_out_mid_drain_test.dart` (skipped; run with `flutter test --run-skipped test/outbox_sign_out_mid_drain_test.dart`). Account A has two journal entries with queued outbox rows, as offline edits leave them. A drain round starts with the app's own wiring: CRDT collections go out through `pushDocument`, which looks up `remoteSyncServiceProvider` per push. After the round has read its rows and before its first push, A signs out.
+- Expected: each entry either reaches A's cloud copy or stays queued for A's next sign-in.
+- Actual: neither entry is in `users/accountA/journal_entries`, and both outbox rows are gone. The edits exist only in the local rows, and nothing will upload them again. A control run without the sign-out uploads both entries.
+- Notes: the sign-out swaps the sync service for one built on `NoOpSyncRepository`, whose writes (`appendOperation`, `upsertDocumentsBatch`, …) return normally without sending anything. The push therefore "succeeds" and the worker clears the row (`OutboxSyncWorker.startDraining`, crdtBacked branch). Only the round already running is affected: the next round sees no signed-in account and stops. This affects journal entries, dreams and the other `FirestoreCollections.crdtBacked` collections; rows in other collections are written to the round's `users/<uid>/…` path directly and were not tested. Older than the BUG-005 change (sign-out made the sync repository a no-op before it too). In the app, this needs an outbox with rows (offline edits, or uploads that failed), followed by Sign out while they drain, for example right after reconnecting.
+
+<!-- Last ID: BUG-225. -->

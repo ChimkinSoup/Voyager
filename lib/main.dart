@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
+import 'package:voyager/app/account_admission.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/app/voyager_app.dart';
 import 'package:voyager/core/platform/app_data_directory.dart';
@@ -53,7 +54,23 @@ Future<void> main([List<String> args = const []]) async {
   // The bootstrap initializes the outbox a frame after launch; an upload that
   // fails before then is held for it rather than forgotten.
   OutboxSyncWorker.holdRecordsUntilInitialized();
-  runApp(const ProviderScope(child: VoyagerBootstrap()));
+  runApp(
+    ProviderScope(
+      overrides: [
+        accountAdmissionProvider.overrideWith(
+          (ref) =>
+              (uid, isCurrent) => admitAccount(
+                ref,
+                uid,
+                isCurrent,
+                confirmDiscard: (unsynced) =>
+                    confirmDiscardUnsynced(ref, unsynced),
+              ),
+        ),
+      ],
+      child: const VoyagerBootstrap(),
+    ),
+  );
 }
 
 /// Shown in place of the app while [appDataDirectory] moves data. No
@@ -214,11 +231,10 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     // then paints the default tab for as long as the read takes.
     ref.read(financeUiPrefsProvider);
     final db = ref.read(databaseProvider);
-    final authRepo = ref.read(authRepositoryProvider);
     OutboxSyncWorker.initialize(
       db,
       FirebaseFirestore.instance,
-      authRepo,
+      () => ref.read(authNotifierProvider).userId,
       // The same gate the sync repository writes through: the bound is on the
       // one Firestore write stream, not on either caller.
       writeGate: ref.read(firestoreWriteGateProvider),

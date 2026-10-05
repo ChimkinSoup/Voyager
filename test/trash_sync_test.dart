@@ -26,14 +26,6 @@ import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
-class _StubAuthRepository implements AuthRepository {
-  @override
-  String? get currentUserId => 'user-1';
-
-  @override
-  noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
 /// A server that can be taken out of reach for the one call that insists on
 /// it — the operation-log wipe.
 class _SyncRepository extends InMemorySyncRepository {
@@ -170,7 +162,7 @@ void main() {
     OutboxSyncWorker.initialize(
       db,
       outboxFirestore,
-      _StubAuthRepository(),
+      () => 'user-1',
       yieldDelay: Duration.zero,
       pushDocument: (collection, documentId, {forceCrdtOverwrite = false}) =>
           service.pushOutboxDocument(
@@ -400,7 +392,7 @@ void main() {
       OutboxSyncWorker.initialize(
         db,
         outboxFirestore,
-        _StubAuthRepository(),
+        () => 'user-1',
         yieldDelay: Duration.zero,
         beforeDrain: device.catchUpIfAway,
       );

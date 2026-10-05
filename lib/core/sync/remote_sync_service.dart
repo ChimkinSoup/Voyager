@@ -1533,7 +1533,36 @@ class RemoteSyncService {
     pull.whenComplete(() {
       if (identical(_runningPull, pull)) _runningPull = null;
     }).ignore();
+    trackPull(pull);
     return pull;
+  }
+
+  /// Pulls running in any instance. Signing out replaces this service but
+  /// does not stop a pull it started, which keeps writing the account's
+  /// documents into SQLite until it ends.
+  static final _pullsInFlight = <Future<void>>{};
+
+  @visibleForTesting
+  static void trackPull(Future<void> pull) {
+    _pullsInFlight.add(pull);
+    pull
+        .whenComplete(() => _pullsInFlight.remove(pull))
+        .catchError((Object _) {});
+  }
+
+  /// Completes once no pull is running in any instance — before the local
+  /// data is wiped for another account, so a pull the previous account
+  /// started cannot write into the emptied store (BUG-005).
+  static Future<void> get pullsIdle async {
+    while (_pullsInFlight.isNotEmpty) {
+      await Future.wait([
+        for (final pull in _pullsInFlight) pull.catchError((Object _) {}),
+      ]);
+      // A turn of the event loop, so a pull queued behind the one just
+      // finished (see [pullAll]) has started, and is counted, before the
+      // set is checked again.
+      await Future<void>(() {});
+    }
   }
 
   Future<void> _pull(void Function(int done, int total)? onProgress) async {

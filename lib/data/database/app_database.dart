@@ -1071,6 +1071,11 @@ class SettingsTable extends Table {
   IntColumn get syncBackfillVersion =>
       integer().withDefault(const Constant(0))();
 
+  /// The account whose data this device's local store holds — see
+  /// `LocalAccountStore`. Device-local, so it stays out of
+  /// [settingsSyncPayload]. Null on a store no account has claimed yet.
+  TextColumn get localOwnerUid => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -1971,7 +1976,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 139;
+  int get schemaVersion => 140;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3524,6 +3529,14 @@ class AppDatabase extends _$AppDatabase {
           'settings_table',
           settingsTable,
           settingsTable.fieldUpdatedAtJson,
+        );
+      }
+      if (from < 140) {
+        await _addColumnIfNotExists(
+          migrator,
+          'settings_table',
+          settingsTable,
+          settingsTable.localOwnerUid,
         );
       }
     },

@@ -36,14 +36,6 @@ class _OfflineForLeetCode extends InMemorySyncRepository {
   }
 }
 
-class _StubAuthRepository implements AuthRepository {
-  @override
-  String? get currentUserId => 'user-1';
-
-  @override
-  noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
 LeetCodeProblem _problem() {
   final now = DateTime.utc(2026, 8, 20, 9);
   return LeetCodeProblem(
@@ -67,7 +59,7 @@ void main() {
     OutboxSyncWorker.initialize(
       db,
       FakeFirebaseFirestore(),
-      _StubAuthRepository(),
+      () => 'user-1',
     );
     final settings = DriftSettingsRepository(db);
     sync = RemoteSyncService(

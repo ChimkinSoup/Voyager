@@ -36,14 +36,6 @@ class _RefuseOnceSyncRepository extends InMemorySyncRepository {
   }
 }
 
-class _StubAuthRepository implements AuthRepository {
-  @override
-  String? get currentUserId => 'user-1';
-
-  @override
-  noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
 /// Holds the first write of each document until released, and refuses the
 /// second — a slow acknowledgement followed by a full write gate.
 class _HoldThenRefuseSyncRepository extends InMemorySyncRepository {
@@ -137,7 +129,7 @@ void main() {
     OutboxSyncWorker.initialize(
       db,
       FakeFirebaseFirestore(),
-      _StubAuthRepository(),
+      () => 'user-1',
       yieldDelay: Duration.zero,
     );
     final syncRepo = _HoldThenRefuseSyncRepository();
