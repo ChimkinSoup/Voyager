@@ -3358,7 +3358,9 @@ class _EntryQuote extends StatelessWidget {
     final text = quote;
     if (text == null || text.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(top: 16),
+      // Room for the Vim `/` prompt, which hangs about 36px below the editor:
+      // in a narrow window the right-aligned quote reaches under it (BUG-019).
+      padding: const EdgeInsets.only(top: 32),
       child: Align(
         alignment: Alignment.centerRight,
         child: InkWell(

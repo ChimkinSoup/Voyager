@@ -14,6 +14,8 @@ library;
 
 import 'dart:math' as math;
 
+import 'package:flutter/widgets.dart' show StringCharacters;
+
 /// How Vim classifies a character for `w`/`b`/`e` and the `iw` text object.
 ///
 /// Vim moves between *runs* of one class: `foo.bar` is three small-word
@@ -200,24 +202,90 @@ int vimColumnOf(String text, int offset) =>
 
 /// End of the object one `x` takes at [offset]. Never crosses the line break.
 int vimObjectEndForward(String text, int offset) {
-  return math.min(vimLineEnd(text, offset), offset + 1);
+  return math.min(vimLineEnd(text, offset), vimCharEnd(text, offset));
 }
 
 /// The `X` counterpart of [vimObjectEndForward]: start of the object that
 /// ends at [offset].
 int vimObjectStartBackward(String text, int offset) {
-  return math.max(vimLineStart(text, offset), offset - 1);
+  final start = vimLineStart(text, offset);
+  return offset <= start ? start : vimCharStart(text, offset - 1);
+}
+
+/// Whether [offset] is certainly between two characters: both code units
+/// around it sit below U+0300, where nothing combines with its neighbour
+/// (no surrogates, combining marks, joiners or variation selectors).
+bool _isPlainBoundary(String text, int offset) =>
+    offset == 0 ||
+    offset == text.length ||
+    (text.codeUnitAt(offset) < 0x300 && text.codeUnitAt(offset - 1) < 0x300);
+
+/// Start of the character (grapheme cluster) [offset] falls in: an emoji is
+/// one character, though it is two or more UTF-16 code units. A caret between
+/// them splits the emoji, which the text engine can't paint (BUG-015).
+int vimCharStart(String text, int offset) {
+  final o = offset.clamp(0, text.length);
+  if (_isPlainBoundary(text, o)) return o;
+  final lineStart = vimLineStart(text, o);
+  var from = o - 1;
+  while (from > lineStart && !_isPlainBoundary(text, from)) {
+    from--;
+  }
+  var start = from;
+  for (final c in text.substring(from, vimLineEnd(text, o)).characters) {
+    if (start + c.length > o) break;
+    start += c.length;
+  }
+  return start;
+}
+
+/// End of the character (grapheme cluster) that starts at or contains
+/// [offset]; [offset] itself at the end of the text.
+int vimCharEnd(String text, int offset) {
+  final start = vimCharStart(text, offset);
+  if (start >= text.length) return text.length;
+  final lineEnd = vimLineEnd(text, start);
+  // The line break is a character of its own, whatever follows it.
+  if (start == lineEnd || _isPlainBoundary(text, start + 1)) return start + 1;
+  return start + text.substring(start, lineEnd).characters.first.length;
 }
 
 /// Clamps [offset] so the caret rests *on* a character rather than past the
 /// end of the line, which is what Normal mode requires (Insert mode may sit at
-/// the line end, so it uses [clampToLineEnd] = false).
+/// the line end, so it uses [clampToLineEnd] = false). Never inside a
+/// character either: see [vimCharStart].
 int vimClampCaret(String text, int offset, {bool allowLineEnd = false}) {
   final o = offset.clamp(0, text.length);
-  if (allowLineEnd) return o;
+  if (allowLineEnd) return vimCharStart(text, o);
   final start = vimLineStart(text, o);
   final end = vimLineEnd(text, o);
-  return o >= end ? math.max(start, end - 1) : o;
+  return o >= end
+      ? math.max(start, vimCharStart(text, end - 1))
+      : vimCharStart(text, o);
+}
+
+/// [count] characters left of [offset], stopping at the start of its line —
+/// Vim's `h`, which never wraps (`whichwrap` leaves it out).
+int vimCharsLeft(String text, int offset, int count) {
+  final start = vimLineStart(text, offset);
+  var o = offset;
+  for (var i = 0; i < count && o > start; i++) {
+    o = vimCharStart(text, o - 1);
+  }
+  return o;
+}
+
+/// [count] characters right of [offset], stopping at the end of its line —
+/// Vim's `l`. The line end itself is only reachable as the far end of an
+/// operator's range (`dl` on the last character); a plain caret is clamped
+/// back onto the last character.
+int vimCharsRight(String text, int offset, int count) {
+  final end = vimLineEnd(text, offset);
+  var o = offset;
+  for (var i = 0; i < count && o < end; i++) {
+    o = vimCharEnd(text, o);
+  }
+  return math.min(o, end);
 }
 
 /// Insert offset for Vim's `a` (append after the caret).
@@ -231,7 +299,7 @@ int vimAppendOffset(String text, int offset) {
   final o = offset.clamp(0, text.length);
   final lineEnd = vimLineEnd(text, o);
   if (o >= lineEnd) return lineEnd;
-  return o + 1;
+  return vimCharEnd(text, o);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,20 @@
+b013-h-bol	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	23	h	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	23	normal
+b013-dh-bol	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	23	dh	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	23	normal
+b013-2h	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	24	2h	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	23	normal
+b013-huge-h	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	24	99999999999999999999h	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	23	normal
+b013-5l	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	20	5l	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	21	normal
+b013-d5l	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	20	d5l	alpha beta gamma del\none two three four five\n\nfoo(bar, baz); qu.end	20	normal
+b013-space-wrap	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	21	{space}	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	23	normal
+b013-backspace-wrap	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	23	{backspace}	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	21	normal
+b014-zz	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	/zz {enter}	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+b014-qqq	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	/qqq {enter}	alpha beta gamma delta\none two three four five\n\nfoo(bar, baz); qu.end	0	normal
+b015-ll	x\u{1f600}y	0	ll	x\u{1f600}y	3	normal
+b015-h	x\u{1f600}y	3	h	x\u{1f600}y	1	normal
+b015-zwj-ll	a\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}b	0	ll	a\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}b	9	normal
+b015-x	a\u{1f600}b	1	x	ab	1	normal
+b015-X	a\u{1f600}b	3	X	ab	1	normal
+b015-ll-iZ	x\u{1f600}y	0	ll iZ {esc}	x\u{1f600}Zy	3	normal
+b015-l-aZ	a\u{1f600}b	0	l aZ {esc}	a\u{1f600}Zb	3	normal
+b018-yy	one\ntwo	5	yy	one\ntwo	5	normal
+b020-VjJ	one\ntwo\nthree\nfour	0	VjJ	one two\nthree\nfour	*	normal
+b020-VjJ-blank	one\ntwo\n\nfour	0	VjJ	one two\n\nfour	*	normal

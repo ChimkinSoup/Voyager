@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
+import 'package:voyager/core/text/newline_normalization.dart';
 import 'package:voyager/core/text/prose_editing_controller.dart';
 import 'package:voyager/core/text/prose_text_span.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
@@ -76,13 +77,10 @@ class LabeledTextField extends StatefulWidget {
 
   /// Lets the field be shorter than Material's 48px interactive minimum.
   ///
-  /// [InputDecorator] enforces that minimum by stretching its container and
-  /// then centring the text inside it, which walks the paragraph off the
-  /// [contentPadding] offset every overlay here is positioned from — the Vim
-  /// caret, the snippet tabstop marks and the squiggles all drift by half the
-  /// slack. Set this on a non-[dense] field given a [contentPadding] tight
-  /// enough to fall under 48, so the decorator lays the text out where the
-  /// padding says instead.
+  /// A single-line field otherwise grows to that minimum with its text centred
+  /// in the extra height. Set this on a non-[dense] field given a
+  /// [contentPadding] tight enough to fall under 48, so the box is the size
+  /// the padding says.
   final bool allowShortHeight;
 
   final double? borderRadius;
@@ -265,6 +263,8 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     // paragraph and the layers stacked around it agree about whether emphasis
     // applies, and two copies of one predicate is how they drift apart.
     final spellcheckOn = _spellcheckOn;
+    final singleLine =
+        !widget.expands && widget.minLines == null && widget.maxLines == 1;
 
     // Dense fields use bodyMedium so the resting floating label fits the
     // short box (snippet Trigger/Replacement). Pin height to 1.0 so every
@@ -303,6 +303,10 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
         expands: widget.expands,
         maxLines: widget.expands ? null : widget.maxLines,
         minLines: widget.expands ? null : widget.minLines,
+        // A pasted `\r\n` would otherwise leave an invisible `\r` behind.
+        inputFormatters: [
+          newlineFormatterFor(widget.expands ? null : widget.maxLines),
+        ],
         obscureText: widget.obscureText,
         enabled: widget.enabled,
         autofocus: widget.autofocus,
@@ -327,7 +331,9 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
         // clips it there instead.
         clipBehavior: spellcheckOn ? Clip.none : Clip.hardEdge,
         decoration: InputDecoration(
-          isDense: widget.dense || widget.allowShortHeight,
+          // A single-line field gets its 48px minimum from outside instead —
+          // see the [Align] at the end of [build].
+          isDense: widget.dense || widget.allowShortHeight || singleLine,
           hintText: effectiveHint,
           hintStyle: fieldHintStyle(context, textStyle),
           contentPadding: contentPadding,
@@ -545,8 +551,23 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     // than relative to them, and `heightFactor: 1` leaves the field's own
     // height alone wherever nothing is stretching it. Multi-line fields are
     // left top-aligned, which is where their text belongs.
-    if (!widget.expands && widget.minLines == null && widget.maxLines == 1) {
+    //
+    // The same centring is also where Material's 48px minimum comes from, the
+    // decorator being told it is dense. Left to the decorator, that minimum
+    // stretches compact density's 46px box and shifts the text down off the
+    // padding the overlays are positioned from — the letter under the Vim
+    // caret sat 2px above the rest of the line. Stretched out here, the
+    // overlays move with the text.
+    if (singleLine) {
       field = Align(alignment: Alignment.center, heightFactor: 1, child: field);
+      if (!widget.dense && !widget.allowShortHeight) {
+        field = ConstrainedBox(
+          constraints: const BoxConstraints(
+            minHeight: kMinInteractiveDimension,
+          ),
+          child: field,
+        );
+      }
     }
 
     return NotchedFieldBorder(

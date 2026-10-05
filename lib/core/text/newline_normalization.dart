@@ -67,6 +67,16 @@ TextEditingValue normalizeNewlinesInValue(TextEditingValue value) {
   );
 }
 
+/// The line-ending formatter for a field with [maxLines] lines.
+///
+/// A one-line field drops `\r` outright, as Flutter's own formatter drops
+/// `\n`. That formatter runs first, so the `\r` of a pasted `\r\n` is all
+/// that reaches this one, and normalizing it would put a line break back into
+/// the field (BUG-017).
+TextInputFormatter newlineFormatterFor(int? maxLines) => maxLines == 1
+    ? FilteringTextInputFormatter.deny('\r')
+    : const NormalizeNewlinesFormatter();
+
 /// Drops `\r` from anything typed, pasted or dropped into a field.
 class NormalizeNewlinesFormatter extends TextInputFormatter {
   const NormalizeNewlinesFormatter();

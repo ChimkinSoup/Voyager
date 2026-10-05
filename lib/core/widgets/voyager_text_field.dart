@@ -256,10 +256,17 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
       textStyle = withSquiggleRoom(textStyle);
     }
 
+    final singleLine =
+        !widget.expands && widget.minLines == null && widget.maxLines == 1;
+    // Material's 48px minimum, applied below the border rather than by the
+    // decorator — see where [field] is centred.
+    final ownMinHeight = singleLine && !(decoration.isDense ?? false);
+
     // Helper and error text go under the border rather than to the TextField:
     // [NotchedFieldBorder] outlines everything its child lays out, so a
     // subtext line inside the decorator would land inside the outline.
     final innerDecoration = _withoutSubtext(decoration).copyWith(
+      isDense: ownMinHeight ? true : null,
       hintText: decoration.hintText,
       // Matched to the field's own text metrics \u2014 see [fieldHintStyle] for the
       // shrink-on-first-keystroke this avoids. A caller's explicit hintStyle
@@ -339,7 +346,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
         // predicate asks whether the *caller* constrains the input, and a
         // line-ending fixup is not that kind of constraint.
         inputFormatters: [
-          const NormalizeNewlinesFormatter(),
+          newlineFormatterFor(widget.expands ? null : widget.maxLines),
           ...?widget.inputFormatters,
         ],
         textAlignVertical: widget.expands || (widget.maxLines ?? 1) > 1
@@ -533,6 +540,21 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
         context: context,
         hideNativeSelection: vim.overlayPaintsSelection || ownSelection,
         child: field,
+      );
+    }
+
+    // Left to the decorator, the 48px minimum stretches compact density's
+    // 46px box and shifts the text down off the padding the overlays are
+    // positioned from — the letter under the Vim caret sat 1px above the rest
+    // of the line. Stretched out here, the overlays move with the text.
+    if (ownMinHeight) {
+      field = ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
+        child: Align(
+          alignment: Alignment.center,
+          heightFactor: 1,
+          child: field,
+        ),
       );
     }
 

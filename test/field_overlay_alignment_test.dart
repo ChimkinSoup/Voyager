@@ -9,6 +9,7 @@ import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/spell_check_squiggle_layer.dart';
+import 'package:voyager/core/widgets/voyager_text_field.dart';
 
 // The layers over a field are positioned from its content padding, so they
 // only land on the glyphs where InputDecorator puts the input where that
@@ -109,4 +110,53 @@ void main() {
     final squiggles = find.byType(SpellCheckSquiggleLayer);
     expect(_top(tester, squiggles), _top(tester, _editable));
   });
+
+  // Compact density puts a default single-line field's content at 46px, under
+  // Material's 48. Stretched there by the decorator, the text moved down off
+  // the padding and the letter under the Vim caret sat above the line.
+  final defaultFields = <String, Widget Function(TextEditingController)>{
+    'LabeledTextField': (c) => LabeledTextField(
+      label: '',
+      showLabel: false,
+      hintText: 'Add task',
+      controller: c,
+    ),
+    'VoyagerTextField': (c) => VoyagerTextField(
+      controller: c,
+      decoration: const InputDecoration(hintText: 'Add task'),
+    ),
+  };
+  for (final entry in defaultFields.entries) {
+    testWidgets('a default single-line ${entry.key} keeps its Vim caret on '
+        'the text at 48px', (tester) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(_harness(entry.value(controller)));
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+
+      expect(
+        tester
+            .getSize(
+              find
+                  .byType(
+                    entry.key == 'LabeledTextField'
+                        ? LabeledTextField
+                        : VoyagerTextField,
+                  )
+                  .first,
+            )
+            .height,
+        kMinInteractiveDimension,
+      );
+      final overlay = find.descendant(
+        of: find.byType(VimTextOverlay),
+        matching: find.byType(CustomPaint),
+      );
+      expect(_top(tester, overlay), _top(tester, _editable));
+    });
+  }
 }

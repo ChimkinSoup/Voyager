@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:voyager/core/text/prose_editing_controller.dart';
+import 'package:voyager/core/text/newline_normalization.dart';
 import 'package:voyager/core/text/prose_text_span.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
@@ -364,6 +365,7 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
                         undoController: vim.undoController,
                         scrollPadding: kVoyagerFieldScrollPadding,
                         scrollPhysics: const VoyagerFieldScrollPhysics(),
+                        inputFormatters: [newlineFormatterFor(1)],
                         decoration: const InputDecoration(
                           hintText: hintText,
                           isDense: true,
@@ -619,6 +621,7 @@ class _TitleEditor extends StatelessWidget {
               undoController: vim.undoController,
               scrollPadding: kVoyagerFieldScrollPadding,
               scrollPhysics: const VoyagerFieldScrollPhysics(),
+              inputFormatters: [newlineFormatterFor(1)],
               decoration: const InputDecoration(
                 isDense: true,
                 border: InputBorder.none,

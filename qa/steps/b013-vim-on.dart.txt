@@ -1,0 +1,4 @@
+final s = await c.read(settingsRepositoryProvider).getSettings();
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(vimModeEnabled: true));
+final after = await c.read(settingsRepositoryProvider).getSettings();
+debugPrint('B013 vim=${after.vimModeEnabled}');

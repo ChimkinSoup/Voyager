@@ -1,0 +1,2 @@
+b017-title-insert		0	i {ctrl+v} {wait:600} {esc}	L1L2	*	normal
+b017-title-normal		0	{ctrl+v} {wait:600}	L1 L2	*	normal

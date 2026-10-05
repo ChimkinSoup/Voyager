@@ -387,16 +387,16 @@ class VimSession {
   int _lineLastChar(int offset) =>
       vimClampCaret(_text, vimLineEnd(_text, offset));
 
-  /// Charwise Visual `l` / → / Space: step right, wrapping onto the next line
-  /// instead of landing past the last character.
-  int _visualCharRight(int count) {
+  /// Charwise Visual `l` / → / Space, and Normal-mode Space: step right,
+  /// wrapping onto the next line instead of landing past the last character.
+  int _charRightWrapping(int count) {
     final text = _text;
     var o = _cursor;
     for (var i = 0; i < count; i++) {
       final end = vimLineEnd(text, o);
       final start = vimLineStart(text, o);
-      if (end > start && o < end - 1) {
-        o++;
+      if (end > start && vimCharEnd(text, o) < end) {
+        o = vimCharEnd(text, o);
       } else if (end < text.length) {
         o = end + 1;
       } else {
@@ -429,11 +429,11 @@ class VimSession {
     if (_visualCursor >= _visualAnchor) {
       return TextSelection(
         baseOffset: _visualAnchor,
-        extentOffset: math.min(text.length, _visualCursor + 1),
+        extentOffset: vimCharEnd(text, _visualCursor),
       );
     }
     return TextSelection(
-      baseOffset: math.min(text.length, _visualAnchor + 1),
+      baseOffset: vimCharEnd(text, _visualAnchor),
       extentOffset: _visualCursor,
     );
   }
@@ -447,7 +447,7 @@ class VimSession {
     }
     final lo = math.min(_visualAnchor, _visualCursor);
     final hi = math.max(_visualAnchor, _visualCursor);
-    return VimRange(lo, math.min(text.length, hi + 1));
+    return VimRange(lo, vimCharEnd(text, hi));
   }
 
   // ==========================================================================
@@ -838,15 +838,19 @@ class VimSession {
   KeyEventResult? _handleNavigationKey(LogicalKeyboardKey key) {
     if (key == LogicalKeyboardKey.arrowLeft) {
       if (_blockVisualLineHorizontal()) return KeyEventResult.handled;
-      _applyMotion(VimMotion.exclusive(_cursor - _takeCount()));
+      _applyMotion(
+        VimMotion.exclusive(vimCharsLeft(_text, _cursor, _takeCount())),
+      );
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowRight) {
       if (_blockVisualLineHorizontal()) return KeyEventResult.handled;
       if (mode == VimMode.visual) {
-        _applyMotion(VimMotion.exclusive(_visualCharRight(_takeCount())));
+        _applyMotion(VimMotion.exclusive(_charRightWrapping(_takeCount())));
       } else {
-        _applyMotion(VimMotion.exclusive(_cursor + _takeCount()));
+        _applyMotion(
+          VimMotion.exclusive(vimCharsRight(_text, _cursor, _takeCount())),
+        );
       }
       return KeyEventResult.handled;
     }
@@ -886,7 +890,14 @@ class VimSession {
     }
     if (key == LogicalKeyboardKey.backspace) {
       if (_blockVisualLineHorizontal()) return KeyEventResult.handled;
-      _applyMotion(VimMotion.exclusive(_cursor - 1));
+      final cursor = _cursor;
+      _applyMotion(
+        VimMotion.exclusive(
+          cursor > vimLineStart(_text, cursor)
+              ? vimCharStart(_text, cursor - 1)
+              : cursor - 1,
+        ),
+      );
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.delete) {
@@ -895,6 +906,11 @@ class VimSession {
     }
     if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter) {
+      // A one-line field has no line to move to, so Enter is left to the
+      // field, which submits it — as it does from Insert.
+      if (!isMultiline() && mode == VimMode.normal && !_hasPendingState) {
+        return KeyEventResult.ignored;
+      }
       final target = vimVerticalMove(
         _text,
         _cursor,
@@ -1020,20 +1036,29 @@ class VimSession {
       // ---- motions ----
       case 'h':
         if (_blockVisualLineHorizontal()) return;
-        _applyMotion(VimMotion.exclusive(_cursor - _takeCount()));
+        _applyMotion(
+          VimMotion.exclusive(vimCharsLeft(_text, _cursor, _takeCount())),
+        );
       case 'l':
         if (_blockVisualLineHorizontal()) return;
         if (mode == VimMode.visual) {
-          _applyMotion(VimMotion.exclusive(_visualCharRight(_takeCount())));
+          _applyMotion(VimMotion.exclusive(_charRightWrapping(_takeCount())));
         } else {
-          _applyMotion(VimMotion.exclusive(_cursor + _takeCount()));
+          _applyMotion(
+            VimMotion.exclusive(vimCharsRight(_text, _cursor, _takeCount())),
+          );
         }
       case ' ':
         if (_blockVisualLineHorizontal()) return;
-        if (mode == VimMode.visual) {
-          _applyMotion(VimMotion.exclusive(_visualCharRight(_takeCount())));
+        // Space wraps onto the next line (Vim's `whichwrap=s`), but not as
+        // an operator's motion: `d<Space>` on the last character takes just
+        // that character, as `dl` does.
+        if (_operator == null) {
+          _applyMotion(VimMotion.exclusive(_charRightWrapping(_takeCount())));
         } else {
-          _applyMotion(VimMotion.exclusive(_cursor + _takeCount()));
+          _applyMotion(
+            VimMotion.exclusive(vimCharsRight(_text, _cursor, _takeCount())),
+          );
         }
       case 'j':
         _moveVertically(_takeCount());
@@ -1232,10 +1257,7 @@ class VimSession {
         } else {
           final count = math.max(1, _takeCount());
           _applyOperatorRange(
-            VimRange(
-              _cursor,
-              math.min(vimLineEnd(_text, _cursor), _cursor + count),
-            ),
+            VimRange(_cursor, vimCharsRight(_text, _cursor, count)),
             'c',
           );
         }
@@ -1462,7 +1484,7 @@ class VimSession {
       case VimMotionKind.inclusive:
         final lo = math.min(origin, destination);
         final hi = math.max(origin, destination);
-        return VimRange(lo, math.min(text.length, hi + 1));
+        return VimRange(lo, vimCharEnd(text, hi));
       case VimMotionKind.exclusive:
         return VimRange(
           math.min(origin, destination),
@@ -1513,9 +1535,15 @@ class VimSession {
             asLines: linewise,
           );
         }
-        // Vim leaves the caret at the start of the yanked region.
+        // Vim leaves the caret at the start of the yanked region, except a
+        // linewise yank starting on the caret's own line (`yy`, `yj`), which
+        // leaves it where it was. `yk` / `ygg` still go to the top line.
+        final caret =
+            linewise && !wasVisual && start == vimLineStart(text, _cursor)
+            ? _cursor
+            : start;
         if (wasVisual) _setMode(VimMode.normal);
-        _setCursor(start);
+        _setCursor(caret);
         _clearPending();
 
       case 'd':
@@ -1982,7 +2010,7 @@ class VimSession {
     }
     final count = math.max(1, _takeCount());
     final start = _cursor;
-    final end = math.min(vimLineEnd(text, start), start + count);
+    final end = vimCharsRight(text, start, count);
     if (end <= start) {
       _clearPending();
       return;
@@ -1997,8 +2025,12 @@ class VimSession {
     final text = _text;
     if (mode.isVisual) {
       final range = _visualRange().normalized();
+      // The line breaks *between* the selected lines: a linewise range also
+      // takes the last line's own break, which would join one line too many.
       final lines = '\n'
-          .allMatches(text.substring(range.start, range.end))
+          .allMatches(
+            text.substring(range.start, math.max(range.start, range.end - 1)),
+          )
           .length;
       final result = vimJoinLines(text, range.start, math.max(1, lines));
       _setMode(VimMode.normal);
@@ -2074,9 +2106,7 @@ class VimSession {
     }
 
     final flattened = isMultiline() ? body : body.replaceAll('\n', ' ');
-    final insertAt = before
-        ? _cursor
-        : math.min(text.length, text.isEmpty ? 0 : _cursor + 1);
+    final insertAt = before ? _cursor : vimCharEnd(text, _cursor);
     final next = text.replaceRange(insertAt, insertAt, flattened);
     _writeText(next, insertAt + flattened.length - 1);
     _clearPending();
@@ -2373,7 +2403,9 @@ class VimSession {
       matchCount: matches.length,
       matchIndex: index == null ? 0 : index + 1,
     );
-    if (index != null) _setCursor(matches[index]);
+    // A pattern that stops matching puts the caret back, as Vim does,
+    // rather than leaving it on what the shorter pattern matched.
+    _setCursor(index != null ? matches[index] : _searchOriginOffset);
   }
 
   void _jumpToMatch({required bool forward, int count = 1}) {

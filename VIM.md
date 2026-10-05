@@ -50,7 +50,7 @@ These modify text/state immediately based on the current cursor position.
 - `N` (Shift+n) - Jump to the previous search match
 
 ---
-The sections below list commands the implementation (`lib/core/vim/`) supports beyond the list above. Each was checked in the running app on 2026-09-29 (QA Phase 3, `qa/steps/p3x-*.tsv`) unless marked *untested*. Known deviations are logged in `qa/BUGS.md` (BUG-013, BUG-014, BUG-015, BUG-016, BUG-018, BUG-020).
+The sections below list commands the implementation (`lib/core/vim/`) supports beyond the list above. Each was checked in the running app on 2026-09-29 (QA Phase 3, `qa/steps/p3x-*.tsv`) unless marked *untested*. Known deviations are logged in `qa/BUGS.md` (BUG-013, BUG-014, BUG-015, BUG-016, BUG-018, BUG-020; all fixed on 2026-10-05).
 #### 9. More Motions
 All take a count and work after an operator or in Visual mode.
 - `W`, `B`, `E` - WORD versions of `w`, `b`, `e`: a WORD is any run of non-blank characters, so `alpha-beta` is one WORD but three words
@@ -60,7 +60,7 @@ All take a count and work after an operator or in Visual mode.
 - `%` - Jump to the matching bracket: `()`, `[]`, `{}`. If the caret isn't on a bracket, the first bracket ahead on the line is used
 - `|` - Jump to a column: `5|` goes to column 5 of the current line
 - `+` / `<Enter>` - Jump to the first non-blank of the next line; `-` - Jump to the first non-blank of the previous line
-- `<Space>` - Same as `l`
+- `<Space>` - Same as `l`, but wraps onto the next line (not after an operator: `d<Space>` on the last character deletes just that character)
 - `NG` / `Ngg` - Jump to line N (`3G`, `2gg`); `N$` - Jump to the end of the line N−1 lines below
 - `gj` / `gk` - Move down / up by *display* line inside a soft-wrapped line (`j`/`k` move by real lines)
 - `<C-d>` / `<C-u>` - Move down / up 10 lines, keeping the column
@@ -102,5 +102,5 @@ After an operator (`d`, `c`, `y`, `>`, `<`, `gu`, `gU`, `g~`) or in Visual mode.
 - Every field starts in Insert mode when it gets focus; the mode badge only appears outside Insert.
 - `y`, `d`, `c`, `x` and `p` use Vim's own register, shared by all fields. It is **not** the OS clipboard: yanking doesn't change what Ctrl+V pastes elsewhere. Use `<C-v>` to paste the OS clipboard and Visual `<C-c>` to copy to it.
 - A focused Vim field keeps `<Esc>` for itself, so pressing Esc in Normal mode never closes the dialog the field is in; use the dialog's buttons or `<C-Enter>` where the form supports it.
-- In one-line fields, `o` / `O` act like `A` / `I`, `j` / `k` do nothing, and pasted line breaks are flattened to spaces.
+- In one-line fields, `o` / `O` act like `A` / `I`, `j` / `k` do nothing, `<Enter>` in Normal mode submits the field (as in Insert), and pasted line breaks are flattened to spaces.
 - Counts are capped at 100000.

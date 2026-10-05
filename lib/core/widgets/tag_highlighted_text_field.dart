@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
+import 'package:voyager/core/text/newline_normalization.dart';
 import 'package:voyager/core/text/prose_editing_controller.dart';
 import 'package:voyager/core/text/prose_text_span.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
@@ -348,6 +349,10 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
         expands: widget.expands,
         maxLines: widget.expands ? null : widget.maxLines,
         minLines: widget.expands ? null : widget.minLines,
+        // A pasted `\r\n` would otherwise leave an invisible `\r` behind.
+        inputFormatters: [
+          newlineFormatterFor(widget.expands ? null : widget.maxLines),
+        ],
         keyboardType: widget.keyboardType,
         textAlignVertical: TextAlignVertical.top,
         strutStyle: strutStyle,
