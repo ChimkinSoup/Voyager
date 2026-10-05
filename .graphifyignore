@@ -1,12 +1,32 @@
-# Ignore raw data and mocks
-*.json
-*.geojson
-*.csv
-*.log
-
-# Ignore build artifacts and caches
-dist/
+@'
+# Build & tool caches
 build/
-.cache/
 .dart_tool/
+.gradle/
+
+# Platform ephemeral/runner files
+windows/
+android/
+ios/
+linux/
+macos/
+web/
+
+# Cloud functions dependencies (or entire functions folder if not indexing backend)
+functions/node_modules/
 node_modules/
+
+# Third party / vendored code
+third_party/
+
+# Generated files & tests (optional, remove test/ if you want test files indexed)
+*.g.dart
+*.freezed.dart
+test/
+
+# Non-code assets
+assets/
+images/
+*.json
+*.diff
+'@ | Set-Content -Encoding utf8 .graphifyignore
