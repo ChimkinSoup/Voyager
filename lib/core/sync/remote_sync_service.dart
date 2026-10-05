@@ -1496,11 +1496,10 @@ class RemoteSyncService {
   static const _operationLogConcurrency = 16;
 
   /// Zone key under which [pullAll] shares one read of every operation log
-  /// among the collections it pulls for the first time — see
-  /// [_operationLogsFor].
+  /// among the collections it pulls whole — see [_operationLogsFor].
   static const _allOperationsKey = #remoteSyncAllOperations;
 
-  /// How many documents a collection's first pull must list before it starts
+  /// How many logs a collection's full pull must resolve before it starts
   /// the read of every operation log, which costs the whole account's logs
   /// however few it needs. Measured on a 15,786-operation account (profile
   /// build, BUG-002): the read took ~24 s, and fetching one log per document
@@ -1599,13 +1598,16 @@ class RemoteSyncService {
 
   /// Each of [documentIds]' operation logs, for a collection's pull.
   ///
-  /// A collection's [firstPull] resolves every document it lists, and one
-  /// query per document was most of a restore: ~800 logs, 16 at a time, on
-  /// Firestore's one worker on Windows (BUG-002). So inside [pullAll], once a
-  /// first pull lists [allOperationsMinDocuments] documents, it takes them
-  /// from one paged read of every log, which any other collection pulled for
-  /// the first time then shares, however few it lists. Each takes its logs
-  /// out of that read, so what was applied isn't held until the pull ends.
+  /// A collection's [full] pull resolves every document it lists (less those
+  /// a weekly one can skip), and one query per document was most of a
+  /// restore: ~800 logs, 16 at a time, on Firestore's one worker on Windows
+  /// (BUG-002). A weekly full pull of an account edited that week skips
+  /// nothing and paid the same: 603 logs took 88 s against 17 s for the read.
+  /// So inside [pullAll], once a full pull has [allOperationsMinDocuments]
+  /// logs to resolve, it takes them from one paged read of every log, which
+  /// any other collection pulled whole then shares, however few it needs.
+  /// Each takes its logs out of that read, so what was applied isn't held
+  /// until the pull ends.
   /// That read can miss what reached a log
   /// while it ran, so a query taken now — after this collection was listed —
   /// for the logs written since the newest operation as the read began names
@@ -1614,10 +1616,10 @@ class RemoteSyncService {
   /// [_fetchOperationLogs].
   Future<Map<String, Future<List<SyncOperation>>>> _operationLogsFor(
     List<String> documentIds, {
-    required bool firstPull,
+    required bool full,
   }) async {
     final shared = Zone.current[_allOperationsKey] as _AllOperations?;
-    if (!firstPull ||
+    if (!full ||
         shared == null ||
         documentIds.isEmpty ||
         (shared.query == null &&
@@ -3189,7 +3191,7 @@ class RemoteSyncService {
     // Snapshot-only collections never wrote an operation log, so resolving
     // one would spend an indexed query per document to learn nothing. The
     // rest are all requested up front, [_operationLogConcurrency] at a time —
-    // or, on a first pull, read in one go (see [_operationLogsFor]): one
+    // or, on a full pull, read in one go (see [_operationLogsFor]): one
     // round trip per document, back to back, was nearly all of a full pull
     // (456 todo tasks took 81 s). The apply loop below still runs in order;
     // only the waiting overlaps.
@@ -3212,11 +3214,9 @@ class RemoteSyncService {
         : null;
     progress?.listed(docs.length, alreadyDone: unchanged.length);
     final operationLogs = resolveCrdt
-        ? await _operationLogsFor(
-            [for (final doc in toApply) operationLogId(doc)],
-            // No watermark yet: this device has never pulled the collection.
-            firstPull: full && previousFullPullAt == null,
-          )
+        ? await _operationLogsFor([
+            for (final doc in toApply) operationLogId(doc),
+          ], full: full)
         : const <String, Future<List<SyncOperation>>>{};
 
     final pulled = <String, Map<String, dynamic>>{};

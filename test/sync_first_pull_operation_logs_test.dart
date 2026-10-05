@@ -80,7 +80,7 @@ class _Device {
         deviceId: 'device-b',
         debouncer: Debouncer(delay: Duration.zero),
       ),
-      watermarkStore: MemorySyncWatermarkStore(),
+      watermarkStore: watermarks,
       deviceId: 'device-b',
       uploadDebounceDelay: Duration.zero,
     );
@@ -88,6 +88,7 @@ class _Device {
 
   final _RecordingSyncRepository server;
   final AppDatabase db;
+  final watermarks = MemorySyncWatermarkStore();
   late final DriftJournalRepository journals;
   late final DriftTodoRepository todos;
   late final RemoteSyncService sync;
@@ -286,6 +287,46 @@ void main() {
     expect(server.logsRead, contains('task-$_tasks'));
     expect((await device.taskTitles())['task-$_tasks'], 'CRDT $_tasks');
   });
+  test(
+    'a weekly full pull with as many logs to resolve shares one read too',
+    () async {
+      final device = newDevice();
+      await device.sync.pullAll();
+      // Every task edited since that pull, so the weekly one can skip none.
+      for (var i = 0; i < _tasks; i++) {
+        await appendTitle(
+          TodoTask(
+            id: 'task-$i',
+            listId: 'list-1',
+            title: '',
+            createdAt: now,
+            updatedAt: now,
+          ),
+          'Week $i',
+          sequence: 2,
+        );
+      }
+      final mark =
+          device.watermarks.watermarks[FirestoreCollections.todoTasks]!;
+      device.watermarks.watermarks[FirestoreCollections.todoTasks] =
+          SyncWatermark(
+            changedSince: mark.changedSince,
+            lastFullPullAt: DateTime.now().toUtc().subtract(
+              const Duration(days: 8),
+            ),
+          );
+      server.logsRead.clear();
+
+      await device.sync.pullAll();
+
+      expect(server.allLogReads, 2);
+      expect(server.logsRead.length, lessThanOrEqualTo(1));
+      final titles = await device.taskTitles();
+      expect(titles['task-0'], 'Week 0');
+      expect(titles[_lastTask], 'Week ${_tasks - 1}');
+    },
+  );
+
   test('a first pull of fewer documents asks for each log on its own, '
       'without reading every log in the account', () async {
     final few = _RecordingSyncRepository();
