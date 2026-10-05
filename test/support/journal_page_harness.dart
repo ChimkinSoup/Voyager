@@ -41,7 +41,9 @@ const journalHarnessSecondName = 'Second';
 /// seeded entry, for tests that need particular bodies or more than one row in
 /// the journal on screen. [theme] puts the real app theme over the page, for
 /// the tests that measure text — the default MaterialApp theme reaches for the
-/// test font, whose glyphs are all one em wide.
+/// test font, whose glyphs are all one em wide. [emptyAccount] seeds nothing
+/// at all — no journal, no entry, no saved settings — the way a brand-new
+/// account first opens the page; the seeding parameters above are ignored.
 Future<AppDatabase> pumpJournalPage(
   WidgetTester tester, {
   ThemeData? theme,
@@ -53,72 +55,75 @@ Future<AppDatabase> pumpJournalPage(
   WeatherApiClient? weatherApiClient,
   List<JournalEntry> Function(DateTime now)? seedEntries,
   List<Override> Function(AppDatabase db)? extraOverrides,
+  bool emptyAccount = false,
 }) async {
   final db = AppDatabase.inMemory();
   addTearDown(db.close);
-  final repo = DriftJournalRepository(db);
-  final now = DateTime.now().toUtc();
-  final harnessJournal = Journal(
-    id: journalHarnessId,
-    name: journalHarnessName,
-    colorValue: 0xFF3366FF,
-    createdAt: now,
-    updatedAt: now,
-  );
-  await repo.upsertJournal(
-    configureJournal == null
-        ? harnessJournal
-        : configureJournal(harnessJournal),
-  );
-  if (seedSecondJournal) {
+  if (!emptyAccount) {
+    final repo = DriftJournalRepository(db);
+    final now = DateTime.now().toUtc();
+    final harnessJournal = Journal(
+      id: journalHarnessId,
+      name: journalHarnessName,
+      colorValue: 0xFF3366FF,
+      createdAt: now,
+      updatedAt: now,
+    );
     await repo.upsertJournal(
-      Journal(
-        id: journalHarnessSecondId,
-        name: journalHarnessSecondName,
-        colorValue: 0xFFFF6633,
-        createdAt: now,
-        updatedAt: now,
-      ),
+      configureJournal == null
+          ? harnessJournal
+          : configureJournal(harnessJournal),
     );
-    await repo.upsertEntry(
-      JournalEntry(
-        id: 'harness-entry-2',
-        journalId: journalHarnessSecondId,
-        title: 'Second journal entry',
-        body: '',
-        entryDate: now,
-        timestamp: now,
-        createdAt: now,
-        updatedAt: now,
-      ),
-    );
-  }
-  final seeded =
-      seedEntries?.call(now) ??
-      [
+    if (seedSecondJournal) {
+      await repo.upsertJournal(
+        Journal(
+          id: journalHarnessSecondId,
+          name: journalHarnessSecondName,
+          colorValue: 0xFFFF6633,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      await repo.upsertEntry(
         JournalEntry(
-          id: 'harness-entry',
-          journalId: journalHarnessId,
-          title: 'Seeded entry',
+          id: 'harness-entry-2',
+          journalId: journalHarnessSecondId,
+          title: 'Second journal entry',
           body: '',
           entryDate: now,
           timestamp: now,
           createdAt: now,
           updatedAt: now,
         ),
-      ];
-  for (final entry in seeded) {
-    await repo.upsertEntry(entry);
-  }
+      );
+    }
+    final seeded =
+        seedEntries?.call(now) ??
+        [
+          JournalEntry(
+            id: 'harness-entry',
+            journalId: journalHarnessId,
+            title: 'Seeded entry',
+            body: '',
+            entryDate: now,
+            timestamp: now,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        ];
+    for (final entry in seeded) {
+      await repo.upsertEntry(entry);
+    }
 
-  final settingsRepo = DriftSettingsRepository(db);
-  var settings = (await settingsRepo.getSettings()).copyWith(
-    lastViewedJournalId: journalHarnessId,
-    journalShowAllEntries: showAllJournals,
-    defaultJournalId: defaultJournalId,
-  );
-  if (configureSettings != null) settings = configureSettings(settings);
-  await settingsRepo.saveSettings(settings);
+    final settingsRepo = DriftSettingsRepository(db);
+    var settings = (await settingsRepo.getSettings()).copyWith(
+      lastViewedJournalId: journalHarnessId,
+      journalShowAllEntries: showAllJournals,
+      defaultJournalId: defaultJournalId,
+    );
+    if (configureSettings != null) settings = configureSettings(settings);
+    await settingsRepo.saveSettings(settings);
+  }
 
   final container = ProviderContainer(
     overrides: [

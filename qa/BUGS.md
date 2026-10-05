@@ -8,11 +8,11 @@ The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10
 
 | Severity | Logged | Fixed + verified in the app | Open |
 |---|--:|--:|--:|
-| Blocker | 7 | 1 (BUG-001) | 6 |
-| Major | 28 | 3 (BUG-002 (see caveat), BUG-010, BUG-043 (dup)) | 25 |
+| Blocker | 7 | 2 (BUG-001, BUG-003) | 5 |
+| Major | 28 | 4 (BUG-002 (see caveat), BUG-004, BUG-010, BUG-043 (dup)) | 24 |
 | Minor | 142 | 2 (BUG-044, BUG-167) | 140 |
 | Cosmetic | 47 | 0 | 47 |
-| **Total** | **224** | **6** | **218** |
+| **Total** | **224** | **8** | **216** |
 
 "Fixed" means re-tested in the running app by a phase re-check or FV (TEST_PLAN.md "Fix verification"). "Open" means no fix was recorded, so each entry stands as it was last observed. Unit-test-only claims don't count as fixed.
 
@@ -160,6 +160,13 @@ Entry format:
 - Expected: typing creates an entry (and its default "Journal") and autosaves it, or the page shows an empty state / first-run prompt instead of an editable editor.
 - Actual: the text stays on screen and nothing reaches SQLite: `journals_table` and `journal_entries_table` both have 0 rows after 8 s, and the outbox is empty. No error in the run log or `voyager_errors.log`. After the restart the editor is blank again, so the text is silently lost. Clicking "New entry" first works (the entry and the `__legacy__` "Journal" are written straight away).
 - Notes: screenshots `qa/shots/p1-journal-typed.png`, `p1-journal-after-restart.png`. In `journal_page.dart`, entries (and the default journal via `_ensureDefaultJournal`) are only created by `_createEntry`, i.e. "New entry"; the editor shown with no entry has nothing to save into. A new user's first action is likely to be typing into that editor. Not yet checked: the same state after deleting the last entry of an existing account (Phase 7).
+- Notes (2026-10-05, fixed in the working tree, uncommitted):
+  - Change: the first edit with nothing selected (body, title, mood or weather) creates an entry that takes what's on screen. `_scheduleBodySave` / `_scheduleMetadataSave` call `_fileUnfiledEdit` → `_createEntry(fromUnfiledEdit: true)`, which also creates the default "Journal" when there is none.
+  - The editor hands the typed body to the new entry synchronously (`fileUnfiledText`), so a keystroke landing before the entry opens isn't reseeded away. The body is recorded as an edit of the empty entry (`recordJournalTextChange('' → body)`), so the operation log holds the whole text (compare the missing base text in BUG-005). Focus and caret stay where the user is typing.
+  - Test: `test/journal_new_account_first_entry_test.dart` "typing into the editor of a new account saves an entry" (empty DB → type body, then title → one `__legacy__` journal and one entry with both). It fails without the fix (0 journals). The harness gained `emptyAccount:`.
+  - After a code review: a keystroke landing in the moment a delete clears the selection, while the editor still holds the deleted entry's text, no longer creates a blank entry (`_createEntryOptimistic` stops when `fileUnfiledText` returns null). Journal tests pass (95); not re-run in the app, since the in-app path above doesn't reach this branch.
+  - Not changed: typing into the blank editor *during* a cold startup pull creates `__legacy__` "Journal" locally before the cloud copy arrives, as "New entry" already did.
+- Notes (2026-10-05, verified in the running app, debug build `f81bdfa` + this change, new account qa-028): **fixed.** The Phase 1 steps: the page opened on the blank editor (no journal in the header). Typing "qa probe body text" into the body created the entry at once: listed as "Untitled", header "Journal 1", text and caret kept, mood/quote filled in. SQLite had `__legacy__` "Journal" and the entry with that body, outbox 0. Then "qa probe title" into Title, 8 s, `stop.ps1` → `launch.ps1`: the entry came back with both (v1). A cold sign-in to qa-028 on a wiped device pulled the same journal and entry, title and body intact, so the cloud copy and its operation log hold the whole body. No errors in the run logs or `voyager_errors.log`. Screenshots `qa/shots/v3-1vm.png` (after typing), `v3-2vm.png` (after the restart).
 
 ### BUG-004 [Phase 1] First entry on a new account: its journal and entry stay invisible until restart
 - Severity: Major
@@ -171,6 +178,11 @@ Entry format:
 - Notes (2026-09-30): likely the same underlying cause as BUG-010 (kept-alive providers that read SQLite once and aren't re-read), triggered here by the page's own first write rather than the startup pull. Not verified for this path. See BUG-010's notes.
 - Notes (2026-09-30): **not** fixed by the BUG-010 change, which refreshes the providers only after the startup pull. Expected to still reproduce; re-check in TEST_PLAN.md "Fix verification" FV-2.
 - Notes (2026-09-30, re-checked in FV-2, build `f3c7cee`, new account qa-010): **still reproduces.** Same steps (New entry → type a body and title → To-Do → Journal → dropdown). The entry and the `__legacy__` "Journal" row are in SQLite, the editor shows the entry, but the list stays empty and the header shows only the chevron (`qa/shots/fv2-b004-3.png`, `fv2-b004-4.png`).
+- Notes (2026-10-05, cause found and fixed in the working tree, uncommitted):
+  - Cause: not the BUG-010 refresh gap as such. `_ensureDefaultJournal` (`journal_page.dart`) wrote the `__legacy__` journal but never invalidated the kept-alive `journalsProvider`, which still held `[]`. With no journals, `_entryListScope` falls back to the all-journals scope, and the single-journal filter (`journalId == '__all__'`) matches nothing, so the list was empty. The header had no journal to name. Switching pages doesn't rebuild a kept-alive provider; a restart does.
+  - Fix: `_ensureDefaultJournal` invalidates `journalsProvider` after the write, through the provider container captured before its awaits, so it lands even if the page was left in between.
+  - Test: `test/journal_new_account_first_entry_test.dart` "the first entry and its default journal show without restart" (empty DB → New entry → type → header shows "Journal", entry listed). It fails without the fix.
+- Notes (2026-10-05, verified in the running app, debug build `f81bdfa` + this change, new account qa-029): **fixed.** FV-2's steps (`qa/steps/fv2-bug004.txt`: New entry → type body and title → To-Do → Journal → dropdown), no restart: the header shows "Journal 1", the entry is listed ("fv bug004 title" / "fv bug004 body"), and the dropdown lists "All journals 1" and "Journal 1" (ticked). No errors in the run log or `voyager_errors.log`. Screenshots `qa/shots/v4-3vm.png` (after To-Do and back), `v4-4vm.png` (dropdown).
 
 ### BUG-005 [Phase 1] Signing into a different account keeps the previous account's local data, and an edit uploads it (corrupted) into the new account
 - Severity: Blocker

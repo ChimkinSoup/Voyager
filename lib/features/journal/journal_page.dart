@@ -145,6 +145,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   var _suppressAutoSelect = false;
   var _appliedSavedPreferences = false;
 
+  /// The entry being created for an edit made with nothing selected; see
+  /// [_fileUnfiledEdit].
+  Future<void>? _unfiledEntryCreation;
+
   /// The journal [_applySavedPreferencesIfReady] is about to restore into,
   /// held only for the frame between deciding it and the post-frame setState
   /// that commits it. See that method for why the gap matters.
@@ -532,12 +536,18 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   Future<void> _ensureDefaultJournal() async {
+    // Captured before the awaits: the invalidation below has to land even if
+    // the page is left in the meantime, or the kept-alive list goes on holding
+    // no journals until a restart (BUG-004).
+    final container = ProviderScope.containerOf(context, listen: false);
     final repo = ref.read(journalRepositoryProvider);
     final journals = await repo.listJournals();
     if (journals.any((journal) => journal.id == legacyJournalId)) return;
 
     final now = utcNow();
-    final settings = await ref.read(settingsRepositoryProvider).getSettings();
+    final settings = await container
+        .read(settingsRepositoryProvider)
+        .getSettings();
     final defaultJournal = Journal(
       id: legacyJournalId,
       name: 'Journal',
@@ -546,7 +556,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       updatedAt: now,
     );
     await repo.upsertJournal(defaultJournal);
-    ref.read(remoteSyncServiceProvider).pushJournal(defaultJournal);
+    container.read(remoteSyncServiceProvider).pushJournal(defaultJournal);
+    container.invalidate(journalsProvider);
   }
 
   /// The journal a new entry belongs to. While "All journals" is on this is
@@ -825,27 +836,45 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _entryListScrollController.jumpTo(0);
   }
 
-  Future<void> _createEntry() async {
+  /// [fromUnfiledEdit]: see [_fileUnfiledEdit]. The entry then takes the
+  /// title, body, mood and weather already on screen, and focus stays put.
+  Future<void> _createEntry({bool fromUnfiledEdit = false}) async {
     if (!mounted) return;
 
     final journals = ref.read(journalsProvider).value;
     if (journals == null) {
-      await _createEntryWhenReady();
+      await _createEntryWhenReady(fromUnfiledEdit: fromUnfiledEdit);
       return;
     }
-    _createEntryOptimistic(journals);
+    _createEntryOptimistic(journals, fromUnfiledEdit: fromUnfiledEdit);
   }
 
-  Future<void> _createEntryWhenReady() async {
+  Future<void> _createEntryWhenReady({required bool fromUnfiledEdit}) async {
     await _ensureDefaultJournal();
     if (!mounted) return;
     final journals = await ref.read(journalRepositoryProvider).listJournals();
     if (!mounted || journals.isEmpty) return;
-    _createEntryOptimistic(journals);
+    _createEntryOptimistic(journals, fromUnfiledEdit: fromUnfiledEdit);
   }
 
-  void _createEntryOptimistic(List<Journal> journals) {
+  void _createEntryOptimistic(
+    List<Journal> journals, {
+    bool fromUnfiledEdit = false,
+  }) {
     if (!mounted) return;
+    // Something was opened while the journals loaded; the edit went to it.
+    if (fromUnfiledEdit && _selectedEntryId != null) return;
+
+    final id = newId();
+    var unfiledBody = '';
+    if (fromUnfiledEdit) {
+      // Null while the editor still holds an entry that was just closed — a
+      // keystroke landing as a delete clears the selection. That keystroke
+      // belongs to the old entry, so no blank one is made for it.
+      final filed = _editorKey.currentState?.fileUnfiledText(id);
+      if (filed == null) return;
+      unfiledBody = filed;
+    }
 
     final settings = ref.read(settingsProvider).value ?? const AppSettings();
     final weatherService = ref.read(weatherServiceProvider);
@@ -868,25 +897,40 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         : null;
 
     final entry = JournalEntry(
-      id: newId(),
+      id: id,
       journalId: journalId,
-      title: '',
-      body: '',
+      title: fromUnfiledEdit ? _titleController.text : '',
+      body: unfiledBody,
       entryDate: now,
       // The default is stamped here, once, where choosing it is the deliberate
       // act of creating an entry — not on every selection, which used to write
       // 'sunny' onto any legacy or imported row merely because the user opened
       // it and typed a character.
-      weatherIcon: weather?.icon ?? 'sunny',
+      weatherIcon:
+          (fromUnfiledEdit ? _weatherIcon : null) ?? weather?.icon ?? 'sunny',
       // Same reasoning as the weather default above: stamped once at creation,
       // so an entry opens at the neutral midpoint instead of unrecorded.
-      mood: kDefaultMood,
+      mood: (fromUnfiledEdit ? _mood : null) ?? kDefaultMood,
       quoteId: quote?.id,
       customQuote: quote?.text,
       timestamp: now,
       createdAt: now,
       updatedAt: now,
     );
+
+    // Recorded as typed into the empty entry rather than left for the editing
+    // session to seed: a keystroke landing before that session is prepared
+    // seeds it from this text without uploading it, and the operation log
+    // would then hold the later edits but not the body they were made to.
+    if (unfiledBody.isNotEmpty) {
+      ref
+          .read(remoteSyncServiceProvider)
+          .recordJournalTextChange(
+            entryId: entry.id,
+            before: '',
+            after: unfiledBody,
+          );
+    }
 
     _registerPendingEntry(entry);
     _suppressAutoSelect = true;
@@ -905,7 +949,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       if (!mounted) return;
       _writeEntryListScrollStorage(0);
       _scrollEntryListToTop();
-      _titleFocusNode.requestFocus();
+      if (!fromUnfiledEdit) _titleFocusNode.requestFocus();
     });
 
     unawaited(seeded.then((_) => _finalizeNewEntry(entry, settings)));
@@ -1189,6 +1233,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   void _scheduleBodySave() {
+    if (_selectedEntryId == null) {
+      _fileUnfiledEdit();
+      return;
+    }
     _bodySaveTimer?.cancel();
     _bodySaveTimer = Timer(_localSaveDebounce, () {
       unawaited(_saveBodyDraft(bumpVersion: false));
@@ -1392,7 +1440,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   void _selectEntryFields(JournalEntry displayEntry) {
     _selectedEntryId = displayEntry.id;
     _selectedEntry = displayEntry;
-    _titleController.text = displayEntry.title;
+    // Guarded so an entry created from the title being typed (see
+    // [_fileUnfiledEdit]) doesn't reset the caret mid-word.
+    if (_titleController.text != displayEntry.title) {
+      _titleController.text = displayEntry.title;
+    }
     _mood = displayEntry.mood;
     // Not defaulted to 'sunny' here. Both save paths write `_weatherIcon`
     // back, so normalizing on selection stamped the default onto every entry
@@ -1691,10 +1743,26 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   bool _isDatePickerOpen = false;
 
   void _scheduleMetadataSave() {
+    if (_selectedEntryId == null) {
+      _fileUnfiledEdit();
+      return;
+    }
     _metadataSaveTimer?.cancel();
     _metadataSaveTimer = Timer(_localSaveDebounce, () {
       unawaited(_saveMetadata());
     });
+  }
+
+  /// An edit made with no entry open — a brand-new account, or a journal the
+  /// page could not open an entry in — becomes a new entry carrying what is on
+  /// screen. The editor stays live with nothing selected (see the metadata row
+  /// in [build]), and every save path needs an entry, so the text used to sit
+  /// there unsaved and be gone after a restart (BUG-003).
+  void _fileUnfiledEdit() {
+    if (_unfiledEntryCreation != null) return;
+    _unfiledEntryCreation = _createEntry(
+      fromUnfiledEdit: true,
+    ).whenComplete(() => _unfiledEntryCreation = null);
   }
 
   Future<void> _flushMetadataSave({bool refreshList = false}) {
@@ -3518,7 +3586,11 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     if (!mounted) return;
     final remoteSync = _remoteSync;
     _tagTimer?.cancel();
-    _controller.text = widget.entry?.body ?? '';
+    // Already this entry's text when [fileUnfiledText] claimed it; reseeding
+    // would drop whatever was typed since, and the caret with it.
+    if (_bodyEntryId == null || _bodyEntryId != widget.entry?.id) {
+      _controller.text = widget.entry?.body ?? '';
+    }
     _lastText = _controller.text;
     // Unconditional, unlike [_attachedEntryId] below: the controller holds this
     // entry's text whether or not there is a sync service to register it with,
@@ -3598,6 +3670,19 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
           'falling back to the entry-keyed draft.',
     );
     return null;
+  }
+
+  /// Files the text typed while no entry was open under [entryId], the entry
+  /// the page has just created to hold it, and returns that text. Null when
+  /// the controller already belongs to an entry.
+  ///
+  /// Claimed here, synchronously, rather than left to [_switchEntryWidget]: a
+  /// keystroke landing before that runs is then recorded against the new
+  /// entry instead of being reseeded away.
+  String? fileUnfiledText(String entryId) {
+    if (_bodyEntryId != null) return null;
+    _bodyEntryId = entryId;
+    return _controller.text;
   }
 
   /// The controller's text with no regard for whose it is.
