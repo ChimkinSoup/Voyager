@@ -268,6 +268,24 @@ class VimTextScope extends StatefulWidget {
 
   final VimFieldBuilder builder;
 
+  /// Whether the snippet layer of the scope around [context] would take a Tab
+  /// pressed now.
+  ///
+  /// A field's own Tab handler — list indent — runs on the field's focus node,
+  /// below this scope, so it would otherwise always win. It asks this first and
+  /// lets the key through when the answer is yes: tabstop advance and manual
+  /// expansion come before list indent (SNIPPET.md §4.5). Same gates as
+  /// [_VimTextScopeState._handleKey]: Shift+Tab is never the snippet layer's,
+  /// and Vim keeps Tab while a Visual range is up.
+  static bool snippetWantsTab(BuildContext? context) {
+    if (HardwareKeyboard.instance.isShiftPressed) return false;
+    final state = context?.findAncestorStateOfType<_VimTextScopeState>();
+    final snippets = state?._snippetSession;
+    if (snippets == null) return false;
+    if (state!._session?.mode.isVisual ?? false) return false;
+    return snippets.wantsTab;
+  }
+
   @override
   State<VimTextScope> createState() => _VimTextScopeState();
 }

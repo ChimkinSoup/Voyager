@@ -457,7 +457,10 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (event.logicalKey == LogicalKeyboardKey.tab) {
       final outdent = HardwareKeyboard.instance.isShiftPressed;
-      if (handleListTab(controller: _notesController, outdent: outdent)) {
+      // A snippet trigger or tabstop at the caret takes Tab first
+      // (SNIPPET.md §4.5); the key goes on up to the snippet layer.
+      if (!VimTextScope.snippetWantsTab(node.context) &&
+          handleListTab(controller: _notesController, outdent: outdent)) {
         // Tab/Backspace mutate the controller directly, bypassing
         // TextField.onChanged — route through the same handler typing uses
         // so the edit gets saved and the CRDT character-op session (which

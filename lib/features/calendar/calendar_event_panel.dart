@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
+import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
@@ -162,7 +163,10 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       if (event is! KeyDownEvent) return KeyEventResult.ignored;
       if (event.logicalKey == LogicalKeyboardKey.tab) {
         final outdent = HardwareKeyboard.instance.isShiftPressed;
-        if (handleListTab(controller: _notesController, outdent: outdent)) {
+        // A snippet trigger or tabstop at the caret takes Tab first
+        // (SNIPPET.md §4.5); the key goes on up to the snippet layer.
+        if (!VimTextScope.snippetWantsTab(node.context) &&
+            handleListTab(controller: _notesController, outdent: outdent)) {
           // Keep _lastNotesText in sync for the next keystroke's diff.
           _handleNotesChanged(_notesController.text);
           return KeyEventResult.handled;

@@ -290,6 +290,7 @@ class SnippetSession {
     if (keyboard.isAltPressed) return KeyEventResult.ignored;
 
     if ((keyboard.isControlPressed || keyboard.isMetaPressed) &&
+        !keyboard.isShiftPressed &&
         key == LogicalKeyboardKey.keyZ) {
       return undoLastExpansion()
           ? KeyEventResult.handled
@@ -341,6 +342,29 @@ class SnippetSession {
     }
     if (marksListenable.value != SnippetMarks.none) _publishMarks();
     return false;
+  }
+
+  /// Whether an unshifted Tab pressed now would be taken here — a tabstop to
+  /// advance to, or a manual trigger before the caret — without doing either.
+  ///
+  /// For the fields whose own Tab handler (list indent) runs below this layer
+  /// and so has to stand aside for it (SNIPPET.md §4.5). Mirrors the checks in
+  /// [_advanceTabstop] and [_tryManualExpand].
+  bool get wantsTab {
+    if (_disposed) return false;
+    final caret = _caret();
+    if (caret == null) return false;
+    if (_stack.any(
+      (frame) => frame.stops.isNotEmpty && frame.contains(caret),
+    )) {
+      return true;
+    }
+    if (_expandKey != SnippetExpandKey.tab ||
+        !_index.hasManual ||
+        !isInsertMode()) {
+      return false;
+    }
+    return _index.matchManual(textController.text, caret) != null;
   }
 
   bool _tryManualExpand() {

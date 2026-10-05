@@ -175,6 +175,27 @@ void main() {
     );
   });
 
+  /// Whether keyboard focus is in the [index]th text field of the dialog.
+  bool fieldFocused(WidgetTester tester, int index) {
+    final field = find.byType(EditableText).at(index);
+    return tester.widget<EditableText>(field).focusNode.hasFocus;
+  }
+
+  testWidgets('Enter on a rejected word keeps the field focused (BUG-026)', (
+    tester,
+  ) async {
+    await openDialog(tester);
+    await type(tester, 'well-known');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('A dictionary word is one word'),
+      findsOneWidget,
+    );
+    expect(fieldFocused(tester, 0), isTrue);
+  });
+
   // `FLAGGED_WORDS.md` §7: the third override the dialog manages.
   group('flagged words', () {
     testWidgets('a bundled row can be flagged, with a replacement', (
@@ -221,6 +242,23 @@ void main() {
 
       expect(await repo.getFlaggedWords(), isEmpty);
       expect(find.textContaining('add it to the'), findsOneWidget);
+    });
+
+    testWidgets('Enter on a refused replacement keeps it focused (BUG-026)', (
+      tester,
+    ) async {
+      await openDialog(tester);
+      await type(tester, 'sad');
+
+      await tester.tap(find.byTooltip('Flag as misspelling'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'sadd');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(await repo.getFlaggedWords(), isEmpty);
+      expect(find.textContaining('add it to the'), findsOneWidget);
+      expect(fieldFocused(tester, 1), isTrue);
     });
 
     testWidgets('a flagged word is one row, not also a faint bundled one', (

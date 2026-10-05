@@ -407,6 +407,10 @@ class _DictionaryDialogState extends ConsumerState<_DictionaryDialog> {
                         vertical: 8,
                       ),
                       onSubmitted: (_) => _add(bundled, custom, flagged),
+                      // Left to its default Enter takes the focus out of the
+                      // field, so a word turned away could not be fixed from
+                      // the keyboard (BUG-026).
+                      onEditingComplete: () {},
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -835,6 +839,9 @@ class _WordEditorState extends State<_WordEditor> {
                       vertical: 8,
                     ),
                     onSubmitted: widget.onSave,
+                    // Kept on Enter for the same reason as the search field:
+                    // a rejected word stays open here to be corrected.
+                    onEditingComplete: () {},
                   ),
                 ),
                 const SizedBox(width: 8),

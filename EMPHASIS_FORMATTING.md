@@ -83,13 +83,18 @@ against text rather than space, simplified from CommonMark:
 
 - an opener may not be *followed* by whitespace, and may not end the document;
 - a closer may not be *preceded* by whitespace, and may not start it;
-- `__` additionally has to sit at a word edge on its outer side.
+- `__` additionally has to sit at a word edge on its outer side;
+- a run with a word character on both sides — the `*` of `2*3` — only pairs
+  with a run on its own line.
 
 That one rule settles most of §11 without special cases. `2 * 3` stays
 arithmetic because the opener is followed by a space. `snake_case__names` and
 `a__b__c` stay literal because `__` is inside a word — while `foo**bar**baz`
 still bolds, since `*` has no such restriction. And §2.4's bullet rule falls out
 for free: a line-start `* ` is followed by a space, so it can never open.
+The line rule is what keeps a stray `2*3` from italicising everything down to
+the next `*` lines later, while an ordinary pair (`a *start⏎ends* here`, or a
+bold pasted over a `<br>`) still spans lines.
 
 When a closer matches an opener, every delimiter opened *after* that opener is
 dropped. This is what keeps the result a properly nested forest rather than a
@@ -712,6 +717,7 @@ counting test holds it to.
 | 2026-09-02 | Smart paste claims Ctrl+V in the field's ancestor `Focus`, and stands down inside a `MediaPasteScope`, which routes the text half itself (§7) |
 | 2026-09-02 | The HTML converter reads inline `style` attributes as well as tags, for Google Docs (§7) |
 | 2026-09-02 | Parse cache holds two entries, for the frame that asks new/old/new (§12) |
+| 2026-10-05 | A delimiter run inside a word pairs only on its own line (§2.3) — BUG-028 |
 
 ---
 

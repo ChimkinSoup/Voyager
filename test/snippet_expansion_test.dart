@@ -6,8 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/snippets/snippet_enabled_scope.dart';
 import 'package:voyager/core/snippets/snippet_index.dart';
 import 'package:voyager/core/snippets/snippet_session.dart';
+import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
+import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/domain/models/snippet.dart';
 
@@ -423,6 +425,75 @@ void main() {
       );
       await press(tester, LogicalKeyboardKey.space);
       expect(controller.text, 'X');
+    });
+
+    group('on a list line (BUG-027)', () {
+      /// The list-aware fields' own Tab handler, as the journal installs it on
+      /// the field's focus node — below the snippet layer.
+      KeyEventResult listTab(FocusNode node, KeyEvent event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey != LogicalKeyboardKey.tab) {
+          return KeyEventResult.ignored;
+        }
+        final outdent = HardwareKeyboard.instance.isShiftPressed;
+        if (!VimTextScope.snippetWantsTab(node.context) &&
+            handleListTab(controller: controller, outdent: outdent)) {
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      }
+
+      for (final line in ['- ee', '* ee', '1. ee']) {
+        testWidgets('Tab expands the trigger in "$line"', (tester) async {
+          focusNode.onKeyEvent = listTab;
+          await pumpField(
+            tester,
+            snippets: [snippet('ee', 'X', auto: false)],
+            text: line,
+          );
+          await press(tester, LogicalKeyboardKey.tab);
+          expect(controller.text, line.replaceFirst('ee', 'X'));
+        });
+      }
+
+      testWidgets('with the caret mid-line, right after the trigger', (
+        tester,
+      ) async {
+        focusNode.onKeyEvent = listTab;
+        await pumpField(
+          tester,
+          snippets: [snippet('ee', 'X', auto: false)],
+          text: '- ee x',
+        );
+        controller.selection = const TextSelection.collapsed(offset: 4);
+        await tester.pump();
+        await press(tester, LogicalKeyboardKey.tab);
+        expect(controller.text, '- X x');
+      });
+
+      testWidgets('with no trigger, Tab still indents the line', (
+        tester,
+      ) async {
+        focusNode.onKeyEvent = listTab;
+        await pumpField(
+          tester,
+          snippets: [snippet('ee', 'X', auto: false)],
+          text: '- item',
+        );
+        await press(tester, LogicalKeyboardKey.tab);
+        expect(controller.text, '  - item');
+      });
+
+      testWidgets('Shift+Tab still outdents over a trigger', (tester) async {
+        focusNode.onKeyEvent = listTab;
+        await pumpField(
+          tester,
+          snippets: [snippet('ee', 'X', auto: false)],
+          text: '  - ee',
+        );
+        await press(tester, LogicalKeyboardKey.tab, shift: true);
+        expect(controller.text, '- ee');
+      });
     });
 
     testWidgets('Tab never expands when Space is the expand key', (

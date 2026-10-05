@@ -155,6 +155,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-033@example.com | 2026-10-05 (code-review fixes: BUG-006 follow-up, shared Settings reveal) | Signed up by keyboard only, after one refused sign-in and one password reset request (no mail is delivered to example.com). No weather location. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-034@example.com | 2026-10-05 (BUG-011 re-check) | New account. Nav order with Jobs first (`navPageOrder` starts `/jobs`); startup mode "First page". Dark + Scatter; Vim off. | Password `qavoyager2026`. Cold sign-in done twice (once with the BUG-011 fix, once without). |
 | voyager-qa-035@example.com | 2026-10-05 (BUG-013…020 re-check) | Journal "Journal" with 1 entry (title "L1 L2", body "one two\n\nfour"). List "Vim List" with tasks "task normal enter" and "L1L2". **Vim ON.** Dark + Scatter. | Password `qavoyager2026`. Signed up after a forced reset (`reset.ps1 -Force`): the local data was the installed release's empty signed-out database (0 entries, outbox 0); its one auto-backup zip was copied aside first. |
+| voyager-qa-036@example.com | 2026-10-05 (BUG-023…028 re-check) | Journal "Journal" with 1 untitled entry (body: the BUG-028 emphasis sample "and 2*3⏎foo**bar**baz⏎⏎and 2*3⏎see foo* bar⏎⏎plain 2*3*4 and a *start⏎ends* here⏎⏎end"). One manual snippet `;sig` → "Best regards, Juno"; expand key Tab. Vim off. Dark + Scatter. | Password `qavoyager2026`. |
 
 ---
 

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
+import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/text/prose_text_span.dart';
 import 'package:voyager/core/media/widgets/media_drop_target.dart';
@@ -1639,7 +1640,10 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (event.logicalKey == LogicalKeyboardKey.tab) {
       final outdent = HardwareKeyboard.instance.isShiftPressed;
-      if (handleListTab(controller: _notesController, outdent: outdent)) {
+      // A snippet trigger or tabstop at the caret takes Tab first
+      // (SNIPPET.md §4.5); the key goes on up to the snippet layer.
+      if (!VimTextScope.snippetWantsTab(node.context) &&
+          handleListTab(controller: _notesController, outdent: outdent)) {
         // Routed through the handler typing uses so _lastNotesText stays in
         // step for the next keystroke.
         _handleNotesChanged(_notesController.text);

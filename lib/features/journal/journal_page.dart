@@ -30,6 +30,7 @@ import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
+import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
@@ -3761,7 +3762,10 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (event.logicalKey == LogicalKeyboardKey.tab) {
       final outdent = HardwareKeyboard.instance.isShiftPressed;
-      if (handleListTab(controller: _controller, outdent: outdent)) {
+      // A snippet trigger or tabstop at the caret takes Tab first
+      // (SNIPPET.md §4.5); the key goes on up to the snippet layer.
+      if (!VimTextScope.snippetWantsTab(node.context) &&
+          handleListTab(controller: _controller, outdent: outdent)) {
         // Tab/Backspace mutate the controller directly, bypassing
         // TextField.onChanged — route through the same handler typing uses
         // so the edit gets saved and the CRDT character-op session stays in

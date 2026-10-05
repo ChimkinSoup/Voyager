@@ -186,6 +186,17 @@ class AutocorrectSession {
   })?
   _lastCorrection;
 
+  /// The correction Ctrl+Z just took back, which redo puts back while the
+  /// restored typo is still the most recent thing to have happened. Cleared
+  /// by any other mutation, like [_lastCorrection].
+  ({
+    TextEditingValue before,
+    TextEditingValue after,
+    String typo,
+    int? boundaryAt,
+  })?
+  _undoneCorrection;
+
   /// Typos the user has rejected in this field, lowercased (§7.3).
   ///
   /// Keyed on the string rather than on a position, which is what makes the
@@ -211,6 +222,7 @@ class AutocorrectSession {
   void reset() {
     _pending = null;
     _lastCorrection = null;
+    _undoneCorrection = null;
     _typedChar = null;
     _typedToken = null;
     _suppressed.clear();
@@ -235,6 +247,15 @@ class AutocorrectSession {
       _typedChar = null;
       return;
     }
+    // Enter is named by its key rather than its character: Windows reports no
+    // character for it, yet the field inserts a `\n`, and the newline is a
+    // boundary like any other (AUTOCORRECT.md §2).
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      _typedChar = '\n';
+      return;
+    }
     final character = event.character;
     _typedChar = (character != null && character.isNotEmpty) ? character : null;
   }
@@ -250,6 +271,12 @@ class AutocorrectSession {
     if (keyboard.isControlPressed || keyboard.isMetaPressed) {
       if (key == LogicalKeyboardKey.keyZ && !keyboard.isShiftPressed) {
         return undoLastCorrection()
+            ? KeyEventResult.handled
+            : KeyEventResult.ignored;
+      }
+      if ((key == LogicalKeyboardKey.keyZ && keyboard.isShiftPressed) ||
+          (key == LogicalKeyboardKey.keyY && !keyboard.isShiftPressed)) {
+        return redoLastCorrection()
             ? KeyEventResult.handled
             : KeyEventResult.ignored;
       }
@@ -358,6 +385,27 @@ class AutocorrectSession {
       }
     });
     flashListenable.value = null;
+    // Only once the typo is actually back — see [revertLastCorrection].
+    if (textController.value.text == record.before.text) {
+      _undoneCorrection = record;
+    }
+    return true;
+  }
+
+  /// Puts back the correction [undoLastCorrection] took away, while the typo
+  /// is still the most recent thing to have happened (AUTOCORRECT.md §8).
+  ///
+  /// Done here for the reason the undo is: the write that restored the typo
+  /// lands on [UndoHistory] as a fresh edit, which empties its redo stack, so
+  /// the field's own redo has nothing to hand back.
+  bool redoLastCorrection() {
+    final record = _undoneCorrection;
+    if (record == null) return false;
+    _undoneCorrection = null;
+    if (!_recordStillStands(record.before)) return false;
+    _applyValue(record.after);
+    if (textController.value.text != record.after.text) return false;
+    _lastCorrection = record;
     return true;
   }
 
@@ -387,6 +435,7 @@ class AutocorrectSession {
     // to have happened, so there is nothing left to revert into. This session's
     // own writes never reach here — they run under [_applying].
     _lastCorrection = null;
+    _undoneCorrection = null;
 
     final edit = autocorrectEditSpan(
       previous.text,

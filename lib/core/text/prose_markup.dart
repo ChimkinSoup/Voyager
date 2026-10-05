@@ -387,6 +387,7 @@ class _Run {
     required this.unit,
     required this.canOpen,
     required this.canClose,
+    required this.intraWord,
   });
 
   final int position;
@@ -394,6 +395,11 @@ class _Run {
   final int unit;
   final bool canOpen;
   final bool canClose;
+
+  /// Whether the run sits inside a word, against a word character on both
+  /// sides — the `*` of `2*3`. Such a run only pairs on its own line: see
+  /// [_crossesLine].
+  final bool intraWord;
 
   /// Characters taken off the left of the run by pairs it has closed, and off
   /// the right by pairs it has opened. Both draw on the same run, so a run
@@ -451,11 +457,26 @@ List<_Run> _scanRuns(String source, List<ProseZone> zones) {
         unit: unit,
         canOpen: canOpen,
         canClose: canClose,
+        intraWord: _isWordCharAt(source, i - 1) && _isWordCharAt(source, end),
       ),
     );
     i = end;
   }
   return runs;
+}
+
+/// Whether pairing [opener] with [closer] would carry a delimiter that sits
+/// inside a word across a line break.
+///
+/// `2*3` is literal unless paired (§11), and a pair that reaches it from
+/// another line is not what the writer meant: it italicised everything down
+/// to the next `*` — a `**` closer lines later, whose bold it then broke. An
+/// ordinary pair still spans lines (`a *start⏎ends* here`, or a pasted bold
+/// over a `<br>`); only an intra-word run is held to its own line.
+bool _crossesLine(String source, _Run opener, _Run closer) {
+  if (!opener.intraWord && !closer.intraWord) return false;
+  final newline = source.lastIndexOf('\n', closer.position);
+  return newline > opener.position;
 }
 
 EmphasisKind _kindFor(int unit, int width) => switch (unit) {
@@ -482,7 +503,8 @@ List<EmphasisSpan> _matchSpans(String source, List<ProseZone> zones) {
         var index = openers.length - 1;
         while (index >= 0 &&
             (openers[index].unit != run.unit ||
-                openers[index].available < needed)) {
+                openers[index].available < needed ||
+                _crossesLine(source, openers[index], run))) {
           index--;
         }
         if (index < 0) break;

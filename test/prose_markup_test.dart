@@ -146,6 +146,21 @@ void main() {
       expect(contents('2*3*4'), ['3']);
     });
 
+    test('a * inside a word does not pair across a line (BUG-028)', () {
+      expect(contents('and 2*3\nfoo**bar**baz'), ['bar']);
+      expect(ProseMarkup.parse('and 2*3\nsee foo* bar').spans, isEmpty);
+      expect(contents('2*3\n**open and *half\n*x*'), ['x']);
+      // Nor does a closer inside a word reach back for an opener above.
+      expect(ProseMarkup.parse('see *foo\nand 2*3').spans, isEmpty);
+    });
+
+    test('ordinary pairs still span lines', () {
+      expect(contents('a *start\nends* here'), ['start\nends']);
+      expect(contents('**one\ntwo**'), ['one\ntwo']);
+      // An outer pair can still reach over a line holding a `2*3`.
+      expect(contents('*a\n2*3\nb*'), ['a\n2*3\nb']);
+    });
+
     test('** pairs inside a word', () {
       expect(contents('foo**bar**baz'), ['bar']);
     });

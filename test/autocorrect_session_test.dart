@@ -182,7 +182,9 @@ void main() {
   Future<void> type(WidgetTester tester, String input) async {
     final state = _fieldState(tester);
     for (final ch in input.split('')) {
-      await tester.sendKeyEvent(_keyFor(ch), character: ch);
+      // Windows sends Enter with no character, though the field inserts a
+      // newline for it (BUG-023).
+      await tester.sendKeyEvent(_keyFor(ch), character: ch == '\n' ? null : ch);
       final value = controller.value;
       final caret = value.selection.baseOffset;
       state.updateEditingValue(
@@ -252,6 +254,14 @@ void main() {
       await pumpField(tester);
       await type(tester, 'wtih\n');
       expect(controller.text, 'with\n');
+    });
+
+    _desktopWidgets('a newline mid-text is a boundary (BUG-023)', (
+      tester,
+    ) async {
+      await pumpField(tester, text: 'hello ');
+      await type(tester, 'wtih\n');
+      expect(controller.text, 'hello with\n');
     });
 
     _desktopWidgets('the first letter keeps its case', (tester) async {
@@ -657,6 +667,36 @@ void main() {
       await tester.pump();
       await press(tester, LogicalKeyboardKey.keyZ, control: true);
       expect(controller.text, 'hello wtih ');
+    });
+
+    _desktopWidgets('redo puts the correction back (BUG-024)', (tester) async {
+      await pumpField(tester);
+      await type(tester, 'wtih ');
+      // Past UndoHistory's 500ms throttle, so the correction has been pushed.
+      await tester.pump(const Duration(milliseconds: 700));
+      await press(tester, LogicalKeyboardKey.keyZ, control: true);
+      expect(controller.text, 'wtih ');
+      await press(tester, LogicalKeyboardKey.keyY, control: true);
+      expect(controller.text, 'with ');
+      expect(controller.selection.baseOffset, 'with '.length);
+      // And again, through Ctrl+Shift+Z.
+      await press(tester, LogicalKeyboardKey.keyZ, control: true);
+      expect(controller.text, 'wtih ');
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await press(tester, LogicalKeyboardKey.keyZ, control: true);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      expect(controller.text, 'with ');
+    });
+
+    _desktopWidgets('an edit after the undo leaves nothing to redo', (
+      tester,
+    ) async {
+      await pumpField(tester);
+      await type(tester, 'wtih ');
+      await press(tester, LogicalKeyboardKey.keyZ, control: true);
+      await type(tester, 'x');
+      await press(tester, LogicalKeyboardKey.keyY, control: true);
+      expect(controller.text, 'wtih x');
     });
   });
 
