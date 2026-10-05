@@ -49,6 +49,26 @@ WeatherIconColors weatherIconColors(String? icon, Brightness brightness) {
   };
 }
 
+/// Stands in for [WeatherIcon] while no weather location is set. [WeatherIcon]
+/// falls back to a sun for an unknown condition, which read as "it is sunny";
+/// this is a neutral add-a-location pin instead.
+class WeatherLocationUnsetIcon extends StatelessWidget {
+  const WeatherLocationUnsetIcon({super.key, this.size});
+
+  final double? size;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.onSurfaceVariant;
+    return PhosphorIcon(
+      PhosphorIconsDuotone.mapPinPlus,
+      size: size ?? IconTheme.of(context).size ?? 22,
+      color: color,
+      duotoneSecondaryColor: color,
+    );
+  }
+}
+
 /// Duotone weather glyph with a condition-colored stroke and fill.
 class WeatherIcon extends StatelessWidget {
   const WeatherIcon(this.icon, {super.key, this.size});

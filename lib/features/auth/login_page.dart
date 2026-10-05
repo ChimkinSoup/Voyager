@@ -17,6 +17,8 @@ class LoginPage extends ConsumerStatefulWidget {
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _emailFocus = FocusNode();
+  final _passwordFocus = FocusNode();
   var _isSignUp = false;
   var _loading = false;
   String? _error;
@@ -26,10 +28,30 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
-  Future<void> _runAuth(Future<void> Function() action) async {
+  /// Puts the caret back after an attempt — the fields and buttons are
+  /// disabled while it runs, which drops their focus — in the field most
+  /// likely to need fixing: Email if it's empty or [email] says the attempt
+  /// was about it, else Password. After the frame, once the fields are
+  /// enabled again.
+  void _refocusField({bool email = false}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      (email || _emailController.text.trim().isEmpty
+              ? _emailFocus
+              : _passwordFocus)
+          .requestFocus();
+    });
+  }
+
+  Future<void> _runAuth(
+    Future<void> Function() action, {
+    bool aboutEmail = false,
+  }) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -39,6 +61,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       await action();
     } catch (e) {
       setState(() => _error = _formatAuthError(e));
+      _refocusField(email: aboutEmail);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -52,6 +75,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         _error = 'Email and password are required.';
         _success = null;
       });
+      _refocusField();
       return;
     }
     await _runAuth(() async {
@@ -75,15 +99,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         _error = 'Enter your email to reset your password.';
         _success = null;
       });
+      _refocusField();
       return;
     }
+    // Failed or sent, the page stays: focus goes back to Email either way.
     await _runAuth(() async {
       await ref.read(authRepositoryProvider).sendPasswordResetEmail(email);
       setState(() {
         _success =
             'If an account exists for this email, a password reset link has been sent.';
       });
-    });
+      _refocusField(email: true);
+    }, aboutEmail: true);
   }
 
   String _formatAuthError(Object error) {
@@ -128,6 +155,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   LabeledTextField(
                     label: 'Email',
                     controller: _emailController,
+                    focusNode: _emailFocus,
+                    // Not on Android, where focus raises the soft keyboard
+                    // over the buttons before the user has chosen a field.
+                    autofocus: !isAndroid,
                     enabled: !busy,
                     onSubmitted: (_) => _submit(),
                   ),
@@ -135,6 +166,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   LabeledTextField(
                     label: 'Password',
                     controller: _passwordController,
+                    focusNode: _passwordFocus,
                     obscureText: true,
                     enabled: !busy,
                     onSubmitted: (_) => _submit(),
@@ -144,6 +176,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: GlassButton(
+                        canRequestFocus: true,
                         onPressed: busy ? null : _resetPassword,
                         label: 'Forgot password?',
                       ),
@@ -170,6 +203,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ],
                   const SizedBox(height: 24),
                   GlassButton(
+                    canRequestFocus: true,
                     onPressed: busy ? null : _submit,
                     child: busy
                         ? const SizedBox(
@@ -182,12 +216,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   const SizedBox(height: 8),
                   if (showGoogleSignIn) ...[
                     GlassButton(
+                      canRequestFocus: true,
                       onPressed: busy ? null : _googleSignIn,
                       label: 'Continue with Google',
                     ),
                     const SizedBox(height: 8),
                   ],
                   GlassButton(
+                    canRequestFocus: true,
                     onPressed: busy
                         ? null
                         : () => setState(() {

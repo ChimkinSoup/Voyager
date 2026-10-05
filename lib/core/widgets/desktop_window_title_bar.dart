@@ -100,30 +100,35 @@ class _DesktopWindowTitleBarState extends State<DesktopWindowTitleBar>
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(left: 4, top: 4, bottom: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _WindowControlButton(
-                    tooltip: 'Minimize',
-                    icon: PhosphorIconsRegular.minus,
-                    onPressed: windowManager.minimize,
-                  ),
-                  _WindowControlButton(
-                    tooltip: _isMaximized ? 'Restore' : 'Maximize',
-                    icon: _isMaximized
-                        ? PhosphorIconsRegular.cards
-                        : PhosphorIconsRegular.square,
-                    onPressed: _toggleMaximize,
-                  ),
-                  _WindowControlButton(
-                    tooltip: 'Close',
-                    icon: PhosphorIconsRegular.x,
-                    onPressed: windowManager.close,
-                    isClose: true,
-                  ),
-                ],
+            // Out of the Tab order, like the OS caption buttons they stand in
+            // for: the bar is hidden unless hovered, so Tab stopped on three
+            // invisible buttons, one of them Close (BUG-006).
+            ExcludeFocus(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 4, top: 4, bottom: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _WindowControlButton(
+                      tooltip: 'Minimize',
+                      icon: PhosphorIconsRegular.minus,
+                      onPressed: windowManager.minimize,
+                    ),
+                    _WindowControlButton(
+                      tooltip: _isMaximized ? 'Restore' : 'Maximize',
+                      icon: _isMaximized
+                          ? PhosphorIconsRegular.cards
+                          : PhosphorIconsRegular.square,
+                      onPressed: _toggleMaximize,
+                    ),
+                    _WindowControlButton(
+                      tooltip: 'Close',
+                      icon: PhosphorIconsRegular.x,
+                      onPressed: windowManager.close,
+                      isClose: true,
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

@@ -381,9 +381,13 @@ class _GlassButtonState extends State<GlassButton>
             // 3–5% alpha still separates a surface, but at this ring's alpha
             // that same widening reads as an accent-colored bloom around the
             // button when keyboard focus lands on it.
+            // The tint or the accent, not [baseColor]: on dark that is the
+            // field plate, a ring the color of the card it sits on.
             if (_isFocused)
               BoxShadow(
-                color: baseColor.withValues(alpha: 0.5),
+                color: (widget.color ?? theme.colorScheme.primary).withValues(
+                  alpha: 0.5,
+                ),
                 blurRadius: 0.0,
                 spreadRadius: 2.0,
               ),
@@ -496,18 +500,29 @@ class _GlassButtonState extends State<GlassButton>
         enabled: isInteractive,
         focusNode: _effectiveFocusNode,
         autofocus: widget.autofocus,
+        // Enter and Space, through the app's default shortcuts, once the
+        // button holds keyboard focus.
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) => widget.onPressed?.call(),
+          ),
+          ButtonActivateIntent: CallbackAction<ButtonActivateIntent>(
+            onInvoke: (_) => widget.onPressed?.call(),
+          ),
+        },
         mouseCursor: isInteractive
             ? SystemMouseCursors.click
             : SystemMouseCursors.basic,
+        // A disabled button only ever turns a highlight off: the detector
+        // reports focus lost as the button disables (Sign in while it runs),
+        // and dropping that left the ring on after focus had moved on.
         onShowHoverHighlight: (hovered) {
-          if (isInteractive && _isHovered != hovered) {
-            setState(() => _isHovered = hovered);
-          }
+          final show = hovered && isInteractive;
+          if (_isHovered != show) setState(() => _isHovered = show);
         },
         onShowFocusHighlight: (focused) {
-          if (isInteractive && _isFocused != focused) {
-            setState(() => _isFocused = focused);
-          }
+          final show = focused && isInteractive;
+          if (_isFocused != show) setState(() => _isFocused = show);
         },
         child: buttonCore,
       ),

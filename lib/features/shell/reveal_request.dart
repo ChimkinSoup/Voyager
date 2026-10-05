@@ -39,3 +39,9 @@ final revealAutoBackupRequestProvider = StateProvider<bool>((ref) => false);
 /// The same for Settings' folder-backup section, set by the inbox's folder
 /// backup rows and by a click on a folder backup's OS notification.
 final revealFolderBackupsRequestProvider = StateProvider<bool>((ref) => false);
+
+/// The same for Settings' weather location tile, set by the forecast sheet
+/// when no location is set.
+final revealWeatherLocationRequestProvider = StateProvider<bool>(
+  (ref) => false,
+);

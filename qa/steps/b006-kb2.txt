@@ -1,0 +1,31 @@
+# BUG-006 re-check 2: Tab order wraps, Space/Enter activate buttons.
+activate
+maximize
+wait 2000
+# Email (autofocus) -> Password -> Forgot -> Sign in -> Create account -> back to Email
+key tab
+key tab
+key tab
+key tab
+wait 300
+shot b006-8-create
+key tab
+wait 300
+shot b006-9-wrap
+# Email empty: Space on Forgot password? -> "Enter your email..." and the caret back in Email
+key tab
+key tab
+key space
+wait 600
+shot b006-10-space-forgot
+# Space on Create account toggles to sign-up, Enter toggles back
+key tab
+key tab
+key tab
+key tab
+key space
+wait 600
+shot b006-11-space-create
+key enter
+wait 600
+shot b006-12-enter-create

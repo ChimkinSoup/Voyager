@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/utils/time_format.dart';
@@ -9,6 +10,7 @@ import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/services/weather_forecast_chart.dart';
+import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/features/shell/weather_chart_curve.dart';
 import 'package:voyager/features/shell/weather_chart_transition_warmup.dart';
 import 'package:voyager/features/shell/weather_forecast_chart.dart';
@@ -51,11 +53,7 @@ class _WeatherForecastDialog extends ConsumerWidget {
               );
             },
             data: (forecast) {
-              if (forecast == null) {
-                return const _ForecastError(
-                  message: 'Set a weather location in Settings first.',
-                );
-              }
+              if (forecast == null) return const _NoLocationPrompt();
               return _ForecastBody(forecast: forecast);
             },
           ),
@@ -86,6 +84,57 @@ class _ForecastError extends StatelessWidget {
             const SizedBox(height: 12),
             GlassButton(onPressed: onRetry, label: 'Retry'),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown instead of the forecast while no location is set: sized to its text
+/// rather than the forecast's panel, with a way to the Settings tile.
+class _NoLocationPrompt extends ConsumerWidget {
+  const _NoLocationPrompt();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 380),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Weather isn\'t set up',
+                  style: theme.textTheme.titleMedium,
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(PhosphorIconsRegular.x),
+                tooltip: 'Close',
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text('Set a weather location in Settings to see the forecast.'),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: GlassButton(
+              label: 'Open Settings',
+              onPressed: () {
+                final router = GoRouter.of(context);
+                ref.read(revealWeatherLocationRequestProvider.notifier).state =
+                    true;
+                Navigator.of(context).pop();
+                router.go('/settings');
+              },
+            ),
+          ),
         ],
       ),
     );

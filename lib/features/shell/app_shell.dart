@@ -788,10 +788,26 @@ class _ClockTextState extends State<_ClockText> {
   void initState() {
     super.initState();
     _time = formatTime12Hour(DateTime.now());
-    _timer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) {
-        setState(() => _time = formatTime12Hour(DateTime.now()));
-      }
+    _scheduleTick();
+  }
+
+  /// Fires just after the next minute boundary rather than on a fixed period
+  /// from mount, which left the clock up to a period behind the system clock.
+  /// A timer that fires a hair early reads the old minute and simply
+  /// reschedules for the boundary a moment away.
+  void _scheduleTick() {
+    final now = DateTime.now();
+    final untilNextMinute =
+        const Duration(minutes: 1) -
+        Duration(
+          seconds: now.second,
+          milliseconds: now.millisecond,
+          microseconds: now.microsecond,
+        );
+    _timer = Timer(untilNextMinute, () {
+      if (!mounted) return;
+      setState(() => _time = formatTime12Hour(DateTime.now()));
+      _scheduleTick();
     });
   }
 
@@ -835,11 +851,18 @@ class _WeatherButtonState extends ConsumerState<_WeatherButton> {
     final cachedWeather = ref.watch(cachedCurrentWeatherProvider);
     final weather = weatherAsync.valueOrNull ?? cachedWeather;
     final icon = weather?.icon;
+    // Unknown while settings load: assume set, so a configured rail doesn't
+    // flash the unset pin on startup.
+    final locationSet =
+        ref.watch(settingsProvider.settled).valueOrNull?.hasWeatherLocation ??
+        true;
     final theme = Theme.of(context);
     final onSurface = theme.colorScheme.onSurface;
     final horizontal = widget.axis == Axis.horizontal;
 
-    final iconWidget = WeatherIcon(icon, size: 22);
+    final iconWidget = locationSet
+        ? WeatherIcon(icon, size: 22)
+        : const WeatherLocationUnsetIcon(size: 22);
     final tempWidget = weather?.tempC == null
         ? null
         : Text(
@@ -850,9 +873,9 @@ class _WeatherButtonState extends ConsumerState<_WeatherButton> {
             ),
           );
 
-    return Semantics(
+    final button = Semantics(
       button: true,
-      label: 'Weather forecast',
+      label: locationSet ? 'Weather forecast' : 'Set a weather location',
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(18),
@@ -907,5 +930,14 @@ class _WeatherButtonState extends ConsumerState<_WeatherButton> {
         ),
       ),
     );
+    // The button's Semantics label already says it; the tooltip announcing it
+    // too had screen readers read it twice.
+    return locationSet
+        ? button
+        : Tooltip(
+            message: 'Set a weather location',
+            excludeFromSemantics: true,
+            child: button,
+          );
   }
 }

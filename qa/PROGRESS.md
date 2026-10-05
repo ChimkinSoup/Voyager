@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 028.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 034.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -150,6 +150,9 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-028@example.com | 2026-10-05 (BUG-003 re-check) | Journal only: `__legacy__` "Journal" with one entry, title "qa probe title", body "qa probe body text" (created by typing into the blank editor). Dark + Scatter; Vim off. | Password `qavoyager2026`. Cold sign-in checked once. |
 | voyager-qa-029@example.com | 2026-10-05 (BUG-004 re-check) | Journal only: `__legacy__` "Journal" with one entry "fv bug004 title" / "fv bug004 body" (FV-2 steps). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-030@example.com | 2026-10-05 (BUG-005 re-check) | Empty apart from its default calendar and this device's registration (account B in the account-switch check). | Password `qavoyager2026`. |
+| voyager-qa-031@example.com | 2026-10-05 (BUG-006/007/008 re-check) | New account, signed up by keyboard only. Weather location "Chicago, Illinois, US" (saved during the BUG-008 check; it started with none). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-032@example.com | 2026-10-05 (BUG-226 check) | Empty apart from its default calendar and this device's registration. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-033@example.com | 2026-10-05 (code-review fixes: BUG-006 follow-up, shared Settings reveal) | Signed up by keyboard only, after one refused sign-in and one password reset request (no mail is delivered to example.com). No weather location. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 
 ---
 

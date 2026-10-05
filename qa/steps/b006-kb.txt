@@ -1,0 +1,24 @@
+# BUG-006 re-check: login page by keyboard only (no clicks).
+activate
+maximize
+wait 2000
+shot b006-1-arrival
+type voyager-qa-031@example.com
+key tab
+type wrongpass
+shot b006-2-typed
+key enter
+wait 5000
+shot b006-3-failed
+key tab
+wait 400
+shot b006-4-tab1
+key tab
+wait 400
+shot b006-5-tab2
+key tab
+wait 400
+shot b006-6-tab3
+key tab
+wait 400
+shot b006-7-tab4

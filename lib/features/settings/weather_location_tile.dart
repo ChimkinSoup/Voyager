@@ -6,6 +6,8 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/features/settings/settings_reveal.dart';
+import 'package:voyager/features/shell/reveal_request.dart';
 
 class WeatherLocationTile extends ConsumerStatefulWidget {
   const WeatherLocationTile({super.key, required this.settings});
@@ -19,6 +21,7 @@ class WeatherLocationTile extends ConsumerStatefulWidget {
 
 class _WeatherLocationTileState extends ConsumerState<WeatherLocationTile> {
   late final TextEditingController _controller;
+  final _focusNode = FocusNode();
   var _saving = false;
   String? _error;
 
@@ -28,7 +31,17 @@ class _WeatherLocationTileState extends ConsumerState<WeatherLocationTile> {
     _controller = TextEditingController(
       text: widget.settings.weatherLocationLabel,
     );
+    if (ref.read(revealWeatherLocationRequestProvider)) _reveal();
   }
+
+  /// Answers the forecast sheet's "Open Settings": scrolls the tile into view
+  /// and puts the caret in the City field.
+  void _reveal() => revealSettingsSection(
+    context,
+    clearRequest: () =>
+        ref.read(revealWeatherLocationRequestProvider.notifier).state = false,
+    onShown: _focusNode.requestFocus,
+  );
 
   @override
   void didUpdateWidget(covariant WeatherLocationTile oldWidget) {
@@ -42,6 +55,7 @@ class _WeatherLocationTileState extends ConsumerState<WeatherLocationTile> {
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -76,6 +90,9 @@ class _WeatherLocationTileState extends ConsumerState<WeatherLocationTile> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<bool>(revealWeatherLocationRequestProvider, (_, next) {
+      if (next) _reveal();
+    });
     final lastUpdated = _lastUpdatedLabel();
 
     return Card(
@@ -86,7 +103,9 @@ class _WeatherLocationTileState extends ConsumerState<WeatherLocationTile> {
           children: [
             Row(
               children: [
-                WeatherIcon(widget.settings.weatherIcon, size: 28),
+                widget.settings.hasWeatherLocation
+                    ? WeatherIcon(widget.settings.weatherIcon, size: 28)
+                    : const WeatherLocationUnsetIcon(size: 28),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -100,6 +119,7 @@ class _WeatherLocationTileState extends ConsumerState<WeatherLocationTile> {
             LabeledTextField(
               label: 'City (e.g. Chicago, US)',
               controller: _controller,
+              focusNode: _focusNode,
               onSubmitted: (_) => _saveLocation(),
             ),
             if (lastUpdated != null) ...[

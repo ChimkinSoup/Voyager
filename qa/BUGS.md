@@ -2,7 +2,7 @@
 
 ## Summary (Final Review, 2026-10-05)
 
-The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10-04, on builds `e3f10f5` → `1a0039b` (plus uncommitted lib changes; each entry names its build). This log has **225 entries** (BUG-001 … BUG-225), of which **1 is a duplicate** (BUG-043 → BUG-010), so **224 distinct defects**. BUG-225 was found after the audit, while fixing BUG-005. The Final Review checked every Blocker and Major for exact duplicates and found only that one. Same-pattern bugs in different components were left separate, because each has its own code path and fix: the Esc-discards-typing trio BUG-084 / BUG-144 / BUG-186, and the session-keys-behind-an-overlay pair BUG-157 / BUG-194. BUG-004 is related to BUG-010 but survived its fix.
+The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10-04, on builds `e3f10f5` → `1a0039b` (plus uncommitted lib changes; each entry names its build). This log has **226 entries** (BUG-001 … BUG-226), of which **1 is a duplicate** (BUG-043 → BUG-010), so **225 distinct defects**. BUG-225 was found after the audit, while fixing BUG-005, and BUG-226 while fixing BUG-008. The Final Review checked every Blocker and Major for exact duplicates and found only that one. Same-pattern bugs in different components were left separate, because each has its own code path and fix: the Esc-discards-typing trio BUG-084 / BUG-144 / BUG-186, and the session-keys-behind-an-overlay pair BUG-157 / BUG-194. BUG-004 is related to BUG-010 but survived its fix.
 
 ### Counts by severity
 
@@ -10,9 +10,9 @@ The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10
 |---|--:|--:|--:|
 | Blocker | 7 | 2 (BUG-001, BUG-003) | 5 |
 | Major | 29 | 4 (BUG-002 (see caveat), BUG-004, BUG-010, BUG-043 (dup)) | 25 |
-| Minor | 142 | 2 (BUG-044, BUG-167) | 140 |
-| Cosmetic | 47 | 0 | 47 |
-| **Total** | **225** | **8** | **217** |
+| Minor | 143 | 4 (BUG-006, BUG-044, BUG-167, BUG-226) | 139 |
+| Cosmetic | 47 | 2 (BUG-007, BUG-008) | 45 |
+| **Total** | **226** | **12** | **214** |
 
 "Fixed" means re-tested in the running app by a phase re-check or FV (TEST_PLAN.md "Fix verification"). "Open" means no fix was recorded, so each entry stands as it was last observed. Unit-test-only claims don't count as fixed.
 
@@ -57,7 +57,8 @@ The phase is the tag in each entry's title, i.e. where the bug was found. BUG-00
 | 26 Sync & offline | · | 2 | 4 | 1 | 7 |
 | FV | · | 1 | 2 | · | 3 |
 | BUG-005 fix | · | 1 | · | · | 1 |
-| **Total** | **7** | **29** | **142** | **47** | **225** |
+| BUG-008 fix | · | · | 1 | · | 1 |
+| **Total** | **7** | **29** | **143** | **47** | **226** |
 
 ### All Blockers
 
@@ -70,6 +71,14 @@ The phase is the tag in each entry's title, i.e. where the bug was found. BUG-00
 | BUG-061 | 8 | Every restart or cloud pull overwrites a dream's sticky note with its body; the note text is lost, also on new devices | Open (still reproduced 2026-10-03, `041a1ea`) |
 | BUG-198 | 23 | After a restart with a workout in progress, no click or key reaches the app and >1 CPU core stays busy until the workout ends | Open |
 | BUG-204 | 23 | Untouched starter exercises are never uploaded: after a wipe or on a new device, planned and lifted ones vanish (orphan plan entries, "No sets" history) | Open |
+
+### Skipped bugs
+
+Bugs deliberately not being fixed for now. They still count as Open above.
+
+| Bug | Phase | Severity | What happens | Skipped |
+|---|---|---|---|---|
+| BUG-009 | 2 | Minor | Shell and pages can't be driven by Tab: focus is invisible, and with nothing focused Tab goes nowhere | 2026-10-05 |
 
 ---
 
@@ -211,6 +220,20 @@ Entry format:
 - Actual: (1) nothing has focus, so the typed e-mail is lost. (2) The first Tab focuses **Email**, so the password lands in the e-mail field in plain text ("qavoyager2026" visible), and Enter shows "Email and password are required." (3) After a failed submit no field has focus. Tab goes Email → Password, then three stops with no visible focus indicator. (4) Enter and Space on the stop after Password do nothing (no "Enter your email to reset…" message; that stop is probably "Forgot password?", which looks faintly highlighted). "Create account" can't be reached or activated without the mouse.
 - Notes: `lib/features/auth/login_page.dart` has no `autofocus` and no focus nodes; only the two fields' `onSubmitted`. Signing in by keyboard works once the e-mail field is clicked (Enter in either field submits). Screenshots `qa/shots/p1-kb-sheet.png`, `p1-tab-sheet.png`, `p1-tab-enter.png`, `p1-tab-space.png`. The same button focus/activation behaviour probably applies to the app's other glass buttons; check it in P2/P25.
 - Notes (2026-09-29, Phase 2): the app-wide case is logged as BUG-009.
+- Notes (2026-10-05, fixed in the working tree, uncommitted):
+  - Change: the Email field autofocuses, and the login page's buttons join the Tab order (`canRequestFocus: true`), so Tab walks Email → Password → Forgot password? → Sign in → (Continue with Google) → Create account. `GlassButton` now answers `ActivateIntent` / `ButtonActivateIntent`, so Enter and Space press a focused one. Its focus ring is drawn in the tint or the accent rather than the fill, which on dark was the field plate (the ring was the color of the card). A failed attempt (empty fields, a refused sign-in, reset with no e-mail) puts the caret back in Email if it's empty, else Password.
+  - Only the login page's buttons were made focusable; other glass buttons are still out of the Tab order (BUG-009).
+  - Tests: `test/login_page_keyboard_test.dart` (4).
+- Notes (2026-10-05, verified in the running app, debug build `fbd2930` + this change, signed out on an empty unowned DB, then new account qa-031): **fixed.** Keyboard only (`qa/steps/b006-kb.txt`, `b006-kb2.txt`):
+  - (1) The e-mail typed on arrival landed in Email; Tab, then the password landed in Password (masked).
+  - (2) A refused sign-in left the caret in Password with its text selected.
+  - (3) Tab then walked Forgot password? → Sign in → Create account, each with a visible accent ring (`qa/shots/b006-4-tab1.png`, `b006-5-tab2.png`, `b006-6-tab3.png`; Google is hidden on this build). The run found the "three stops with no visible focus" of the original report: the next Tab went to a `Focus` outside the page, the custom title bar's Minimize / Maximize / Close (`DesktopWindowTitleBar`), which is hidden unless hovered, so Enter there could have closed the app. They are now wrapped in `ExcludeFocus`, as OS caption buttons aren't Tab stops either. After that, Tab from Create account wraps to Email (`b006-9-wrap.png`).
+  - (4) With Email empty, Space on Forgot password? showed "Enter your email to reset your password." and put the caret in Email (`b006-10-space-forgot.png`). Space on Create account switched to Sign up and Enter switched back, focus staying on the button (`b006-11-space-create.png`, `b006-12-enter-create.png`). qa-031 was then signed up by keyboard alone.
+- Notes (2026-10-05, follow-up from a code review, uncommitted; verified in the running app, qa-033):
+  - `GlassButton` ignored the "highlight off" callback while disabled, so a button pressed by keyboard (Sign in, a reset) kept its ring after the attempt even though focus had moved on. It now always accepts "off". Before: the ring stayed on Sign in in a test with a realistic sign-in delay; after: gone (`qa/shots/b006-14-signin-failed.png`).
+  - A password reset, refused or sent, now puts the caret in Email; a refused reset used to pick Password, and a sent one left nothing focused (`b006-15-reset-done.png`, focus read over the VM service).
+  - Email no longer autofocuses on Android, where it raised the soft keyboard over the buttons. Not run on Android; covered by a test.
+  - Tests: `test/login_page_keyboard_test.dart` now 7; the keyboard tests run as Windows (`TargetPlatformVariant`).
 
 ### BUG-007 [Phase 2] Rail clock changes minute up to 30 s late
 - Severity: Cosmetic
@@ -219,6 +242,8 @@ Entry format:
 - Expected: the clock shows the new minute within a second or two of the system clock.
 - Actual: it still showed "4:23 PM" at 16:24:18 and first showed "4:24 PM" at 16:24:22, about 22 s late. Earlier in the session the rail showed "4:22 PM" in the same screenshot as a journal entry stamped "4:23 PM" (`qa/shots/p2-state-journal-back.png`).
 - Notes: crops in `qa/shots/p2-clock-0..15.png`. `_ClockTextState` (`lib/features/shell/app_shell.dart`) refreshes on a `Timer.periodic(30 s)` started at mount, not aligned to the minute, so the lag is anywhere from 0 to 30 s depending on when the shell was built.
+- Notes (2026-10-05, fixed in the working tree, uncommitted): `_ClockTextState` now sets a one-shot timer for the next minute boundary and reschedules from each tick, replacing the 30 s period from mount. A timer that fires slightly early reads the old minute and reschedules for the boundary a moment later. No unit test: `DateTime.now()` isn't faked in widget tests.
+- Notes (2026-10-05, verified in the running app, same build, qa-031): **fixed.** The rail clock's text and the app's own `DateTime.now()` were read together over the VM service every ~2.2 s across two minute boundaries, on two separately launched shells. Both times the new minute showed at the first sample after the boundary: "5:05 AM" at 5:05:59.501 → "5:06 AM" at 5:06:01.726, and "5:09 AM" at 5:09:59.648 → "5:10 AM" at 5:10:01.849, so at most ~1.9 s late (the sampling interval), against up to 30 s before.
 
 ### BUG-008 [Phase 2] No weather location: the rail shows a sunny-weather icon, and the forecast sheet is an empty panel with no way to Settings
 - Severity: Cosmetic
@@ -227,6 +252,19 @@ Entry format:
 - Expected: an icon or label that reads as "weather not set up" (not a forecast), and a prompt that leads to Settings → Pages → Weather location.
 - Actual: the rail shows a yellow sun with no temperature, which reads as "it is sunny". The Settings tile shows the same sun beside the empty "City" field. Clicking the button opens the full-size forecast sheet (~1,360×1,240 physical px) holding only "Set a weather location in Settings first.", with no link to Settings and no close button (Esc or a click outside closes it).
 - Notes: screenshots `qa/shots/p2-start.png` (rail sun), `p2-weather-sheet.png` (empty sheet), `p2-pages-tab.png` (Settings tile). `WeatherIcon` (`lib/core/widgets/weather_icon.dart`) falls back to `PhosphorIcons.sun` for any unknown or null icon. After saving "Chicago, US" the rail showed a cloud and "25°" and the forecast sheet worked (daily cards, day selection, Esc and X close it).
+- Notes (2026-10-05, fixed in the working tree, uncommitted):
+  - With no location set (`AppSettings.hasWeatherLocation`), the rail and the Settings tile show a neutral map-pin-plus (`WeatherLocationUnsetIcon`) instead of the sun. The rail button is labelled and tooltipped "Set a weather location".
+  - With no forecast, the sheet shows a compact prompt ("Weather isn't set up", a close X, and "Open Settings") instead of the full-size panel. "Open Settings" raises `revealWeatherLocationRequestProvider`, the same pattern as the backup reveals: Settings opens on Pages, and the tile scrolls into view and focuses the City field.
+  - Tests: `test/weather_forecast_no_location_test.dart`.
+- Notes (2026-10-05, verified in the running app, same build, new account qa-031): **fixed.**
+  - The rail shows the grey pin with no temperature (`qa/shots/b008-1-shell.png`). Clicking it opens the compact prompt with a close X and "Open Settings" (`b008-3-prompt.png`), which lands on Settings → Pages with the tile on top, the pin beside the empty City field, and the caret in City (`b008-4-settings.png`).
+  - The tooltip couldn't be captured: no tooltip shows under the harness's synthetic hover, a known one (Settings → Devices pencil) included. Over the VM service the rail button carries `Tooltip` and `Semantics` "Set a weather location".
+  - The first run found a bug in this fix: with Settings already open on another tab, `Scrollable.ensureVisible` also scrolled the tab view, still animating to Pages, and threw `Null check operator used on a null value` in `RenderViewportBase.getOffsetToReveal` (`voyager_errors.log`, 05:03:51 and the 05:07:29 reproduction). The tile now scrolls only its own list and takes focus first. After the change, both paths (Settings not yet built, and Settings open on Account; `qa/steps/b008-reveal.dart.txt` via `evalc.ps1`) focused City with no new error-log lines (`b008-13-reveal-fresh.png`, `b008-14-reveal-after-fix.png`). The backup tiles' reveals had the same fault: BUG-226.
+  - Regression: after saving "Chicago, US", the rail showed the sun and "12°", the tile the condition glyph, and the forecast sheet the full panel (`b008-8-saved.png`, `b008-9-forecast.png`).
+  - Still showing a sun without a location: the journal editor's per-entry weather glyph beside the mood slider (`weatherIconData`'s fallback). Not part of this bug as logged.
+- Notes (2026-10-05, follow-up from a code review, uncommitted; verified in the running app, qa-033):
+  - The rail's tooltip no longer adds its own semantics (`excludeFromSemantics`), so screen readers read "Set a weather location" once.
+  - The reveal (with the backup ones, BUG-226) is now one helper, `revealSettingsSection` (`lib/features/settings/settings_reveal.dart`). It waits for the Settings tab view to stop animating, scrolls only the section's list, and focuses City only after that scroll ends. Focusing during the tab animation would have scrolled the moving tab view through the caret's own show-on-screen. Both paths, Settings not yet built and Pages kept alive with Settings on Account, focused City with no new error-log lines (`qa/shots/rv-1-weather-fresh.png`, `rv-2-weather-keptalive.png`). Tests: `test/settings_reveal_test.dart` (2), which fail with the old timing.
 
 ### BUG-009 [Phase 2] Shell and pages can't be driven by Tab: focus is invisible, and with nothing focused Tab goes nowhere
 - Severity: Minor
@@ -236,6 +274,7 @@ Entry format:
 - Actual: (a) focus stays on the root `FocusScopeNode` after every Tab; nothing gets focus, nothing is highlighted, and Enter does nothing (no "Create a category" dialog). (b) focus moves to a different `FocusNode` on each Tab and the task list scrolls (so focus is going into the list rows), but no row, checkbox, star or button shows any focus indicator, so the user can't tell where they are.
 - Notes: screenshots `qa/shots/p2-tab-1..6.png`, `p2-tab-enter.png`, `p2-tab-todo.png`. The rail's destination buttons are wrapped in `ExcludeFocus` (`lib/features/shell/app_shell.dart`), so they are deliberately out of the Tab order; Ctrl+Tab / Ctrl+Shift+Tab is the only keyboard route between pages (it works, including over hidden/reordered pages). The weather button and inbox bell were not reached by Tab in (a). Same pattern as BUG-006 (login page); this is the app-wide case. Scatter was on.
 - Notes (2026-10-01, Phase 16): the Life page is case (a): after a click on the canvas, Tab leaves `primaryFocus` on one scope wrapping the whole page, so the stat labels and the bucket list (opened by clicking the trunk) can't be reached from the keyboard. Inside the bucket-list popover Tab escapes to an off-screen page and the title bar (BUG-137).
+- Notes (2026-10-05): skipped for now; listed under "Skipped bugs" in the summary.
 
 ### BUG-010 [Phase 2] Signing in on an empty device: the Journal page shows no entries until restart, although they were pulled
 - Severity: Major
@@ -2054,4 +2093,15 @@ Entry format:
 - Actual: neither entry is in `users/accountA/journal_entries`, and both outbox rows are gone. The edits exist only in the local rows, and nothing will upload them again. A control run without the sign-out uploads both entries.
 - Notes: the sign-out swaps the sync service for one built on `NoOpSyncRepository`, whose writes (`appendOperation`, `upsertDocumentsBatch`, …) return normally without sending anything. The push therefore "succeeds" and the worker clears the row (`OutboxSyncWorker.startDraining`, crdtBacked branch). Only the round already running is affected: the next round sees no signed-in account and stops. This affects journal entries, dreams and the other `FirestoreCollections.crdtBacked` collections; rows in other collections are written to the round's `users/<uid>/…` path directly and were not tested. Older than the BUG-005 change (sign-out made the sync repository a no-op before it too). In the app, this needs an outbox with rows (offline edits, or uploads that failed), followed by Sign out while they drain, for example right after reconnecting.
 
-<!-- Last ID: BUG-225. -->
+### BUG-226 [BUG-008 fix] Backup reveals throw when Settings is already open on another tab
+- Severity: Minor
+- Found: 2026-10-05, while fixing BUG-008 (the weather tile's reveal threw the same way before its fix), debug build `fbd2930` + working tree, account qa-032
+- Steps to reproduce: Settings open on the Account tab. Raise the inbox's "Backups failing" reveal (`revealAutoBackupRequestProvider`) or a folder-backup reveal (`revealFolderBackupsRequestProvider`, also set by a folder backup's OS notification). Here it was raised over the VM service (`qa/steps/backup-reveal.ps1` with `backup-reveal-auto.dart.txt` / `backup-reveal-folder.dart.txt`, via `evalc.ps1`).
+- Expected: Settings switches to Data and scrolls the backup tiles into view, with no error.
+- Actual: Settings switches to Data, but each reveal logs an uncaught `Null check operator used on a null value` in `RenderViewportBase.getOffsetToReveal` to `voyager_errors.log` (from `Scrollable.ensureVisible` → `_PagePosition.ensureVisible`). With Settings not yet built (the usual inbox path), no error.
+- Notes: `_AutoBackupTiles._reveal` (`settings_page.dart`) and `FolderBackupSection._reveal` (`folder_backup_section.dart`) called `Scrollable.ensureVisible`, which also scrolls every ancestor scrollable, including the `TabBarView`'s page view while it is still animating from Account to Data, whose viewport throws. The existing test "Settings answers the backup reveal a request made while Settings is open" (`test/notification_inbox_row_click_test.dart`) passes either way.
+- Notes (2026-10-05, fixed in the working tree, uncommitted; verified in the running app, same build + this change, qa-032): **fixed.** Both reveals now scroll only the Data list (`Scrollable.maybeOf(context)?.position.ensureVisible`), as the weather tile does. Before: 15 new error-log lines per reveal with Settings open on Account (`qa/shots/bk-2-auto-open.png`, `bk-3-folder-open.png`). After a relaunch: the folder reveal with Settings not yet built, then each reveal with Settings open on Account and the Data list scrolled to the top first (`bk-5-data-top.png`), logged no new lines, and the list scrolled to bring the backup tiles fully into view (`bk-4-folder-fresh-fixed.png`, `bk-6-auto-open-fixed.png`, `bk-7-folder-open-fixed.png`).
+- Notes (2026-10-05, follow-up, uncommitted; verified in the running app, qa-033): both reveals now go through the shared `revealSettingsSection` (see BUG-008). The auto-backup reveal with Data not yet built and the folder reveal with Data kept alive and scrolled to the top logged no new lines and brought the tiles into view (`qa/shots/rv-3-auto-first.png`, `rv-4-folder-keptalive.png`). `qa/steps/backup-reveal.ps1` also takes `-Kind weather` now and reports the focused field.
+  - Known limit, not changed: Settings' tab lists build lazily (`KeepAliveScrollView` is a `ListView`), so a section beyond the list's cache extent isn't built and can't answer a reveal until scrolled near. The weather and backup sections are within it at the maximized window size checked here.
+
+<!-- Last ID: BUG-226. -->

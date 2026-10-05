@@ -43,6 +43,7 @@ import 'package:voyager/features/settings/job_experience_snippets_dialog.dart';
 import 'package:voyager/features/settings/media_storage_dialog.dart';
 import 'package:voyager/features/settings/key_binding_dialog.dart';
 import 'package:voyager/features/settings/settings_color_palette_section.dart';
+import 'package:voyager/features/settings/settings_reveal.dart';
 import 'package:voyager/features/settings/settings_tab_memory.dart';
 import 'package:voyager/features/settings/snippets_dialog.dart';
 import 'package:voyager/features/settings/weather_location_tile.dart';
@@ -57,7 +58,8 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 /// The tab strip's labels, in order. [_dataTab] holds the automatic-backup
-/// tiles the inbox's "Backups failing" row reveals.
+/// tiles the inbox's "Backups failing" row reveals; [_pagesTab] the weather
+/// location tile the forecast sheet reveals.
 const _settingsTabs = [
   'Account',
   'Appearance',
@@ -67,6 +69,7 @@ const _settingsTabs = [
   'About',
 ];
 final _dataTab = _settingsTabs.indexOf('Data');
+final _pagesTab = _settingsTabs.indexOf('Pages');
 
 class _SettingsPageState extends ConsumerState<SettingsPage>
     with SingleTickerProviderStateMixin {
@@ -74,12 +77,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     length: _settingsTabs.length,
     vsync: this,
     // A reveal requested before Settings opened: start on the tab holding
-    // the backup tiles so they mount and answer it themselves. Otherwise
+    // the requested tiles so they mount and answer it themselves. Otherwise
     // wherever the user left Settings last time, even in an earlier run.
     initialIndex:
         ref.read(revealAutoBackupRequestProvider) ||
             ref.read(revealFolderBackupsRequestProvider)
         ? _dataTab
+        : ref.read(revealWeatherLocationRequestProvider)
+        ? _pagesTab
         : math.max(0, _settingsTabs.indexOf(SettingsTabMemory.lastTab ?? '')),
   );
 
@@ -104,6 +109,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     });
     ref.listen<bool>(revealFolderBackupsRequestProvider, (_, next) {
       if (next) _tabs.animateTo(_dataTab);
+    });
+    ref.listen<bool>(revealWeatherLocationRequestProvider, (_, next) {
+      if (next) _tabs.animateTo(_pagesTab);
     });
     final settingsAsync = ref.watch(settingsProvider.settled);
 
@@ -1370,20 +1378,12 @@ class _AutoBackupTilesState extends ConsumerState<_AutoBackupTiles> {
     if (ref.read(revealAutoBackupRequestProvider)) _reveal();
   }
 
-  /// Answers the inbox's "Backups failing" row. After the frame: the
-  /// request can't be cleared mid-build, and there is nothing to scroll to
-  /// before layout.
-  void _reveal() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      ref.read(revealAutoBackupRequestProvider.notifier).state = false;
-      Scrollable.ensureVisible(
-        context,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-      );
-    });
-  }
+  /// Answers the inbox's "Backups failing" row.
+  void _reveal() => revealSettingsSection(
+    context,
+    clearRequest: () =>
+        ref.read(revealAutoBackupRequestProvider.notifier).state = false,
+  );
 
   @override
   Widget build(BuildContext context) {

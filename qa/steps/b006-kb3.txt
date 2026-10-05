@@ -1,0 +1,20 @@
+# BUG-006 follow-up (review fixes): keyboard only.
+activate
+maximize
+wait 2000
+type voyager-qa-033@example.com
+key tab
+type wrongpass
+# Password -> Forgot password? -> Sign in: ring on, then Enter (refused)
+key tab
+key tab
+wait 300
+shot b006-13-signin-ring
+key enter
+wait 5000
+shot b006-14-signin-failed
+# Caret is back in Password: Tab to Forgot password? and Enter (e-mail filled)
+key tab
+key enter
+wait 5000
+shot b006-15-reset-done

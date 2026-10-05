@@ -6,6 +6,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/features/settings/folder_backup_list_dialog.dart';
 import 'package:voyager/features/settings/folder_backup_source_dialog.dart';
+import 'package:voyager/features/settings/settings_reveal.dart';
 import 'package:voyager/features/settings/services/folder_backup_service.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 
@@ -30,17 +31,11 @@ class _FolderBackupSectionState extends ConsumerState<FolderBackupSection> {
 
   /// Answers the inbox's rows and the OS notification, as the automatic
   /// backup tiles do theirs.
-  void _reveal() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      ref.read(revealFolderBackupsRequestProvider.notifier).state = false;
-      Scrollable.ensureVisible(
-        context,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-      );
-    });
-  }
+  void _reveal() => revealSettingsSection(
+    context,
+    clearRequest: () =>
+        ref.read(revealFolderBackupsRequestProvider.notifier).state = false,
+  );
 
   @override
   Widget build(BuildContext context) {
