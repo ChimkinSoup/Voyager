@@ -1,6 +1,76 @@
 # Voyager QA Audit — Bugs
 
-<!-- SUMMARY: written by the Final Review phase (counts by severity and by phase). -->
+## Summary (Final Review, 2026-10-05)
+
+The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10-04, on builds `e3f10f5` → `1a0039b` (plus uncommitted lib changes; each entry names its build). This log has **224 entries** (BUG-001 … BUG-224), of which **1 is a duplicate** (BUG-043 → BUG-010), so **223 distinct defects**. The Final Review checked every Blocker and Major for exact duplicates and found only that one. Same-pattern bugs in different components were left separate, because each has its own code path and fix: the Esc-discards-typing trio BUG-084 / BUG-144 / BUG-186, and the session-keys-behind-an-overlay pair BUG-157 / BUG-194. BUG-004 is related to BUG-010 but survived its fix.
+
+### Counts by severity
+
+| Severity | Logged | Fixed + verified in the app | Open |
+|---|--:|--:|--:|
+| Blocker | 7 | 1 (BUG-001) | 6 |
+| Major | 28 | 3 (BUG-002 (see caveat), BUG-010, BUG-043 (dup)) | 25 |
+| Minor | 142 | 2 (BUG-044, BUG-167) | 140 |
+| Cosmetic | 47 | 0 | 47 |
+| **Total** | **224** | **6** | **218** |
+
+"Fixed" means re-tested in the running app by a phase re-check or FV (TEST_PLAN.md "Fix verification"). "Open" means no fix was recorded, so each entry stands as it was last observed. Unit-test-only claims don't count as fixed.
+
+Caveats:
+- BUG-002 counts as fixed for its restore half and the offline probe (FV-4, FV-11). Its weekly-pull skip is unit-tested only, and a weekly full pull of an account active that week still took 88 s (see its 2026-10-04 note).
+- FV re-tested other fixes that have no bug number of their own (FV-5 reminder engine, FV-6 sync gate, FV-7 floater depth, FV-8 time picker, FV-9 media half, FV-10 restore audit). All passed except FV-6 (BUG-217) and FV-9's link half (BUG-224).
+- BUG-220 was reproduced only with simulated whole-document snapshot writes. Real character-op edits from a second device are untested (one PC).
+- `flutter test` on 2026-10-04 (FV): 4,232 passed, 17 skipped, 10 failed. 9 failures are in tests of uncommitted finance files (`finance_sidebar_menus_test.dart` ×8, `finance_net_flow_view_test.dart` ×1, with a RenderFlex overflow at `finance_budget_panel.dart:226`), and 1 is in `calendar_overlay_page_test.dart` ("reveal opens beside the revealed event"). These come from the uncommitted working tree, not from a phase, so they aren't logged as bugs.
+
+### Counts by phase (severity × phase)
+
+The phase is the tag in each entry's title, i.e. where the bug was found. BUG-001 and BUG-002 were seen by Juno at setup and are tagged Phase 1. FV covers BUG-045, BUG-046 (FV-1/FV-2) and BUG-224 (FV-9). Counts use each entry's logged severity, and the duplicate BUG-043 is counted under Phase 6.
+
+| Phase | Blocker | Major | Minor | Cosmetic | Total |
+|---|--:|--:|--:|--:|--:|
+| 1 First run & auth | 3 | 2 | 1 | · | 6 |
+| 2 Shell & navigation | · | 1 | 3 | 2 | 6 |
+| 3 Vim | 1 | · | 6 | 1 | 8 |
+| 4 Text-editing helpers | · | 1 | 8 | 3 | 12 |
+| 5 Hotkeys & floaters | · | · | 5 | 1 | 6 |
+| 6 Notifications & reminders | · | 1 | 4 | 1 | 6 |
+| 7 Journal | · | · | 11 | 2 | 13 |
+| 8 Dreams | 1 | · | 3 | 1 | 5 |
+| 9 To-Do | · | 1 | 5 | 3 | 9 |
+| 10 Calendar | · | 2 | 5 | 3 | 10 |
+| 11 Search | · | 1 | 7 | 3 | 11 |
+| 12 Analytics & trackers | · | 3 | 7 | 1 | 11 |
+| 13 Finance A | · | 1 | 6 | 2 | 9 |
+| 14 Finance B | · | · | 8 | 2 | 10 |
+| 15 Finance C | · | 4 | 6 | 1 | 11 |
+| 16 Life | · | · | 5 | 3 | 8 |
+| 17 LeetCode A | · | 1 | 6 | 4 | 11 |
+| 18 LeetCode B | · | 1 | 4 | 1 | 6 |
+| 19A Rankings core | · | 2 | 3 | 1 | 6 |
+| 19B Rankings map | · | · | 5 | 2 | 7 |
+| 20 Jobs | · | · | 9 | 2 | 11 |
+| 21 Study A | · | 1 | 4 | 2 | 7 |
+| 22 Study B | · | 1 | 4 | 1 | 6 |
+| 23 Workout | 2 | · | 5 | 1 | 8 |
+| 24 Trash & undo | · | · | 3 | · | 3 |
+| 25 Settings & data | · | 2 | 3 | 3 | 8 |
+| 26 Sync & offline | · | 2 | 4 | 1 | 7 |
+| FV | · | 1 | 2 | · | 3 |
+| **Total** | **7** | **28** | **142** | **47** | **224** |
+
+### All Blockers
+
+| Bug | Phase | What happens | Status |
+|---|---|---|---|
+| BUG-001 | 1 | Signing in after a signed-out launch leaves sync signed out until restart; a stuck session reset the synced settings | **Fixed** (`9c05738`), verified in Phase 1 and FV-3 |
+| BUG-003 | 1 | Brand-new account: the Journal editor accepts text that is never saved | Open |
+| BUG-005 | 1 | Signing into a different account keeps the previous account's local data, and an edit uploads it, corrupted, into the new account | Open |
+| BUG-015 | 3 | Vim motions split emoji in half: inserting there crashes the app, and `x` saves and syncs a "�" | Open |
+| BUG-061 | 8 | Every restart or cloud pull overwrites a dream's sticky note with its body; the note text is lost, also on new devices | Open (still reproduced 2026-10-03, `041a1ea`) |
+| BUG-198 | 23 | After a restart with a workout in progress, no click or key reaches the app and >1 CPU core stays busy until the workout ends | Open |
+| BUG-204 | 23 | Untouched starter exercises are never uploaded: after a wipe or on a new device, planned and lifted ones vanish (orphan plan entries, "No sets" history) | Open |
+
+---
 
 Append-only findings log. Observations only: no proposed fixes, no code.
 Number IDs sequentially; check the last ID before adding one. To mark a
@@ -30,6 +100,7 @@ Entry format:
 - Notes (2026-09-27, consequence): **synced settings were reset to defaults.** During the stuck session, the local settings row (all defaults) was saved at 2026-09-28T03:10:05Z (23:10 local). Settings merge last-write-wins on the whole document (`mergeSettingsFromRemote`), so that newer clock beat the real settings (last changed 2026-09-27T01:38:30Z per the 00:57 auto-backup), and the next pull kept the defaults. The following launch (23:08, signed in from the start, so a real repository) probably uploaded the defaults over the cloud copy (not verified; Firestore wasn't read directly). Lost: theme/background (triangle texture and wave tuning), accent color, LeetCode username, and every other synced setting. The pre-wipe auto-backups in `C:\Users\Juno\VoyagerQA-localonly-backup-2026-09-27\backups\` still hold the real values.
 - Notes (2026-09-29, Phase 1 re-check): the fix holds. Launched signed out, signed into voyager-qa-002 from the login page onto an empty local DB: its journal entry was pulled within ~12 s, and later writes drained from the outbox. The same passed for qa-003.
 - Notes (2026-10-03, Phase 26 re-check of the consequence): not reproduced. qa-026's cloud settings (accent `#a6d189`, quotes off, week starts Monday off, dark) survived a cold re-login with an accent change made during the pull: afterwards `settings/app` held the new accent `#00bcd4` and every other synced setting unchanged (102 fields before and after). The settings had already been pulled when the change was saved (the pull of 3,912 docs fetches settings early), so a change made before they arrive wasn't caught in the window.
+- Notes (2026-10-05, re-check of Juno's per-setting stamps fix, uncommitted tree on `1a0039b`): passed, this time inside the window. Cold sign-in to qa-026 on a wiped DB with a listener armed in the app on `authStateChanges`, which saved accent `#ff5722` the moment sign-in landed. At that save the local row still held the defaults (quotes on, week starts Monday on; the cloud has both off), so the remote settings hadn't arrived; only `accentColor` was stamped. After the pull, `settings/app` differed from before only in `accentColor` and the clock fields (`settingsUpdatedAt`, new `settingsFieldUpdatedAt` / `settingsFieldStampsAt`): the other 99 synced settings were unchanged. The local row matched the cloud on all 101 synced settings (quotes off, week starts Monday off, dark + scatter, new accent). A restart re-uploaded nothing (same `updateTime`), the outbox was empty, and the run logs had no errors. Under whole-document LWW the same sequence would have let the default row's newer clock win.
 
 ### BUG-002 [Phase 1] Full startup pull saturates Firestore: false "offline" badge and a pull that stalls
 - Severity: Major
@@ -75,6 +146,7 @@ Entry format:
   - Pages are sized to ~16 MB of payload (`FirestoreSyncRepository.nextOperationPageSize`). The first page asks for 250; later ones fit what the pages so far averaged, between 50 and 1,000. On the measured account (~12 KB average) that's still 1,000 a page.
   - Tests: `test/sync_first_pull_operation_logs_test.dart` now seeds 200 tasks, and adds tests for a small first pull (no whole read), logs taken out of the result, and page sizing.
   - Not re-measured in the app.
+- Notes (2026-10-04, FV-4 / FV-11, qa-026, debug build `1a0039b`): the restore half holds. A cold restore of 300 entries / 303 tasks / 3,000 tracker values took the paged whole-log read: `pullAll took 23600ms: 3931 docs … journal_entries 17460ms (300, full), todo_tasks 16678ms (303, full)`, no `reading every operation log failed` line, text identical to P26's, no false offline badge during the pull. The next launch: `2414ms: 3 docs, 0 pulled whole`. **Weekly full pull of a recently active account:** with every `last_full_pull_at` aged 8 days, `pullAll took 88332ms … todo_tasks 86518ms (303, full), journal_entries 86494ms (300, full)`, i.e. 5× the cold restore of the same account, because every operation was newer than the cutoff, so nothing was skippable and all 603 logs were resolved one query at a time (later pulls never use the shared read). By design of the skip; whether it matters depends on how many documents a real account edits in a week. The skip itself couldn't be exercised: no QA account has a few hundred documents whose operations are older than ~8 days.
 
 ### BUG-003 [Phase 1] Brand-new account: the Journal editor accepts text that is never saved
 - Severity: Blocker
@@ -161,6 +233,7 @@ Entry format:
   - "All journals" showed 3 instead of 5: a separate counting bug, BUG-046, not the refresh.
   - Known gap confirmed: the pulled custom quote was in SQLite but `customQuotesProvider` still held `[]` and the quote pool lacked it, until a restart (then `[fv-quote]`). `historicalJournalEntriesProvider` not exercised: the seeded entries were only 0–2 days old.
   - A normal restart showed data from the first frame with no empty flash. The journal list pane widened by ~50 logical px within the first few seconds; not investigated whether that follows the pull or the settings load.
+- Notes (2026-10-05, Final Review): BUG-043 is marked as a duplicate of this bug (the reminder symptom of the same refresh gap). BUG-004 is related but **not** a duplicate: it has a different trigger (the page's own first write), the BUG-010 fix didn't fix it, and FV-2 confirmed it still reproduces.
 
 ### BUG-011 [Phase 2] After signing in on an empty device, the startup page ignores the account's startup setting
 - Severity: Minor
@@ -440,6 +513,7 @@ Entry format:
 - Notes (2026-09-30): same cause as BUG-010. The reminder providers are kept-alive `FutureProvider`s that read SQLite once, before the pull has written anything, and aren't among the four providers `lib/main.dart` invalidates after the startup pull. See BUG-010's notes.
 - Notes (2026-09-30, fixed in the working tree, uncommitted, with BUG-010): the startup pull now refreshes every data provider, including `scheduledReminderRulesProvider`, `reminderDeliveryStatesProvider`, `entityRemindersProvider`, `pinnedNotesProvider` and `notificationDismissalsProvider`, so the reminder engine sees the pulled rules once the pull ends. To verify: TEST_PLAN.md "Fix verification" FV-2.
 - Notes (2026-09-30, verified in the running app, FV-2 passed; build `f3c7cee`, qa-009): after a cold re-login, without restarting, the Inbox listed the scheduled rule, the pinned note and "Hidden (1)" (`qa/shots/fv2-inbox.png`). The once-rule due 22 minutes after the sign-in fired on time: sticky shown (`fv2-reminder.png`), `stickyShown` and `osFired` rows at 17:34:00Z from the new device id, and the OS toast in Windows' notification store. After acknowledging it and restarting, no second `stickyShown` row was logged.
+- Notes (2026-10-05, Final Review): **Duplicate of BUG-010.** Same root behaviour: kept-alive data providers read SQLite once, before the startup pull has written anything, and weren't re-read when it ended. BUG-010 records it on the Journal page and its 2026-09-30 note widens it to every page, reminders included. One fix (`invalidateAllDataProvidersFrom` after the pull) closed both, and FV-2 verified both. This entry stays as the record of the reminder symptom (due reminders never alert), but it isn't a separate defect. The summary counts it under its logged severity.
 
 ### BUG-044 [Phase 6] Every restore onto a wiped device re-uploads the backfilled collections, so the next launch pulls them all again
 - Severity: Minor
@@ -1879,6 +1953,7 @@ Entry format:
 - Expected: a placeholder that fits (an icon alone at this size), no layout error.
 - Actual: the 40×40 thumbnails show the cloud-off icon and "Downlo / ad di…" cut off, with the debug "OVERFLOWED BY 16 PIXELS" stripe across them (`qa/shots/p25-cold-landing2.png`); `voyager_errors.log` 16:56:40 "A RenderFlex overflowed by 16 pixels on the bottom", from `_PlaceholderMessage`'s Column in `lib/core/media/widgets/media_image.dart:291`. Release builds show the text clipped without the stripe.
 - Notes: the Image storage dialog's larger tiles show the same placeholder fine (`p25-L-media.png`).
+- Notes (2026-10-04, FV-4, qa-026): the same overflow ("A RenderFlex overflowed by 16 pixels on the bottom", `media_image.dart:291`) with downloads **on**, when the downloads failed during a Force-offline pull: the 40 px thumbnails show the "Retry" placeholder (`qa/shots/fv4-imgs-failed3.png`; `run-20261004-220743.log`, `voyager_errors.log`). So any placeholder message in the editor's image fan hits it, not only "Download disabled".
 
 ### BUG-217 [Phase 26] Dev "Check every collection against the cloud" counts the two untouched built-in workout plans as unsynced, so "Check, then quit" and `reset.ps1`'s sync gate refuse on any account whose plans were never edited
 - Severity: Minor
@@ -1887,6 +1962,7 @@ Entry format:
 - Expected: an untouched seed counts as nothing to lose, as the check already does for the job-stage seeds (`seed-*`) and the starter exercises ("every device seeds the same document for itself").
 - Actual: `safeToWipe: false`, 2 unsynced: `workout_plans` `workout_plan_weekly (not in cloud)` and `workout_plan_cycle (not in cloud)` (`qa/shots/p26-checkall.png`, `%APPDATA%\Voyager\voyager\sync_check.json`). Both rows are `version 0`, written by `DriftWorkoutRepository.ensureSeeded` with `recordLocalActivity: false`, so they are never uploaded; `FullSyncCheck._gapsIn` (`lib/core/dev/full_sync_check.dart` ~L137-149) exempts only `isJobSeedId` rows and starter exercises by name. "Check, then quit" therefore never quits, and `qa/harness/sync_gate.ps1` (run by `reset.ps1`) throws on this device.
 - Notes: the same class as BUG-204 / BUG-210 (seed rows treated like user data). Workaround: edit a plan once so it uploads, or `reset.ps1 -Force` on a QA account.
+- Notes (2026-10-04, FV-6, qa-027, build `1a0039b`): still reproduces on a fresh account after opening Workout and Jobs: the 5 `seed-stage-*` / 145 `seed-company-*` job seeds were correctly not reported, the two workout plans were (`safeToWipe: false`, 2 unsynced). Workout → Split → "Make active" (both plans to v1, uploaded) made the check pass. Before Workout is first opened there are no plan rows, so the check passes.
 
 ### BUG-218 [Phase 26] The offline badge pushes the rail's last items down: Settings loses its label and the bottom of its highlight
 - Severity: Cosmetic
@@ -1935,5 +2011,14 @@ Entry format:
 - Expected: the upload is retried once the connection is back (the worker's own doc says "Drains everything queued, in both directions. The entry point the connectivity lifecycle calls"), or at the latest on the next launch, so the image reaches the cloud and the other devices.
 - Actual: `media_assets_table.upload_state` stays `pending` after the reconnect and after a full restart (assets `f536f01d…` and `86bc4a5e…`, run log: one `[media] transfer attempt N failed … SocketException: DevFlags.forceOffline` each, then nothing). Firestore never gets the blob. They went up only when a new image was attached, 5 minutes later, because attaching calls `drainUploads` (all three uploaded within 15 s).
 - Notes: nothing calls `MediaTransferWorker.drain()`: `_resumeSyncAfterReconnect` in `lib/main.dart` restarts the document outbox and pulls, but leaves media alone. The launch path only calls `requeueFailedUploads()`, which returns before `drainUploads()` when no asset is parked as `failed` (`media_transfer_worker.dart` ~L184-204), so a transient failure (attempt 1 of 4) that leaves the asset `pending` is never retried. Voyager runs from the tray for days, so an image attached during a short outage may sit only on this PC indefinitely. The document outbox drained fine across the same outage (P26).
+- Notes (2026-10-04, FV-4, qa-026): the **download** side behaves the same way. On a cold sign-in, Force offline went on 9 s into the pull while the 4 journal images were downloading: each logged attempts 1–3 and "parking … after 4 attempt(s)", ending `download_state = failed`. After Force offline went off (twice, with 2 minutes' wait), nothing retried them; the entry showed four "Retry" placeholders (`qa/shots/fv4-imgs-failed3.png`). The next launch's `requeueFailedDownloads()` fetched all four (`present`). Unlike uploads, a failed download offers a manual Retry, and the blob is still in the cloud.
 
-<!-- Last ID: BUG-223. -->
+### BUG-224 [FV-9] Jobs smart paste turns a non-web link written without `//` into an https URL (`mailto:` becomes an openable link to the mail domain), and a markdown link whose target contains `)` is kept whole as the title
+- Severity: Minor
+- Found: 2026-10-04, Fix verification FV-9 (qa-027, build `1a0039b` + uncommitted lib changes)
+- Steps to reproduce: Jobs → put each of these on the clipboard, then press Add (the Track form reads the clipboard): (1) `[z](mailto:hr@acme.com)`; (2) `[w](javascript:void)`; (3) `[y](javascript:alert(1))`. Save (1) and (2) with any company; right-click each row.
+- Expected: FV-9 / commit `394ed2c`: a posting whose markdown link isn't a web link keeps only the title; nothing that isn't http(s) is stored as the application URL or offered as "Open".
+- Actual: (1) Role title "z", Application URL **`https://mailto:hr@acme.com`**; the row's menu offers "Open application URL", which would open `https://acme.com` with `mailto:hr` as userinfo (not clicked, MANUAL-ONLY). (2) Title "w", URL `https://javascript:void` stored; its menu has no Open (the URI doesn't parse). (3) No URL, but Role title is the whole raw string `[y](javascript:alert(1))` (`qa/shots/fv9-add2.png`, `fv9-add3.png`, `fv9-add4.png`, `fv9-menu1.png`, `fv9-menu2.png`; SQL `job_applications_table.application_url`). `[x](file:///C:/Windows)` worked as intended: title "x", no URL (`fv9-add1.png`).
+- Notes: `normalizeJobUrl` (`lib/features/jobs/job_clipboard_parser.dart` ~L130) only recognises a scheme followed by `://`; anything else gets `https://` prepended, so `mailto:`, `tel:`, `javascript:` and `data:` targets become https URLs. Case (3): `_markdownLink` stops at the first `)`, so a target with parentheses doesn't match and the whole string falls through to the title. The unit tests cover `file://` targets only. No script or file path can be launched this way; the risk is a misleading "Open" on a link that was never a web page.
+
+<!-- Last ID: BUG-224. -->

@@ -212,10 +212,17 @@ void main() {
 
     test('matching ignores case but keeps both spellings', () {
       expect(filterTransactionOrigins(origins, 'WAL'), [
-        'Kowalski',
         'Walmart',
         'walmart',
+        'Kowalski',
       ]);
+    });
+
+    test('an earlier match ranks above a more recent later one', () {
+      expect(
+        filterTransactionOrigins(['Farah foods', 'Foodie fruity'], 'food'),
+        ['Foodie fruity', 'Farah foods'],
+      );
     });
   });
 

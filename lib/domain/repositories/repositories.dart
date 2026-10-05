@@ -1267,6 +1267,10 @@ abstract class SyncRepository {
   Future<Map<String, dynamic>?> getRemoteSettings();
   Future<void> upsertRemoteSettings(Map<String, dynamic> data);
 
+  /// Writes every synced setting [settings] changed more recently than the
+  /// remote document — see `settingsUploadPatch`.
+  Future<void> uploadSettings(AppSettings settings);
+
   /// Whether writes are already piling up unacknowledged.
   ///
   /// True means the backend has not kept up — either this session has more

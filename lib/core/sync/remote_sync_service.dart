@@ -6296,7 +6296,7 @@ class RemoteSyncService {
     try {
       // Merged into the existing `settings/app` document rather than
       // overwriting it, so the weather location living there survives.
-      await _syncRepository.upsertRemoteSettings(settingsToFirestore(settings));
+      await _syncRepository.uploadSettings(settings);
       _syncActivity?.recordUpload(FirestoreCollections.settings);
       await OutboxSyncWorker.recordSuccess(
         collection: FirestoreCollections.settings,

@@ -1,0 +1,61 @@
+activate
+place 1000 600 1800 1100
+wait 800
+other-open
+otherb-open 200 300 900 500
+wait 800
+zorder
+hotkey ctrl+alt+t
+wait 2000
+type FV7 floater task
+key enter
+wait 2000
+zorder
+otherb-click 30 30
+wait 800
+zorder
+hotkey ctrl+alt+j
+wait 2000
+zorder
+status
+otherb-click 30 30
+wait 1500
+zorder
+hotkey ctrl+alt+j
+wait 2000
+type FV7 journal line
+wait 1500
+otherb-click 30 30
+wait 1500
+zorder
+hotkey ctrl+alt+f
+wait 2000
+zorder
+status
+otherb-click 30 30
+wait 1500
+zorder
+hotkey ctrl+alt+f
+wait 2000
+type 7.77
+key ctrl+enter
+wait 2500
+zorder
+otherb-click 30 30
+wait 800
+zorder
+hotkey ctrl+alt+r
+wait 2000
+zorder
+status
+otherb-click 30 30
+wait 1500
+zorder
+hotkey ctrl+alt+r
+wait 2000
+type FV7 floater reminder
+key ctrl+enter
+wait 2500
+zorder
+status
+ostatus

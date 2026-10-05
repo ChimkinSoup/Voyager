@@ -67,17 +67,22 @@ List<String> recentTransactionOrigins(
 
 /// The origins worth offering for [query], in the order to offer them.
 ///
-/// [origins] comes from [recentTransactionOrigins] and keeps its recency
-/// order: every origin is one the user has used, so there is no unused
-/// catalogue to rank below them the way the Jobs company list has. Matching is
-/// a case-insensitive substring — typing `wal` should still find `Walmart` —
-/// even though the origins themselves stay distinct by case. An empty query
-/// offers them all.
+/// [origins] comes from [recentTransactionOrigins]. Matching is a
+/// case-insensitive substring — typing `wal` should still find `Walmart` —
+/// even though the origins themselves stay distinct by case. Matches are
+/// ranked by how early the query lands in them, so `food` offers
+/// `Foodie Fruity` before `Farah Foods`; origins matching at the same spot
+/// keep their recency order. An empty query offers them all.
 List<String> filterTransactionOrigins(List<String> origins, String query) {
   final needle = query.trim().toLowerCase();
   if (needle.isEmpty) return origins;
-  return [
-    for (final origin in origins)
-      if (origin.toLowerCase().contains(needle)) origin,
-  ];
+  final matches = [
+    for (final (i, origin) in origins.indexed)
+      if (origin.toLowerCase().indexOf(needle) case final at when at >= 0)
+        (at: at, recency: i, origin: origin),
+  ]..sort((a, b) {
+    final byAt = a.at.compareTo(b.at);
+    return byAt != 0 ? byAt : a.recency.compareTo(b.recency);
+  });
+  return [for (final m in matches) m.origin];
 }

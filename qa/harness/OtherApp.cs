@@ -151,4 +151,89 @@ public static class Other
     }
 
     public static void MinimizeVoyager() { ShowWindow(Voy.MainWindow(), 6); }
+
+    public static IntPtr Handle { get { return handle; } }
+}
+
+// FV-7: a second probe-owned "other app" window, so Voyager can sit under two.
+public static class OtherB
+{
+    [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(Other.POINT p);
+    [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
+    [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] static extern void mouse_event(uint f, int dx, int dy, int data, UIntPtr extra);
+
+    static Form form;
+    static IntPtr handle = IntPtr.Zero;
+    public static IntPtr Handle { get { return handle; } }
+
+    public static void Open(int x, int y, int w, int h)
+    {
+        if (form != null) return;
+        var ready = new ManualResetEvent(false);
+        var t = new Thread(() =>
+        {
+            form = new Form();
+            form.Text = "VoyagerQA Other App B";
+            form.StartPosition = FormStartPosition.Manual;
+            form.Bounds = new Rectangle(x, y, w, h);
+            form.TopMost = true;
+            form.ShowInTaskbar = true;
+            form.BackColor = Color.DarkOliveGreen;
+            form.Shown += (s, e) => { handle = form.Handle; ready.Set(); };
+            Application.Run(form);
+        });
+        t.SetApartmentState(ApartmentState.STA);
+        t.IsBackground = true;
+        t.Start();
+        ready.WaitOne(5000);
+        Thread.Sleep(300);
+    }
+
+    public static void SetTopmost(bool on) { if (form != null) form.Invoke((Action)(() => { form.TopMost = on; })); }
+
+    public static void Close() { if (form != null) { form.Invoke((Action)(() => form.Close())); form = null; handle = IntPtr.Zero; } }
+
+    public static void Click(int dx, int dy)
+    {
+        if (form == null) throw new InvalidOperationException("other window B not open");
+        Rectangle b = Rectangle.Empty;
+        form.Invoke((Action)(() => { b = form.Bounds; }));
+        var p = new Other.POINT { X = dx >= 0 ? b.X + dx : b.X + b.Width / 2, Y = dy >= 0 ? b.Y + dy : b.Y + b.Height / 2 };
+        var under = GetAncestor(WindowFromPoint(p), 2);
+        if (under != handle) throw new InvalidOperationException("GUARD: the window under (" + p.X + "," + p.Y + ") is not the QA other-app form B (" + Other.Describe(under) + ")");
+        SetCursorPos(p.X, p.Y);
+        Thread.Sleep(60);
+        mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+        Thread.Sleep(40);
+        mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+        Thread.Sleep(120);
+    }
+}
+
+// FV-7: the top-to-bottom order of Voyager's main window and the two probe forms.
+public static class ZOrder
+{
+    [DllImport("user32.dll")] static extern IntPtr GetTopWindow(IntPtr h);
+    [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr h, uint cmd);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
+    [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+
+    public static string Of()
+    {
+        var main = Voy.MainWindow();
+        var parts = new System.Collections.Generic.List<string>();
+        for (var h = GetTopWindow(IntPtr.Zero); h != IntPtr.Zero; h = GetWindow(h, 2))
+        {
+            if (h == Other.Handle) parts.Add("A");
+            else if (h == OtherB.Handle) parts.Add("B");
+            else if (h == main)
+            {
+                RECT r; GetWindowRect(h, out r);
+                parts.Add("Voyager[" + (IsWindowVisible(h) ? "" : "hidden ") + (r.R - r.L) + "x" + (r.B - r.T) + "]");
+            }
+        }
+        return "z: " + string.Join(" > ", parts.ToArray());
+    }
 }

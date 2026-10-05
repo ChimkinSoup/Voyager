@@ -3775,37 +3775,135 @@ Map<String, dynamic> settingsSyncPayload(AppSettings s) => {
   'showWorkoutStatistics': s.showWorkoutStatistics,
 };
 
-/// [settingsSyncPayload] plus the clock the merge compares. Written with
-/// `SetOptions(merge: true)`, so the weather keys sharing this document are
-/// left untouched.
+/// [settingsSyncPayload] plus a single clock for all of it, as a backup file
+/// stores the settings. With no per-setting stamps, merging it applies every
+/// setting at that clock.
 Map<String, dynamic> settingsToFirestore(AppSettings settings) => {
   ...settingsSyncPayload(settings),
   'settingsUpdatedAt': _dateToFirestore(settings.updatedAt ?? utcNow()),
 };
 
-/// Applies a remote settings document to [local], whole-document
-/// last-write-wins: the device that most recently changed a synced setting
-/// wins for all of them at once.
+final _settingsSyncKeys = settingsSyncPayload(const AppSettings()).keys.toSet();
+
+/// [AppSettings.fieldUpdatedAt], with a row from before stamps read as every
+/// synced setting changed at its `updatedAt`.
+Map<String, DateTime> settingsFieldStamps(AppSettings settings) {
+  if (settings.fieldUpdatedAt case final stamps?) return stamps;
+  final updatedAt = settings.updatedAt;
+  if (updatedAt == null) return const {};
+  return {for (final key in _settingsSyncKeys) key: updatedAt};
+}
+
+/// [previous]'s stamps with every synced setting that differs in [next] moved
+/// to [now]. With no [previous], every setting counts as changed.
+Map<String, DateTime> restampSettings(
+  AppSettings? previous,
+  AppSettings next,
+  DateTime now,
+) {
+  final before = previous == null ? null : settingsSyncPayload(previous);
+  final stamps = previous == null
+      ? <String, DateTime>{}
+      : {...settingsFieldStamps(previous)};
+  for (final entry in settingsSyncPayload(next).entries) {
+    if (before == null ||
+        jsonEncode(before[entry.key]) != jsonEncode(entry.value)) {
+      stamps[entry.key] = now;
+    }
+  }
+  return stamps;
+}
+
+/// When each setting in a remote settings document last changed.
 ///
-/// Returns [local] unchanged when it is the newer of the two, so a pull that
+/// The stamps are trusted only when `settingsFieldStampsAt` matches the
+/// document's clock. A build from before stamps writes every setting and moves
+/// only `settingsUpdatedAt`, and because uploads merge, the stamps of an
+/// earlier write survive it while describing older values. Untrusted or
+/// absent stamps read as every setting present changed at the document's
+/// clock, which is what that build's whole-document write means. A document
+/// with no clock at all predates settings syncing (the weather service has
+/// been writing it all along) and has nothing to apply.
+Map<String, DateTime> _remoteSettingsStamps(Map<String, dynamic> data) {
+  final clock = parseFirestoreDate(data['settingsUpdatedAt']);
+  if (clock == null) return const {};
+  final trusted =
+      data['settingsFieldUpdatedAt'] is Map &&
+      parseFirestoreDate(data['settingsFieldStampsAt']) == clock;
+  final stamps = trusted
+      ? decodeJobFieldStamps(data['settingsFieldUpdatedAt'])
+      : const <String, DateTime>{};
+  return {
+    for (final key in _settingsSyncKeys)
+      if (data.containsKey(key))
+        if (trusted ? stamps[key] : clock case final stamp?) key: stamp,
+  };
+}
+
+/// What to write to the remote settings document [remote] so it holds every
+/// setting [local] changed more recently than it does: those settings, and
+/// stamps for the whole document. Empty when the remote is already as new.
+///
+/// Only meant for a read-then-write in one transaction. A setting this device
+/// never chose has no stamp and is never written, so a fresh install's
+/// defaults can't reach the cloud; one it holds only because it pulled it is
+/// written only while the cloud has nothing newer.
+Map<String, dynamic> settingsUploadPatch(
+  AppSettings local,
+  Map<String, dynamic>? remote,
+) {
+  final remoteStamps = remote == null
+      ? const <String, DateTime>{}
+      : _remoteSettingsStamps(remote);
+  final payload = settingsSyncPayload(local);
+  final stamps = {...remoteStamps};
+  final patch = <String, dynamic>{};
+  settingsFieldStamps(local).forEach((key, stamp) {
+    if (!payload.containsKey(key)) return;
+    final theirs = remoteStamps[key];
+    if (theirs != null && !stamp.isAfter(theirs)) return;
+    patch[key] = payload[key];
+    stamps[key] = stamp;
+  });
+  if (patch.isEmpty) return const {};
+  final clock = _dateToFirestore(
+    stamps.values.reduce((a, b) => a.isAfter(b) ? a : b),
+  );
+  return {
+    ...patch,
+    // Still the whole-document clock to a build from before stamps.
+    'settingsUpdatedAt': clock,
+    'settingsFieldUpdatedAt': _fieldStampsToFirestore(stamps),
+    'settingsFieldStampsAt': clock,
+  };
+}
+
+/// Applies a remote settings document to [local] setting by setting: each
+/// takes whichever side changed it last.
+///
+/// Returns [local] unchanged when no remote setting is newer, so a pull that
 /// finds nothing newer costs no write.
 AppSettings mergeSettingsFromRemote(
-  Map<String, dynamic> data,
+  Map<String, dynamic> remote,
   AppSettings local,
 ) {
-  final remoteUpdated = parseFirestoreDate(data['settingsUpdatedAt']);
-  // A document with no clock predates settings syncing (the weather service
-  // has been writing this document all along) and has nothing to apply.
-  if (remoteUpdated == null) return local;
-  // Strictly newer, unlike the record merges: an equal clock means this is the
-  // document *we* just wrote. Firestore echoes our own writes back through the
-  // snapshot listener, and re-applying one would rewrite the settings row and
-  // invalidate every provider in the app on every save.
-  final localUpdated = local.updatedAt;
-  if (localUpdated != null && !remoteUpdated.isAfter(localUpdated)) {
-    return local;
-  }
+  final localStamps = settingsFieldStamps(local);
+  final won = <String, DateTime>{};
+  _remoteSettingsStamps(remote).forEach((key, stamp) {
+    // Strictly newer, unlike the record merges: an equal stamp means this is
+    // the document *we* just wrote. Firestore echoes our own writes back
+    // through the snapshot listener, and re-applying one would rewrite the
+    // settings row and invalidate every provider in the app on every save.
+    final mine = localStamps[key];
+    if (mine == null || stamp.isAfter(mine)) won[key] = stamp;
+  });
+  if (won.isEmpty) return local;
 
+  // Only the settings that won are left to read, and every read below keeps
+  // the local value for a key that is absent.
+  final data = {for (final key in won.keys) key: remote[key]};
+  final remoteUpdated = won.values.reduce((a, b) => a.isAfter(b) ? a : b);
+  final localUpdated = local.updatedAt;
   return local.copyWith(
     accentColor: _remoteInt(data, 'accentColor'),
     themeMode: _enumFromName(
@@ -3992,7 +4090,10 @@ AppSettings mergeSettingsFromRemote(
     workoutRestSeconds: _remoteInt(data, 'workoutRestSeconds'),
     showWorkoutsOnCalendar: data['showWorkoutsOnCalendar'] as bool?,
     showWorkoutStatistics: data['showWorkoutStatistics'] as bool?,
-    updatedAt: remoteUpdated,
+    updatedAt: localUpdated != null && localUpdated.isAfter(remoteUpdated)
+        ? localUpdated
+        : remoteUpdated,
+    fieldUpdatedAt: {...localStamps, ...won},
   );
 }
 

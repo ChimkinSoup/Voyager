@@ -177,6 +177,7 @@ class AppSettings {
     this.showWorkoutsOnCalendar = false,
     this.showWorkoutStatistics = false,
     this.updatedAt,
+    this.fieldUpdatedAt,
     this.syncBackfillVersion = 0,
     List<int>? colorPalette,
   }) : colorPalette = colorPalette ?? defaultColorPalette;
@@ -519,14 +520,23 @@ class AppSettings {
   final bool showWorkoutStatistics;
 
   /// When a setting that syncs last changed, on whichever device changed it —
-  /// the last-write-wins clock for the whole settings document. Null on a row
-  /// written before this existed.
+  /// the newest of [fieldUpdatedAt]. Null on a row written before this existed.
   ///
   /// Only [settingsSyncPayload] fields move it: a weather refresh, a dev-flag
   /// toggle, or remembering which page you were on are device-local writes,
   /// and letting them bump this clock would let simply opening the app
   /// overwrite a preference another device changed more recently.
   final DateTime? updatedAt;
+
+  /// When each synced setting last changed, keyed as [settingsSyncPayload]
+  /// keys them: the last-write-wins clock per setting. Changing one setting
+  /// stamps only that one, so a device whose other settings are still the
+  /// defaults can't carry them over the cloud copy (BUG-001).
+  ///
+  /// A setting with no stamp was never chosen on any device this row heard
+  /// from, and any remote value beats it. Null on a row written before stamps
+  /// existed: every synced setting then counts as changed at [updatedAt].
+  final Map<String, DateTime>? fieldUpdatedAt;
 
   /// Which one-time upload of the newly synced collections this device has
   /// already run. Device-local: it describes this installation's upload
@@ -682,6 +692,7 @@ class AppSettings {
     bool? showWorkoutsOnCalendar,
     bool? showWorkoutStatistics,
     DateTime? updatedAt,
+    Map<String, DateTime>? fieldUpdatedAt,
     int? syncBackfillVersion,
     List<int>? colorPalette,
     bool clearJobProfileLinkedInUrl = false,
@@ -981,6 +992,7 @@ class AppSettings {
       showWorkoutStatistics:
           showWorkoutStatistics ?? this.showWorkoutStatistics,
       updatedAt: updatedAt ?? this.updatedAt,
+      fieldUpdatedAt: fieldUpdatedAt ?? this.fieldUpdatedAt,
       syncBackfillVersion: syncBackfillVersion ?? this.syncBackfillVersion,
     );
   }

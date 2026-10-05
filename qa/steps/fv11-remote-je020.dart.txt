@@ -1,0 +1,16 @@
+final repo = c.read(syncRepositoryProvider);
+final remote = await repo.getDocument('journal_entries', 'p26-je-020');
+final ops = await repo.listOperations('p26-je-020');
+var maxSeq = 0;
+for (final o in ops) { if (o.sequence > maxSeq) maxSeq = o.sequence; }
+final now = DateTime.now().toUtc();
+final payload = Map<String, dynamic>.from(remote!);
+payload['body'] = 'P26 bulk body 20 lorem ipsum dolor sit amet FVPULLREMOTE';
+payload['version'] = (remote['version'] as num).toInt() + 1;
+payload['updatedAt'] = now.toIso8601String();
+final opId = 'fv-devB_p26-je-020_' + now.microsecondsSinceEpoch.toString() + '_' + (maxSeq + 1).toString();
+final bytes = const JSONMessageCodec().encodeMessage(payload)!;
+final encoded = String.fromCharCodes(bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes));
+await repo.appendOperation(SyncOperation(id: opId, documentId: 'p26-je-020', sequence: maxSeq + 1, payload: encoded, deviceId: 'fv-devB', timestamp: now));
+await repo.upsertDocument('journal_entries', 'p26-je-020', payload);
+debugPrint('P26 FVREMOTE wrote v' + payload['version'].toString() + ' seq ' + (maxSeq + 1).toString() + ' ops ' + ops.length.toString());

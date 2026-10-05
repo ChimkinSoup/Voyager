@@ -1,0 +1,24 @@
+activate
+shot fv4-pull-01
+wait 3000
+shot fv4-pull-02
+wait 3000
+shot fv4-pull-03
+wait 3000
+shot fv4-pull-04
+wait 3000
+shot fv4-pull-05
+wait 3000
+shot fv4-pull-06
+wait 3000
+shot fv4-pull-07
+wait 3000
+shot fv4-pull-08
+wait 3000
+shot fv4-pull-09
+wait 3000
+shot fv4-pull-10
+wait 3000
+shot fv4-pull-11
+wait 3000
+shot fv4-pull-12

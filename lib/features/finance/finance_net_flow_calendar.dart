@@ -40,8 +40,8 @@ const _monthNames = [
 /// A year of daily money: each day tinted by the hero chart's solo series (net
 /// when none is soloed), scaled against that year's busiest day.
 ///
-/// Days inside the chart's range carry the colour; days outside it stay
-/// muted, but still hover and still jump. Tapping any day asks [onDayTap] to
+/// Days inside the chart's range carry the colour; days outside it carry it
+/// dimmed, and still hover and still jump. Tapping any day asks [onDayTap] to
 /// take the ledger there.
 ///
 /// Structure and hover plumbing follow LeetCodeActivityCalendar; see it for
@@ -367,17 +367,17 @@ class _DayCell extends StatelessWidget {
         : (value.abs() / busiest).clamp(0.0, 1.0);
 
     // Days spilling in from an adjacent month stay neutral, as on every year
-    // heatmap in the app; so do days outside the chart's range. A quiet day in
-    // range is a whisper of green — nothing lost reads as "at or above zero".
+    // heatmap in the app; days outside the chart's range keep their colour at
+    // half the strength. A quiet day is a whisper of green — nothing lost
+    // reads as "at or above zero".
+    final rangeDim = inRange ? 1.0 : 0.5;
     final Color fill;
-    if (!inMonth || !inRange) {
-      fill = theme.colorScheme.onSurface.withValues(
-        alpha: 0.05 * (inMonth ? 1.0 : 0.4),
-      );
+    if (!inMonth) {
+      fill = theme.colorScheme.onSurface.withValues(alpha: 0.05 * 0.4);
     } else if (value == 0) {
-      fill = kIncomeGreen.withValues(alpha: 0.08);
+      fill = kIncomeGreen.withValues(alpha: 0.08 * rangeDim);
     } else {
-      fill = hue.withValues(alpha: 0.15 + 0.85 * intensity);
+      fill = hue.withValues(alpha: (0.15 + 0.85 * intensity) * rangeDim);
     }
 
     final cell = Container(

@@ -10121,6 +10121,17 @@ class $SettingsTableTable extends SettingsTable
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _fieldUpdatedAtJsonMeta =
+      const VerificationMeta('fieldUpdatedAtJson');
+  @override
+  late final GeneratedColumn<String> fieldUpdatedAtJson =
+      GeneratedColumn<String>(
+        'field_updated_at_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _syncBackfillVersionMeta =
       const VerificationMeta('syncBackfillVersion');
   @override
@@ -10283,6 +10294,7 @@ class $SettingsTableTable extends SettingsTable
     showWorkoutsOnCalendar,
     showWorkoutStatistics,
     updatedAt,
+    fieldUpdatedAtJson,
     syncBackfillVersion,
   ];
   @override
@@ -11599,6 +11611,15 @@ class $SettingsTableTable extends SettingsTable
         updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
       );
     }
+    if (data.containsKey('field_updated_at_json')) {
+      context.handle(
+        _fieldUpdatedAtJsonMeta,
+        fieldUpdatedAtJson.isAcceptableOrUnknown(
+          data['field_updated_at_json']!,
+          _fieldUpdatedAtJsonMeta,
+        ),
+      );
+    }
     if (data.containsKey('sync_backfill_version')) {
       context.handle(
         _syncBackfillVersionMeta,
@@ -12213,6 +12234,10 @@ class $SettingsTableTable extends SettingsTable
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       ),
+      fieldUpdatedAtJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}field_updated_at_json'],
+      ),
       syncBackfillVersion: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}sync_backfill_version'],
@@ -12477,6 +12502,11 @@ class SettingsTableData extends DataClass
   /// before the first pull ever ran.
   final DateTime? updatedAt;
 
+  /// `settingKey -> ISO instant` — see `AppSettings.fieldUpdatedAt`. Null on a
+  /// row from before per-setting stamps, which keeps "every setting changed at
+  /// [updatedAt]" distinct from "no setting chosen yet" (`{}`).
+  final String? fieldUpdatedAtJson;
+
   /// Which one-time upload of the newly synced collections this device has
   /// run — see `FirestoreCollections.syncBackfillVersion`. Device-local, so it
   /// stays out of [settingsSyncPayload].
@@ -12631,6 +12661,7 @@ class SettingsTableData extends DataClass
     required this.showWorkoutsOnCalendar,
     required this.showWorkoutStatistics,
     this.updatedAt,
+    this.fieldUpdatedAtJson,
     required this.syncBackfillVersion,
   });
   @override
@@ -12983,6 +13014,9 @@ class SettingsTableData extends DataClass
     if (!nullToAbsent || updatedAt != null) {
       map['updated_at'] = Variable<DateTime>(updatedAt);
     }
+    if (!nullToAbsent || fieldUpdatedAtJson != null) {
+      map['field_updated_at_json'] = Variable<String>(fieldUpdatedAtJson);
+    }
     map['sync_backfill_version'] = Variable<int>(syncBackfillVersion);
     return map;
   }
@@ -13237,6 +13271,9 @@ class SettingsTableData extends DataClass
       updatedAt: updatedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(updatedAt),
+      fieldUpdatedAtJson: fieldUpdatedAtJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fieldUpdatedAtJson),
       syncBackfillVersion: Value(syncBackfillVersion),
     );
   }
@@ -13588,6 +13625,9 @@ class SettingsTableData extends DataClass
         json['showWorkoutStatistics'],
       ),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
+      fieldUpdatedAtJson: serializer.fromJson<String?>(
+        json['fieldUpdatedAtJson'],
+      ),
       syncBackfillVersion: serializer.fromJson<int>(
         json['syncBackfillVersion'],
       ),
@@ -13862,6 +13902,7 @@ class SettingsTableData extends DataClass
       'showWorkoutsOnCalendar': serializer.toJson<bool>(showWorkoutsOnCalendar),
       'showWorkoutStatistics': serializer.toJson<bool>(showWorkoutStatistics),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
+      'fieldUpdatedAtJson': serializer.toJson<String?>(fieldUpdatedAtJson),
       'syncBackfillVersion': serializer.toJson<int>(syncBackfillVersion),
     };
   }
@@ -14016,6 +14057,7 @@ class SettingsTableData extends DataClass
     bool? showWorkoutsOnCalendar,
     bool? showWorkoutStatistics,
     Value<DateTime?> updatedAt = const Value.absent(),
+    Value<String?> fieldUpdatedAtJson = const Value.absent(),
     int? syncBackfillVersion,
   }) => SettingsTableData(
     id: id ?? this.id,
@@ -14292,6 +14334,9 @@ class SettingsTableData extends DataClass
         showWorkoutsOnCalendar ?? this.showWorkoutsOnCalendar,
     showWorkoutStatistics: showWorkoutStatistics ?? this.showWorkoutStatistics,
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+    fieldUpdatedAtJson: fieldUpdatedAtJson.present
+        ? fieldUpdatedAtJson.value
+        : this.fieldUpdatedAtJson,
     syncBackfillVersion: syncBackfillVersion ?? this.syncBackfillVersion,
   );
   SettingsTableData copyWithCompanion(SettingsTableCompanion data) {
@@ -14741,6 +14786,9 @@ class SettingsTableData extends DataClass
           ? data.showWorkoutStatistics.value
           : this.showWorkoutStatistics,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      fieldUpdatedAtJson: data.fieldUpdatedAtJson.present
+          ? data.fieldUpdatedAtJson.value
+          : this.fieldUpdatedAtJson,
       syncBackfillVersion: data.syncBackfillVersion.present
           ? data.syncBackfillVersion.value
           : this.syncBackfillVersion,
@@ -14933,6 +14981,7 @@ class SettingsTableData extends DataClass
           ..write('showWorkoutsOnCalendar: $showWorkoutsOnCalendar, ')
           ..write('showWorkoutStatistics: $showWorkoutStatistics, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('fieldUpdatedAtJson: $fieldUpdatedAtJson, ')
           ..write('syncBackfillVersion: $syncBackfillVersion')
           ..write(')'))
         .toString();
@@ -15089,6 +15138,7 @@ class SettingsTableData extends DataClass
     showWorkoutsOnCalendar,
     showWorkoutStatistics,
     updatedAt,
+    fieldUpdatedAtJson,
     syncBackfillVersion,
   ]);
   @override
@@ -15270,6 +15320,7 @@ class SettingsTableData extends DataClass
           other.showWorkoutsOnCalendar == this.showWorkoutsOnCalendar &&
           other.showWorkoutStatistics == this.showWorkoutStatistics &&
           other.updatedAt == this.updatedAt &&
+          other.fieldUpdatedAtJson == this.fieldUpdatedAtJson &&
           other.syncBackfillVersion == this.syncBackfillVersion);
 }
 
@@ -15423,6 +15474,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   final Value<bool> showWorkoutsOnCalendar;
   final Value<bool> showWorkoutStatistics;
   final Value<DateTime?> updatedAt;
+  final Value<String?> fieldUpdatedAtJson;
   final Value<int> syncBackfillVersion;
   const SettingsTableCompanion({
     this.id = const Value.absent(),
@@ -15574,6 +15626,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.showWorkoutsOnCalendar = const Value.absent(),
     this.showWorkoutStatistics = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.fieldUpdatedAtJson = const Value.absent(),
     this.syncBackfillVersion = const Value.absent(),
   });
   SettingsTableCompanion.insert({
@@ -15726,6 +15779,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     this.showWorkoutsOnCalendar = const Value.absent(),
     this.showWorkoutStatistics = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.fieldUpdatedAtJson = const Value.absent(),
     this.syncBackfillVersion = const Value.absent(),
   });
   static Insertable<SettingsTableData> custom({
@@ -15878,6 +15932,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Expression<bool>? showWorkoutsOnCalendar,
     Expression<bool>? showWorkoutStatistics,
     Expression<DateTime>? updatedAt,
+    Expression<String>? fieldUpdatedAtJson,
     Expression<int>? syncBackfillVersion,
   }) {
     return RawValuesInsertable({
@@ -16134,6 +16189,8 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       if (showWorkoutStatistics != null)
         'show_workout_statistics': showWorkoutStatistics,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (fieldUpdatedAtJson != null)
+        'field_updated_at_json': fieldUpdatedAtJson,
       if (syncBackfillVersion != null)
         'sync_backfill_version': syncBackfillVersion,
     });
@@ -16289,6 +16346,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     Value<bool>? showWorkoutsOnCalendar,
     Value<bool>? showWorkoutStatistics,
     Value<DateTime?>? updatedAt,
+    Value<String?>? fieldUpdatedAtJson,
     Value<int>? syncBackfillVersion,
   }) {
     return SettingsTableCompanion(
@@ -16516,6 +16574,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
       showWorkoutStatistics:
           showWorkoutStatistics ?? this.showWorkoutStatistics,
       updatedAt: updatedAt ?? this.updatedAt,
+      fieldUpdatedAtJson: fieldUpdatedAtJson ?? this.fieldUpdatedAtJson,
       syncBackfillVersion: syncBackfillVersion ?? this.syncBackfillVersion,
     );
   }
@@ -17138,6 +17197,9 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (fieldUpdatedAtJson.present) {
+      map['field_updated_at_json'] = Variable<String>(fieldUpdatedAtJson.value);
+    }
     if (syncBackfillVersion.present) {
       map['sync_backfill_version'] = Variable<int>(syncBackfillVersion.value);
     }
@@ -17330,6 +17392,7 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
           ..write('showWorkoutsOnCalendar: $showWorkoutsOnCalendar, ')
           ..write('showWorkoutStatistics: $showWorkoutStatistics, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('fieldUpdatedAtJson: $fieldUpdatedAtJson, ')
           ..write('syncBackfillVersion: $syncBackfillVersion')
           ..write(')'))
         .toString();
@@ -54560,6 +54623,7 @@ typedef $$SettingsTableTableCreateCompanionBuilder =
       Value<bool> showWorkoutsOnCalendar,
       Value<bool> showWorkoutStatistics,
       Value<DateTime?> updatedAt,
+      Value<String?> fieldUpdatedAtJson,
       Value<int> syncBackfillVersion,
     });
 typedef $$SettingsTableTableUpdateCompanionBuilder =
@@ -54713,6 +54777,7 @@ typedef $$SettingsTableTableUpdateCompanionBuilder =
       Value<bool> showWorkoutsOnCalendar,
       Value<bool> showWorkoutStatistics,
       Value<DateTime?> updatedAt,
+      Value<String?> fieldUpdatedAtJson,
       Value<int> syncBackfillVersion,
     });
 
@@ -55474,6 +55539,11 @@ class $$SettingsTableTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get fieldUpdatedAtJson => $composableBuilder(
+    column: $table.fieldUpdatedAtJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -56252,6 +56322,11 @@ class $$SettingsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get fieldUpdatedAtJson => $composableBuilder(
+    column: $table.fieldUpdatedAtJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get syncBackfillVersion => $composableBuilder(
     column: $table.syncBackfillVersion,
     builder: (column) => ColumnOrderings(column),
@@ -57015,6 +57090,11 @@ class $$SettingsTableTableAnnotationComposer
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
+  GeneratedColumn<String> get fieldUpdatedAtJson => $composableBuilder(
+    column: $table.fieldUpdatedAtJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get syncBackfillVersion => $composableBuilder(
     column: $table.syncBackfillVersion,
     builder: (column) => column,
@@ -57230,6 +57310,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> showWorkoutsOnCalendar = const Value.absent(),
                 Value<bool> showWorkoutStatistics = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
+                Value<String?> fieldUpdatedAtJson = const Value.absent(),
                 Value<int> syncBackfillVersion = const Value.absent(),
               }) => SettingsTableCompanion(
                 id: id,
@@ -57387,6 +57468,7 @@ class $$SettingsTableTableTableManager
                 showWorkoutsOnCalendar: showWorkoutsOnCalendar,
                 showWorkoutStatistics: showWorkoutStatistics,
                 updatedAt: updatedAt,
+                fieldUpdatedAtJson: fieldUpdatedAtJson,
                 syncBackfillVersion: syncBackfillVersion,
               ),
           createCompanionCallback:
@@ -57565,6 +57647,7 @@ class $$SettingsTableTableTableManager
                 Value<bool> showWorkoutsOnCalendar = const Value.absent(),
                 Value<bool> showWorkoutStatistics = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
+                Value<String?> fieldUpdatedAtJson = const Value.absent(),
                 Value<int> syncBackfillVersion = const Value.absent(),
               }) => SettingsTableCompanion.insert(
                 id: id,
@@ -57722,6 +57805,7 @@ class $$SettingsTableTableTableManager
                 showWorkoutsOnCalendar: showWorkoutsOnCalendar,
                 showWorkoutStatistics: showWorkoutStatistics,
                 updatedAt: updatedAt,
+                fieldUpdatedAtJson: fieldUpdatedAtJson,
                 syncBackfillVersion: syncBackfillVersion,
               ),
           withReferenceMapper: (p0) => p0

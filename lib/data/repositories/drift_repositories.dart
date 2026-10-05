@@ -3724,7 +3724,8 @@ class DriftFinanceRepository implements FinanceRepository {
     id: row.id,
     name: row.name,
     baselineRemainingCents: row.baselineRemainingCents,
-    baselineAsOf: row.baselineAsOf,
+    // Stored in UTC; local like [_map]'s occurredAt.
+    baselineAsOf: row.baselineAsOf.toLocal(),
     annualLimits: AnnualLimit.listFromJson(jsonDecode(row.annualLimitsJson)),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -3741,7 +3742,8 @@ class DriftFinanceRepository implements FinanceRepository {
         RoomEventKind.values.asNameMap()[row.kind] ??
         RoomEventKind.contribution,
     amountCents: row.amountCents,
-    occurredAt: row.occurredAt,
+    // Stored in UTC; local like [_map]'s occurredAt.
+    occurredAt: row.occurredAt.toLocal(),
     transactionId: row.transactionId,
     valuationId: row.valuationId,
     counterAssetId: row.counterAssetId,
@@ -3880,7 +3882,9 @@ class DriftFinanceRepository implements FinanceRepository {
     origin: row.origin,
     note: row.note,
     tags: List<String>.from(jsonDecode(row.tagsJson) as List),
-    occurredAt: row.occurredAt,
+    // Synced rows are stored in UTC and read back as UTC DateTimes. Every
+    // finance view buckets by the local calendar day, so convert here once.
+    occurredAt: row.occurredAt.toLocal(),
     roomEventId: row.roomEventId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -4540,6 +4544,9 @@ class DriftSettingsRepository implements SettingsRepository {
       showWorkoutsOnCalendar: row.showWorkoutsOnCalendar,
       showWorkoutStatistics: row.showWorkoutStatistics,
       updatedAt: row.updatedAt,
+      fieldUpdatedAt: row.fieldUpdatedAtJson == null
+          ? null
+          : decodeJobFieldStamps(row.fieldUpdatedAtJson),
       syncBackfillVersion: row.syncBackfillVersion,
     );
   }
@@ -4561,8 +4568,12 @@ class DriftSettingsRepository implements SettingsRepository {
     final previous = await _readSettings();
     final syncedFieldsChanged =
         previous == null || !_sameSyncedSettings(previous, settings);
+    final now = utcNow();
     final effective = recordLocalActivity && syncedFieldsChanged
-        ? settings.copyWith(updatedAt: utcNow())
+        ? settings.copyWith(
+            updatedAt: now,
+            fieldUpdatedAt: restampSettings(previous, settings, now),
+          )
         : settings;
 
     await _saveSettingsRow(effective);
@@ -4854,6 +4865,11 @@ class DriftSettingsRepository implements SettingsRepository {
             showWorkoutsOnCalendar: Value(settings.showWorkoutsOnCalendar),
             showWorkoutStatistics: Value(settings.showWorkoutStatistics),
             updatedAt: Value(settings.updatedAt),
+            fieldUpdatedAtJson: Value(
+              settings.fieldUpdatedAt == null
+                  ? null
+                  : encodeJobFieldStamps(settings.fieldUpdatedAt!),
+            ),
             syncBackfillVersion: Value(settings.syncBackfillVersion),
           ),
         );

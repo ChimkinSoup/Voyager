@@ -44,6 +44,7 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/services/recurrence_engine.dart';
 import 'package:voyager/features/todo/todo_list_actions.dart';
+import 'package:voyager/features/todo/todo_subtask_draft_store.dart';
 import 'package:voyager/core/widgets/scroll_offset_isolate.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -92,6 +93,12 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   late final FocusNode _titleFocusNode;
   late final FocusNode _notesFocusNode;
   late final FocusNode _subtaskFocusNode;
+  late final TodoSubtaskDraftStore _subtaskDrafts;
+
+  /// The task whose draft the add-subtask field is holding, or null while
+  /// that draft is still loading — so neither the hand-off's clear() nor the
+  /// load filling the field is saved over the wrong task's draft.
+  String? _subtaskDraftTaskId;
   final GlobalKey _subtaskListKey = GlobalKey();
   DateTime? _dueDate;
   late RecurrenceRule _recurrence;
@@ -127,8 +134,11 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     _notesFocusNode.addListener(_handleNotesFocusChanged);
     _notesFocusNode.onKeyEvent = _handleNotesKey;
     _subtaskController = TextEditingController();
+    _subtaskController.addListener(_saveSubtaskDraft);
     _subtaskFocusNode = FocusNode();
     _subtaskFocusNode.onKeyEvent = _handleSubtaskKey;
+    _subtaskDrafts = ref.read(todoSubtaskDraftStoreProvider);
+    _loadSubtaskDraft();
     _dueDate = widget.task.dueDate;
     _recurrence = widget.task.recurrence;
     _loadSubtasks();
@@ -173,10 +183,13 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       _recurrence = widget.task.recurrence;
       // Cleared, not left to the query below: until it resolves the panel
       // would otherwise still be listing the previous task's subtasks, and
-      // the draft in the add-subtask field belongs to that task too.
+      // the draft in the add-subtask field belongs to that task too. It's
+      // already saved under that task; this one's is loaded in its place.
       _subtasks = const [];
+      _subtaskDraftTaskId = null;
       _subtaskController.clear();
       _loadSubtasks();
+      _loadSubtaskDraft();
       _registerPendingNotesListener(widget.task.id);
       _setNotesEditingFlag(_notesFocusNode.hasFocus);
       _beginEditingSession(ref.read(remoteSyncServiceProvider));
@@ -329,6 +342,24 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
         .read(todoRepositoryProvider)
         .listSubtasks(widget.task.id);
     if (mounted) setState(() => _subtasks = subtasks);
+  }
+
+  Future<void> _loadSubtaskDraft() async {
+    final taskId = widget.task.id;
+    final draft = await _subtaskDrafts.load(taskId);
+    if (!mounted || widget.task.id != taskId) return;
+    // Anything typed while the load was in flight wins over the stored draft.
+    if (_subtaskController.text.isEmpty && draft != null) {
+      _subtaskController.text = draft;
+    }
+    _subtaskDraftTaskId = taskId;
+    _saveSubtaskDraft();
+  }
+
+  void _saveSubtaskDraft() {
+    final taskId = _subtaskDraftTaskId;
+    if (taskId == null) return;
+    _subtaskDrafts.save(taskId, _subtaskController.text);
   }
 
   @override

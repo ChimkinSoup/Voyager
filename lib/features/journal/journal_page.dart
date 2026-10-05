@@ -2692,7 +2692,13 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                                 child: _JournalScopeHeader(
                                   journals: displayJournals,
                                   entryCounts: entryCounts,
-                                  allEntriesCount: filtered.length,
+                                  allEntriesCount: entryCounts.entries
+                                      .where(
+                                        (e) => !excludedFromAllView.contains(
+                                          e.key,
+                                        ),
+                                      )
+                                      .fold(0, (total, e) => total + e.value),
                                   selectedJournalId: journalFilter,
                                   viewAllJournals: _viewAllJournals,
                                   accent: journalBarColor,

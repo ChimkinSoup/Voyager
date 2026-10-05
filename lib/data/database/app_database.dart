@@ -1060,6 +1060,11 @@ class SettingsTable extends Table {
   /// before the first pull ever ran.
   DateTimeColumn get updatedAt => dateTime().nullable()();
 
+  /// `settingKey -> ISO instant` — see `AppSettings.fieldUpdatedAt`. Null on a
+  /// row from before per-setting stamps, which keeps "every setting changed at
+  /// [updatedAt]" distinct from "no setting chosen yet" (`{}`).
+  TextColumn get fieldUpdatedAtJson => text().nullable()();
+
   /// Which one-time upload of the newly synced collections this device has
   /// run — see `FirestoreCollections.syncBackfillVersion`. Device-local, so it
   /// stays out of [settingsSyncPayload].
@@ -1966,7 +1971,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 138;
+  int get schemaVersion => 139;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3511,6 +3516,14 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'CREATE INDEX IF NOT EXISTS idx_counter_adjustments_tracker_day '
           'ON counter_adjustments_table (tracker_id, day)',
+        );
+      }
+      if (from < 139) {
+        await _addColumnIfNotExists(
+          migrator,
+          'settings_table',
+          settingsTable,
+          settingsTable.fieldUpdatedAtJson,
         );
       }
     },

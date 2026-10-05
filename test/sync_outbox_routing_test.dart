@@ -245,6 +245,43 @@ void main() {
     expect(listed.newestWrite, isNotNull);
   });
 
+  test('a drained settings upload writes only the settings changed here', () async {
+    // BUG-001's consequence: a device that changed one setting before its
+    // first pull used to upload its defaults for every other one.
+    final firestore = FakeFirebaseFirestore();
+    final doc = firestore.doc(
+      'users/user-1/${FirestoreCollections.settings}/'
+      '${FirestoreCollections.settingsDocumentId}',
+    );
+    await doc.set({
+      'accentColor': 0xFFA6D189,
+      'showQuotes': false,
+      'settingsUpdatedAt': DateTime.utc(2026, 9, 27).toIso8601String(),
+    });
+    final repo = DriftSettingsRepository(db);
+    await repo.saveSettings(
+      (await repo.getSettings()).copyWith(accentColor: 0xFF00BCD4),
+    );
+    final worker = OutboxSyncWorker(
+      db,
+      firestore,
+      _StubAuthRepository(),
+      yieldDelay: Duration.zero,
+    );
+    await worker.enqueue(
+      collection: FirestoreCollections.settings,
+      documentId: FirestoreCollections.settingsDocumentId,
+    );
+
+    await worker.startDraining();
+
+    final cloud = (await doc.get()).data()!;
+    expect(cloud['accentColor'], 0xFF00BCD4);
+    expect(cloud['showQuotes'], isFalse);
+    expect(cloud.containsKey('themeMode'), isFalse);
+    expect(await allRows(), isEmpty);
+  });
+
   test('a queued row whose entity is gone is just cleared', () async {
     final firestore = FakeFirebaseFirestore();
     final worker = OutboxSyncWorker(

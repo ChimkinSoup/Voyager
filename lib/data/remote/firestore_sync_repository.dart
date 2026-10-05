@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/firestore_write_gate.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
@@ -182,6 +183,31 @@ class FirestoreSyncRepository implements SyncRepository {
   Future<void> upsertRemoteSettings(Map<String, dynamic> data) async {
     await writeGate.run(() => _settingsDoc.set(data, SetOptions(merge: true)));
   }
+
+  @override
+  Future<void> uploadSettings(AppSettings settings) =>
+      writeGate.run(() => writeSettings(_firestore, _settingsDoc, settings));
+
+  /// Reads the settings document and writes [settingsUploadPatch] in one
+  /// transaction, so a setting changed on another device since this one last
+  /// pulled is never written over with this device's older value.
+  static Future<void> writeSettings(
+    FirebaseFirestore firestore,
+    DocumentReference<Map<String, dynamic>> doc,
+    AppSettings settings,
+  ) => firestore.runTransaction((txn) async {
+    final snap = await txn.get(doc);
+    final patch = settingsUploadPatch(settings, snap.data());
+    if (patch.isEmpty) return;
+    // An update rather than a merging set leaves the weather keys sharing this
+    // document alone just the same, and fake_cloud_firestore's transaction
+    // ignores `SetOptions`.
+    if (snap.exists) {
+      txn.update(doc, patch);
+    } else {
+      txn.set(doc, patch);
+    }
+  });
 
   @override
   Future<void> ping() async {
@@ -788,6 +814,9 @@ class NoOpSyncRepository implements SyncRepository {
 
   @override
   Future<void> upsertRemoteSettings(Map<String, dynamic> data) async {}
+
+  @override
+  Future<void> uploadSettings(AppSettings settings) async {}
 
   @override
   Future<void> ping() async {}

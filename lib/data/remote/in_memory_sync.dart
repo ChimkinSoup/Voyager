@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -162,6 +163,12 @@ class InMemorySyncRepository implements SyncRepository {
   @override
   Future<void> upsertRemoteSettings(Map<String, dynamic> data) async {
     _remoteSettings = {...?_remoteSettings, ...data};
+  }
+
+  @override
+  Future<void> uploadSettings(AppSettings settings) async {
+    final patch = settingsUploadPatch(settings, _remoteSettings);
+    if (patch.isNotEmpty) await upsertRemoteSettings(patch);
   }
 
   @override

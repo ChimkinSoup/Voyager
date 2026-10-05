@@ -145,7 +145,8 @@ String _dayKey(DateTime date) =>
 /// semi-important; anything further out (or with no due date) isn't shown.
 NotificationUrgency? evaluateTaskUrgency(TodoTask task, DateTime now) {
   if (task.completed || task.deletedAt != null) return null;
-  final dueDate = task.dueDate;
+  // Stored in UTC; a due time after 8 PM would otherwise land on tomorrow.
+  final dueDate = task.dueDate?.toLocal();
   if (dueDate == null) return null;
   final today = DateTime(now.year, now.month, now.day);
   final due = DateTime(dueDate.year, dueDate.month, dueDate.day);
@@ -226,7 +227,7 @@ List<NotificationFeedItem> buildNotificationFeed({
         id: task.id,
         type: NotificationItemType.task,
         urgency: urgency,
-        dueAt: task.dueDate!,
+        dueAt: task.dueDate!.toLocal(),
         task: task,
       ),
     );

@@ -1,0 +1,11 @@
+final sr = c.read(settingsRepositoryProvider);
+final auth = c.read(authRepositoryProvider);
+debugPrint('BUG001 ARMED signedIn=' + (auth.currentUserId != null).toString());
+auth.authStateChanges.firstWhere((v) => v).then((_) async {
+  final t0 = DateTime.now().toUtc().toIso8601String();
+  final s = await sr.getSettings();
+  debugPrint('BUG001 SIGNIN-SEEN ' + t0 + ' accent ' + s.accentColor.toRadixString(16) + ' quotes ' + s.showQuotes.toString() + ' wsm ' + s.weekStartsOnMonday.toString() + ' stamps ' + s.fieldUpdatedAt.toString());
+  await sr.saveSettings(s.copyWith(accentColor: 0xFFFF5722));
+  final s2 = await sr.getSettings();
+  debugPrint('BUG001 SAVED ' + DateTime.now().toUtc().toIso8601String() + ' accent ' + s2.accentColor.toRadixString(16) + ' quotes ' + s2.showQuotes.toString() + ' stamps ' + s2.fieldUpdatedAt.toString());
+});

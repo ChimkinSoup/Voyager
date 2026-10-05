@@ -263,6 +263,33 @@ class OutboxSyncWorker {
             continue;
           }
 
+          // Settings upload as a read-then-write of only what is newer here,
+          // which a batch can't express — see
+          // [FirestoreSyncRepository.writeSettings].
+          if (collection == FirestoreCollections.settings) {
+            final settings = await DriftSettingsRepository(_db).getSettings();
+            for (final pending in entry.value) {
+              if (_writeGate.isPaused) break;
+              try {
+                await _writeGate.run(
+                  () => FirestoreSyncRepository.writeSettings(
+                    _firestore,
+                    _firestore.doc(
+                      'users/$userId/$collection/'
+                      '${FirestoreCollections.settingsDocumentId}',
+                    ),
+                    settings,
+                  ),
+                );
+                await _clearPending([pending]);
+                pushed = true;
+              } catch (error) {
+                if (await _handleUploadFailure(pending, error)) pushed = true;
+              }
+            }
+            continue;
+          }
+
           final Map<String, Map<String, dynamic>> payloads;
           try {
             payloads = await _payloadsFor(collection, {
@@ -282,9 +309,10 @@ class OutboxSyncWorker {
               orphans.add(pending);
               continue;
             }
-            final firestoreId = collection == FirestoreCollections.settings
-                ? FirestoreCollections.settingsDocumentId
-                : firestoreDocumentIdForLocal(collection, pending.documentId);
+            final firestoreId = firestoreDocumentIdForLocal(
+              collection,
+              pending.documentId,
+            );
             uploads.add(
               _PendingUpload(
                 pending: pending,
@@ -292,11 +320,8 @@ class OutboxSyncWorker {
                   'users/$userId/$collection/$firestoreId',
                 ),
                 // Stamped like any other upload, or incremental pulls and live
-                // listeners on other devices never see this change. The
-                // settings document is read whole, never by write time.
-                data: collection == FirestoreCollections.settings
-                    ? data
-                    : FirestoreSyncRepository.stamped(data),
+                // listeners on other devices never see this change.
+                data: FirestoreSyncRepository.stamped(data),
               ),
             );
           }
@@ -713,15 +738,6 @@ class OutboxSyncWorker {
           DriftSettingsRepository(_db).getJobExperienceSnippetRecord,
           jobExperienceSnippetToFirestore,
         );
-      case FirestoreCollections.settings:
-        // One document, not a collection, and it always exists — `getSettings`
-        // inserts the default row rather than returning null.
-        final settings = await DriftSettingsRepository(_db).getSettings();
-        return {
-          FirestoreCollections.settingsDocumentId: settingsToFirestore(
-            settings,
-          ),
-        };
       default:
         return const {};
     }
@@ -814,7 +830,8 @@ class OutboxSyncWorker {
     }
   }
 
-  /// Collections [_payloadsFor] knows how to rebuild a write for.
+  /// Collections [_payloadsFor] knows how to rebuild a write for, plus the
+  /// settings document, which the drain uploads on its own.
   ///
   /// A queued row for anything else could never be drained, so failures in
   /// those collections are parked rather than queued — an unretryable row that

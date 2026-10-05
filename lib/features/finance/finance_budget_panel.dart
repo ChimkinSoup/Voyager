@@ -155,6 +155,8 @@ class _BudgetRow extends ConsumerWidget {
     final spentFraction = budget.limitCents <= 0
         ? 0.0
         : spentCents / budget.limitCents;
+    // Spending relative to where the pace marker sits: positive is over pace.
+    final paceDeltaCents = spentCents - (budget.limitCents * pace).round();
 
     return ContextMenuRegion(
       // Built on right-click rather than eagerly, like the ledger rows: the
@@ -223,12 +225,28 @@ class _BudgetRow extends ConsumerWidget {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  Text(
-                    switch (status) {
-                      BudgetStatus.onTrack => 'On track',
-                      BudgetStatus.aheadOfPace => 'Ahead of pace',
-                      BudgetStatus.overBudget => 'Over budget',
-                    },
+                  Text.rich(
+                    TextSpan(
+                      text: switch (status) {
+                        BudgetStatus.onTrack => 'On track',
+                        BudgetStatus.aheadOfPace => 'Ahead of pace',
+                        BudgetStatus.overBudget => 'Over budget',
+                      },
+                      children: [
+                        if (paceDeltaCents != 0)
+                          TextSpan(
+                            text: paceDeltaCents > 0
+                                ? ' (${formatCents(paceDeltaCents)} over pace)'
+                                : ' (${formatCents(-paceDeltaCents)} under pace)',
+                            style: TextStyle(
+                              color: paceDeltaCents > 0
+                                  ? theme.colorScheme.error
+                                  : theme.colorScheme.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                      ],
+                    ),
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: statusColor,
                       fontWeight: FontWeight.w600,

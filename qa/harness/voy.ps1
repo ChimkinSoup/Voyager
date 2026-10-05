@@ -23,6 +23,8 @@
 #   other-click [dx dy]        real click on it (centre, or offset from its top-left); guarded
 #   other-type <text>          type into its textbox (only while it is foreground)
 #   other-topmost on|off | other-close | ostatus (foreground owner, its text, hotkey hits)
+#   otherb-open x y w h | otherb-click [dx dy] | otherb-close   a second probe form "B" (FV-7)
+#   zorder                     top-to-bottom order of form A, form B and Voyager's main window
 #   tray-menu                  open the real tray context menu (posted right-click)
 #   other-grab <chord> [id]    register a global hotkey to it (another process owns the combo)
 param([Parameter(Position = 0)][string]$Cmd = 'status', [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]]$Rest)
@@ -77,6 +79,13 @@ function Invoke-Step([string]$line) {
     'other-type' { [Other]::Type($arg.Replace('\n', "`n")) }
     'other-topmost' { [Other]::SetTopmost($a[0] -eq 'on') }
     'other-close' { [Other]::Close() }
+    'otherb-open' {
+      [OtherB]::Open([int]$a[0], [int]$a[1], [int]$a[2], [int]$a[3])
+      [OtherB]::Click(-1, -1); Start-Sleep -Milliseconds 200; [OtherB]::SetTopmost($false)
+    }
+    'otherb-click' { if ($a.Count -ge 2) { [OtherB]::Click([int]$a[0], [int]$a[1]) } else { [OtherB]::Click(-1, -1) } }
+    'otherb-close' { [OtherB]::Close() }
+    'zorder' { Write-Output ([ZOrder]::Of()) }
     'ostatus' { Write-Output ([Other]::Status()); Write-Output ([Voy]::Status()); Write-Output ([Other]::Menu()) }
     'tray-menu' { [Voy]::Tray($false) }
     'other-grab' {

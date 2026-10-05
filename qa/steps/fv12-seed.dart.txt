@@ -1,0 +1,13 @@
+final r = c.read(remoteSyncServiceProvider);
+final rr = c.read(rankingRepositoryProvider);
+final now = DateTime.now().toUtc();
+final rc = RankingCategory(id: 'fv12-rcat', createdAt: now, updatedAt: now, version: 1, name: 'FV12 Places', colorValue: 0xFFDD8800, iconKey: 'star', childUnitsEnabled: false, childUnitLabel: 'Visit', locationEnabled: true);
+await rr.upsertCategory(rc);
+r.pushRankingCategory(rc);
+final rp1 = RankingParent(id: 'fv12-rp-1', createdAt: now, updatedAt: now, version: 1, categoryId: 'fv12-rcat', title: 'FV12 Cafe', overallScore: 4.0, notes: '', tags: const [], starred: false, locations: const [RankingLocation(id: 'fv12-loc-1', latitude: 43.4643, longitude: -80.5204, address: '1 King St', label: 'Uptown', sortOrder: 0)]);
+await rr.upsertParent(rp1);
+r.pushRankingParent(rp1);
+final rp2 = RankingParent(id: 'fv12-rp-2', createdAt: now, updatedAt: now, version: 1, categoryId: 'fv12-rcat', title: 'FV12 No location', overallScore: 3.0, notes: '', tags: const [], starred: false, locations: const []);
+await rr.upsertParent(rp2);
+r.pushRankingParent(rp2);
+invalidateAllDataProvidersIn(c);
