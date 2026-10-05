@@ -13,6 +13,7 @@ import 'package:voyager/features/auth/login_page.dart';
 import 'package:voyager/features/shell/app_shell.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/shell/shell_page_transition.dart';
+import 'package:voyager/routing/popup_route_observer.dart';
 
 /// Pages built with the shell. The rest are built by the shell's warm-up a
 /// few seconds later, or on first visit if that comes sooner — see
@@ -31,15 +32,17 @@ const _preloadedShellPaths = {
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authNotifierProvider);
   final settingsRepo = ref.read(settingsRepositoryProvider);
+  PopupRouteObserver.reset();
 
   return GoRouter(
     initialLocation: '/login',
     refreshListenable: auth,
     // A fresh instance per router: this provider rebuilds on auth changes, and
     // an observer can't be shared with the navigator it is replacing.
-    observers: [ModalScrimObserver()],
+    observers: [ModalScrimObserver(), PopupRouteObserver()],
     routes: [
       ShellRoute(
+        observers: [PopupRouteObserver()],
         builder: (_, _, child) => DesktopWindowFrame(child: child),
         routes: [
           GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
@@ -72,6 +75,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                   // container can build it when it chooses: with the shell
                   // for [_preloadedShellPaths], a few seconds on for the rest.
                   preload: true,
+                  observers: [PopupRouteObserver()],
                   routes: [
                     GoRoute(
                       path: dest.path,

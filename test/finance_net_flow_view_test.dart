@@ -185,8 +185,13 @@ void main() {
       of: find.text(DateFormat('MMMM').format(today)),
       matching: find.byType(Card),
     );
+    // Only in-month days are tappable; the tile's spill-over days from the
+    // neighbouring months can carry the same number.
     final dayCell = find.descendant(
-      of: monthTile,
+      of: find.descendant(
+        of: monthTile,
+        matching: find.byType(GestureDetector),
+      ),
       matching: find.text('${today.day}'),
     );
     await tester.ensureVisible(dayCell);

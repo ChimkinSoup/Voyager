@@ -130,7 +130,12 @@ class _TodoFloaterState extends ConsumerState<TodoFloater> {
   Future<void> _save() async {
     if (_saving) return;
     final title = _title.text.trim();
-    if (title.isEmpty) return;
+    if (title.isEmpty) {
+      // Enter let go of the keyboard before this ran; the bar is driven by
+      // keyboard alone, so what's typed next would go nowhere.
+      _titleFocus.requestFocus();
+      return;
+    }
     _saving = true;
     final container = ProviderScope.containerOf(context, listen: false);
     final draft = ref.read(todoCaptureDraftProvider);

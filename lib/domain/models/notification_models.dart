@@ -1,3 +1,4 @@
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
@@ -148,9 +149,7 @@ NotificationUrgency? evaluateTaskUrgency(TodoTask task, DateTime now) {
   // Stored in UTC; a due time after 8 PM would otherwise land on tomorrow.
   final dueDate = task.dueDate?.toLocal();
   if (dueDate == null) return null;
-  final today = DateTime(now.year, now.month, now.day);
-  final due = DateTime(dueDate.year, dueDate.month, dueDate.day);
-  final daysUntil = due.difference(today).inDays;
+  final daysUntil = calendarDaysBetween(now, dueDate);
   if (daysUntil <= 0) return NotificationUrgency.important;
   if (daysUntil == 1) return NotificationUrgency.semi;
   return null;

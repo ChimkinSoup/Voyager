@@ -12,6 +12,7 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
 import 'package:voyager/routing/app_router.dart';
+import 'package:voyager/routing/popup_route_observer.dart';
 
 /// How many stickies are shown at once. The rest wait their turn behind a
 /// count, so a morning of missed reminders cannot wall off the window.
@@ -26,11 +27,47 @@ const double _kStickyWidth = 360;
 ///
 /// Bottom of the window, away from [VoyagerToast]'s slot at the top, so a
 /// transient toast never lands on a sticky's buttons.
-class ReminderStickyStack extends ConsumerWidget {
+///
+/// It sits above every navigator, so it steps aside while a dialog or
+/// popover the user opened is up ([popupRouteOpen]); only a card an OS
+/// notification click asks for in the meantime shows through.
+class ReminderStickyStack extends ConsumerStatefulWidget {
   const ReminderStickyStack({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ReminderStickyStack> createState() =>
+      _ReminderStickyStackState();
+}
+
+class _ReminderStickyStackState extends ConsumerState<ReminderStickyStack> {
+  /// The engine's focus generation when a popup last opened, or the last one
+  /// closed. A
+  /// notification click after that moves it on.
+  late int _generationAtPopupChange;
+
+  @override
+  void initState() {
+    super.initState();
+    _generationAtPopupChange = ref.read(reminderEngineProvider).focusGeneration;
+    popupRouteOpen.addListener(_popupChanged);
+    popupRoutePushes.addListener(_popupChanged);
+  }
+
+  @override
+  void dispose() {
+    popupRouteOpen.removeListener(_popupChanged);
+    popupRoutePushes.removeListener(_popupChanged);
+    super.dispose();
+  }
+
+  void _popupChanged() => setState(
+    () => _generationAtPopupChange = ref
+        .read(reminderEngineProvider)
+        .focusGeneration,
+  );
+
+  @override
+  Widget build(BuildContext context) {
     final engine = ref.watch(reminderEngineProvider);
     final due = engine.due;
     if (due.isEmpty) return const SizedBox.shrink();
@@ -45,28 +82,38 @@ class ReminderStickyStack extends ConsumerWidget {
     ];
     final visible = ordered.take(_kMaxVisibleStickies).toList();
     final hidden = due.length - visible.length;
+    final covered = popupRouteOpen.value;
+    final shownThrough = engine.focusGeneration != _generationAtPopupChange
+        ? focused
+        : null;
 
     final stack = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final view in visible)
-          Padding(
+          Offstage(
             key: ValueKey(view.sourceKey),
-            padding: const EdgeInsets.only(top: 8),
-            child: _StickyReminderCard(
-              view: view,
-              focusGeneration: view.sourceKey == focused
-                  ? engine.focusGeneration
-                  : null,
+            offstage: covered && view.sourceKey != shownThrough,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: _StickyReminderCard(
+                view: view,
+                focusGeneration: view.sourceKey == focused
+                    ? engine.focusGeneration
+                    : null,
+              ),
             ),
           ),
         if (hidden > 0)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: _MoreBadge(count: hidden),
+          Offstage(
+            offstage: covered,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: _MoreBadge(count: hidden),
+              ),
             ),
           ),
       ],

@@ -2,6 +2,8 @@
 // action, and the calendar page drawing, creating, editing and revealing with
 // an overlay in place. The rule itself is pinned in calendar_overlay_test.dart.
 
+import 'dart:math' as math;
+
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
@@ -470,10 +473,22 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
 
-      // The popover lines its edge up with the bar it is anchored to.
-      final panel = tester.getRect(find.byType(CalendarEventPanel));
+      // The popover lines its edge up with the bar it is anchored to, unless
+      // that would run it off the right edge, where it is pulled back inside.
+      final popover = find.ancestor(
+        of: find.byType(CalendarEventPanel),
+        matching: find.byType(ContextualPopover),
+      );
       final gym = tester.getRect(_eventBar('gym'));
-      expect(panel.left, moreOrLessEquals(gym.left, epsilon: 8));
+      final viewWidth = tester.view.physicalSize.width;
+      // Layout width, not the on-screen rect's: the entrance scale may still
+      // be running, and it shrinks toward the left edge being checked.
+      final popoverWidth = tester.getSize(popover).width;
+      final expectedLeft = math.min(gym.left, viewWidth - popoverWidth - 8);
+      expect(
+        tester.getTopLeft(popover).dx,
+        moreOrLessEquals(expectedLeft, epsilon: 8),
+      );
     });
   });
 }

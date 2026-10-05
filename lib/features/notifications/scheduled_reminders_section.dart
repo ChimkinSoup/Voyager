@@ -639,8 +639,14 @@ class _ScheduledReminderEditorState
     if (!_enabled) return null;
     if (_kind == ReminderScheduleKind.weekly && _weekdays.isEmpty) return null;
     final now = DateTime.now();
-    // A draft armed now: the countdown answers from now whatever an existing
-    // rule was armed at.
+    final next = _nextFireArmedAt(now);
+    if (next == null) return 'That time has already passed';
+    return 'Fires in ${reminderDistanceLabel(next, now)}';
+  }
+
+  /// When the schedule as the form has it next fires, for a rule armed at
+  /// [now], whatever an existing rule was armed at. Null when it never does.
+  DateTime? _nextFireArmedAt(DateTime now) {
     final draft = ScheduledReminderRule(
       id: '',
       createdAt: now,
@@ -656,9 +662,7 @@ class _ScheduledReminderEditorState
           : null,
       armedAt: now,
     );
-    final next = nextRuleFire(draft, now)?.fireAt;
-    if (next == null) return 'That time has already passed';
-    return 'Fires in ${reminderDistanceLabel(next, now)}';
+    return nextRuleFire(draft, now)?.fireAt;
   }
 
   /// The date picker's own size, in the dialog where there is room for it.
@@ -689,6 +693,7 @@ class _ScheduledReminderEditorState
       setState(() {
         _onceDate = DateTime(local.year, local.month, local.day);
         _minutes = local.hour * 60 + local.minute;
+        _error = null;
       });
       return;
     }
@@ -700,7 +705,10 @@ class _ScheduledReminderEditorState
       builder: (_) => TimeSelectorPopover(initialTime: _timeAsDateTime),
     );
     if (picked == null || !mounted) return;
-    setState(() => _minutes = picked.hour * 60 + picked.minute);
+    setState(() {
+      _minutes = picked.hour * 60 + picked.minute;
+      _error = null;
+    });
   }
 
   Future<void> _save() async {
@@ -717,11 +725,6 @@ class _ScheduledReminderEditorState
       setState(() => _error = 'Pick at least one device');
       return;
     }
-    if (_saving) return;
-    _saving = true;
-
-    final now = utcNow();
-    final body = _body.text.trim();
     final existing = widget.existing;
     final onceDate = _kind == ReminderScheduleKind.once
         ? DateTime(_onceDate.year, _onceDate.month, _onceDate.day)
@@ -729,6 +732,25 @@ class _ScheduledReminderEditorState
     final weekdays = _kind == ReminderScheduleKind.weekly
         ? _weekdays
         : const <int>{};
+    // A new time starts counting from now, as does a rule switched back on. A
+    // rename leaves a due reminder due.
+    final rearmed =
+        existing == null ||
+        existing.scheduleKind != _kind ||
+        existing.localTimeMinutes != _minutes ||
+        !_sameDays(existing.weeklyWeekdays, weekdays) ||
+        existing.onceLocalDate != onceDate ||
+        (!existing.enabled && _enabled);
+    // Armed after its only time, a one-time reminder would never fire.
+    if (_enabled && rearmed && _nextFireArmedAt(DateTime.now()) == null) {
+      setState(() => _error = "Pick a time that hasn't passed yet");
+      return;
+    }
+    if (_saving) return;
+    _saving = true;
+
+    final now = utcNow();
+    final body = _body.text.trim();
     final targets = _allDevices ? const <String>[] : _deviceIds.toList();
 
     final ScheduledReminderRule rule;
@@ -748,12 +770,6 @@ class _ScheduledReminderEditorState
         armedAt: now,
       );
     } else {
-      final scheduleChanged =
-          existing.scheduleKind != _kind ||
-          existing.localTimeMinutes != _minutes ||
-          !_sameDays(existing.weeklyWeekdays, weekdays) ||
-          existing.onceLocalDate != onceDate;
-      final switchedOn = !existing.enabled && _enabled;
       rule = existing.copyWith(
         title: title,
         body: body.isEmpty ? null : body,
@@ -765,9 +781,7 @@ class _ScheduledReminderEditorState
         onceLocalDate: onceDate,
         clearOnceLocalDate: onceDate == null,
         targetDeviceIds: targets,
-        // A new time starts counting from now, as does a rule switched back
-        // on. A rename leaves a due reminder due.
-        armedAt: scheduleChanged || switchedOn ? now : null,
+        armedAt: rearmed ? now : null,
         updatedAt: now,
         version: existing.version + 1,
       );
@@ -815,177 +829,174 @@ class _ScheduledReminderEditorState
     // back to everything except the On row, whose hover fill is the one thing
     // meant to reach past the form — so its label can line up with the
     // headings above it without sitting against the fill's edge.
-    final content = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: _kTogglePadding),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    final form = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: _kTogglePadding),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LabeledTextField(
+            label: 'Title',
+            controller: _title,
+            autofocus: existing == null,
+            textInputAction: TextInputAction.next,
+            onChanged: (_) {
+              if (_error != null) setState(() => _error = null);
+            },
+          ),
+          const SizedBox(height: 12),
+          LabeledTextField(
+            label: 'Note (optional)',
+            controller: _body,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => unawaited(_save()),
+          ),
+          label('Repeats'),
+          SegmentedButton<ReminderScheduleKind>(
+            segments: const [
+              ButtonSegment(
+                value: ReminderScheduleKind.once,
+                label: Text('Once'),
+              ),
+              ButtonSegment(
+                value: ReminderScheduleKind.daily,
+                label: Text('Daily'),
+              ),
+              ButtonSegment(
+                value: ReminderScheduleKind.weekly,
+                label: Text('Weekly'),
+              ),
+            ],
+            selected: {_kind},
+            showSelectedIcon: false,
+            onSelectionChanged: (selection) => setState(() {
+              _kind = selection.first;
+              _error = null;
+            }),
+          ),
+          const SizedBox(height: 16),
+          // The time, and for a weekly rule its days, share one row: the
+          // pills say what they set, so a label above them only repeats it.
+          Row(
             children: [
-              LabeledTextField(
-                label: 'Title',
-                controller: _title,
-                autofocus: existing == null,
-                textInputAction: TextInputAction.next,
-                onChanged: (_) {
-                  if (_error != null) setState(() => _error = null);
-                },
+              Builder(
+                builder: (buttonContext) => SelectorPill(
+                  icon: PhosphorIconsRegular.clock,
+                  label: timeLabel,
+                  onTap: () => unawaited(_pickTime(buttonContext)),
+                ),
               ),
-              const SizedBox(height: 12),
-              LabeledTextField(
-                label: 'Note (optional)',
-                controller: _body,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => unawaited(_save()),
-              ),
-              label('Repeats'),
-              SegmentedButton<ReminderScheduleKind>(
-                segments: const [
-                  ButtonSegment(
-                    value: ReminderScheduleKind.once,
-                    label: Text('Once'),
-                  ),
-                  ButtonSegment(
-                    value: ReminderScheduleKind.daily,
-                    label: Text('Daily'),
-                  ),
-                  ButtonSegment(
-                    value: ReminderScheduleKind.weekly,
-                    label: Text('Weekly'),
-                  ),
-                ],
-                selected: {_kind},
-                showSelectedIcon: false,
-                onSelectionChanged: (selection) =>
-                    setState(() => _kind = selection.first),
-              ),
-              const SizedBox(height: 16),
-              // The time, and for a weekly rule its days, share one row: the
-              // pills say what they set, so a label above them only repeats it.
-              Row(
-                children: [
-                  Builder(
-                    builder: (buttonContext) => SelectorPill(
-                      icon: PhosphorIconsRegular.clock,
-                      label: timeLabel,
-                      onTap: () => unawaited(_pickTime(buttonContext)),
-                    ),
-                  ),
-                  if (_kind == ReminderScheduleKind.weekly) ...[
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (
-                            var day = DateTime.monday;
-                            day <= DateTime.sunday;
-                            day++
-                          )
-                            SelectorPill(
-                              dense: true,
-                              // 2024-01-01 was a Monday.
-                              label: DateFormat.E().format(
-                                DateTime(2024, 1, day),
-                              ),
-                              isActive: _weekdays.contains(day),
-                              fillWhenActive: true,
-                              onTap: () => setState(() {
-                                if (!_weekdays.remove(day)) {
-                                  _weekdays.add(day);
-                                }
-                                _error = null;
-                              }),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              if (_countdownLabel case final countdown?)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    countdown,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+              if (_kind == ReminderScheduleKind.weekly) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (
+                        var day = DateTime.monday;
+                        day <= DateTime.sunday;
+                        day++
+                      )
+                        SelectorPill(
+                          dense: true,
+                          // 2024-01-01 was a Monday.
+                          label: DateFormat.E().format(DateTime(2024, 1, day)),
+                          isActive: _weekdays.contains(day),
+                          fillWhenActive: true,
+                          onTap: () => setState(() {
+                            if (!_weekdays.remove(day)) {
+                              _weekdays.add(day);
+                            }
+                            _error = null;
+                          }),
+                        ),
+                    ],
                   ),
                 ),
-              label('Devices'),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  SelectorPill(
-                    dense: true,
-                    label: 'All devices',
-                    isActive: _allDevices,
-                    fillWhenActive: true,
-                    onTap: () => setState(() {
-                      _allDevices = true;
-                      _error = null;
-                    }),
-                  ),
-                  for (final device in devices)
-                    SelectorPill(
-                      dense: true,
-                      label: device.id == thisDeviceId
-                          ? '${device.displayName} (this device)'
-                          : device.displayName,
-                      isActive: !_allDevices && _deviceIds.contains(device.id),
-                      fillWhenActive: true,
-                      onTap: () => setState(() {
-                        if (_allDevices) {
-                          _allDevices = false;
-                          _deviceIds = {device.id};
-                        } else if (!_deviceIds.remove(device.id)) {
-                          _deviceIds.add(device.id);
-                        }
-                        _error = null;
-                      }),
-                    ),
-                ],
-              ),
-              if (devices.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    'Devices appear here once they have signed in.',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 8),
+              ],
             ],
           ),
-        ),
-        SwitchListTile(
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: _kTogglePadding,
-          ),
-          title: const Text('On'),
-          value: _enabled,
-          onChanged: (value) => setState(() => _enabled = value),
-        ),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: _kTogglePadding),
-            child: Text(
-              _error!,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.error,
+          if (_countdownLabel case final countdown?)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                countdown,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
+          label('Devices'),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              SelectorPill(
+                dense: true,
+                label: 'All devices',
+                isActive: _allDevices,
+                fillWhenActive: true,
+                onTap: () => setState(() {
+                  _allDevices = true;
+                  _error = null;
+                }),
+              ),
+              for (final device in devices)
+                SelectorPill(
+                  dense: true,
+                  label: device.id == thisDeviceId
+                      ? '${device.displayName} (this device)'
+                      : device.displayName,
+                  isActive: !_allDevices && _deviceIds.contains(device.id),
+                  fillWhenActive: true,
+                  onTap: () => setState(() {
+                    if (_allDevices) {
+                      _allDevices = false;
+                      _deviceIds = {device.id};
+                    } else if (!_deviceIds.remove(device.id)) {
+                      _deviceIds.add(device.id);
+                    }
+                    _error = null;
+                  }),
+                ),
+            ],
           ),
-      ],
+          if (devices.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'Devices appear here once they have signed in.',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
     );
+    final footer = [
+      SwitchListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: _kTogglePadding),
+        title: const Text('On'),
+        value: _enabled,
+        onChanged: (value) => setState(() {
+          _enabled = value;
+          _error = null;
+        }),
+      ),
+      if (_error != null)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: _kTogglePadding),
+          child: Text(
+            _error!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+          ),
+        ),
+    ];
 
     final actions = [
       if (existing != null)
@@ -1013,17 +1024,34 @@ class _ScheduledReminderEditorState
 
     final Widget body;
     if (widget.onClose == null) {
+      // In a window too short for the form only the form scrolls: the On row
+      // and the error stay above the buttons, where a scrolled-off switch
+      // would give no sign it was there. Half of the top padding goes inside
+      // the scroll view, which clips at the Title field's top: its floating
+      // label rises that far above the field.
       body = AlertDialog(
         contentPadding: const EdgeInsets.fromLTRB(
           _kTogglePadding,
-          16,
+          8,
           _kTogglePadding,
           24,
         ),
         title: Text(existing == null ? 'New reminder' : 'Edit reminder'),
         content: SizedBox(
           width: kReminderFormWidth,
-          child: VoyagerScrollView(child: content),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Flexible(
+                child: VoyagerScrollView(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: form,
+                ),
+              ),
+              ...footer,
+            ],
+          ),
         ),
         actions: actions,
       );
@@ -1067,7 +1095,8 @@ class _ScheduledReminderEditorState
                   ],
                 ),
               ),
-              content,
+              form,
+              ...footer,
               Padding(
                 padding: const EdgeInsets.fromLTRB(_kTogglePadding, 8, 0, 0),
                 child: Row(

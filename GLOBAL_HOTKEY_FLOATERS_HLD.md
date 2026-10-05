@@ -47,11 +47,11 @@ This document locks product decisions from the 2026-09-16 design review.
 | **Todo draft** | In-memory until process exit. Dismiss / click-off / Escape-not-used keeps draft; **Enter** saves task and clears draft. Survives floater dismiss, not restart |
 | **Todo “Open app”** | Dismiss floater; show/focus main window; navigate to Todo; put draft into the page composer (do not auto-save) |
 | **Todo success feedback** | Toast on successful Enter save |
-| **Journal QJE model** | At most **one Quick Journal Entry per local calendar day** for the hotkey notepad. Opening the notepad: if today’s QJE exists → bind; else **create immediately** (empty body OK). Reopening the notepad the same day always reuses that entry unless the user deleted it |
-| **Journal create timing** | **On notepad open** (not first keystroke). Accidental open may leave an empty QJE — accepted so floater and in-app share one entry identity |
+| **Journal QJE model** | At most **one Quick Journal Entry per local calendar day per device** for the hotkey notepad. Opening the notepad: if this device’s QJE for today exists → bind; else the notepad opens empty and the QJE is created on the first write. Reopening the notepad the same day reuses that entry unless the user deleted it. The day → entry pointer is device-local (§6.3), so a wipe, a reinstall, a switch to another account and back, or a second device starts a new QJE for the day |
+| **Journal create timing** | Notepad: **on first write** (not on open), so an accidental open leaves nothing behind. In-app hotkey: on open (§6.5). Both resolve through the same serialized lookup, so they share one entry identity |
 | **Journal body sync** | Live, **debounced**, plus **flush on blur/dismiss**. Notepad is a plain text mirror of the QJE body. Deletes in the notepad delete in the entry. Clearing all text leaves a **blank** entry (does not auto-delete) |
 | **Journal formatting** | Plain text only — no forced bullets or timestamps |
-| **Journal delete control** | Notepad has a **Delete** control that deletes the linked QJE; next open that day creates a fresh QJE |
+| **Journal delete control** | Notepad has a **Delete** control that deletes the linked QJE; the next write in the notepad (or the in-app hotkey) that day creates a fresh QJE |
 | **Journal preview** | Notepad shows a **one-line preview** of the linked entry (title or body snippet) |
 | **Journal default journal/list** | Last opened/edited journal — same “last touched” spirit as todo lists |
 | **In-app journal hotkey** | Navigate to Journal and open **today’s QJE** (create if missing). Same entry the notepad would bind — not a separate always-new entry |
@@ -65,6 +65,8 @@ This document locks product decisions from the 2026-09-16 design review.
 ### Interpretation note (journal)
 
 Earlier feedback mixed “create on first keystroke / no entry if never typed,” “one entry per day,” and “always create on open.” **Locked merge:** create-or-bind **on open**, **one QJE per local day**, reuse until deleted; in-app hotkey opens that same QJE. First-keystroke gating is dropped.
+
+**Update (2026-10-05, BUG-038):** the code diverged from the locked merge on two points, deliberately, and this document now follows the code: the notepad creates the QJE on its first write rather than on open, and the day → entry pointer is kept on the device rather than synced, so two devices never race to claim one day. The cost, accepted: after a wipe, a reinstall, a switch to another account and back, or on a second device, a day’s quick notes can be split across two entries.
 
 ---
 
@@ -124,7 +126,7 @@ Detection reuses / extends existing window visibility + focus signals (`window_m
 | Finance transaction draft | Until successful save clears it, or process exit |
 | Last-touched todo list id | Persist as today if already persisted; floater saves update it |
 | Last-touched journal id | Same |
-| Today’s QJE id | Prefer durable link (see §6.3) so restart same day still rebinds; entry itself is in DB |
+| Today’s QJE id | Durable but device-local (see §6.3): a restart the same day rebinds; entry itself is in DB and syncs |
 
 Drafts are **not** synced and must not create remote todos/transactions until explicit save.
 
@@ -174,12 +176,12 @@ Small notepad, **bottom-right**, always on top:
 
 ```
 Open notepad
-  → resolve today’s QJE for hotkey (local calendar day)
-  → if missing: create empty QJE in last-touched journal
-  → bind notepad ↔ QJE.body
-  → show one-line preview
+  → find today’s QJE for hotkey (local calendar day, this device’s pointer)
+  → if found: bind notepad ↔ QJE.body, show one-line preview
+  → if missing: open empty; nothing is created yet
 
 Type / edit
+  → first write with no QJE: create it in last-touched journal, then bind
   → debounce write to QJE.body → normal sync pipeline
 
 Dismiss (click outside)
@@ -189,12 +191,12 @@ Dismiss (click outside)
 Delete on notepad
   → delete QJE (same soft-delete / sync rules as in-app)
   → clear binding; close or clear notepad (prefer close)
-  → next open that day creates a new QJE
+  → next write that day creates a new QJE
 ```
 
 ### 6.3 Identity: one QJE per day
 
-- Mark or record the QJE so the hotkey system can find “today’s quick entry” (e.g. stable metadata flag, or a small local/settings pointer `quickJournalEntryIdByDate`).
+- A device-local pointer file (`quick_journal_entry.json` in the app data directory: the day and the entry id) records today’s QJE. The entry syncs like any other; the pointer does not, so two devices never race to claim one day. A device without the pointer (fresh install, wipe, a switch to another account and back, second device) starts its own QJE for the day.
 - Multiple normal journal entries per day remain allowed; **only one** is the hotkey QJE.
 - Manual delete of that entry (from notepad **or** from the main app) clears the binding; next notepad/in-app hotkey creates a new QJE for that day.
 
@@ -302,7 +304,7 @@ Remove or retire `QuickTodoPopup` / `QuickJournalPopup` full-page embeds once fl
 | Risk | Handling |
 |------|----------|
 | Flutter secondary windows + shared Riverpod/DB | Design floaters to call into the same isolates/services carefully; prefer one DB owner in the main isolate with messages if required |
-| Accidental journal opens create empty QJEs | Accepted; Delete on notepad + normal journal delete clean up |
+| Accidental journal opens create empty QJEs | Gone: the notepad creates the QJE on its first write (BUG-038) |
 | Focus steal in games/fullscreen | Accepted for v1 |
 | Click-outside detection on always-on-top | Use window blur/deactivate; verify against multi-monitor |
 | Tray vs current destroy-on-close | Behavior change: document in PRODUCT if needed; ensure flush still runs on Quit |

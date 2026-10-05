@@ -91,6 +91,14 @@ class FloaterWindow {
       onShow();
       return;
     }
+    // Win32's `SetWindowPlacement` pumps the message loop and the engine
+    // begins a frame inside it, which asserts if one is already running. A
+    // floater replacing another gets here straight from the old one's flush,
+    // which can resume inside a frame; a borrowed window has no platform call
+    // left on the way to [_place] to take it out of one.
+    while (SchedulerBinding.instance.schedulerPhase != SchedulerPhase.idle) {
+      await Future<void>(() {});
+    }
     await _cloaked(hwnd, () async {
       await _borrow(hwnd);
       onShow();

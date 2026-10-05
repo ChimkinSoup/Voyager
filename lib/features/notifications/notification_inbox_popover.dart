@@ -14,6 +14,7 @@ import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
@@ -1813,10 +1814,7 @@ class _FeedItemText extends StatelessWidget {
 
 /// "Today" / "Tomorrow" / "in N days" / "N days overdue", relative to now.
 String _dueLabel(DateTime due) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final target = DateTime(due.year, due.month, due.day);
-  final days = target.difference(today).inDays;
+  final days = calendarDaysBetween(DateTime.now(), due);
   if (days == 0) return 'Today';
   if (days == 1) return 'Tomorrow';
   if (days < 0) return '${-days}d overdue';
@@ -1828,7 +1826,7 @@ String _dateLabel(DateTime date) {
   final today = DateTime(now.year, now.month, now.day);
   final target = DateTime(date.year, date.month, date.day);
   if (target == today) return 'Today';
-  if (target == today.add(const Duration(days: 1))) return 'Tomorrow';
+  if (target == addCalendarDays(today, 1)) return 'Tomorrow';
   return '${date.month}/${date.day}';
 }
 
