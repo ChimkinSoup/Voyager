@@ -52,6 +52,7 @@ class _CustomQuotesDialogState extends ConsumerState<_CustomQuotesDialog> {
     final text = _controller.text.trim();
     if (text.isEmpty) {
       setState(() => _error = 'Write a quote first.');
+      _focusNode.requestFocus();
       return;
     }
     // Against the whole pool, not just the user's own: a bundled quote typed
@@ -60,6 +61,9 @@ class _CustomQuotesDialogState extends ConsumerState<_CustomQuotesDialog> {
     if (!mounted) return;
     if (pool.any((q) => sameQuoteText(q.text, text))) {
       setState(() => _error = 'That quote is already in the pool.');
+      // The field's own submit unfocuses it; keep it where the user can fix
+      // the text.
+      _focusNode.requestFocus();
       return;
     }
 

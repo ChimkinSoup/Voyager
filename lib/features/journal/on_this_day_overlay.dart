@@ -56,8 +56,11 @@ class _OnThisDayOverlayState extends ConsumerState<OnThisDayOverlay>
   static const _cardWidth = 220.0;
   static const _cardHeight = 300.0;
 
-  /// How much of the tucked card's left edge stays on screen.
-  static const _peek = 32.0;
+  /// How much of the tucked card's left edge stays on screen. The journal
+  /// editor's right gutter, so the strip never covers the editor's controls —
+  /// at 32 it hid the mood slider's last stop and part of the trash button in
+  /// a narrow window (BUG-055).
+  static const _peek = 24.0;
 
   /// The out card's counterclockwise turn, in radians (about 4°).
   static const _outTilt = 0.07;

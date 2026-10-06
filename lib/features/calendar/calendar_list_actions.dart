@@ -161,13 +161,25 @@ Future<bool> deleteCalendarList(
   // await, where [context] may already be dead.
   final fallbackColor = Theme.of(context).colorScheme.primary.toARGB32();
 
+  final fallbackName =
+      allCalendars
+          .where((item) => item.id == legacyCalendarId)
+          .map((item) => item.name)
+          .firstOrNull ??
+      'Calendar';
   final choice = await showDeleteContainerDialog(
     context,
     title: 'Delete "${calendar.name}"?',
-    message: eventCount == 0
-        ? 'This calendar has no events and will be removed.'
-        : 'This calendar has $eventCount events. Move them to the default "Calendar", or delete everything.',
-    deleteAllLabel: 'Yes (delete all events)',
+    message: switch (eventCount) {
+      0 => 'This calendar has no events and will be removed.',
+      1 =>
+        'This calendar has 1 event. Move it to "$fallbackName", or delete everything.',
+      _ =>
+        'This calendar has $eventCount events. Move them to "$fallbackName", or delete everything.',
+    },
+    moveLabel: 'Move to "$fallbackName"',
+    hasContents: eventCount > 0,
+    deleteAllLabel: 'Delete all events',
   );
   if (!context.mounted || choice == DeleteContainerChoice.cancel) return false;
 

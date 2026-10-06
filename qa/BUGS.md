@@ -10,9 +10,9 @@ The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10
 |---|--:|--:|--:|
 | Blocker | 7 | 2 (BUG-001, BUG-003) | 5 |
 | Major | 29 | 5 (BUG-002 (see caveat), BUG-004, BUG-010, BUG-043 (dup), BUG-045) | 24 |
-| Minor | 143 | 6 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-167, BUG-226) | 137 |
-| Cosmetic | 47 | 3 (BUG-007, BUG-008, BUG-042) | 44 |
-| **Total** | **226** | **16** | **210** |
+| Minor | 143 | 11 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-050, BUG-051, BUG-052, BUG-054, BUG-055, BUG-167, BUG-226) | 132 |
+| Cosmetic | 47 | 4 (BUG-007, BUG-008, BUG-042, BUG-049) | 43 |
+| **Total** | **226** | **22** | **204** |
 
 "Fixed" means re-tested in the running app by a phase re-check or FV (TEST_PLAN.md "Fix verification"). "Open" means no fix was recorded, so each entry stands as it was last observed. Unit-test-only claims don't count as fixed.
 
@@ -22,6 +22,8 @@ Caveats:
 - BUG-220 was reproduced only with simulated whole-document snapshot writes. Real character-op edits from a second device are untested (one PC).
 - `flutter test` on 2026-10-04 (FV): 4,232 passed, 17 skipped, 10 failed. 9 failures are in tests of uncommitted finance files (`finance_sidebar_menus_test.dart` ×8, `finance_net_flow_view_test.dart` ×1, with a RenderFlex overflow at `finance_budget_panel.dart:226`), and 1 is in `calendar_overlay_page_test.dart` ("reveal opens beside the revealed event"). These come from the uncommitted working tree, not from a phase, so they aren't logged as bugs.
 - `flutter test` on 2026-10-05 (after the BUG-042/045/047 fixes): 4,355 passed, 18 skipped, 0 failed. BUG-042, BUG-045, BUG-046 and BUG-047 were verified in the app the same day (TEST_PLAN.md FV-13).
+- `flutter test` on 2026-10-05 (after the BUG-049…055 fixes, BUG-053 skipped): 4,363 passed, 18 skipped, 0 failed. BUG-049, BUG-050, BUG-051, BUG-052, BUG-054 and BUG-055 were verified in the app the same day (TEST_PLAN.md FV-14).
+- `flutter test` on 2026-10-05 (after three code-review follow-ups to BUG-049/052/054, see FV-14): 4,365 passed, 18 skipped, 0 failed.
 
 ### Counts by phase (severity × phase)
 
@@ -81,6 +83,7 @@ Bugs deliberately not being fixed for now. They still count as Open above.
 |---|---|---|---|---|
 | BUG-009 | 2 | Minor | Shell and pages can't be driven by Tab: focus is invisible, and with nothing focused Tab goes nowhere | 2026-10-05 |
 | BUG-031 | 4 | Cosmetic | Snippets dialog hides snippets beyond the fourth with no sign that the list scrolls | 2026-10-05 |
+| BUG-053 | 7 | Minor | "New entry" saves a blank entry on every click; ten quick clicks leave ten empty "Untitled" entries | 2026-10-05 |
 
 ---
 
@@ -706,6 +709,7 @@ Entry format:
 - Actual: "This journal has 1 entries. Move them to the default "Journal", or delete everything." with buttons Cancel / **Yes** / Yes (delete all entries) (`qa/shots/p7-41-gdelete.png`). "Yes" means "move the entries"; it reads as "yes, delete".
 - Notes: message built in `deleteJournalList` (`journal_list_actions.dart`); the zero-entry case has its own wording.
 - Notes (2026-09-30, Phase 10): the delete-calendar dialog has the same "Yes" / "Yes (delete all events)" pair: `Delete "Holidays"?` "This calendar has 3 events. Move them to the default "Calendar", or delete everything." (`qa/shots/p10-75-delcal.png`).
+- Notes (2026-10-05, fixed in the working tree, verified in the running app, FV-14 passed; working tree on `59c9145`, new account qa-039): the journal and calendar delete dialogs now say "1 entry" / "1 event" ("Move it to …"), call the default container by its current name, and label the buttons `Move to "Journal"` (or the default's current name) and "Delete all entries" / "Delete all events". In the app: FX Gamma with one entry → Delete read "This journal has 1 entry. Move it to "Journal", or delete everything." with Cancel / Move to "Journal" / Delete all entries (`qa/shots/fx-049-03-delete-dialog.png`). Move to "Journal" moved the entry: SQLite has "FX049 one entry" live in "Journal" (`__legacy__`, created then as the fallback). Test: `test/journal_delete_dialog_wording_test.dart` (one entry; two entries with the default renamed "Diary"), which fails without the fix. Not driven in the app: the calendar dialog. Not changed: the to-do list's dialog, which has the same "Yes" (BUG-073).
 
 ### BUG-050 [Phase 7] New journal / list / calendar name dialog: "Title cannot be empty" under a "Name" field, and Enter on an empty name drops keyboard focus
 - Severity: Minor
@@ -714,6 +718,7 @@ Entry format:
 - Expected: an error that matches the field ("Name cannot be empty"), and focus stays in the field so the user can type the name.
 - Actual: the error reads "Title cannot be empty" (`qa/shots/p7-04-empty-enter.png`), and the field loses focus: `primaryFocus` = the dialog's `FocusScopeNode`, so what's typed next goes nowhere until the field is clicked. Spaces-only is also rejected with the same text (correct).
 - Notes: shared widget `lib/core/widgets/create_name_color_dialog.dart`, used by journals, calendars (`calendar_list_actions.dart`), to-do lists (`todo_list_actions.dart`, `todo_manage_sheet.dart`) and jobs (`jobs_manage_sheet.dart`), so all of those inherit it (only the journal one was driven). Same focus shape as BUG-026 (dictionary dialog). Also seen in Settings → Pages → Custom quotes: Enter on a duplicate ("That quote is already in the pool.") drops focus from the "Add a quote" field (`p7-79-cq-dup.png`; the next Ctrl+A/Delete did nothing).
+- Notes (2026-10-05, fixed in the working tree, verified in the running app, FV-14 passed; working tree on `59c9145`, new account qa-039): the shared `create_name_color_dialog.dart` now says "Name cannot be empty" and hands focus back to the Name field after a rejected submit (the field's own submit had unfocused it), so every caller (journals, calendars, to-do lists, jobs) gets both. The custom quotes dialog's "Add a quote" field also takes focus back after "Write a quote first." and "That quote is already in the pool.". In the app: gear → New journal → Enter on the empty field showed "Name cannot be empty" with the caret still in the field (`qa/shots/fx-050-04-error-crop.png`); "FX Gamma" typed next went into it (`fx-050-03-typed.png`) and Enter created it. Test: `test/name_dialog_focus_test.dart` (both dialogs; fails without the fix). Not driven in the app: the custom quotes half, and the list / calendar / jobs callers.
 
 ### BUG-051 [Phase 7] The Trash dialog's "Restored …" toast never goes away
 - Severity: Minor
@@ -728,6 +733,7 @@ Entry format:
 - Notes (2026-10-01, Phase 14): `Restored "Transit"` (a finance category) stayed from 7:26 PM until the 7:34 PM restart, over the Finance hero in both themes and at every window size (`qa/shots/p14-95-annual.png`, `p14-110-light-ledger.png`, `p14-115-min-analytics.png`).
 - Notes: `trash_dialog.dart` `_restore` calls `showVoyagerToast` with no `dwell`, and in `voyager_toast.dart` a toast without a dwell "is staying up until its owner takes it away"; the dialog never does. The same applies to its "Already restored" and "Can't restore … / Restore … first" toasts. Other dwell-less notices that aren't progress cards and so may stick the same way (not driven): `workout_history.dart:800` "Can't move a workout into the future", `media_attach.dart:107` low-disk warning.
 - Notes (2026-10-03, Phase 24, build `041a1ea`): restoring 21 items in a row from Settings → Data → Trash stacked 19 toasts down the middle of the window and off its bottom edge (`qa/shots/p24-restore-all.png`, `p24-r4.png`, `p24-r6-5.png`). They draw above modal scrims, so they cover the Trash list's titles and chips, the item detail dialog's "Delete forever…" button (`p24-r5.png`) and the confirm dialogs; they are click-through, so the buttons under them still work, but the text can't be read. They stayed across Journal, To-Do, Settings, Rankings and the map until a restart. At the minimum window size a single stuck toast hides the Settings tab bar (Appearance / Editing / Pages / Data, `p24-min-set.png`). The blocked-restore messages (`Restore task "P24 task B parent" first`, `Restore entry … first`) also have no icon, so they show the working spinner forever, as if a restore were still running (`p24-tblocked.png`, `p24-rblocked.png`).
+- Notes (2026-10-05, fixed in the working tree, verified in the running app, FV-14 passed; working tree on `59c9145`, new account qa-039): the Trash dialog's restore toasts ("Restored …", "Already restored", the blocked-restore messages) now have a 4 s dwell, and the blocked ones a warning icon instead of the endless spinner. In the app: Manage journals → Recently deleted → Restore on Journal "FX Gamma" showed `Restored Journal "FX Gamma"` with its icon (`qa/shots/fx-051-02-restored-1s.png`); with the dialogs closed and the pointer elsewhere it was gone at 9 s (`fx-051-04-9s.png`). Test: a case in `test/trash_dialog_test.dart` (fails without the fix). Not changed: the other dwell-less notices named above (`workout_history.dart`, `media_attach.dart`), which weren't driven. Not driven in the app: the blocked-restore and "Already restored" toasts, and many restores in a row (P24 note).
 
 ### BUG-052 [Phase 7] An entry whose quote is empty has no way to get one back
 - Severity: Minor
@@ -736,6 +742,7 @@ Entry format:
 - Expected: some way to add a quote again (the quote area stays as a placeholder, or Browse quotes is reachable elsewhere).
 - Actual: the quote line disappears and the body box grows into its space (`qa/shots/p7-75-emptyquote.png`); SQLite `custom_quote` = '' and `quote_id` null. The only entry point to the quote editor was the quote text itself, so the entry can never get a quote again, even with "Show quotes" on.
 - Notes: `_EntryQuote` (`journal_page.dart`) returns `SizedBox.shrink()` for a null or empty quote, and it is the only caller of `_editQuote`. Saving and Ctrl+Enter in the dialog, Browse quotes (search, case-insensitive match highlight, "No quotes match …") all worked.
+- Notes (2026-10-05, fixed in the working tree, verified in the running app, FV-14 passed; working tree on `59c9145`, new account qa-039): `_EntryQuote` no longer collapses for a null or empty quote. It shows "Add a quote" in the quote's place and style, and clicking it opens the same Edit quote dialog (with Browse quotes). In the app: an entry seeded without a quote showed "Add a quote" (`qa/shots/fx-052-01-max.png`). Typing a quote there and pressing Enter showed it and saved `custom_quote` = 'FX052 typed quote' (`fx-052-03-saved.png`). Then the logged steps: quote → select all, delete → Enter gave `custom_quote` = '' and "Add a quote" again (`fx-052-05-emptied-crop.png`). Test: a case in `test/journal_new_entry_quote_test.dart` (fails without the fix). Side effect: an entry created before its quote is drawn (the cold case) briefly shows "Add a quote" instead of an empty space.
 
 ### BUG-053 [Phase 7] "New entry" saves a blank entry on every click; ten quick clicks leave ten empty "Untitled" entries
 - Severity: Minor
@@ -744,6 +751,7 @@ Entry format:
 - Expected: an untouched new entry is either not kept, or the button reuses the blank entry already open instead of stacking another.
 - Actual: ten rows, all `title` '' and `body` '', each with its own quote and timestamp 0.3 s apart, listed as ten "Untitled" entries (`qa/shots/p7-83-rapid10.png`, Alpha 31 → 41). They stay after switching entries and after restart, sync to the cloud, and count in the journal totals (On This Day skips them, since both title and body are blank). Nothing ever cleans them up; each has to be deleted by hand, with a confirm dialog each time.
 - Notes: by design in the code the row is written at once (`_createEntryOptimistic`, and `_finalizeNewEntry`'s comment explains the write is what schedules the upload). No FlutterError; the ten were created in order with distinct ids. JOURNAL_DATA_LOSS_POSTMORTEM.md's incident began while "empty test entries were being deleted in quick succession", i.e. clearing exactly this kind of leftover.
+- Notes (2026-10-05): skipped for now; listed under "Skipped bugs" in the summary.
 
 ### BUG-054 [Phase 7] With "Only my quotes" just turned on, the next new entry still gets a bundled quote
 - Severity: Minor
@@ -752,6 +760,7 @@ Entry format:
 - Expected: the entry's quote is one of the three custom quotes.
 - Actual: the first new entry got the bundled "Write what should not be forgotten." (`quote_id` `quote_1`); the next nine got custom quotes. SQLite `settings_table.custom_quotes_only` was already 1.
 - Notes: suspected from the code: `_createEntryOptimistic` draws synchronously from `quoteBankProvider` whenever `quotesLoadedProvider.hasValue`, and a provider that is refreshing still has its previous value, so the first draw after a pool change comes from the old bank. The same applies right after adding a custom quote ("a quote the user just added is immediately eligible" per the provider's comment). Not re-run.
+- Notes (2026-10-05, cause confirmed in a widget test, fixed in the working tree, verified in the running app, FV-14 passed; working tree on `59c9145`, new account qa-039): the suspected cause was right. A pool change marks the kept-alive `quotesLoadedProvider` for a rebuild, and the next read starts it, so `_createEntryOptimistic` saw a value that was still the old bank and drew from it. It now draws synchronously only when the bank isn't rebuilding; otherwise `_finalizeNewEntry` waits for the new bank. In the app: 3 custom quotes added and "Only my quotes" turned on with the dialog's own repository/provider calls (`qa/steps/fx054-custom-only.dart.txt`, `evalc.ps1 -Lib features/settings/custom_quotes_dialog.dart`). Three "New entry" clicks then got `fx054-q2`, `fx054-q3`, `fx054-q1`, so the first one already had a custom quote (`qa/shots/fx-054-01-new1.png`). The Settings dialog itself wasn't driven. Test: a case in `test/journal_new_entry_quote_test.dart` (fails without the fix: the entry gets the bundled quote).
 
 ### BUG-055 [Phase 7] At the minimum window size the tucked On This Day strip covers mood 10 and half of the delete button
 - Severity: Minor
@@ -760,6 +769,7 @@ Entry format:
 - Expected: mood set to 10 (HLD §5.3 allows the strip to overlap "~8 px over the editor's right edge").
 - Actual: at this width the metadata row wraps, and the tucked strip (x ≈ 1350–1424) sits over the right end of the mood slider and the left half of the trash button (`qa/shots/p7-96-min-otdclick.png`). The click at the "10" stop opened the card instead and the mood stayed 5 in SQLite (`p7-97-min-mood10.png`). Only the left half of the trash button is clickable. At maximized they don't overlap.
 - Notes: the strip only shows on days with a match, so it comes and goes. Dragging the slider thumb to the end may still reach 10 (not tried). ON_THIS_DAY_HLD.md §10 open point 3 covers the scrollbar overlap only.
+- Notes (2026-10-05, fixed in the working tree, verified in the running app, FV-14 passed; working tree on `59c9145`, new account qa-039): the tucked strip is now 24 px wide, the editor's right gutter, so it no longer reaches over the editor (ON_THIS_DAY_HLD.md §10 open point 3's remedy; HLD updated). Reproduced first at the minimum size: the mood line runs to the editor's edge and the 32 px strip hid its "10" stop (`qa/shots/fx-055-02-min-tucked.png`). After the fix the stop sits just left of the strip (`fx-055-03-min-fixed.png`). Clicking it set `mood` = 10 in SQLite (`fx-055-04-mood10.png`), and a click on the trash button's right edge opened "Delete entry?" (`fx-055-05-trash-right.png`, cancelled). "1mo" and the count badge still fit the strip, also maximized (`fx-052-01-max.png`). Test: `test/journal_on_this_day_min_window_test.dart` (fails without the fix). Hovering the strip still nudges it 6 px over the editor, by design.
 
 ### BUG-056 [Phase 7] Journals have no stable order: after signing in on another install the switcher, the Manage list and the All-journals "New entry" target all change
 - Severity: Minor

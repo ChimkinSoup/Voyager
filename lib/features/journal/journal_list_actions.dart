@@ -178,13 +178,25 @@ Future<bool> deleteJournalList(
   // happened, leaving the journal half-deleted.
   final fallbackColor = Theme.of(context).colorScheme.primary.toARGB32();
 
+  final fallbackName =
+      allJournals
+          .where((item) => item.id == legacyJournalId)
+          .map((item) => item.name)
+          .firstOrNull ??
+      'Journal';
   final choice = await showDeleteContainerDialog(
     context,
     title: 'Delete "${journal.name}"?',
-    message: entryCount == 0
-        ? 'This journal has no entries and will be removed.'
-        : 'This journal has $entryCount entries. Move them to the default "Journal", or delete everything.',
-    deleteAllLabel: 'Yes (delete all entries)',
+    message: switch (entryCount) {
+      0 => 'This journal has no entries and will be removed.',
+      1 =>
+        'This journal has 1 entry. Move it to "$fallbackName", or delete everything.',
+      _ =>
+        'This journal has $entryCount entries. Move them to "$fallbackName", or delete everything.',
+    },
+    moveLabel: 'Move to "$fallbackName"',
+    hasContents: entryCount > 0,
+    deleteAllLabel: 'Delete all entries',
   );
   if (choice == DeleteContainerChoice.cancel) return false;
 

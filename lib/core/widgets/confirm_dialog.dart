@@ -45,6 +45,9 @@ Future<bool> showConfirmDialog(
 
 /// Delete a journal or to-do list: move contents to the default container, or
 /// soft-delete everything including contents.
+///
+/// An empty container ([hasContents] false) has nothing to move, so it gets a
+/// single Delete, which answers [DeleteContainerChoice.deleteAll].
 enum DeleteContainerChoice { cancel, moveToDefault, deleteAll }
 
 Future<DeleteContainerChoice> showDeleteContainerDialog(
@@ -53,6 +56,7 @@ Future<DeleteContainerChoice> showDeleteContainerDialog(
   required String message,
   String moveLabel = 'Yes',
   String deleteAllLabel = 'Yes (delete all entries)',
+  bool hasContents = true,
 }) async {
   final result = await showVoyagerDialog<DeleteContainerChoice>(
     context: context,
@@ -65,16 +69,17 @@ Future<DeleteContainerChoice> showDeleteContainerDialog(
           label: 'Cancel',
           dense: true,
         ),
-        GlassButton(
-          onPressed: () =>
-              Navigator.pop(context, DeleteContainerChoice.moveToDefault),
-          label: moveLabel,
-          dense: true,
-        ),
+        if (hasContents)
+          GlassButton(
+            onPressed: () =>
+                Navigator.pop(context, DeleteContainerChoice.moveToDefault),
+            label: moveLabel,
+            dense: true,
+          ),
         GlassButton(
           onPressed: () =>
               Navigator.pop(context, DeleteContainerChoice.deleteAll),
-          label: deleteAllLabel,
+          label: hasContents ? deleteAllLabel : 'Delete',
           color: Theme.of(context).colorScheme.error,
           dense: true,
         ),

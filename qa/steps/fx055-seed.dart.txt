@@ -1,0 +1,10 @@
+final repo = c.read(journalRepositoryProvider);
+final now = DateTime.now().toUtc();
+final local = DateTime.now();
+await repo.upsertJournal(Journal(id: 'fx055-alpha', name: 'FX Alpha', colorValue: 0xFF8CAAEE, onThisDayCadence: OnThisDayCadence.monthlyAndYearly, createdAt: now, updatedAt: now));
+final dates = [DateTime(local.year, local.month - 1, local.day, 12), DateTime(local.year - 1, local.month, local.day, 12), local];
+for (var i = 0; i < dates.length; i++) { final d = dates[i].toUtc(); await repo.upsertEntry(JournalEntry(id: 'fx055-entry-$i', journalId: 'fx055-alpha', title: 'FX055 entry $i', body: 'otd body $i', entryDate: d, timestamp: d, createdAt: d, updatedAt: d)); }
+final s = await c.read(settingsRepositoryProvider).getSettings();
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(lastViewedJournalId: 'fx055-alpha'));
+c.invalidate(journalsProvider); c.invalidate(journalEntryCountsProvider); c.invalidate(journalEntriesProvider); c.invalidate(allJournalEntriesProvider); c.invalidate(journalListEntriesProvider);
+debugPrint('FX055 seeded FX Alpha with 3 entries');

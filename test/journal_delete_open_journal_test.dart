@@ -60,7 +60,7 @@ void main() {
         final gammaEntry = (await repo.listEntries(journalId: gamma.id)).single;
         expect(gammaEntry.body, 'Gamma body text');
 
-        // Gear → Gamma ⋮ → Delete → "Yes (delete all entries)" → Close.
+        // Gear → Gamma ⋮ → Delete → "Delete all entries" → Close.
         await tester.tap(find.byTooltip('Manage journals'));
         await tester.pumpAndSettle();
         final row = find.ancestor(
@@ -76,7 +76,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Delete').last);
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Yes (delete all entries)'));
+        await tester.tap(find.text('Delete all entries'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Close'));
         await _pumpFrames(tester, 8);

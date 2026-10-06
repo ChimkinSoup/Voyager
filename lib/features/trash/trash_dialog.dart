@@ -34,6 +34,10 @@ class _TrashDialog extends ConsumerStatefulWidget {
 }
 
 class _TrashDialogState extends ConsumerState<_TrashDialog> {
+  /// Without a dwell (or an icon) a toast stays up until its owner takes it
+  /// away, and nothing here ever does.
+  static const _restoreToastDwell = Duration(seconds: 4);
+
   late TrashFeature? _feature = widget.initialFeature;
 
   /// Set while a restore or erase is running, so a second click can't start
@@ -64,10 +68,16 @@ class _TrashDialogState extends ConsumerState<_TrashDialog> {
             ? 'Restored $label'
             : 'Restored $label to $movedTo',
         icon: PhosphorIconsRegular.arrowCounterClockwise,
+        dwell: _restoreToastDwell,
       );
     } on RestoreSuperseded {
       if (!mounted) return;
-      showVoyagerToast(context, message: 'Already restored');
+      showVoyagerToast(
+        context,
+        message: 'Already restored',
+        icon: PhosphorIconsRegular.arrowCounterClockwise,
+        dwell: _restoreToastDwell,
+      );
     } on TrashRestoreBlocked catch (blocked) {
       if (!mounted) return;
       final parentTitle = blocked.parentTitle;
@@ -78,6 +88,8 @@ class _TrashDialogState extends ConsumerState<_TrashDialog> {
                   'exists'
             : 'Restore ${blocked.parentNoun} "${cappedTrashTitle(parentTitle)}" '
                   'first',
+        icon: PhosphorIconsRegular.warning,
+        dwell: _restoreToastDwell,
       );
     }
   });

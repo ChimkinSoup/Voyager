@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 039.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 040.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -158,6 +158,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-036@example.com | 2026-10-05 (BUG-023…028 re-check) | Journal "Journal" with 1 untitled entry (body: the BUG-028 emphasis sample "and 2*3⏎foo**bar**baz⏎⏎and 2*3⏎see foo* bar⏎⏎plain 2*3*4 and a *start⏎ends* here⏎⏎end"). One manual snippet `;sig` → "Best regards, Juno"; expand key Tab. Vim off. Dark + Scatter. | Password `qavoyager2026`. |
 | voyager-qa-037@example.com | 2026-10-05 (BUG-032 / BUG-034 re-check) | Journal "Journal" with 1 untitled entry (body "bug032 upload check" + one pasted image, `qa/data/img03.png`, uploaded). Vim off. Dark + Scatter. | Password `qavoyager2026`. |
 | voyager-qa-038@example.com | 2026-10-05 (FV-13: BUG-042/045/046/047) | uid `W07XOHovjLPavkidjWfVqb1Iy123`. Journals "Journal" (`__legacy__`, 1 entry, body " GHOST"), "FX Beta" (`fx046-beta`, 2 entries) and "Gamma" (deleted with its entry, in Trash). 6 once-rules "FX042 rule 0..5" (rule 0 acknowledged; 1..5 due Oct 5 10:45 PM to Oct 6 2:45 AM). Default calendar "FX045 Edited Default" v2, pink. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-039@example.com | 2026-10-05 (FV-14: BUG-049…055) | uid `aZ3d9gtSOrfmp90dHSan5IlYKLY2`. Journals "FX Alpha" (`fx055-alpha`, Monthly + yearly On this day, 6 entries: 3 seeded `fx055-entry-0..2` dated a month ago, a year ago and Oct 5 2026, plus 3 untitled with custom quotes), "FX Gamma" (restored from Trash, empty) and "Journal" (`__legacy__`, 1 entry "FX049 one entry"). 3 custom quotes "FX054 custom quote 1..3", "Only my quotes" on. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 
 ---
 
@@ -372,6 +373,8 @@ One line per completed phase.
 ---
 
 ## 7. Handoff note
+
+**2026-10-05 (after the audit, second batch):** BUG-049, BUG-050, BUG-051, BUG-052, BUG-054 and BUG-055 fixed and verified in the app (TEST_PLAN.md FV-14, qa-039); BUG-053 marked skipped. Summary counts updated. One unexplained Riverpod startup assertion is noted in FV-14's result. Session ended `SIGNED-OUT`.
 
 **2026-10-05 (after the audit):** BUG-042, BUG-045, BUG-047 fixed and BUG-046 found already fixed; all four verified in the app (TEST_PLAN.md FV-13, qa-038), summary counts updated. Session ended `SIGNED-OUT`.
 

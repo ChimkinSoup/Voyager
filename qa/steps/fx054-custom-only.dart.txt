@@ -1,0 +1,7 @@
+final settingsRepo = c.read(settingsRepositoryProvider);
+final now = DateTime.now().toUtc();
+for (var i = 1; i <= 3; i++) { final q = CustomQuote(id: 'fx054-q$i', text: 'FX054 custom quote $i', createdAt: now, updatedAt: now); await settingsRepo.upsertCustomQuote(q); c.read(remoteSyncServiceProvider).pushCustomQuote(q); }
+c.invalidate(customQuotesProvider);
+final s = await settingsRepo.getSettings();
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(customQuotesOnly: true));
+debugPrint('FX054 added 3 custom quotes, customQuotesOnly on');

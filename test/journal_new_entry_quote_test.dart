@@ -4,12 +4,15 @@
 import 'dart:async';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
+import 'package:voyager/features/journal/journal_page.dart';
 
 import 'fakes/fake_weather_api_client.dart';
 import 'support/journal_page_harness.dart';
@@ -157,4 +160,114 @@ void main() {
 
     await disposeJournalPage(tester);
   });
+
+  testWidgets('with "Only my quotes" just turned on, the next new entry gets '
+      'a custom quote (BUG-054)', (tester) async {
+    late _RecordingJournalRepository repo;
+    await pumpJournalPage(
+      tester,
+      extraOverrides: (db) => [
+        journalRepositoryProvider.overrideWith(
+          (ref) => repo = _RecordingJournalRepository(db),
+        ),
+        bundledQuotesProvider.overrideWith(
+          (ref) async => const [Quote(id: 'b1', text: 'Bundled quote')],
+        ),
+      ],
+    );
+
+    // The bank loaded over the bundled pool, as after the startup warm-up.
+    await tester.tap(find.text('New entry'));
+    await settle(tester, frames: 20);
+    final first = await repo.getEntry(repo.writes.first.id);
+    expect(first!.customQuote, 'Bundled quote');
+
+    // Settings → Custom quotes: add one, turn "Only my quotes" on.
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(JournalPage)),
+    );
+    final settingsRepo = container.read(settingsRepositoryProvider);
+    final now = DateTime.now().toUtc();
+    await settingsRepo.upsertCustomQuote(
+      CustomQuote(id: 'c1', text: 'My quote', createdAt: now, updatedAt: now),
+    );
+    container.invalidate(customQuotesProvider);
+    await container
+        .read(settingsProvider.notifier)
+        .saveSettings(
+          (await settingsRepo.getSettings()).copyWith(customQuotesOnly: true),
+        );
+    await settle(tester);
+
+    repo.writes.clear();
+    await tester.tap(find.text('New entry'));
+    await settle(tester, frames: 20);
+
+    final created = await repo.getEntry(repo.writes.first.id);
+    expect(created!.customQuote, 'My quote');
+
+    await disposeJournalPage(tester);
+  });
+
+  testWidgets('an entry without a quote can be given one (BUG-052)', (
+    tester,
+  ) async {
+    // The harness's seeded entry was written without a quote, like one
+    // imported or synced from an older build.
+    final db = await pumpJournalPage(tester);
+
+    await tester.tap(find.text('Add a quote'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(EditableText),
+      ),
+      'Typed quote',
+    );
+    await tester.tap(find.text('Save'));
+    await settle(tester, frames: 20);
+
+    expect(find.text('Typed quote'), findsOneWidget);
+    expect(find.text('Add a quote'), findsNothing);
+    final entry = await DriftJournalRepository(db).getEntry('harness-entry');
+    expect(entry!.customQuote, 'Typed quote');
+
+    await disposeJournalPage(tester);
+  });
+
+  testWidgets(
+    'a new entry waiting for its quote does not flash "Add a quote"',
+    (tester) async {
+      // The bank never loaded, as on a cold start: the entry is created without
+      // a quote and gets one only once the bundled quotes arrive.
+      final bundled = Completer<List<Quote>>();
+      await pumpJournalPage(
+        tester,
+        extraOverrides: (_) => [
+          bundledQuotesProvider.overrideWith((ref) => bundled.future),
+        ],
+      );
+
+      await tester.tap(find.text('New entry'));
+      await settle(tester);
+
+      final shown = find.text('Add a quote').evaluate().where((element) {
+        var hidden = false;
+        element.visitAncestorElements((ancestor) {
+          final widget = ancestor.widget;
+          hidden = widget is Visibility && !widget.visible;
+          return !hidden;
+        });
+        return !hidden;
+      });
+      expect(shown, isEmpty);
+
+      bundled.complete(const [Quote(id: 'b1', text: 'Late quote')]);
+      await settle(tester, frames: 20);
+      expect(find.text('Late quote'), findsOneWidget);
+
+      await disposeJournalPage(tester);
+    },
+  );
 }

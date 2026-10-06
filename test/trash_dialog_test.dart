@@ -141,6 +141,23 @@ void main() {
     expect(find.text('Journal "Work"'), findsNothing);
   });
 
+  testWidgets('the "Restored …" toast goes away on its own (BUG-051)', (
+    tester,
+  ) async {
+    await openTrash(tester, feature: TrashFeature.journal);
+
+    await tester.tap(find.text('Restore'));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Restored Journal "Work"'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pumpAndSettle();
+    expect(find.text('Restored Journal "Work"'), findsNothing);
+  });
+
   testWidgets('clicking a row shows the deleted item in full', (tester) async {
     await openTrash(tester);
 

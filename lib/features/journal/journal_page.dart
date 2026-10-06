@@ -114,6 +114,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   var _viewAllJournals = false;
   final _optimisticallyHiddenEntryIds = <String>{};
   final _pendingEntries = <String, JournalEntry>{};
+
+  /// New entries whose quote [_finalizeNewEntry] is still drawing. Their quote
+  /// line stays blank rather than offering "Add a quote" for a moment.
+  final _quotePendingEntryIds = <String>{};
   final _pendingEntryIds = <String>[];
   final _entryListScrollController = ScrollController();
   String? _selectedEntryId;
@@ -896,10 +900,14 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     // it is from the startup warm-up onwards. Leaving it to
     // [_finalizeNewEntry] meant the entry painted one frame with no quote,
     // the editor stretched over the space it would take, and then jumped as
-    // the quote landed. The async pass below still covers the cold case.
-    final quote = ref.read(quotesLoadedProvider).hasValue
+    // the quote landed. The async pass below still covers the cold case, and
+    // a bank that is rebuilding or failed to: while the pool or "Only my
+    // quotes" has just changed it still holds the old pool, so drawing from it
+    // here would hand out a quote the user has just ruled out.
+    final quote = ref.read(quotesLoadedProvider) is AsyncData
         ? ref.read(quoteBankProvider).nextQuote(journalId)
         : null;
+    if (quote == null) _quotePendingEntryIds.add(id);
 
     final entry = JournalEntry(
       id: id,
@@ -1001,15 +1009,19 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     // device, and its id never reaches [journalAllEntryIdsProvider], so
     // [_reconcilePendingEntries] never evicts it from [_pendingEntries] and
     // [_suppressAutoSelect] stays on for good.
-    await _saveNewEntryDelta(entry.id, (base) {
-      final quote = assignedQuote;
-      if (quote == null) return base;
-      return base.copyWith(
-        quoteId: quote.id,
-        customQuote: quote.text,
-        bumpVersion: false,
-      );
-    });
+    try {
+      await _saveNewEntryDelta(entry.id, (base) {
+        final quote = assignedQuote;
+        if (quote == null) return base;
+        return base.copyWith(
+          quoteId: quote.id,
+          customQuote: quote.text,
+          bumpVersion: false,
+        );
+      });
+    } finally {
+      if (_quotePendingEntryIds.remove(entry.id) && mounted) setState(() {});
+    }
 
     final weatherService = ref.read(weatherServiceProvider);
     final weather =
@@ -3093,6 +3105,9 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                             if (showEntryQuote && _selectedEntry != null)
                               _EntryQuote(
                                 quote: _selectedEntry!.customQuote,
+                                drawing: _quotePendingEntryIds.contains(
+                                  _selectedEntry!.id,
+                                ),
                                 onTap: _editQuote,
                               ),
                           ],
@@ -3353,16 +3368,26 @@ class _EditQuoteDialogState extends State<_EditQuoteDialog> {
 }
 
 class _EntryQuote extends StatelessWidget {
-  const _EntryQuote({required this.quote, required this.onTap});
+  const _EntryQuote({
+    required this.quote,
+    required this.drawing,
+    required this.onTap,
+  });
 
   final String? quote;
+
+  /// The entry's quote is still being drawn: the placeholder keeps its space
+  /// but isn't shown, so a new entry never flashes "Add a quote".
+  final bool drawing;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final text = quote;
-    if (text == null || text.isEmpty) return const SizedBox.shrink();
-    return Padding(
+    // An entry with no quote still gets a way into the quote editor, the only
+    // place one can be written or browsed for.
+    final text = quote ?? '';
+    final placeholder = text.isEmpty;
+    final quoteLine = Padding(
       // Room for the Vim `/` prompt, which hangs about 36px below the editor:
       // in a narrow window the right-aligned quote reaches under it (BUG-019).
       padding: const EdgeInsets.only(top: 32),
@@ -3376,7 +3401,7 @@ class _EntryQuote extends StatelessWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 320),
               child: VoyagerProseText(
-                text,
+                placeholder ? 'Add a quote' : text,
                 textAlign: TextAlign.right,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   fontStyle: FontStyle.italic,
@@ -3389,6 +3414,13 @@ class _EntryQuote extends StatelessWidget {
           ),
         ),
       ),
+    );
+    return Visibility(
+      visible: !(placeholder && drawing),
+      maintainSize: true,
+      maintainAnimation: true,
+      maintainState: true,
+      child: quoteLine,
     );
   }
 }

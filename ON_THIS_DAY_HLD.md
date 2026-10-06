@@ -37,7 +37,7 @@ Status: **implemented** (schema v125).
 | **Monthly** | Same day in the **immediately prior** month only. Never two or more months back. |
 | **Missing days** | On the last day of a month, also show every entry whose day number is greater than today's. Nothing is skipped. |
 | **Surface** | Journal page only. |
-| **Presentation** | A portrait card. Tucked, it stands upright in the right edge with a 32 px strip showing. Out, it sits by the right edge turned ~4° counterclockwise. Clicking the strip brings it out; any interaction outside the card tucks it back. |
+| **Presentation** | A portrait card. Tucked, it stands upright in the right edge with a 24 px strip showing. Out, it sits by the right edge turned ~4° counterclockwise. Clicking the strip brings it out; any interaction outside the card tucks it back. |
 | **Multiple matches** | One card with paging ("1 of 3"), newest first. No stacked cards. The tucked strip shows how far back the first (newest) match is and, with more than one, the count. |
 | **Dismiss** | ✕ hides the card, strip included, **for the rest of this run of the app**. It is held in memory only: restarting the app the same day brings the card back, and it slides out again. Not synced, not persisted, not in backups. |
 | **Eligible entries** | Not soft-deleted, in a non-deleted journal, and not blank (the title or body has non-whitespace text). |
@@ -112,14 +112,14 @@ Scrolling with the wheel or trackpad does **not** tuck it, since reading while t
 
 - **Surface:** `surfaceContainerHigh` with 16 px corners, elevation 8, and a faint 1 px border in the journal colour at 35 % opacity.
 - **Size:** 220 × 300 logical px, or `available − 32` wide if narrower. It is anchored 72 px below the top of the journal content area, with a 16 px gutter from the right edge when out.
-- **Tucked:** upright, translated right until only a 32 px strip of its left edge is on screen. The rest is clipped by the overlay's `Stack`. The strip shows the memory icon at the top. Near the bottom, in 9 px text in the journal colour, is how far back the card's first (newest) match is, as `OnThisDayMatch.shortAgo` ("1mo", "1y", "6y"). With 2 or more matches, the count sits below that, in a small round badge tinted with the journal colour so it doesn't read as a distance. Both ends sit 14 px in from the card's top and bottom edges. "1mo" is the widest label and fits the 32 px strip. Hovering the strip nudges the card 6 px further out and shows a click cursor. A removed `MouseRegion` gets no `onExit`, so ✕ and a scope change clear the hover state themselves. Clicking anywhere on the visible strip brings it out.
+- **Tucked:** upright, translated right until only a 24 px strip of its left edge is on screen. The rest is clipped by the overlay's `Stack`. The strip shows the memory icon at the top. Near the bottom, in 9 px text in the journal colour, is how far back the card's first (newest) match is, as `OnThisDayMatch.shortAgo` ("1mo", "1y", "6y"). With 2 or more matches, the count sits below that, in a small round badge tinted with the journal colour so it doesn't read as a distance. Both ends sit 14 px in from the card's top and bottom edges. "1mo" is the widest label and fits the 24 px strip. Hovering the strip nudges the card 6 px further out and shows a click cursor. A removed `MouseRegion` gets no `onExit`, so ✕ and a scope change clear the hover state themselves. Clicking anywhere on the visible strip brings it out.
 - **Out:** rotated ~4° (0.07 rad) counterclockwise about its centre, like a card laid on a desk.
 - **Motion:** one `AnimationController`, 420 ms. It goes out on `VoyagerSpring.momentumCurve`, whose slight overshoot turns the card a hair past its resting angle before it settles, and comes back on `Curves.easeInOutCubic`. Translation and rotation both follow the same progress.
 - **Content fades:** staggered so they never overlap mid-swing. The strip's icon, distance and count fade out over the first third, and the card's contents fade in from 25 % to 100 %.
 - **Reduced motion:** no rotation, and a 150 ms (`VoyagerMotion.crossfade`) linear slide. There is no pure-fade equivalent, because the two states are positions, not visibility.
 - **Hit-testing:** the transforms are the outermost widgets under the `Positioned`. A render box above them would hit-test against the untransformed layout box, and the tucked strip lies outside it. An early version had exactly that bug: the strip didn't respond to clicks.
 - **Stacking:** the card sits above the entry list and editor but below dialogs and toasts. It is mounted over the whole page content, so its right edge is the window's.
-- **Editor overlap:** the tucked strip is 32 px wide and the editor's right gutter is 24 px, so the strip reaches ~8 px over the editor's right edge (and its scrollbar) within the card's 300 px band. Out, the card overlaps the editor fully, which is the point of an overlay.
+- **Editor overlap:** the tucked strip is 24 px wide, the width of the editor's right gutter, so it stays clear of the editor (only the 6 px hover nudge reaches over its edge). It used to be 32 px and reached ~8 px over the editor; in a narrow window, where the mood slider takes a line of its own and runs to the editor's edge, that hid the slider's last stop and part of the trash button (BUG-055). Out, the card overlaps the editor fully, which is the point of an overlay.
 
 ### 5.4 Content
 
@@ -222,7 +222,7 @@ The visual design (tucked, mid-swing, out; the one-line setting) was checked wit
 
 1. **No undo for ✕.** Tucking is the safety net, since an outside click only tucks. A restart also restores a dismissed card. If accidental dismissals happen, add an Undo toast.
 2. **Entry read per commit point** (focus loss, entry or journal switch, create, delete) once any journal is opted in (§7). Move to a date-window repository query if it shows up in profiles.
-3. **The tucked strip overlaps the editor's right edge by ~8 px** (§5.3). If it gets in the way of the scrollbar, narrow the peek to the 24 px gutter.
+3. ~~**The tucked strip overlaps the editor's right edge by ~8 px**~~ (§5.3). Resolved 2026-10-05: the peek was narrowed to the 24 px gutter after the overlap hid editor controls (BUG-055).
 4. **Midnight rollover** is picked up on the next page rebuild, not live.
 
 ---

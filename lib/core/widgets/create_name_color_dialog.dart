@@ -49,6 +49,7 @@ class _CreateNameColorDialog extends StatefulWidget {
 
 class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
   late final TextEditingController _nameController;
+  final _nameFocusNode = FocusNode();
   late int _selectedColor;
   var _showEmptyNameError = false;
 
@@ -62,6 +63,7 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
   @override
   void dispose() {
     _nameController.dispose();
+    _nameFocusNode.dispose();
     super.dispose();
   }
 
@@ -69,6 +71,9 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       setState(() => _showEmptyNameError = true);
+      // The field's own submit unfocuses it; hand focus back so the name can
+      // be typed straight away.
+      _nameFocusNode.requestFocus();
       return;
     }
     Navigator.pop(context, (name: name, color: _selectedColor));
@@ -91,6 +96,7 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
                 LabeledTextField(
                   label: 'Name',
                   controller: _nameController,
+                  focusNode: _nameFocusNode,
                   autofocus: true,
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _submit(),
@@ -103,7 +109,7 @@ class _CreateNameColorDialogState extends State<_CreateNameColorDialog> {
                 if (_showEmptyNameError) ...[
                   const SizedBox(height: 6),
                   Text(
-                    'Title cannot be empty',
+                    'Name cannot be empty',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.error,
                     ),
