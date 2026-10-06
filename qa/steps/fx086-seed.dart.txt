@@ -1,0 +1,21 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final j = Journal(id: 'fx086-j', createdAt: now, updatedAt: now, version: 1, name: 'FX Search');
+await jr.upsertJournal(j); r.pushJournal(j);
+final specs = <List<String>>[
+  ['Emphasis', 'This has **boldword** and foo**bar** and ==marked== text'],
+  ['Accents', 'Coffee at the caf' + String.fromCharCode(0xE9) + ' was na' + String.fromCharCode(0xEF) + 've fun'],
+  ['Deep accent', List.filled(120, 'filler').join(' ') + ' then a cr' + String.fromCharCode(0xE8) + 'me br' + String.fromCharCode(0xFB) + 'l' + String.fromCharCode(0xE9) + 'e and zebra__corn__ at the end'],
+  ['Literal stars', 'Math 2*3 stays as typed'],
+];
+var n = 0;
+for (final s in specs) {
+  final d = DateTime(2026, 10, 1 + n, 10).toUtc();
+  final en = JournalEntry(id: 'fx086-e$n', createdAt: now, updatedAt: now, version: 1, journalId: 'fx086-j', title: s[0], body: s[1], entryDate: d, timestamp: d);
+  await jr.upsertEntry(en); r.pushJournalEntryNow(en); n++;
+}
+final dr = c.read(dreamRepositoryProvider);
+final dream = DreamEntry(id: 'fx086-dream', createdAt: now, updatedAt: now, version: 1, title: 'Caf' + String.fromCharCode(0xE9) + ' dream', body: 'a na' + String.fromCharCode(0xEF) + 've moon**lit** walk', entryDate: DateTime(2026, 10, 5, 6));
+await dr.upsertEntry(dream); r.pushDreamEntryNow(dream);
+invalidateAllDataProvidersIn(c);

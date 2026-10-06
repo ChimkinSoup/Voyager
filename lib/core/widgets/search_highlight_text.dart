@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:voyager/core/text/prose_markup.dart';
 import 'package:voyager/core/text/prose_text_span.dart';
+import 'package:voyager/core/text/search_fold.dart';
 import 'package:voyager/core/text/styled_runs.dart';
 import 'package:voyager/core/widgets/prose_highlight_underlay.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
@@ -22,18 +23,33 @@ import 'package:voyager/core/utils/journal_tags.dart';
 /// The tail is capped at [maxLength] but left un-marked: it's far longer than
 /// two lines can show, so the caller's `TextOverflow.ellipsis` is what the
 /// reader actually sees, and a `…` here would double up with it.
+///
+/// [fold] finds the hit the way the Search page matches: on [searchFold]ed
+/// text with paired delimiters left out, so `foobar` lands on `foo**bar**`
+/// (BUG-089) and `cafe` on `café` (BUG-090).
 String searchSnippet(
   String text, {
   List<String> keywords = const [],
   int leadIn = 30,
   int maxLength = 400,
+  bool fold = false,
 }) {
   final collapsed = text.replaceAll(RegExp(r'\s+'), ' ').trim();
-  final needles = _normalizedKeywords(keywords);
+  final needles = _normalizedKeywords(keywords, fold: fold);
 
   var start = 0;
   if (needles.isNotEmpty) {
-    final hit = _nextPatternIndex(collapsed.toLowerCase(), needles, 0);
+    var hit = _nextHit(collapsed.toLowerCase(), needles, 0)?.index;
+    // The mapped fold costs two body-length lists, so it only runs when the
+    // plain search missed and folding could find something it can't.
+    if (fold && hit == null && _foldCanDiffer(collapsed)) {
+      final folded = searchFoldMapped(
+        collapsed,
+        skip: proseDelimiterOffsets(collapsed),
+      );
+      final found = _nextHit(folded.text, needles, 0);
+      if (found != null) hit = folded.starts[found.index];
+    }
     if (hit != null && hit > leadIn) {
       start = hit - leadIn;
       final space = collapsed.indexOf(' ', start);
@@ -64,6 +80,7 @@ Widget searchHighlightedText(
   int Function(String tag)? tagColorFor,
   ProseEmphasisTheme? emphasisTheme,
   required Brightness brightness,
+  bool fold = false,
 }) {
   // Required rather than defaulted: a tag pill painted in the dark palette on
   // a light surface is close to invisible, and a default would have made that
@@ -78,6 +95,11 @@ Widget searchHighlightedText(
   final emphasis = emphasisTheme == null
       ? const <StyledRange>[]
       : proseReadRanges(text, emphasisTheme);
+  // With [fold], the delimiters the emphasis hides, so a keyword is matched
+  // against what the reader sees: `foobar` across `foo**bar**` (BUG-089).
+  final hidden = !fold || emphasisTheme == null || keywords.isEmpty
+      ? const <int>{}
+      : _hiddenOffsets(text);
   // `==highlight==` leaves a mark, not a fill — see [kProseHighlightMark].
   final highlightFill = emphasisTheme?.highlightColor;
 
@@ -92,6 +114,8 @@ Widget searchHighlightedText(
           keywords,
           emphasis: emphasis,
           offset: cursor,
+          hidden: hidden,
+          fold: fold,
         ),
       );
     }
@@ -122,6 +146,8 @@ Widget searchHighlightedText(
                   keywords,
                   emphasis: emphasis,
                   offset: match.start,
+                  hidden: hidden,
+                  fold: fold,
                 ),
               ),
             ),
@@ -139,6 +165,8 @@ Widget searchHighlightedText(
         keywords,
         emphasis: emphasis,
         offset: cursor,
+        hidden: hidden,
+        fold: fold,
       ),
     );
   }
@@ -223,7 +251,13 @@ Widget keywordHighlightedText(
 ///
 /// [emphasis] carries the formatting of the *whole* document this slice came
 /// from, in document offsets, with [offset] saying where the slice starts in
-/// it — see [applyStyledRanges].
+/// it — see [applyStyledRanges]. [hidden] holds the delimiters that emphasis
+/// hides, in the same offsets; [fold] matching skips them.
+///
+/// [fold] matches on [searchFold]ed text, so `cafe` emphasises `café` — the
+/// Search page's matching. Elsewhere it stays case folding only, since those
+/// filters don't fold accents and a highlight they never matched would read
+/// as a hit.
 List<TextSpan> keywordSpans(
   String text,
   TextStyle? style,
@@ -231,8 +265,10 @@ List<TextSpan> keywordSpans(
   Color? highlightColor,
   List<StyledRange> emphasis = const [],
   int offset = 0,
+  Set<int> hidden = const {},
+  bool fold = false,
 }) {
-  final needles = _normalizedKeywords(keywords);
+  final needles = _normalizedKeywords(keywords, fold: fold);
   if (needles.isEmpty || text.isEmpty) {
     return applyStyledRanges(
       [TextSpan(text: text, style: style)],
@@ -247,44 +283,40 @@ List<TextSpan> keywordSpans(
   ]..sort((a, b) => b.length.compareTo(a.length));
 
   final spans = <TextSpan>[];
-  var index = 0;
-  final lower = text.toLowerCase();
+  final mapped = fold
+      ? searchFoldMapped(text, skip: hidden, skipBase: offset)
+      : null;
+  final haystack = mapped?.text ?? text.toLowerCase();
+  int startOf(int k) => mapped?.starts[k] ?? math.min(k, text.length);
+  int endOf(int k) => mapped?.ends[k] ?? math.min(k + 1, text.length);
 
   TextStyle highlightedStyle() => (style ?? const TextStyle()).copyWith(
     backgroundColor: highlightColor ?? style?.color?.withValues(alpha: 0.18),
     fontWeight: FontWeight.w600,
   );
 
-  while (index < text.length) {
-    int? hitAt;
-    int? hitLen;
-    for (final pattern in patterns) {
-      if (pattern.isEmpty) continue;
-      if (lower.startsWith(pattern, index)) {
-        hitAt = index;
-        hitLen = pattern.length;
-        break;
-      }
+  var cursor = 0;
+  var at = 0;
+  while (true) {
+    final hit = _nextHit(haystack, patterns, at);
+    if (hit == null) break;
+    at = hit.index + hit.length;
+    // Back in [text]: a folded match can span hidden delimiters and dropped
+    // accents, and one source letter can fold to two (`ß`), so a match may
+    // begin inside the letter the last one ended on.
+    final start = math.max(startOf(hit.index), cursor);
+    final end = endOf(at - 1);
+    if (end <= start) continue;
+    if (start > cursor) {
+      spans.add(TextSpan(text: text.substring(cursor, start), style: style));
     }
-
-    if (hitAt == null) {
-      final next = _nextPatternIndex(lower, patterns, index);
-      if (next == null) {
-        spans.add(TextSpan(text: text.substring(index), style: style));
-        break;
-      }
-      spans.add(TextSpan(text: text.substring(index, next), style: style));
-      index = next;
-      continue;
-    }
-
     spans.add(
-      TextSpan(
-        text: text.substring(hitAt, hitAt + hitLen!),
-        style: highlightedStyle(),
-      ),
+      TextSpan(text: text.substring(start, end), style: highlightedStyle()),
     );
-    index = hitAt + hitLen;
+    cursor = end;
+  }
+  if (cursor < text.length) {
+    spans.add(TextSpan(text: text.substring(cursor), style: style));
   }
 
   return applyStyledRanges(
@@ -294,17 +326,58 @@ List<TextSpan> keywordSpans(
   );
 }
 
-List<String> _normalizedKeywords(List<String> keywords) => keywords
-    .map((k) => k.trim().toLowerCase())
-    .where((k) => k.isNotEmpty)
-    .toList();
+List<String> _normalizedKeywords(List<String> keywords, {required bool fold}) =>
+    keywords
+        .map((k) => fold ? searchFold(k.trim()) : k.trim().toLowerCase())
+        .where((k) => k.isNotEmpty)
+        .toList();
 
-int? _nextPatternIndex(String lower, List<String> patterns, int from) {
+/// Whether [searchFold] or a hidden delimiter could make a match the plain
+/// lowercase search misses: anything non-ASCII, or a delimiter character.
+bool _foldCanDiffer(String text) {
+  for (var i = 0; i < text.length; i++) {
+    final unit = text.codeUnitAt(i);
+    if (unit >= 0x80 || unit == 0x2A || unit == 0x5F || unit == 0x3D) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// [proseDelimiterOffsets], cached the way [proseReadRanges] caches its
+/// ranges: the Search page rebuilds every visible row per keystroke, and each
+/// row would otherwise re-parse its title and snippet.
+Set<int> _hiddenOffsets(String text) {
+  final hit = _hiddenOffsetsCache[text];
+  if (hit != null) return hit;
+  if (_hiddenOffsetsCache.length >= _hiddenOffsetsCacheLimit) {
+    _hiddenOffsetsCache.clear();
+  }
+  return _hiddenOffsetsCache[text] = proseDelimiterOffsets(text);
+}
+
+final _hiddenOffsetsCache = <String, Set<int>>{};
+const _hiddenOffsetsCacheLimit = 256;
+
+/// The earliest occurrence of any of [patterns] in [folded] at or after
+/// [from], taking the longest pattern when several start there.
+({int index, int length})? _nextHit(
+  String folded,
+  List<String> patterns,
+  int from,
+) {
   int? best;
+  var bestLength = 0;
   for (final pattern in patterns) {
     if (pattern.isEmpty) continue;
-    final i = lower.indexOf(pattern, from);
-    if (i >= 0 && (best == null || i < best)) best = i;
+    final i = folded.indexOf(pattern, from);
+    if (i < 0) continue;
+    if (best == null ||
+        i < best ||
+        (i == best && pattern.length > bestLength)) {
+      best = i;
+      bestLength = pattern.length;
+    }
   }
-  return best;
+  return best == null ? null : (index: best, length: bestLength);
 }

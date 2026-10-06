@@ -1,0 +1,46 @@
+# FV-24 follow-up (code review): re-check BUG-087…090 after the review fixes.
+activate
+maximize
+wait 1500
+click 88 298
+wait 1200
+click 88 778
+wait 1200
+type foobar
+wait 900
+shot fx29-01-arrival-foobar
+key ctrl+a
+type cafe
+wait 900
+shot fx29-02-cafe
+key ctrl+a
+type creme
+wait 900
+shot fx29-03-creme-deep
+key ctrl+a
+type a
+wait 900
+shot fx29-04-count
+key ctrl+a
+key backspace
+wait 900
+shot fx29-05-cleared
+type a
+wait 900
+key tab
+wait 300
+key ctrl+f
+wait 300
+type qqqzzz
+wait 900
+shot fx29-06-ctrlf-nomatch
+key ctrl+a
+type /dream cafe
+wait 900
+shot fx29-07-dream-cafe
+key ctrl+a
+type moonlit
+wait 900
+shot fx29-08-dream-moonlit
+key esc
+wait 500

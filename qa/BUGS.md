@@ -10,9 +10,9 @@ The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10
 |---|--:|--:|--:|
 | Blocker | 7 | 3 (BUG-001, BUG-003, BUG-061) | 4 |
 | Major | 29 | 9 (BUG-002 (see caveat), BUG-004, BUG-010, BUG-043 (dup), BUG-045, BUG-066, BUG-074, BUG-078, BUG-084) | 20 |
-| Minor | 145 | 30 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-048, BUG-050, BUG-051, BUG-052, BUG-054, BUG-055, BUG-056, BUG-059, BUG-060, BUG-062, BUG-063, BUG-065, BUG-067, BUG-068, BUG-069, BUG-072, BUG-079, BUG-080, BUG-081, BUG-082, BUG-083, BUG-085, BUG-167, BUG-226, BUG-227, BUG-228) | 115 |
+| Minor | 145 | 35 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-048, BUG-050, BUG-051, BUG-052, BUG-054, BUG-055, BUG-056, BUG-059, BUG-060, BUG-062, BUG-063, BUG-065, BUG-067, BUG-068, BUG-069, BUG-072, BUG-079, BUG-080, BUG-081, BUG-082, BUG-083, BUG-085, BUG-086, BUG-087, BUG-088, BUG-089, BUG-090, BUG-167, BUG-226, BUG-227, BUG-228) | 110 |
 | Cosmetic | 47 | 12 (BUG-007, BUG-008, BUG-042, BUG-049, BUG-057, BUG-064, BUG-070, BUG-071, BUG-073, BUG-075, BUG-076, BUG-077) | 35 |
-| **Total** | **228** | **54** | **174** |
+| **Total** | **228** | **59** | **169** |
 
 "Fixed" means re-tested in the running app by a phase re-check or FV (TEST_PLAN.md "Fix verification"). "Open" means no fix was recorded, so each entry stands as it was last observed. Unit-test-only claims don't count as fixed.
 
@@ -34,6 +34,7 @@ Caveats:
 - `flutter test` on 2026-10-06 (after the code-review follow-ups to BUG-072/073/074/075/228): 4,424 passed, 18 skipped, 0 failed. All were re-verified in the app the same day (TEST_PLAN.md FV-21).
 - `flutter test` on 2026-10-06 (after the BUG-076…080 fixes): 4,433 passed, 18 skipped, 0 failed. BUG-076 … BUG-080 were verified in the app the same day (TEST_PLAN.md FV-22). After BUG-077's outline was changed to the page background tone: 4,434 passed, 18 skipped, 0 failed. After the code-review follow-ups (FV-22 second follow-up): 4,437 passed, 18 skipped, 0 failed.
 - `flutter test` on 2026-10-06 (after the BUG-081…085 fixes): 4,446 passed, 18 skipped, 0 failed. BUG-081 … BUG-085 were verified in the app the same day (TEST_PLAN.md FV-23). After the code-review follow-ups (FV-23 follow-up): 4,450 passed, 18 skipped, 0 failed.
+- `flutter test` on 2026-10-06 (after the BUG-087…090 fixes; BUG-086 already fixed by BUG-006's change): 4,469 passed, 18 skipped, 0 failed. BUG-086 … BUG-090 were verified in the app the same day (TEST_PLAN.md FV-24). After the code-review follow-ups: 4,473 passed, 18 skipped, 0 failed, and BUG-087…090 re-verified in the app (FV-24 follow-up).
 
 ### Counts by phase (severity × phase)
 
@@ -1105,6 +1106,7 @@ Entry format:
 - Actual: the second Tab moves focus into `DesktopWindowTitleBar` (`_WindowControlButton`, focus ancestry logged in `qa/logs/run-20261001-162641.log` lines `FOF3`/`FOG0`/`FOG1`). The bar is hidden, and focus is never drawn (BUG-009), so nothing on screen changes. Enter then **minimized** the window (`status`: iconic=True). One Tab further, Enter **hid the window to the tray** (first run, 16:18: visible=False; the process kept running). The next Tab after the title-bar buttons goes to the rail's clock/weather button.
 - Notes: the three buttons are Minimize, Maximize/Restore and Close (`lib/core/widgets/desktop_window_title_bar.dart`). They stay in the focus order while the bar is hidden, so this applies on every page, not just Search. A keyboard user tabbing through a short page reaches them after one or two stops.
 
+- Notes (2026-10-06, re-checked, FV-24; qa-047, Dark): **already fixed** by BUG-006's change (`30a4c91`), which put the title bar's Minimize / Maximize / Close inside `ExcludeFocus`; no new code. In the app (maximized, Search with 4 results): a focus listener over the VM service logged every focus change through 40 Tabs and none landed in `DesktopWindowTitleBar`; window stayed `iconic=False visible=True`. The literal steps (type, Tab, Tab, Enter) now open the second result's entry dialog (`fx28-18-tab-tab-enter.png`). Still open: after the rail's inbox button, Tab walks into the off-screen Journal page's body and stops there; that is BUG-215, not this one.
 ### BUG-087 [Phase 11] Search shows a blank page when nothing matches (and on an account with no entries); no "no results" message or count
 - Severity: Minor
 - Found: 2026-10-01, Phase 11 (qa-016)
@@ -1113,6 +1115,7 @@ Entry format:
 - Actual: below the field the page is empty (`qa/shots/p11-q20-noresult.png`, `p11-q19-notag.png`, `p11-01-search-empty.png`). It looks the same as "still loading" or "broken". No result count is shown for any query either (`commonword` matches 600 entries with no indication of how many).
 - Notes: `SearchPage.build` renders `KeepAliveScrollList(itemCount: results.length)` with no empty branch, for both the journal and the dream scope.
 
+- Notes (2026-10-06, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-24; qa-047, Dark): confirmed. Both scopes now show a muted line when the list is empty: "No entries match “qqqzzz”" / "No dreams match “…”" for a query, and "No journal entries yet. Entries you write will show up here." / "No dreams yet. …" with no query. While a query filters, "N matches" sits above the list, as on To-Do (`_resultsOrMessage` in `search_page.dart`). In the app: empty account (`fx28-01-empty-arrival.png`), `abc` (`fx28-02`), `qqqzzz` (`fx28-11`), `a` → "4 matches" (`fx28-10`), dream scope `qqq` (`fx28-14`). Tests: `test/search_page_empty_and_focus_test.dart` (3 cases).
 ### BUG-088 [Phase 11] Search page: the query field isn't focused on arrival and Ctrl+F doesn't focus it, so typed text goes nowhere
 - Severity: Minor
 - Found: 2026-10-01, Phase 11 (qa-016)
@@ -1121,6 +1124,7 @@ Entry format:
 - Actual: `primaryFocus` = the route's `FocusScopeNode`; both `abc`s are dropped and the field stays empty (`qa/shots/p11-80-typed-unfocused.png`). The user has to click the field. Tab from nothing reaches the field only sometimes; after a tray restore focus sat at the root scope and Tab did nothing at all.
 - Notes: same family as BUG-009 (no visible focus / Tab order). The results dialog also opens with nothing focused: Tab then goes to the body, skipping the title (`p11-83-state.png`).
 
+- Notes (2026-10-06, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-24; qa-047, Dark): confirmed. The query field takes focus whenever the Search branch becomes the visible one (a `TickerMode` flip, post-frame, skipped while a dialog is open), and Ctrl+F / Cmd+F focuses it and selects the query from anywhere on the page (a `HardwareKeyboard` handler gated like To-Do's and Finance's). In the app: rail click from Journal, then typing without a click → "abc" in the field (`fx28-02`); Tab onto a result, Ctrl+F → query selected, typing replaced it (`fx28-15`, `fx28-16`); Ctrl+Shift+Tab → Ctrl+Tab back, typing landed (`fx28-17`). Tests: `test/search_page_empty_and_focus_test.dart` (2 cases). Not changed: the results dialog still opens with nothing focused (this entry's last note).
 ### BUG-089 [Phase 11] Search matches the stored formatting markers, not the text the user sees: "foobar" misses "foo**bar**", while "**" or "==" match entries with no visible match
 - Severity: Minor
 - Found: 2026-10-01, Phase 11 (qa-016)
@@ -1129,6 +1133,7 @@ Entry format:
 - Actual: `foobar` → blank page (`qa/shots/p11-q12-foobar.png`) although the Emphasis result shows "foobar" for any other query. `**` → the Emphasis entry, with nothing highlighted (`p11-q14-stars.png`). Searching `boldword` works because the marker sits outside the word.
 - Notes: `SearchService.searchEntries` and `filterDreamEntries` lowercase the raw `title body` (markers included); only the display goes through `proseReadRanges` (EMPHASIS_FORMATTING.md §10). The same applies to `__underline__`, `==highlight==` and any marker inside a word (BUG-028's intra-word pairs).
 
+- Notes (2026-10-06, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-24; qa-047, Dark): confirmed. Matching now runs on what the row displays: paired delimiters are taken out before folding (`SearchService.foldEntry`, `dreamSearchCorpus`, both via `proseStrip`), and the highlighter and snippet skip the same delimiters (`proseDelimiterOffsets`, new in `prose_markup.dart`), so a match across `foo**bar**` is found and highlighted. Unpaired markers the author typed still match literally. In the app: `foobar` → Emphasis, "foobar" highlighted (`fx28-03`); `**` → "No entries match" (`fx28-04`); `2*3` still finds "Math 2*3" (`fx28-09`); dream `moonlit` finds "moon**lit**" (`fx28-13`). `zebra__corn__` correctly doesn't match `zebracorn`: `__` can't pair inside a word, so the row shows the underscores (`fx28-08`). Tests: `test/search_fold_test.dart`.
 ### BUG-090 [Phase 11] Search doesn't fold accents: "cafe" doesn't find "café", "naive" doesn't find "naïve"
 - Severity: Minor
 - Found: 2026-10-01, Phase 11 (qa-016)
@@ -1137,6 +1142,7 @@ Entry format:
 - Actual: `cafe` → blank page (`qa/shots/p11-q03-cafe.png`); only the exact `café`, pasted, finds it (`p11-103-cafe-accent.png`). Case folding works (`XYLOPHONE mixedcase` matched "MixedCase XYLOPHONE"); CJK, Arabic and emoji queries match exactly.
 - Notes: plain `toLowerCase()` + `contains` in `SearchService.searchEntries` and `filterDreamEntries`. Related: hashtags with non-ASCII letters are cut short (BUG-063), so `#café` can't be searched as a tag either.
 
+- Notes (2026-10-06, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-24; qa-047, Dark): confirmed. New `lib/core/text/search_fold.dart`: lower case, combining marks dropped, Latin-1 / Latin Extended-A letters (plus ș, ț) folded to their base, æ/œ/ß/þ expanded. Query tokens, the haystack and `#tag` filters all go through it on both scopes, and `keywordSpans` / `searchSnippet` match on folded text mapped back to the source, so the accented word is highlighted and the snippet travels to it. In the app: `cafe` and `naive` find and highlight "café" / "naïve" (`fx28-05`, `fx28-06`); `creme` reaches "crème" 120 words down (`fx28-07`); dream `cafe` highlights "Café dream" (`fx28-12`). The highlighter and snippet are shared with To-Do, LeetCode and Study, so folding there is opt-in (`fold: true`, passed only by the Search page): those filters don't fold accents, and a folded highlight would mark text they never matched (code-review follow-up, below). Not folded: Latin Extended Additional (Vietnamese) and other scripts. Tests: `test/search_fold_test.dart`.
 ### BUG-091 [Phase 11] Typing a query that starts with "/dream" (e.g. "/dreamscape") switches to the dream scope halfway through the word
 - Severity: Minor
 - Found: 2026-10-01, Phase 11 (qa-016)

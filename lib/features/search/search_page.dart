@@ -44,10 +44,12 @@ import 'package:voyager/features/search/dream_search.dart';
 import 'package:voyager/features/search/search_dream_save_helper.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/utils/keyboard_focus_utils.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/domain/services/search_service.dart';
 import 'package:voyager/features/search/search_entry_save_helper.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
@@ -85,7 +87,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   Timer? _queryDebounce;
   static const _queryDebounceDelay = Duration(milliseconds: 150);
 
-  /// `entry.id -> lowercased "title body"`, rebuilt only when the merged list
+  /// `entry.id -> SearchService.foldEntry`, rebuilt only when the merged list
   /// changes. Folding per keystroke allocated a full-body concat and a
   /// full-body lowercase for every entry in the database — the dominant cost
   /// of typing in this field, all of it on the UI isolate.
@@ -106,6 +108,11 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   final Set<String> _deletedDreamIds = {};
   final _dreamResultsController = ScrollController();
 
+  /// `dream.id -> (the row it was folded from, dreamSearchCorpus)`. A row the
+  /// provider hands back unchanged is the same object, so its fold is reused;
+  /// a refreshed or edited one is folded again.
+  var _dreamFolded = <String, (DreamEntry, String)>{};
+
   /// Whether a Vim session owns the query field, and with it Escape.
   ///
   /// Read here rather than in [_handleQueryKey]: `VimEnabledScope.of`
@@ -114,14 +121,62 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   /// [TickerMode] through its notifier.
   bool _vimOwnsEscape = false;
 
+  /// Whether this shell branch was the visible one at the last dependency
+  /// change, so arriving on the page can be told apart from staying on it.
+  bool _onScreen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_handleFindShortcut);
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _vimOwnsEscape = VimEnabledScope.of(context);
+    // Every shell branch stays mounted, so arriving is a TickerMode flip. The
+    // query field is the page's only control: without this, what the user
+    // typed on arrival went nowhere until they clicked it (BUG-088).
+    final onScreen = TickerMode.valuesOf(context).enabled;
+    if (onScreen && !_onScreen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _isForeground()) _queryFocusNode.requestFocus();
+      });
+    }
+    _onScreen = onScreen;
+  }
+
+  /// Whether this page is the one the keyboard belongs to: its branch is the
+  /// visible one and nothing (dialog, popover) is open over it — the To-Do
+  /// page's check.
+  bool _isForeground() {
+    if (!subtreeIsVisible(context)) return false;
+    return !(Navigator.maybeOf(context, rootNavigator: true)?.canPop() ??
+        false);
+  }
+
+  /// Ctrl+F / Cmd+F focuses the query and selects it, as on To-Do and
+  /// Finance. A [HardwareKeyboard] handler for their reason: it has to fire
+  /// whatever holds focus, including nothing.
+  bool _handleFindShortcut(KeyEvent event) {
+    if (!mounted) return false;
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.keyF) return false;
+    final keyboard = HardwareKeyboard.instance;
+    if (!keyboard.isControlPressed && !keyboard.isMetaPressed) return false;
+    if (!_isForeground()) return false;
+    _queryFocusNode.requestFocus();
+    _queryController.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _queryController.text.length,
+    );
+    return true;
   }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleFindShortcut);
     _queryDebounce?.cancel();
     _queryController.dispose();
     _queryFocusNode.dispose();
@@ -269,6 +324,20 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     ];
   }
 
+  /// [dreamSearchCorpus] for every dream in [merged], from [_dreamFolded]
+  /// where the row is unchanged.
+  Map<String, String> _dreamFoldedText(List<DreamEntry> merged) {
+    final next = <String, (DreamEntry, String)>{};
+    for (final dream in merged) {
+      final cached = _dreamFolded[dream.id];
+      next[dream.id] = cached != null && identical(cached.$1, dream)
+          ? cached
+          : (dream, dreamSearchCorpus(dream));
+    }
+    _dreamFolded = next;
+    return {for (final e in next.entries) e.key: e.value.$2};
+  }
+
   Map<String, String> _foldedText(
     List<JournalEntry> source,
     List<JournalEntry> merged,
@@ -280,7 +349,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     _haystack
       ..clear()
       ..addEntries(
-        merged.map((e) => MapEntry(e.id, '${e.title} ${e.body}'.toLowerCase())),
+        merged.map((e) => MapEntry(e.id, SearchService.foldEntry(e))),
       );
     _haystackEntries = source;
     _haystackRevision = _localRevision;
@@ -576,6 +645,49 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     );
   }
 
+  /// The results, with how many there are while a query filters them — or,
+  /// when there are none, a line saying why instead of a blank page that
+  /// looks the same as loading or broken (BUG-087).
+  Widget _resultsOrMessage(
+    ThemeData theme, {
+    required int count,
+    required String noMatches,
+    required String nothingYet,
+    required Widget Function() list,
+  }) {
+    final query = _activeQuery.trim();
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.6);
+    if (count == 0) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 24),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: Text(
+            query.isEmpty ? nothingYet : '$noMatches \u201c$query\u201d',
+            style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+    // Always under the Column, the count or not: moving the list in and out
+    // of it as a query is typed or cleared would remount it.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (query.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(right: 16, bottom: 4),
+            child: Text(
+              count == 1 ? '1 match' : '$count matches',
+              style: theme.textTheme.labelSmall?.copyWith(color: muted),
+            ),
+          ),
+        Expanded(child: list()),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final entriesAsync = ref.watch(
@@ -654,98 +766,113 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                             .split(RegExp(r'\s+'))
                             .where((k) => k.isNotEmpty)
                             .toList();
-                        return KeepAliveScrollList(
-                          storageKey: ShellPageStorageKeys.searchResults,
-                          controller: _resultsController,
-                          itemCount: results.length,
-                          itemBuilder: (_, i) {
-                            final entry = results[i];
-                            final bodyStyle = theme.textTheme.bodyMedium!;
-                            // Results show stored prose, so the markers render the
-                            // same way they do in the editor (§10).
-                            final emphasisTheme = ProseEmphasisTheme.of(
-                              theme.colorScheme,
-                              theme.colorScheme.primary,
-                            );
-                            return ContextMenuRegion(
-                              items: [
-                                ContextMenuItem(
-                                  label: 'Statistics',
-                                  icon: PhosphorIconsRegular.chartBar,
-                                  onTap: () => showJournalEntryStatisticsDialog(
-                                    context,
-                                    ref,
-                                    entry,
+                        return _resultsOrMessage(
+                          theme,
+                          count: results.length,
+                          noMatches: 'No entries match',
+                          nothingYet:
+                              'No journal entries yet. Entries you write '
+                              'will show up here.',
+                          list: () => KeepAliveScrollList(
+                            storageKey: ShellPageStorageKeys.searchResults,
+                            controller: _resultsController,
+                            itemCount: results.length,
+                            itemBuilder: (_, i) {
+                              final entry = results[i];
+                              final bodyStyle = theme.textTheme.bodyMedium!;
+                              // Results show stored prose, so the markers render the
+                              // same way they do in the editor (§10).
+                              final emphasisTheme = ProseEmphasisTheme.of(
+                                theme.colorScheme,
+                                theme.colorScheme.primary,
+                              );
+                              return ContextMenuRegion(
+                                items: [
+                                  ContextMenuItem(
+                                    label: 'Statistics',
+                                    icon: PhosphorIconsRegular.chartBar,
+                                    onTap: () =>
+                                        showJournalEntryStatisticsDialog(
+                                          context,
+                                          ref,
+                                          entry,
+                                        ),
                                   ),
-                                ),
-                                ContextMenuItem(
-                                  label: 'Change Journal',
-                                  icon: PhosphorIconsRegular.folder,
-                                  onTap: () => unawaited(
-                                    _changeEntryJournal(entry, journals),
-                                  ),
-                                ),
-                                ContextMenuItem(
-                                  label: 'Delete',
-                                  icon: PhosphorIconsRegular.trash,
-                                  isDestructive: true,
-                                  onTap: () => unawaited(_deleteEntry(entry)),
-                                ),
-                              ],
-                              child: ListTile(
-                                title: searchHighlightedText(
-                                  entry.title.isEmpty
-                                      ? 'Untitled'
-                                      : entry.title,
-                                  style: bodyStyle.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  keywords: keywords,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  emphasisTheme: emphasisTheme,
-                                  brightness: theme.brightness,
-                                ),
-                                subtitle: searchHighlightedText(
-                                  searchSnippet(entry.body, keywords: keywords),
-                                  style: bodyStyle,
-                                  keywords: keywords,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  emphasisTheme: emphasisTheme,
-                                  brightness: theme.brightness,
-                                ),
-                                trailing: Text(
-                                  DateFormat.yMMMd().format(
-                                    entry.entryDate.toLocal(),
-                                  ),
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.6),
-                                  ),
-                                ),
-                                onTap: () async {
-                                  await showVoyagerDialog<void>(
-                                    context: context,
-                                    builder: (context) => _SearchEntryDialog(
-                                      entry: entry,
-                                      journals: journals,
-                                      onSaved: (updatedEntry) {
-                                        if (mounted) {
-                                          setState(() {
-                                            _localUpdates[updatedEntry.id] =
-                                                updatedEntry;
-                                            _localRevision++;
-                                          });
-                                          _invalidateEntryCaches();
-                                        }
-                                      },
+                                  ContextMenuItem(
+                                    label: 'Change Journal',
+                                    icon: PhosphorIconsRegular.folder,
+                                    onTap: () => unawaited(
+                                      _changeEntryJournal(entry, journals),
                                     ),
-                                  );
-                                },
-                              ),
-                            );
-                          },
+                                  ),
+                                  ContextMenuItem(
+                                    label: 'Delete',
+                                    icon: PhosphorIconsRegular.trash,
+                                    isDestructive: true,
+                                    onTap: () => unawaited(_deleteEntry(entry)),
+                                  ),
+                                ],
+                                child: ListTile(
+                                  title: searchHighlightedText(
+                                    entry.title.isEmpty
+                                        ? 'Untitled'
+                                        : entry.title,
+                                    style: bodyStyle.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    keywords: keywords,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    emphasisTheme: emphasisTheme,
+                                    brightness: theme.brightness,
+                                    fold: true,
+                                  ),
+                                  subtitle: searchHighlightedText(
+                                    searchSnippet(
+                                      entry.body,
+                                      keywords: keywords,
+                                      fold: true,
+                                    ),
+                                    style: bodyStyle,
+                                    keywords: keywords,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    emphasisTheme: emphasisTheme,
+                                    brightness: theme.brightness,
+                                    fold: true,
+                                  ),
+                                  trailing: Text(
+                                    DateFormat.yMMMd().format(
+                                      entry.entryDate.toLocal(),
+                                    ),
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                  onTap: () async {
+                                    await showVoyagerDialog<void>(
+                                      context: context,
+                                      builder: (context) => _SearchEntryDialog(
+                                        entry: entry,
+                                        journals: journals,
+                                        onSaved: (updatedEntry) {
+                                          if (mounted) {
+                                            setState(() {
+                                              _localUpdates[updatedEntry.id] =
+                                                  updatedEntry;
+                                              _localRevision++;
+                                            });
+                                            _invalidateEntryCaches();
+                                          }
+                                        },
+                                      ),
+                                    );
+                                  },
+                                ),
+                              );
+                            },
+                          ),
                         );
                       },
                       loading: () =>
@@ -788,6 +915,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           entries: merged,
           query: parsedQuery.keywords,
           tagFilter: parsedQuery.tags.isEmpty ? null : parsedQuery.tags,
+          foldedText: _dreamFoldedText(merged),
         );
         final keywords = parsedQuery.keywords
             .split(RegExp(r'\s+'))
@@ -798,68 +926,76 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           theme.colorScheme,
           theme.colorScheme.primary,
         );
-        return KeepAliveScrollList(
-          storageKey: ShellPageStorageKeys.searchDreamResults,
-          controller: _dreamResultsController,
-          itemCount: results.length,
-          itemBuilder: (_, i) {
-            final entry = results[i];
-            return ContextMenuRegion(
-              items: [
-                ContextMenuItem(
-                  label: 'Statistics',
-                  icon: PhosphorIconsRegular.chartBar,
-                  onTap: () => unawaited(_showDreamStatistics(entry)),
-                ),
-                ContextMenuItem(
-                  label: 'Delete',
-                  icon: PhosphorIconsRegular.trash,
-                  isDestructive: true,
-                  onTap: () => unawaited(_deleteDream(entry)),
-                ),
-              ],
-              child: ListTile(
-                title: searchHighlightedText(
-                  entry.title.isEmpty ? 'Untitled' : entry.title,
-                  style: bodyStyle.copyWith(fontWeight: FontWeight.w600),
-                  keywords: keywords,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  emphasisTheme: emphasisTheme,
-                  brightness: theme.brightness,
-                ),
-                subtitle: searchHighlightedText(
-                  searchSnippet(entry.body, keywords: keywords),
-                  style: bodyStyle,
-                  keywords: keywords,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  emphasisTheme: emphasisTheme,
-                  brightness: theme.brightness,
-                ),
-                trailing: Text(
-                  DateFormat.yMMMd().format(entry.entryDate.toLocal()),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        return _resultsOrMessage(
+          theme,
+          count: results.length,
+          noMatches: 'No dreams match',
+          nothingYet: 'No dreams yet. Dreams you record will show up here.',
+          list: () => KeepAliveScrollList(
+            storageKey: ShellPageStorageKeys.searchDreamResults,
+            controller: _dreamResultsController,
+            itemCount: results.length,
+            itemBuilder: (_, i) {
+              final entry = results[i];
+              return ContextMenuRegion(
+                items: [
+                  ContextMenuItem(
+                    label: 'Statistics',
+                    icon: PhosphorIconsRegular.chartBar,
+                    onTap: () => unawaited(_showDreamStatistics(entry)),
                   ),
-                ),
-                onTap: () async {
-                  await showVoyagerDialog<void>(
-                    context: context,
-                    builder: (context) => _SearchDreamDialog(
-                      entry: entry,
-                      accentColor: accentColor,
-                      onSaved: (updated) {
-                        if (!mounted) return;
-                        setState(() => _dreamUpdates[updated.id] = updated);
-                        ref.invalidate(allDreamEntriesProvider);
-                      },
+                  ContextMenuItem(
+                    label: 'Delete',
+                    icon: PhosphorIconsRegular.trash,
+                    isDestructive: true,
+                    onTap: () => unawaited(_deleteDream(entry)),
+                  ),
+                ],
+                child: ListTile(
+                  title: searchHighlightedText(
+                    entry.title.isEmpty ? 'Untitled' : entry.title,
+                    style: bodyStyle.copyWith(fontWeight: FontWeight.w600),
+                    keywords: keywords,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    emphasisTheme: emphasisTheme,
+                    brightness: theme.brightness,
+                    fold: true,
+                  ),
+                  subtitle: searchHighlightedText(
+                    searchSnippet(entry.body, keywords: keywords, fold: true),
+                    style: bodyStyle,
+                    keywords: keywords,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    emphasisTheme: emphasisTheme,
+                    brightness: theme.brightness,
+                    fold: true,
+                  ),
+                  trailing: Text(
+                    DateFormat.yMMMd().format(entry.entryDate.toLocal()),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
-                  );
-                },
-              ),
-            );
-          },
+                  ),
+                  onTap: () async {
+                    await showVoyagerDialog<void>(
+                      context: context,
+                      builder: (context) => _SearchDreamDialog(
+                        entry: entry,
+                        accentColor: accentColor,
+                        onSaved: (updated) {
+                          if (!mounted) return;
+                          setState(() => _dreamUpdates[updated.id] = updated);
+                          ref.invalidate(allDreamEntriesProvider);
+                        },
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),

@@ -1,0 +1,53 @@
+# FV-24: BUG-087/089/090 queries on the fx086 seed (Search page, maximized).
+activate
+click 1526 72
+key ctrl+a
+type foobar
+wait 900
+shot fx28-03-foobar
+key ctrl+a
+type **
+wait 900
+shot fx28-04-stars
+key ctrl+a
+type cafe
+wait 900
+shot fx28-05-cafe
+key ctrl+a
+type naive
+wait 900
+shot fx28-06-naive
+key ctrl+a
+type creme
+wait 900
+shot fx28-07-creme-deep
+key ctrl+a
+type zebracorn
+wait 900
+shot fx28-08-underline-intraword
+key ctrl+a
+type 2*3
+wait 900
+shot fx28-09-literal-star
+key ctrl+a
+type a
+wait 900
+shot fx28-10-count
+key ctrl+a
+type qqqzzz
+wait 900
+shot fx28-11-nomatch
+key ctrl+a
+type /dream cafe
+wait 900
+shot fx28-12-dream-cafe
+key ctrl+a
+type moonlit
+wait 900
+shot fx28-13-dream-moonlit
+key ctrl+a
+type qqq
+wait 900
+shot fx28-14-dream-nomatch
+key esc
+wait 500

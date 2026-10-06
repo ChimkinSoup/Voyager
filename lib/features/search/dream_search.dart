@@ -1,3 +1,5 @@
+import 'package:voyager/core/text/prose_markup.dart';
+import 'package:voyager/core/text/search_fold.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 
 /// The Search page's dream-journal scope: the query-field command that enters
@@ -24,55 +26,56 @@ String? dreamSearchCommandQuery(String text) {
 }
 
 /// Everything about [entry] a query can match: its title, its body, and its
-/// notepad, folded to lower case.
+/// notepad, as displayed (paired formatting markers taken out, BUG-089) and
+/// folded by [searchFold].
 ///
-/// Folded per call rather than cached the way the journal side caches entry
-/// bodies (see `_SearchPageState._foldedText`): that cache exists because the
-/// journal corpus is every entry in the database, while dreams are one row a
-/// night.
+/// The Search page caches it per dream (see `_SearchPageState._dreamFolded`):
+/// [proseStrip] parses each dream with markers, and the filter runs per
+/// keystroke.
 String dreamSearchCorpus(DreamEntry entry) {
   final notes = entry.notes;
-  final buffer = StringBuffer(entry.title)
+  final buffer = StringBuffer(proseStrip(entry.title))
     ..write(' ')
-    ..write(entry.body);
+    ..write(proseStrip(entry.body));
   if (notes != null && notes.isNotEmpty) {
     buffer
       ..write(' ')
-      ..write(notes);
+      ..write(proseStrip(notes));
   }
-  return buffer.toString().toLowerCase();
+  return searchFold(buffer.toString());
 }
 
 /// [entries] filtered by [tagFilter] (ANDed) and by every token in [query],
 /// in the order they came in.
 ///
 /// The same semantics as [SearchService.searchEntries] on the journal side:
-/// case-insensitive substring matching, every token has to land somewhere in
+/// substring matching on [searchFold]ed text, every token has to land somewhere in
 /// the corpus, and both sides of a tag comparison are folded because
 /// `extractTags` preserves the author's casing.
 List<DreamEntry> filterDreamEntries({
   required List<DreamEntry> entries,
   required String query,
   List<String>? tagFilter,
+  Map<String, String>? foldedText,
 }) {
   var candidates = entries;
   if (tagFilter != null && tagFilter.isNotEmpty) {
-    final needles = tagFilter.map((t) => t.toLowerCase()).toList();
+    final needles = tagFilter.map(searchFold).toList();
     candidates = candidates.where((e) {
-      final own = e.tags.map((t) => t.toLowerCase()).toSet();
+      final own = e.tags.map(searchFold).toSet();
       return needles.every(own.contains);
     }).toList();
   }
 
   final tokens = query
-      .toLowerCase()
       .split(RegExp(r'\s+'))
+      .map(searchFold)
       .where((t) => t.isNotEmpty)
       .toList();
   if (tokens.isEmpty) return candidates;
 
   return candidates.where((entry) {
-    final haystack = dreamSearchCorpus(entry);
+    final haystack = foldedText?[entry.id] ?? dreamSearchCorpus(entry);
     return tokens.every(haystack.contains);
   }).toList();
 }
