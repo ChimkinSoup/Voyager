@@ -263,6 +263,12 @@ abstract class CalendarRepository {
     String toCalendarId,
   );
 
+  /// Writes [calendar] with its new colour and gives its events whose colour
+  /// is still [fromColor] that colour too, in one transaction: a failure part
+  /// way leaves the calendar on [fromColor], so choosing the colour again
+  /// finishes the job.
+  Future<void> recolorCalendar(Calendar calendar, int fromColor);
+
   Future<List<CalendarEvent>> listEvents({
     String? calendarId,
     DateTime? from,

@@ -60,7 +60,15 @@ Future<void> changeCalendarListColor(
   );
   if (color == null) return;
   final updated = calendar.copyWith(colorValue: color);
-  await ref.read(calendarRepositoryProvider).upsertCalendar(updated);
+  // Events store the colour they were created with. Those still on the old
+  // calendar colour move with it (BUG-079); one the user set to that same
+  // colour on purpose can't be told apart, and moves too.
+  final oldColor = defaultEventColorFor(
+    calendar,
+    accentColor: ref.read(settingsProvider).valueOrNull?.accentColor,
+  );
+  await ref.read(calendarRepositoryProvider).recolorCalendar(updated, oldColor);
+  ref.invalidate(calendarEventsProvider);
   ref.invalidate(calendarsProvider);
   await ref.read(calendarsProvider.future);
 }

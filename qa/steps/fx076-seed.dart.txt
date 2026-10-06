@@ -1,0 +1,22 @@
+﻿final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final cr = c.read(calendarRepositoryProvider);
+const pink = 4294228196;
+final cal = Calendar(id: 'fx079-hol', createdAt: now, updatedAt: now, version: 1, name: 'FX Hol', colorValue: pink);
+final walk = CalendarEvent(id: 'fx076-walk', createdAt: now, updatedAt: now, version: 1, calendarId: 'fx079-hol', title: 'Daily walk', start: DateTime(2026, 10, 1, 7), end: DateTime(2026, 10, 1, 7, 30), isFullDay: false, colorValue: pink, recurrence: const RecurrenceRule(frequency: EventRecurrence.daily));
+final standup = CalendarEvent(id: 'fx076-standup', createdAt: now, updatedAt: now, version: 1, calendarId: 'fx079-hol', title: 'Weekly standup', start: DateTime(2026, 10, 5, 9), end: DateTime(2026, 10, 5, 9, 30), isFullDay: false, colorValue: pink, recurrence: const RecurrenceRule(frequency: EventRecurrence.weekly));
+final rent = CalendarEvent(id: 'fx076-rent', createdAt: now, updatedAt: now, version: 1, calendarId: 'fx079-hol', title: 'Monthly rent', start: DateTime(2026, 10, 1), end: DateTime(2026, 10, 1, 23, 59), isFullDay: true, colorValue: pink, recurrence: const RecurrenceRule(frequency: EventRecurrence.monthly));
+final own = CalendarEvent(id: 'fx079-own', createdAt: now, updatedAt: now, version: 1, calendarId: 'fx079-hol', title: 'Own blue', start: DateTime(2026, 10, 8, 14), end: DateTime(2026, 10, 8, 15), isFullDay: false, colorValue: 0xFF7C9EFF);
+await cr.upsertCalendar(cal);
+for (final e in [walk, standup, rent, own]) { await cr.upsertEvent(e); }
+await r.pushRecords(FirestoreCollections.calendars, [cal]);
+await r.pushRecords(FirestoreCollections.calendarEvents, [walk, standup, rent, own]);
+final tr = c.read(todoRepositoryProvider);
+final list = TodoListModel(id: 'fx080-list', createdAt: now, updatedAt: now, version: 1, name: 'Cal Tasks', colorValue: 0xFFE78284);
+await tr.upsertList(list); r.pushTodoList(list);
+final t = TodoTask(id: 'fx080-task', createdAt: now, updatedAt: now, version: 1, listId: 'fx080-list', title: 'Cal task A', dueDate: DateTime(2026, 10, 7, 10, 15), dueDateSetAt: now, sortOrder: 1000000);
+await tr.upsertTask(t); await r.pushTodoTaskNow(t);
+final s = await c.read(settingsRepositoryProvider).getSettings();
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(lastViewedCalendarId: 'fx079-hol'));
+debugPrint('FX076 seeded weekStartsMonday=${s.weekStartsOnMonday} hide=${s.hideCompletedTasks}');
+invalidateAllDataProvidersIn(c);

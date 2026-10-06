@@ -1256,6 +1256,7 @@ final calendarTodoMarkersProvider = FutureProvider<List<CalendarTodoMarker>>((
     tasks,
     listColors,
     fallbackColorValue: settings.accentColor,
+    hideCompleted: settings.hideCompletedTasks,
   );
 });
 

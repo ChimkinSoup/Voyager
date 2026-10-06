@@ -289,7 +289,9 @@ class CalendarWeekLayoutMetrics {
   }
 }
 
-typedef CalendarWeekEventTap = void Function(CalendarEvent event);
+/// [day] is the column that was clicked, which picks the occurrence of a
+/// repeating event (BUG-078).
+typedef CalendarWeekEventTap = void Function(CalendarEvent event, DateTime day);
 typedef CalendarWeekTodoTap = void Function(CalendarTodoMarker marker);
 typedef CalendarWeekSlotTap = void Function(DateTime day, DateTime time);
 
@@ -736,6 +738,9 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                                     borderRadius: borderRadius,
                                     lineColor: divider.withValues(alpha: 0.45),
                                     labelColor: onSurfaceVariant,
+                                    labelHaloColor: calendarWeekPageBackground(
+                                      context,
+                                    ),
                                     hourLabelBuilder: _hourLabel,
                                     timelineScrollPadding:
                                         calendarWeekTimelineScrollPadding,
@@ -811,7 +816,7 @@ class _AllDayShelfColumn extends StatelessWidget {
                       isFirstColumn: isFirstColumn,
                       isLastColumn: isLastColumn,
                       highlighted: editingEventId == columnEvents[i]!.id,
-                      onTap: () => onEventTap(columnEvents[i]!),
+                      onTap: () => onEventTap(columnEvents[i]!, day),
                     ),
                   )
                 : const SizedBox.shrink(),
@@ -889,7 +894,7 @@ class _DayTimedColumn extends StatelessWidget {
                           // rather than firing on every repeat in the week.
                           day: day,
                           highlighted: editingEventId == slot.entry.event!.id,
-                          onTap: () => onEventTap(slot.entry.event!),
+                          onTap: () => onEventTap(slot.entry.event!, day),
                         ),
                 ),
               ),
@@ -1031,6 +1036,18 @@ double calendarWeekMorphBorderRadius(double t) => lerpDouble(
   t,
 )!;
 
+/// The tone the page background shows behind the week grid, for the hour
+/// labels' outline. In dark mode the geometric texture tints its resting
+/// triangles 8 % toward the accent (`ambient` in geometric_texture.frag), so
+/// the bare scaffold colour reads as near-black against it; the light theme's
+/// paper is the scaffold colour itself.
+Color calendarWeekPageBackground(BuildContext context) {
+  final theme = Theme.of(context);
+  final scaffold = theme.scaffoldBackgroundColor;
+  if (theme.brightness == Brightness.light) return scaffold;
+  return Color.lerp(scaffold, theme.colorScheme.primary, 0.08)!;
+}
+
 /// Formats an hour (0-24) as "12 AM", "1 AM", "12 PM", etc.
 String calendarWeekHourLabel(int hour) {
   final h = hour % 12 == 0 ? 12 : hour % 12;
@@ -1053,6 +1070,35 @@ Path calendarWeekHourLineClipPath({
   return path;
 }
 
+/// Laid-out hour labels, by text, colour and whether it's the outline.
+///
+/// The grid painter is rebuilt on every scroll tick, and the 25 labels never
+/// change, so each one is laid out once instead of twice per frame.
+final _hourLabelLayouts = <(String, Color, bool), TextPainter>{};
+
+TextPainter _hourLabelLayout(
+  String label,
+  Color color, {
+  required bool stroke,
+}) {
+  return _hourLabelLayouts.putIfAbsent((label, color, stroke), () {
+    final base = AppFonts.style(fontSize: 10, height: 1);
+    final style = stroke
+        ? base.copyWith(
+            foreground: Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 3
+              ..strokeJoin = StrokeJoin.round
+              ..color = color,
+          )
+        : base.copyWith(color: color);
+    return TextPainter(
+      text: TextSpan(text: label, style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+  });
+}
+
 /// Fixed-viewport hour-line + label overlay.
 class CalendarWeekTimeGridPainter extends CustomPainter {
   const CalendarWeekTimeGridPainter({
@@ -1063,6 +1109,7 @@ class CalendarWeekTimeGridPainter extends CustomPainter {
     required this.lineColor,
     required this.labelColor,
     required this.hourLabelBuilder,
+    required this.labelHaloColor,
     this.lineOpacity = 1,
     this.timelineScrollPadding = calendarWeekTimelineScrollPadding,
   });
@@ -1074,6 +1121,12 @@ class CalendarWeekTimeGridPainter extends CustomPainter {
   final Color lineColor;
   final Color labelColor;
   final String Function(int hour) hourLabelBuilder;
+
+  /// Outline drawn around each hour label, so the label stays readable where
+  /// it crosses a light event block (BUG-077). The page background tone
+  /// ([calendarWeekPageBackground]): it vanishes on the empty grid and only
+  /// shows against a fill.
+  final Color labelHaloColor;
   final double lineOpacity;
   final double timelineScrollPadding;
 
@@ -1093,11 +1146,6 @@ class CalendarWeekTimeGridPainter extends CustomPainter {
       ..color = lineColor.withValues(alpha: lineColor.a * lineOpacity)
       ..strokeWidth = 1;
 
-    final textStyle = AppFonts.style(
-      fontSize: 10,
-      color: labelColor.withValues(alpha: labelColor.a * lineOpacity),
-      height: 1,
-    );
     const leftLineWidth = 18.0;
     const labelGap = 4.0;
     const labelLeft = leftLineWidth + labelGap;
@@ -1111,10 +1159,8 @@ class CalendarWeekTimeGridPainter extends CustomPainter {
       if (y < 0 || y > size.height) continue;
 
       final label = hourLabelBuilder(hour);
-      final painter = TextPainter(
-        text: TextSpan(text: label, style: textStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
+      final painter = _hourLabelLayout(label, labelColor, stroke: false);
+      final halo = _hourLabelLayout(label, labelHaloColor, stroke: true);
 
       final labelY = y - painter.height / 2;
       final labelRight = labelLeft + painter.width;
@@ -1125,7 +1171,23 @@ class CalendarWeekTimeGridPainter extends CustomPainter {
         Offset(size.width, y),
         linePaint,
       );
+      // The cached layouts are opaque; a fading grid fades halo and label
+      // together as one layer.
+      final fading = lineOpacity < 1;
+      if (fading) {
+        canvas.saveLayer(
+          Rect.fromLTWH(
+            labelLeft - 2,
+            labelY - 2,
+            painter.width + 4,
+            painter.height + 4,
+          ),
+          Paint()..color = Color.fromRGBO(0, 0, 0, lineOpacity),
+        );
+      }
+      halo.paint(canvas, Offset(labelLeft, labelY));
       painter.paint(canvas, Offset(labelLeft, labelY));
+      if (fading) canvas.restore();
     }
 
     canvas.restore();
@@ -1138,6 +1200,7 @@ class CalendarWeekTimeGridPainter extends CustomPainter {
       old.borderedClipRects != borderedClipRects ||
       old.borderRadius != borderRadius ||
       old.lineColor != lineColor ||
+      old.labelHaloColor != labelHaloColor ||
       old.lineOpacity != lineOpacity ||
       old.timelineScrollPadding != timelineScrollPadding;
 }

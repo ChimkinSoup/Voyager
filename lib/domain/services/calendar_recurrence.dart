@@ -120,6 +120,12 @@ bool calendarEventOccursOnDayNormalized(
   DateTime localDay, // must already be date-only local
 ) => _coveringOccurrenceStart(n, localDay) != null;
 
+/// Fast variant of [calendarOccurrenceStartOn] for a pre-normalized event.
+DateTime? calendarOccurrenceStartOnNormalized(
+  NormalizedCalendarEvent n,
+  DateTime localDay, // must already be date-only local
+) => _coveringOccurrenceStart(n, localDay);
+
 bool calendarEventOccursOnDay(CalendarEvent event, DateTime day) =>
     calendarEventOccursOnDayNormalized(
       NormalizedCalendarEvent(event),

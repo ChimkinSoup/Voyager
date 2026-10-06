@@ -247,8 +247,10 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     final calendar = widget.calendars
         .where((c) => c.id == calendarId)
         .firstOrNull;
-    final settings = ref.read(settingsProvider).valueOrNull;
-    return calendar?.colorValue ?? settings?.accentColor ?? 0xFF7C9EFF;
+    return defaultEventColorFor(
+      calendar,
+      accentColor: ref.read(settingsProvider).valueOrNull?.accentColor,
+    );
   }
 
   void _scheduleTitleFocusIfNeeded() {

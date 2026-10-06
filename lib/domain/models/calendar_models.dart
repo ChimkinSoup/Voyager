@@ -6,6 +6,15 @@ import 'package:voyager/domain/models/soft_deletable.dart';
 // import calendar_models.dart for it keep compiling unchanged.
 export 'package:voyager/domain/models/recurrence_rule.dart';
 
+/// The colour a new event in [calendar] starts with: the calendar's own,
+/// else the user's accent ([accentColor]), else the default periwinkle.
+///
+/// Events store this colour rather than following their calendar, so a
+/// calendar colour change recolours the events still on it; that match only
+/// holds while every creation path picks the colour here.
+int defaultEventColorFor(Calendar? calendar, {int? accentColor}) =>
+    calendar?.colorValue ?? accentColor ?? 0xFF7C9EFF;
+
 class Calendar extends SoftDeletable {
   const Calendar({
     required super.id,

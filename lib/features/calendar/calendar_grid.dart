@@ -53,6 +53,7 @@ export 'calendar_week_timeline.dart'
         CalendarWeekDayColumnBorderPainter,
         CalendarWeekTimeGridPainter,
         CalendarWeekDayDateLabel,
+        calendarWeekPageBackground,
         calendarWeekBorderedDayColumnRects,
         calendarWeekMorphBorderedDayColumnRects,
         calendarWeekMorphBorderRadius,
@@ -179,7 +180,7 @@ class CalendarGrid extends StatelessWidget {
   final bool showMonthChrome;
   final VoidCallback? onPreviousMonth;
   final VoidCallback? onNextMonth;
-  final void Function(CalendarEvent event)? onEventTap;
+  final CalendarWeekEventTap? onEventTap;
   final void Function(CalendarTodoMarker marker)? onTodoTap;
   final void Function(DateTime day, DateTime time)? onWeekSlotTap;
   final void Function(CalendarDayEntry entry)? onEntryTap;
@@ -851,7 +852,7 @@ class _WeekGrid extends StatelessWidget {
   final List<CalendarEvent> events;
   final List<CalendarTodoMarker> todoMarkers;
   final Set<DateTime> workoutDays;
-  final void Function(CalendarEvent event)? onEventTap;
+  final CalendarWeekEventTap? onEventTap;
   final void Function(CalendarTodoMarker marker)? onTodoTap;
   final void Function(DateTime day, DateTime time)? onSlotTap;
   final CalendarEntryMenuBuilder? entryMenuBuilder;
@@ -879,7 +880,7 @@ class _WeekGrid extends StatelessWidget {
         todoMarkers: todoMarkers,
         weekStartsMonday: weekStartsMonday,
         scrollController: scrollController,
-        onEventTap: onEventTap ?? (_) {},
+        onEventTap: onEventTap ?? (_, _) {},
         onTodoTap: onTodoTap ?? (_) {},
         onSlotTap: onSlotTap ?? (_, _) {},
         entryMenuBuilder: entryMenuBuilder,

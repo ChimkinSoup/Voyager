@@ -110,64 +110,82 @@ List<List<CalendarEvent?>> calendarPackWeekEvents(
   List<DateTime> weekDates,
   List<CalendarEvent> allEvents,
 ) {
-  // Membership is asked for O(rows x 7) times per event by the packing loop
-  // below, and [calendarEventOccursOnDay] allocates a fresh
-  // [NormalizedCalendarEvent] on every ask — a toLocal(), two dateOnly() calls
-  // and a Set built from the parsed exception list. Normalize once up front and
-  // answer from a per-event membership row instead.
+  // Each *occurrence* gets its own lane, not each event: a repeating event
+  // holding one lane for the whole row let any event later in the week push it
+  // down on every day, so the same pair of events flipped order from week to
+  // week (BUG-076). A multi-day occurrence still keeps one lane across its days.
+  //
+  // Normalize once up front: [calendarOccurrenceStartOn] allocates a fresh
+  // [NormalizedCalendarEvent] on every ask.
   final localDays = [
     for (final date in weekDates) DateUtils.dateOnly(date.toLocal()),
   ];
-  final occursOn = <String, List<bool>>{};
-  final weekEvents = <CalendarEvent>[];
+  final segments =
+      <({CalendarEvent event, DateTime start, int first, int last})>[];
   for (final n in normalizeCalendarEvents(allEvents)) {
-    final row = [
-      for (final day in localDays) calendarEventOccursOnDayNormalized(n, day),
-    ];
-    if (row.contains(true)) {
-      occursOn[n.event.id] = row;
-      weekEvents.add(n.event);
+    final time = n.event.start.toLocal();
+    DateTime? runOccurrence;
+    var runFirst = 0;
+    for (var c = 0; c <= 7; c++) {
+      final occurrence = c < 7
+          ? calendarOccurrenceStartOnNormalized(n, localDays[c])
+          : null;
+      if (occurrence == runOccurrence) continue;
+      if (runOccurrence != null) {
+        segments.add((
+          event: n.event,
+          start: DateTime(
+            runOccurrence.year,
+            runOccurrence.month,
+            runOccurrence.day,
+            time.hour,
+            time.minute,
+          ),
+          first: runFirst,
+          last: c - 1,
+        ));
+      }
+      runOccurrence = occurrence;
+      runFirst = c;
     }
   }
 
-  weekEvents.sort((a, b) {
-    final aStart = a.start.toLocal();
-    final bStart = b.start.toLocal();
-    final startCmp = aStart.compareTo(bStart);
+  segments.sort((a, b) {
+    final startCmp = a.start.compareTo(b.start);
     if (startCmp != 0) return startCmp;
 
-    final aDuration = a.end.difference(a.start);
-    final bDuration = b.end.difference(b.start);
-    return bDuration.compareTo(aDuration);
+    final aDuration = a.event.end.difference(a.event.start);
+    final bDuration = b.event.end.difference(b.event.start);
+    final durationCmp = bDuration.compareTo(aDuration);
+    if (durationCmp != 0) return durationCmp;
+
+    // List.sort isn't stable: without a last key, two events with the same
+    // start and length could swap places from one week row to the next.
+    return a.event.id.compareTo(b.event.id);
   });
 
   final result = List<List<CalendarEvent?>>.generate(7, (_) => []);
 
-  for (final event in weekEvents) {
-    final occurs = occursOn[event.id]!;
+  for (final segment in segments) {
     int availableRow = 0;
     while (true) {
       bool canFit = true;
-      for (int c = 0; c < 7; c++) {
-        if (occurs[c]) {
-          if (result[c].length > availableRow &&
-              result[c][availableRow] != null) {
-            canFit = false;
-            break;
-          }
+      for (int c = segment.first; c <= segment.last; c++) {
+        if (result[c].length > availableRow &&
+            result[c][availableRow] != null) {
+          canFit = false;
+          break;
         }
       }
       if (canFit) break;
       availableRow++;
     }
 
-    for (int c = 0; c < 7; c++) {
-      if (occurs[c]) {
-        while (result[c].length <= availableRow) {
-          result[c].add(null);
-        }
-        result[c][availableRow] = event;
+    for (int c = segment.first; c <= segment.last; c++) {
+      while (result[c].length <= availableRow) {
+        result[c].add(null);
       }
+      result[c][availableRow] = segment.event;
     }
   }
   return result;

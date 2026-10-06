@@ -176,6 +176,7 @@ List<CalendarTodoMarker> buildCalendarTodoMarkers(
   Iterable<TodoTask> tasks,
   Map<String, int?> listColors, {
   required int fallbackColorValue,
+  bool hideCompleted = false,
 }) {
   final taskList = tasks.toList();
   final subtasksByParent = <String, List<TodoTask>>{};
@@ -188,7 +189,10 @@ List<CalendarTodoMarker> buildCalendarTodoMarkers(
 
   final markers = <CalendarTodoMarker>[];
   for (final task in taskList) {
-    if (task.completed || task.isSubtask || task.dueDate == null) continue;
+    // A completed task stays on the grid in its completed style, where it can
+    // be unticked (BUG-080), unless the user hides completed tasks.
+    if (task.isSubtask || task.dueDate == null) continue;
+    if (hideCompleted && task.completed) continue;
     final subs = subtasksByParent[task.id] ?? const <TodoTask>[];
     markers.add(
       CalendarTodoMarker(
@@ -209,7 +213,6 @@ List<CalendarTodoMarker> buildCalendarTodoMarkers(
 }
 
 bool calendarTodoOnDay(CalendarTodoMarker marker, DateTime day) {
-  if (marker.completed) return false;
   final due = marker.dueDate.toLocal();
   return due.year == day.year && due.month == day.month && due.day == day.day;
 }
@@ -241,7 +244,12 @@ class CalendarDayTodoIcons extends StatelessWidget {
   Widget build(BuildContext context) {
     if (markers.isEmpty) return const SizedBox.shrink();
 
-    final visible = markers.take(maxIcons).toList();
+    // Open tasks take the few icon slots first: a morning of completed tasks
+    // mustn't hide the one still to do.
+    final visible = [
+      ...markers.where((m) => !m.completed),
+      ...markers.where((m) => m.completed),
+    ].take(maxIcons).toList();
     final count = visible.length;
     final width = iconSize + (count - 1) * overlapStep;
 
@@ -258,7 +266,10 @@ class CalendarDayTodoIcons extends StatelessWidget {
               child: Icon(
                 PhosphorIconsFill.checkFat,
                 size: iconSize,
-                color: paletteColor(visible[i].colorValue, context),
+                color: paletteColor(
+                  visible[i].colorValue,
+                  context,
+                ).withValues(alpha: visible[i].completed ? 0.4 : 1.0),
               ),
             ),
         ],

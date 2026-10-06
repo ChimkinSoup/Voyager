@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 045.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 046.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -164,6 +164,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-042@example.com | 2026-10-06 (FV-17: BUG-061…065, + follow-up) | Dreams "FX17 dream T1 T2 T3 T4" (body "FX17 BODY text KEEP1 KEEP2  RACER2A R2B", note "zzopen FX17 NOTE text N2") and "FX17 tags" (body with `#夢 #café #naïve #día-de-muertos`, no note). Journal "Journal" with "FX17 journal" (body "journal body R2 #caf"). To-Do lists "FX Home" (`fx065-home`, empty) and "FX Work" (`fx065-work`) with "FX17 repeat task" (`fx065-task`, daily 9:30 AM, due Oct 9 in the cloud, notes "task note R2", 3 completions). `dream_split_width` 384.9. Dark + Scatter; Vim off. | Password `qavoyager2026`. Notes were never corrupted, so it can re-check BUG-061 after later sync changes. |
 | voyager-qa-043@example.com | 2026-10-06 (FV-18: BUG-066…070, + follow-up) | To-Do lists "FX Home" (`fx066-home`) and "Perf 200" (`p9-perf`: 200 seeded tasks, 000 and 001 completed, plus "draft textZ" with one image and "second draftQ"); "FX066 parent" (subtasks "FX066 sub 0–2", the same image) is in FX Home; "FX Work" deleted with its 2 tasks. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-044@example.com | 2026-10-06 (FV-19: BUG-071…075) | To-Do: built-in list renamed "Inbox" (holds "FX A trashed", restored from the trash) and "FX Alpha" (`fx071-alpha`, `0xFFE5C890`; "FX A0–A3", A3 completed, "FX A0 sub 0–1"; deleted with its tasks then restored). **Default view = FX Alpha.** Calendar "FX Cal" (`fx075-cal`): "MD weekend span" all-day Oct 10–13, "MD overnight" Oct 11 20:00 → Oct 12 02:00, "Repro noon" Oct 6 11:00–12:30. Journals "FX J-Alpha" (`fx228-ja`, **default view**; deleted with its entry then restored) and "FX J-Beta" (`fx228-jb`), one entry each (FV-20). FV-21: lists "Strays" (with "FX stray subtask") and "Gamma" in the trash; "Gamma task" restored into Inbox. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-045@example.com | 2026-10-06 (FV-22: BUG-076…080) | Calendar "FX Hol" (`fx079-hol`, green `0xFFA6D189` after the FV-22 colour change, was pink): "Daily walk" daily 07:00 from Oct 1 (exception Oct 16, override "Fri16 walk"), "Weekly standup" Mon 09:00 from Oct 5, "Monthly rent" all-day monthly from Oct 1, "Own blue" Oct 8 14:00 (`0xFF7C9EFF`). To-Do list "Cal Tasks" (`fx080-list`) with "Cal task A" due Oct 7 10:15 AM (open). Dark + Scatter; Vim off; week starts Monday. | Password `qavoyager2026`. |
 
 ---
 
@@ -378,6 +379,8 @@ One line per completed phase.
 ---
 
 ## 7. Handoff note
+
+**2026-10-06 (BUG-076…080):** all five fixed and verified in the app (TEST_PLAN.md FV-22, qa-045). BUG-077's cause differs from the report: the labels were already on top, just unreadable over light blocks; fixed with an outline. BUG-079 fixed as Juno chose (events still on the old calendar colour follow the change). Summary counts updated (49 fixed, 179 open). Full suite 4,433 passed. Session ended `SIGNED-OUT`. Follow-up: BUG-077's outline now uses the page background tone, not black (Dark and Light checked; full suite 4,434). Code-review follow-ups (FV-22 second follow-up): tie-break, icon order, shared default colour, transactional recolour, label layout cache; full suite 4,437. A cold re-login of qa-045 then failed at sign-in twice ("Sign in failed", likely throttling). The app is stopped and nobody is signed in, but `%APPDATA%\Voyageroyager` holds an empty database from that launch that `reset.ps1` refuses to wipe until the Dev check is run (it has no rows).
 
 **2026-10-06 (code-review follow-ups):** seven review findings on the BUG-072…075/228 work fixed, and BUG-074 reworked so typed end times hold until Enter/blur/close. All re-verified in the app (TEST_PLAN.md FV-21, qa-044). Juno's real account was signed in at the start; the reset waited for Juno's Dev-page check, and the sync gate confirmed it. Full suite 4,424 passed. Session ended `SIGNED-OUT`.
 

@@ -1706,6 +1706,33 @@ class DriftCalendarRepository implements CalendarRepository {
   }
 
   @override
+  Future<void> recolorCalendar(Calendar calendar, int fromColor) async {
+    final recolored = <CalendarEvent>[];
+    await _db.transaction(() async {
+      await upsertCalendar(calendar, recordLocalActivity: false);
+      final toColor = calendar.colorValue;
+      if (toColor == null || toColor == fromColor) return;
+      final events = await listEvents(
+        calendarId: calendar.id,
+        includeDeleted: true,
+      );
+      for (final event in events) {
+        if (event.colorValue != fromColor) continue;
+        final updated = event.copyWith(colorValue: toColor);
+        await upsertEvent(updated, recordLocalActivity: false);
+        recolored.add(updated);
+      }
+    });
+    // Uploads are announced only once the rows are committed, as the upserts
+    // above would have done one by one (Google events excepted, see there).
+    _syncedWrites?.notifyOne(FirestoreCollections.calendars, calendar);
+    _syncedWrites?.notify(FirestoreCollections.calendarEvents, [
+      for (final event in recolored)
+        if (event.source != EventSource.google) event,
+    ]);
+  }
+
+  @override
   Future<List<CalendarEvent>> listEvents({
     String? calendarId,
     DateTime? from,

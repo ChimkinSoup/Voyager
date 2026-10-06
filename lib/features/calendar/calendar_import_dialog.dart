@@ -100,9 +100,10 @@ class _CalendarImportDialogState extends ConsumerState<_CalendarImportDialog> {
     final calendar = widget.calendars
         .where((c) => c.id == _calendarId)
         .firstOrNull;
-    return calendar?.colorValue ??
-        ref.read(settingsProvider).valueOrNull?.accentColor ??
-        0xFF7C9EFF;
+    return defaultEventColorFor(
+      calendar,
+      accentColor: ref.read(settingsProvider).valueOrNull?.accentColor,
+    );
   }
 
   Future<void> _import() async {
