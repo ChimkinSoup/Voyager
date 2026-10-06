@@ -1,0 +1,6 @@
+final repo = c.read(journalRepositoryProvider);
+final now = DateTime.now().toUtc();
+final js = [Journal(id: 'fx056-z', name: 'Alpha', colorValue: 0xFFEF9F76, createdAt: now.add(const Duration(minutes: 1)), updatedAt: now), Journal(id: 'fx056-m', name: 'Gamma', colorValue: 0xFFEA999C, createdAt: now.add(const Duration(minutes: 2)), updatedAt: now), Journal(id: 'fx056-a', name: 'Beta', colorValue: 0xFFA6D189, createdAt: now.add(const Duration(minutes: 3)), updatedAt: now)];
+for (final j in js) { await repo.upsertJournal(j); c.read(remoteSyncServiceProvider).pushJournal(j); }
+c.invalidate(journalsProvider);
+debugPrint('FX056 seeded Alpha, Gamma, Beta (created in that order; ids z, m, a)');

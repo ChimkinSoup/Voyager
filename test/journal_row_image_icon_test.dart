@@ -37,10 +37,12 @@ void expectIconOnRowOf(WidgetTester tester, String title) {
   );
   expect(row.contains(icon.center), isTrue, reason: 'icon is on $title');
   final date = tester.getRect(
-    find.descendant(
-      of: find.ancestor(of: imageIcon(), matching: find.byType(Row)).first,
-      matching: find.byType(Text),
-    ),
+    find
+        .descendant(
+          of: find.ancestor(of: imageIcon(), matching: find.byType(Row)).first,
+          matching: find.byType(Text),
+        )
+        .first,
   );
   expect(icon.left, greaterThanOrEqualTo(date.right));
   expect((icon.center.dy - date.center.dy).abs(), lessThan(4));

@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 040.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 042.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -160,6 +160,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-038@example.com | 2026-10-05 (FV-13: BUG-042/045/046/047) | uid `W07XOHovjLPavkidjWfVqb1Iy123`. Journals "Journal" (`__legacy__`, 1 entry, body " GHOST"), "FX Beta" (`fx046-beta`, 2 entries) and "Gamma" (deleted with its entry, in Trash). 6 once-rules "FX042 rule 0..5" (rule 0 acknowledged; 1..5 due Oct 5 10:45 PM to Oct 6 2:45 AM). Default calendar "FX045 Edited Default" v2, pink. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-039@example.com | 2026-10-05 (FV-14: BUG-049…055) | uid `aZ3d9gtSOrfmp90dHSan5IlYKLY2`. Journals "FX Alpha" (`fx055-alpha`, Monthly + yearly On this day, 6 entries: 3 seeded `fx055-entry-0..2` dated a month ago, a year ago and Oct 5 2026, plus 3 untitled with custom quotes), "FX Gamma" (restored from Trash, empty) and "Journal" (`__legacy__`, 1 entry "FX049 one entry"). 3 custom quotes "FX054 custom quote 1..3", "Only my quotes" on. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-040@example.com | 2026-10-05 (FV-15: BUG-048) | Journal "Beta" (live, 1 entry "Alpha entry", restored from the trash) plus tombstoned "Alpha" and "Gamma" (Gamma's blank "Untitled" in the trash with it). No Default view. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-041@example.com | 2026-10-06 (FV-16: BUG-056/057/059/060) | Journals Alpha (`fx056-z`, 1 entry "FX059 quick line"), Gamma (`fx056-m`, #EA999C, 1 blank entry), Beta (`fx056-a`), created in that order. Custom quotes "FX059 quote 1–3", "Only my quotes" on. Dreams: one with body "I was flying over a city.", one with only the note "only a note here". **Light** theme. | Password `qavoyager2026`. Switch back to Dark before reusing it for a standard-configuration phase. |
 
 ---
 
@@ -374,6 +375,8 @@ One line per completed phase.
 ---
 
 ## 7. Handoff note
+
+**2026-10-06:** BUG-056, BUG-057 and BUG-060 fixed; BUG-059 found already fixed (`a991189`). All four verified in the app (TEST_PLAN.md FV-16, qa-041). BUG-058 marked skipped. Summary counts updated. Journals are now listed in creation order, so the §5 note that the dropdown order isn't stable across installs (BUG-056) no longer applies. Session ended `SIGNED-OUT`.
 
 **2026-10-05 (after the audit, second batch):** BUG-049, BUG-050, BUG-051, BUG-052, BUG-054 and BUG-055 fixed and verified in the app (TEST_PLAN.md FV-14, qa-039); BUG-053 marked skipped. Summary counts updated. One unexplained Riverpod startup assertion is noted in FV-14's result. Session ended `SIGNED-OUT`.
 

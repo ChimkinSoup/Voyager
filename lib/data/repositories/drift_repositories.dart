@@ -77,7 +77,14 @@ class DriftJournalRepository implements JournalRepository {
 
   @override
   Future<List<Journal>> listJournals({bool includeDeleted = false}) async {
-    final rows = await _db.select(_db.journalsTable).get();
+    // Creation order, not row order: a pull inserts rows in the order they
+    // arrive, so every install listed them differently (BUG-056).
+    final rows =
+        await (_db.select(_db.journalsTable)..orderBy([
+              (t) => OrderingTerm.asc(t.createdAt),
+              (t) => OrderingTerm.asc(t.id),
+            ]))
+            .get();
     return rows
         .where((r) => includeDeleted || r.deletedAt == null)
         .map(_mapJournal)

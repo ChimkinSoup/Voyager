@@ -31,6 +31,7 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
   late DateTime _hoveredDate; // Used for VIM navigation focus
   DateTime? _firstSelected;
   DateTime? _secondSelected;
+  bool _awaitingRangeEnd = false;
   late final FocusNode _focusNode;
   bool _canPop = false;
   bool _showHoverRing = false;
@@ -65,6 +66,8 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
     super.didUpdateWidget(oldWidget);
     if (widget.initialStartDate != oldWidget.initialStartDate ||
         widget.initialEndDate != oldWidget.initialEndDate) {
+      // A range started against the old dates would close from the new start.
+      _awaitingRangeEnd = false;
       if (widget.initialStartDate != _firstSelected) {
         _firstSelected = widget.initialStartDate;
         if (_focusedMonth.year != _firstSelected!.year ||
@@ -98,28 +101,28 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
     });
   }
 
-  void _handleDateTap(DateTime date) {
+  void _handleDateTap(DateTime date, {bool startsRange = false}) {
     setState(() {
       _hoveredDate = date;
-      if (widget.singleDateMode) {
+      // A plain tap picks one day. Shift+tap, or a long press on touch,
+      // starts a fresh range at the tapped day, and the next tap — Shift or
+      // not — closes it. Inline mode reports a single date, so it never
+      // starts one.
+      if (_awaitingRangeEnd) {
+        _secondSelected = date;
+        _awaitingRangeEnd = false;
+      } else if (!widget.singleDateMode &&
+          !widget.inlineMode &&
+          (startsRange || HardwareKeyboard.instance.isShiftPressed)) {
+        _firstSelected = date;
+        _secondSelected = null;
+        _awaitingRangeEnd = true;
+      } else {
         _firstSelected = date;
         _secondSelected = date;
-      } else {
-        if (_firstSelected == null) {
-          _firstSelected = date;
-        } else if (_secondSelected == null) {
-          _secondSelected = date;
-        } else {
-          // Reset selection
-          _firstSelected = date;
-          _secondSelected = null;
-        }
       }
     });
-
-    if (widget.singleDateMode || _secondSelected != null) {
-      _submit();
-    }
+    if (!_awaitingRangeEnd) _submit();
   }
 
   void _submitQuickAction(DateTime date) {
@@ -515,6 +518,12 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                                     _showHoverRing = false;
                                   });
                                   _handleDateTap(date);
+                                },
+                                onLongPress: () {
+                                  setState(() {
+                                    _showHoverRing = false;
+                                  });
+                                  _handleDateTap(date, startsRange: true);
                                 },
                                 child: Center(
                                   child: Column(

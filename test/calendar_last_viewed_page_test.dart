@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
@@ -150,7 +151,16 @@ void main() {
     Color? triggerColor(String label) =>
         tester.widget<Text>(find.text(label)).style?.color;
 
-    expect(triggerColor('Work'), const Color(0xFF00FF00));
+    // Light theme: the switcher darkens a colour too pale to read (BUG-057).
+    expect(
+      triggerColor('Work'),
+      readableInkOn(
+        const Color(0xFF00FF00),
+        Theme.of(
+          tester.element(find.byType(CalendarPage)),
+        ).scaffoldBackgroundColor,
+      ),
+    );
 
     await tester.tap(find.text('Work'));
     await tester.pumpAndSettle();

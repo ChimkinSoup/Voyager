@@ -40,7 +40,7 @@ Color? _hueLinkedInk(Color background) {
 /// [color] as text on [background]: itself when it already clears
 /// [_labelContrastFloor], otherwise scaled toward black (hue held) until it
 /// does.
-Color _inkOn(Color color, Color background) {
+Color readableInkOn(Color color, Color background) {
   for (var step = 100; step >= 5; step -= 5) {
     final scale = step / 100;
     final ink = Color.from(
@@ -308,7 +308,7 @@ class VoyagerTheme {
     );
     // On cream a text button's elevation casts a mid-grey pill under its
     // transparent fill, and the raw accent is too pale to read as text.
-    final lightTextInk = _inkOn(accent, palette.scaffold);
+    final lightTextInk = readableInkOn(accent, palette.scaffold);
     final lightTextButtonStyle = textButtonStyle.copyWith(
       elevation: const WidgetStatePropertyAll(0),
       foregroundColor: WidgetStateProperty.resolveWith(

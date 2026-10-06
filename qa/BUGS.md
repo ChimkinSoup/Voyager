@@ -10,9 +10,9 @@ The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10
 |---|--:|--:|--:|
 | Blocker | 7 | 2 (BUG-001, BUG-003) | 5 |
 | Major | 29 | 5 (BUG-002 (see caveat), BUG-004, BUG-010, BUG-043 (dup), BUG-045) | 24 |
-| Minor | 143 | 12 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-048, BUG-050, BUG-051, BUG-052, BUG-054, BUG-055, BUG-167, BUG-226) | 131 |
-| Cosmetic | 47 | 4 (BUG-007, BUG-008, BUG-042, BUG-049) | 43 |
-| **Total** | **226** | **23** | **203** |
+| Minor | 143 | 15 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-048, BUG-050, BUG-051, BUG-052, BUG-054, BUG-055, BUG-056, BUG-059, BUG-060, BUG-167, BUG-226) | 128 |
+| Cosmetic | 47 | 5 (BUG-007, BUG-008, BUG-042, BUG-049, BUG-057) | 42 |
+| **Total** | **226** | **27** | **199** |
 
 "Fixed" means re-tested in the running app by a phase re-check or FV (TEST_PLAN.md "Fix verification"). "Open" means no fix was recorded, so each entry stands as it was last observed. Unit-test-only claims don't count as fixed.
 
@@ -25,6 +25,7 @@ Caveats:
 - `flutter test` on 2026-10-05 (after the BUG-049…055 fixes, BUG-053 skipped): 4,363 passed, 18 skipped, 0 failed. BUG-049, BUG-050, BUG-051, BUG-052, BUG-054 and BUG-055 were verified in the app the same day (TEST_PLAN.md FV-14).
 - `flutter test` on 2026-10-05 (after three code-review follow-ups to BUG-049/052/054, see FV-14): 4,365 passed, 18 skipped, 0 failed.
 - `flutter test` on 2026-10-05 (after the BUG-048 fix): 4,371 passed, 18 skipped, 0 failed. BUG-048 was verified in the app the same day (TEST_PLAN.md FV-15).
+- `flutter test` on 2026-10-06 (after the BUG-056/057/060 fixes, BUG-059 already fixed, BUG-058 skipped): 4,382 passed, 18 skipped, 1 failed. The failure was `calendar_last_viewed_page_test.dart` expecting the raw calendar colour on a light trigger, which BUG-057 now darkens. After updating that expectation the file passes, so 4,383 passed, 0 failed. BUG-056, BUG-057, BUG-059 and BUG-060 were verified in the app the same day (TEST_PLAN.md FV-16).
 
 ### Counts by phase (severity × phase)
 
@@ -85,6 +86,7 @@ Bugs deliberately not being fixed for now. They still count as Open above.
 | BUG-009 | 2 | Minor | Shell and pages can't be driven by Tab: focus is invisible, and with nothing focused Tab goes nowhere | 2026-10-05 |
 | BUG-031 | 4 | Cosmetic | Snippets dialog hides snippets beyond the fourth with no sign that the list scrolls | 2026-10-05 |
 | BUG-053 | 7 | Minor | "New entry" saves a blank entry on every click; ten quick clicks leave ten empty "Untitled" entries | 2026-10-05 |
+| BUG-058 | 7 | Minor | The journal body swallows Tab and Shift+Tab on every line, so keyboard focus can never leave it | 2026-10-06 |
 
 ---
 
@@ -780,6 +782,8 @@ Entry format:
 - Expected: the same order on every device (creation order, or a user-set order), and the same default journal for new entries.
 - Actual: after the pull the order is Alpha, Gamma, Journal (`qa/shots/p7-100-light-manage.png`, `p7-101-light-dropdown.png`), and in All journals the button became "New entry in Gamma" (`p7-95-min.png`); earlier in the session it had said "New entry in Alpha" and then "New entry in Journal".
 - Notes: `DriftJournalRepository.listJournals` (`drift_repositories.dart`) selects with no ORDER BY, so the order is SQLite's row order, i.e. whatever order rows were inserted, which after a pull is the order they arrived. There's no sort field and no reorder control (TEST_PLAN P7 lists "manage sheet reorder"; the Manage dialog has none). The All-journals new-entry target looks like it follows the first listed journal (not confirmed in code).
+- Notes (2026-10-06, confirmed in code, fixed in the working tree, uncommitted): confirmed. `listJournals` now orders by `createdAt`, then `id`. `createdAt` is synced (`journalToFirestore`), so every install lists journals in creation order. The All-journals "New entry" target (`resolveNewItemTarget`) is the open journal, then the synced `lastViewedJournalId`, then "Journal" (`__legacy__`), and only then the first listed journal. So a target that differs after a sign-in comes from the last viewed journal (by design), and the list order only matters as the final fallback, which is now stable. A user-set order (reorder control) wasn't added. Test: `test/journal_list_order_test.dart` (fails without the fix: Gamma, Alpha, Journal). Not yet checked in the running app.
+- Notes (2026-10-06, verified in the running app, FV-16 passed; working tree on `76c5abe`, new account qa-041): journals seeded and uploaded in the order Alpha, Gamma, Beta, with ids chosen in the reverse order (`fx056-z`, `-m`, `-a`; `qa/steps/fx056-seed.dart.txt`). After a cold re-login, SQLite's row order (what the switcher used to show) was Beta, Gamma, Alpha. The dropdown (`qa/shots/fx-056-02-dropdown.png`) and Manage journals (`fx-056-03-manage.png`) both listed Alpha, Gamma, Beta, and the page opened on Alpha.
 
 ### BUG-057 [Phase 7] Light theme: journal names in the switcher are pastel on cream (Gamma 2.0:1)
 - Severity: Cosmetic
@@ -788,6 +792,8 @@ Entry format:
 - Expected: readable labels (4.5:1 for text).
 - Actual: each journal name is drawn in its own palette colour on the cream menu: "Gamma" `#EA999C` on `#F8F6EF` measures 2.04:1, "Alpha" (peach) about the same; "Journal"/"All journals" (periwinkle) a little better (`qa/shots/p7-101-light-dropdown.png`). The header title uses the same colour. In dark the same colours read fine.
 - Notes: same family as the P2 lead (To-Do header pale green on cream) and BUG-042. The rest of the journal page in light (list, editor, On This Day card, Manage dialog) was legible.
+- Notes (2026-10-06, confirmed by a unit test, fixed in the working tree, uncommitted): confirmed. A test measured "Gamma" #EA999C at 1.96:1 against the Light scaffold. The fix follows BUG-042's: in Light only, `ScopeSwitcher` (`lib/core/widgets/scope_switcher.dart`) draws the trigger's name and caret, and each menu row's name and check, in the scope colour darkened with the hue kept until it clears 4.5:1 on the scaffold (#F5F1E9, the darkest cream surface, so the paler menu clears it too). It uses the BUG-042 helper, now public as `readableInkOn` in `voyager_theme.dart`. "All journals" (accent periwinkle) is covered too. Dark is unchanged. Test: `test/scope_switcher_light_contrast_test.dart` (Light: title and menu names ≥ 4.5:1; Dark: colour unchanged). The Light case fails without the fix. The To-Do, Calendar and Finance analytics switchers use the same widget, so this probably also fixes BUG-071's header and BUG-214's "Calendar ▾" label. Neither was checked. `test/calendar_last_viewed_page_test.dart` now expects the darkened calendar colour on its light trigger. Not yet checked in the running app.
+- Notes (2026-10-06, verified in the running app, FV-16 passed; qa-041): Light theme, journal Gamma (#EA999C) open, dropdown open (`qa/shots/fx-057-02-dropdown.png`). Measured from the screenshot (darkest label pixel against the median background): header "Gamma" #8B5C5E on #F0ECE4 4.70:1 (logged 2.04:1); menu "Gamma" #8C5C5E 5.10:1, "Alpha" #8F5F47 4.95:1, "Beta" #5B734B 4.86:1, "All journals" #5167A6 5.06:1, all on #F8F6EF. In Dark (`fx-056-02-dropdown.png`) the names keep their own colours. BUG-071 and BUG-214 still weren't checked.
 
 ### BUG-058 [Phase 7] The journal body swallows Tab and Shift+Tab on every line, so keyboard focus can never leave it
 - Severity: Minor
@@ -798,6 +804,7 @@ Entry format:
 - Notes (2026-09-30, Phase 8): the dream body does the same (`_DreamBodyEditorState._handleKey` returns `handled` for every Tab, on purpose per its comment). Title Enter/Tab → body works; Shift+Tab ×2, Tab ×2 and Esc then all keep focus in the body. Clicking a dream row leaves focus on the route's scope, so the next keystrokes go nowhere.
 - Notes: with BUG-009 (nothing else on the page takes Tab focus), the journal is mouse-only apart from typing: there's no keyboard route to the entry list, New entry, mood, weather, date, delete, the journal switcher or the gear, and no journal shortcuts in the Ctrl+/ list. Arrow keys in the body move the caret only.
 - Notes (2026-10-01, Phase 11): same in Search's "Journal entry" dialog: Tab from the title goes to the body (by design there), and from the body every Tab stays in it, so the mood, weather, date, journal flag, Close and Save can't be reached by keyboard. Ctrl+Enter saves; Esc discards (BUG-084).
+- Notes (2026-10-06): skipped for now; listed under "Skipped bugs" in the summary.
 
 ### BUG-059 [Phase 7] After signing in on an empty device, custom quotes don't load until restart: the dialog says there are none, re-adding one duplicates it, and with "Only my quotes" new entries get the placeholder "Write your story."
 - Severity: Minor
@@ -806,6 +813,8 @@ Entry format:
 - Expected: the quick entry gets one of the custom quotes; the dialog lists the three quotes; adding an existing one says "That quote is already in the pool."
 - Actual: (a) the quick entry is stamped `quote_id` 'default', "Write your story." (`qa/shots/p7-116-qje2.png`), the QuoteBank's empty-pool placeholder, because the pool is custom quotes only and the custom list is still the empty one read before the pull. (b) The dialog says "You haven't added any quotes yet." with the switch on and the hint "with none of your own, entries have no quote to draw" (`p7-117-cq-after-relogin.png`). (c) It's accepted and SQLite now holds "QA quote one" twice (`1b6d4e48…` and `0d7f6d91…`), which syncs.
 - Notes: the known gap from FV-2 (BUG-010's notes: `customQuotesProvider` isn't refreshed after the startup pull, so the pool lacks pulled quotes until a restart), with these user-visible results. With "Only my quotes" off, the pool falls back to the bundled quotes only, so the symptom is just that custom quotes aren't drawn.
+- Notes (2026-10-06, re-validated in code): already fixed, by the change BUG-010's 2026-10-05 note records (committed in `a991189`). `customQuotesProvider` is in `_secondaryDataProviders`, which `invalidateAllDataProvidersFrom` (`lib/main.dart`, after the startup pull) invalidates. That rebuilds `quotePoolProvider` and the kept-alive `quotesLoadedProvider`, so (a) the quick entry draws from the pulled quotes, (b) the dialog, which watches `customQuotesProvider`, lists them, and (c) its duplicate check, which reads `quotePoolProvider`, sees them. Test: "a quote a pull wrote joins the pool without a restart" in `test/custom_quotes_test.dart` (passes). No change made. Not re-run in the app.
+- Notes (2026-10-06, verified in the running app, FV-16 passed; qa-041): the logged steps. 3 custom quotes with "Only my quotes" on, uploaded (`qa/steps/fx059-seed.dart.txt`, `-Lib features/settings/custom_quotes_dialog.dart`), then a cold re-login and no restart. (a) Ctrl+Alt+J on the Journal page + "FX059 quick line": the entry has `quote_id` = 'fx059-q1', `custom_quote` = 'FX059 quote 1' (`qa/shots/fx-059-01-quick.png`). (b) Settings → Pages → Custom quotes lists all three with the switch on (`fx-059-04-dialog.png`). (c) Typing "FX059 quote 1" + Enter shows "That quote is already in the pool." and SQLite still has 3 quotes (`fx-059-05-dup.png`).
 
 ### BUG-060 [Phase 8] Dream list: a dream with no detailed log looks the same as a finished one (no "drafted" indicator)
 - Severity: Minor
@@ -814,6 +823,8 @@ Entry format:
 - Expected: DREAM_JOURNAL.md, Split-Pane Dashboard: "If the user hasn't written a detailed log yet, the card should have a faint border or subtle indicator letting them know it's drafted."
 - Actual: the row reads "Untitled" + date, with the same surface and border as every other row (`qa/shots/p8-08-back.png`, right half). A dream with a title but no body ("Second dream" before its body autosaved, `p8-05a-before.png`) also looks like any other row. Nothing in the list separates drafts from logged dreams.
 - Notes: `_DreamEntryListTile` (`dream_journal_page.dart`) has no draft state; it only omits the preview line when the body is empty. Related HLD drift (not logged separately): the HLD's sticky-note "pin" button (note slides away, a text box slides up under the body) was removed on purpose in commit `2b667aa` ("Feedback + apple_design"), and the note now only opens/closes; DREAM_JOURNAL.md still describes pinning.
+- Notes (2026-10-06, confirmed in code, fixed in the working tree, uncommitted): confirmed as described. A dream whose body (the detailed log) is empty or whitespace now shows an italic "Draft" at the right of its date row, in the date's colour, before the image icon if there is one. The open dream follows the live body, so the label goes away as the first character is typed. Title and sticky note don't count. Test: `test/dream_list_draft_indicator_test.dart` (fails without the fix). `test/journal_row_image_icon_test.dart`'s row check now takes the date row's first `Text`, since its body-less dreams show "Draft" too. Not yet checked in the running app.
+- Notes (2026-10-06, verified in the running app, FV-16 passed; qa-041, Light, window `place 200 100 2000 1100` to keep the note button off the taskbar corner): New dream → the row reads "Untitled / date · Draft" (`qa/shots/fx-060-01-new.png`). Typing a body made "Draft" go away while typing, replaced by the preview line (`fx-060-04-typing.png`). A second new dream with only a note (SQLite `body` '' / `notes` 'only a note here'), then Ctrl+Tab away and back: that row shows "Draft", the logged dream doesn't (`fx-060-07-noteonly.png`). Seen, not caused by this change: a row with a preview line has three lines in the `ListTile`'s fixed two-line height, so its date line runs past the bottom edge, which is visible on the selected row's outline (`fx-060-05-saved.png`). The row layout is unchanged from before, and "Draft" only shows on rows without a preview. Not logged.
 
 ### BUG-061 [Phase 8] Restarting replaces every dream's sticky note with a copy of its body; the note text is lost
 - Severity: Blocker

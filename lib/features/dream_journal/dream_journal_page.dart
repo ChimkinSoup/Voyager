@@ -1447,6 +1447,46 @@ class _DreamEntryListTile extends StatelessWidget {
     final dateStyle = theme.textTheme.labelSmall?.copyWith(
       color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
     );
+    Widget subtitle(String body) {
+      final preview = firstSentencePreview(body);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (preview.isNotEmpty)
+            VoyagerProseText(
+              preview,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: previewStyle,
+            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text('$dateLabel · $timeLabel', style: dateStyle),
+              ),
+              // A dream with no detailed log yet — nothing a preview can
+              // show — is still a draft (DREAM_JOURNAL.md, Split-Pane
+              // Dashboard; BUG-060).
+              if (preview.isEmpty)
+                Text(
+                  'Draft',
+                  style: dateStyle?.copyWith(fontStyle: FontStyle.italic),
+                ),
+              if (hasImages)
+                Padding(
+                  padding: const EdgeInsets.only(left: VoyagerSpacing.xs),
+                  child: Icon(
+                    PhosphorIconsRegular.image,
+                    size: 10,
+                    color: dateStyle?.color,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: VoyagerSpacing.sm,
@@ -1482,51 +1522,12 @@ class _DreamEntryListTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: titleStyle,
               ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (isSelected)
-              ValueListenableBuilder<String>(
+        subtitle: isSelected
+            ? ValueListenableBuilder<String>(
                 valueListenable: bodyPreview,
-                builder: (context, body, _) {
-                  final preview = firstSentencePreview(body);
-                  if (preview.isEmpty) return const SizedBox.shrink();
-                  return VoyagerProseText(
-                    preview,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: previewStyle,
-                  );
-                },
+                builder: (context, body, _) => subtitle(body),
               )
-            else
-              Builder(
-                builder: (context) {
-                  final preview = firstSentencePreview(entry.body);
-                  if (preview.isEmpty) return const SizedBox.shrink();
-                  return VoyagerProseText(
-                    preview,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: previewStyle,
-                  );
-                },
-              ),
-            Row(
-              children: [
-                Expanded(
-                  child: Text('$dateLabel · $timeLabel', style: dateStyle),
-                ),
-                if (hasImages)
-                  Icon(
-                    PhosphorIconsRegular.image,
-                    size: 10,
-                    color: dateStyle?.color,
-                  ),
-              ],
-            ),
-          ],
-        ),
+            : subtitle(entry.body),
         onTap: onTap,
       ),
     );
