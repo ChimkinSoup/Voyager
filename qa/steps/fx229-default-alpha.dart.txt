@@ -1,0 +1,3 @@
+final s = await c.read(settingsRepositoryProvider).getSettings();
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(defaultTodoListId: 'fx071-alpha'));
+debugPrint('FX229 default -> FX Alpha');

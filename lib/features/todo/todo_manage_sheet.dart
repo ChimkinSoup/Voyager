@@ -129,8 +129,7 @@ class _TodoListManageDialogState extends ConsumerState<_TodoListManageDialog> {
 
   Future<void> _deleteList(TodoListModel list) async {
     // Shared with the todo page's list dropdown. This used to be a second copy
-    // of that body and had already drifted — it never cleared a stale
-    // defaultTodoListId, leaving the setting pointing at a deleted list.
+    // of that body and had already drifted.
     final deleted = await deleteTodoList(
       context,
       ref,

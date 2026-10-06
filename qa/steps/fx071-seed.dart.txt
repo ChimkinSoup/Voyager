@@ -1,0 +1,20 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final tr = c.read(todoRepositoryProvider);
+final inbox = TodoListModel(id: '__legacy_todo__', createdAt: now, updatedAt: now, version: 1, name: 'Inbox');
+final alpha = TodoListModel(id: 'fx071-alpha', createdAt: now, updatedAt: now, version: 1, name: 'FX Alpha', colorValue: 0xFFE5C890);
+for (final l in [inbox, alpha]) { await tr.upsertList(l); r.pushTodoList(l); }
+for (var i = 0; i < 4; i++) { final t = TodoTask(id: 'fx071-a$i', createdAt: now, updatedAt: now, version: 1, listId: 'fx071-alpha', title: 'FX A$i', sortOrder: 1000000 + i * 1000, completed: i == 3); await tr.upsertTask(t); await r.pushTodoTaskNow(t); }
+for (var i = 0; i < 2; i++) { final s = TodoTask(id: 'fx071-a0-sub$i', createdAt: now, updatedAt: now, version: 1, listId: 'fx071-alpha', parentTaskId: 'fx071-a0', title: 'FX A0 sub $i', sortOrder: i * 1000); await tr.upsertTask(s); await r.pushTodoTaskNow(s); }
+final trashed = TodoTask(id: 'fx071-trashed', createdAt: now, updatedAt: now, version: 1, listId: 'fx071-alpha', title: 'FX A trashed', sortOrder: 9000000, deletedAt: now.subtract(const Duration(minutes: 1)));
+await tr.upsertTask(trashed); await r.pushTodoTaskNow(trashed);
+final s = await c.read(settingsRepositoryProvider).getSettings();
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(defaultTodoListId: 'fx071-alpha'));
+final cr = c.read(calendarRepositoryProvider);
+final cal = Calendar(id: 'fx075-cal', createdAt: now, updatedAt: now, version: 1, name: 'FX Cal');
+final span = CalendarEvent(id: 'fx075-span', createdAt: now, updatedAt: now, version: 1, calendarId: 'fx075-cal', title: 'MD weekend span', start: DateTime(2026, 10, 10), end: DateTime(2026, 10, 13, 23, 59), isFullDay: true);
+final night = CalendarEvent(id: 'fx075-night', createdAt: now, updatedAt: now, version: 1, calendarId: 'fx075-cal', title: 'MD overnight', start: DateTime(2026, 10, 11, 20), end: DateTime(2026, 10, 12, 2));
+await cr.upsertCalendar(cal); await cr.upsertEvent(span); await cr.upsertEvent(night);
+await r.pushRecords(FirestoreCollections.calendars, [cal]); await r.pushRecords(FirestoreCollections.calendarEvents, [span, night]);
+debugPrint('FX071 seeded');
+invalidateAllDataProvidersIn(c);

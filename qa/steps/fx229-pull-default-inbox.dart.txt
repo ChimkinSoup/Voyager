@@ -1,0 +1,4 @@
+final sr = c.read(settingsRepositoryProvider);
+await sr.saveSettings((await sr.getSettings()).copyWith(defaultTodoListId: '__legacy_todo__'), recordLocalActivity: false);
+c.invalidate(settingsProvider);
+debugPrint('FX229 default -> Inbox, as a pull writes it');

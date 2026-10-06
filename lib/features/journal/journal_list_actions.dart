@@ -219,17 +219,10 @@ Future<bool> deleteJournalList(
     }
 
     await repo.softDeleteJournal(journal.id, at: deletedAt);
-
-    // A deleted journal can't stay the one the page opens into; leaving the id
-    // behind would make the journal page fall back silently and look as if the
-    // setting had been forgotten.
-    final settingsRepo = ref.read(settingsRepositoryProvider);
-    final settings = await settingsRepo.getSettings();
-    if (settings.defaultJournalId == journal.id) {
-      await ref
-          .read(settingsProvider.notifier)
-          .saveSettings(settings.copyWith(clearDefaultJournalId: true));
-    }
+    // A default-view id is left in place: the page and the journal settings
+    // treat an id with no live journal behind it as no default, and restoring
+    // the journal from the trash then brings the setting back with it, as
+    // deleteTodoList does for lists (BUG-072).
   } catch (error, stackTrace) {
     onLocalDeleteFailed?.call();
     FlutterError.reportError(

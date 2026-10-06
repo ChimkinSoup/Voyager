@@ -160,7 +160,9 @@ List<CalendarWeekMorphEntry> calendarWeekMorphEntries({
             bottomLeft: isStart && !isBottom ? radius : Radius.zero,
             bottomRight: isEnd && !isBottom ? radius : Radius.zero,
           ),
-          showTitle: isStart,
+          // Matches [CalendarDayEventBar]: a carried-over bar is labelled
+          // again at the start of the week row.
+          showTitle: isStart || c == 0,
         ),
         fontSize,
         monthOpacity,

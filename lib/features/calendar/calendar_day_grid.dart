@@ -1301,6 +1301,7 @@ class MorphDayEventStack extends StatefulWidget {
     required this.cellHeight,
     required this.dayLayoutSize,
     required this.morphReverse,
+    this.isFirstColumn = false,
     this.layoutDayLayoutSize,
     this.frozenMetrics,
     this.opacity = 1,
@@ -1308,6 +1309,10 @@ class MorphDayEventStack extends StatefulWidget {
 
   final List<CalendarEvent?> events;
   final DateTime date;
+
+  /// Whether this day opens its week row, where a carried-over bar is
+  /// labelled again.
+  final bool isFirstColumn;
   final double styleT;
   final double maxWidth;
   final double cellHeight;
@@ -1529,11 +1534,16 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
 
     final isStart = calendarEventBarStartsOnDay(event, widget.date);
     final isEnd = calendarEventBarEndsOnDay(event, widget.date);
+    // Labelled where [CalendarDayEventBar] labels it: the event's first day,
+    // and the start of each week row it carries into (BUG-075).
+    final labelled = isStart || widget.isFirstColumn;
     // isStart/isEnd sides extend into the cell padding to exactly match
     // CalendarDayEventBar (left: -cellPadding.left). Without this the morph
     // layer bar would be narrower than the regular-grid bar at t=0, producing
     // an instant visual snap when the morph takes over.
-    final bridgeLeft = isStart
+    // A first-column bar stops at the cell edge, as CalendarDayEventBar's does:
+    // there is no cell to its left to bridge into.
+    final bridgeLeft = isStart || widget.isFirstColumn
         ? MonthDayCellStyle.full.cellPadding.left
         : MonthDayCellStyle.full.cellMargin.left +
               MonthDayCellStyle.full.cellPadding.left +
@@ -1566,6 +1576,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
               : frozenBarHeight,
           eventFontSize: frozenEventFontSize,
           expandT: 1.0,
+          showText: labelled,
           currentBridgeLeft: bridgeLeft,
           currentBridgeRight: bridgeRight,
           roundLeft: isStart,
@@ -1603,7 +1614,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
         eventFontSize: frozenEventFontSize,
         expandT: 1.0 - shrinkT,
         opacity: 1.0 - shrinkT,
-        showText: isStart && textOpacity > 0,
+        showText: labelled && textOpacity > 0,
         currentBridgeLeft: currentBridgeLeft,
         currentBridgeRight: currentBridgeRight,
         roundLeft: isStart,
@@ -1655,7 +1666,7 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
       eventFontSize: frozenEventFontSize,
       expandT: 1.0 - shrinkT,
       opacity: barOpacity,
-      showText: isStart && textOpacity > 0,
+      showText: labelled && textOpacity > 0,
       currentBridgeLeft: currentBridgeLeft,
       currentBridgeRight: currentBridgeRight,
       roundLeft: isStart,
@@ -2325,7 +2336,9 @@ class CalendarDayEventBar extends StatelessWidget {
                 hollow: done,
               ),
               alignment: Alignment.centerLeft,
-              child: isStart
+              // A bar carried over into a new week row is labelled again: it
+              // is the only place that row's part can be told apart (BUG-075).
+              child: isStart || isFirstColumn
                   ? Text(
                       event.title,
                       maxLines: 1,

@@ -1,0 +1,12 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final tr = c.read(todoRepositoryProvider);
+final strays = TodoListModel(id: 'fx229-strays', createdAt: now, updatedAt: now, version: 1, name: 'Strays');
+final gamma = TodoListModel(id: 'fx229-gamma', createdAt: now, updatedAt: now, version: 1, name: 'Gamma');
+for (final l in [strays, gamma]) { await tr.upsertList(l); r.pushTodoList(l); }
+final stray = TodoTask(id: 'fx229-stray', createdAt: now, updatedAt: now, version: 1, listId: 'fx229-strays', parentTaskId: 'fx071-a1', title: 'FX stray subtask', sortOrder: 0);
+await tr.upsertTask(stray); await r.pushTodoTaskNow(stray);
+final g = TodoTask(id: 'fx229-g1', createdAt: now, updatedAt: now, version: 1, listId: 'fx229-gamma', title: 'Gamma task', sortOrder: 0, deletedAt: now.subtract(const Duration(minutes: 1)));
+await tr.upsertTask(g); await r.pushTodoTaskNow(g);
+debugPrint('FX229 seeded');
+invalidateAllDataProvidersIn(c);

@@ -172,7 +172,15 @@ class TrashService {
         fallbackName = target.kind.title(target.data);
       } else {
         targetId = parent.fallbackId;
-        fallbackName = parent.fallbackName;
+        // The default container goes by whatever it was renamed to, if it
+        // has a row (BUG-073).
+        final fallbackRow = rows[parent.collection]?[targetId];
+        final title = fallbackRow == null
+            ? null
+            : trashKinds[parent.collection]!.title(fallbackRow.data);
+        fallbackName = title == null || title.isEmpty
+            ? parent.fallbackName
+            : title;
       }
       // The rows that went with it sat in the same container, and follow it.
       for (final row in [root, ...members]) {

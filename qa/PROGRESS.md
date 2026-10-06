@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 044.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 045.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -163,6 +163,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-041@example.com | 2026-10-06 (FV-16: BUG-056/057/059/060) | Journals Alpha (`fx056-z`, 1 entry "FX059 quick line"), Gamma (`fx056-m`, #EA999C, 1 blank entry), Beta (`fx056-a`), created in that order. Custom quotes "FX059 quote 1–3", "Only my quotes" on. Dreams: one with body "I was flying over a city.", one with only the note "only a note here". **Light** theme. | Password `qavoyager2026`. Switch back to Dark before reusing it for a standard-configuration phase. |
 | voyager-qa-042@example.com | 2026-10-06 (FV-17: BUG-061…065, + follow-up) | Dreams "FX17 dream T1 T2 T3 T4" (body "FX17 BODY text KEEP1 KEEP2  RACER2A R2B", note "zzopen FX17 NOTE text N2") and "FX17 tags" (body with `#夢 #café #naïve #día-de-muertos`, no note). Journal "Journal" with "FX17 journal" (body "journal body R2 #caf"). To-Do lists "FX Home" (`fx065-home`, empty) and "FX Work" (`fx065-work`) with "FX17 repeat task" (`fx065-task`, daily 9:30 AM, due Oct 9 in the cloud, notes "task note R2", 3 completions). `dream_split_width` 384.9. Dark + Scatter; Vim off. | Password `qavoyager2026`. Notes were never corrupted, so it can re-check BUG-061 after later sync changes. |
 | voyager-qa-043@example.com | 2026-10-06 (FV-18: BUG-066…070, + follow-up) | To-Do lists "FX Home" (`fx066-home`) and "Perf 200" (`p9-perf`: 200 seeded tasks, 000 and 001 completed, plus "draft textZ" with one image and "second draftQ"); "FX066 parent" (subtasks "FX066 sub 0–2", the same image) is in FX Home; "FX Work" deleted with its 2 tasks. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-044@example.com | 2026-10-06 (FV-19: BUG-071…075) | To-Do: built-in list renamed "Inbox" (holds "FX A trashed", restored from the trash) and "FX Alpha" (`fx071-alpha`, `0xFFE5C890`; "FX A0–A3", A3 completed, "FX A0 sub 0–1"; deleted with its tasks then restored). **Default view = FX Alpha.** Calendar "FX Cal" (`fx075-cal`): "MD weekend span" all-day Oct 10–13, "MD overnight" Oct 11 20:00 → Oct 12 02:00, "Repro noon" Oct 6 11:00–12:30. Journals "FX J-Alpha" (`fx228-ja`, **default view**; deleted with its entry then restored) and "FX J-Beta" (`fx228-jb`), one entry each (FV-20). FV-21: lists "Strays" (with "FX stray subtask") and "Gamma" in the trash; "Gamma task" restored into Inbox. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 
 ---
 
@@ -377,6 +378,12 @@ One line per completed phase.
 ---
 
 ## 7. Handoff note
+
+**2026-10-06 (code-review follow-ups):** seven review findings on the BUG-072…075/228 work fixed, and BUG-074 reworked so typed end times hold until Enter/blur/close. All re-verified in the app (TEST_PLAN.md FV-21, qa-044). Juno's real account was signed in at the start; the reset waited for Juno's Dev-page check, and the sync gate confirmed it. Full suite 4,424 passed. Session ended `SIGNED-OUT`.
+
+**2026-10-06 (BUG-228 + follow-ups):** BUG-228 fixed; deleting the default journal no longer clears its default view; the month↔year zoom labels carried-over bars like the month grid. All three verified in the app (TEST_PLAN.md FV-20, qa-044). Summary counts updated (44 fixed, 184 open). Full suite 4,419 passed. Session ended `SIGNED-OUT`.
+
+**2026-10-06 (BUG-071…075):** BUG-072, BUG-073, BUG-074 and BUG-075 fixed; BUG-071 found already fixed (BUG-057's change). All five verified in the app (TEST_PLAN.md FV-19, qa-044). Found BUG-228 (the first launch after a cold sign-in ignores the synced To-Do default view). Summary counts updated (43 fixed, 185 open). Full suite 4,414 passed. Session ended `SIGNED-OUT`.
 
 **2026-10-06 (BUG-227):** fixed and verified in the app (TEST_PLAN.md FV-18, second follow-up, qa-043). Summary counts updated (38 fixed, 189 open). Full suite 4,408 passed. Session ended `SIGNED-OUT`.
 

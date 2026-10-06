@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/constants/journal_constants.dart';
+import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/soft_delete/restore_contract.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
@@ -407,6 +408,71 @@ void main() {
       expect(movedTo, isNull);
       expect((await journals.getEntry('e'))!.journalId, 'j');
     });
+
+    test('a task whose list is in the trash too is restored into the '
+        'built-in list, named as it was renamed (BUG-073)', () async {
+      for (final (id, name) in [(legacyTodoListId, 'Inbox'), ('a', 'Alpha')]) {
+        await todos.upsertList(
+          TodoListModel(
+            id: id,
+            name: name,
+            createdAt: created,
+            updatedAt: created,
+          ),
+        );
+      }
+      await todos.upsertTask(
+        TodoTask(
+          id: 't',
+          listId: 'a',
+          title: 'A3 trashed',
+          sortOrder: 0,
+          createdAt: created,
+          updatedAt: created,
+        ),
+      );
+      await todos.softDeleteTask('t');
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      await todos.softDeleteList('a', at: utcNow());
+
+      final item = (await trash.list()).firstWhere((i) => i.id == 't');
+
+      expect(await trash.restore(item), 'Inbox');
+      expect((await todos.getTask('t'))!.listId, legacyTodoListId);
+    });
+
+    test(
+      'a built-in list with an empty name is still called "To-do"',
+      () async {
+        for (final (id, name) in [(legacyTodoListId, ''), ('a', 'Alpha')]) {
+          await todos.upsertList(
+            TodoListModel(
+              id: id,
+              name: name,
+              createdAt: created,
+              updatedAt: created,
+            ),
+          );
+        }
+        await todos.upsertTask(
+          TodoTask(
+            id: 't',
+            listId: 'a',
+            title: 'A3 trashed',
+            sortOrder: 0,
+            createdAt: created,
+            updatedAt: created,
+          ),
+        );
+        await todos.softDeleteTask('t');
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        await todos.softDeleteList('a', at: utcNow());
+
+        final item = (await trash.list()).firstWhere((i) => i.id == 't');
+
+        expect(await trash.restore(item), 'To-do');
+      },
+    );
 
     test('a card whose deck is gone has nowhere to go', () async {
       await study.upsertDeck(

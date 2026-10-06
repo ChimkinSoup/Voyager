@@ -3717,6 +3717,7 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
             date: widget.dates[i],
             month: widget.morphMonth,
             events: packedWeeks[i ~/ 7][i % 7],
+            isFirstColumn: i % 7 == 0,
             todoMarkers: calendarTodoMarkersForDay(
               widget.todoMarkers,
               widget.dates[i],
@@ -3904,6 +3905,7 @@ class _MorphCell extends StatelessWidget {
     required this.date,
     required this.month,
     required this.events,
+    required this.isFirstColumn,
     required this.todoMarkers,
     required this.hasWorkout,
     required this.weekHighlightAlpha,
@@ -3912,6 +3914,7 @@ class _MorphCell extends StatelessWidget {
   final DateTime date;
   final DateTime month;
   final List<CalendarEvent?> events;
+  final bool isFirstColumn;
   final List<CalendarTodoMarker> todoMarkers;
   final bool hasWorkout;
 
@@ -4159,6 +4162,7 @@ class _MorphCell extends StatelessWidget {
                       child: MorphDayEventStack(
                         events: events,
                         date: date,
+                        isFirstColumn: isFirstColumn,
                         // During a chained week↔year transition styleT rises
                         // from 0→1, which would grow year dots into bars while
                         // they fade out. Clamping to 0 keeps them as settled

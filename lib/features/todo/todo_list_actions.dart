@@ -243,8 +243,7 @@ Future<Map<String, DateTime>> detachMediaForTasks(
 /// Prompts for, and carries out, the deletion of [list].
 ///
 /// Shared by the list dropdown's manage menu and the manage sheet, which used
-/// to keep near-identical copies of this body and had already drifted apart
-/// (the sheet's copy never cleared a stale `defaultTodoListId`).
+/// to keep near-identical copies of this body and had already drifted apart.
 ///
 /// [allLists] is only used to find — or fabricate — the built-in fallback list;
 /// the task count driving the dialog and both branches is read from the
@@ -268,19 +267,40 @@ Future<bool> deleteTodoList(
   // through a BuildContext across an async gap.
   final container = ProviderScope.containerOf(context, listen: false);
   final tasks = await repo.listTasks(list.id, topLevelOnly: false);
-  final total = tasks.length;
+  // Counted as the list's own row in Manage lists counts it: subtasks ride
+  // along with their parents and aren't tasks of their own (BUG-073).
+  final total = tasks.where((task) => task.parentTaskId == null).length;
   if (!context.mounted) return false;
 
   // Hoisted out of the async gap below: the orElse closure that fabricates a
   // replacement list used to read Theme.of(context) after the dialog awaited.
   final fallbackColor = Theme.of(context).colorScheme.primary.toARGB32();
+  final fallbackName =
+      allLists
+          .where((item) => item.id == legacyTodoListId)
+          .map((item) => item.name)
+          .where((name) => name.isNotEmpty)
+          .firstOrNull ??
+      'To-do';
   final choice = await showDeleteContainerDialog(
     context,
     title: 'Delete "${list.name}"?',
-    message: total == 0
-        ? 'This list has no tasks and will be removed.'
-        : 'This list has $total tasks. Move them to the default "To-do" list, or delete everything.',
-    deleteAllLabel: 'Yes (delete all tasks)',
+    message: switch (total) {
+      _ when tasks.isEmpty => 'This list has no tasks and will be removed.',
+      // Only subtasks whose own task isn't here (stranded by a move before
+      // BUG-066): still contents, so the user gets told and gets the choice.
+      0 when tasks.length == 1 =>
+        'This list has no tasks, only 1 subtask of a task elsewhere. Move it to "$fallbackName", or delete everything.',
+      0 =>
+        'This list has no tasks, only ${tasks.length} subtasks of tasks elsewhere. Move them to "$fallbackName", or delete everything.',
+      1 =>
+        'This list has 1 task. Move it to "$fallbackName", or delete everything.',
+      _ =>
+        'This list has $total tasks. Move them to "$fallbackName", or delete everything.',
+    },
+    moveLabel: 'Move to "$fallbackName"',
+    hasContents: tasks.isNotEmpty,
+    deleteAllLabel: 'Delete all tasks',
   );
   if (!context.mounted || choice == DeleteContainerChoice.cancel) return false;
 
@@ -317,16 +337,9 @@ Future<bool> deleteTodoList(
   }
 
   await repo.softDeleteList(list.id, at: deletedAt);
-  // A deleted list can't stay the one the page opens into; leaving the id
-  // behind would make the todo page fall back silently and look as if the
-  // setting had been forgotten.
-  final settingsRepo = ref.read(settingsRepositoryProvider);
-  final settings = await settingsRepo.getSettings();
-  if (settings.defaultTodoListId == list.id) {
-    await ref
-        .read(settingsProvider.notifier)
-        .saveSettings(settings.copyWith(clearDefaultTodoListId: true));
-  }
+  // A default-view id is left in place: the page and the list settings treat
+  // an id with no live list behind it as no default, and restoring the list
+  // from the trash then brings the setting back with it (BUG-072).
   final deletedList = (await repo.listLists(
     includeDeleted: true,
   )).firstWhere((item) => item.id == list.id);

@@ -1,0 +1,10 @@
+final now = DateTime.now().toUtc();
+final today = DateTime.now();
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+for (final j in [Journal(id: 'fx228-ja', createdAt: now, updatedAt: now, version: 1, name: 'FX J-Alpha', colorValue: 0xFFE5C890), Journal(id: 'fx228-jb', createdAt: now.add(const Duration(seconds: 1)), updatedAt: now, version: 1, name: 'FX J-Beta')]) { await jr.upsertJournal(j); r.pushJournal(j); }
+for (final (id, jid, title) in [('fx228-ea', 'fx228-ja', 'FX J-Alpha entry'), ('fx228-eb', 'fx228-jb', 'FX J-Beta entry')]) { final en = JournalEntry(id: id, createdAt: now, updatedAt: now, version: 1, journalId: jid, title: title, body: 'body of $title', entryDate: today); await jr.upsertEntry(en); r.pushJournalEntryNow(en); }
+final s = await c.read(settingsRepositoryProvider).getSettings();
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(defaultJournalId: 'fx228-ja'));
+debugPrint('FX228 journal seeded');
+invalidateAllDataProvidersIn(c);

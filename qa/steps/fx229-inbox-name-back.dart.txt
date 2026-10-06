@@ -1,0 +1,6 @@
+final tr = c.read(todoRepositoryProvider);
+final inbox = (await tr.listLists()).firstWhere((l) => l.id == '__legacy_todo__');
+final renamed = inbox.copyWith(name: 'Inbox');
+await tr.upsertList(renamed); c.read(remoteSyncServiceProvider).pushTodoList(renamed);
+debugPrint('FX229 inbox renamed back to "${renamed.name}"');
+invalidateAllDataProvidersIn(c);

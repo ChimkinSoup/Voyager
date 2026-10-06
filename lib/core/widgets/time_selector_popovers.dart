@@ -86,6 +86,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
         _endSelectAllNextTap = true;
         selectAllTimeText(_endController);
       } else {
+        _commitTypedEnd();
         _endController.text = _formatTime(_endDt);
       }
     });
@@ -127,9 +128,21 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
   void _onEndTextChanged() {
     if (!_endFocus.hasFocus) return;
     final parsed = parseTimeQuery(_endController.text, _endDt);
-    if (parsed != null && parsed != _endDt) {
-      _applyEndDt(parsed, updateText: false);
-    }
+    if (parsed == null || parsed == _endDt) return;
+    // An end at or before the start is usually a prefix on its way to a later
+    // time ("12" on the way to "12:30p"). Applied per keystroke, the failsafe
+    // in [_applyEndDt] pushed the start back for good (BUG-074), so such an
+    // end waits for [_commitTypedEnd] and the finished time.
+    if (!parsed.isAfter(_startDt)) return;
+    _applyEndDt(parsed, updateText: false);
+  }
+
+  /// Applies the end field's text as typed, failsafe included, once the user
+  /// is done with it: Enter, leaving the field, or closing the popover.
+  void _commitTypedEnd() {
+    final parsed = parseTimeQuery(_endController.text, _endDt);
+    if (parsed == null || parsed == _endDt) return;
+    _applyEndDt(parsed, updateText: true);
   }
 
   void _applyStartDt(DateTime newStartDt, {bool updateText = true}) {
@@ -192,6 +205,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
 
   void _submit() {
     if (!mounted) return;
+    _commitTypedEnd();
     setState(() => _canPop = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted)
@@ -319,6 +333,7 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (mounted) {
+          _commitTypedEnd();
           setState(() => _canPop = true);
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted)

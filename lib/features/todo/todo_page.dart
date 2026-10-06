@@ -341,6 +341,15 @@ class _TodoPageState extends ConsumerState<TodoPage>
   // _applySavedViewPreferences) — the same late recovery _resolveListId
   // performs for the selected list id.
   var _appliedSavedShowAllTasks = false;
+  // The default-view list the saved view was last opened into. On a cold
+  // sign-in the page opens before the pull brings the account's default in,
+  // so a later change is followed too, until the user picks a view of their
+  // own in this session (BUG-228).
+  String? _appliedDefaultListId;
+  var _userChoseView = false;
+  // Whether that default has been checked against the loaded lists (see
+  // _reopenPastDeadDefault).
+  var _checkedDefaultIsLive = false;
   // Cache subtask stats futures by task ID to avoid re-querying the DB on
   // every rebuild (e.g. during drag-to-scroll), which would cause
   // FutureBuilder to restart and create visible jank.
@@ -845,15 +854,21 @@ class _TodoPageState extends ConsumerState<TodoPage>
       _showAllTasks = savedSettings?.todoShowAllTasks ?? false;
     }
     _appliedSavedShowAllTasks = savedSettings != null;
+    _appliedDefaultListId = defaultListId;
   }
 
   /// Restores the saved view — a default list if one is set, otherwise the
   /// last-viewed list and all-tasks flag — on the first build that has
   /// settings, for the case where [initState] read them while still loading.
   void _applySavedViewPreferences(AppSettings? settings) {
-    if (_appliedSavedShowAllTasks || settings == null) return;
+    if (settings == null) return;
+    if (_appliedSavedShowAllTasks) {
+      _followChangedDefaultList(settings);
+      return;
+    }
     _appliedSavedShowAllTasks = true;
     final defaultListId = settings.defaultTodoListId;
+    _appliedDefaultListId = defaultListId;
     if (defaultListId != null) {
       // Assigned straight away rather than from the post-frame callback below:
       // this runs at the top of build and _resolveListId reads _selectedListId
@@ -868,6 +883,65 @@ class _TodoPageState extends ConsumerState<TodoPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() => _showAllTasks = showAll);
+    });
+  }
+
+  /// Opens into a default-view list that arrived after the saved view was
+  /// applied — the pull of a cold sign-in, or another device setting one —
+  /// as long as the user hasn't chosen a view here since (BUG-228).
+  void _followChangedDefaultList(AppSettings settings) {
+    final defaultListId = settings.defaultTodoListId;
+    if (_userChoseView ||
+        defaultListId == null ||
+        defaultListId == _appliedDefaultListId) {
+      return;
+    }
+    // The pull can write the setting before the list itself; until the list
+    // is here _resolveListId would only fall back, so wait for a later build.
+    final lists = ref.read(todoListsProvider).valueOrNull;
+    if (lists == null || !lists.any((list) => list.id == defaultListId)) {
+      return;
+    }
+    // Switching now would carry an open edit panel, a list filter or a
+    // reorder in flight onto the other list; any of them means the user is
+    // already working here.
+    if (_editPanelTask != null ||
+        _listSearchBarOpen ||
+        _optimisticActiveTaskOrder != null) {
+      _userChoseView = true;
+      return;
+    }
+    _appliedDefaultListId = defaultListId;
+    // Same-build assignment as in [_applySavedViewPreferences].
+    _selectedListId = defaultListId;
+    if (!_showAllTasks) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _showAllTasks = false);
+    });
+  }
+
+  /// A deleted default list keeps its id, so restoring the list brings the
+  /// setting back (BUG-072). Until then the page opens as if there were no
+  /// default, the saved "All tasks" view included. The id can only be checked
+  /// once the lists have loaded, which may be after the saved view was
+  /// applied; the last-viewed list needs nothing here, since _resolveListId
+  /// already falls back to it.
+  void _reopenPastDeadDefault(AppSettings settings) {
+    if (_checkedDefaultIsLive || !_appliedSavedShowAllTasks) return;
+    final lists = ref.read(todoListsProvider).valueOrNull;
+    if (lists == null) return;
+    _checkedDefaultIsLive = true;
+    final defaultListId = _appliedDefaultListId;
+    if (_userChoseView ||
+        defaultListId == null ||
+        lists.any((list) => list.id == defaultListId) ||
+        !settings.todoShowAllTasks) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _userChoseView) return;
+      setState(() => _showAllTasks = true);
     });
   }
 
@@ -906,6 +980,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
   }
 
   void _markListViewed(String listId) {
+    _userChoseView = true;
     unawaited(_persistLastViewedList(listId));
   }
 
@@ -2567,6 +2642,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
   /// are filed under.
   void _selectAllTasksFromSwitcher() {
     if (_showAllTasks) return;
+    _userChoseView = true;
     // The filter belongs to the view it was typed in, and this is a different
     // one.
     _closeListSearch();
@@ -2577,6 +2653,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
   /// The gear beside the switcher: create, rename, recolour, configure and
   /// delete lists, all in one dialog rather than a menu nested in the picker.
   Future<void> _openListManageSheet() async {
+    // A default set from in here takes effect on the next open, as it always
+    // has, rather than moving the page under the dialog.
+    _userChoseView = true;
     final createdId = await showTodoListManageSheet(context, ref);
     if (!mounted) return;
     // A list may have been deleted out from under the open panel, and the
@@ -2775,6 +2854,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
     final settingsAsync = ref.watch(settingsProvider.settled);
     final settings = settingsAsync.valueOrNull;
     _applySavedViewPreferences(settings);
+    if (settings != null) _reopenPastDeadDefault(settings);
     final hideCompleted = settingsAsync.maybeWhen(
       data: (settings) => settings.hideCompletedTasks,
       orElse: () => false,
