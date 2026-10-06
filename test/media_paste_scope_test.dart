@@ -39,6 +39,15 @@ class _FakeClipboard extends MediaClipboard {
       MediaClipboardContents(text: text, imageBytes: image);
 }
 
+/// A file store that never reports low disk, so a paste finishes without
+/// shelling out for the free-space query.
+class _RoomyFileStore extends MediaFileStore {
+  _RoomyFileStore({required super.root});
+
+  @override
+  Future<bool> isDiskLow() async => false;
+}
+
 void main() {
   group('routeMediaPaste', () {
     test('an image with nothing focused is attached', () {
@@ -195,13 +204,16 @@ void main() {
       bool vim = false,
       bool fieldTakesBoth = false,
       Future<String> Function()? onBeforeAttach,
+      bool roomyDisk = false,
     }) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             mediaServiceProvider.overrideWith((ref) => service),
             mediaFileStoreProvider.overrideWithValue(
-              MediaFileStore(root: Directory('${tempDir.path}/media')),
+              roomyDisk
+                  ? _RoomyFileStore(root: Directory('${tempDir.path}/media'))
+                  : MediaFileStore(root: Directory('${tempDir.path}/media')),
             ),
           ],
           child: MaterialApp(
@@ -422,6 +434,42 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1700));
       await tester.pumpAndSettle();
       expect(find.text('Image added'), findsNothing);
+    });
+
+    // Pasting the same picture again used to add a second copy to the same
+    // gallery (BUG-067).
+    testWidgets('an image already in the gallery is not attached again', (
+      tester,
+    ) async {
+      // A second Ctrl+V is ignored while the first paste is still running,
+      // and the low-disk check at its end would otherwise outlive the poll.
+      await pumpScope(
+        tester,
+        _FakeClipboard(image: pngOf(8, 8)),
+        roomyDisk: true,
+      );
+      await pressPaste(tester, until: () async => await referenceCount() == 1);
+      final references = await service.referencesFor(
+        FirestoreCollections.todoTasks,
+        'task-1',
+      );
+      final mediaId = references.single.mediaId;
+      final firstVersion = (await service.asset(mediaId))!.version;
+      await tester.pump(const Duration(milliseconds: 1700));
+      await tester.pumpAndSettle();
+
+      // The second ingest finds the same asset and bumps it, which is the
+      // last thing it writes before the duplicate check.
+      await pressPaste(
+        tester,
+        until: () async =>
+            (await service.asset(mediaId))!.version > firstVersion,
+      );
+
+      expect(await referenceCount(), 1);
+      expect(find.text('This image is already attached'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
     });
 
     testWidgets('a refused image takes its spinner down with it', (

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
@@ -382,6 +384,40 @@ Future<void> _moveTasksToDefaultList(
   final rows = writes.values.toList();
   await repo.upsertTasksBatch(rows);
   await remoteSync.pushTodoTasksBatch(rows);
+}
+
+/// Saves [task]'s move to another list, and pushes it.
+///
+/// [writes] are the rows the move changes: [task] itself, as it is to be
+/// saved, and the destination's tasks [applyTaskListMove] re-placed around it.
+/// Every list move goes through here because the task's subtasks have to move
+/// with it: a subtask carries its parent's `listId`, and anything that goes by
+/// list — the delete-list dialog's count, its "delete all tasks" — would
+/// otherwise still find it in the old list (BUG-066).
+///
+/// The uploads are not awaited: callers refresh their lists right after, and
+/// that must not wait on the network. A failed upload lands in the outbox.
+Future<void> saveTaskListMove(
+  TodoRepository repo,
+  RemoteSyncService remoteSync, {
+  required TodoTask task,
+  required List<TodoTask> writes,
+}) async {
+  final subtasks = [
+    for (final subtask in await repo.listSubtasks(task.id))
+      if (subtask.listId != task.listId) subtask.copyWith(listId: task.listId),
+  ];
+  await repo.upsertTasksBatch([...writes, ...subtasks]);
+  // The moved task on its own, so it keeps its title/notes char-ops; the rest
+  // is placement and list only.
+  remoteSync.pushTodoTaskInBackground(task);
+  unawaited(
+    remoteSync.pushTodoTasksBatch([
+      for (final row in writes)
+        if (row.id != task.id) row,
+      ...subtasks,
+    ]),
+  );
 }
 
 Future<TodoListModel?> createTodoList(

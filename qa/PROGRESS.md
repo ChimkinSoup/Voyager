@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 043.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 044.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -162,6 +162,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-040@example.com | 2026-10-05 (FV-15: BUG-048) | Journal "Beta" (live, 1 entry "Alpha entry", restored from the trash) plus tombstoned "Alpha" and "Gamma" (Gamma's blank "Untitled" in the trash with it). No Default view. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-041@example.com | 2026-10-06 (FV-16: BUG-056/057/059/060) | Journals Alpha (`fx056-z`, 1 entry "FX059 quick line"), Gamma (`fx056-m`, #EA999C, 1 blank entry), Beta (`fx056-a`), created in that order. Custom quotes "FX059 quote 1–3", "Only my quotes" on. Dreams: one with body "I was flying over a city.", one with only the note "only a note here". **Light** theme. | Password `qavoyager2026`. Switch back to Dark before reusing it for a standard-configuration phase. |
 | voyager-qa-042@example.com | 2026-10-06 (FV-17: BUG-061…065, + follow-up) | Dreams "FX17 dream T1 T2 T3 T4" (body "FX17 BODY text KEEP1 KEEP2  RACER2A R2B", note "zzopen FX17 NOTE text N2") and "FX17 tags" (body with `#夢 #café #naïve #día-de-muertos`, no note). Journal "Journal" with "FX17 journal" (body "journal body R2 #caf"). To-Do lists "FX Home" (`fx065-home`, empty) and "FX Work" (`fx065-work`) with "FX17 repeat task" (`fx065-task`, daily 9:30 AM, due Oct 9 in the cloud, notes "task note R2", 3 completions). `dream_split_width` 384.9. Dark + Scatter; Vim off. | Password `qavoyager2026`. Notes were never corrupted, so it can re-check BUG-061 after later sync changes. |
+| voyager-qa-043@example.com | 2026-10-06 (FV-18: BUG-066…070, + follow-up) | To-Do lists "FX Home" (`fx066-home`) and "Perf 200" (`p9-perf`: 200 seeded tasks, 000 and 001 completed, plus "draft textZ" with one image and "second draftQ"); "FX066 parent" (subtasks "FX066 sub 0–2", the same image) is in FX Home; "FX Work" deleted with its 2 tasks. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 
 ---
 
@@ -376,6 +377,12 @@ One line per completed phase.
 ---
 
 ## 7. Handoff note
+
+**2026-10-06 (BUG-227):** fixed and verified in the app (TEST_PLAN.md FV-18, second follow-up, qa-043). Summary counts updated (38 fixed, 189 open). Full suite 4,408 passed. Session ended `SIGNED-OUT`.
+
+**2026-10-06 (code-review follow-up to BUG-066…070):** list moves persist through one `saveTaskListMove` with background uploads, the duplicate-image check reads the gallery once per batch, and BUG-069's selection restore moved into `showVoyagerDialog` with listener cleanup. Re-verified in the app on qa-043. New BUG-227 (Minor, open): a panel move back into the list on screen doesn't save. Session ended `SIGNED-OUT`.
+
+**2026-10-06 (BUG-066…070):** BUG-066, BUG-067 (duplicate warning only; the Notes-paste routing is by design), BUG-068, BUG-069 and BUG-070 fixed and verified in the app (TEST_PLAN.md FV-18, qa-043). Summary counts updated (37 fixed, 189 open). Full suite 4,404 passed. Session ended `SIGNED-OUT`.
 
 **2026-10-06 (code-review follow-up):** BUG-061 now names the CRDT text field by collection, BUG-062 requests focus when the note field is built, BUG-065 resolves an off-screen panel task against its own list, and the spell-checker part of BUG-063 is reverted. Full suite 4,399 passed; BUG-061/062/065 re-verified in the app (TEST_PLAN.md FV-17 follow-up, qa-042). Session ended `SIGNED-OUT`.
 

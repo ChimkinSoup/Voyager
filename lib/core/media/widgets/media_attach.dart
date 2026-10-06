@@ -61,23 +61,49 @@ Future<void> attachImagesForOwner(
     overlay,
     message: count == 1 ? 'Adding image…' : 'Adding $count images…',
   );
+  var added = 0;
   try {
     // One attach under way from the first image to the last, so an editor
     // cancelled mid-batch waits for the images not yet started too.
     await service.trackAttach(() async {
+      // Ingest already folds identical images into one asset, so an image
+      // this gallery holds comes back as an asset it already references — and
+      // the same image twice in one batch as the same asset twice. A second
+      // copy is never what was meant (BUG-067).
+      final present = {
+        for (final reference in await service.referencesFor(
+          collection,
+          documentId,
+          facet: facet,
+        ))
+          reference.mediaId,
+      };
       for (final bytes in images) {
-        await service.attachBytes(
-          bytes: bytes,
+        final asset = await service.ingestBytes(bytes);
+        if (!present.add(asset.id)) continue;
+        await service.addReference(
+          mediaId: asset.id,
           collection: collection,
           documentId: documentId,
           facet: facet,
         );
+        added++;
       }
     });
+    final skipped = count - added;
     toast.update(
-      message: count == 1 ? 'Image added' : '$count images added',
-      icon: PhosphorIconsRegular.check,
-      dwell: _attachedToastDwell,
+      message: switch ((added, skipped)) {
+        (_, 0) => count == 1 ? 'Image added' : '$count images added',
+        (0, 1) => 'This image is already attached',
+        (0, _) => 'These images are already attached',
+        _ =>
+          '${added == 1 ? 'Image' : '$added images'} added, '
+              '$skipped already attached',
+      },
+      icon: skipped == 0
+          ? PhosphorIconsRegular.check
+          : PhosphorIconsRegular.warning,
+      dwell: skipped == 0 ? _attachedToastDwell : _failedToastDwell,
     );
   } on MediaIngestException catch (error) {
     // The spinner becomes the refusal, in the card the user is already

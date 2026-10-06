@@ -156,12 +156,24 @@ class _StableViewScrollPosition extends ScrollPositionWithSingleContext {
 
   final bool Function() isArmed;
 
+  /// The extent a correction in this layout has already made up for.
+  ///
+  /// A correction returns false, so the viewport lays out again, and
+  /// [oldPosition] stays the metrics from before the first try. Measuring
+  /// each retry against that would add the same growth on every pass —
+  /// and the long list's estimated extent moves with the offset, so every
+  /// pass finds some — until the viewport gives up after 20 cycles.
+  double? _correctedMaxScrollExtent;
+
   @override
   bool correctForNewDimensions(
     ScrollMetrics oldPosition,
     ScrollMetrics newPosition,
   ) {
-    final grew = newPosition.maxScrollExtent - oldPosition.maxScrollExtent;
+    final grew =
+        newPosition.maxScrollExtent -
+        (_correctedMaxScrollExtent ?? oldPosition.maxScrollExtent);
+    _correctedMaxScrollExtent = null;
     // Only ever armed for uncompleting (see _TaskRowState._handleToggle),
     // whose regrown row lands at the very top of the whole scrollable. That
     // growth always displaces whatever the user currently sees at the
@@ -204,6 +216,7 @@ class _StableViewScrollPosition extends ScrollPositionWithSingleContext {
       );
     }
     if (willCorrect) {
+      _correctedMaxScrollExtent = newPosition.maxScrollExtent;
       correctPixels(pixels + grew);
       return false;
     }
@@ -1912,10 +1925,16 @@ class _TodoPageState extends ConsumerState<TodoPage>
       }
     });
 
-    for (final t in batch.tasks) {
-      await repo.upsertTask(t);
-      remoteSync.pushTodoTaskInBackground(t);
-    }
+    await saveTaskListMove(
+      repo,
+      remoteSync,
+      task: placed,
+      writes: [
+        for (final t in batch.tasks)
+          if (t.id != task.id) t,
+        placed,
+      ],
+    );
     if (!mounted) return;
     ref.invalidate(todoTasksProvider(sourceListId));
     ref.invalidate(todoTasksProvider(destListId));
@@ -2126,6 +2145,12 @@ class _TodoPageState extends ConsumerState<TodoPage>
   /// user was scrolled deep enough into it that the insertion point was
   /// still above their viewport.
   bool _uncompleteGrowsAboveViewport(TodoTask task) {
+    // A tick un-done before it was committed — a second click on a row still
+    // playing its check — leaves the row in the active section, where it
+    // collapses and regrows in place. Nothing enters from the completed
+    // section, so correcting for that regrowth only pushes the view down.
+    if (!task.completed) return false;
+
     // Starred tasks always land in the starred section — the topmost segment
     // of the active list, always above the completed section.
     if (task.starred) return true;

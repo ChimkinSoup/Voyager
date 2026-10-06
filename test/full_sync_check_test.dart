@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/core/dev/full_sync_check.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
@@ -184,6 +185,22 @@ void main() {
     final report = await check.run();
 
     expect(report.gaps.single.id, bench.id);
+  });
+
+  test('untouched built-in plans are not gaps, edited ones are', () async {
+    final workouts = DriftWorkoutRepository(db);
+    await workouts.ensureSeeded();
+
+    expect((await check.run()).safeToWipe, isTrue);
+
+    final cycle = (await workouts.listPlans()).firstWhere(
+      (p) => p.id == kCycleWorkoutPlanId,
+    );
+    await workouts.upsertPlan(cycle.copyWith(cycleLength: 5));
+
+    final report = await check.run();
+
+    expect(report.gaps.single.id, kCycleWorkoutPlanId);
   });
 
   test('a collection answered from the cache is not vouched for', () async {

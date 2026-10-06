@@ -690,18 +690,33 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     // The completion log is kept against disk, not the popup's snapshot: the
     // task may have been ticked elsewhere while the popup was open.
     final onDisk = await repo.getTask(next.id) ?? before;
-    await repo.upsertTasksBatch(writes);
-    // The edited row carries title/notes changes, so it goes up on its own to
-    // keep its char-ops; the rest of the batch is sort-order shuffling only.
     final edited = writes.where((t) => t.id == next.id).firstOrNull;
-    if (edited != null) {
-      // Background: a throw here skipped the cascade push and the repeating
-      // task's roll-forward below, both of which are already owed.
-      remoteSync.pushTodoTaskInBackground(edited);
+    if (listMoved) {
+      final moved = edited ?? next;
+      await saveTaskListMove(
+        repo,
+        remoteSync,
+        task: moved,
+        writes: [
+          for (final t in writes)
+            if (t.id != next.id) t,
+          moved,
+        ],
+      );
+    } else {
+      await repo.upsertTasksBatch(writes);
+      // The edited row carries title/notes changes, so it goes up on its own
+      // to keep its char-ops; the rest of the batch is sort-order shuffling
+      // only.
+      if (edited != null) {
+        // Background: a throw here skipped the cascade push and the repeating
+        // task's roll-forward below, both of which are already owed.
+        remoteSync.pushTodoTaskInBackground(edited);
+      }
+      await remoteSync.pushTodoTasksBatch(
+        writes.where((t) => t.id != next.id).toList(),
+      );
     }
-    await remoteSync.pushTodoTasksBatch(
-      writes.where((t) => t.id != next.id).toList(),
-    );
     await recordTodoCompletionChange(
       repo: repo,
       sync: remoteSync,

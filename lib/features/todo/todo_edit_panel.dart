@@ -563,7 +563,11 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     if (stored == null) return;
 
     final effectiveDue = clearDueDate ? null : (dueDate ?? _dueDate);
-    final listMoved = listId != null && listId != widget.task.listId;
+    // Against the stored row too: the move put an optimistic copy carrying
+    // the destination into the page, and by the time the read above returns
+    // the page may already have handed that copy to this panel as
+    // widget.task, which would make the move look like no change (BUG-227).
+    final listMoved = listId != null && listId != stored.listId;
     final dueSortChanged =
         !widget.task.isSubtask &&
         (reorderDueDate || clearDueDate || effectiveDue != widget.task.dueDate);
@@ -594,37 +598,37 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     );
 
     if (listMoved) {
-      final sourceListId = widget.task.listId;
+      final sourceListId = stored.listId;
       final destSiblings = await repo.listTasks(listId);
       final destActive = activeTopLevelTasks(destSiblings);
       final batch = applyTaskListMove(baseUpdate, destActive);
-      TodoTask? savedTask;
-      for (final task in batch.tasks) {
-        final toSave = task.id == widget.task.id
-            ? task.copyWith(
-                title: baseUpdate.title,
-                listId: baseUpdate.listId,
-                notes: baseUpdate.notes,
-                clearNotes: baseUpdate.notes == null,
-                dueDate: baseUpdate.dueDate,
-                clearDueDate: clearDueDate,
-                dueDateSetAt: baseUpdate.dueDateSetAt,
-                clearDueDateSetAt: clearDueDate,
-              )
-            : task;
-        if (toSave.id == widget.task.id) {
-          savedTask = toSave;
-        }
-        await repo.upsertTask(toSave);
-        remoteSync.pushTodoTaskInBackground(toSave);
-      }
+      final savedTask = batch.tasks
+          .firstWhere((t) => t.id == widget.task.id, orElse: () => baseUpdate)
+          .copyWith(
+            title: baseUpdate.title,
+            listId: baseUpdate.listId,
+            notes: baseUpdate.notes,
+            clearNotes: baseUpdate.notes == null,
+            dueDate: baseUpdate.dueDate,
+            clearDueDate: clearDueDate,
+            dueDateSetAt: baseUpdate.dueDateSetAt,
+            clearDueDateSetAt: clearDueDate,
+          );
+      await saveTaskListMove(
+        repo,
+        remoteSync,
+        task: savedTask,
+        writes: [
+          for (final task in batch.tasks)
+            if (task.id != widget.task.id) task,
+          savedTask,
+        ],
+      );
       ref.invalidate(todoTasksProvider);
       ref.invalidate(todoTasksProvider(sourceListId));
       ref.invalidate(todoTasksProvider(listId));
       ref.invalidate(allTodoTasksProvider);
-      if (savedTask != null) {
-        widget.onTaskOptimistic?.call(savedTask);
-      }
+      widget.onTaskOptimistic?.call(savedTask);
       widget.onSortBatchApplied?.call(batch);
       logTodoSortDebug(
         ref.read(todoSortDebugLoggerProvider),
@@ -1176,10 +1180,15 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                       // or not its content fills it, which on a tall panel
                       // would leave the reorder list a strip at the bottom
                       // and the space the fields did not use as a gap under
-                      // it.
+                      // it. With no subtasks there is nothing to reserve
+                      // room for, so the fields may take the whole height:
+                      // on a short panel the cap hid the image strip and
+                      // "Add subtask" above an empty area (BUG-070).
                       ConstrainedBox(
                         constraints: BoxConstraints(
-                          maxHeight: constraints.maxHeight * 0.6,
+                          maxHeight: _subtasks.isEmpty
+                              ? constraints.maxHeight
+                              : constraints.maxHeight * 0.6,
                         ),
                         child: VoyagerScrollView(
                           // The top inset clears the title's floating label,

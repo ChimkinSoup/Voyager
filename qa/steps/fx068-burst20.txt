@@ -1,0 +1,46 @@
+activate
+wheel 1400 900 200
+wait 1000
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+click 273 173
+wait 120
+wait 2500
+move 1400 1400
+shot fx18-19-burst20

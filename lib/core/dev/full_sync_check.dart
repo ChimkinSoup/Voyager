@@ -147,6 +147,13 @@ class FullSyncCheck {
               kStarterExercises.contains(record.data['name'])) {
             continue;
           }
+          // The built-in plans are seeded the same way, under fixed ids.
+          if (name == FirestoreCollections.workoutPlans &&
+              parseVersion(record.data) == 0 &&
+              (record.id == kWeeklyWorkoutPlanId ||
+                  record.id == kCycleWorkoutPlanId)) {
+            continue;
+          }
           gaps.add(
             SyncGap(collection: name, id: record.id, reason: 'not in cloud'),
           );

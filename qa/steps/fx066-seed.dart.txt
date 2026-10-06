@@ -1,0 +1,15 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final tr = c.read(todoRepositoryProvider);
+final work = TodoListModel(id: 'fx066-work', createdAt: now, updatedAt: now, version: 1, name: 'FX Work');
+final home = TodoListModel(id: 'fx066-home', createdAt: now, updatedAt: now, version: 1, name: 'FX Home');
+for (final l in [work, home]) { await tr.upsertList(l); r.pushTodoList(l); }
+final parent = TodoTask(id: 'fx066-parent', createdAt: now, updatedAt: now, version: 1, listId: 'fx066-work', title: 'FX066 parent', sortOrder: 1000000);
+await tr.upsertTask(parent); await r.pushTodoTaskNow(parent);
+for (var i = 0; i < 3; i++) { final s = TodoTask(id: 'fx066-sub-$i', createdAt: now, updatedAt: now, version: 1, listId: 'fx066-work', parentTaskId: 'fx066-parent', title: 'FX066 sub $i', sortOrder: i * 1000); await tr.upsertTask(s); await r.pushTodoTaskNow(s); }
+for (var i = 0; i < 2; i++) { final t = TodoTask(id: 'fx066-plain-$i', createdAt: now, updatedAt: now, version: 1, listId: 'fx066-work', title: 'FX plain task $i', sortOrder: 2000000 + i * 1000); await tr.upsertTask(t); await r.pushTodoTaskNow(t); }
+final perf = TodoListModel(id: 'p9-perf', createdAt: now, updatedAt: now, version: 1, name: 'Perf 200');
+await tr.upsertList(perf); r.pushTodoList(perf);
+for (var i = 0; i < 200; i++) { final t = TodoTask(id: 'p9-perf-$i', createdAt: now, updatedAt: now, version: 1, listId: 'p9-perf', title: 'Perf task ${i.toString().padLeft(3, '0')}', sortOrder: i * 1000, notes: i % 10 == 0 ? 'perf note $i' : null); await tr.upsertTask(t); await r.pushTodoTaskNow(t); }
+debugPrint('FX066 seeded');
+invalidateAllDataProvidersIn(c);

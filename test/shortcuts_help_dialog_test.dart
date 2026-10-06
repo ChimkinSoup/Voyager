@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -92,6 +94,49 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Keyboard shortcuts'), findsNothing);
   });
+
+  // Closing the list hands focus back to the field it was opened from, and a
+  // one-line field on desktop selects all of its text when it regains focus,
+  // so the next keystroke used to replace the draft (BUG-069).
+  testWidgets(
+    'closing the list leaves the caret where it was in the field',
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+    (tester) async {
+      final controller = TextEditingController(text: 'draft text');
+      addTearDown(controller.dispose);
+      final focusNode = FocusNode();
+      addTearDown(focusNode.dispose);
+      late BuildContext fieldContext;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                fieldContext = context;
+                return TextField(controller: controller, focusNode: focusNode);
+              },
+            ),
+          ),
+        ),
+      );
+      focusNode.requestFocus();
+      await tester.pump();
+      controller.selection = const TextSelection.collapsed(offset: 10);
+      await tester.pump();
+
+      unawaited(showShortcutsHelpDialog(fieldContext, const AppSettings()));
+      await tester.pumpAndSettle();
+      expect(find.text('Keyboard shortcuts'), findsOneWidget);
+      expect(focusNode.hasFocus, isFalse);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.text('Keyboard shortcuts'), findsNothing);
+
+      expect(focusNode.hasFocus, isTrue);
+      expect(controller.selection, const TextSelection.collapsed(offset: 10));
+    },
+  );
 
   testWidgets(
     'Ctrl+/ shows a keybind saved after startup',

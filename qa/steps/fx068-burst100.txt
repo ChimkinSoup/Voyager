@@ -1,0 +1,29 @@
+activate
+wheel 1400 900 200
+wait 1500
+click 273 173
+wait 100
+click 273 173
+wait 100
+click 273 173
+wait 100
+click 273 173
+wait 100
+click 273 173
+wait 100
+click 273 173
+wait 100
+click 273 173
+wait 100
+click 273 173
+wait 100
+click 273 173
+wait 100
+click 273 173
+wait 100
+shot fx18-17-burst100-f0
+wait 1000
+shot fx18-17-burst100-f1
+wait 3000
+move 1400 1400
+shot fx18-17-burst100-f2
