@@ -83,6 +83,7 @@ typedef _JournalRowSignature = ({
   String body,
   DateTime entryDate,
   bool isSelected,
+  bool hasImages,
 });
 
 /// Below this the editor's metadata row stacks the mood bar above its
@@ -143,6 +144,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   // actually displayed at the end of every build.
   final _rowWidgetCache = <String, _JournalEntryListTile>{};
   final _rowSignatureCache = <String, _JournalRowSignature>{};
+
+  // Entry ids with at least one image attached, refreshed from
+  // mediaOwnersWithImagesProvider in build. Read by _rowFor for the date
+  // row's image icon.
+  var _entriesWithImages = const <String>{};
   Timer? _metadataSaveTimer;
   Timer? _bodySaveTimer;
   Future<void>? _flushInProgress;
@@ -1408,11 +1414,13 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     JournalEntry entry, {
     required bool isSelected,
   }) {
+    final hasImages = _entriesWithImages.contains(entry.id);
     final signature = (
       title: entry.title,
       body: entry.body,
       entryDate: entry.entryDate,
       isSelected: isSelected,
+      hasImages: hasImages,
     );
     final cached = _rowWidgetCache[entry.id];
     if (cached != null && _rowSignatureCache[entry.id] == signature) {
@@ -1422,6 +1430,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       key: ValueKey(entry.id),
       entry: entry,
       isSelected: isSelected,
+      hasImages: hasImages,
       titlePreview: _listTitlePreview,
       bodyPreview: _listBodyPreview,
       onTap: () => unawaited(_openEntry(entry.id)),
@@ -2372,6 +2381,17 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     _journalRepository = ref.read(journalRepositoryProvider);
     _journalWriteCoordinator = ref.read(journalWriteCoordinatorProvider);
     _journalDebugLogger = ref.read(journalDebugLoggerProvider);
+    // Watched so attaching or removing an image adds or drops the row's
+    // image icon (the todo page's trigger).
+    _entriesWithImages =
+        ref
+            .watch(
+              mediaOwnersWithImagesProvider(
+                FirestoreCollections.journalEntries,
+              ),
+            )
+            .valueOrNull ??
+        const <String>{};
     ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
       if (request?.kind == QuickCaptureKind.journal) {
         // One after another: the notepad's offscreen open can outlast the
@@ -4025,6 +4045,7 @@ class _JournalEntryListTile extends StatelessWidget {
     super.key,
     required this.entry,
     required this.isSelected,
+    required this.hasImages,
     required this.titlePreview,
     required this.bodyPreview,
     required this.onTap,
@@ -4032,6 +4053,7 @@ class _JournalEntryListTile extends StatelessWidget {
 
   final JournalEntry entry;
   final bool isSelected;
+  final bool hasImages;
   final ValueNotifier<String> titlePreview;
   final ValueNotifier<String> bodyPreview;
   final VoidCallback onTap;
@@ -4138,7 +4160,19 @@ class _JournalEntryListTile extends StatelessWidget {
                 },
               ),
             ],
-            Text('$dateLabel · $timeLabel', style: dateStyle),
+            Row(
+              children: [
+                Expanded(
+                  child: Text('$dateLabel · $timeLabel', style: dateStyle),
+                ),
+                if (hasImages)
+                  Icon(
+                    PhosphorIconsRegular.image,
+                    size: 10,
+                    color: dateStyle?.color,
+                  ),
+              ],
+            ),
           ],
         ),
         onTap: onTap,

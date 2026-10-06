@@ -1005,6 +1005,16 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   Widget build(BuildContext context) {
     final entriesAsync = ref.watch(allDreamEntriesProvider.settled);
     final settings = ref.watch(settingsProvider.settled).valueOrNull;
+    // Watched here rather than in _buildEntryList, which runs inside a
+    // LayoutBuilder after build, so attaching or removing an image adds or
+    // drops the row's image icon (the todo page's trigger).
+    final entriesWithImages =
+        ref
+            .watch(
+              mediaOwnersWithImagesProvider(FirestoreCollections.dreamEntries),
+            )
+            .valueOrNull ??
+        const <String>{};
     if (!_appliedSavedWidth && settings != null) {
       _splitWidth = settings.dreamSplitWidth;
       _appliedSavedWidth = true;
@@ -1108,7 +1118,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
                             ? Curves.easeOut
                             : VoyagerSpring.moveCurve,
                         width: compact ? totalWidth : listWidth,
-                        child: _buildEntryList(sorted),
+                        child: _buildEntryList(sorted, entriesWithImages),
                       ),
                     if (!compact)
                       ResizablePaneDivider(
@@ -1201,7 +1211,10 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     return true;
   }
 
-  Widget _buildEntryList(List<DreamEntry> entries) {
+  Widget _buildEntryList(
+    List<DreamEntry> entries,
+    Set<String> entriesWithImages,
+  ) {
     return Column(
       children: [
         Padding(
@@ -1250,6 +1263,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
                       child: _DreamEntryListTile(
                         entry: entry,
                         isSelected: entry.id == _selectedEntryId,
+                        hasImages: entriesWithImages.contains(entry.id),
                         titlePreview: _listTitlePreview,
                         bodyPreview: _listBodyPreview,
                         onTap: () {
@@ -1407,6 +1421,7 @@ class _DreamEntryListTile extends StatelessWidget {
   const _DreamEntryListTile({
     required this.entry,
     required this.isSelected,
+    required this.hasImages,
     required this.titlePreview,
     required this.bodyPreview,
     required this.onTap,
@@ -1414,6 +1429,7 @@ class _DreamEntryListTile extends StatelessWidget {
 
   final DreamEntry entry;
   final bool isSelected;
+  final bool hasImages;
   final ValueNotifier<String> titlePreview;
   final ValueNotifier<String> bodyPreview;
   final VoidCallback onTap;
@@ -1496,7 +1512,19 @@ class _DreamEntryListTile extends StatelessWidget {
                   );
                 },
               ),
-            Text('$dateLabel · $timeLabel', style: dateStyle),
+            Row(
+              children: [
+                Expanded(
+                  child: Text('$dateLabel · $timeLabel', style: dateStyle),
+                ),
+                if (hasImages)
+                  Icon(
+                    PhosphorIconsRegular.image,
+                    size: 10,
+                    color: dateStyle?.color,
+                  ),
+              ],
+            ),
           ],
         ),
         onTap: onTap,
