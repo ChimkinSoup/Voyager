@@ -10,9 +10,9 @@ The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10
 |---|--:|--:|--:|
 | Blocker | 7 | 2 (BUG-001, BUG-003) | 5 |
 | Major | 29 | 5 (BUG-002 (see caveat), BUG-004, BUG-010, BUG-043 (dup), BUG-045) | 24 |
-| Minor | 143 | 11 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-050, BUG-051, BUG-052, BUG-054, BUG-055, BUG-167, BUG-226) | 132 |
+| Minor | 143 | 12 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-048, BUG-050, BUG-051, BUG-052, BUG-054, BUG-055, BUG-167, BUG-226) | 131 |
 | Cosmetic | 47 | 4 (BUG-007, BUG-008, BUG-042, BUG-049) | 43 |
-| **Total** | **226** | **22** | **204** |
+| **Total** | **226** | **23** | **203** |
 
 "Fixed" means re-tested in the running app by a phase re-check or FV (TEST_PLAN.md "Fix verification"). "Open" means no fix was recorded, so each entry stands as it was last observed. Unit-test-only claims don't count as fixed.
 
@@ -24,6 +24,7 @@ Caveats:
 - `flutter test` on 2026-10-05 (after the BUG-042/045/047 fixes): 4,355 passed, 18 skipped, 0 failed. BUG-042, BUG-045, BUG-046 and BUG-047 were verified in the app the same day (TEST_PLAN.md FV-13).
 - `flutter test` on 2026-10-05 (after the BUG-049…055 fixes, BUG-053 skipped): 4,363 passed, 18 skipped, 0 failed. BUG-049, BUG-050, BUG-051, BUG-052, BUG-054 and BUG-055 were verified in the app the same day (TEST_PLAN.md FV-14).
 - `flutter test` on 2026-10-05 (after three code-review follow-ups to BUG-049/052/054, see FV-14): 4,365 passed, 18 skipped, 0 failed.
+- `flutter test` on 2026-10-05 (after the BUG-048 fix): 4,371 passed, 18 skipped, 0 failed. BUG-048 was verified in the app the same day (TEST_PLAN.md FV-15).
 
 ### Counts by phase (severity × phase)
 
@@ -700,6 +701,7 @@ Entry format:
 - Expected: one journal, "Alpha".
 - Actual: two journals: "Journal" (`__legacy__`, 0 entries) and "Alpha" (`qa/shots/p7-07-created.png`). "Journal" stays in the switcher and the Manage list for good: its ⋮ menu has Rename / Change color / Settings but no Delete (`p7-38-legacymenu.png`; `deleteJournalList` returns early for `legacyJournalId`). In "All journals", New entry defaults to it ("New entry in Journal") after a restart.
 - Notes: deliberate in the code (`createJournalList`, `lib/features/journal/journal_list_actions.dart`: "if (allJournals.isEmpty) … legacy"), presumably so a delete-with-move always has a target. Same shape as BUG-012 (To-Do's hidden built-in list). Whether a user should be stuck with it is Juno's call; it can at least be renamed.
+- Notes (2026-10-05, fixed in the working tree, verified in the running app, FV-15 passed; working tree on `e5d1b10`, new account qa-040): the first journal is now the only one. Any journal but the last can be deleted, the built-in "Journal" included; the last one has no Delete. "Move" sends the entries to the Default-view journal, or else the oldest one left, and a trash restore whose journal is gone does the same (blocked when none is left). In the app: "Alpha" alone after the logged steps; with Gamma as Default view, deleting Alpha offered and did `Move to "Gamma"`; an entry restored after its journal was deleted went to Beta (`qa/shots/b048-*.png`). Tests: `test/journal_first_journal_only_test.dart`, new cases in `test/trash_service_test.dart`.
 
 ### BUG-049 [Phase 7] Delete-journal dialog says "This journal has 1 entries" and its "Yes" button doesn't say what it does
 - Severity: Cosmetic

@@ -64,6 +64,7 @@ import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:voyager/features/hotkeys/quick_journal_entry.dart';
 import 'package:voyager/features/journal/journal_entry_actions.dart';
 import 'package:voyager/features/journal/journal_entry_delete.dart';
+import 'package:voyager/features/journal/journal_list_actions.dart';
 import 'package:voyager/features/journal/journal_manage_sheet.dart';
 import 'package:voyager/features/journal/on_this_day_overlay.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
@@ -680,14 +681,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     // second, unasked-for change of context.
     final live = journals.where((j) => j.deletedAt == null).toList();
     if (live.any((j) => j.id == openJournalId)) return;
+    // The journal its entries were moved to, when they were: read from the
+    // database, as deleteJournalList does.
+    final settings = await ref.read(settingsRepositoryProvider).getSettings();
+    if (!mounted) return;
     final fallback =
-        live
-            .cast<Journal?>()
-            .firstWhere(
-              (j) => j!.id == legacyJournalId,
-              orElse: () => live.isNotEmpty ? live.first : null,
-            )
-            ?.id ??
+        fallbackJournalFor(
+          live,
+          defaultJournalId: settings.defaultJournalId,
+        )?.id ??
         legacyJournalId;
     final liveIds = {for (final journal in live) journal.id};
     setState(() {
@@ -859,9 +861,16 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   }
 
   Future<void> _createEntryWhenReady({required bool fromUnfiledEdit}) async {
-    await _ensureDefaultJournal();
+    final repo = ref.read(journalRepositoryProvider);
+    var journals = await repo.listJournals();
     if (!mounted) return;
-    final journals = await ref.read(journalRepositoryProvider).listJournals();
+    // Only an account with no journal at all gets the built-in one. Making it
+    // next to the others would bring back a "Journal" the user deleted.
+    if (journals.isEmpty) {
+      await _ensureDefaultJournal();
+      if (!mounted) return;
+      journals = await repo.listJournals();
+    }
     if (!mounted || journals.isEmpty) return;
     _createEntryOptimistic(journals, fromUnfiledEdit: fromUnfiledEdit);
   }

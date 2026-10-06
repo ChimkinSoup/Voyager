@@ -333,8 +333,17 @@ void main() {
       },
     );
 
-    test('an entry whose journal is in the trash too goes to the default '
-        'journal', () async {
+    test('an entry whose journal is in the trash too goes to the oldest '
+        'journal left', () async {
+      await journals.upsertJournal(
+        Journal(
+          id: 'newer',
+          name: 'Newer',
+          createdAt: created.add(const Duration(days: 1)),
+          updatedAt: created,
+        ),
+      );
+      await addJournal(legacyJournalId, 'Journal');
       await addJournal('j', 'Work');
       await addEntry('e', 'j', 'Standup');
       await journals.softDeleteEntry('e');
@@ -348,6 +357,44 @@ void main() {
       expect(entry.deletedAt, isNull);
       expect(entry.journalId, legacyJournalId);
       expect((await journals.getJournal('j'))!.deletedAt, isNotNull);
+    });
+
+    test('an entry whose journal is in the trash too goes to the default-view '
+        'journal when one is set', () async {
+      await addJournal(legacyJournalId, 'Journal');
+      await addJournal('alpha', 'Alpha');
+      final settingsRepo = DriftSettingsRepository(db);
+      await settingsRepo.saveSettings(
+        (await settingsRepo.getSettings()).copyWith(defaultJournalId: 'alpha'),
+      );
+      await addJournal('j', 'Work');
+      await addEntry('e', 'j', 'Standup');
+      await journals.softDeleteEntry('e');
+      await deleteJournalWithEntries('j');
+
+      final item = (await trash.list()).firstWhere((i) => i.id == 'e');
+
+      expect(await trash.restore(item), 'Alpha');
+      expect((await journals.getEntry('e'))!.journalId, 'alpha');
+    });
+
+    test('an entry with no journal left to go to stays in the trash', () async {
+      await addJournal('j', 'Work');
+      await addEntry('e', 'j', 'Standup');
+      await journals.softDeleteEntry('e');
+      await deleteJournalWithEntries('j');
+
+      final item = (await trash.list()).firstWhere((i) => i.id == 'e');
+
+      await expectLater(
+        trash.restore(item),
+        throwsA(
+          isA<TrashRestoreBlocked>()
+              .having((b) => b.parentNoun, 'noun', 'journal')
+              .having((b) => b.parentTitle, 'title', 'Work'),
+        ),
+      );
+      expect((await journals.getEntry('e'))!.deletedAt, isNotNull);
     });
 
     test('an entry whose journal is live goes back into it', () async {
@@ -400,6 +447,7 @@ void main() {
     });
 
     test('a row already back is reported, not rewritten', () async {
+      await addJournal(legacyJournalId, 'Journal');
       await addEntry('e', legacyJournalId, 'Standup');
       await journals.softDeleteEntry('e');
       final item = (await trash.list()).single;

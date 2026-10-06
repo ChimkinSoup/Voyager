@@ -3,6 +3,7 @@ import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/soft_delete/restore_contract.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/soft_delete_policy.dart';
+import 'package:voyager/core/utils/fallback_container.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
@@ -156,20 +157,28 @@ class TrashService {
       if (parentId == parent.fallbackId) continue;
       final parentRow = rows[parent.collection]?[parentId];
       if (parentRow != null && parentRow.deletedAt == null) continue;
-      if (!parent.hasFallback) {
-        throw TrashRestoreBlocked(
-          parentNoun: trashKinds[parent.collection]!.noun,
-          parentTitle: parentRow == null
-              ? null
-              : trashKinds[parent.collection]!.title(parentRow.data),
-        );
+      TrashRestoreBlocked blocked() => TrashRestoreBlocked(
+        parentNoun: trashKinds[parent.collection]!.noun,
+        parentTitle: parentRow == null
+            ? null
+            : trashKinds[parent.collection]!.title(parentRow.data),
+      );
+      if (!parent.hasFallback) throw blocked();
+      final String? targetId;
+      if (parent.toRemaining) {
+        final target = await _remainingContainer(parent, rows);
+        if (target == null) throw blocked();
+        targetId = target.id;
+        fallbackName = target.kind.title(target.data);
+      } else {
+        targetId = parent.fallbackId;
+        fallbackName = parent.fallbackName;
       }
-      fallbackName = parent.fallbackName;
       // The rows that went with it sat in the same container, and follow it.
       for (final row in [root, ...members]) {
         if (row.kind.collection == root.kind.collection &&
             row.data[parent.key] == storedId) {
-          (rewrites[_key(row)] ??= {})[parent.key] = parent.fallbackId;
+          (rewrites[_key(row)] ??= {})[parent.key] = targetId;
         }
       }
     }
@@ -311,6 +320,26 @@ class TrashService {
         if (dependent.keys.any((key) => row.data[key] == owner.id)) yield row;
       }
     }
+  }
+
+  /// The live container a [TrashParent.orRemaining] row goes to: the one it
+  /// prefers, or else the oldest. Null when none is left.
+  Future<TrashRow?> _remainingContainer(
+    TrashParent parent,
+    Map<String, Map<String, TrashRow>> rows,
+  ) async {
+    final live = [
+      for (final row in rows[parent.collection]?.values ?? const <TrashRow>[])
+        if (row.deletedAt == null) row,
+    ];
+    return pickFallbackContainer(
+      live,
+      id: (row) => parent.localId(row.id),
+      // Every row the app writes has one; a row without sorts as the oldest.
+      createdAt: (row) =>
+          parseFirestoreDate(row.data['createdAt']) ?? DateTime.utc(0),
+      preferredId: await parent.preferred!(_db),
+    );
   }
 
   Future<Map<String, Map<String, TrashRow>>> _readAll() async {

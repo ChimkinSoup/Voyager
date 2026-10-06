@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
+import 'package:voyager/core/utils/fallback_container.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
@@ -67,7 +67,6 @@ Future<void> changeJournalListColor(
 Future<Journal?> createJournalList(BuildContext context, WidgetRef ref) async {
   final allJournals = ref.read(journalsProvider).valueOrNull ?? [];
   final palette = ref.read(colorPaletteProvider);
-  final defaultColor = Theme.of(context).colorScheme.primary.toARGB32();
   final assigner = paletteFromItems(
     allJournals.map((j) => j.colorValue),
     palette,
@@ -94,18 +93,6 @@ Future<Journal?> createJournalList(BuildContext context, WidgetRef ref) async {
     createdAt: now,
     updatedAt: now,
   );
-
-  if (allJournals.isEmpty) {
-    final legacy = Journal(
-      id: legacyJournalId,
-      name: 'Journal',
-      colorValue: defaultColor,
-      createdAt: now,
-      updatedAt: now,
-    );
-    await repo.upsertJournal(legacy);
-    remoteSync.pushJournal(legacy);
-  }
 
   await repo.upsertJournal(created);
   remoteSync.pushJournal(created);
@@ -142,12 +129,7 @@ Future<void> _syncJournalDeleteRemote({
   required DeleteContainerChoice choice,
   required int entryCount,
   required List<String> affectedEntryIds,
-  Journal? fallbackJournalToPush,
 }) async {
-  if (fallbackJournalToPush != null) {
-    remoteSync.pushJournal(fallbackJournalToPush);
-  }
-
   if (choice != DeleteContainerChoice.cancel && entryCount > 0) {
     for (final id in affectedEntryIds) {
       final stored = await repository.getEntry(id);
@@ -158,7 +140,25 @@ Future<void> _syncJournalDeleteRemote({
   await remoteSync.pushJournalById(journal.id);
 }
 
+/// Where a deleted journal's entries go with "Move": the journal set as the
+/// default view, or failing that the oldest one left. Null when no journal
+/// other than [excludingId] is left.
+Journal? fallbackJournalFor(
+  List<Journal> journals, {
+  String? excludingId,
+  String? defaultJournalId,
+}) {
+  return pickFallbackContainer(
+    journals.where((j) => j.id != excludingId && j.deletedAt == null),
+    id: (j) => j.id,
+    createdAt: (j) => j.createdAt,
+    preferredId: defaultJournalId,
+  );
+}
+
 /// Deletes a journal locally first (fast), updates providers, then syncs remotely.
+///
+/// The last journal can't be deleted: its entries would have nowhere to go.
 ///
 /// [onConfirmed] runs immediately after the user confirms, before local I/O.
 Future<bool> deleteJournalList(
@@ -170,31 +170,27 @@ Future<bool> deleteJournalList(
   VoidCallback? onConfirmed,
   VoidCallback? onLocalDeleteFailed,
 }) async {
-  if (journal.id == legacyJournalId) return false;
+  // Read from the database, as the trash's restore does, so the two pick the
+  // same journal even while the settings provider is still loading.
+  final settings = await ref.read(settingsRepositoryProvider).getSettings();
+  final fallback = fallbackJournalFor(
+    allJournals,
+    excludingId: journal.id,
+    defaultJournalId: settings.defaultJournalId,
+  );
+  if (fallback == null || !context.mounted) return false;
 
-  // Read before the first await: the `orElse` below runs after two of them,
-  // and reaching for `Theme.of(context)` there throws if the page was torn
-  // down mid-delete — which the catch reports as a delete failure that never
-  // happened, leaving the journal half-deleted.
-  final fallbackColor = Theme.of(context).colorScheme.primary.toARGB32();
-
-  final fallbackName =
-      allJournals
-          .where((item) => item.id == legacyJournalId)
-          .map((item) => item.name)
-          .firstOrNull ??
-      'Journal';
   final choice = await showDeleteContainerDialog(
     context,
     title: 'Delete "${journal.name}"?',
     message: switch (entryCount) {
       0 => 'This journal has no entries and will be removed.',
       1 =>
-        'This journal has 1 entry. Move it to "$fallbackName", or delete everything.',
+        'This journal has 1 entry. Move it to "${fallback.name}", or delete everything.',
       _ =>
-        'This journal has $entryCount entries. Move them to "$fallbackName", or delete everything.',
+        'This journal has $entryCount entries. Move them to "${fallback.name}", or delete everything.',
     },
-    moveLabel: 'Move to "$fallbackName"',
+    moveLabel: 'Move to "${fallback.name}"',
     hasContents: entryCount > 0,
     deleteAllLabel: 'Delete all entries',
   );
@@ -204,7 +200,6 @@ Future<bool> deleteJournalList(
 
   final repo = ref.read(journalRepositoryProvider);
   final remoteSync = ref.read(remoteSyncServiceProvider);
-  Journal? fallbackJournalToPush;
   var affectedEntryIds = const <String>[];
 
   try {
@@ -220,24 +215,7 @@ Future<bool> deleteJournalList(
       await repo.softDeleteEntriesInJournal(journal.id, at: deletedAt);
     } else if (choice == DeleteContainerChoice.moveToDefault &&
         entryCount > 0) {
-      final fallback = allJournals.firstWhere(
-        (item) => item.id == legacyJournalId,
-        orElse: () {
-          final now = utcNow();
-          return Journal(
-            id: legacyJournalId,
-            name: 'Journal',
-            colorValue: fallbackColor,
-            createdAt: now,
-            updatedAt: now,
-          );
-        },
-      );
-      if (!allJournals.any((item) => item.id == legacyJournalId)) {
-        await repo.upsertJournal(fallback);
-        fallbackJournalToPush = fallback;
-      }
-      await repo.reassignEntriesJournal(journal.id, legacyJournalId);
+      await repo.reassignEntriesJournal(journal.id, fallback.id);
     }
 
     await repo.softDeleteJournal(journal.id, at: deletedAt);
@@ -275,7 +253,6 @@ Future<bool> deleteJournalList(
       choice: choice,
       entryCount: entryCount,
       affectedEntryIds: affectedEntryIds,
-      fallbackJournalToPush: fallbackJournalToPush,
     ).catchError((Object error, StackTrace stackTrace) {
       FlutterError.reportError(
         FlutterErrorDetails(

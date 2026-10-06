@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/constants/journal_constants.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/widgets/voyager_menu_catalog.dart';
@@ -151,7 +150,9 @@ class _JournalManageDialogState extends ConsumerState<_JournalManageDialog> {
                       },
                       itemBuilder: (context) => buildCatalogMenu(
                         context,
-                        from: journal.id == legacyJournalId
+                        // The last journal stays: its entries would have
+                        // nowhere to go.
+                        from: _journals.length == 1
                             ? defaultConfigurableManageMenuEntries
                             : configurableManageMenuEntries,
                       ),

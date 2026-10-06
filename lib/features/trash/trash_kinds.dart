@@ -5,6 +5,7 @@ import 'package:voyager/core/constants/todo_constants.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/text/prose_markup.dart';
+import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 
 /// The page a deleted item came from — the trash's filter chips.
@@ -52,6 +53,7 @@ class TrashParent {
     : hasFallback = false,
       fallbackId = null,
       fallbackName = null,
+      preferred = null,
       localId = _sameId;
 
   /// A container whose feature has a default one to restore into instead.
@@ -62,7 +64,19 @@ class TrashParent {
     required this.fallbackId,
     required String this.fallbackName,
     this.localId = _sameId,
-  }) : hasFallback = true;
+  }) : hasFallback = true,
+       preferred = null;
+
+  /// A container whose feature has no fixed default: the row goes to one of
+  /// those still there, the one [preferred] names or else the oldest.
+  const TrashParent.orRemaining(
+    this.collection,
+    this.key, {
+    required Future<String?> Function(AppDatabase db) this.preferred,
+    this.localId = _sameId,
+  }) : hasFallback = true,
+       fallbackId = null,
+       fallbackName = null;
 
   final String collection;
   final String key;
@@ -73,6 +87,14 @@ class TrashParent {
   final bool hasFallback;
   final String? fallbackId;
   final String? fallbackName;
+
+  /// The local id of the container a [TrashParent.orRemaining] row prefers.
+  /// Set only by that constructor.
+  final Future<String?> Function(AppDatabase db)? preferred;
+
+  /// Whether the row goes to a remaining container rather than a fixed
+  /// [fallbackId] (which, null, means the top level).
+  bool get toRemaining => preferred != null;
 }
 
 /// How one synced collection appears in the trash.
@@ -125,6 +147,15 @@ class TrashKind {
 
 String _sameId(String id) => id;
 
+/// The journal set as the default view, where a deleted journal's entries go
+/// too (`fallbackJournalFor`).
+Future<String?> _defaultJournalId(AppDatabase db) async {
+  final row = await (db.select(
+    db.settingsTable,
+  )..where((t) => t.id.equals(1))).getSingleOrNull();
+  return row?.defaultJournalId;
+}
+
 String? _name(Map<String, dynamic> data) => data['name'] as String?;
 
 String? _field(Map<String, dynamic> data, String key) => data[key] as String?;
@@ -173,11 +204,10 @@ final _kinds = <TrashKind>[
     title: _titleOrBody,
     wipe: ['title', 'body', 'richBodyJson', 'tags', 'customQuote'],
     parents: [
-      TrashParent.orDefault(
+      TrashParent.orRemaining(
         FirestoreCollections.journals,
         'journalId',
-        fallbackId: legacyJournalId,
-        fallbackName: 'Journal',
+        preferred: _defaultJournalId,
         localId: journalReferenceIdFromFirestore,
       ),
     ],

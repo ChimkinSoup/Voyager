@@ -37,16 +37,16 @@ void main() {
   testWidgets('one entry is "1 entry", and the buttons name their action', (
     tester,
   ) async {
-    await pumpJournalPage(tester);
+    await pumpJournalPage(tester, seedSecondJournal: true);
     await _openDeleteDialog(tester);
 
     expect(
       find.text(
-        'This journal has 1 entry. Move it to "Journal", or delete everything.',
+        'This journal has 1 entry. Move it to "Second", or delete everything.',
       ),
       findsOneWidget,
     );
-    expect(find.text('Move to "Journal"'), findsOneWidget);
+    expect(find.text('Move to "Second"'), findsOneWidget);
     expect(find.text('Delete all entries'), findsOneWidget);
     expect(find.text('Yes'), findsNothing);
 
@@ -55,9 +55,12 @@ void main() {
     await disposeJournalPage(tester);
   });
 
-  testWidgets('the move target is called by its current name', (tester) async {
+  testWidgets('the move target is the default-view journal, by its current '
+      'name', (tester) async {
     final db = await pumpJournalPage(
       tester,
+      seedSecondJournal: true,
+      defaultJournalId: legacyJournalId,
       seedEntries: (now) => [
         for (var i = 0; i < 2; i++)
           JournalEntry(
@@ -103,7 +106,11 @@ void main() {
   });
 
   testWidgets('an empty journal offers a single Delete', (tester) async {
-    await pumpJournalPage(tester, seedEntries: (_) => const []);
+    await pumpJournalPage(
+      tester,
+      seedSecondJournal: true,
+      seedEntries: (_) => const [],
+    );
     await _openDeleteDialog(tester);
 
     expect(

@@ -20,8 +20,8 @@ Future<void> _pumpFrames(WidgetTester tester, int count) async {
 void main() {
   setUpAll(() => driftRuntimeOptions.dontWarnAboutMultipleDatabases = true);
 
-  // On a new account the first journal comes with the empty built-in
-  // "Journal" (BUG-048), which is where the page falls back to.
+  // On a new account "Beta" is made first, as the last journal can't be
+  // deleted; it is the empty journal the page falls back to.
   for (final emptyAccount in [false, true]) {
     testWidgets(
       'deleting the open journal takes its entry out of the editor '
@@ -32,17 +32,19 @@ void main() {
         // Create "Gamma"; closing Manage opens it with a new entry.
         await tester.tap(find.byTooltip('Manage journals'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('New journal'));
-        await tester.pumpAndSettle();
-        await tester.enterText(
-          find.descendant(
-            of: find.byType(AlertDialog).last,
-            matching: find.byType(EditableText),
-          ),
-          'Gamma',
-        );
-        await tester.tap(find.text('Create'));
-        await tester.pumpAndSettle();
+        for (final name in [if (emptyAccount) 'Beta', 'Gamma']) {
+          await tester.tap(find.text('New journal'));
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.descendant(
+              of: find.byType(AlertDialog).last,
+              matching: find.byType(EditableText),
+            ),
+            name,
+          );
+          await tester.tap(find.text('Create'));
+          await tester.pumpAndSettle();
+        }
         await tester.tap(find.text('Close'));
         await _pumpFrames(tester, 8);
 
