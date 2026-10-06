@@ -24,12 +24,15 @@ const searchHarnessJournalId = 'harness-journal';
 ///
 /// [vimEnabled] publishes the user's Vim keybindings setting to the page's
 /// fields, which changes who owns Escape.
+///
+/// [remote] stands in for Firestore, for callers that check what was uploaded.
 Future<AppDatabase> pumpSearchPage(
   WidgetTester tester, {
   required List<JournalEntry> Function(DateTime now) entries,
   List<DreamEntry> Function(DateTime now)? dreams,
   bool vimEnabled = false,
   List<Override> extraOverrides = const [],
+  InMemorySyncRepository? remote,
 }) async {
   final db = AppDatabase.inMemory();
   addTearDown(db.close);
@@ -57,7 +60,9 @@ Future<AppDatabase> pumpSearchPage(
   final container = ProviderContainer(
     overrides: [
       databaseProvider.overrideWithValue(db),
-      syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
+      syncRepositoryProvider.overrideWithValue(
+        remote ?? InMemorySyncRepository(),
+      ),
       // remoteSyncServiceProvider reaches the weather service, whose real
       // client wants a Firebase app.
       weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),

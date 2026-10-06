@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
+import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/domain/models/dream_models.dart';
@@ -19,6 +20,7 @@ class SearchDreamSaveHelper {
     required String body,
     required String notes,
     DateTime? entryDate,
+    bool publish = true,
   }) async {
     DreamEntry? result;
     try {
@@ -52,7 +54,32 @@ class SearchDreamSaveHelper {
       return null;
     }
     if (result == null) return null;
+    // Local-only, as [SearchEntrySaveHelper.saveEntry] explains.
+    if (!publish) {
+      remoteSync.cancelDocument(FirestoreCollections.dreamEntries, baseline.id);
+      try {
+        await OutboxSyncWorker.recordCrdtOverwrite(
+          collection: FirestoreCollections.dreamEntries,
+          documentId: baseline.id,
+        );
+      } catch (error, stackTrace) {
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'SearchDreamSaveHelper',
+            context: ErrorDescription('while queueing a dream from Search'),
+          ),
+        );
+      }
+      return result;
+    }
+    return publishEntry(result!);
+  }
 
+  /// Publishes [entry], a row already on disk, and returns what was published
+  /// (or [entry] itself if publishing failed).
+  Future<DreamEntry> publishEntry(DreamEntry entry) async {
     // Same reason as the journal side (see [SearchEntrySaveHelper.saveEntry]):
     // this dialog keeps no CRDT editing session, so the debounced upload
     // scheduled above would push a new body with no character operations
@@ -60,8 +87,8 @@ class SearchDreamSaveHelper {
     // Reported separately from the save so a publish failure cannot discard a
     // row that is already on disk.
     try {
-      remoteSync.cancelDocument(FirestoreCollections.dreamEntries, baseline.id);
-      return await remoteSync.forceOverwriteDreamEntryText(result!);
+      remoteSync.cancelDocument(FirestoreCollections.dreamEntries, entry.id);
+      return await remoteSync.forceOverwriteDreamEntryText(entry);
     } catch (error, stackTrace) {
       FlutterError.reportError(
         FlutterErrorDetails(
@@ -71,7 +98,7 @@ class SearchDreamSaveHelper {
           context: ErrorDescription('while publishing a dream from Search'),
         ),
       );
-      return result;
+      return entry;
     }
   }
 }

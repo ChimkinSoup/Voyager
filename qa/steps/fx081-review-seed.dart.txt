@@ -1,0 +1,13 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final cr = c.read(calendarRepositoryProvider);
+const pink = 4294228196;
+final second = CalendarEvent(id: 'fx081-wed2', createdAt: now, updatedAt: now, version: 1, calendarId: 'fx081-cal', title: 'Wed second', start: DateTime(2026, 10, 21), end: DateTime(2026, 10, 21, 23, 59), isFullDay: true, colorValue: pink);
+final span = CalendarEvent(id: 'fx081-span', createdAt: now, updatedAt: now, version: 1, calendarId: 'fx081-cal', title: 'Overnight span', start: DateTime(2026, 10, 21, 22), end: DateTime(2026, 10, 22, 2), isFullDay: false, colorValue: 0xFF7C9EFF);
+await cr.upsertEvent(second); await cr.upsertEvent(span);
+await r.pushRecords(FirestoreCollections.calendarEvents, [second, span]);
+final jr = c.read(journalRepositoryProvider);
+final en = JournalEntry(id: 'fx-review-moodless', createdAt: now, updatedAt: now, version: 1, journalId: 'fx084-j', title: 'Moodless entry', body: 'quokkaroo has no mood yet', entryDate: DateTime(2026, 10, 4, 9));
+await jr.upsertEntry(en); r.pushJournalEntryNow(en);
+debugPrint('FXREVIEW seeded mood=${en.mood} weather=${en.weatherIcon}');
+invalidateAllDataProvidersIn(c);

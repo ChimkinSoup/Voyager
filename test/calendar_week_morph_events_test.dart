@@ -89,11 +89,14 @@ List<CalendarEvent> _events() {
       color: 0xFFD0A030,
     ),
     // More than a month cell shows: the rest sit behind "+N" in month view.
+    // Timed, so the week timeline shows all six (its all-day shelf would fold
+    // them into "+N more" too).
     for (var i = 0; i < 6; i++)
       event(
         'crowd$i',
-        _at(6, 0),
-        _at(6, 23).add(const Duration(minutes: 59)),
+        _at(6, 9 + i),
+        _at(6, 9 + i).add(const Duration(minutes: 30)),
+        fullDay: false,
         color: 0xFF208080,
       ),
   ];

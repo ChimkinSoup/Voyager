@@ -1,0 +1,28 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final cr = c.read(calendarRepositoryProvider);
+const pink = 4294228196;
+final cal = Calendar(id: 'fx081-cal', createdAt: now, updatedAt: now, version: 1, name: 'FX Cal', colorValue: pink);
+await cr.upsertCalendar(cal);
+final evs = <CalendarEvent>[];
+CalendarEvent ev(String id, String title, DateTime s, DateTime e, {bool full = false, RecurrenceRule rec = RecurrenceRule.none}) => CalendarEvent(id: id, createdAt: now, updatedAt: now, version: 1, calendarId: 'fx081-cal', title: title, start: s, end: e, isFullDay: full, colorValue: pink, recurrence: rec);
+for (var i = 1; i <= 25; i++) { final n = i.toString().padLeft(2, '0'); evs.add(ev('fx081-ad$n', 'D50 allday $n', DateTime(2026, 10, 22), DateTime(2026, 10, 22, 23, 59), full: true)); evs.add(ev('fx081-tm$n', 'D50 timed $n', DateTime(2026, 10, 22, 9), DateTime(2026, 10, 22, 9, 30))); }
+evs.add(ev('fx081-mon', 'Mon review', DateTime(2026, 10, 19, 10), DateTime(2026, 10, 19, 11)));
+evs.add(ev('fx081-wedad', 'Wed holiday', DateTime(2026, 10, 21), DateTime(2026, 10, 21, 23, 59), full: true));
+evs.add(ev('fx083-walk', 'Daily walk', DateTime(2026, 10, 1, 7), DateTime(2026, 10, 1, 7, 30), rec: const RecurrenceRule(frequency: EventRecurrence.daily)));
+evs.add(ev('fx083-standup', 'Weekly standup', DateTime(2026, 10, 5, 9), DateTime(2026, 10, 5, 9, 30), rec: const RecurrenceRule(frequency: EventRecurrence.weekly)));
+for (var i = 0; i < 5; i++) { evs.add(ev('fx083-oct6-$i', 'Oct6 item ${i + 1}', DateTime(2026, 10, 6, 10 + i), DateTime(2026, 10, 6, 10 + i, 30))); }
+for (final e in evs) { await cr.upsertEvent(e); }
+await r.pushRecords(FirestoreCollections.calendars, [cal]);
+await r.pushRecords(FirestoreCollections.calendarEvents, evs);
+final jr = c.read(journalRepositoryProvider);
+final j = Journal(id: 'fx084-j', createdAt: now, updatedAt: now, version: 1, name: 'FX Journal');
+await jr.upsertJournal(j); r.pushJournal(j);
+final en = JournalEntry(id: 'fx084-entry', createdAt: now, updatedAt: now, version: 1, journalId: 'fx084-j', title: 'Zebra entry', body: 'zebracorn sighting log', entryDate: DateTime(2026, 10, 5, 20));
+await jr.upsertEntry(en); r.pushJournalEntryNow(en);
+final dream = DreamEntry(id: 'fx085-dream', createdAt: now, updatedAt: now, version: 1, title: 'Unicorn dream', body: 'a unicornfish swam past', entryDate: DateTime(2026, 10, 5, 6));
+await c.read(dreamRepositoryProvider).upsertEntry(dream); r.pushDreamEntryNow(dream);
+final s = await c.read(settingsRepositoryProvider).getSettings();
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(lastViewedCalendarId: 'fx081-cal'));
+debugPrint('FX081 seeded ${evs.length} events weekStartsMonday=${s.weekStartsOnMonday}');
+invalidateAllDataProvidersIn(c);

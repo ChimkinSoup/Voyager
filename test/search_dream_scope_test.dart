@@ -204,7 +204,7 @@ void main() {
     await disposeSearchPage(tester);
   });
 
-  testWidgets('Close discards what the dream popup was given', (tester) async {
+  testWidgets('Cancel discards what the dream popup was given', (tester) async {
     _useTallWindow(tester);
     final db = await pumpSearchPage(
       tester,
@@ -227,7 +227,7 @@ void main() {
       'Typed then thrown away',
     );
     await settle(tester);
-    await tester.tap(find.text('Close'));
+    await tester.tap(find.text('Cancel'));
     await settle(tester);
 
     final after = await _readDream(db);

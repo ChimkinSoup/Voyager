@@ -937,6 +937,99 @@ class _DreamScopeChip extends StatelessWidget {
   return (tags: tags, keywords: keywords.join(' '));
 }
 
+/// How long typing in a Search dialog pauses before it is autosaved.
+const _searchDialogAutosaveDelay = Duration(milliseconds: 1500);
+
+/// List editing for a Search dialog's multi-line field, as on the Journal and
+/// Dreams pages: Enter continues a list, Tab indents, Backspace on a bare
+/// marker removes it. [onEdited] runs after every edit.
+class _ListField {
+  _ListField(this.controller, {required this.onEdited})
+    : _lastText = controller.text;
+
+  final TextEditingController controller;
+  final VoidCallback onEdited;
+  String _lastText;
+
+  void onChanged(String _) {
+    applyListEditing(controller: controller, previousText: _lastText);
+    _lastText = controller.text;
+    onEdited();
+  }
+
+  /// The half [onChanged] can't see: neither key changes the text on its
+  /// own. Without it Tab fell through to focus traversal, and Backspace behind
+  /// a bare marker deleted one character of it instead of the marker.
+  KeyEventResult onKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.tab) {
+      final outdent = HardwareKeyboard.instance.isShiftPressed;
+      // A snippet trigger or tabstop at the caret takes Tab first
+      // (SNIPPET.md §4.5); the key goes on up to the snippet layer.
+      if (!VimTextScope.snippetWantsTab(node.context) &&
+          handleListTab(controller: controller, outdent: outdent)) {
+        onChanged(controller.text);
+        return KeyEventResult.handled;
+      }
+    }
+    if (event.logicalKey == LogicalKeyboardKey.backspace &&
+        handleListBackspace(controller: controller)) {
+      onChanged(controller.text);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+}
+
+/// What both Search dialogs share around saving: the queue their saves run
+/// in, and the autosave.
+///
+/// The autosave writes locally once typing pauses, so a crash or kill loses
+/// at most the last moment of it; publishing waits for the dialog to close
+/// (see [SearchEntrySaveHelper.saveEntry] for why).
+mixin _SearchDialogSaving<T extends StatefulWidget> on State<T> {
+  /// Serialises the dialog's saves. A publish wipes and re-seeds the remote
+  /// operation log, which two overlapping calls must never interleave.
+  Future<void> _saveChain = Future<void>.value();
+
+  Timer? _autosaveTimer;
+
+  /// Whether an autosave wrote locally and nothing has published since.
+  bool _publishOwed = false;
+
+  Future<void> _save({bool publish = true});
+
+  void _scheduleAutosave() {
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer(_searchDialogAutosaveDelay, () {
+      if (mounted) unawaited(_save(publish: false));
+    });
+  }
+
+  /// Queues [link] behind the dialog's earlier saves. A failure is reported
+  /// as saving [what], after [onError], and the queue keeps moving.
+  void _enqueueSave(
+    String what,
+    Future<void> Function() link, {
+    VoidCallback? onError,
+  }) {
+    _saveChain = _saveChain.then((_) => link()).catchError((
+      Object error,
+      StackTrace stackTrace,
+    ) {
+      onError?.call();
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'SearchPage',
+          context: ErrorDescription('while saving $what from Search'),
+        ),
+      );
+    });
+  }
+}
+
 class _SearchEntryDialog extends ConsumerStatefulWidget {
   const _SearchEntryDialog({
     required this.entry,
@@ -952,7 +1045,8 @@ class _SearchEntryDialog extends ConsumerStatefulWidget {
   ConsumerState<_SearchEntryDialog> createState() => _SearchEntryDialogState();
 }
 
-class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
+class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog>
+    with _SearchDialogSaving<_SearchEntryDialog> {
   late final TextEditingController _titleController;
   late final TextEditingController _bodyController;
   late final FocusNode _titleFocusNode;
@@ -965,11 +1059,16 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
   /// with). [_isDirty] is the difference between it and the live buffer.
   late _EntryBaseline _baseline;
 
-  /// Serialises this dialog's saves. Each one wipes and re-seeds the entry's
-  /// remote operation log, which two overlapping calls must never interleave.
-  Future<void> _saveChain = Future<void>.value();
-
   late final Future<void> Function() _lifecycleFlushCallback;
+
+  /// The entry as the dialog opened it, which Cancel puts back.
+  late final JournalEntry _opened;
+
+  /// Set by Cancel, so the save it makes can clear a mood or weather the
+  /// entry never had instead of writing the defaults the controls show.
+  bool _revertingToOpened = false;
+
+  late final _ListField _body;
 
   @override
   void initState() {
@@ -977,8 +1076,10 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     _lifecycleFlushCallback = _lifecycleFlush;
     PendingFlushRegistry.instance.register(_lifecycleFlushCallback);
     _entry = widget.entry;
+    _opened = widget.entry;
     _titleController = TextEditingController(text: _entry.title);
     _bodyController = TextEditingController(text: _entry.body);
+    _body = _ListField(_bodyController, onEdited: _scheduleAutosave);
 
     _titleFocusNode = FocusNode();
     _titleFocusNode.onKeyEvent = (node, event) {
@@ -998,7 +1099,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
       return KeyEventResult.ignored;
     };
 
-    // _handleBodyKey is installed by TagHighlightedTextField (see its
+    // _body.onKey is installed by TagHighlightedTextField (see its
     // onKeyEvent param) rather than assigned here: the tag completion popup
     // owns focusNode.onKeyEvent so it can take Enter while it's open, and
     // chains through to this handler otherwise.
@@ -1037,40 +1138,25 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
         _entry.journalId != b.journalId;
   }
 
-  KeyEventResult _handleBodyKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.enter &&
-        !HardwareKeyboard.instance.isShiftPressed) {
-      _saveAndClose();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
   JournalWriteCoordinator? _coordinator;
   RemoteSyncService? _remoteSync;
   JournalRepository? _journalRepository;
 
   bool _isDatePickerOpen = false;
 
-  /// Set by the two gestures that mean *throw this away*: the Close button and
-  /// Escape. Everything else that ends the dialog — Save, Enter, a click on
-  /// the backdrop, a lifecycle flush — still writes the buffer.
-  bool _discarded = false;
-
   @override
   void dispose() {
     PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
+    _autosaveTimer?.cancel();
     // Was `if (!_isSaved)`, a flag set on the first line of _save and never
     // reset. It conflated "a save has ever run" with "the buffer is
     // persisted", so any lifecycle flush — alt-tabbing away on desktop is one,
     // a shell branch change is another — latched it, and every edit made
     // afterwards was silently dropped by Close and Escape alike. Dirtiness is
     // the real question, and _save answers it again on its own first line so
-    // an unconditional close can't queue a duplicate write either.
-    if (_isDirty && !_discarded) {
-      unawaited(_save());
-    }
+    // an unconditional close can't queue a duplicate write either. Called
+    // even when clean: an autosave may still owe its publish.
+    unawaited(_save());
     _titleController.dispose();
     _bodyController.dispose();
     _titleFocusNode.dispose();
@@ -1089,15 +1175,36 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     _journal?.colorValue ?? Theme.of(context).colorScheme.primary.toARGB32(),
   );
 
-  /// Persists the buffer if it differs from [_baseline], and publishes it.
+  /// Persists the buffer if it differs from [_baseline] and, unless
+  /// [publish] is false (the autosave), publishes it — or, with nothing new to
+  /// write, publishes what an earlier autosave left owed.
   ///
   /// Saving unconditionally was not free: it bumped `version`, restamped
   /// `updatedAt` and re-uploaded a document nothing had changed, and every one
   /// of those uploads deleted the entry's entire remote operation log and
   /// re-seeded it. Since the dialog is barrier-dismissible, a mis-tap was
   /// enough to do all of that to an untouched entry.
-  Future<void> _save() {
-    if (!_isDirty) return _saveChain;
+  @override
+  Future<void> _save({bool publish = true}) {
+    // Cached references, so nothing calls ref.read() during dispose().
+    final helper = SearchEntrySaveHelper(
+      coordinator: _coordinator ?? ref.read(journalWriteCoordinatorProvider),
+      remoteSync: _remoteSync ?? ref.read(remoteSyncServiceProvider),
+      journalRepository:
+          _journalRepository ?? ref.read(journalRepositoryProvider),
+    );
+    final what = 'entry ${_entry.id}';
+
+    if (!_isDirty) {
+      if (publish) {
+        _enqueueSave(what, () async {
+          if (!_publishOwed) return;
+          _publishOwed = false;
+          _adopt(await helper.publishEntry(_entry));
+        });
+      }
+      return _saveChain;
+    }
 
     // Read synchronously, before anything is awaited, so the snapshot and the
     // dirty flag can't disagree with each other.
@@ -1118,55 +1225,65 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
     // its own save.
     final previous = _baseline;
     _baseline = snapshot;
+    // What reaches disk: the shown values, except that Cancel puts back a
+    // mood or weather the entry never had as empty.
+    final mood = _revertingToOpened && _opened.mood == null
+        ? null
+        : snapshot.mood;
+    final weatherIcon = _revertingToOpened && _opened.weatherIcon == null
+        ? null
+        : snapshot.weatherIcon;
 
-    // Cached references, so nothing calls ref.read() during dispose().
-    final helper = SearchEntrySaveHelper(
-      coordinator: _coordinator ?? ref.read(journalWriteCoordinatorProvider),
-      remoteSync: _remoteSync ?? ref.read(remoteSyncServiceProvider),
-      journalRepository:
-          _journalRepository ?? ref.read(journalRepositoryProvider),
-    );
-    final entryId = _entry.id;
-
-    _saveChain = _saveChain
-        .then((_) async {
-          // Re-read rather than closing over `_entry`: an earlier link in the
-          // chain may have replaced it with the row it published.
-          final updated = await helper.saveEntry(
-            baseline: _entry,
-            title: snapshot.title,
-            body: snapshot.body,
-            mood: snapshot.mood,
-            weatherIcon: snapshot.weatherIcon,
-            journalId: snapshot.journalId,
-            entryDate: snapshot.entryDate,
-          );
-          if (updated == null) {
-            // Nothing reached disk. Re-arm so a later close retries instead of
-            // dropping the edit on the floor — unless the user has typed since,
-            // in which case a newer snapshot already owns the baseline.
-            if (identical(_baseline, snapshot)) _baseline = previous;
-            return;
-          }
-          if (mounted) setState(() => _entry = updated);
-          widget.onSaved(updated);
-        })
-        .catchError((Object error, StackTrace stackTrace) {
-          // Keeps the queue moving; SearchEntrySaveHelper already reports what it
-          // caught, so this only ever sees something it re-threw.
+    _enqueueSave(
+      what,
+      () async {
+        // Re-read rather than closing over `_entry`: an earlier link in the
+        // chain may have replaced it with the row it published.
+        final updated = await helper.saveEntry(
+          baseline: _entry,
+          title: snapshot.title,
+          body: snapshot.body,
+          mood: mood,
+          weatherIcon: weatherIcon,
+          journalId: snapshot.journalId,
+          entryDate: snapshot.entryDate,
+          publish: publish,
+        );
+        if (updated == null) {
+          // Nothing reached disk. Re-arm so a later close retries instead of
+          // dropping the edit on the floor — unless the user has typed since,
+          // in which case a newer snapshot already owns the baseline.
           if (identical(_baseline, snapshot)) _baseline = previous;
-          FlutterError.reportError(
-            FlutterErrorDetails(
-              exception: error,
-              stack: stackTrace,
-              library: 'SearchPage',
-              context: ErrorDescription(
-                'while saving entry $entryId from Search',
-              ),
-            ),
-          );
-        });
+          // An autosave that landed earlier was never shown (see [_adopt]);
+          // show it now rather than leave the list behind the disk.
+          if (publish && _publishOwed) widget.onSaved(_entry);
+          return;
+        }
+        _publishOwed = !publish;
+        _adopt(updated, notify: publish);
+      },
+      // SearchEntrySaveHelper already reports what it caught, so this only
+      // ever sees something it re-threw.
+      onError: () {
+        if (identical(_baseline, snapshot)) _baseline = previous;
+      },
+    );
     return _saveChain;
+  }
+
+  /// Takes in the row a save wrote. Set even after the dialog has closed: the
+  /// publish that closing queues reads it.
+  ///
+  /// An autosave passes [notify] false. The row changes nothing this dialog
+  /// shows, and handing it to [_SearchEntryDialog.onSaved] rebuilt the whole
+  /// results list behind the dialog and reloaded every journal entry provider
+  /// app-wide on each pause in typing — the Journal page's autosave avoids the
+  /// same refetch for the same reason. The publish on close reports the row.
+  void _adopt(JournalEntry row, {bool notify = true}) {
+    _entry = row;
+    if (!notify) return;
+    if (mounted) setState(() {});
+    widget.onSaved(row);
   }
 
   Future<void> _lifecycleFlush() => _save();
@@ -1174,16 +1291,25 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
   /// Closes first, then saves: the popup disappearing is the user's
   /// confirmation that Enter landed, so it must not wait on the write.
   void _saveAndClose() {
+    _autosaveTimer?.cancel();
     unawaited(_save());
     if (mounted) Navigator.pop(context);
   }
 
-  /// Leaves without writing: the buffer is dropped and the entry stays as it
-  /// was on disk. [dispose] is what would otherwise persist it, so the flag has
-  /// to be set before the pop rather than passed out of it.
-  void _discardAndClose() {
-    _discarded = true;
-    if (mounted) Navigator.pop(context);
+  /// Puts the entry back as it was when the dialog opened, writing the
+  /// original over anything autosaved meanwhile, then closes.
+  void _cancelAndClose() {
+    _revertingToOpened = true;
+    _titleController.text = _opened.title;
+    _bodyController.text = _opened.body;
+    _mood = _opened.mood ?? kDefaultMood;
+    _weatherIcon = _opened.weatherIcon ?? 'sunny';
+    _entry = _entry.copyWith(
+      entryDate: _opened.entryDate,
+      journalId: _opened.journalId,
+      bumpVersion: false,
+    );
+    _saveAndClose();
   }
 
   Future<void> _changeEntryDateAndTime(BuildContext buttonContext) async {
@@ -1250,16 +1376,14 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
       onSubmit: () async {
         if (context.mounted) Navigator.pop(context);
       },
-      // Escape reads as Close, not as a second Save. The route installs its own
-      // DismissIntent action for the same key; this one sits below it, so the
-      // lookup that starts at the focused field finds it first. Nothing here
-      // touches the barrier, which keeps saving — a stray click outside is not
-      // a decision to discard.
+      // Escape keeps the edit, as a click outside does. The route installs its
+      // own DismissIntent action for the same key; this one sits below it, so
+      // the lookup that starts at the focused field finds it first.
       child: Actions(
         actions: <Type, Action<Intent>>{
           DismissIntent: CallbackAction<DismissIntent>(
             onInvoke: (_) {
-              _discardAndClose();
+              _saveAndClose();
               return null;
             },
           ),
@@ -1292,6 +1416,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                           40,
                           16,
                         ),
+                        onChanged: (_) => _scheduleAutosave(),
                         onSubmitted: (_) => _saveAndClose(),
                       ),
                       Positioned(
@@ -1346,7 +1471,10 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                         child: MoodGradientSlider(
                           value: _mood,
                           accent: _accentColor,
-                          onChanged: (value) => setState(() => _mood = value),
+                          onChanged: (value) {
+                            setState(() => _mood = value);
+                            _scheduleAutosave();
+                          },
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -1361,9 +1489,12 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                           minWidth: 40,
                           minHeight: 40,
                         ),
-                        onSelected: (entry) => setState(
-                          () => _weatherIcon = entry.weatherIconValue!,
-                        ),
+                        onSelected: (entry) {
+                          setState(
+                            () => _weatherIcon = entry.weatherIconValue!,
+                          );
+                          _scheduleAutosave();
+                        },
                         itemBuilder: (context) =>
                             buildCatalogMenu(context, from: weatherMenuEntries),
                       ),
@@ -1392,7 +1523,8 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
                         controller: _bodyController,
                         focusNode: _bodyFocusNode,
                         tagScope: TagScope.journal,
-                        onKeyEvent: _handleBodyKey,
+                        onKeyEvent: _body.onKey,
+                        onChanged: _body.onChanged,
                         cursorColor: _accentColor,
                         expands: true,
                         hintText: 'Start writing...',
@@ -1411,8 +1543,8 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog> {
           ),
           actions: [
             GlassButton(
-              onPressed: _discardAndClose,
-              label: 'Close',
+              onPressed: _cancelAndClose,
+              label: 'Cancel',
               dense: true,
             ),
             GlassButton(
@@ -1513,7 +1645,8 @@ class _SearchDreamDialog extends ConsumerStatefulWidget {
   ConsumerState<_SearchDreamDialog> createState() => _SearchDreamDialogState();
 }
 
-class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
+class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog>
+    with _SearchDialogSaving<_SearchDreamDialog> {
   late final TextEditingController _titleController;
   late final TextEditingController _bodyController;
   late final TextEditingController _notesController;
@@ -1521,16 +1654,10 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
   late final FocusNode _bodyFocusNode;
   late final FocusNode _notesFocusNode;
   late DreamEntry _entry;
-  String _lastNotesText = '';
 
   /// What the last save published (or, until then, what the dream was opened
   /// with). [_isDirty] is the difference between it and the live buffer.
   late _DreamBaseline _baseline;
-
-  /// Serialises this dialog's saves, for the same reason the journal one does:
-  /// each wipes and re-seeds the dream's remote operation log, which two
-  /// overlapping calls must never interleave.
-  Future<void> _saveChain = Future<void>.value();
 
   late final Future<void> Function() _lifecycleFlushCallback;
 
@@ -1539,9 +1666,14 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
 
   bool _isDatePickerOpen = false;
 
-  /// Set by the two gestures that mean *throw this away*: the Close button and
-  /// Escape. Everything else that ends the dialog still writes the buffer.
-  bool _discarded = false;
+  /// The dream as the dialog opened it, which Cancel puts back.
+  late final DreamEntry _opened;
+
+  late final _ListField _body;
+
+  /// The corner scratchpad, which continues lists as it does on the Dream
+  /// Journal page.
+  late final _ListField _notes;
 
   @override
   void initState() {
@@ -1549,10 +1681,12 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
     _lifecycleFlushCallback = _lifecycleFlush;
     PendingFlushRegistry.instance.register(_lifecycleFlushCallback);
     _entry = widget.entry;
+    _opened = widget.entry;
     _titleController = TextEditingController(text: _entry.title);
     _bodyController = TextEditingController(text: _entry.body);
     _notesController = TextEditingController(text: _entry.notes ?? '');
-    _lastNotesText = _notesController.text;
+    _body = _ListField(_bodyController, onEdited: _scheduleAutosave);
+    _notes = _ListField(_notesController, onEdited: _scheduleAutosave);
 
     _titleFocusNode = FocusNode();
     _titleFocusNode.onKeyEvent = (node, event) {
@@ -1576,7 +1710,7 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
     // The scratchpad has no completion popup to share the slot with, so this
     // one is assigned directly, exactly as the Dream Journal page does it.
     _notesFocusNode = FocusNode();
-    _notesFocusNode.onKeyEvent = _handleNotesKey;
+    _notesFocusNode.onKeyEvent = _notes.onKey;
 
     _baseline = _DreamBaseline(
       title: _entry.title,
@@ -1589,9 +1723,9 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
   @override
   void dispose() {
     PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
-    if (_isDirty && !_discarded) {
-      unawaited(_save());
-    }
+    _autosaveTimer?.cancel();
+    // Even when clean: an autosave may still owe its publish.
+    unawaited(_save());
     _titleController.dispose();
     _bodyController.dispose();
     _notesController.dispose();
@@ -1611,60 +1745,31 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
         _entry.entryDate != b.entryDate;
   }
 
-  KeyEventResult _handleBodyKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.enter &&
-        !HardwareKeyboard.instance.isShiftPressed) {
-      _saveAndClose();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
-  /// The scratchpad continues lists as it does on the Dream Journal page. No
-  /// save is scheduled off it: this dialog writes on close, not on a debounce.
-  void _handleNotesChanged(String _) {
-    applyListEditing(
-      controller: _notesController,
-      previousText: _lastNotesText,
-    );
-    _lastNotesText = _notesController.text;
-  }
-
-  /// The other half of the scratchpad's list editing — the part
-  /// [_handleNotesChanged] can't see, because neither key changes the text on
-  /// its own. Without it Tab fell through to focus traversal and left the note
-  /// entirely, and Backspace behind a bare marker deleted one character of it
-  /// instead of the marker.
-  KeyEventResult _handleNotesKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.tab) {
-      final outdent = HardwareKeyboard.instance.isShiftPressed;
-      // A snippet trigger or tabstop at the caret takes Tab first
-      // (SNIPPET.md §4.5); the key goes on up to the snippet layer.
-      if (!VimTextScope.snippetWantsTab(node.context) &&
-          handleListTab(controller: _notesController, outdent: outdent)) {
-        // Routed through the handler typing uses so _lastNotesText stays in
-        // step for the next keystroke.
-        _handleNotesChanged(_notesController.text);
-        return KeyEventResult.handled;
-      }
-    }
-    if (event.logicalKey == LogicalKeyboardKey.backspace) {
-      if (handleListBackspace(controller: _notesController)) {
-        _handleNotesChanged(_notesController.text);
-        return KeyEventResult.handled;
-      }
-    }
-    return KeyEventResult.ignored;
-  }
-
-  /// Persists the buffer if it differs from [_baseline], and publishes it.
+  /// Persists the buffer if it differs from [_baseline], and publishes it
+  /// unless [publish] is false.
   ///
   /// The same shape as [_SearchEntryDialogState._save], including why the
-  /// baseline moves before the write lands and why a failed write re-arms it.
-  Future<void> _save() {
-    if (!_isDirty) return _saveChain;
+  /// baseline moves before the write lands, why a failed write re-arms it and
+  /// how a clean save publishes what an autosave left owed.
+  @override
+  Future<void> _save({bool publish = true}) {
+    // Cached references, so nothing calls ref.read() during dispose().
+    final helper = SearchDreamSaveHelper(
+      coordinator: _coordinator ?? ref.read(dreamWriteCoordinatorProvider),
+      remoteSync: _remoteSync ?? ref.read(remoteSyncServiceProvider),
+    );
+    final what = 'dream ${_entry.id}';
+
+    if (!_isDirty) {
+      if (publish) {
+        _enqueueSave(what, () async {
+          if (!_publishOwed) return;
+          _publishOwed = false;
+          _adopt(await helper.publishEntry(_entry));
+        });
+      }
+      return _saveChain;
+    }
 
     // Read synchronously, before anything is awaited, so the snapshot and the
     // dirty flag can't disagree with each other.
@@ -1680,48 +1785,43 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
     final previous = _baseline;
     _baseline = snapshot;
 
-    // Cached references, so nothing calls ref.read() during dispose().
-    final helper = SearchDreamSaveHelper(
-      coordinator: _coordinator ?? ref.read(dreamWriteCoordinatorProvider),
-      remoteSync: _remoteSync ?? ref.read(remoteSyncServiceProvider),
-    );
-    final entryId = _entry.id;
-
-    _saveChain = _saveChain
-        .then((_) async {
-          final updated = await helper.saveEntry(
-            // Re-read rather than closing over a captured row: an earlier link in
-            // the chain may have replaced it with the one it published.
-            baseline: _entry,
-            title: snapshot.title,
-            body: snapshot.body,
-            notes: snapshot.notes,
-            entryDate: snapshot.entryDate,
-          );
-          if (updated == null) {
-            // Nothing reached disk. Re-arm so a later close retries instead of
-            // dropping the edit — unless the user has typed since, in which case a
-            // newer snapshot already owns the baseline.
-            if (identical(_baseline, snapshot)) _baseline = previous;
-            return;
-          }
-          if (mounted) setState(() => _entry = updated);
-          widget.onSaved(updated);
-        })
-        .catchError((Object error, StackTrace stackTrace) {
+    _enqueueSave(
+      what,
+      () async {
+        final updated = await helper.saveEntry(
+          // Re-read rather than closing over a captured row: an earlier link
+          // in the chain may have replaced it with the one it published.
+          baseline: _entry,
+          title: snapshot.title,
+          body: snapshot.body,
+          notes: snapshot.notes,
+          entryDate: snapshot.entryDate,
+          publish: publish,
+        );
+        if (updated == null) {
+          // Nothing reached disk. Re-arm so a later close retries instead of
+          // dropping the edit — unless the user has typed since, in which
+          // case a newer snapshot already owns the baseline.
           if (identical(_baseline, snapshot)) _baseline = previous;
-          FlutterError.reportError(
-            FlutterErrorDetails(
-              exception: error,
-              stack: stackTrace,
-              library: 'SearchPage',
-              context: ErrorDescription(
-                'while saving dream $entryId from Search',
-              ),
-            ),
-          );
-        });
+          if (publish && _publishOwed) widget.onSaved(_entry);
+          return;
+        }
+        _publishOwed = !publish;
+        _adopt(updated, notify: publish);
+      },
+      onError: () {
+        if (identical(_baseline, snapshot)) _baseline = previous;
+      },
+    );
     return _saveChain;
+  }
+
+  /// As [_SearchEntryDialogState._adopt].
+  void _adopt(DreamEntry row, {bool notify = true}) {
+    _entry = row;
+    if (!notify) return;
+    if (mounted) setState(() {});
+    widget.onSaved(row);
   }
 
   Future<void> _lifecycleFlush() => _save();
@@ -1729,16 +1829,19 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
   /// Closes first, then saves: the popup disappearing is the user's
   /// confirmation that Enter landed, so it must not wait on the write.
   void _saveAndClose() {
+    _autosaveTimer?.cancel();
     unawaited(_save());
     if (mounted) Navigator.pop(context);
   }
 
-  /// Leaves without writing: the buffer is dropped and the dream stays as it
-  /// was on disk. [dispose] is what would otherwise persist it, so the flag
-  /// has to be set before the pop rather than passed out of it.
-  void _discardAndClose() {
-    _discarded = true;
-    if (mounted) Navigator.pop(context);
+  /// Puts the dream back as it was when the dialog opened, writing the
+  /// original over anything autosaved meanwhile, then closes.
+  void _cancelAndClose() {
+    _titleController.text = _opened.title;
+    _bodyController.text = _opened.body;
+    _notesController.text = _opened.notes ?? '';
+    _entry = _entry.copyWith(entryDate: _opened.entryDate, bumpVersion: false);
+    _saveAndClose();
   }
 
   Future<void> _changeEntryDateAndTime(BuildContext buttonContext) async {
@@ -1785,12 +1888,12 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
       onSubmit: () async {
         if (context.mounted) Navigator.pop(context);
       },
-      // Escape reads as Close, not as a second Save — see the journal dialog.
+      // Escape keeps the edit — see the journal dialog.
       child: Actions(
         actions: <Type, Action<Intent>>{
           DismissIntent: CallbackAction<DismissIntent>(
             onInvoke: (_) {
-              _discardAndClose();
+              _saveAndClose();
               return null;
             },
           ),
@@ -1814,6 +1917,7 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
                     focusNode: _titleFocusNode,
                     textInputAction: TextInputAction.done,
                     accentColor: accent,
+                    onChanged: (_) => _scheduleAutosave(),
                     onSubmitted: (_) => _saveAndClose(),
                   ),
                   const SizedBox(height: 12),
@@ -1858,7 +1962,8 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
                                 controller: _bodyController,
                                 focusNode: _bodyFocusNode,
                                 tagScope: TagScope.dream,
-                                onKeyEvent: _handleBodyKey,
+                                onKeyEvent: _body.onKey,
+                                onChanged: _body.onChanged,
                                 cursorColor: accent,
                                 expands: true,
                                 hintText: 'Describe your dream...',
@@ -1885,7 +1990,7 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
                           controller: _notesController,
                           focusNode: _notesFocusNode,
                           accentColor: accent,
-                          onChanged: _handleNotesChanged,
+                          onChanged: _notes.onChanged,
                         ),
                       ],
                     ),
@@ -1896,8 +2001,8 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog> {
           ),
           actions: [
             GlassButton(
-              onPressed: _discardAndClose,
-              label: 'Close',
+              onPressed: _cancelAndClose,
+              label: 'Cancel',
               dense: true,
             ),
             GlassButton(

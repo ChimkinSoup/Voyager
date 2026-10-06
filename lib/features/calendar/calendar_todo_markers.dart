@@ -127,15 +127,55 @@ List<List<CalendarEvent?>> calendarPackWeekAllDayShelf({
   );
 }
 
+/// Most rows the pinned all-day shelf grows to. A busier day shows the first
+/// rows and a "+N more" in the last, as a month cell does, so the timeline
+/// below keeps its height for the whole week.
+const calendarWeekAllDayShelfMaxRows = 3;
+
 int calendarWeekAllDayShelfRowCount(List<List<CalendarEvent?>> packedColumns) {
   var maxRows = 0;
   for (final column in packedColumns) {
     if (column.length > maxRows) maxRows = column.length;
   }
-  return maxRows;
+  return maxRows.clamp(0, calendarWeekAllDayShelfMaxRows);
 }
 
-/// Pinned all-day shelf height for the visible week (shows every full-day event).
+/// Whether one shelf column has more rows than the shelf shows, so its last
+/// row is a "+N more" instead of an event.
+bool calendarWeekAllDayShelfFolds(List<CalendarEvent?> column, int rowCount) =>
+    rowCount > 0 && column.skip(rowCount).any((e) => e != null);
+
+/// Whether row [row] of shelf column [c] is folded into "+N more". False for
+/// a column outside the week, so callers can ask about either neighbour.
+bool calendarWeekAllDayShelfRowFolded(
+  List<List<CalendarEvent?>> packed,
+  int rowCount,
+  int c,
+  int row,
+) =>
+    c >= 0 &&
+    c < packed.length &&
+    row == rowCount - 1 &&
+    calendarWeekAllDayShelfFolds(packed[c], rowCount);
+
+/// The events one shelf column folds into its "+N more" row: everything from
+/// the last row down. Empty when the column fits.
+List<CalendarEvent> calendarWeekAllDayShelfOverflow(
+  List<CalendarEvent?> column,
+  int rowCount,
+) {
+  if (!calendarWeekAllDayShelfFolds(column, rowCount)) return const [];
+  return column.skip(rowCount - 1).whereType<CalendarEvent>().toList();
+}
+
+/// Pinned all-day shelf height for [rowCount] rows (see
+/// [calendarWeekAllDayShelfRowCount]).
+double calendarWeekAllDayShelfHeightForRows(int rowCount) => rowCount == 0
+    ? calendarWeekAllDayShelfHeight
+    : rowCount * calendarWeekAllDayEventRowHeight;
+
+/// Pinned all-day shelf height for the visible week, up to
+/// [calendarWeekAllDayShelfMaxRows] rows.
 double calendarWeekAllDayShelfHeightFor({
   required List<CalendarEvent> events,
   required List<DateTime> weekDays,
@@ -144,9 +184,9 @@ double calendarWeekAllDayShelfHeightFor({
     events: events,
     weekDays: weekDays,
   );
-  final maxRows = calendarWeekAllDayShelfRowCount(packed);
-  if (maxRows == 0) return calendarWeekAllDayShelfHeight;
-  return maxRows * calendarWeekAllDayEventRowHeight;
+  return calendarWeekAllDayShelfHeightForRows(
+    calendarWeekAllDayShelfRowCount(packed),
+  );
 }
 
 /// Last attached offset, or [lastKnownOffset] when detached or multiply attached.

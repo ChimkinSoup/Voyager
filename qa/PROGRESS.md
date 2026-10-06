@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 046.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 047.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -165,6 +165,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-043@example.com | 2026-10-06 (FV-18: BUG-066…070, + follow-up) | To-Do lists "FX Home" (`fx066-home`) and "Perf 200" (`p9-perf`: 200 seeded tasks, 000 and 001 completed, plus "draft textZ" with one image and "second draftQ"); "FX066 parent" (subtasks "FX066 sub 0–2", the same image) is in FX Home; "FX Work" deleted with its 2 tasks. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-044@example.com | 2026-10-06 (FV-19: BUG-071…075) | To-Do: built-in list renamed "Inbox" (holds "FX A trashed", restored from the trash) and "FX Alpha" (`fx071-alpha`, `0xFFE5C890`; "FX A0–A3", A3 completed, "FX A0 sub 0–1"; deleted with its tasks then restored). **Default view = FX Alpha.** Calendar "FX Cal" (`fx075-cal`): "MD weekend span" all-day Oct 10–13, "MD overnight" Oct 11 20:00 → Oct 12 02:00, "Repro noon" Oct 6 11:00–12:30. Journals "FX J-Alpha" (`fx228-ja`, **default view**; deleted with its entry then restored) and "FX J-Beta" (`fx228-jb`), one entry each (FV-20). FV-21: lists "Strays" (with "FX stray subtask") and "Gamma" in the trash; "Gamma task" restored into Inbox. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-045@example.com | 2026-10-06 (FV-22: BUG-076…080) | Calendar "FX Hol" (`fx079-hol`, green `0xFFA6D189` after the FV-22 colour change, was pink): "Daily walk" daily 07:00 from Oct 1 (exception Oct 16, override "Fri16 walk"), "Weekly standup" Mon 09:00 from Oct 5, "Monthly rent" all-day monthly from Oct 1, "Own blue" Oct 8 14:00 (`0xFF7C9EFF`). To-Do list "Cal Tasks" (`fx080-list`) with "Cal task A" due Oct 7 10:15 AM (open). Dark + Scatter; Vim off; week starts Monday. | Password `qavoyager2026`. |
+| voyager-qa-046@example.com | 2026-10-06 (FV-23: BUG-081…085) | Calendar "FX Cal" (`fx081-cal`, pink): Thu Oct 22 25 all-day "D50 allday 01–25" + 25 timed 09:00 "D50 timed 01–25"; "Mon review" Oct 19 10:00, "Wed holiday" Oct 21 all-day, "Daily walk" daily 07:00 from Oct 1, "Weekly standup" Mon 09:00 from Oct 5, "Oct6 item 1–5" Oct 6 10:00–14:00, "ok" Oct 19 12:00 and "Focus test ok" Oct 6 12:00 (made in FV-23), "Wed second" Oct 21 all-day and "Overnight span" Oct 21 22:00 → Oct 22 02:00 (FV-23 follow-up). Journal "FX Journal" (`fx084-j`) with "Zebra entry" (body "zebracorn sighting log\n- item one\n- item two ESCTEST KILLEDIT"); dream "Unicorn dream" (body "a unicornfish swam past"); "Moodless entry" (`fx-review-moodless`, body "quokkaroo has no mood yet KILL2", mood and weather null). Dark + Scatter; Vim off; week starts Monday. | Password `qavoyager2026`. |
 
 ---
 
@@ -379,6 +380,10 @@ One line per completed phase.
 ---
 
 ## 7. Handoff note
+
+**2026-10-06 (code-review follow-up to BUG-081…085):** bars stop at a neighbour's "+N more"; the event-panel refocus is desktop-only; the Search dialogs' autosave is local-only (outbox marker as crash net, publish on close) and Cancel clears a null mood/weather. Re-verified in the app on qa-046 (TEST_PLAN.md FV-23 follow-up). Full suite 4,450 passed. Session ended `SIGNED-OUT`.
+
+**2026-10-06 (BUG-081…085):** all five fixed and verified in the app (TEST_PLAN.md FV-23, qa-046). BUG-084 fixed as Juno chose: Esc saves, typing autosaves after 1.5 s, Close became Cancel (restores the entry as opened). The leftover empty database from FV-22 was wiped with `reset.ps1 -Force`, approved by Juno. Summary counts updated (54 fixed, 174 open). Full suite 4,446 passed. Session ended `SIGNED-OUT`.
 
 **2026-10-06 (BUG-076…080):** all five fixed and verified in the app (TEST_PLAN.md FV-22, qa-045). BUG-077's cause differs from the report: the labels were already on top, just unreadable over light blocks; fixed with an outline. BUG-079 fixed as Juno chose (events still on the old calendar colour follow the change). Summary counts updated (49 fixed, 179 open). Full suite 4,433 passed. Session ended `SIGNED-OUT`. Follow-up: BUG-077's outline now uses the page background tone, not black (Dark and Light checked; full suite 4,434). Code-review follow-ups (FV-22 second follow-up): tie-break, icon order, shared default colour, transactional recolour, label layout cache; full suite 4,437. A cold re-login of qa-045 then failed at sign-in twice ("Sign in failed", likely throttling). The app is stopped and nobody is signed in, but `%APPDATA%\Voyageroyager` holds an empty database from that launch that `reset.ps1` refuses to wipe until the Dev check is run (it has no rows).
 

@@ -8,8 +8,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/data/database/app_database.dart';
+import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 
@@ -60,7 +62,7 @@ void main() {
     final before = await _readEntry(db);
 
     await _openEntryDialog(tester);
-    await tester.tap(find.text('Close'));
+    await tester.tap(find.text('Cancel'));
     await settle(tester);
 
     final after = await _readEntry(db);
@@ -101,18 +103,17 @@ void main() {
     await disposeSearchPage(tester);
   });
 
-  // Close is the way out that throws the edit away. Everything else that ends
-  // the dialog — Save, Enter, a click on the barrier, a lifecycle flush — is
-  // still a write, so the discard has to be exactly these two gestures and no
-  // more.
-  testWidgets('Close discards what was typed', (tester) async {
+  // Cancel is the way out that throws the session away: it puts the entry back
+  // as it was opened. Everything else that ends the dialog — Save, Enter,
+  // Escape, a click on the barrier, a lifecycle flush — is a write.
+  testWidgets('Cancel discards what was typed', (tester) async {
     final db = await pumpSearchPage(tester, entries: _seed);
     final before = await _readEntry(db);
     await _openEntryDialog(tester);
 
     await tester.enterText(_titleField().first, 'Typed then thrown away');
     await settle(tester);
-    await tester.tap(find.text('Close'));
+    await tester.tap(find.text('Cancel'));
     await settle(tester);
 
     final after = await _readEntry(db);
@@ -124,7 +125,98 @@ void main() {
     await disposeSearchPage(tester);
   });
 
-  testWidgets('Escape discards what was typed', (tester) async {
+  testWidgets('typing is autosaved while the dialog stays open', (
+    tester,
+  ) async {
+    final db = await pumpSearchPage(tester, entries: _seed);
+    await _openEntryDialog(tester);
+
+    await tester.enterText(_titleField().first, 'Typed and left open');
+    await settle(tester);
+    expect((await _readEntry(db)).title, 'Untouched title');
+    await tester.pump(const Duration(seconds: 2));
+    await settle(tester);
+
+    expect(find.text('Journal entry'), findsOneWidget);
+    expect((await _readEntry(db)).title, 'Typed and left open');
+
+    await disposeSearchPage(tester);
+  });
+
+  testWidgets('moving the caret does not push the autosave back', (
+    tester,
+  ) async {
+    final db = await pumpSearchPage(tester, entries: _seed);
+    await _openEntryDialog(tester);
+
+    await tester.enterText(_titleField().first, 'Typed, then clicked around');
+    await tester.pump(const Duration(milliseconds: 1000));
+    final controller = tester
+        .widget<EditableText>(_titleField().first)
+        .controller;
+    controller.selection = const TextSelection.collapsed(offset: 3);
+    await tester.pump(const Duration(milliseconds: 700));
+    await settle(tester);
+
+    // 1.7 s after the edit, 0.7 s after the caret moved.
+    expect((await _readEntry(db)).title, 'Typed, then clicked around');
+
+    await disposeSearchPage(tester);
+  });
+
+  testWidgets('Cancel after an autosave puts the entry back as opened', (
+    tester,
+  ) async {
+    final db = await pumpSearchPage(tester, entries: _seed);
+    await _openEntryDialog(tester);
+
+    await tester.enterText(_titleField().first, 'Autosaved then cancelled');
+    await tester.pump(const Duration(seconds: 2));
+    await settle(tester);
+    expect((await _readEntry(db)).title, 'Autosaved then cancelled');
+
+    await tester.tap(find.text('Cancel'));
+    await settle(tester);
+
+    final after = await _readEntry(db);
+    expect(after.title, 'Untouched title');
+    expect(after.body, 'Untouched body');
+    // The autosave wrote the slider's and the icon's display defaults; the
+    // entry was opened without either, so Cancel clears them again.
+    expect(after.mood, isNull);
+    expect(after.weatherIcon, isNull);
+
+    await disposeSearchPage(tester);
+  });
+
+  testWidgets('an autosave stays local; closing publishes it', (tester) async {
+    final remote = InMemorySyncRepository();
+    final db = await pumpSearchPage(tester, entries: _seed, remote: remote);
+    await _openEntryDialog(tester);
+
+    await tester.enterText(_titleField().first, 'Autosaved, then saved');
+    await tester.pump(const Duration(seconds: 2));
+    await settle(tester);
+    expect((await _readEntry(db)).title, 'Autosaved, then saved');
+    expect(
+      await remote.getDocument(FirestoreCollections.journalEntries, _entryId),
+      isNull,
+      reason: 'an autosave must not upload',
+    );
+
+    await tester.tap(find.text('Save'));
+    await settle(tester);
+
+    final published = await remote.getDocument(
+      FirestoreCollections.journalEntries,
+      _entryId,
+    );
+    expect(published?['title'], 'Autosaved, then saved');
+
+    await disposeSearchPage(tester);
+  });
+
+  testWidgets('Escape keeps what was typed', (tester) async {
     final db = await pumpSearchPage(tester, entries: _seed);
     await _openEntryDialog(tester);
 
@@ -134,7 +226,32 @@ void main() {
     await settle(tester);
 
     expect(find.text('Journal entry'), findsNothing);
-    expect((await _readEntry(db)).title, 'Untouched title');
+    expect((await _readEntry(db)).title, 'Typed then escaped');
+
+    await disposeSearchPage(tester);
+  });
+
+  testWidgets('Enter in the body starts a new line and continues a list', (
+    tester,
+  ) async {
+    await pumpSearchPage(tester, entries: _seed);
+    await _openEntryDialog(tester);
+
+    final body = _titleField().at(1);
+    await tester.tap(body);
+    await settle(tester);
+    await tester.enterText(body, '- item one');
+    await settle(tester);
+    // The key itself no longer saves and closes...
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await settle(tester);
+    expect(find.text('Journal entry'), findsOneWidget);
+    // ...and the newline the platform then inserts continues the list.
+    final controller = tester.widget<EditableText>(body).controller;
+    await tester.enterText(body, '${controller.text}\n');
+    await settle(tester);
+
+    expect(controller.text, '- item one\n- ');
 
     await disposeSearchPage(tester);
   });

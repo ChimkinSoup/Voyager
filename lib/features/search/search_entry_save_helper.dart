@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
+import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -20,6 +21,14 @@ class SearchEntrySaveHelper {
   final RemoteSyncService remoteSync;
   final JournalRepository journalRepository;
 
+  /// Writes the entry and, when [publish] is set, publishes it (see
+  /// [publishEntry]). A null [mood] or [weatherIcon] clears the field.
+  ///
+  /// With [publish] false — the dialog's autosave — only SQLite is written:
+  /// each publish wipes and re-seeds the entry's remote operation log, too
+  /// costly to do on every pause in typing. The rewrite is recorded in the
+  /// outbox instead, so if the app dies before the dialog closes and
+  /// publishes, the next drain publishes it from the row.
   Future<JournalEntry?> saveEntry({
     required JournalEntry baseline,
     required String title,
@@ -28,19 +37,25 @@ class SearchEntrySaveHelper {
     required String? weatherIcon,
     required String journalId,
     DateTime? entryDate,
+    bool publish = true,
   }) async {
     JournalEntry? result;
     try {
       await coordinator.saveEntry(
         entryId: baseline.id,
         bumpVersion: true,
+        // An autosave refreshes nothing, as on the Journal page: the publish
+        // on close does it once (see [JournalWriteCoordinator.saveEntry]).
+        refreshCaches: publish,
         applyDelta: (base) {
           return base.copyWith(
             title: title,
             body: body,
             tags: extractTags(body),
             mood: mood,
+            clearMood: mood == null,
             weatherIcon: weatherIcon,
+            clearWeatherIcon: weatherIcon == null,
             journalId: journalId,
             entryDate: entryDate ?? base.entryDate,
             bumpVersion: false,
@@ -65,7 +80,34 @@ class SearchEntrySaveHelper {
       return null;
     }
     if (result == null) return null;
+    if (!publish) {
+      remoteSync.cancelDocument(
+        FirestoreCollections.journalEntries,
+        baseline.id,
+      );
+      try {
+        await OutboxSyncWorker.recordCrdtOverwrite(
+          collection: FirestoreCollections.journalEntries,
+          documentId: baseline.id,
+        );
+      } catch (error, stackTrace) {
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: error,
+            stack: stackTrace,
+            library: 'SearchEntrySaveHelper',
+            context: ErrorDescription('while queueing an entry from Search'),
+          ),
+        );
+      }
+      return result;
+    }
+    return publishEntry(result!);
+  }
 
+  /// Publishes [entry], a row already on disk, and returns what was published
+  /// (or [entry] itself if publishing failed).
+  Future<JournalEntry> publishEntry(JournalEntry entry) async {
     // The search page doesn't maintain a CRDT editing session, so the
     // debounced upload scheduled above would push empty char-ops — creating
     // a gap in the CRDT history that causes corrupted-op-chain conflicts on
@@ -80,11 +122,8 @@ class SearchEntrySaveHelper {
     // pre-edit title and body. The edit looked lost, and the stale row it left
     // behind was then used to build delete tombstones.
     try {
-      remoteSync.cancelDocument(
-        FirestoreCollections.journalEntries,
-        baseline.id,
-      );
-      return await remoteSync.forceOverwriteJournalEntryText(result!);
+      remoteSync.cancelDocument(FirestoreCollections.journalEntries, entry.id);
+      return await remoteSync.forceOverwriteJournalEntryText(entry);
     } catch (error, stackTrace) {
       FlutterError.reportError(
         FlutterErrorDetails(
@@ -94,7 +133,7 @@ class SearchEntrySaveHelper {
           context: ErrorDescription('while publishing entry from Search'),
         ),
       );
-      return result;
+      return entry;
     }
   }
 }

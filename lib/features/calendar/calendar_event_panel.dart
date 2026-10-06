@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -414,9 +415,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
         _end = result.end;
       });
     }
-    // After closing the time popover, ensure nothing has focus
-    // so EnterToSubmitScope can catch the next Enter keypress.
-    FocusManager.instance.primaryFocus?.unfocus();
+    _refocusAfterPopover();
   }
 
   Future<void> _openRepeatPopover(BuildContext buttonContext) async {
@@ -437,9 +436,38 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       _isRepeatPopoverOpen = false;
       if (rule != null) _recurrence = rule;
     });
-    // Same reason as the time popover: leave nothing focused so the panel's
-    // [EnterToSubmitScope] catches the next Enter.
-    FocusManager.instance.primaryFocus?.unfocus();
+    _refocusAfterPopover();
+  }
+
+  /// Hands focus back to the Title once a picker closes. Unfocusing instead
+  /// parked it on the panel's route scope, above every key handler in the
+  /// panel, so Ctrl+Enter and typing went nowhere. In the Title, Enter still
+  /// saves (its onSubmitted) and Ctrl+Enter reaches [CtrlEnterToSubmitScope].
+  ///
+  /// The caret then goes to the end of it: a desktop single-line field selects
+  /// all of its text when focused from outside, so the next keystroke would
+  /// replace the title.
+  ///
+  /// Desktop only: on a touch device focusing the Title would raise the soft
+  /// keyboard after every pick, and there is no Ctrl+Enter to keep working.
+  void _refocusAfterPopover() {
+    final hardwareKeyboard = switch (defaultTargetPlatform) {
+      TargetPlatform.windows ||
+      TargetPlatform.macOS ||
+      TargetPlatform.linux => true,
+      _ => false,
+    };
+    if (!hardwareKeyboard) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      return;
+    }
+    _titleFocusNode.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_titleFocusNode.hasFocus) return;
+      _titleController.selection = TextSelection.collapsed(
+        offset: _titleController.text.length,
+      );
+    });
   }
 
   @override

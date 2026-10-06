@@ -480,16 +480,15 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
           (d) => calendarSameDay(d, today),
         );
 
-        final allDayShelfHeight = calendarWeekAllDayShelfHeightFor(
-          events: widget.events,
-          weekDays: weekDays,
-        );
         final packedAllDayShelf = calendarPackWeekAllDayShelf(
           events: widget.events,
           weekDays: weekDays,
         );
         final allDayShelfRowCount = calendarWeekAllDayShelfRowCount(
           packedAllDayShelf,
+        );
+        final allDayShelfHeight = calendarWeekAllDayShelfHeightForRows(
+          allDayShelfRowCount,
         );
 
         return Column(
@@ -631,6 +630,20 @@ class _CalendarWeekTimelineState extends State<CalendarWeekTimeline>
                                       margin: margin,
                                       isFirstColumn: i == 0,
                                       isLastColumn: i == 6,
+                                      leftFoldsLastRow:
+                                          calendarWeekAllDayShelfRowFolded(
+                                            packedAllDayShelf,
+                                            allDayShelfRowCount,
+                                            i - 1,
+                                            allDayShelfRowCount - 1,
+                                          ),
+                                      rightFoldsLastRow:
+                                          calendarWeekAllDayShelfRowFolded(
+                                            packedAllDayShelf,
+                                            allDayShelfRowCount,
+                                            i + 1,
+                                            allDayShelfRowCount - 1,
+                                          ),
                                       onEventTap: widget.onEventTap,
                                       entryMenuBuilder: widget.entryMenuBuilder,
                                       editingEventId: widget.editingEventId,
@@ -773,6 +786,8 @@ class _AllDayShelfColumn extends StatelessWidget {
     required this.margin,
     required this.isFirstColumn,
     required this.isLastColumn,
+    required this.leftFoldsLastRow,
+    required this.rightFoldsLastRow,
     required this.onEventTap,
     this.entryMenuBuilder,
     this.editingEventId,
@@ -784,19 +799,33 @@ class _AllDayShelfColumn extends StatelessWidget {
   final double margin;
   final bool isFirstColumn;
   final bool isLastColumn;
+
+  /// Whether the neighbouring column shows "+N more" in the last row, so a
+  /// bar there ends at this column instead of bridging into the label.
+  final bool leftFoldsLastRow;
+  final bool rightFoldsLastRow;
   final CalendarWeekEventTap onEventTap;
   final CalendarEntryMenuBuilder? entryMenuBuilder;
   final String? editingEventId;
 
   @override
   Widget build(BuildContext context) {
+    final overflow = calendarWeekAllDayShelfOverflow(columnEvents, rowCount);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var i = 0; i < rowCount; i++)
           SizedBox(
             height: calendarWeekAllDayEventRowHeight,
-            child: i < columnEvents.length && columnEvents[i] != null
+            child: overflow.isNotEmpty && i == rowCount - 1
+                ? _AllDayShelfMoreButton(
+                    day: day,
+                    events: overflow,
+                    onEventTap: onEventTap,
+                    entryMenuBuilder: entryMenuBuilder,
+                    editingEventId: editingEventId,
+                  )
+                : i < columnEvents.length && columnEvents[i] != null
                 ? calendarEntryContextMenu(
                     builder: entryMenuBuilder,
                     entry: columnEvents[i]!.isFullDay
@@ -813,8 +842,12 @@ class _AllDayShelfColumn extends StatelessWidget {
                       event: columnEvents[i]!,
                       day: day,
                       margin: margin,
-                      isFirstColumn: isFirstColumn,
-                      isLastColumn: isLastColumn,
+                      isFirstColumn:
+                          isFirstColumn ||
+                          (leftFoldsLastRow && i == rowCount - 1),
+                      isLastColumn:
+                          isLastColumn ||
+                          (rightFoldsLastRow && i == rowCount - 1),
                       highlighted: editingEventId == columnEvents[i]!.id,
                       onTap: () => onEventTap(columnEvents[i]!, day),
                     ),
@@ -822,6 +855,61 @@ class _AllDayShelfColumn extends StatelessWidget {
                 : const SizedBox.shrink(),
           ),
       ],
+    );
+  }
+}
+
+/// The shelf's last row on a day with more all-day events than it shows:
+/// opens the rest in the month cell's "+N" popover.
+class _AllDayShelfMoreButton extends StatelessWidget {
+  const _AllDayShelfMoreButton({
+    required this.day,
+    required this.events,
+    required this.onEventTap,
+    this.entryMenuBuilder,
+    this.editingEventId,
+  });
+
+  final DateTime day;
+  final List<CalendarEvent> events;
+  final CalendarWeekEventTap onEventTap;
+  final CalendarEntryMenuBuilder? entryMenuBuilder;
+  final String? editingEventId;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Builder(
+      builder: (buttonContext) => Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(4),
+          canRequestFocus: false,
+          onTap: () => showCalendarOverflowEventsPopover(
+            badgeContext: buttonContext,
+            day: day,
+            overflowEvents: events,
+            editingEventId: editingEventId,
+            entryMenuBuilder: entryMenuBuilder,
+            onEntryTap: (entry) => onEventTap(entry.event!, day),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '+${events.length} more',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppFonts.style(
+                  fontSize: 11,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

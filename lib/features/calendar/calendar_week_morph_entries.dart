@@ -175,21 +175,29 @@ List<CalendarWeekMorphEntry> calendarWeekMorphEntries({
     events: events,
     weekDays: weekDates,
   );
-  final shelfHeight = calendarWeekAllDayShelfHeightFor(
-    events: events,
-    weekDays: weekDates,
-  );
+  final shelfRows = calendarWeekAllDayShelfRowCount(shelf);
+  final shelfHeight = calendarWeekAllDayShelfHeightForRows(shelfRows);
   for (var c = 0; c < 7; c++) {
     final column = weekColumnRects[c];
     final shelfTop = column.top - shelfHeight + weekMargin;
-    for (var r = 0; r < shelf[c].length; r++) {
+    // Rows past the shelf, or folded into its "+N more", have no week pill.
+    final drawnRows = calendarWeekAllDayShelfFolds(shelf[c], shelfRows)
+        ? shelfRows - 1
+        : shelfRows;
+    for (var r = 0; r < shelf[c].length && r < drawnRows; r++) {
       final event = shelf[c][r];
       if (event == null) continue;
+      // A neighbour showing "+N more" on this row ends the bar like the edge
+      // of the week does, as [_AllDayShelfColumn] draws it.
       final (bridgeLeft, bridgeRight) = calendarWeekEventBridges(
         event,
         day: weekDates[c],
-        isFirstColumn: c == 0,
-        isLastColumn: c == 6,
+        isFirstColumn:
+            c == 0 ||
+            calendarWeekAllDayShelfRowFolded(shelf, shelfRows, c - 1, r),
+        isLastColumn:
+            c == 6 ||
+            calendarWeekAllDayShelfRowFolded(shelf, shelfRows, c + 1, r),
       );
       final rect = Rect.fromLTRB(
         column.left + weekMargin - (bridgeLeft ? weekMargin + 2 : 0),

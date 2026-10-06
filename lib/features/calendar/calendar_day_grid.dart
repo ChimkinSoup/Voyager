@@ -764,16 +764,13 @@ class CalendarDayCell extends StatelessWidget {
     final adjacentFade = inMonth ? 1.0 : calendarAdjacentMonthEventOpacity;
     final eventOpacity = entryOpacity.clamp(0.0, 1.0) * adjacentFade;
 
-    final packedEvents = events.whereType<CalendarEvent>().toList(
-      growable: false,
-    );
-    final overflowCount = packedEvents.length > style.maxEventLines
-        ? packedEvents.length - style.maxEventLines
-        : 0;
-    final overflowEvents = overflowCount > 0
-        ? packedEvents.sublist(style.maxEventLines)
-        : const <CalendarEvent>[];
     final displayedEventCount = visibleEvents.clamp(0, style.maxEventLines);
+    // Everything not drawn as a bar, however few bars this cell had room for.
+    final overflowEvents = events
+        .skip(displayedEventCount)
+        .whereType<CalendarEvent>()
+        .toList(growable: false);
+    final overflowCount = overflowEvents.length;
 
     return Stack(
       clipBehavior: Clip.none,
@@ -906,7 +903,7 @@ class CalendarDayCell extends StatelessWidget {
                 extraCount: overflowCount,
                 onTap: onEntryTap == null
                     ? null
-                    : (badgeContext) => _showOverflowEventsPopover(
+                    : (badgeContext) => showCalendarOverflowEventsPopover(
                         badgeContext: badgeContext,
                         day: date,
                         overflowEvents: overflowEvents,
@@ -1143,14 +1140,19 @@ class CalendarWorkoutIcon extends StatelessWidget {
   }
 }
 
-/// How many event bars fit in a full-layout month day cell.
-int calendarVisibleEventCount({
+/// Shortest month event bar whose title is still legible (an 8px label in
+/// [calendarMonthEventFontSize]). A cell too short for more bars of this
+/// height shows fewer, and the "+N" badge counts the rest.
+const calendarMonthMinReadableBarHeight = 12.0;
+
+/// How many bar slots a full-layout month day cell divides its event area
+/// into: as many readable bars as fit, up to [MonthDayCellStyle.maxEventLines].
+int _monthEventSlotCount({
   required double cellHeight,
   required MonthDayCellStyle style,
-  required int eventCount,
   required bool hasIndicators,
 }) {
-  if (eventCount == 0 || style.maxEventLines <= 0) return 0;
+  if (style.maxEventLines <= 0) return 0;
 
   final dayNumberHeight = style.fontSize + 8;
   var used = dayNumberHeight;
@@ -1160,12 +1162,28 @@ int calendarVisibleEventCount({
   }
 
   const eventGap = 2.0;
-  const minBarHeight = 8.0;
+  const betweenEventGap = 1.0;
   final available = cellHeight - used - eventGap;
-  if (available < minBarHeight) return 0;
+  final fit =
+      ((available + betweenEventGap) /
+              (calendarMonthMinReadableBarHeight + betweenEventGap))
+          .floor();
+  return fit.clamp(0, style.maxEventLines);
+}
 
-  final fit = (available / minBarHeight).floor();
-  return fit.clamp(0, style.maxEventLines).clamp(0, eventCount);
+/// How many event bars fit in a full-layout month day cell.
+int calendarVisibleEventCount({
+  required double cellHeight,
+  required MonthDayCellStyle style,
+  required int eventCount,
+  required bool hasIndicators,
+}) {
+  if (eventCount == 0) return 0;
+  return _monthEventSlotCount(
+    cellHeight: cellHeight,
+    style: style,
+    hasIndicators: hasIndicators,
+  ).clamp(0, eventCount);
 }
 
 /// Per-event bar height matching [CalendarDayCell]'s expanded month layout.
@@ -1184,7 +1202,11 @@ double calendarMonthEventBarHeight({
   }
   const eventGap = 2.0;
   const betweenEventGap = 1.0;
-  final slotCount = style.maxEventLines.clamp(1, style.maxEventLines);
+  final slotCount = _monthEventSlotCount(
+    cellHeight: cellHeight,
+    style: style,
+    hasIndicators: hasIndicators,
+  ).clamp(1, style.maxEventLines);
   var eventAreaHeight = (cellHeight - headerUsed - eventGap).clamp(
     0.0,
     double.infinity,
@@ -2032,7 +2054,9 @@ class _EventFocusRingPainter extends CustomPainter {
       oldDelegate.clipRight != clipRight;
 }
 
-Future<void> _showOverflowEventsPopover({
+/// The list behind a "+N" — a month cell's badge or the week shelf's
+/// "+N more" row — anchored to [badgeContext].
+Future<void> showCalendarOverflowEventsPopover({
   required BuildContext badgeContext,
   required List<CalendarEvent> overflowEvents,
   required DateTime day,
