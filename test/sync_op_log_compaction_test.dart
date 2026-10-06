@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/sync/debouncer.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
 import 'package:voyager/data/database/app_database.dart';
@@ -11,7 +12,6 @@ import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/character_op_session.dart';
 import 'package:voyager/domain/services/character_operation.dart';
 import 'package:voyager/domain/services/character_sequence_crdt_merger.dart';
-
 
 void main() {
   late AppDatabase db;
@@ -90,7 +90,10 @@ void main() {
 
   Future<String> resolvedBody() async {
     final ops = await syncRepo.listOperations('doc-1');
-    final merged = CharacterSequenceCrdtMerger().applyMergedPayload(ops);
+    final merged = CharacterSequenceCrdtMerger().applyMergedPayload(
+      ops,
+      textField: 'body',
+    );
     return (jsonDecode(merged) as Map)['body'] as String;
   }
 
@@ -100,7 +103,10 @@ void main() {
     );
     expect(await resolvedBody(), text);
 
-    final compacted = await service.compactOperationLog('doc-1');
+    final compacted = await service.compactOperationLog(
+      'doc-1',
+      collection: FirestoreCollections.journalEntries,
+    );
 
     expect(compacted, isTrue);
     expect(await syncRepo.listOperations('doc-1'), hasLength(1));
@@ -118,12 +124,24 @@ void main() {
     // plus a delete per superseded operation. Generating that against a queue
     // that is not moving is what filled Firestore's write queue across a run
     // of hot restarts, since the in-memory guard cannot survive one.
-    expect(await service.compactOperationLog('doc-1'), isFalse);
+    expect(
+      await service.compactOperationLog(
+        'doc-1',
+        collection: FirestoreCollections.journalEntries,
+      ),
+      isFalse,
+    );
     expect(await syncRepo.listOperations('doc-1'), hasLength(before));
 
     // ...and resumes once the queue is moving again.
     syncRepo.unsentWriteBacklog = false;
-    expect(await service.compactOperationLog('doc-1'), isTrue);
+    expect(
+      await service.compactOperationLog(
+        'doc-1',
+        collection: FirestoreCollections.journalEntries,
+      ),
+      isTrue,
+    );
   });
 
   test('leaves a short log alone', () async {
@@ -132,7 +150,13 @@ void main() {
     );
     final before = (await syncRepo.listOperations('doc-1')).length;
 
-    expect(await service.compactOperationLog('doc-1'), isFalse);
+    expect(
+      await service.compactOperationLog(
+        'doc-1',
+        collection: FirestoreCollections.journalEntries,
+      ),
+      isFalse,
+    );
     expect(await syncRepo.listOperations('doc-1'), hasLength(before));
   });
 
@@ -165,7 +189,13 @@ void main() {
     );
     expect(await resolvedBody(), 'short');
 
-    expect(await service.compactOperationLog('doc-1'), isTrue);
+    expect(
+      await service.compactOperationLog(
+        'doc-1',
+        collection: FirestoreCollections.journalEntries,
+      ),
+      isTrue,
+    );
 
     final remaining = await syncRepo.listOperations('doc-1');
     expect(remaining, hasLength(1));
@@ -194,7 +224,13 @@ void main() {
     );
     final before = (await syncRepo.listOperations('doc-1')).length;
 
-    expect(await service.compactOperationLog('doc-1'), isFalse);
+    expect(
+      await service.compactOperationLog(
+        'doc-1',
+        collection: FirestoreCollections.journalEntries,
+      ),
+      isFalse,
+    );
     expect(await syncRepo.listOperations('doc-1'), hasLength(before));
   });
 
@@ -216,7 +252,13 @@ void main() {
       ),
     );
 
-    expect(await service.compactOperationLog('doc-1'), isTrue);
+    expect(
+      await service.compactOperationLog(
+        'doc-1',
+        collection: FirestoreCollections.journalEntries,
+      ),
+      isTrue,
+    );
     expect(await syncRepo.listOperations('doc-1'), hasLength(1));
     expect(await resolvedBody(), text);
   });

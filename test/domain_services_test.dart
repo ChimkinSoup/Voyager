@@ -92,8 +92,77 @@ void main() {
       ),
     ];
     expect(merger.mergeOperations(const [], ops), isEmpty);
-    final resolved = jsonDecode(merger.applyMergedPayload(ops)) as Map;
+    final resolved =
+        jsonDecode(merger.applyMergedPayload(ops, textField: 'body')) as Map;
     expect(resolved['body'], 'abcd');
+  });
+
+  // BUG-061: a dream has a `body` (its CRDT text) and a `notes` (its sticky
+  // note); a task keeps its CRDT text in `notes`. The caller names the field.
+  group('merged payload text field', () {
+    SyncOperation charOpsDoc(Map<String, dynamic>? snapshot) => SyncOperation(
+      id: 'op-1',
+      documentId: 'doc-1',
+      sequence: 1,
+      payload: CharOpsPayload(
+        charOps: const [
+          CharacterOperation(
+            id: 'c1',
+            clientId: 'd1',
+            logicalClock: 1,
+            position: 'a0',
+            character: 'H',
+          ),
+          CharacterOperation(
+            id: 'c2',
+            clientId: 'd1',
+            logicalClock: 2,
+            position: 'a1',
+            character: 'i',
+          ),
+        ],
+        snapshot: snapshot,
+      ).encode(),
+      deviceId: 'd1',
+      timestamp: DateTime.utc(2026, 1, 1),
+    );
+
+    Map<dynamic, dynamic> resolve(
+      Map<String, dynamic>? snapshot, {
+      required String textField,
+    }) =>
+        jsonDecode(
+              CharacterSequenceCrdtMerger().applyMergedPayload([
+                charOpsDoc(snapshot),
+              ], textField: textField),
+            )
+            as Map;
+
+    test("keeps a dream's sticky note separate from its body", () {
+      final resolved = resolve({
+        'title': 'Dream',
+        'body': 'old',
+        'notes': 'my note',
+      }, textField: 'body');
+      expect(resolved['body'], 'Hi');
+      expect(resolved['notes'], 'my note');
+    });
+
+    test("writes a task's merged text into its notes", () {
+      final resolved = resolve({
+        'title': 'Task',
+        'notes': 'old',
+      }, textField: 'notes');
+      expect(resolved['notes'], 'Hi');
+      expect(resolved.containsKey('body'), isFalse);
+    });
+
+    test('without a snapshot, writes only the named field', () {
+      final dream = resolve(null, textField: 'body');
+      expect(dream, {'body': 'Hi'});
+      final task = resolve(null, textField: 'notes');
+      expect(task, {'notes': 'Hi'});
+    });
   });
 
   test('character sequence crdt merges concurrent inserts by position', () {
@@ -137,7 +206,7 @@ void main() {
         timestamp: DateTime(2026, 1, 1),
       ),
     ]);
-    expect(merger.applyMergedPayload(merged), 'b');
+    expect(merger.applyMergedPayload(merged, textField: 'body'), 'b');
   });
 
   test('soft delete expires after retention window', () {

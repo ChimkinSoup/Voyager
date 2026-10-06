@@ -7,7 +7,14 @@ import 'dart:ui' show Brightness;
 /// each word would be filed as a tag of its own. It has to be *inner*: a
 /// trailing hyphen is punctuation the user is still typing past ("#done-"),
 /// not part of the name.
-final journalTagPattern = RegExp(r'#(\w+(?:-\w+)*)');
+///
+/// "Word character" is any Unicode letter, combining mark or digit, plus `_` —
+/// not Dart's `\w`, which is ASCII-only and cut `#café` down to `caf` and
+/// ignored `#夢` entirely.
+final journalTagPattern = RegExp(
+  r'#([\p{L}\p{M}\p{N}_]+(?:-[\p{L}\p{M}\p{N}_]+)*)',
+  unicode: true,
+);
 
 List<String> extractTags(String body) {
   final matches = journalTagPattern.allMatches(body);

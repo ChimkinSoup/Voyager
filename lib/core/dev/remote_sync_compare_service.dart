@@ -490,6 +490,7 @@ class RemoteSyncCompareService {
     final crdtPayload = await _crdtResolver.resolvePayload(
       _syncRepository,
       firestoreDocumentId,
+      collection: collection,
     );
     if (crdtPayload != null) {
       return _normalizeRemoteDocument(collection, crdtPayload);

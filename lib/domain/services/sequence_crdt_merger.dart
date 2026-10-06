@@ -23,8 +23,11 @@ class SequenceCrdtMerger {
     return all.where((op) => seen.add(op.id)).toList();
   }
 
-  String applyMergedPayload(List<SyncOperation> merged) {
+  String applyMergedPayload(
+    List<SyncOperation> merged, {
+    required String textField,
+  }) {
     if (merged.isEmpty) return '';
-    return _delegate.applyMergedPayload(merged);
+    return _delegate.applyMergedPayload(merged, textField: textField);
   }
 }

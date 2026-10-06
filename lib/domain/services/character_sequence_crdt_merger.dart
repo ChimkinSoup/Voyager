@@ -85,7 +85,16 @@ class CharacterSequenceCrdtMerger {
   }
 
   /// Returns merged document JSON from operations, or empty if none.
-  String applyMergedPayload(List<SyncOperation> merged) {
+  ///
+  /// [textField] is the document field the character operations spell out —
+  /// `FirestoreCollections.crdtTextField` of its collection. The merged text
+  /// goes there and nowhere else: a dream has both a `body` (its text) and a
+  /// `notes` (its sticky note), and guessing from the payload's shape copied
+  /// every dream's body over its note (BUG-061).
+  String applyMergedPayload(
+    List<SyncOperation> merged, {
+    required String textField,
+  }) {
     if (merged.isEmpty) return '';
 
     final complete = _completeCharOpPayloads(merged);
@@ -93,23 +102,19 @@ class CharacterSequenceCrdtMerger {
     final charOps = _mergeParsed(complete);
 
     if (charOps.isNotEmpty && latestSnapshot != null) {
-      final snapshotBody = _textFromSnapshot(latestSnapshot);
-      final mergedBody = applyMergedText(charOps);
       final body = _pickBody(
-        mergedBody: mergedBody,
-        snapshotBody: snapshotBody,
+        mergedBody: applyMergedText(charOps),
+        snapshotBody: latestSnapshot[textField] as String? ?? '',
       );
-      final result = Map<String, dynamic>.from(latestSnapshot)..['body'] = body;
-      if (latestSnapshot.containsKey('notes')) {
-        result['notes'] = body.isEmpty ? null : body;
-      }
-      return jsonEncode(result);
+      return jsonEncode({
+        ...latestSnapshot,
+        textField: _textValue(textField, body),
+      });
     }
 
     if (charOps.isNotEmpty) {
       return jsonEncode({
-        'body': applyMergedText(charOps),
-        'notes': applyMergedText(charOps),
+        textField: _textValue(textField, applyMergedText(charOps)),
       });
     }
 
@@ -207,9 +212,9 @@ class CharacterSequenceCrdtMerger {
     return null;
   }
 
-  String _textFromSnapshot(Map<String, dynamic> snapshot) {
-    return snapshot['body'] as String? ?? snapshot['notes'] as String? ?? '';
-  }
+  /// A task with no notes stores null, not an empty string.
+  String? _textValue(String textField, String text) =>
+      textField == 'notes' && text.isEmpty ? null : text;
 
   String _pickBody({required String mergedBody, required String snapshotBody}) {
     if (mergedBody.isEmpty) return snapshotBody;

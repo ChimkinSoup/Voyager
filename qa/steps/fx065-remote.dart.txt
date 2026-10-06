@@ -1,0 +1,6 @@
+final tr = c.read(todoRepositoryProvider);
+final t = (await tr.getTask('fx065-task'))!;
+final d = DateTime(2026, 10, 20, 9, 30).toUtc();
+await tr.upsertTask(t.copyWith(dueDate: d, version: t.version + 1));
+c.invalidate(todoTasksProvider('fx065-work'));
+debugPrint('FX065R wrote due ' + d.toIso8601String() + ' to fx065-task (list ' + t.listId + ')');

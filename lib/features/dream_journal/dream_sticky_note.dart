@@ -62,6 +62,12 @@ class _DreamStickyNoteState extends State<DreamStickyNote>
   );
   var _expanded = false;
 
+  /// Opening the note is a request to write in it — unless the user is
+  /// already typing in another field, which keeps the caret (BUG-062). Read
+  /// by the field when it is built, half way through the opening animation,
+  /// so a note closed before then leaves no focus request behind.
+  var _focusNoteOnOpen = false;
+
   @override
   void dispose() {
     _controller.dispose();
@@ -69,7 +75,10 @@ class _DreamStickyNoteState extends State<DreamStickyNote>
   }
 
   void _toggleExpanded() {
-    setState(() => _expanded = !_expanded);
+    setState(() {
+      _expanded = !_expanded;
+      _focusNoteOnOpen = _expanded && !_textFieldHasFocus();
+    });
     if (_expanded) {
       _controller.forward();
     } else {
@@ -91,55 +100,65 @@ class _DreamStickyNoteState extends State<DreamStickyNote>
     return Positioned(
       right: DreamStickyNote.edgeInset,
       bottom: DreamStickyNote.edgeInset,
-      child: AnimatedBuilder(
-        animation: curved,
-        builder: (context, _) {
-          final t = curved.value;
-          final width = lerpDouble(_peekSize, _expandedWidth, t);
-          final height = lerpDouble(_peekSize, _expandedHeight, t);
-          final contentOpacity = ((t - 0.5) / 0.5).clamp(0.0, 1.0);
-          return Material(
-            elevation: 3 + 5 * t,
-            color: Color.lerp(
-              theme.colorScheme.surfaceContainerHighest,
-              theme.colorScheme.surface,
-              t,
-            ),
-            shadowColor: VoyagerColors.of(
-              context,
-            ).shadow.withValues(alpha: 0.25),
-            borderRadius: BorderRadius.circular(14),
-            // Material clips nothing by default, so note text scrolling
-            // through the field's viewport painted straight over the card's
-            // rounded top corners instead of disappearing behind them.
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: _expanded ? null : _toggleExpanded,
-              child: SizedBox(
-                width: width,
-                height: height,
-                child: contentOpacity <= 0
-                    ? _StickyNoteCorner(color: accent)
-                    : Opacity(
-                        opacity: contentOpacity,
-                        child: _StickyNoteContents(
-                          controller: widget.controller,
-                          onChanged: widget.onChanged,
-                          focusNode: widget.focusNode,
-                          accentColor: accent,
-                          onClose: _toggleExpanded,
-                        ),
-                      ),
+      // Counts as part of the text fields for taps, so opening or closing the
+      // note doesn't blur the body (or title) the user is typing in.
+      child: TextFieldTapRegion(
+        child: AnimatedBuilder(
+          animation: curved,
+          builder: (context, _) {
+            final t = curved.value;
+            final width = lerpDouble(_peekSize, _expandedWidth, t);
+            final height = lerpDouble(_peekSize, _expandedHeight, t);
+            final contentOpacity = ((t - 0.5) / 0.5).clamp(0.0, 1.0);
+            return Material(
+              elevation: 3 + 5 * t,
+              color: Color.lerp(
+                theme.colorScheme.surfaceContainerHighest,
+                theme.colorScheme.surface,
+                t,
               ),
-            ),
-          );
-        },
+              shadowColor: VoyagerColors.of(
+                context,
+              ).shadow.withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(14),
+              // Material clips nothing by default, so note text scrolling
+              // through the field's viewport painted straight over the card's
+              // rounded top corners instead of disappearing behind them.
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: _expanded ? null : _toggleExpanded,
+                child: SizedBox(
+                  width: width,
+                  height: height,
+                  child: contentOpacity <= 0
+                      ? _StickyNoteCorner(color: accent)
+                      : Opacity(
+                          opacity: contentOpacity,
+                          child: _StickyNoteContents(
+                            controller: widget.controller,
+                            onChanged: widget.onChanged,
+                            focusNode: widget.focusNode,
+                            accentColor: accent,
+                            focusOnOpen: _focusNoteOnOpen,
+                            onClose: _toggleExpanded,
+                          ),
+                        ),
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
 
   double lerpDouble(double a, double b, double t) => a + (b - a) * t;
+
+  static bool _textFieldHasFocus() =>
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorStateOfType<EditableTextState>() !=
+      null;
 }
 
 /// The peeking corner sliver — a hint of the note before the user taps it.
@@ -166,6 +185,7 @@ class _StickyNoteContents extends StatefulWidget {
     required this.onChanged,
     required this.accentColor,
     required this.onClose,
+    required this.focusOnOpen,
     this.focusNode,
   });
 
@@ -173,6 +193,7 @@ class _StickyNoteContents extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final Color accentColor;
   final VoidCallback onClose;
+  final bool focusOnOpen;
   final FocusNode? focusNode;
 
   @override
@@ -201,11 +222,21 @@ class _StickyNoteContentsState extends State<_StickyNoteContents> {
       source: widget.controller,
       focusNode: _focusNode,
     );
+    // Not in the tree until this build; the node takes the focus as it joins.
+    // Checked again here: a click into the body while the card was opening
+    // keeps the caret there.
+    if (widget.focusOnOpen && !_DreamStickyNoteState._textFieldHasFocus()) {
+      _focusNode.requestFocus();
+    }
   }
 
   @override
   void didUpdateWidget(covariant _StickyNoteContents oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Reopened before closing got far enough to remove the field.
+    if (widget.focusOnOpen && !oldWidget.focusOnOpen) {
+      _focusNode.requestFocus();
+    }
     if (oldWidget.controller != widget.controller ||
         oldWidget.focusNode != widget.focusNode) {
       _prose.dispose();

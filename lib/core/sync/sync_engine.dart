@@ -174,17 +174,26 @@ class SyncEngine {
     _syncActivity?.recordUpload(collection);
   }
 
-  Future<Map<String, dynamic>?> resolveDocumentPayload(String documentId) {
-    return _crdtResolver.resolvePayload(_syncRepository, documentId);
+  Future<Map<String, dynamic>?> resolveDocumentPayload(
+    String documentId, {
+    required String collection,
+  }) {
+    return _crdtResolver.resolvePayload(
+      _syncRepository,
+      documentId,
+      collection: collection,
+    );
   }
 
   Future<String> resolveConflicts(
     String documentId, {
+    required String collection,
     List<SyncOperation> localOperations = const [],
   }) async {
     final payload = await _crdtResolver.resolvePayload(
       _syncRepository,
       documentId,
+      collection: collection,
       localOperations: localOperations,
     );
     if (payload == null) return '';

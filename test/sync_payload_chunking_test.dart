@@ -132,7 +132,7 @@ void main() {
       final merged = CharacterSequenceCrdtMerger().applyMergedPayload([
         for (var i = 0; i < chunks.length; i++)
           operationDoc(id: 'op_c$i', payload: chunks[i].encode()),
-      ]);
+      ], textField: 'body');
 
       expect((jsonDecode(merged) as Map)['body'], text);
     });
@@ -167,7 +167,7 @@ void main() {
             sequence: 2,
             timestamp: DateTime.utc(2026, 1, 2),
           ),
-      ]);
+      ], textField: 'body');
 
       expect((jsonDecode(merged) as Map)['body'], 'hello');
     });
@@ -184,7 +184,7 @@ void main() {
       final merged = CharacterSequenceCrdtMerger().applyMergedPayload([
         for (var i = 0; i < chunks.length; i++)
           operationDoc(id: 'op-full_c$i', payload: chunks[i].encode()),
-      ]);
+      ], textField: 'body');
 
       expect((jsonDecode(merged) as Map)['body'], replacement);
     });
@@ -304,7 +304,10 @@ void main() {
         );
       }
 
-      final merged = CharacterSequenceCrdtMerger().applyMergedPayload(stored);
+      final merged = CharacterSequenceCrdtMerger().applyMergedPayload(
+        stored,
+        textField: 'body',
+      );
       expect((jsonDecode(merged) as Map)['body'], text);
     });
 

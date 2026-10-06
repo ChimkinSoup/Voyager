@@ -931,10 +931,34 @@ class _TodoPageState extends ConsumerState<TodoPage>
   TodoTask? _panelTaskFor(List<TodoTask> sorted) {
     final panelTask = _editPanelTask;
     if (panelTask == null) return null;
-    return sorted.cast<TodoTask?>().firstWhere(
+    final onScreen = sorted.cast<TodoTask?>().firstWhere(
       (task) => task!.id == panelTask.id,
-      orElse: () => panelTask,
+      orElse: () => null,
     );
+    if (onScreen != null) return onScreen;
+
+    // Not in the list on screen: the panel's list flag moves a task without
+    // following it. Resolved against its own list instead, so a roll-forward,
+    // a remote edit or any other write still reaches the panel (BUG-065).
+    // One list, already cached by its provider, and only while this lasts.
+    final ownProvider = todoTasksProvider(panelTask.listId);
+    ref.listen<AsyncValue<List<TodoTask>>>(
+      ownProvider,
+      (previous, next) => _refreshOrDeferWhileScrolling(),
+    );
+    final ownTasks = ref.read(ownProvider).valueOrNull;
+    final persisted = ownTasks?.cast<TodoTask?>().firstWhere(
+      (task) => task!.id == panelTask.id,
+      orElse: () => null,
+    );
+    if (ownTasks == null || persisted == null) return panelTask;
+    // The list on screen reconciles only its own rows, so this one's
+    // optimistic overrides are settled here.
+    _reconcileCompletionOverrides(ownTasks);
+    _reconcileTaskOverrides(ownTasks);
+    final task = _taskOverrides[persisted.id] ?? persisted;
+    final completed = _completionOverrides[persisted.id];
+    return completed == null ? task : task.copyWith(completed: completed);
   }
 
   // Read live (not cached at construction) so toggling the dev flag takes

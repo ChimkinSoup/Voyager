@@ -181,6 +181,12 @@ abstract final class FirestoreCollections {
   /// replaced wholesale, and [snapshotOnly] covers it.
   static const crdtBacked = {journalEntries, dreamEntries, todoTasks};
 
+  /// The field a [crdtBacked] collection keeps its collaborative text in: a
+  /// task's `notes`, an entry's or a dream's `body`. A dream has a `notes`
+  /// too, its sticky note, which is a plain field.
+  static String crdtTextField(String collection) =>
+      collection == todoTasks ? 'notes' : 'body';
+
   /// Collections whose documents are plain records — no collaborative text, so
   /// nothing for the character-level CRDT in `sync_operations` to merge.
   ///

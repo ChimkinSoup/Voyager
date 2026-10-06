@@ -138,6 +138,10 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   double? _splitWidth;
   double? _dragStartWidth;
   var _splitDragging = false;
+
+  /// The split's width at the last build, to tell a window resize apart from
+  /// a divider snap-back: only the latter should animate the list pane.
+  double? _splitTotalWidth;
   var _appliedSavedWidth = false;
 
   /// Phone shell only: whether the zen editor is covering the dream list.
@@ -1087,6 +1091,12 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
             return LayoutBuilder(
               builder: (context, constraints) {
                 final totalWidth = constraints.maxWidth;
+                // Animating the list from its old width while the window
+                // shrinks leaves the editor whatever is left, far below
+                // [DreamSplitLayout.minEditorWidth] (BUG-064).
+                final resized =
+                    _splitTotalWidth != null && _splitTotalWidth != totalWidth;
+                _splitTotalWidth = totalWidth;
                 final storedListWidth =
                     _splitWidth ??
                     DreamSplitLayout.defaultListWidth(totalWidth);
@@ -1111,7 +1121,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
                   children: [
                     if (showList)
                       AnimatedContainer(
-                        duration: _splitDragging
+                        duration: _splitDragging || resized
                             ? Duration.zero
                             : const Duration(milliseconds: 260),
                         curve: VoyagerMotion.reduced(context)

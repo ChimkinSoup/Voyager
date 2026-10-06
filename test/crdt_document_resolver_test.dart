@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/sync/crdt_document_resolver.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
 import 'package:voyager/core/utils/ids.dart';
@@ -44,8 +45,15 @@ void main() {
       ),
     );
 
-    final resolvedJson = await engine.resolveConflicts('task-1');
-    final resolvedPayload = await resolver.resolvePayload(repo, 'task-1');
+    final resolvedJson = await engine.resolveConflicts(
+      'task-1',
+      collection: FirestoreCollections.todoTasks,
+    );
+    final resolvedPayload = await resolver.resolvePayload(
+      repo,
+      'task-1',
+      collection: FirestoreCollections.todoTasks,
+    );
 
     expect(resolvedJson, jsonEncode(resolvedPayload));
     expect(resolvedPayload?['title'], 'Merged title');

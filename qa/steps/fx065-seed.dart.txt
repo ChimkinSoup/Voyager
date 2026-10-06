@@ -1,0 +1,12 @@
+final now = DateTime.now().toUtc();
+final today = DateTime.now();
+final due = DateTime(today.year, today.month, today.day, 9, 30).toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final tr = c.read(todoRepositoryProvider);
+final work = TodoListModel(id: 'fx065-work', createdAt: now, updatedAt: now, version: 1, name: 'FX Work');
+final home = TodoListModel(id: 'fx065-home', createdAt: now, updatedAt: now, version: 1, name: 'FX Home');
+for (final l in [work, home]) { await tr.upsertList(l); r.pushTodoList(l); }
+final t = TodoTask(id: 'fx065-task', createdAt: now, updatedAt: now, version: 1, listId: 'fx065-work', title: 'FX17 repeat task', sortOrder: 1000000, dueDate: due, recurrence: const RecurrenceRule(frequency: EventRecurrence.daily), recurrenceAnchor: due);
+await tr.upsertTask(t); await r.pushTodoTaskNow(t);
+final s = await tr.listTasks('fx065-work');
+debugPrint('FX065 seeded ' + s.length.toString() + ' task(s) in FX Work');

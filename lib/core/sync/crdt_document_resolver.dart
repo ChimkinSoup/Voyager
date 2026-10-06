@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/character_sequence_crdt_merger.dart';
@@ -17,6 +18,7 @@ class CrdtDocumentResolver {
   Future<Map<String, dynamic>?> resolvePayload(
     SyncRepository repository,
     String documentId, {
+    required String collection,
     List<SyncOperation> localOperations = const [],
     List<SyncOperation>? remoteOperations,
   }) async {
@@ -26,7 +28,10 @@ class CrdtDocumentResolver {
     }
 
     final merged = _mergeSyncOperations(localOperations, remoteOperations);
-    final payloadJson = _merger.applyMergedPayload(merged);
+    final payloadJson = _merger.applyMergedPayload(
+      merged,
+      textField: FirestoreCollections.crdtTextField(collection),
+    );
     if (payloadJson.isEmpty) return null;
 
     return jsonDecode(payloadJson) as Map<String, dynamic>;

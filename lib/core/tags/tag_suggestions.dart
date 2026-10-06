@@ -24,16 +24,21 @@ const _hashCodeUnit = 0x23;
 
 /// Whether [codeUnit] is a word character.
 ///
-/// Matches [journalTagPattern]'s `\w`, which in Dart is ASCII-only
-/// (`[A-Za-z0-9_]`). Written against code units rather than a [RegExp] because
+/// Matches [journalTagPattern]'s word characters: Unicode letters, marks and
+/// digits plus `_`. Written against code units rather than a [RegExp] because
 /// this runs on every keystroke of a document that can be thousands of
 /// characters long — `text[i]` alone would allocate a one-char [String] per
-/// character scanned.
+/// character scanned. Only non-ASCII code units take the [RegExp] path; a
+/// letter outside the BMP (a surrogate pair) isn't recognised here.
 bool _isWordChar(int codeUnit) =>
     (codeUnit >= 0x61 && codeUnit <= 0x7A) || // a-z
     (codeUnit >= 0x41 && codeUnit <= 0x5A) || // A-Z
     (codeUnit >= 0x30 && codeUnit <= 0x39) || // 0-9
-    codeUnit == 0x5F; // _
+    codeUnit == 0x5F || // _
+    (codeUnit >= 0x80 &&
+        _nonAsciiWordChar.hasMatch(String.fromCharCode(codeUnit)));
+
+final _nonAsciiWordChar = RegExp(r'[\p{L}\p{M}\p{N}]', unicode: true);
 
 /// Whether [codeUnit] can appear inside a tag body — a word character or the
 /// hyphen that joins a multi-word tag's words together.

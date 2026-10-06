@@ -8,11 +8,11 @@ The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10
 
 | Severity | Logged | Fixed + verified in the app | Open |
 |---|--:|--:|--:|
-| Blocker | 7 | 2 (BUG-001, BUG-003) | 5 |
+| Blocker | 7 | 3 (BUG-001, BUG-003, BUG-061) | 4 |
 | Major | 29 | 5 (BUG-002 (see caveat), BUG-004, BUG-010, BUG-043 (dup), BUG-045) | 24 |
-| Minor | 143 | 15 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-048, BUG-050, BUG-051, BUG-052, BUG-054, BUG-055, BUG-056, BUG-059, BUG-060, BUG-167, BUG-226) | 128 |
-| Cosmetic | 47 | 5 (BUG-007, BUG-008, BUG-042, BUG-049, BUG-057) | 42 |
-| **Total** | **226** | **27** | **199** |
+| Minor | 143 | 18 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-048, BUG-050, BUG-051, BUG-052, BUG-054, BUG-055, BUG-056, BUG-059, BUG-060, BUG-062, BUG-063, BUG-065, BUG-167, BUG-226) | 125 |
+| Cosmetic | 47 | 6 (BUG-007, BUG-008, BUG-042, BUG-049, BUG-057, BUG-064) | 41 |
+| **Total** | **226** | **32** | **194** |
 
 "Fixed" means re-tested in the running app by a phase re-check or FV (TEST_PLAN.md "Fix verification"). "Open" means no fix was recorded, so each entry stands as it was last observed. Unit-test-only claims don't count as fixed.
 
@@ -26,6 +26,7 @@ Caveats:
 - `flutter test` on 2026-10-05 (after three code-review follow-ups to BUG-049/052/054, see FV-14): 4,365 passed, 18 skipped, 0 failed.
 - `flutter test` on 2026-10-05 (after the BUG-048 fix): 4,371 passed, 18 skipped, 0 failed. BUG-048 was verified in the app the same day (TEST_PLAN.md FV-15).
 - `flutter test` on 2026-10-06 (after the BUG-056/057/060 fixes, BUG-059 already fixed, BUG-058 skipped): 4,382 passed, 18 skipped, 1 failed. The failure was `calendar_last_viewed_page_test.dart` expecting the raw calendar colour on a light trigger, which BUG-057 now darkens. After updating that expectation the file passes, so 4,383 passed, 0 failed. BUG-056, BUG-057, BUG-059 and BUG-060 were verified in the app the same day (TEST_PLAN.md FV-16).
+- `flutter test` on 2026-10-06 (after the BUG-061…065 fixes; BUG-062's keyboard route skipped on purpose): 4,396 passed, 18 skipped, 0 failed. BUG-061, BUG-062, BUG-063, BUG-064 and BUG-065 were verified in the app the same day (TEST_PLAN.md FV-17). After the code-review follow-up (BUG-061 text field by collection, BUG-062 focus timing, BUG-065 panel resolved against its own list, spell-checker change reverted): 4,399 passed, 18 skipped, 0 failed, and BUG-061/062/065 re-verified in the app (FV-17 follow-up).
 
 ### Counts by phase (severity × phase)
 
@@ -73,7 +74,7 @@ The phase is the tag in each entry's title, i.e. where the bug was found. BUG-00
 | BUG-003 | 1 | Brand-new account: the Journal editor accepts text that is never saved | Open |
 | BUG-005 | 1 | Signing into a different account keeps the previous account's local data, and an edit uploads it, corrupted, into the new account | Open |
 | BUG-015 | 3 | Vim motions split emoji in half: inserting there crashes the app, and `x` saves and syncs a "�" | Open |
-| BUG-061 | 8 | Every restart or cloud pull overwrites a dream's sticky note with its body; the note text is lost, also on new devices | Open (still reproduced 2026-10-03, `041a1ea`) |
+| BUG-061 | 8 | Every restart or cloud pull overwrites a dream's sticky note with its body; the note text is lost, also on new devices | **Fixed** (2026-10-06, uncommitted), verified in FV-17 |
 | BUG-198 | 23 | After a restart with a workout in progress, no click or key reaches the app and >1 CPU core stays busy until the workout ends | Open |
 | BUG-204 | 23 | Untouched starter exercises are never uploaded: after a wipe or on a new device, planned and lifted ones vanish (orphan plan entries, "No sets" history) | Open |
 
@@ -838,7 +839,10 @@ Entry format:
 - Notes (2026-09-30, cold sign-in): after `reset.ps1 -Force` → `login.ps1` on an empty device, the pull (`dream_entries 3796ms (129, full)`) produced the same state: 77 of 129 dreams with `notes` = `body`, every other field equal to the pre-wipe snapshot. A new device gets the corrupted notes too. It isn't known whether Firestore's documents still hold the original notes and only the pull resolves them wrongly, or whether the notes were uploaded corrupted.
 - Notes (2026-10-01, Phase 11, build `5ea667d`): still reproduces. qa-016: 4 dreams seeded through the repository (one with note "notekeyword secret", three without notes); one edited from the Search dream dialog (note intact afterwards in SQLite). After `stop.ps1` → `launch.ps1` all 4 dreams had `notes` = `body`, including the three that had no note, and "notekeyword secret" was gone. Effect on Search: dream note searches now match body copies.
 - Notes (2026-10-03, Phase 24): still reproduces on `041a1ea`. Dream `p24-dream` (seeded with note "P24 dream note", body "P24 dream body #lucid") was deleted, and after a cold re-login its Trash detail shows Notes = "P24 dream body #lucid" (`qa/shots/p24-kbd-menu.png`). The corruption reaches tombstoned dreams too, so a restore brings back the wrong note.
+- Notes (2026-10-06, confirmed in code, fixed in the working tree, uncommitted): cause confirmed as described. `applyMergedPayload` now writes the merged text into `notes` only for a task snapshot; a snapshot with `entryDate` (a dream) keeps its own `notes`. Tested on `entryDate` rather than `body` because compaction baselines of tasks already carry a `body` key. Notes already overwritten on disk or in Firestore are not repaired. Test: `test/domain_services_test.dart` group "merged payload text field" (fails without the fix). Not yet checked in the running app.
 
+- Notes (2026-10-06, verified in the running app, FV-17 passed; qa-042, Dark): dream "FX17 dream" (typed body, note "zzopen FX17 NOTE text") and "FX17 tags" (pasted body, no note). After stop.ps1 + launch.ps1 (pull "dream_entries (2)") and then a cold re-login (reset -Force, "61 pulled whole"), SQLite kept both notes as they were: the note intact, the other still NULL. Before the fix the first restart overwrote both.
+- Notes (2026-10-06, code-review follow-up, re-verified in the app, FV-17 follow-up; qa-042): the `entryDate` test is replaced: the caller names the text field by collection (`FirestoreCollections.crdtTextField`, `notes` for tasks, `body` otherwise) through the resolver, compaction and `applyMergedPayload`, and char ops without a snapshot now write only that field (before, `body` and `notes` both). After a restart and a cold re-login a journal body, a dream body + note, a note-less dream and a task's notes all came back as saved.
 ### BUG-062 [Phase 8] Opening the dream sticky note doesn't put the caret in it; what's typed next is lost, and the note can't be opened from the keyboard
 - Severity: Minor
 - Found: 2026-09-30, Phase 8 (qa-012)
@@ -846,7 +850,10 @@ Entry format:
 - Expected: the note opens ready to type (it exists "to take brief notes … to jog their memory", DREAM_JOURNAL.md), or at least the keystrokes land somewhere visible.
 - Actual: `primaryFocus` after the click is the body's `FocusScopeNode`, not the note field; "zzopen" went nowhere (not in the note, the body or the title; SQLite unchanged, `qa/shots/p8-11-typed-after-open.png`). The user has to click a second time inside the note. The collapsed tab also has no keyboard route: Tab from the body never leaves it (see BUG-058's P8 note), and no shortcut opens the note.
 - Notes: `_DreamStickyNoteState._toggleExpanded` (`dream_sticky_note.dart`) only runs the animation; it never requests the note's focus node. Once the note has focus, Tab (nothing to indent) moves to the body and Shift+Tab reaches the note's close button, as the code intends.
+- Notes (2026-10-06, confirmed in code, changed in the working tree, uncommitted): confirmed as described; the click also blurred the body (desktop tap-outside). Changed per Juno's spec rather than the Expected above: the note is now inside a `TextFieldTapRegion`, so opening or closing it no longer blurs the body or title, and the caret stays where it was. Opening it with no text field focused puts the caret in the note. The keyboard route (no way to open the note from the keyboard) is skipped on purpose (Juno, 2026-10-06). Test: `test/dream_sticky_note_focus_test.dart` (fails without the change). Not yet checked in the running app.
 
+- Notes (2026-10-06, verified in the running app, FV-17 passed; qa-042, Dark): window 2000x1100. Body focused, click the note tab, type " KEEP1": it landed in the body (`fx17-03-open-bodyfocus.png`); Close, type " KEEP2": body (`fx17-04`). Clicked empty list space (primaryFocus = a FocusScopeNode, no text field), click the tab and type at once "zzopen FX17 NOTE text": all of it in the note, nothing lost (`fx17-05`). Title focused: opening and closing the note kept the caret in the title (" T1 T2", `fx17-06`).
+- Notes (2026-10-06, code-review follow-up, re-verified in the app, FV-17 follow-up; qa-042): the focus request now happens when the note field is built (half way through opening), re-checked then, so closing early leaves nothing pending and a click into the body during the opening keeps the body (opened, then clicked the body 40 ms later: body kept the caret). Body, title and no-focus cases re-checked.
 ### BUG-063 [Phase 8] Hashtags stop at the first non-ASCII letter: "#café" is saved as tag "caf", "#naïve" as "na", and "#夢" is no tag at all
 - Severity: Minor
 - Found: 2026-09-30, Phase 8 (qa-012)
@@ -854,7 +861,10 @@ Entry format:
 - Expected: three tags, "夢", "café", "naïve", each highlighted in full.
 - Actual: SQLite `tags_json` = `["caf","na"]`. The pill covers only "#caf" and "#na", and "é" / "ïve" trail after it unstyled (`qa/shots/p8-32-tags.png`); "#夢" gets no pill and no tag.
 - Notes: `journalTagPattern` = `#(\w+(?:-\w+)*)` (`lib/core/utils/journal_tags.dart`), and Dart's `\w` is ASCII-only `[A-Za-z0-9_]`. `extractTags` is shared, so journal entries (and every other user of the pattern) are affected the same way (inferred, only the dream body was driven). A user writing in French, German, Spanish, CJK, Arabic etc. gets truncated or missing tags, and different words can collapse into the same tag ("#café" and "#cafè" both become "caf"). The rest of the pasted text (CJK, Arabic, emoji including a ZWJ family) rendered and saved correctly.
+- Notes (2026-10-06, confirmed in code, fixed in the working tree, uncommitted): confirmed as described. `journalTagPattern` now uses Unicode letters, combining marks and digits plus `_` (`unicode: true`), so `#café`, `#naïve`, `#夢` and `#تجربة` are whole tags. Tag completion (`_isWordChar` in `tag_suggestions.dart`) and the spell checker's boundary widening follow it; completion doesn't recognise letters outside the BMP (surrogate pairs). Existing rows keep their truncated `tags_json` until the body is edited. `rankingTagPattern` (structured ranking tags) is left ASCII. Test: `test/unicode_tags_test.dart` (fails without the fix). Not yet checked in the running app.
 
+- Notes (2026-10-06, verified in the running app, FV-17 passed; qa-042, Dark): pasted "tags #夢 #café #naïve #día-de-muertos end" into a new dream body: four whole pills (`fx17-07-tags.png`), SQLite `tags_json` ["夢","café","naïve","día-de-muertos"], unchanged after a cold re-login.
+- Notes (2026-10-06, code-review follow-up): the spell checker's boundary-widening change mentioned above is reverted; it isn't needed for tags, and with it unspaced CJK/Thai prose made every edit scan to the 200-character cap. Tag extraction and tag completion keep the Unicode change.
 ### BUG-064 [Phase 8] Shrinking the window on the Dreams page overflows the editor's date/delete row (RenderFlex overflowed by 70 px)
 - Severity: Cosmetic
 - Found: 2026-09-30, Phase 8 (qa-012)
@@ -862,7 +872,9 @@ Entry format:
 - Expected: the editor keeps at least `DreamSplitLayout.minEditorWidth` (380 logical) while the list narrows; no FlutterError.
 - Actual: the run log gets `A RenderFlex overflowed by 70 pixels on the right`, from the `Row` at `lib/features/dream_journal/dream_journal_page.dart:1325` (date pill + trash button), with `constraints: BoxConstraints(w=157.5 …)`. The editor column was 157.5 logical wide for a moment. Seen twice (17:42:44 and again after a fresh launch, `qa/logs/run-20260930-173309.log`, `run-20260930-175012.log`; also in `voyager_errors.log`). The settled layout is fine (`qa/shots/p8-63-min-again.png`); the stripe only shows during the resize.
 - Notes: suspected from the code: the list pane is an animated container (260 ms) whose width is clamped against the *new* total width, but while it animates from the old width, the editor gets whatever is left, which is far below its minimum. Resizing to 2000×1100 didn't trigger it.
+- Notes (2026-10-06, confirmed in code, fixed in the working tree, uncommitted): confirmed as suspected. The list pane no longer animates when the split's total width changed since the last build, so a window resize snaps it to the new bound; the divider snap-back still animates. Test: `test/dream_split_resize_test.dart` (overflow without the fix). Not yet checked in the running app.
 
+- Notes (2026-10-06, verified in the running app, FV-17 passed; qa-042, Dark): maximized, list dragged to `dream_split_width` 384.9, then `place 0 0 1440 1040`, maximize, and the same shrink again: no "overflowed" line in the run log and nothing in `voyager_errors.log` (`fx17-10-min.png`, `fx17-11-min-again.png`).
 ### BUG-065 [Phase 9] Edit panel keeps showing a task's old due date after the task was moved to another list and then completed (repeating task)
 - Severity: Minor
 - Found: 2026-09-30, Phase 9 (qa-013)
@@ -870,7 +882,10 @@ Entry format:
 - Expected: the task rolls forward to its next occurrence and the panel shows the new date (Thu, Oct 1), as it does for a task that stays in the list on screen.
 - Actual: SQLite has `due_date` Oct 1, `completed` 0 and a completion row for Sep 30, but the panel still reads "Wed, Sep 30" (`qa/shots/p9-76-moved-complete.png`). The first run, on "P9 task 30 EDITED" (moved Work → To-do), kept "Thu, Oct 1 at 9:30 …" on screen through two completions while the task was due Oct 3 (`p9-18-panelcomplete.png`, `p9-20-panel-second.png`); only reopening it from All tasks showed Oct 3. Same list (task 29, not moved): the panel's date updates at once (`p9-22-t29-complete.png`).
 - Notes: display only as far as checked. Each completion recorded the right occurrence (Oct 1, then Oct 2 for task 30), and typing into the stale panel's Title afterwards ("P9 task 31 X") didn't write the old date back. Presumably the page's `panelTask` comes from the list on screen, which no longer contains the moved task. Not checked: changing repeat or "Reset due date" from the stale panel. Not a bug (my first reading of these shots): the panel checkbox looked ticked after each click, but that is the checkbox's hover preview (grey tick while the pointer is over it); with the pointer moved away it's unticked (`p9-74-moved.png`). Clicking it again completes the next occurrence, the same as the row checkbox does.
+- Notes (2026-10-06, confirmed in code, fixed in the working tree, uncommitted): confirmed. `_panelTaskFor` refreshes the panel from the list on screen and falls back to the panel's own copy when the task isn't there, which is the case after a move from the panel; nothing updated that copy. When a roll-forward lands for the task the panel shows, the panel now takes the written row. Test: `test/todo_moved_task_panel_test.dart` (fails without the fix). Not yet checked in the running app.
 
+- Notes (2026-10-06, verified in the running app, FV-17 passed; qa-042, Dark): seeded "FX17 repeat task" in "FX Work" (today 9:30 AM, daily; `qa/steps/fx065-seed.dart.txt`). Opened it, list flag, "FX Home": the page stayed on FX Work (0 tasks) with the panel open. Panel checkbox, pointer moved away: SQLite due Oct 7, panel "Wed, Oct 7" (`fx17-17-complete1.png`). Again: due Oct 8, panel "Thu, Oct 8" (`fx17-18`); completion rows Oct 6 and Oct 7.
+- Notes (2026-10-06, code-review follow-up, re-verified in the app, FV-17 follow-up; qa-042): replaced the roll-forward patch with a general fix: a panel task that isn't on screen is resolved against its own list (one cached list provider, only while that lasts). Re-checked the move + tick (panel "Fri, Oct 9" = SQLite) and a simulated pull of another device's edit to the moved task: the panel showed the new date (Oct 20) and didn't write its old copy back.
 ### BUG-066 [Phase 9] Moving a task to another list leaves its subtasks in the old list; deleting the old list then deletes them from under the moved task
 - Severity: Major
 - Found: 2026-09-30, Phase 9 (qa-013)

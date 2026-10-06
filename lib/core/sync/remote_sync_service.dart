@@ -1289,7 +1289,7 @@ class RemoteSyncService {
       );
     }
 
-    unawaited(_compactInBackground(documentId, rawOps));
+    unawaited(_compactInBackground(collection, documentId, rawOps));
   }
 
   bool isDocumentEditing(String collection, String documentId) {
@@ -3258,6 +3258,7 @@ class RemoteSyncService {
           ? await _crdtResolver.resolvePayload(
               _syncRepository,
               logId,
+              collection: collection,
               remoteOperations: operationLog,
             )
           : null;
@@ -4515,9 +4516,7 @@ class RemoteSyncService {
     if (session.opsReplacedBy(text).any((op) => op.clientId != deviceId)) {
       final logText = session.text;
       _charOpRegistry.removeSession(collection, documentId);
-      final textField = collection == FirestoreCollections.todoTasks
-          ? 'notes'
-          : 'body';
+      final textField = FirestoreCollections.crdtTextField(collection);
       await _quarantineConflict(
         collection: collection,
         documentId: documentId,
@@ -5000,6 +4999,7 @@ class RemoteSyncService {
   /// Returns whether it actually compacted.
   Future<bool> compactOperationLog(
     String documentId, {
+    required String collection,
     List<SyncOperation>? knownOperations,
   }) async {
     if (!_compactingDocuments.add(documentId)) return false;
@@ -5032,7 +5032,10 @@ class RemoteSyncService {
       );
       if (foreignWriteIsRecent) return false;
 
-      final resolvedJson = _charMerger.applyMergedPayload(ops);
+      final resolvedJson = _charMerger.applyMergedPayload(
+        ops,
+        textField: FirestoreCollections.crdtTextField(collection),
+      );
       if (resolvedJson.isEmpty) return false;
       final snapshot = jsonDecode(resolvedJson);
       if (snapshot is! Map<String, dynamic>) return false;
@@ -5086,11 +5089,16 @@ class RemoteSyncService {
   }
 
   Future<void> _compactInBackground(
+    String collection,
     String documentId,
     List<SyncOperation> ops,
   ) async {
     try {
-      await compactOperationLog(documentId, knownOperations: ops);
+      await compactOperationLog(
+        documentId,
+        collection: collection,
+        knownOperations: ops,
+      );
     } catch (error, stackTrace) {
       // Housekeeping must never take editing down with it.
       debugPrint(
