@@ -326,7 +326,11 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
       createdAt: now,
       updatedAt: now,
     );
-    await repo.upsertCalendar(defaultCalendar);
+    // Not announced to sync: on a new device this runs before the startup
+    // pull, and the upload would replace a default renamed elsewhere. The pull
+    // still brings that one down (its version beats this v0), and an edit here
+    // uploads it as usual.
+    await repo.upsertCalendar(defaultCalendar, recordLocalActivity: false);
     if (mounted) ref.invalidate(calendarsProvider);
   }
 

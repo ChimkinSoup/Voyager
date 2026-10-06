@@ -1,0 +1,11 @@
+final now = DateTime.now().toUtc();
+final local = DateTime.now();
+final rules = <ScheduledReminderRule>[];
+for (var i = 0; i < 6; i++) {
+  final at = i == 0 ? local.subtract(const Duration(minutes: 1)) : local.add(Duration(hours: 2 + i));
+  rules.add(ScheduledReminderRule(id: 'fx042-rule-$i', createdAt: now, updatedAt: now, version: 1, title: 'FX042 rule $i', body: 'FX042 body $i', scheduleKind: ReminderScheduleKind.once, localTimeMinutes: at.hour * 60 + at.minute, onceLocalDate: DateTime(at.year, at.month, at.day), armedAt: now.subtract(const Duration(minutes: 10))));
+}
+for (final rule in rules) { await c.read(reminderRepositoryProvider).upsertRule(rule); }
+await c.read(remoteSyncServiceProvider).pushRecords('scheduled_reminder_rules', rules);
+c.invalidate(scheduledReminderRulesProvider);
+debugPrint('FX042 seeded ${rules.length} rules');

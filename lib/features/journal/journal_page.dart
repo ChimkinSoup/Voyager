@@ -653,6 +653,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   /// delete journals, all in one dialog rather than a menu nested in the
   /// picker.
   Future<void> _openJournalManageSheet() async {
+    // Read before the dialog: a delete inside it refreshes the journals, and
+    // [build] then moves [_journalFilter] to a live journal on its own,
+    // leaving the deleted journal's entry open in the editor.
+    final openJournalId = _journalFilter;
     final createdId = await showJournalManageSheet(context, ref);
     if (!mounted) return;
     final journals = await ref.read(journalsProvider.future);
@@ -671,7 +675,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     // list deletion — switching the view mode out from under a delete is a
     // second, unasked-for change of context.
     final live = journals.where((j) => j.deletedAt == null).toList();
-    if (live.any((j) => j.id == _journalFilter)) return;
+    if (live.any((j) => j.id == openJournalId)) return;
     final fallback =
         live
             .cast<Journal?>()

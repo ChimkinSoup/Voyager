@@ -354,6 +354,14 @@ class _StickyReminderCardState extends ConsumerState<_StickyReminderCard>
                   dense: true,
                   label: 'Acknowledge',
                   color: accent,
+                  // Light's default is a faint wafer, the same as the two
+                  // snoozes beside it; fill it as dark's default does.
+                  glassOpacity: theme.brightness == Brightness.dark
+                      ? null
+                      : 0.95,
+                  textColor: theme.brightness == Brightness.dark
+                      ? null
+                      : theme.colorScheme.onPrimary,
                   enabled: !_busy,
                   onPressed: () =>
                       _run((engine) => engine.acknowledge(view.sourceKey)),

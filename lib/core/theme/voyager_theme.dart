@@ -37,6 +37,23 @@ Color? _hueLinkedInk(Color background) {
   return null;
 }
 
+/// [color] as text on [background]: itself when it already clears
+/// [_labelContrastFloor], otherwise scaled toward black (hue held) until it
+/// does.
+Color _inkOn(Color color, Color background) {
+  for (var step = 100; step >= 5; step -= 5) {
+    final scale = step / 100;
+    final ink = Color.from(
+      alpha: 1,
+      red: color.r * scale,
+      green: color.g * scale,
+      blue: color.b * scale,
+    );
+    if (_contrastRatio(ink, background) >= _labelContrastFloor) return ink;
+  }
+  return _neutralInk;
+}
+
 /// Label color for text/icons painted on a solid [background] that the user
 /// picked — the theme accent, or an event/list/category color.
 ///
@@ -289,6 +306,18 @@ class VoyagerTheme {
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,
     );
+    // On cream a text button's elevation casts a mid-grey pill under its
+    // transparent fill, and the raw accent is too pale to read as text.
+    final lightTextInk = _inkOn(accent, palette.scaffold);
+    final lightTextButtonStyle = textButtonStyle.copyWith(
+      elevation: const WidgetStatePropertyAll(0),
+      foregroundColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.disabled) ? null : lightTextInk,
+      ),
+      iconColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.disabled) ? null : lightTextInk,
+      ),
+    );
     final outlinedButtonStyle = sharedButtonStyle.copyWith(side: buttonSide);
 
     return ThemeData(
@@ -358,7 +387,9 @@ class VoyagerTheme {
       filledButtonTheme: FilledButtonThemeData(style: sharedButtonStyle),
       elevatedButtonTheme: ElevatedButtonThemeData(style: sharedButtonStyle),
       outlinedButtonTheme: OutlinedButtonThemeData(style: outlinedButtonStyle),
-      textButtonTheme: TextButtonThemeData(style: textButtonStyle),
+      textButtonTheme: TextButtonThemeData(
+        style: palette.isDark ? textButtonStyle : lightTextButtonStyle,
+      ),
       iconButtonTheme: IconButtonThemeData(
         style: ButtonStyle(
           overlayColor: pressOverlay,

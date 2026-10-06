@@ -1,0 +1,5 @@
+final repo = c.read(calendarRepositoryProvider);
+final legacy = (await repo.listCalendars()).firstWhere((x) => x.id == '__legacy_calendar__');
+final edited = Calendar(id: legacy.id, createdAt: legacy.createdAt, updatedAt: DateTime.now().toUtc(), version: legacy.version + 1, name: 'FX045 Edited Default', colorValue: legacy.colorValue);
+await repo.upsertCalendar(edited);
+debugPrint('FX045-EDIT to v${edited.version}, no explicit push');

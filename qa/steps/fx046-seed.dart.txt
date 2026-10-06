@@ -1,0 +1,6 @@
+final repo = c.read(journalRepositoryProvider);
+final now = DateTime.now().toUtc();
+await repo.upsertJournal(Journal(id: 'fx046-beta', name: 'FX Beta', colorValue: 0xFFA6D189, createdAt: now, updatedAt: now));
+for (var i = 0; i < 2; i++) { await repo.upsertEntry(JournalEntry(id: 'fx046-entry-$i', journalId: 'fx046-beta', title: 'FX Beta entry $i', body: 'beta body $i', entryDate: now, timestamp: now, createdAt: now, updatedAt: now)); }
+c.invalidate(journalsProvider); c.invalidate(journalEntryCountsProvider); c.invalidate(journalEntriesProvider);
+debugPrint('FX046 seeded FX Beta with 2 entries');
