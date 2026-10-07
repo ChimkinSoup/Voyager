@@ -1,0 +1,4 @@
+final now = DateTime.now().toUtc();
+final tr = c.read(trackerRepositoryProvider);
+await tr.upsertTracker(StatisticTracker(id: 'fx101-mood4', createdAt: now, updatedAt: now, name: 'Mood4', type: TrackerType.enumType, cadence: TrackerCadence.daily, colorValue: 0xFF99D1DB, trackingStyle: TrackerStyle.independent, enumOptions: ['X', 'Y']));
+invalidateAllDataProvidersIn(c);

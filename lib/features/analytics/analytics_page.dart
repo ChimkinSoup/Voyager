@@ -188,14 +188,15 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               ? ref.watch(allDreamEntriesProvider.settled)
               : null;
           final today = DateTime.now();
+          // The Dream Logged tracker's own days, so the chip and its
+          // drill-down agree on what counts as a logged dream.
+          final todayDay = DateTime(today.year, today.month, today.day);
+          final dreamEntries = dreamEntriesAsync?.valueOrNull;
           final dreamLoggedToday =
-              dreamEntriesAsync?.valueOrNull?.any((e) {
-                final d = e.entryDate.toLocal();
-                return d.year == today.year &&
-                    d.month == today.month &&
-                    d.day == today.day;
-              }) ??
-              false;
+              dreamEntries != null &&
+              dreamLoggedTrackerValues(
+                dreamEntries,
+              ).any((v) => v.periodStart == todayDay);
           final showWorkoutStats = settings?.showWorkoutStatistics ?? false;
           final workoutDays = showWorkoutStats
               ? ref.watch(workoutDaysProvider.settled).valueOrNull
@@ -347,81 +348,102 @@ class _MacroStatsRow extends StatelessWidget {
   final StatisticTracker? workedOutTracker;
   final bool workedOutToday;
 
+  static const _minChipWidthWithIcon = 125.0;
+
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
-    return IntrinsicHeight(
-      child: Row(
-        children: [
-          _StatChip(
-            label: 'Entries',
-            value: compactNumberLabel(totalEntries),
-            icon: PhosphorIconsRegular.notebook,
-            accent: accent,
-            onTap: () => _showStatisticDetail(
-              context: context,
-              tracker: entriesTracker,
-              analytics: analytics,
-            ),
-          ),
-          const SizedBox(width: 10),
-          _StatChip(
-            label: 'Words',
-            value: compactNumberLabel(totalWords),
-            icon: PhosphorIconsRegular.textAa,
-            accent: accent,
-            onTap: () => _showStatisticDetail(
-              context: context,
-              tracker: wordCountTracker,
-              analytics: analytics,
-            ),
-          ),
-          const SizedBox(width: 10),
-          _StatChip(
-            label: 'Best Streak',
-            value:
-                '${compactNumberLabel(longestStreak)} '
-                '${longestStreak == 1 ? 'day' : 'days'}',
-            icon: PhosphorIconsRegular.flame,
-            accent: accent,
-            onTap: () => _showStatisticDetail(
-              context: context,
-              tracker: streakTracker,
-              analytics: analytics,
-            ),
-          ),
-          const SizedBox(width: 10),
-          const _TasksChip(),
-          if (dreamLoggedTracker != null) ...[
-            const SizedBox(width: 10),
-            _StatChip(
-              label: 'Dream Today',
-              value: dreamLoggedToday ? 'Yes' : 'No',
-              icon: PhosphorIconsRegular.moonStars,
-              accent: accent,
-              onTap: () => _showStatisticDetail(
-                context: context,
-                tracker: dreamLoggedTracker!,
-                analytics: analytics,
+    final chipCount =
+        4 +
+        (dreamLoggedTracker == null ? 0 : 1) +
+        (workedOutTracker == null ? 0 : 1);
+    // Measured here, not in the chip: the row's [IntrinsicHeight] can't lay
+    // out a [LayoutBuilder]. Five or six chips at the minimum window size
+    // give the icon's room to the value.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final chipWidth =
+            (constraints.maxWidth - 10 * (chipCount - 1)) / chipCount;
+        final showIcon = chipWidth >= _minChipWidthWithIcon;
+        return IntrinsicHeight(
+          child: Row(
+            children: [
+              _StatChip(
+                label: 'Entries',
+                value: compactNumberLabel(totalEntries),
+                icon: PhosphorIconsRegular.notebook,
+                accent: accent,
+                showIcon: showIcon,
+                onTap: () => _showStatisticDetail(
+                  context: context,
+                  tracker: entriesTracker,
+                  analytics: analytics,
+                ),
               ),
-            ),
-          ],
-          if (workedOutTracker != null) ...[
-            const SizedBox(width: 10),
-            _StatChip(
-              label: 'Workout Today',
-              value: workedOutToday ? 'Yes' : 'No',
-              icon: PhosphorIconsRegular.barbell,
-              accent: accent,
-              onTap: () => _showStatisticDetail(
-                context: context,
-                tracker: workedOutTracker!,
-                analytics: analytics,
+              const SizedBox(width: 10),
+              _StatChip(
+                label: 'Words',
+                value: compactNumberLabel(totalWords),
+                icon: PhosphorIconsRegular.textAa,
+                accent: accent,
+                showIcon: showIcon,
+                onTap: () => _showStatisticDetail(
+                  context: context,
+                  tracker: wordCountTracker,
+                  analytics: analytics,
+                ),
               ),
-            ),
-          ],
-        ],
-      ),
+              const SizedBox(width: 10),
+              _StatChip(
+                label: 'Best Streak',
+                value:
+                    '${compactNumberLabel(longestStreak)} '
+                    '${longestStreak == 1 ? 'day' : 'days'}',
+                icon: PhosphorIconsRegular.flame,
+                accent: accent,
+                showIcon: showIcon,
+                onTap: () => _showStatisticDetail(
+                  context: context,
+                  tracker: streakTracker,
+                  analytics: analytics,
+                ),
+              ),
+              const SizedBox(width: 10),
+              _TasksChip(showIcon: showIcon),
+              if (dreamLoggedTracker != null) ...[
+                const SizedBox(width: 10),
+                _StatChip(
+                  label: 'Dream Today',
+                  value: dreamLoggedToday ? 'Yes' : 'No',
+                  icon: PhosphorIconsRegular.moonStars,
+                  accent: accent,
+                  showIcon: showIcon,
+                  onTap: () => _showStatisticDetail(
+                    context: context,
+                    tracker: dreamLoggedTracker!,
+                    analytics: analytics,
+                  ),
+                ),
+              ],
+              if (workedOutTracker != null) ...[
+                const SizedBox(width: 10),
+                _StatChip(
+                  label: 'Workout Today',
+                  value: workedOutToday ? 'Yes' : 'No',
+                  icon: PhosphorIconsRegular.barbell,
+                  accent: accent,
+                  showIcon: showIcon,
+                  onTap: () => _showStatisticDetail(
+                    context: context,
+                    tracker: workedOutTracker!,
+                    analytics: analytics,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -433,7 +455,9 @@ class _MacroStatsRow extends StatelessWidget {
 /// so watching them at the page level would rebuild the whole page —
 /// tracker grid and all — per tick while To-Do was in use.
 class _TasksChip extends ConsumerWidget {
-  const _TasksChip();
+  const _TasksChip({required this.showIcon});
+
+  final bool showIcon;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -444,6 +468,7 @@ class _TasksChip extends ConsumerWidget {
       value: open == null ? '—' : '${compactNumberLabel(open)} open',
       icon: PhosphorIconsRegular.listChecks,
       accent: Theme.of(context).colorScheme.primary,
+      showIcon: showIcon,
       onTap: () => showVoyagerDialog<void>(
         context: context,
         builder: (_) => const _TasksDialog(),
@@ -522,6 +547,7 @@ class _StatChip extends StatelessWidget {
     required this.icon,
     required this.accent,
     this.onTap,
+    this.showIcon = true,
   });
 
   final String label;
@@ -529,6 +555,7 @@ class _StatChip extends StatelessWidget {
   final IconData icon;
   final Color accent;
   final VoidCallback? onTap;
+  final bool showIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -548,8 +575,10 @@ class _StatChip extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Icon(icon, size: 18, color: accent),
-                const SizedBox(width: 10),
+                if (showIcon) ...[
+                  Icon(icon, size: 18, color: accent),
+                  const SizedBox(width: 10),
+                ],
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -560,13 +589,17 @@ class _StatChip extends StatelessWidget {
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                      Text(
-                        value,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
+                      // Shrinks rather than lose its end in a narrow chip.
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          value,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -3497,6 +3530,23 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
   late final String? _initialEnum;
   late final String _initialInt;
 
+  /// Set by the first of Save, Delete, Esc or a click outside, so a second
+  /// one arriving while the first awaits its write can't write again or pop
+  /// the route underneath. Cleared if that write fails, so the popover can
+  /// still be closed.
+  bool _closing = false;
+
+  Future<void> _closeOnce(Future<void> Function() close) async {
+    if (_closing) return;
+    _closing = true;
+    try {
+      await close();
+    } catch (_) {
+      _closing = false;
+      rethrow;
+    }
+  }
+
   /// Whether anything was actually edited.
   ///
   /// A never-logged period seeds the editor from the tracker's defaults
@@ -3928,12 +3978,16 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
         ),
       ),
     );
-    return CtrlEnterToSubmitScope(
-      onSubmit: _save,
-      // The integer editor's field autofocuses and holds focus itself; the
-      // switch and option editors have nothing that would.
-      autofocus: widget.tracker.type != TrackerType.integer,
-      child: content,
+    // Each value editor autofocuses itself (field, switch, option picker), so
+    // Space / Enter act on it from the start. Esc goes the way of a click
+    // outside: saved if edited, closed either way.
+    return Actions(
+      actions: {
+        DismissIntent: CallbackAction<DismissIntent>(
+          onInvoke: (_) => _handleOutsideTap(),
+        ),
+      },
+      child: CtrlEnterToSubmitScope(onSubmit: _save, child: content),
     );
   }
 
@@ -4009,13 +4063,21 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
           ],
         );
       case TrackerType.boolean:
-        return SwitchListTile(
-          contentPadding: const EdgeInsets.only(left: 6, right: 0),
-          dense: true,
-          title: const Text('Completed'),
-          value: _boolValue ?? false,
-          activeColor: accent,
-          onChanged: (v) => setState(() => _boolValue = v),
+        // Enter saves, as it does in the number editor; Space toggles.
+        return CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.enter): _save,
+            const SingleActivator(LogicalKeyboardKey.numpadEnter): _save,
+          },
+          child: SwitchListTile(
+            contentPadding: const EdgeInsets.only(left: 6, right: 0),
+            dense: true,
+            autofocus: true,
+            title: const Text('Completed'),
+            value: _boolValue ?? false,
+            activeColor: accent,
+            onChanged: (v) => setState(() => _boolValue = v),
+          ),
         );
       // Never opened for a counter — see [_openSparklinePeriodEditor].
       case TrackerType.counter:
@@ -4026,6 +4088,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
           initialValue: options.contains(_enumValue) ? _enumValue : null,
           accentColor: accent,
           showCaret: false,
+          autofocus: true,
           decoration: const InputDecoration(labelText: 'Value', isDense: true),
           items: options
               .map((o) => DropdownMenuItem(value: o, child: Text(o)))
@@ -4035,7 +4098,9 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
     }
   }
 
-  Future<void> _delete() async {
+  Future<void> _delete() => _closeOnce(_deleteNow);
+
+  Future<void> _deleteNow() async {
     // Belt and braces alongside the guard in [_openSparklinePeriodEditor]:
     // a virtual tracker's values are derived at display time, so a row
     // written under its id is one nothing ever reads back.
@@ -4102,7 +4167,9 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
     navigator.pop();
   }
 
-  Future<void> _save() async {
+  Future<void> _save() => _closeOnce(_commit);
+
+  Future<void> _commit() async {
     // See [_delete] — a write under a virtual tracker's id is unreadable.
     if (widget.tracker.isDefault) {
       if (mounted) Navigator.of(context).pop();
@@ -4184,7 +4251,9 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
     if (mounted) Navigator.of(context).pop();
   }
 
-  Future<void> _handleOutsideTap() async {
+  Future<void> _handleOutsideTap() => _closeOnce(_dismiss);
+
+  Future<void> _dismiss() async {
     // A dismissal is not an edit. The editor is seeded from the tracker's
     // *defaults* on a period that was never logged, so "untouched" and
     // "deliberately the default value" occupy the same fields — only
@@ -4198,7 +4267,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
       if (mounted) Navigator.of(context).pop();
       return;
     }
-    await _save();
+    await _commit();
   }
 }
 

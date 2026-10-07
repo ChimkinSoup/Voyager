@@ -429,9 +429,12 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
       case TrackerType.enumType:
         final options = widget.tracker.enumOptions;
         final selected = _enumValue;
+        final optionStyle = theme.textTheme.bodySmall?.copyWith(fontSize: 10);
         return VoyagerDropdownButtonFormField<String>(
           initialValue: selected,
           showCaret: false,
+          // An empty row is then as tall as a filled one.
+          style: optionStyle,
           accentColor: accent,
           decoration: InputDecoration(
             isDense: true,
@@ -447,10 +450,7 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
               .map(
                 (o) => DropdownMenuItem(
                   value: o,
-                  child: Text(
-                    o,
-                    style: theme.textTheme.bodySmall?.copyWith(fontSize: 10),
-                  ),
+                  child: Text(o, style: optionStyle),
                 ),
               )
               .toList(),

@@ -1,0 +1,16 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final tr = c.read(trackerRepositoryProvider);
+await tr.upsertTracker(StatisticTracker(id: 'fx101-mood', createdAt: now, updatedAt: now, name: 'Mood2', type: TrackerType.enumType, cadence: TrackerCadence.daily, colorValue: 0xFFF4B8E4, trackingStyle: TrackerStyle.independent, enumOptions: ['A', 'B']));
+await tr.upsertTracker(StatisticTracker(id: 'fx101-gym', createdAt: now, updatedAt: now, name: 'Gym', type: TrackerType.boolean, cadence: TrackerCadence.weekly, colorValue: 0xFFE5C890, trackingStyle: TrackerStyle.independent));
+await tr.upsertTracker(StatisticTracker(id: 'fx101-pages', createdAt: now, updatedAt: now, name: 'Pages read', type: TrackerType.integer, cadence: TrackerCadence.daily, colorValue: 0xFFA6D189, trackingStyle: TrackerStyle.independent));
+await tr.upsertValue(TrackerValue(id: 'fx101-pages-5', trackerId: 'fx101-pages', periodStart: DateTime(2026, 10, 5), intValue: 12, createdAt: now, updatedAt: now));
+final dr = c.read(dreamRepositoryProvider);
+final real = DreamEntry(id: 'fx101-dream-real', createdAt: now, updatedAt: now, version: 1, title: 'Real dream', body: 'flying over water', entryDate: DateTime(2026, 10, 6, 7).toUtc());
+await dr.upsertEntry(real); r.pushDreamEntryNow(real);
+final blank = DreamEntry(id: 'fx101-dream-blank', createdAt: now, updatedAt: now, version: 1, title: '', body: '', entryDate: DateTime(2026, 10, 7, 7).toUtc());
+await dr.upsertEntry(blank); r.pushDreamEntryNow(blank);
+final s = c.read(settingsProvider).value!;
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(showDreamStatistics: true));
+invalidateAllDataProvidersIn(c);
+debugPrint('FX101 seeded');

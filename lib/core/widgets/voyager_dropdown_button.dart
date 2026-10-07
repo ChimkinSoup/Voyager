@@ -25,6 +25,8 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
     super.enabled = true,
     this.isExpanded = false,
     this.showCaret = true,
+    this.autofocus = false,
+    this.style,
     this.accentColor,
     this.onMenuStateChanged,
   }) : assert(items.isNotEmpty),
@@ -60,6 +62,8 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
                enabled: dropdown.enabled,
                isExpanded: isExpanded,
                showCaret: dropdown.showCaret,
+               autofocus: dropdown.autofocus,
+               style: dropdown.style,
                accentColor: dropdown.accentColor,
                onMenuStateChanged: dropdown.onMenuStateChanged,
                onChanged: (value) {
@@ -76,6 +80,14 @@ class VoyagerDropdownButtonFormField<T> extends FormField<T> {
   final ValueChanged<T?>? onChanged;
   final bool isExpanded;
   final bool showCaret;
+
+  /// Focuses the field when it's first built, so Space / Enter open its menu.
+  final bool autofocus;
+
+  /// The field's text style, which also sets the empty field's height. Pass
+  /// the options' style when it isn't the default, so an empty field is as
+  /// tall as a filled one. Defaults to the theme's `bodyLarge`.
+  final TextStyle? style;
   final Color? accentColor;
 
   /// Called with `true` when the popup menu opens and `false` once it has
@@ -104,6 +116,8 @@ class _VoyagerDropdownFieldControl<T> extends StatefulWidget {
     required this.enabled,
     required this.isExpanded,
     required this.showCaret,
+    required this.autofocus,
+    required this.style,
     required this.onChanged,
     this.accentColor,
     this.onMenuStateChanged,
@@ -114,6 +128,8 @@ class _VoyagerDropdownFieldControl<T> extends StatefulWidget {
   final bool enabled;
   final bool isExpanded;
   final bool showCaret;
+  final bool autofocus;
+  final TextStyle? style;
   final ValueChanged<T?> onChanged;
   final Color? accentColor;
   final ValueChanged<bool>? onMenuStateChanged;
@@ -203,11 +219,12 @@ class _VoyagerDropdownFieldControlState<T>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final selected = _selectedItem();
-    final labelStyle = theme.textTheme.bodyLarge;
+    final labelStyle = widget.style ?? theme.textTheme.bodyLarge;
 
     return Focus(
       canRequestFocus: widget.enabled,
       child: InkWell(
+        autofocus: widget.autofocus,
         onTap: widget.enabled ? _openMenu : null,
         child: Row(
           children: [
@@ -215,7 +232,10 @@ class _VoyagerDropdownFieldControlState<T>
               child: DefaultTextStyle(
                 style: labelStyle!,
                 overflow: TextOverflow.ellipsis,
-                child: selected?.child ?? const SizedBox.shrink(),
+                // With nothing picked, a blank line of the field's own text
+                // keeps it one line tall: without a caret beside it, an empty
+                // box here collapsed the tap target to nothing.
+                child: selected?.child ?? const Text(' '),
               ),
             ),
             if (widget.showCaret)

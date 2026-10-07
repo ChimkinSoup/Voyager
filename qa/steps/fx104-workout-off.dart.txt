@@ -1,0 +1,2 @@
+final s = c.read(settingsProvider).value!;
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(showWorkoutStatistics: false));

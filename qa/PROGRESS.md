@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 050.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 051.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -169,6 +169,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-047@example.com | 2026-10-06 (FV-24: BUG-086…090) | Journal "FX Search" (`fx086-j`): "Emphasis" (`This has **boldword** and foo**bar** and ==marked== text`), "Accents" ("Coffee at the café was naïve fun"), "Deep accent" (120 × "filler" then "crème brûlée and zebra__corn__"), "Literal stars" ("Math 2*3 stays as typed"), dated Oct 1–4. Dream "Café dream" (`fx086-dream`, "a naïve moon**lit** walk", Oct 5). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-048@example.com | 2026-10-06 (FV-25: BUG-093…095) | Journal "FX Streak" (`fx091-j`): "Streak 3/5"…"Streak 3/12" and "Streak 6/1"…"Streak 6/5" (10:00 each, body "one two three"), "Dialog entry" (Oct 6, 40 short paragraphs). Dream "Dialog dream" (Oct 6, same body). Theme left on Dark. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-049@example.com | 2026-10-06 (FV-26: BUG-096…100) | Journal "FX Trackers" (`fx096-j`): "Streak 3/5"…"Streak 3/12", "Streak 6/1"…"Streak 6/5", "Streak 10/4"…"Streak 10/6" (10:00 each, body "one two three"). Trackers "Pages read" (`fx096-pages`, Number heatmap daily: Oct 1 5, Oct 2 12.34, Oct 3 25, Oct 4 8, Oct 5 999999999 plus a hidden Boolean `true` from the FV-26 follow-up) and "Weight" (`fx096-weight`, Sparkline 50–300: Sep 26 175, Oct 4 180). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-050@example.com | 2026-10-07 (FV-27: BUG-101…105) | Trackers "Mood2" (`fx101-mood`, Dropdown A/B daily, no default: Oct 5 A, Oct 6 B, Oct 7 A), "Mood3" (`fx101-mood3`, Dropdown X/Y daily: Oct 7 X), "Mood4" (`fx101-mood4`, Dropdown X/Y daily, no values), "Pages read" (`fx101-pages`, Number daily: Oct 3 9, Oct 4 7, Oct 5 12), "Gym" (`fx101-gym`, Boolean weekly: weeks of Sep 21 false, Sep 28 true, Oct 5 true). Dreams "Real dream" (Oct 6) and a blank one (Oct 7). **Show dream statistics ON.** Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 
 ---
 
@@ -299,7 +300,7 @@ One line per completed phase.
 - **Tab + Enter can minimize or hide Voyager** (BUG-086): Tab walks into the invisible title-bar Minimize/Maximize/Close buttons. In a harness run, don't press Enter after several Tabs without checking `primaryFocus` (`qa/steps/kf.ps1`). If the window vanished, `tray-open` (hidden) or `activate` (minimized) brings it back; after `tray-open` focus sits on the root scope and Tab does nothing until something is clicked.
 - **Search page:** the results list fills the whole page, so any click below the field opens a result's dialog (there's no empty space when results show). Query field (1500, 72); first result row (600, 200); right-click menu items Statistics (725, 252) / Change Journal (725, 333) / Delete (725, 414); dialog body (2300, 1200), Close (2189, 1564) / Save (2309, 1564) for journal entries; dream-scope chip ✕ (494, 73). The page remembers the dream scope across visits: exit it with the ✕ before typing `/dream` again.
 - **Analytics page (maximized, scrolled to top):** chips y=112 (Entries 550, Words 1207, Best Streak 1863, Tasks 2520 with 4 chips; 5 chips shift them), New tracker (2719, 672); New tracker dialog: Name autofocused, Type field (1440, 484) → menu Number/Boolean/Dropdown at y≈578/675/772, Cadence (1440, 717 for Boolean; 727 for Dropdown) → daily/weekly/monthly/yearly at ≈813/909/1005/1100, Create (1798, 1379 for Boolean; grows with options). Rows re-layout as trackers are added/starred: always re-measure from a shot. A tracker's name/chrome opens its detail popup; squares and sparklines open the value popover.
-- **BUG-102 eats clicks:** after closing a value popover with Esc, the next click does nothing. Close popovers with Cancel (or send a throwaway click) before the next real click, or results get misread.
+- **BUG-102 eats clicks (builds before the FV-27 fix):** Esc didn't close a value popover, so the next click only closed it. Close popovers with Cancel (or send a throwaway click) before the next real click, or results get misread. Fixed in FV-27: Esc now closes (and saves an edit).
 - **The Light theme button** is at (2707, 829) on Settings → Appearance (not 415). Ctrl+Shift+Tab from Analytics goes to **Search**, not Settings; use the rail.
 - **Finance page (maximized):** tabs Ledger (370, 340), Analytics (603, 340), Goals (840, 340); hero (click anywhere, e.g. 1500, 160) opens the expanded view: range chips Month/7D/30D/90D/YTD at x ≈ 193/322/449/577/706, y 218; legend chips y 298; category filter (950, 218). Open the transaction sheet with `hotkey ctrl+alt+f` (the + button is in the bottom-right corner: don't click it maximized). Sheet: Expense (1140, 566), Deposit (1740, 566), Amount (1440, 680), Store (1440, 813), Note (1440, 941), Tags (1440, 1069), Date pill (1960, 1182), Add/Save (1440, 1310), close X (1991, 462). Row right-click menu items sit at +(215, 52) Convert, +(145, 132) Duplicate, +(125, 213) Delete from the click point. Analytics → Spending Breakdown mode buttons Category/Tag/Store at x ≈ 1190/1309/1430, y 1156; right-click a legend row → "View transactions".
 - **Toast Undo moves with the message length:** for `Deleted "Walmart - Toothpaste"` it was at (1722, 65), not (1663, 65). Take a shot with the pointer parked on the toast (`move 1500 65`) and read the position, or the next click lands on whatever row moved up.
@@ -383,6 +384,10 @@ One line per completed phase.
 ---
 
 ## 7. Handoff note
+
+**2026-10-07 (code-review follow-up to BUG-101/102/105):** one close guard for the value popover (no double write or double pop; recoverable if the write fails), Enter saves in the Boolean popover, the empty dropdown no longer copies its first option (empty Inbox rows are slightly taller, accepted). Full suite 4,489 passed; verified in the app (TEST_PLAN.md FV-27 follow-up, qa-050). Session ended `SIGNED-OUT`.
+
+**2026-10-07 (BUG-101…105):** all five reproduced on the unfixed build and fixed and verified in the app (TEST_PLAN.md FV-27, qa-050). Dropdown trackers can be logged (popover and Inbox, mouse and keys); Esc closes a value popover (saving an edit), which was also the cause of the "eaten" click; Space toggles a Boolean at once; "Dream Today" ignores blank dreams; stat chips keep whole values at the minimum size. Summary counts updated (72 fixed, 156 open). Full suite 4,489 passed. Session ended `SIGNED-OUT`.
 
 **2026-10-06 (code-review follow-up to BUG-097/100):** hidden other-type readings survive writes and deletes, the type-change notice is accurate, the number fields reject a mid-text edit instead of trimming the end, and two small cleanups. Full suite 4,484 passed; re-verified in the app on 2026-10-07 after a locked-screen attempt (TEST_PLAN.md FV-26 follow-up, qa-049). Session ended `SIGNED-OUT`.
 
