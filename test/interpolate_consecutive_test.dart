@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
+import 'package:voyager/features/analytics/sparkline_touch.dart';
 
 void main() {
   final analytics = AnalyticsService();
@@ -74,4 +75,38 @@ void main() {
     // The trailing side still clamps to the last known value.
     expect(spots.last.y, 5);
   });
+  // BUG-099: one value used to come back as a lone spot, and the sparkline's
+  // click resolver clamps into the series' own x range, so every click on
+  // the chart resolved to that one day and overwrote it.
+  test(
+    'a single value still spans the window, so other days are clickable',
+    () {
+      final to = from.add(const Duration(days: 30));
+      final spots = analytics.interpolateConsecutive(
+        values: [value(27, 180)],
+        from: from,
+        to: to,
+        maxDays: 30,
+      );
+
+      expect(spots.first.x, 0);
+      expect(spots.last.x, 30);
+      expect(spots.firstWhere((s) => s.x == 10).y, 0);
+      expect(spots.firstWhere((s) => s.x == 27).y, 180);
+      expect(spots.last.y, 180);
+
+      DateTime daily(DateTime d) => DateTime(d.year, d.month, d.day);
+      double clickAt(double x) => sparklinePeriodAnchorX(
+        rawX: x,
+        from: from,
+        values: [value(27, 180)],
+        periodStartOf: daily,
+        spots: spots,
+        periodStarts: [for (var d = -1; d <= 30; d++) d.toDouble()],
+      );
+      expect(clickAt(29), 29);
+      expect(clickAt(24), 24);
+      expect(clickAt(27), 27);
+    },
+  );
 }

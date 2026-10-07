@@ -32,11 +32,13 @@ import 'package:voyager/domain/services/periodic_prompt_service.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/services/analytics_service.dart';
+import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/shell/shell_page_storage_keys.dart';
 import 'package:voyager/features/analytics/counter_controls.dart';
 import 'package:voyager/features/analytics/mood_trend_card.dart';
 import 'package:voyager/features/analytics/sparkline_touch.dart';
 import 'package:voyager/features/analytics/stat_number_format.dart';
+import 'package:voyager/features/analytics/tracker_entry_row.dart';
 import 'package:voyager/features/calendar/calendar_keyboard_shortcuts.dart';
 import 'package:voyager/features/calendar/calendar_grid.dart'
     show MonthTitleHeader;
@@ -3974,10 +3976,10 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-              ],
+              inputFormatters: [trackerNumberFormatter(signed: false)],
               accentColor: accent,
+              // Rebuilds the slider above, which reads this field's text.
+              onChanged: cap == null ? null : (_) => setState(() {}),
               onSubmitted: (_) => _save(),
               decoration: const InputDecoration(
                 labelText: 'Value',
@@ -4047,6 +4049,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
     final overlay = Overlay.of(context, rootOverlay: true);
     final navigator = Navigator.of(context);
     final onSaved = widget.onSaved;
+    final type = widget.tracker.type;
 
     final current = widget.initialValue;
     if (current != null) {
@@ -4058,7 +4061,7 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
         overlay: overlay,
         message: 'Deleted logged value',
         delete: () async {
-          await repository.softDeleteValue(current.id);
+          await _deleteReading(repository, current, type);
           onSaved();
         },
         restore: () async {
@@ -4070,8 +4073,10 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
           // The version is resolved against disk rather than against the
           // snapshot — see [restoreVersionFrom].
           final onDisk = await repository.getValue(current.id);
+          // A row that only lost this type's reading isn't a tombstone; it
+          // counts as restored once that reading is back.
           abortIfAlreadyRestored(
-            found: onDisk != null,
+            found: onDisk != null && hasReadingOfType(onDisk, type),
             deletedAt: onDisk?.deletedAt,
           );
           await repository.upsertValue(
@@ -4119,9 +4124,11 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
         final text = _intController.text.trim();
         if (text.isEmpty) {
           if (current != null) {
-            await ref
-                .read(trackerRepositoryProvider)
-                .softDeleteValue(current.id);
+            await _deleteReading(
+              ref.read(trackerRepositoryProvider),
+              current,
+              widget.tracker.type,
+            );
             widget.onSaved();
           }
           if (mounted) Navigator.of(context).pop();
@@ -4152,15 +4159,17 @@ class _MorphPopoverState extends ConsumerState<_MorphPopover>
     // a higher version. Writing it at version 0 let the remote tombstone
     // outrank the fresh local value and delete it again on the next pull.
     final onDisk = await repo.getValue(id);
+    // A reading logged under another type is hidden, not discarded.
+    final kept = otherTypeReadings(onDisk, widget.tracker.type);
 
     await repo.upsertValue(
       TrackerValue(
         id: id,
         trackerId: widget.tracker.id,
         periodStart: widget.periodDate,
-        intValue: intVal,
-        boolValue: boolVal,
-        enumValue: enumVal,
+        intValue: intVal ?? kept.intValue,
+        boolValue: boolVal ?? kept.boolValue,
+        enumValue: enumVal ?? kept.enumValue,
         createdAt: onDisk?.createdAt ?? current?.createdAt ?? now,
         updatedAt: now,
         // A write is a new revision of whatever is already there.
@@ -4442,6 +4451,30 @@ DateTime _nextTrackerPeriod(DateTime date, TrackerCadence cadence) {
   };
 }
 
+/// Removes [value]'s reading of [type]. A row that also holds a reading of
+/// another type, logged before the tracker's type changed and hidden since,
+/// keeps that one and only loses this field; any other row is soft-deleted.
+Future<void> _deleteReading(
+  TrackerRepository repository,
+  TrackerValue value,
+  TrackerType type,
+) async {
+  final kept = otherTypeReadings(value, type);
+  if (kept.intValue == null &&
+      kept.boolValue == null &&
+      kept.enumValue == null) {
+    return repository.softDeleteValue(value.id);
+  }
+  final row = await repository.getValue(value.id) ?? value;
+  await repository.upsertValue(
+    row.copyWith(
+      intValue: kept.intValue,
+      boolValue: kept.boolValue,
+      enumValue: kept.enumValue,
+    ),
+  );
+}
+
 /// Singular unit noun for a cadence, e.g. "day"/"week"/"month"/"year".
 String _cadenceUnit(TrackerCadence cadence) {
   return switch (cadence) {
@@ -4515,6 +4548,8 @@ class _DetailStatisticsSection extends ConsumerWidget {
         _row(context, 'Journals', compactNumberLabel(journalCount)),
     ];
     ({int longest, int current}) streak;
+    final unit = _cadenceUnit(tracker.cadence);
+    String streakLabel(int n) => '$n ${n == 1 ? unit : '${unit}s'}';
 
     // The virtual Word Count tracker has a value on every day since the first
     // entry (0 on silent days — see [wordCountTrackerValues]), so a value
@@ -4531,6 +4566,25 @@ class _DetailStatisticsSection extends ConsumerWidget {
       rows.addAll([
         _row(context, 'Average', average.toStringAsFixed(1)),
         _row(context, 'Highest', compactNumberLabel(highest)),
+      ]);
+      return _section(theme, rows);
+    }
+
+    // The virtual Streak tracker also has a value on every day since the
+    // first entry: the length of the run ending that day, 0 on silent days
+    // (see [streakTrackerValues]). Its streaks are read off those run lengths
+    // (the current one ending at the last journaled day, as [_streakStats]
+    // does); a value count, average and lowest would describe calendar days.
+    if (tracker.id == kStreakTrackerId) {
+      final runs = values.map((v) => (v.intValue ?? 0).toInt()).toList();
+      final journaled = runs.where((n) => n > 0).length;
+      if (journaled == 0) return const SizedBox.shrink();
+      final current = runs.lastWhere((n) => n > 0);
+      final longest = runs.reduce((a, b) => a > b ? a : b);
+      rows.addAll([
+        _row(context, 'Days journaled', compactNumberLabel(journaled)),
+        _row(context, 'Current streak', streakLabel(current)),
+        _row(context, 'Longest streak', streakLabel(longest)),
       ]);
       return _section(theme, rows);
     }
@@ -4616,8 +4670,6 @@ class _DetailStatisticsSection extends ConsumerWidget {
         streak = _streakStats(periods, tracker.cadence);
     }
 
-    final unit = _cadenceUnit(tracker.cadence);
-    String streakLabel(int n) => '$n ${n == 1 ? unit : '${unit}s'}';
     rows.add(_row(context, 'Current streak', streakLabel(streak.current)));
     rows.add(_row(context, 'Longest streak', streakLabel(streak.longest)));
 
@@ -6654,6 +6706,19 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                     ? null
                     : (value) => setState(() => _type = value ?? _type),
               ),
+              // Readings of the old type are hidden, not converted — see
+              // [trackerValuesProvider].
+              if (widget.tracker != null && _type != widget.tracker!.type) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Values logged under another type are hidden while this '
+                  'tracker is ${_typeLabel(_type)}, and come back if you '
+                  'switch the type back.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
               // Only when creating: afterwards the starting value is just the
               // creation day's row in the counter's log.
               if (_type == TrackerType.counter && widget.tracker == null) ...[
@@ -6664,7 +6729,7 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                     signed: true,
                   ),
                   inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'^-?\d*')),
+                    trackerNumberFormatter(signed: true, decimal: false),
                   ],
                   accentColor: accent,
                   decoration: const InputDecoration(
@@ -6748,7 +6813,10 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                   VoyagerTextField(
                     controller: _defaultIntController,
                     keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(kTrackerNumberMaxDigits),
+                    ],
                     accentColor: accent,
                     decoration: const InputDecoration(
                       labelText: 'Default value',
@@ -6783,6 +6851,9 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                           keyboardType: TextInputType.number,
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(
+                              kTrackerNumberMaxDigits,
+                            ),
                           ],
                           accentColor: accent,
                           decoration: const InputDecoration(
@@ -6813,6 +6884,9 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
                           keyboardType: TextInputType.number,
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(
+                              kTrackerNumberMaxDigits,
+                            ),
                           ],
                           accentColor: accent,
                           decoration: const InputDecoration(
@@ -7016,9 +7090,15 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
 
   void _addOption() {
     final text = _newOptionController.text.trim();
-    if (text.isEmpty) return;
+    // The field's Enter unfocuses it before this runs; a rejected add hands
+    // focus back so the text can be fixed in place.
+    if (text.isEmpty) {
+      _newOptionFocusNode.requestFocus();
+      return;
+    }
     if (_enumOptions.contains(text)) {
       setState(() => _optionError = 'This option already exists');
+      _newOptionFocusNode.requestFocus();
       return;
     }
     setState(() {
@@ -7098,7 +7178,11 @@ class _TrackerDialogState extends ConsumerState<_TrackerDialog> {
 
     final enumOptions = _enumOptions;
     if (_type == TrackerType.enumType) {
-      if (enumOptions.isEmpty) return;
+      if (enumOptions.isEmpty) {
+        setState(() => _optionError = 'Add at least one option');
+        _newOptionFocusNode.requestFocus();
+        return;
+      }
       if (enumOptions.toSet().length != enumOptions.length) {
         setState(() => _optionError = 'Options must be unique');
         return;

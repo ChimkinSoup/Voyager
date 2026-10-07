@@ -23,6 +23,36 @@ import 'package:voyager/features/analytics/counter_controls.dart';
 /// (see [TrackerEntryRowState.commit]) until the section's centralized Save
 /// button commits them, since typing a number has no natural "done" moment
 /// the way selecting a dropdown option or flipping a switch does.
+/// Input rule for a tracker's number field: up to [kTrackerNumberMaxDigits]
+/// whole digits and, when [decimal], two decimals, with a leading minus when
+/// [signed]. Text typed or pasted at the end is trimmed to the part that fits
+/// ("12.345" → "12.34"); an edit anywhere else that would break the rule is
+/// rejected, leaving the field as it was. Trimming there kept only the
+/// leading match, so a digit typed into the middle of a full field silently
+/// pushed the last digit off the end.
+TextInputFormatter trackerNumberFormatter({
+  required bool signed,
+  bool decimal = true,
+}) {
+  final rule = RegExp(
+    '^${signed ? '-?' : ''}\\d{0,$kTrackerNumberMaxDigits}'
+    '${decimal ? '(\\.\\d{0,2})?' : ''}',
+  );
+  return TextInputFormatter.withFunction((oldValue, newValue) {
+    final text = newValue.text;
+    final fit = rule.matchAsPrefix(text)![0]!;
+    if (fit.length == text.length) return newValue;
+    final caret = newValue.selection.isValid
+        ? newValue.selection.end
+        : text.length;
+    if (caret != text.length) return oldValue;
+    return TextEditingValue(
+      text: fit,
+      selection: TextSelection.collapsed(offset: fit.length),
+    );
+  });
+}
+
 class TrackerEntryRow extends ConsumerStatefulWidget {
   const TrackerEntryRow({
     super.key,
@@ -110,12 +140,15 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
     // a null `existing` while the row survives at a higher version. See
     // [_saveValue].
     final onDisk = await repo.getValue(id);
+    final kept = otherTypeReadings(onDisk, widget.tracker.type);
     await repo.upsertValue(
       TrackerValue(
         id: id,
         trackerId: widget.tracker.id,
         periodStart: date,
         intValue: val,
+        boolValue: kept.boolValue,
+        enumValue: kept.enumValue,
         createdAt: onDisk?.createdAt ?? existing?.createdAt ?? now,
         updatedAt: now,
         version: (onDisk?.version ?? 0) + 1,
@@ -338,11 +371,7 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
                     signed: true,
                     decimal: true,
                   ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(
-                      RegExp(r'^-?\d*\.?\d{0,2}'),
-                    ),
-                  ],
+                  inputFormatters: [trackerNumberFormatter(signed: true)],
                   textAlign: TextAlign.left,
                   textAlignVertical: TextAlignVertical.center,
                   scrollPadding: kVoyagerFieldScrollPadding,
@@ -472,14 +501,17 @@ class TrackerEntryRowState extends ConsumerState<TrackerEntryRow> {
     // version 0, which let the remote tombstone outrank the fresh local value
     // and delete it again on the next pull with nothing to explain why.
     final onDisk = await repo.getValue(id);
+    // A reading logged under another type is hidden, not discarded: it comes
+    // back if the tracker's type is switched back.
+    final kept = otherTypeReadings(onDisk, widget.tracker.type);
     await repo.upsertValue(
       TrackerValue(
         id: id,
         trackerId: widget.tracker.id,
         periodStart: widget.date,
-        intValue: intValue,
-        boolValue: boolValue,
-        enumValue: enumValue,
+        intValue: intValue ?? kept.intValue,
+        boolValue: boolValue ?? kept.boolValue,
+        enumValue: enumValue ?? kept.enumValue,
         createdAt: onDisk?.createdAt ?? current?.createdAt ?? now,
         updatedAt: now,
         // A write is a new revision of whatever is already there.

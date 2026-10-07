@@ -2062,19 +2062,19 @@ final trackerValuesProvider = FutureProvider.family((
   if (trackerId == kWorkedOutTrackerId) {
     return workedOutTrackerValues(await ref.watch(workoutDaysProvider.future));
   }
-  // Selected, not watched whole: only the fields the counter series reads, so
-  // a star toggle or a reorder doesn't refetch every tracker's values.
-  final counter = await ref.watch(
+  // Selected, not watched whole: only the fields read below, so a star toggle
+  // or a reorder doesn't refetch every tracker's values.
+  final selected = await ref.watch(
     trackersProvider.selectAsync((trackers) {
       for (final t in trackers) {
-        if (t.id == trackerId && t.type == TrackerType.counter) {
-          return (cadence: t.cadence, createdAt: t.createdAt);
+        if (t.id == trackerId) {
+          return (type: t.type, cadence: t.cadence, createdAt: t.createdAt);
         }
       }
       return null;
     }),
   );
-  if (counter != null) {
+  if (selected?.type == TrackerType.counter) {
     final trackers = await ref.read(trackersProvider.future);
     final tracker = trackers.firstWhere((t) => t.id == trackerId);
     final adjustments = await ref.watch(
@@ -2082,7 +2082,15 @@ final trackerValuesProvider = FutureProvider.family((
     );
     return counterSeriesValues(tracker, adjustments, today: DateTime.now());
   }
-  return ref.watch(trackerRepositoryProvider).listValues(trackerId);
+  // Readings logged under another type stay stored but out of view: a number
+  // isn't a "no" to a Boolean tracker. They come back if the type is changed
+  // back, as off-cadence rows do; writes keep them (see [otherTypeReadings]).
+  final values = await ref
+      .watch(trackerRepositoryProvider)
+      .listValues(trackerId);
+  final type = selected?.type;
+  if (type == null) return values;
+  return values.where((v) => hasReadingOfType(v, type)).toList();
 });
 
 /// A counter tracker's live change rows. See [CounterAdjustment].

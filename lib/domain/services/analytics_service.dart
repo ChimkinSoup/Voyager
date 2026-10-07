@@ -79,7 +79,8 @@ class AnalyticsService {
   /// Uses the same Cardinal tension-spline (tension = 0, Catmull-Rom tangents)
   /// as [WeatherChartCurve] to fill gaps between recorded values. The X axis
   /// is the day offset from [from]; the Y axis is the recorded or interpolated
-  /// integer value. If fewer than 2 data points exist the raw spots are returned.
+  /// integer value. A single data point still yields the whole window (0 before
+  /// it, its value after), so a pointer anywhere on the chart has a day to land on.
   ///
   /// [upperBound] is the tracker's integer cap, when it has one. A cubic
   /// Hermite segment isn't bounded by its endpoints — it overshoots whenever
@@ -113,12 +114,6 @@ class AnalyticsService {
     if (dayMap.isEmpty) return const [];
 
     final totalDays = calendarDaysBetween(from, to);
-
-    // If only one data point, return it as a flat line
-    if (dayMap.length == 1) {
-      final entry = dayMap.entries.first;
-      return [FlSpot(entry.key.toDouble(), entry.value)];
-    }
 
     // Sorted known spots
     final knownX = dayMap.keys.toList()..sort();

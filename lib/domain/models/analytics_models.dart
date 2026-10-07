@@ -144,6 +144,39 @@ class StatisticTracker extends SoftDeletable {
   }
 }
 
+/// The most whole-number digits a tracker number field accepts (values,
+/// limits, starting value): up to 999,999,999. Without a cap, a long enough
+/// number parses to `Infinity`, which can't be drawn, formatted or synced.
+const int kTrackerNumberMaxDigits = 9;
+
+/// Whether [value] holds a reading of [type]. A row logged under another type
+/// (before the tracker's type changed) has that field null, and is hidden
+/// while the tracker is [type] rather than read as an answer of it.
+bool hasReadingOfType(TrackerValue value, TrackerType type) => switch (type) {
+  TrackerType.integer => value.intValue != null,
+  TrackerType.boolean => value.boolValue != null,
+  TrackerType.enumType => value.enumValue != null,
+  TrackerType.counter => true,
+};
+
+/// The readings [row] holds for types other than [type], which a write of a
+/// [type] reading carries over so switching the type back brings them back.
+/// The field for [type] itself is always null. A missing or deleted row holds
+/// none.
+({double? intValue, bool? boolValue, String? enumValue}) otherTypeReadings(
+  TrackerValue? row,
+  TrackerType type,
+) {
+  if (row == null || row.deletedAt != null) {
+    return (intValue: null, boolValue: null, enumValue: null);
+  }
+  return (
+    intValue: type == TrackerType.integer ? null : row.intValue,
+    boolValue: type == TrackerType.boolean ? null : row.boolValue,
+    enumValue: type == TrackerType.enumType ? null : row.enumValue,
+  );
+}
+
 /// [raw] confined to [tracker]'s recorded range (`defaultInt`..`integerCap`),
 /// or returned unchanged when the tracker has no limit.
 ///

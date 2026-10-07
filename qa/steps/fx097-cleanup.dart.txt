@@ -1,0 +1,3 @@
+final tr = c.read(trackerRepositoryProvider);
+for (final v in await tr.listValues('fx096-pages')) { if (v.intValue != null && v.intValue!.isInfinite) { await tr.softDeleteValue(v.id); debugPrint('FX097 removed ${v.id}'); } }
+invalidateAllDataProvidersIn(c);
