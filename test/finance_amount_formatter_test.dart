@@ -1,6 +1,6 @@
-// BUG-108: the amount fields dropped a typed `,` (and `-`, `e`), so `1,5`
-// became 15 without a word. Typed keys are now kept for the error line to
-// explain; only a paste is still cleaned.
+// BUG-108: the amount fields dropped a typed `,` (and `-`), so `1,5` became
+// 15 without a word. A typed `,` or `-` is now kept for the error line to
+// explain; a typed letter or other symbol is refused, and a paste is cleaned.
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,12 +15,23 @@ String _edit(AmountInputFormatter f, String from, String to) =>
     f.formatEditUpdate(_value(from), _value(to)).text;
 
 void main() {
-  test('a typed key is kept as typed', () {
+  test('a typed comma or minus is kept as typed', () {
     final f = AmountInputFormatter();
     expect(_edit(f, '1', '1,'), '1,');
-    expect(_edit(f, '1', '1e'), '1e');
     expect(_edit(f, '', '-'), '-');
     expect(_edit(f, '1.99', '1.999'), '1.999');
+  });
+
+  test('a typed letter or other symbol is refused', () {
+    final f = AmountInputFormatter();
+    expect(_edit(f, '1', '1e'), '1');
+    expect(_edit(f, '1', '1a'), '1');
+    expect(_edit(f, '', r'$'), '');
+    expect(_edit(f, '1', '1 '), '1');
+  });
+
+  test('a deletion leaves the rest of the text alone', () {
+    expect(_edit(AmountInputFormatter(), r'$12', r'$1'), r'$1');
   });
 
   test('a paste is cleaned to digits and dots', () {

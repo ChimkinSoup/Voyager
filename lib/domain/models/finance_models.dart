@@ -690,9 +690,9 @@ final _signedAmountShape = RegExp(r'^-?\d*\.?\d*$');
 /// Why [text] isn't shaped like a money amount, or null when it is (or is
 /// empty).
 ///
-/// Typed keys reach the amount fields unfiltered, so `1,5`, `1e12` and `-5`
-/// show up here as typed rather than being silently rewritten to 15, 112 and
-/// 5; only a [signed] field takes a leading `-`. A third decimal is refused
+/// A typed `,` or `-` reaches the amount fields unfiltered, so `1,5` and `-5`
+/// show up here as typed rather than being silently rewritten to 15 and 5;
+/// only a [signed] field takes a leading `-`. A third decimal is refused
 /// rather than rounded, so `1.999` can't be saved as $2.00.
 String? amountShapeError(String text, {bool signed = false}) {
   final raw = text.trim();
