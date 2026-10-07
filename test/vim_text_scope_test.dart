@@ -504,6 +504,8 @@ void main() {
     WidgetTester tester, {
     required bool vimEnabled,
     required VoidCallback onDismiss,
+    TextInputType? keyboardType,
+    bool obscureText = false,
   }) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -527,6 +529,8 @@ void main() {
                   child: LabeledTextField(
                     label: 'Body',
                     controller: controller,
+                    keyboardType: keyboardType,
+                    obscureText: obscureText,
                   ),
                 ),
               ),
@@ -565,6 +569,60 @@ void main() {
       await press(tester, LogicalKeyboardKey.escape);
       expect(dismissed, isFalse);
     }
+  });
+
+  testWidgets('with Vim on, Escape in a non-Vim field stays in the field', (
+    tester,
+  ) async {
+    // BUG-112: an amount box is excluded from Vim editing, but the Esc a Vim
+    // user presses after typing a number must not close the sheet either.
+    var dismissed = false;
+    controller.text = '12';
+    await pumpFieldUnderDismissHandler(
+      tester,
+      vimEnabled: true,
+      keyboardType: TextInputType.number,
+      onDismiss: () => dismissed = true,
+    );
+
+    for (var i = 0; i < 3; i++) {
+      await press(tester, LogicalKeyboardKey.escape);
+      expect(dismissed, isFalse);
+    }
+    expect(find.text('NORMAL'), findsNothing);
+    expect(controller.text, '12');
+  });
+
+  testWidgets('with Vim on, Escape in a password field reaches the dialog', (
+    tester,
+  ) async {
+    // The BUG-112 hold is for structured inputs only: a password box has no
+    // Vim session and nothing for Esc to stop, so Esc still closes.
+    var dismissed = false;
+    await pumpFieldUnderDismissHandler(
+      tester,
+      vimEnabled: true,
+      obscureText: true,
+      onDismiss: () => dismissed = true,
+    );
+
+    await press(tester, LogicalKeyboardKey.escape);
+    expect(dismissed, isTrue);
+  });
+
+  testWidgets('with Vim off, Escape in a field still reaches the dialog', (
+    tester,
+  ) async {
+    var dismissed = false;
+    await pumpFieldUnderDismissHandler(
+      tester,
+      vimEnabled: false,
+      keyboardType: TextInputType.number,
+      onDismiss: () => dismissed = true,
+    );
+
+    await press(tester, LogicalKeyboardKey.escape);
+    expect(dismissed, isTrue);
   });
 
   testWidgets('linewise Visual then Esc then i keeps the input connection', (
@@ -749,9 +807,7 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('AltGr characters in the / bar join the pattern', (
-    tester,
-  ) async {
+  testWidgets('AltGr characters in the / bar join the pattern', (tester) async {
     await pumpField(tester, vimEnabled: true, text: 'mail a@b');
     await press(tester, LogicalKeyboardKey.escape);
     await typeCommand(tester, '/');

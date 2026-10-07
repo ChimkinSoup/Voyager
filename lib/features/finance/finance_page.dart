@@ -969,7 +969,7 @@ class _UpcomingHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = theme.colorScheme.primary;
+    final accent = themedLabelInk(theme, theme.colorScheme.primary);
     return Padding(
       padding: const EdgeInsets.only(top: 4, bottom: 2),
       child: Row(
@@ -1160,7 +1160,10 @@ class _TransactionRow extends ConsumerWidget {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     final isDeposit = transaction.type == TransactionType.deposit;
-    final amountColor = isDeposit ? kIncomeGreen : accent;
+    // Darkened in Light: the raw accent is too pale on cream (BUG-114).
+    final amountColor = isDeposit
+        ? kIncomeGreen
+        : themedLabelInk(theme, accent);
 
     return ContextMenuRegion(
       // Built on right-click rather than eagerly: the ledger rebuilds

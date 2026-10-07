@@ -262,9 +262,11 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
                 ],
               ),
               const SizedBox(height: 12),
+              // Focused when editing too: the sheet used to open with
+              // nothing focused, so typing went nowhere (BUG-117).
               VoyagerTextField(
                 controller: _nameController,
-                autofocus: widget.existing == null,
+                autofocus: true,
                 accentColor: accent,
                 decoration: const InputDecoration(
                   labelText: 'Goal',

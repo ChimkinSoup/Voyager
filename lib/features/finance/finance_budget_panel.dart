@@ -129,7 +129,7 @@ class _BudgetRow extends ConsumerWidget {
   /// bar can't show — what the spending on this tag actually looks like.
   void _viewExpenses(WidgetRef ref) {
     ref.read(financeLedgerFilterProvider.notifier).state =
-        FinanceLedgerFilter.tag(budget.tag);
+        FinanceLedgerFilter.budget(budget.tag);
     ref
         .read(financeUiPrefsProvider.notifier)
         .setViewMode(FinanceViewMode.ledger);

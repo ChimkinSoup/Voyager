@@ -1,0 +1,18 @@
+final now = DateTime.now().toUtc();
+final fr = c.read(financeRepositoryProvider);
+await fr.upsertTransaction(FinancialTransaction(id: 'fx111-qmart', createdAt: now, updatedAt: now, version: 0, type: TransactionType.expense, amountCents: 4000, occurredAt: DateTime(2026, 10, 2, 12, 0), origin: 'Qmart', tags: const ['groceries']));
+await fr.upsertTransaction(FinancialTransaction(id: 'fx111-kostco', createdAt: now, updatedAt: now, version: 0, type: TransactionType.expense, amountCents: 7000, occurredAt: DateTime(2026, 10, 3, 12, 0), origin: 'Kostco', tags: const ['Groceries']));
+await fr.upsertTransaction(FinancialTransaction(id: 'fx111-thai', createdAt: now, updatedAt: now, version: 0, type: TransactionType.expense, amountCents: 3000, occurredAt: DateTime(2026, 10, 4, 12, 0), origin: 'ThaiPlace', tags: const ['food', 'thai']));
+await fr.upsertTransaction(FinancialTransaction(id: 'fx111-zhell', createdAt: now, updatedAt: now, version: 0, type: TransactionType.expense, amountCents: 2500, occurredAt: DateTime(2026, 10, 5, 12, 0), origin: 'Zhell', tags: const ['travel', 'food']));
+await fr.upsertTransaction(FinancialTransaction(id: 'fx111-cine', createdAt: now, updatedAt: now, version: 0, type: TransactionType.expense, amountCents: 1200, occurredAt: DateTime(2026, 10, 6, 12, 0), origin: 'Cine', tags: const ['fun']));
+await fr.upsertTransaction(FinancialTransaction(id: 'fx111-future', createdAt: now, updatedAt: now, version: 0, type: TransactionType.expense, amountCents: 9999, occurredAt: DateTime(2026, 10, 15, 12, 0), origin: 'FutureStore', tags: const []));
+await fr.upsertTransaction(FinancialTransaction(id: 'fx111-dep', createdAt: now, updatedAt: now, version: 0, type: TransactionType.deposit, amountCents: 100000, occurredAt: DateTime(2026, 10, 1, 9, 0), origin: 'Employer', tags: const []));
+await fr.upsertTransaction(FinancialTransaction(id: 'fx111-sep', createdAt: now, updatedAt: now, version: 0, type: TransactionType.expense, amountCents: 1500, occurredAt: DateTime(2026, 9, 20, 12, 0), origin: 'SepStore', tags: const ['groceries']));
+await fr.upsertBudget(Budget(id: 'fx111-budget', createdAt: now, updatedAt: now, version: 0, tag: 'groceries', limitCents: 10000));
+await fr.upsertCategory(FinanceCategory(id: 'fx111-cat-food', createdAt: now, updatedAt: now, version: 0, name: 'Zfood', colorValue: 0xFFF4B8E4, tags: const ['food', 'groceries', 'thai']));
+await fr.upsertCategory(FinanceCategory(id: 'fx111-cat-transit', createdAt: now, updatedAt: now, version: 0, name: 'Transit', colorValue: 0xFF81C8BE, tags: const ['food', 'travel']));
+await fr.upsertSavingsGoal(SavingsGoal(id: 'fx111-goal', createdAt: now, updatedAt: now, version: 0, name: 'Trip', targetCents: 500000));
+await fr.upsertAsset(Asset(id: 'fx111-asset-a', createdAt: now, updatedAt: now, version: 0, name: 'TFSA A'));
+await fr.upsertAsset(Asset(id: 'fx111-asset-b', createdAt: now, updatedAt: now, version: 0, name: 'TFSA B'));
+invalidateAllDataProvidersIn(c);
+debugPrint('FX111 seeded');

@@ -11,6 +11,7 @@ import 'package:voyager/core/spellcheck/autocorrect_session.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/text/prose_paste.dart';
 import 'package:voyager/core/vim/vim_anchored_chrome.dart';
+import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_session.dart';
 import 'package:voyager/core/vim/vim_text_ops.dart';
 
@@ -214,6 +215,7 @@ class VimTextScope extends StatefulWidget {
     this.capsLockIndicatorAllowed = true,
     this.shiftWidth = kVimShiftWidth,
     this.smartIndent = false,
+    this.holdsEscape = false,
   });
 
   /// Whether this field gets Vim at all. False for password boxes, numeric
@@ -263,6 +265,11 @@ class VimTextScope extends StatefulWidget {
   /// code editors, whose Enter indents the same way — see
   /// `VimSession.smartIndent`.
   final bool smartIndent;
+
+  /// Whether Escape stops at this field while Vim is switched on although
+  /// [enabled] is false — a structured input such as an amount; see
+  /// `vimHoldsEscapeIn` and [_VimTextScopeState._holdsEscape].
+  final bool holdsEscape;
 
   final Color? accentColor;
 
@@ -337,6 +344,10 @@ class _VimTextScopeState extends State<VimTextScope> {
   /// inherited widget for the same reason [_snippetScope] is.
   AutocorrectScopeData _autocorrectScope = AutocorrectScopeData.disabled;
 
+  /// The user's Vim setting, regardless of whether this field suits it — see
+  /// [_holdsEscape].
+  bool _vimSwitchedOn = false;
+
   /// The [MediaPasteScope] above this field, which already owns Ctrl+V — see
   /// [MediaPasteOwnerScope]. Null where there is none.
   MediaPasteOwnerScope? _mediaPaste;
@@ -380,6 +391,21 @@ class _VimTextScopeState extends State<VimTextScope> {
 
   bool get _active => widget.enabled && widget.controller != null;
 
+  /// Whether Escape stops at this field although no Vim session runs here.
+  ///
+  /// With Vim on, Esc is "stop typing", not "close", and a live session never
+  /// lets it leave the field (see [VimSession.handleKey]). A structured input
+  /// `vimSuitsField` rules out — an amount, a hex colour, marked by
+  /// [VimTextScope.holdsEscape] — would otherwise
+  /// hand that same reflexive press to the dialog around it, which closes and
+  /// takes the half-filled form with it (BUG-112). So those fields keep the
+  /// Vim rule for Escape without getting Vim editing.
+  bool get _holdsEscape =>
+      widget.holdsEscape &&
+      _vimSwitchedOn &&
+      _session == null &&
+      widget.controller != null;
+
   bool get _snippetsActive =>
       widget.snippetsAllowed &&
       _snippetScope.active &&
@@ -420,6 +446,7 @@ class _VimTextScopeState extends State<VimTextScope> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _vimSwitchedOn = VimEnabledScope.of(context);
     final scope = SnippetEnabledScope.of(context);
     if (scope != _snippetScope) {
       _snippetScope = scope;
@@ -843,7 +870,8 @@ class _VimTextScopeState extends State<VimTextScope> {
     if (session == null &&
         snippets == null &&
         autocorrect == null &&
-        !_prosePasteActive) {
+        !_prosePasteActive &&
+        !_holdsEscape) {
       return KeyEventResult.ignored;
     }
     // Only claim keys destined for a real text field. The scope's subtree can
@@ -856,6 +884,11 @@ class _VimTextScopeState extends State<VimTextScope> {
     if (editable == null ||
         focused?.findAncestorStateOfType<EditableTextState>() != editable) {
       return KeyEventResult.ignored;
+    }
+    if (_holdsEscape &&
+        event.logicalKey == LogicalKeyboardKey.escape &&
+        event is! KeyUpEvent) {
+      return KeyEventResult.handled;
     }
     // Vim wins Tab while a Visual range is up: advancing a tabstop writes a
     // collapsed selection, which the Vim layer would not see, leaving it in
@@ -946,7 +979,8 @@ class _VimTextScopeState extends State<VimTextScope> {
     if (session == null &&
         snippets == null &&
         autocorrect == null &&
-        !_prosePasteActive) {
+        !_prosePasteActive &&
+        !_holdsEscape) {
       return widget.builder(
         context,
         VimFieldBinding(snippetsAllowed: _canCreateSnippets),

@@ -206,28 +206,35 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
                 ),
               ),
               const SizedBox(height: 16),
-              SegmentedButton<bool>(
-                showSelectedIcon: false,
-                style: SegmentedButton.styleFrom(
-                  selectedBackgroundColor: accent.withValues(alpha: 0.18),
-                  selectedForegroundColor: accent,
+              // Inside the fields' tap region, as the transaction sheet's
+              // toggle is: a click on it no longer unfocuses Amount, so
+              // "click Withdraw, type the amount" works (BUG-117).
+              TextFieldTapRegion(
+                child: SegmentedButton<bool>(
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(
+                    selectedBackgroundColor: accent.withValues(alpha: 0.18),
+                    selectedForegroundColor: accent,
+                  ),
+                  segments: const [
+                    ButtonSegment(
+                      value: false,
+                      icon: Icon(PhosphorIconsRegular.arrowDown, size: 16),
+                      label: Text('Add'),
+                    ),
+                    ButtonSegment(
+                      value: true,
+                      icon: Icon(PhosphorIconsRegular.arrowUp, size: 16),
+                      label: Text('Withdraw'),
+                    ),
+                  ],
+                  selected: {_withdrawing},
+                  onSelectionChanged: (set) {
+                    if (set.isNotEmpty) {
+                      setState(() => _withdrawing = set.first);
+                    }
+                  },
                 ),
-                segments: const [
-                  ButtonSegment(
-                    value: false,
-                    icon: Icon(PhosphorIconsRegular.arrowDown, size: 16),
-                    label: Text('Add'),
-                  ),
-                  ButtonSegment(
-                    value: true,
-                    icon: Icon(PhosphorIconsRegular.arrowUp, size: 16),
-                    label: Text('Withdraw'),
-                  ),
-                ],
-                selected: {_withdrawing},
-                onSelectionChanged: (set) {
-                  if (set.isNotEmpty) setState(() => _withdrawing = set.first);
-                },
               ),
               const SizedBox(height: 16),
               // Scoped to the amount field and the button below: rebuilding

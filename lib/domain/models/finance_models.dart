@@ -384,7 +384,9 @@ enum BudgetStatus {
 
 /// Total expense cents tagged [tag] within the calendar month containing
 /// [month]. Deposits never count toward a budget, and a transaction carrying
-/// several tags counts in full toward each of their budgets.
+/// several tags counts in full toward each of their budgets. Tags match
+/// ignoring case, as a category's do: `#Groceries` counts toward a
+/// `groceries` budget (BUG-115).
 int budgetSpentCents(
   List<FinancialTransaction> transactions,
   String tag,
@@ -396,10 +398,18 @@ int budgetSpentCents(
   for (final t in transactions) {
     if (t.type != TransactionType.expense) continue;
     if (t.occurredAt.isBefore(start) || !t.occurredAt.isBefore(next)) continue;
-    if (!t.tags.contains(tag)) continue;
+    if (!budgetCountsTags(t.tags, tag)) continue;
     total += t.amountCents;
   }
   return total;
+}
+
+/// Whether an expense tagged [tags] counts toward the budget for [tag]: any
+/// of its tags, ignoring case. Shared by [budgetSpentCents] and the budget's
+/// "view expenses" ledger filter, so the list matches the bar.
+bool budgetCountsTags(List<String> tags, String tag) {
+  final lower = tag.toLowerCase();
+  return tags.any((name) => name.toLowerCase() == lower);
 }
 
 /// Fraction of the current month elapsed (0..1], the reference a budget's
@@ -466,6 +476,20 @@ class FinanceCategory extends SoftDeletable {
       tags: tags ?? this.tags,
     );
   }
+}
+
+/// The category a transaction tagged [tags] is filed under: the one holding
+/// its first tag, or null when it has no tags or that tag is in no category.
+/// One rule for the Spending Breakdown, its drill-down, the ledger's category
+/// filter and the hero's expanded view, so they agree on what a category
+/// contains (BUG-119).
+FinanceCategory? categoryForTags(
+  List<String> tags,
+  List<FinanceCategory> categories,
+) {
+  if (tags.isEmpty) return null;
+  final first = tags.first;
+  return categories.where((c) => c.containsTag(first)).firstOrNull;
 }
 
 /// Something the user owns (or owes) that contributes to net worth beyond the

@@ -207,6 +207,11 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
     );
     return VimTextScope(
       enabled: VimEnabledScope.of(context) && suits,
+      holdsEscape: vimHoldsEscapeIn(
+        obscureText: widget.obscureText,
+        keyboardType: widget.keyboardType,
+        inputFormatters: widget.inputFormatters,
+      ),
       snippetsAllowed: widget.snippetsAllowed && suits,
       autocorrectAllowed: widget.autocorrectAllowed && suits,
       controller: widget.controller,

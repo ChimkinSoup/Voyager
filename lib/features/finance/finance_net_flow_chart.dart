@@ -24,6 +24,12 @@ const double _kBottomAxisHeight = 26;
 Color netFlowSignColor(int cents, ThemeData theme) =>
     cents >= 0 ? kIncomeGreen : theme.colorScheme.primary;
 
+/// [netFlowSignColor] for a figure written as text: in Light the accent is
+/// darkened until it reads on cream (BUG-114).
+Color netFlowSignInk(int cents, ThemeData theme) => cents >= 0
+    ? kIncomeGreen
+    : themedLabelInk(theme, theme.colorScheme.primary);
+
 Color netFlowSeriesColor(NetFlowSeries series, ThemeData theme) =>
     switch (series) {
       NetFlowSeries.net => theme.colorScheme.onSurfaceVariant,

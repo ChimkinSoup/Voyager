@@ -96,6 +96,26 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
 
   bool get _canSave => _tag.isNotEmpty && _parsedLimit != null && !_saving;
 
+  /// The budget a *new* one's tag already has, ignoring case. Adding it again
+  /// used to replace that budget's limit and spelling without a word
+  /// (BUG-115), so the sheet refuses it and points at the one to edit.
+  Budget? _duplicateIn(List<Budget> budgets) {
+    if (widget.existing != null) return null;
+    final tag = _tag.toLowerCase();
+    if (tag.isEmpty) return null;
+    return budgets.where((b) => b.tag.toLowerCase() == tag).firstOrNull;
+  }
+
+  /// [_duplicateIn] against the live budget list, watched through the
+  /// [Consumer] asking, so a budgets change rebuilds only the Tag field and
+  /// the Add button rather than the whole sheet.
+  Budget? _watchDuplicate(WidgetRef ref) => _duplicateIn(
+    ref.watch(budgetsProvider.settled).valueOrNull ?? const <Budget>[],
+  );
+
+  String _duplicateMessage(Budget budget) =>
+      '#${budget.tag} already has a budget. Edit that one instead.';
+
   Future<void> _save() async {
     final limit = _parsedLimit;
     if (limit == null || !_canSave) return;
@@ -113,14 +133,16 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
     final tag = _tag;
 
     try {
-      // Reuse an existing budget for the same tag rather than creating a
-      // duplicate that would double-count the same spending.
-      final budgets = await repo.listBudgets();
-      final match = budgets.cast<Budget?>().firstWhere(
-        (b) => b != null && b.tag.toLowerCase() == tag.toLowerCase(),
-        orElse: () => null,
-      );
-      final target = widget.existing ?? match;
+      // Checked against disk too: Ctrl+Enter reaches here without the
+      // button's check, and the list the sheet shows can be a frame stale.
+      // Refreshing that list puts the message on the Tag field, which clears
+      // it again as the tag is changed; a save error line would linger.
+      if (_duplicateIn(await repo.listBudgets()) != null) {
+        container.invalidate(budgetsProvider);
+        if (mounted) setState(() => _saving = false);
+        return;
+      }
+      final target = widget.existing;
 
       await repo.upsertBudget(
         Budget(
@@ -244,16 +266,27 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
                 ],
               ),
               const SizedBox(height: 12),
-              VoyagerTextField(
-                controller: _tagController,
-                autofocus: widget.existing == null,
-                accentColor: accent,
-                enabled: widget.existing == null,
-                decoration: const InputDecoration(
-                  labelText: 'Tag',
-                  hintText: 'dining_out',
+              ListenableBuilder(
+                listenable: _tagController,
+                builder: (context, _) => Consumer(
+                  builder: (context, ref, _) {
+                    final duplicate = _watchDuplicate(ref);
+                    return VoyagerTextField(
+                      controller: _tagController,
+                      autofocus: widget.existing == null,
+                      accentColor: accent,
+                      enabled: widget.existing == null,
+                      decoration: InputDecoration(
+                        labelText: 'Tag',
+                        hintText: 'dining_out',
+                        errorText: duplicate == null
+                            ? null
+                            : _duplicateMessage(duplicate),
+                      ),
+                      onSubmitted: (_) => _limitFocusNode.requestFocus(),
+                    );
+                  },
                 ),
-                onSubmitted: (_) => _limitFocusNode.requestFocus(),
               ),
               // Each piece below watches only the field it reads. A
               // `setState` listener on the controllers rebuilt the whole sheet
@@ -269,26 +302,34 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
                       limit: 12,
                     );
                     if (suggestions.isEmpty) return const SizedBox.shrink();
+                    // Inside the fields' tap region, so a click on a chip
+                    // doesn't unfocus the Tag field first; picking one then
+                    // moves on to the limit, ready to type (BUG-117).
                     return Padding(
                       padding: const EdgeInsets.only(top: 10),
-                      child: Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final tag in suggestions)
-                            ActionChip(
-                              label: Text(
-                                '#$tag',
-                                style: const TextStyle(fontSize: 12),
+                      child: TextFieldTapRegion(
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final tag in suggestions)
+                              ActionChip(
+                                label: Text(
+                                  '#$tag',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () {
+                                  _tagController.text = tag;
+                                  _tagController.selection =
+                                      TextSelection.collapsed(
+                                        offset: tag.length,
+                                      );
+                                  _limitFocusNode.requestFocus();
+                                },
                               ),
-                              visualDensity: VisualDensity.compact,
-                              onPressed: () {
-                                _tagController.text = tag;
-                                _tagController.selection =
-                                    TextSelection.collapsed(offset: tag.length);
-                              },
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -315,7 +356,13 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
                     prefixText: r'$ ',
                     errorText: _limitError,
                   ),
-                  onSubmitted: (_) => _save(),
+                  // Enter unfocuses a one-line field before this runs; when
+                  // the save is refused the caret has to stay to fix the
+                  // limit (BUG-117). A save that goes through closes the sheet.
+                  onSubmitted: (_) {
+                    _limitFocusNode.requestFocus();
+                    _save();
+                  },
                 ),
               ),
               ListenableBuilder(
@@ -354,10 +401,14 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
                   _tagController,
                   _limitController,
                 ]),
-                builder: (context, _) => GlassButton(
-                  onPressed: _canSave ? _save : null,
-                  label: widget.existing == null ? 'Add' : 'Save',
-                  padding: const EdgeInsets.symmetric(vertical: 14),
+                builder: (context, _) => Consumer(
+                  builder: (context, ref, _) => GlassButton(
+                    onPressed: _canSave && _watchDuplicate(ref) == null
+                        ? _save
+                        : null,
+                    label: widget.existing == null ? 'Add' : 'Save',
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
                 ),
               ),
             ],

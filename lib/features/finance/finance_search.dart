@@ -60,7 +60,7 @@ bool financeTransactionMatches(
 }
 
 /// What a [FinanceLedgerFilter] narrows the ledger by.
-enum FinanceLedgerFilterKind { tag, category, store }
+enum FinanceLedgerFilterKind { tag, budget, category, store }
 
 /// A standing question the ledger is narrowed to: the expenses carrying a tag,
 /// filed under a spending-breakdown category, or bought at a store.
@@ -71,6 +71,12 @@ enum FinanceLedgerFilterKind { tag, category, store }
 class FinanceLedgerFilter {
   const FinanceLedgerFilter.tag(this.value)
     : kind = FinanceLedgerFilterKind.tag;
+
+  /// A budget's expenses, by the rule the budget counts them with: any tag,
+  /// ignoring case ([budgetCountsTags]). Kept apart from [tag], whose source
+  /// is a breakdown slice that tells the spellings apart.
+  const FinanceLedgerFilter.budget(this.value)
+    : kind = FinanceLedgerFilterKind.budget;
   const FinanceLedgerFilter.category(this.value)
     : kind = FinanceLedgerFilterKind.category;
   const FinanceLedgerFilter.store(this.value)
@@ -82,7 +88,8 @@ class FinanceLedgerFilter {
   /// Lowercase, to sit after "No " in the empty ledger; the chip capitalises
   /// it.
   String get description => switch (kind) {
-    FinanceLedgerFilterKind.tag => 'expenses tagged #$value',
+    FinanceLedgerFilterKind.tag ||
+    FinanceLedgerFilterKind.budget => 'expenses tagged #$value',
     FinanceLedgerFilterKind.category when value == kUntaggedLabel =>
       'untagged expenses',
     FinanceLedgerFilterKind.category when value == kUncategorizedLabel =>
@@ -101,13 +108,11 @@ class FinanceLedgerFilter {
     switch (kind) {
       case FinanceLedgerFilterKind.tag:
         return transaction.tags.contains(value);
+      case FinanceLedgerFilterKind.budget:
+        return budgetCountsTags(transaction.tags, value);
       case FinanceLedgerFilterKind.category:
         if (transaction.tags.isEmpty) return value == kUntaggedLabel;
-        final primaryTag = transaction.tags.first;
-        final category = categories.cast<FinanceCategory?>().firstWhere(
-          (c) => c!.containsTag(primaryTag),
-          orElse: () => null,
-        );
+        final category = categoryForTags(transaction.tags, categories);
         return (category?.name ?? kUncategorizedLabel) == value;
       case FinanceLedgerFilterKind.store:
         final origin = transaction.origin?.trim();

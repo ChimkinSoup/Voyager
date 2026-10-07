@@ -78,6 +78,10 @@ class _ContributionRoomModalState
   final _remainingController = TextEditingController();
   final _limitFocusNode = FocusNode();
   final _remainingFocusNode = FocusNode();
+
+  /// Holds focus for the Join list, which has no field of its own: with
+  /// nothing focused, Ctrl+Enter never reached the sheet (BUG-117).
+  final _joinFocusNode = FocusNode();
   _Mode _mode = _Mode.create;
   String? _joinRoomId;
   bool _saving = false;
@@ -104,6 +108,7 @@ class _ContributionRoomModalState
     _remainingController.dispose();
     _limitFocusNode.dispose();
     _remainingFocusNode.dispose();
+    _joinFocusNode.dispose();
     super.dispose();
   }
 
@@ -335,9 +340,10 @@ class _ContributionRoomModalState
                 const SizedBox(height: 16),
               ],
               if (showCreateFields) ...[
+                // Focused when editing too, so the keys work (BUG-117).
                 VoyagerTextField(
                   controller: _nameController,
-                  autofocus: !_editing,
+                  autofocus: true,
                   accentColor: accent,
                   decoration: const InputDecoration(
                     labelText: 'Room name',
@@ -400,19 +406,25 @@ class _ContributionRoomModalState
                   ),
                 ),
               ] else ...[
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final room in rooms ?? const <ContributionRoom>[])
-                      ChoiceChip(
-                        label: Text(room.name),
-                        selected: room.id == _joinRoomId,
-                        selectedColor: accent.withValues(alpha: 0.18),
-                        onSelected: (_) =>
-                            setState(() => _joinRoomId = room.id),
-                      ),
-                  ],
+                Focus(
+                  focusNode: _joinFocusNode,
+                  autofocus: true,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final room in rooms ?? const <ContributionRoom>[])
+                        ChoiceChip(
+                          label: Text(room.name),
+                          selected: room.id == _joinRoomId,
+                          selectedColor: accent.withValues(alpha: 0.18),
+                          onSelected: (_) {
+                            setState(() => _joinRoomId = room.id);
+                            _joinFocusNode.requestFocus();
+                          },
+                        ),
+                    ],
+                  ),
                 ),
               ],
               if (_saveError != null) ...[

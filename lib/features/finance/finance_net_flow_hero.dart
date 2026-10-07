@@ -135,7 +135,7 @@ class _FinanceNetFlowHeroState extends State<FinanceNetFlowHero> {
                           child: Text(
                             formatCents(monthNet, signed: true),
                             style: theme.textTheme.displaySmall?.copyWith(
-                              color: netFlowSignColor(monthNet, theme),
+                              color: netFlowSignInk(monthNet, theme),
                               fontWeight: FontWeight.w700,
                               letterSpacing: -0.5,
                             ),
@@ -147,7 +147,7 @@ class _FinanceNetFlowHeroState extends State<FinanceNetFlowHero> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.labelMedium?.copyWith(
-                            color: netFlowSignColor(delta, theme),
+                            color: netFlowSignInk(delta, theme),
                           ),
                         ),
                       ],
@@ -395,7 +395,8 @@ class _NetFlowDetailCardState extends ConsumerState<_NetFlowDetailCard> {
     final category = categories.where((c) => c.id == _categoryId).firstOrNull;
     final where = category == null
         ? null
-        : (FinancialTransaction t) => t.tags.any(category.containsTag);
+        : (FinancialTransaction t) =>
+              categoryForTags(t.tags, categories)?.id == category.id;
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);

@@ -219,6 +219,10 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     );
     return VimTextScope(
       enabled: VimEnabledScope.of(context) && suits,
+      holdsEscape: vimHoldsEscapeIn(
+        obscureText: widget.obscureText,
+        keyboardType: widget.keyboardType,
+      ),
       snippetsAllowed: widget.snippetsAllowed && suits,
       autocorrectAllowed: widget.autocorrectAllowed && suits,
       controller: widget.controller,

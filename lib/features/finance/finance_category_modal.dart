@@ -10,8 +10,10 @@ import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/features/finance/finance_soft_delete.dart';
 
 /// Opens the add / edit category modal — a named, colored grouping of tags.
 Future<void> showCategoryModal(
@@ -57,6 +59,9 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
   /// silently sitting there with Save disabled forever.
   String? _saveError;
 
+  /// Why the last tag clicked wasn't added, shown under the chips.
+  String? _tagWarning;
+
   @override
   void initState() {
     super.initState();
@@ -92,6 +97,47 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
     return sorted;
   }
 
+  /// Selects or clears [tag]. A tag can be in one category only: in two, the
+  /// breakdown filed it under whichever name sorted first, so a rename moved
+  /// money between categories (BUG-118). Adding one that another category
+  /// holds (ignoring case, as categories match) is refused with a warning.
+  void _toggleTag(String tag, bool selected, List<FinanceCategory> others) {
+    final owner = selected ? categoryForTags([tag], others) : null;
+    setState(() {
+      _tagWarning = owner == null ? null : _takenMessage(tag, owner);
+      if (owner != null) return;
+      if (selected) {
+        _selectedTags.add(tag);
+      } else {
+        _selectedTags.remove(tag);
+      }
+    });
+  }
+
+  String _takenMessage(String tag, FinanceCategory owner) =>
+      '#$tag is already in "${owner.name}". A tag can be in one category '
+      'only.';
+
+  /// The first tag added in this sheet that another live category on disk
+  /// already holds, with its owner. Checked at save as well as on the chip:
+  /// the chip checks a list that may not have loaded yet, or may be a frame
+  /// stale. Tags the category held before the sheet opened are left alone,
+  /// so a pair shared from before the rule existed doesn't block a rename.
+  Future<(String, FinanceCategory)?> _takenOnDisk(
+    FinanceRepository repo,
+  ) async {
+    final others = [
+      for (final c in await repo.listCategories())
+        if (c.id != widget.existing?.id) c,
+    ];
+    final before = {...?widget.existing?.tags};
+    for (final tag in _selectedTags.difference(before)) {
+      final owner = categoryForTags([tag], others);
+      if (owner != null) return (tag, owner);
+    }
+    return null;
+  }
+
   Future<void> _save() async {
     if (!_canSave) return;
     setState(() {
@@ -105,6 +151,14 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
     final container = widget.container;
 
     try {
+      if (await _takenOnDisk(repo) case (final tag, final owner)?) {
+        if (!mounted) return;
+        setState(() {
+          _saving = false;
+          _tagWarning = _takenMessage(tag, owner);
+        });
+        return;
+      }
       // Re-read rather than trusting [existing] — see the goal sheet.
       final onDisk = existing == null
           ? null
@@ -147,19 +201,22 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
       _saving = true;
       _saveError = null;
     });
-    final repo = ref.read(financeRepositoryProvider);
-    final container = widget.container;
-    try {
-      await repo.softDeleteCategory(existing.id);
-      container.invalidate(financeCategoriesProvider);
-      if (mounted) Navigator.of(context).pop();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _saveError = 'Could not delete: $e';
-      });
+    // The root overlay, resolved before the sheet closes: the undo offer has
+    // to outlive the sheet that raised it, as the budget sheet's does.
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final deleted = await deleteCategoryWithUndo(
+      overlay: overlay,
+      container: widget.container,
+      repo: ref.read(financeRepositoryProvider),
+      category: existing,
+    );
+    if (!mounted) return;
+    if (!deleted) {
+      // The helper has already said so in its own toast.
+      setState(() => _saving = false);
+      return;
     }
+    Navigator.of(context).pop();
   }
 
   @override
@@ -167,6 +224,12 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
     final theme = Theme.of(context);
     final accent = paletteColor(_colorValue, context);
     final tags = _knownTags();
+    final others = [
+      for (final c
+          in ref.watch(financeCategoriesProvider.settled).valueOrNull ??
+              const <FinanceCategory>[])
+        if (c.id != widget.existing?.id) c,
+    ];
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
     final sheet = Padding(
@@ -207,9 +270,11 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
                 ],
               ),
               const SizedBox(height: 12),
+              // Focused when editing too: with nothing focused, Ctrl+Enter
+              // and typing went nowhere (BUG-117).
               VoyagerTextField(
                 controller: _nameController,
-                autofocus: widget.existing == null,
+                autofocus: true,
                 accentColor: accent,
                 decoration: const InputDecoration(
                   labelText: 'Category name',
@@ -228,36 +293,47 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
                   ),
                 )
               else
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final tag in tags)
-                      FilterChip(
-                        label: Text(
-                          '#$tag',
-                          style: const TextStyle(fontSize: 12),
+                // The chips and swatches sit inside the fields' tap region:
+                // a click on one used to unfocus the name field, after which
+                // Ctrl+Enter no longer saved (BUG-117).
+                TextFieldTapRegion(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final tag in tags)
+                        FilterChip(
+                          label: Text(
+                            '#$tag',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          selected: _selectedTags.contains(tag),
+                          visualDensity: VisualDensity.compact,
+                          selectedColor: accent.withValues(alpha: 0.22),
+                          checkmarkColor: accent,
+                          onSelected: (selected) =>
+                              _toggleTag(tag, selected, others),
                         ),
-                        selected: _selectedTags.contains(tag),
-                        visualDensity: VisualDensity.compact,
-                        selectedColor: accent.withValues(alpha: 0.22),
-                        checkmarkColor: accent,
-                        onSelected: (selected) => setState(() {
-                          if (selected) {
-                            _selectedTags.add(tag);
-                          } else {
-                            _selectedTags.remove(tag);
-                          }
-                        }),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
+              if (_tagWarning != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _tagWarning!,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ],
               const SizedBox(height: 18),
-              ColorPickerField(
-                label: 'Color',
-                value: _colorValue,
-                onChanged: (c) => setState(() => _colorValue = c),
-                swatchRadius: 16,
+              TextFieldTapRegion(
+                child: ColorPickerField(
+                  label: 'Color',
+                  value: _colorValue,
+                  onChanged: (c) => setState(() => _colorValue = c),
+                  swatchRadius: 16,
+                ),
               ),
               if (_saveError != null) ...[
                 const SizedBox(height: 16),

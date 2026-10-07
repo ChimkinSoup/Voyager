@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
@@ -453,6 +454,18 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     final accent = theme.colorScheme.primary;
     final isDeposit = _type == TransactionType.deposit;
     final amountColor = isDeposit ? kIncomeGreen : accent;
+    // The accent as text: darkened in Light until it reads on the selected
+    // segment's tint, the darkest surface it sits on (BUG-114).
+    final amountInk = isDeposit
+        ? kIncomeGreen
+        : themedLabelInk(
+            theme,
+            accent,
+            background: Color.alphaBlend(
+              accent.withValues(alpha: 0.18),
+              theme.scaffoldBackgroundColor,
+            ),
+          );
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
     final linked = widget.existing?.roomEventId != null;
 
@@ -510,7 +523,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                     selectedBackgroundColor: amountColor.withValues(
                       alpha: 0.18,
                     ),
-                    selectedForegroundColor: amountColor,
+                    selectedForegroundColor: amountInk,
                   ),
                   segments: const [
                     ButtonSegment(
@@ -545,7 +558,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                 builder: (context, _) => VoyagerTextField(
                   controller: _amountController,
                   autofocus: widget.autofocus && widget.existing == null,
-                  accentColor: amountColor,
+                  accentColor: amountInk,
                   cursorColor: amountColor,
                   keyboardType: const TextInputType.numberWithOptions(
                     decimal: true,
@@ -557,7 +570,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                     LengthLimitingTextInputFormatter(12),
                   ],
                   style: theme.textTheme.headlineSmall?.copyWith(
-                    color: amountColor,
+                    color: amountInk,
                     fontWeight: FontWeight.w600,
                   ),
                   decoration: InputDecoration(

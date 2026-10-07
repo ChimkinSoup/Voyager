@@ -218,6 +218,10 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     );
     return VimTextScope(
       enabled: VimEnabledScope.of(context) && suits,
+      holdsEscape: vimHoldsEscapeIn(
+        keyboardType: widget.keyboardType,
+        readOnly: widget.readOnly,
+      ),
       snippetsAllowed: suits,
       autocorrectAllowed: suits,
       controller: widget.controller,

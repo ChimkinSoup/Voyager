@@ -172,10 +172,7 @@ List<BreakdownSlice> spendingBreakdown(
     } else {
       final primaryTag = t.tags.first;
       if (groupByCategory) {
-        final category = categories.cast<FinanceCategory?>().firstWhere(
-          (c) => c!.containsTag(primaryTag),
-          orElse: () => null,
-        );
+        final category = categoryForTags(t.tags, categories);
         if (category != null) {
           label = category.name;
           colorValue = category.colorValue;
@@ -350,10 +347,7 @@ BreakdownFocusResult spendingBreakdownFocusedByCategory(
     } else if (untagged) {
       continue;
     } else {
-      final category = categories.cast<FinanceCategory?>().firstWhere(
-        (c) => c!.containsTag(t.tags.first),
-        orElse: () => null,
-      );
+      final category = categoryForTags(t.tags, categories);
       if (uncategorized) {
         if (category != null) continue;
       } else if (category?.name != label) {

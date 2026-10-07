@@ -59,6 +59,60 @@ Future<bool> deleteSubscriptionWithUndo({
   );
 }
 
+/// Soft-deletes [category] and offers an undo, like a budget or a bill
+/// (BUG-120). See [deleteSubscriptionWithUndo] for why the overlay and
+/// container are passed in rather than looked up.
+Future<bool> deleteCategoryWithUndo({
+  required OverlayState overlay,
+  required ProviderContainer container,
+  required FinanceRepository repo,
+  required FinanceCategory category,
+}) async {
+  return softDeleteWithUndo(
+    overlay: overlay,
+    message: deletedMessage(category.name, fallback: 'category'),
+    delete: () async {
+      await repo.softDeleteCategory(category.id);
+      container.invalidate(financeCategoriesProvider);
+    },
+    restore: () async {
+      // Categories are a handful of rows, so the tombstone is found by
+      // sweeping the including-deleted list, as for a budget.
+      final current = await repo
+          .listCategories(includeDeleted: true)
+          .then((all) => all.where((c) => c.id == category.id).firstOrNull);
+      abortIfAlreadyRestored(
+        found: current != null,
+        deletedAt: current?.deletedAt,
+      );
+      // A tag another category took while this one was deleted stays there:
+      // a tag can be in one category only (BUG-118).
+      final others = [
+        for (final c in await repo.listCategories())
+          if (c.id != category.id) c,
+      ];
+      await repo.upsertCategory(
+        FinanceCategory(
+          id: category.id,
+          createdAt: category.createdAt,
+          updatedAt: utcNow(),
+          version: restoreVersionFrom(
+            preDeleteVersion: category.version,
+            currentVersion: current?.version,
+          ),
+          name: category.name,
+          colorValue: category.colorValue,
+          tags: [
+            for (final tag in category.tags)
+              if (categoryForTags([tag], others) == null) tag,
+          ],
+        ),
+      );
+      container.invalidate(financeCategoriesProvider);
+    },
+  );
+}
+
 /// Soft-deletes [budget] and offers an undo. See [deleteSubscriptionWithUndo]
 /// for why the overlay and container are passed in rather than looked up.
 Future<bool> deleteBudgetWithUndo({

@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 052.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 053.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -171,6 +171,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-049@example.com | 2026-10-06 (FV-26: BUG-096…100) | Journal "FX Trackers" (`fx096-j`): "Streak 3/5"…"Streak 3/12", "Streak 6/1"…"Streak 6/5", "Streak 10/4"…"Streak 10/6" (10:00 each, body "one two three"). Trackers "Pages read" (`fx096-pages`, Number heatmap daily: Oct 1 5, Oct 2 12.34, Oct 3 25, Oct 4 8, Oct 5 999999999 plus a hidden Boolean `true` from the FV-26 follow-up) and "Weight" (`fx096-weight`, Sparkline 50–300: Sep 26 175, Oct 4 180). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-050@example.com | 2026-10-07 (FV-27: BUG-101…105) | Trackers "Mood2" (`fx101-mood`, Dropdown A/B daily, no default: Oct 5 A, Oct 6 B, Oct 7 A), "Mood3" (`fx101-mood3`, Dropdown X/Y daily: Oct 7 X), "Mood4" (`fx101-mood4`, Dropdown X/Y daily, no values), "Pages read" (`fx101-pages`, Number daily: Oct 3 9, Oct 4 7, Oct 5 12), "Gym" (`fx101-gym`, Boolean weekly: weeks of Sep 21 false, Sep 28 true, Oct 5 true). Dreams "Real dream" (Oct 6) and a blank one (Oct 7). **Show dream statistics ON.** Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-051@example.com | 2026-10-07 (FV-28: BUG-106…110) | Finance only: expenses `fx106-eve` (EveStore $7, Oct 6 9:30 PM), `fx106-late` (LateStore $9, Oct 6 10 PM), `fx106-noon` ($20, Oct 6 noon), `fx106-sep30` (SepEveStore $16, Sep 30 9:45 PM), `fx109-a` (Walmart $3, Oct 5); deposit `fx106-dep` (Employer $1,000, Oct 2); UI-made Oct 7 rows "Line1Line2" $4 and $12.34; budget none; asset "TFSA" $500 (no room). Every `occurred_at` is in UTC form after the cold re-login. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-052@example.com | 2026-10-07 (FV-29: BUG-111…120) | Finance only: October expenses `fx111-qmart` (Qmart $40 #groceries), `fx111-kostco` (Kostco $70 #Groceries), `fx111-thai` (ThaiPlace $30 #food #thai), `fx111-zhell` (Zhell $25 #travel #food), `fx111-cine` (Cine $12 #fun), `fx111-future` (FutureStore $99.99, Oct 15, upcoming), `fx111-sep` (SepStore $15 #groceries, Sep 20); deposit `fx111-dep` (Employer $1,000, Oct 1). Budgets #groceries $100 and #rent $200. Categories "Zfood" (#food #groceries #thai), "Transit" (#food #travel; the shared #food predates the BUG-118 fix) and "Funs" (#fun, deleted and restored). Goal "Trip" $5,000 (nothing allocated). Assets "TFSA A" ($500) and "TFSA B" (not valued), both in room "R1" (limit $7,000, $5,000 remaining). **Vim ON**; Dark + Scatter. | Password `qavoyager2026`. Turn Vim off if reused. |
 
 ---
 

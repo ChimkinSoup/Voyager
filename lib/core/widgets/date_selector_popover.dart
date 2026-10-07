@@ -160,19 +160,19 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
     final key = event.logicalKey;
     int dayDelta = 0;
 
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      _previousMonth();
-      return;
-    } else if (key == LogicalKeyboardKey.arrowRight) {
-      _nextMonth();
-      return;
-    } else if (key == LogicalKeyboardKey.keyH) {
+    // The arrows move the highlighted day like h/j/k/l, so a day can be picked
+    // without the mouse (BUG-111); the month turns when the day leaves it.
+    // Enter — Ctrl+Enter included — picks the highlighted day.
+    if (key == LogicalKeyboardKey.keyH || key == LogicalKeyboardKey.arrowLeft) {
       dayDelta = -1;
-    } else if (key == LogicalKeyboardKey.keyL) {
+    } else if (key == LogicalKeyboardKey.keyL ||
+        key == LogicalKeyboardKey.arrowRight) {
       dayDelta = 1;
-    } else if (key == LogicalKeyboardKey.keyJ) {
+    } else if (key == LogicalKeyboardKey.keyJ ||
+        key == LogicalKeyboardKey.arrowDown) {
       dayDelta = 7;
-    } else if (key == LogicalKeyboardKey.keyK) {
+    } else if (key == LogicalKeyboardKey.keyK ||
+        key == LogicalKeyboardKey.arrowUp) {
       dayDelta = -7;
     } else if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter) {

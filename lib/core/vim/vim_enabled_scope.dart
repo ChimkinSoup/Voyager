@@ -60,6 +60,23 @@ bool vimSuitsField({
   return true;
 }
 
+/// Whether a field [vimSuitsField] rules out still keeps Escape from reaching
+/// its dialog while Vim is switched on: only the structured inputs — a
+/// numeric keyboard or a caller's formatters, as on an amount or a hex
+/// colour — where Esc is the Vim user's "stop typing" and closing the dialog
+/// would lose a half-filled form (BUG-112). A password or read-only field
+/// keeps Esc as "close".
+bool vimHoldsEscapeIn({
+  bool obscureText = false,
+  TextInputType? keyboardType,
+  List<TextInputFormatter>? inputFormatters,
+  bool readOnly = false,
+}) {
+  if (obscureText || readOnly) return false;
+  if (inputFormatters != null && inputFormatters.isNotEmpty) return true;
+  return keyboardType != null && !_isFreeTextKeyboard(keyboardType);
+}
+
 /// Whether a keyboard type still denotes free text. Anything else (number,
 /// phone, datetime, url…) is a structured input.
 ///

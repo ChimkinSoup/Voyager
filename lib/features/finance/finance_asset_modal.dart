@@ -348,6 +348,9 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
                 builder: (context, _) => VoyagerTextField(
                   controller: _valueController,
                   focusNode: _valueFocusNode,
+                  // Updating an asset is updating its value; the sheet used
+                  // to open with nothing focused (BUG-117).
+                  autofocus: existing != null,
                   accentColor: accent,
                   cursorColor: accent,
                   keyboardType: const TextInputType.numberWithOptions(
