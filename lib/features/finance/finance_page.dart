@@ -771,14 +771,11 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
           ledgerBody = KeepAliveCustomScrollView(
             storageKey: ShellPageStorageKeys.financeLedgerNarrow,
             controller: _narrowScroll,
+            // The panels go above the ledger: below it, a long ledger put
+            // them out of reach (BUG-121).
             slivers: [
               SliverPadding(
                 padding: EdgeInsets.fromLTRB(horizontal, 4, horizontal, 0),
-                sliver: _ledgerSliver(ledger, tagColors, filter: ledgerFilter),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
-              SliverPadding(
-                padding: EdgeInsets.fromLTRB(horizontal, 0, horizontal, 96),
                 sliver: SliverToBoxAdapter(
                   child: Column(
                     children: const [
@@ -788,6 +785,11 @@ class _FinanceViewState extends ConsumerState<_FinanceView> {
                     ],
                   ),
                 ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(horizontal, 0, horizontal, 96),
+                sliver: _ledgerSliver(ledger, tagColors, filter: ledgerFilter),
               ),
             ],
           );

@@ -362,23 +362,27 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: VoyagerDropdownButtonFormField<BillingPeriod>(
-                      initialValue: _period,
-                      accentColor: accent,
-                      decoration: const InputDecoration(labelText: 'Billing'),
-                      items: [
-                        for (final p in BillingPeriod.values)
-                          DropdownMenuItem(
-                            value: p,
-                            child: Text(
-                              billingPeriodLabel(p),
-                              style: const TextStyle(fontSize: 13),
+                    // Out of the Tab order, like the Enter chain above: Tab
+                    // goes from Amount to Store (BUG-122). A click opens it.
+                    child: ExcludeFocusTraversal(
+                      child: VoyagerDropdownButtonFormField<BillingPeriod>(
+                        initialValue: _period,
+                        accentColor: accent,
+                        decoration: const InputDecoration(labelText: 'Billing'),
+                        items: [
+                          for (final p in BillingPeriod.values)
+                            DropdownMenuItem(
+                              value: p,
+                              child: Text(
+                                billingPeriodLabel(p),
+                                style: const TextStyle(fontSize: 13),
+                              ),
                             ),
-                          ),
-                      ],
-                      onChanged: (p) {
-                        if (p != null) setState(() => _period = p);
-                      },
+                        ],
+                        onChanged: (p) {
+                          if (p != null) setState(() => _period = p);
+                        },
+                      ),
                     ),
                   ),
                 ],

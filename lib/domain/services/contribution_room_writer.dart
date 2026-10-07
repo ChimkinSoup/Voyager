@@ -5,8 +5,13 @@ import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
 /// Records [valueCents] as [assetId]'s value on [day], replacing that day's
-/// valuation if it has one — the same rule the asset sheet follows. Returns
-/// the valuation's id.
+/// valuation if it has one — the rule the asset sheet and the room flows
+/// share. Returns the valuation's id.
+///
+/// With no live valuation that day, a deleted one is brought back with the
+/// new figure rather than a second row minted beside it, so undoing that
+/// delete later can't leave two values on one day. A day that already holds
+/// [valueCents] isn't rewritten.
 Future<String> upsertValuationOnDay(
   FinanceRepository repo, {
   required String assetId,
@@ -14,14 +19,23 @@ Future<String> upsertValuationOnDay(
   required int valueCents,
 }) async {
   final now = utcNow();
-  final sameDay = (await repo.listAssetValuations(assetId: assetId))
-      .where(
+  final onDay =
+      (await repo.listAssetValuations(
+        assetId: assetId,
+        includeDeleted: true,
+      )).where(
         (v) =>
             v.asOf.year == day.year &&
             v.asOf.month == day.month &&
             v.asOf.day == day.day,
-      )
-      .firstOrNull;
+      );
+  final sameDay =
+      onDay.where((v) => v.deletedAt == null).firstOrNull ?? onDay.firstOrNull;
+  if (sameDay != null &&
+      sameDay.deletedAt == null &&
+      sameDay.valueCents == valueCents) {
+    return sameDay.id;
+  }
   final id = sameDay?.id ?? newId();
   await repo.upsertAssetValuation(
     AssetValuation(
@@ -35,6 +49,35 @@ Future<String> upsertValuationOnDay(
     ),
   );
   return id;
+}
+
+/// The direction of a contribution's or withdrawal's ledger row, as seen from
+/// the user's cash: a contribution leaves it, a withdrawal comes back into it.
+/// The asset's valuation moves the other way, so net worth stays where it was
+/// (BUG-128).
+TransactionType roomCashType(RoomEventKind kind) =>
+    kind == RoomEventKind.contribution
+    ? TransactionType.expense
+    : TransactionType.deposit;
+
+/// Turns the ledger rows written before [roomCashType] (a contribution as a
+/// deposit, a withdrawal as an expense) the right way round. Returns how many
+/// rows it rewrote; a second run finds none.
+Future<int> retypeRoomLedgerRows(FinanceRepository repo) async {
+  final transactions = {for (final t in await repo.listTransactions()) t.id: t};
+  var rewritten = 0;
+  for (final event in await repo.listAssetRoomEvents()) {
+    if (event.kind.isTransfer) continue;
+    final tx = transactions[event.transactionId];
+    if (tx == null || tx.roomEventId != event.id) continue;
+    final type = roomCashType(event.kind);
+    if (tx.type == type) continue;
+    await repo.upsertTransaction(
+      tx.copyWith(type: type, updatedAt: utcNow(), version: tx.version + 1),
+    );
+    rewritten++;
+  }
+  return rewritten;
 }
 
 /// Writes a contribution or withdrawal on [asset]: the event, its ledger row,
@@ -100,9 +143,7 @@ Future<AssetRoomEvent> saveRoomCashEvent(
       createdAt: tx?.createdAt ?? now,
       updatedAt: now,
       version: tx == null ? 0 : tx.version + 1,
-      type: kind == RoomEventKind.contribution
-          ? TransactionType.deposit
-          : TransactionType.expense,
+      type: roomCashType(kind),
       amountCents: amountCents,
       occurredAt: occurredAt,
       // A contribution's source is the account, so the ledger row reads as

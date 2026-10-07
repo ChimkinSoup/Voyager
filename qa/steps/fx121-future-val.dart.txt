@@ -1,0 +1,4 @@
+final now = DateTime.now().toUtc();
+final fr = c.read(financeRepositoryProvider);
+await fr.upsertAssetValuation(AssetValuation(id: 'fx121-v4', createdAt: now, updatedAt: now, version: 0, assetId: 'fx121-asset', valueCents: 1575000, asOf: DateTime(2026, 10, 21)));
+invalidateAllDataProvidersIn(c);

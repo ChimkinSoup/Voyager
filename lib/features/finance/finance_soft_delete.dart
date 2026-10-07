@@ -160,3 +160,168 @@ Future<bool> deleteBudgetWithUndo({
     },
   );
 }
+
+/// Soft-deletes [goal] with its allocations and offers an undo that brings
+/// both back (BUG-127). See [deleteSubscriptionWithUndo] for why the overlay
+/// and container are passed in rather than looked up.
+Future<bool> deleteGoalWithUndo({
+  required OverlayState overlay,
+  required ProviderContainer container,
+  required FinanceRepository repo,
+  required SavingsGoal goal,
+}) async {
+  void refresh() {
+    container.invalidate(savingsGoalsProvider);
+    container.invalidate(goalAllocationsProvider);
+  }
+
+  return softDeleteWithUndo(
+    overlay: overlay,
+    message: deletedMessage(goal.name, fallback: 'goal'),
+    delete: () async {
+      await repo.softDeleteSavingsGoal(goal.id);
+      refresh();
+    },
+    restore: () async {
+      final current = (await repo.listSavingsGoals(
+        includeDeleted: true,
+      )).where((g) => g.id == goal.id).firstOrNull;
+      abortIfAlreadyRestored(
+        found: current != null,
+        deletedAt: current?.deletedAt,
+      );
+      final now = utcNow();
+      await repo.upsertSavingsGoal(
+        SavingsGoal(
+          id: goal.id,
+          createdAt: goal.createdAt,
+          updatedAt: now,
+          version: restoreVersionFrom(
+            preDeleteVersion: goal.version,
+            currentVersion: current?.version,
+          ),
+          name: goal.name,
+          targetCents: goal.targetCents,
+          colorValue: goal.colorValue,
+          note: goal.note,
+          targetDate: goal.targetDate,
+        ),
+      );
+      // The allocations the delete took share the goal's tombstone instant;
+      // any deleted on their own before it stay deleted.
+      for (final a in await repo.listGoalAllocations(
+        goalId: goal.id,
+        includeDeleted: true,
+      )) {
+        if (a.deletedAt == null || a.deletedAt != current?.deletedAt) continue;
+        await repo.upsertGoalAllocation(
+          _undeletedAllocation(a, now, version: a.version + 1),
+        );
+      }
+      refresh();
+    },
+  );
+}
+
+/// Soft-deletes [allocation] and offers an undo (BUG-126). [title] names it in
+/// the toast. See [deleteSubscriptionWithUndo] for why the overlay and
+/// container are passed in rather than looked up.
+Future<bool> deleteAllocationWithUndo({
+  required OverlayState overlay,
+  required ProviderContainer container,
+  required FinanceRepository repo,
+  required GoalAllocation allocation,
+  required String title,
+}) {
+  return softDeleteWithUndo(
+    overlay: overlay,
+    message: deletedMessage(title, fallback: 'allocation'),
+    delete: () async {
+      await repo.softDeleteGoalAllocation(allocation.id);
+      container.invalidate(goalAllocationsProvider);
+    },
+    restore: () async {
+      final current = (await repo.listGoalAllocations(
+        goalId: allocation.goalId,
+        includeDeleted: true,
+      )).where((a) => a.id == allocation.id).firstOrNull;
+      abortIfAlreadyRestored(
+        found: current != null,
+        deletedAt: current?.deletedAt,
+      );
+      await repo.upsertGoalAllocation(
+        _undeletedAllocation(
+          allocation,
+          utcNow(),
+          version: restoreVersionFrom(
+            preDeleteVersion: allocation.version,
+            currentVersion: current?.version,
+          ),
+        ),
+      );
+      container.invalidate(goalAllocationsProvider);
+    },
+  );
+}
+
+/// [allocation] without its tombstone, at [version]. Rebuilt rather than
+/// copyWith'd: copyWith can't clear `deletedAt`.
+GoalAllocation _undeletedAllocation(
+  GoalAllocation allocation,
+  DateTime now, {
+  required int version,
+}) => GoalAllocation(
+  id: allocation.id,
+  createdAt: allocation.createdAt,
+  updatedAt: now,
+  version: version,
+  goalId: allocation.goalId,
+  amountCents: allocation.amountCents,
+  allocatedAt: allocation.allocatedAt,
+  note: allocation.note,
+);
+
+/// Soft-deletes [valuation] and offers an undo (BUG-130). [title] names it in
+/// the toast. See [deleteSubscriptionWithUndo] for why the overlay and
+/// container are passed in rather than looked up.
+Future<bool> deleteValuationWithUndo({
+  required OverlayState overlay,
+  required ProviderContainer container,
+  required FinanceRepository repo,
+  required AssetValuation valuation,
+  required String title,
+}) {
+  return softDeleteWithUndo(
+    overlay: overlay,
+    message: deletedMessage(title, fallback: 'valuation'),
+    delete: () async {
+      await repo.softDeleteAssetValuation(valuation.id);
+      container.invalidate(assetValuationsProvider);
+    },
+    restore: () async {
+      final current = (await repo.listAssetValuations(
+        assetId: valuation.assetId,
+        includeDeleted: true,
+      )).where((v) => v.id == valuation.id).firstOrNull;
+      abortIfAlreadyRestored(
+        found: current != null,
+        deletedAt: current?.deletedAt,
+      );
+      await repo.upsertAssetValuation(
+        AssetValuation(
+          id: valuation.id,
+          createdAt: valuation.createdAt,
+          updatedAt: utcNow(),
+          version: restoreVersionFrom(
+            preDeleteVersion: valuation.version,
+            currentVersion: current?.version,
+          ),
+          assetId: valuation.assetId,
+          valueCents: valuation.valueCents,
+          asOf: valuation.asOf,
+        ),
+      );
+      container.invalidate(assetValuationsProvider);
+    },
+  );
+}

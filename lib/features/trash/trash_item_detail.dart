@@ -363,6 +363,11 @@ class _TrashItemDetail extends ConsumerWidget {
         context,
         mergeSavingsGoalFromRemote(data, id),
       ),
+      FirestoreCollections.goalAllocations => _section(
+        context,
+        'Note',
+        mergeGoalAllocationFromRemote(data, id).note,
+      ),
       FirestoreCollections.trackers => _tracker(
         context,
         mergeTrackerFromRemote(data, id),

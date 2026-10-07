@@ -93,7 +93,7 @@ void main() {
   });
 
   test(
-    'contribute writes a linked deposit, the event and a valuation',
+    'contribute writes a linked outflow, the event and a valuation',
     () async {
       await addRoom();
       final asset = await addAsset('a', roomId: 'room', valueCents: 100000);
@@ -101,7 +101,8 @@ void main() {
       final event = await contribute(asset, 25000, valuationCents: 125000);
 
       final tx = (await repo.listTransactions()).single;
-      expect(tx.type, TransactionType.deposit);
+      // The cash leaves for the asset (BUG-128).
+      expect(tx.type, TransactionType.expense);
       expect(tx.amountCents, 25000);
       expect(tx.roomEventId, event.id);
       expect(tx.origin, 'Asset a');
@@ -118,14 +119,56 @@ void main() {
     },
   );
 
-  test('withdraw writes an expense', () async {
+  test('withdraw writes an inflow', () async {
     await addRoom();
     final asset = await addAsset('a', roomId: 'room');
     await contribute(asset, 5000, kind: RoomEventKind.withdrawal);
     expect(
       (await repo.listTransactions()).single.type,
-      TransactionType.expense,
+      TransactionType.deposit,
     );
+  });
+
+  test(
+    'a same-day valuation brings a deleted one back, not a second',
+    () async {
+      final asset = await addAsset('a', valueCents: 100000);
+      final id = (await repo.listAssetValuations(assetId: 'a')).single.id;
+      final day = (await repo.listAssetValuations(assetId: 'a')).single.asOf;
+      await repo.softDeleteAssetValuation(id);
+
+      final written = await upsertValuationOnDay(
+        repo,
+        assetId: asset.id,
+        day: day,
+        valueCents: 120000,
+      );
+
+      expect(written, id);
+      final all = await repo.listAssetValuations(
+        assetId: 'a',
+        includeDeleted: true,
+      );
+      expect(all.single.deletedAt, isNull);
+      expect(all.single.valueCents, 120000);
+    },
+  );
+
+  test('BUG-128 rows written the old way round are turned once', () async {
+    await addRoom();
+    final asset = await addAsset('a', roomId: 'room');
+    await contribute(asset, 25000);
+    final tx = (await repo.listTransactions()).single;
+    // As the old writer filed a contribution.
+    await repo.upsertTransaction(
+      tx.copyWith(type: TransactionType.deposit, version: tx.version + 1),
+    );
+
+    expect(await retypeRoomLedgerRows(repo), 1);
+    final fixed = (await repo.listTransactions()).single;
+    expect(fixed.type, TransactionType.expense);
+    expect(fixed.version, tx.version + 2);
+    expect(await retypeRoomLedgerRows(repo), 0);
   });
 
   test('a retry with the same ids overwrites instead of duplicating', () async {

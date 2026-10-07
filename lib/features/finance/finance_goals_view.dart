@@ -30,7 +30,9 @@ class FinanceGoalsView extends ConsumerWidget {
     // is a full scan of every allocation, and it was being run three times
     // per goal (the total, the completed count, and each card).
     final allocatedByGoal = <String, int>{};
+    final now = DateTime.now();
     for (final a in allocations) {
+      if (!isGoalAllocationSettled(a, now)) continue;
       allocatedByGoal[a.goalId] =
           (allocatedByGoal[a.goalId] ?? 0) + a.amountCents;
     }
@@ -91,7 +93,7 @@ class FinanceGoalsView extends ConsumerWidget {
                     ),
                   ),
                   Text(
-                    '${formatCents(totalSaved)} of ${formatCents(totalTarget)}',
+                    '${formatNetCents(totalSaved)} of ${formatCents(totalTarget)}',
                     style: theme.textTheme.labelMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -208,7 +210,7 @@ class _GoalCard extends ConsumerWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              '${formatCents(allocatedCents)} of ${formatCents(goal.targetCents)}',
+              '${formatNetCents(allocatedCents)} of ${formatCents(goal.targetCents)}',
               textAlign: TextAlign.center,
               style: theme.textTheme.labelMedium?.copyWith(
                 fontWeight: FontWeight.w600,

@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 053.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 054.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -172,6 +172,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-050@example.com | 2026-10-07 (FV-27: BUG-101…105) | Trackers "Mood2" (`fx101-mood`, Dropdown A/B daily, no default: Oct 5 A, Oct 6 B, Oct 7 A), "Mood3" (`fx101-mood3`, Dropdown X/Y daily: Oct 7 X), "Mood4" (`fx101-mood4`, Dropdown X/Y daily, no values), "Pages read" (`fx101-pages`, Number daily: Oct 3 9, Oct 4 7, Oct 5 12), "Gym" (`fx101-gym`, Boolean weekly: weeks of Sep 21 false, Sep 28 true, Oct 5 true). Dreams "Real dream" (Oct 6) and a blank one (Oct 7). **Show dream statistics ON.** Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-051@example.com | 2026-10-07 (FV-28: BUG-106…110) | Finance only: expenses `fx106-eve` (EveStore $7, Oct 6 9:30 PM), `fx106-late` (LateStore $9, Oct 6 10 PM), `fx106-noon` ($20, Oct 6 noon), `fx106-sep30` (SepEveStore $16, Sep 30 9:45 PM), `fx109-a` (Walmart $3, Oct 5); deposit `fx106-dep` (Employer $1,000, Oct 2); UI-made Oct 7 rows "Line1Line2" $4 and $12.34; budget none; asset "TFSA" $500 (no room). Every `occurred_at` is in UTC form after the cold re-login. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-052@example.com | 2026-10-07 (FV-29: BUG-111…120) | Finance only: October expenses `fx111-qmart` (Qmart $40 #groceries), `fx111-kostco` (Kostco $70 #Groceries), `fx111-thai` (ThaiPlace $30 #food #thai), `fx111-zhell` (Zhell $25 #travel #food), `fx111-cine` (Cine $12 #fun), `fx111-future` (FutureStore $99.99, Oct 15, upcoming), `fx111-sep` (SepStore $15 #groceries, Sep 20); deposit `fx111-dep` (Employer $1,000, Oct 1). Budgets #groceries $100 and #rent $200. Categories "Zfood" (#food #groceries #thai), "Transit" (#food #travel; the shared #food predates the BUG-118 fix) and "Funs" (#fun, deleted and restored). Goal "Trip" $5,000 (nothing allocated). Assets "TFSA A" ($500) and "TFSA B" (not valued), both in room "R1" (limit $7,000, $5,000 remaining). **Vim ON**; Dark + Scatter. | Password `qavoyager2026`. Turn Vim off if reused. |
+| voyager-qa-053@example.com | 2026-10-07 (FV-30: BUG-121…130) | Finance only: 40 expenses `fx121-t0..39` (Store0..39, Oct 7 back to Aug 29, every third #groceries), deposit `fx121-dep` (Employer $1,000, Oct 1); budget #groceries $100. Goal "Japan trip" $2,000 with allocations $450 (Oct 7, "From October paycheck") and −$450 (Oct 31, upcoming). Asset "TFSA A" (note "Brokerage") in room "TFSA" (baseline $10,000 Jan 1, limit $7,000): valuations Sep 1 $300, Sep 15 $9,500, Oct 7 $9,500 (revived by the FV-30 follow-up), Oct 21 $15,750; contributions $200 (Oct 2, seeded old-style, re-typed) and $300 (Oct 7). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 
 ---
 
@@ -386,6 +387,10 @@ One line per completed phase.
 ---
 
 ## 7. Handoff note
+
+**2026-10-07 (code-review follow-up to BUG-121…130):** applied items 1, 3, 4, 5, 6, 8 (Juno's pick): safe startup re-type, single allocations/valuations in Trash, overdraw checked over later days, same-day valuation writes revive a deleted one, app container for the allocation row, and an older pre-filled asset value is re-recorded for today. Full suite 4,539 passed; verified in the app (TEST_PLAN.md FV-30 follow-up, qa-053). Session ended `SIGNED-OUT`.
+
+**2026-10-07 (BUG-121…130, BUG-124 skipped):** all nine fixed and verified in the app (TEST_PLAN.md FV-30, qa-053). Narrow layout puts the radar and budgets on top; Tab skips the subscription sheet's Billing; the income donut says "received"; goals can't be overdrawn, list their allocations (edit, delete + Undo, post-dated ones wait), and delete with Undo; contributions are cash outflows kept out of income/spending (HLD updated, old rows re-typed after the startup pull); the asset sheet reads today's value, doesn't re-stamp it, and lists valuations with delete + Undo. Summary counts updated (93 fixed, 135 open). Full suite 4,532 passed. Session ended `SIGNED-OUT`.
 
 **2026-10-07 (BUG-106…110, BUG-109 skipped):** all four checked on the unfixed build first (TEST_PLAN.md FV-28, qa-051). BUG-106 (evening transactions on the wrong day) and BUG-110 (two-line paste into Store) were already fixed by earlier commits (`09de0ef`, `801ab25`); BUG-106's remaining finance date fields now read back local too. BUG-107 fixed (clicking Expense/Deposit keeps the caret in Amount). BUG-108 fixed: every finance amount field shows an error for `1,5`, `-5` or a third decimal instead of rewriting it (Juno's choice); pastes are still cleaned. Follow-up: a typed letter, space or other symbol is now refused outright (so `1e12` types as `112`), per Juno. Summary counts updated (76 fixed, 152 open). Full suite 4,495 passed. Session ended `SIGNED-OUT`.
 

@@ -28,6 +28,7 @@ import 'package:voyager/features/settings/settings_tab_memory.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/hotkey_service.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/domain/services/contribution_room_writer.dart';
 import 'package:voyager/firebase_options.dart';
 
 Future<void> main([List<String> args = const []]) async {
@@ -406,6 +407,22 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
           );
           // After the pull, so the references it brought in count.
           unawaited(ref.read(mediaServiceProvider).reconcileRefcounts());
+          // Contribution rows written the old way round, here or on another
+          // device, before the providers below re-read them (BUG-128). A
+          // failure is reported, not thrown: the refresh below must still run.
+          try {
+            await retypeRoomLedgerRows(ref.read(financeRepositoryProvider));
+          } catch (error, stackTrace) {
+            FlutterError.reportError(
+              FlutterErrorDetails(
+                exception: error,
+                stack: stackTrace,
+                library: 'VoyagerBootstrap',
+                context: ErrorDescription('while re-typing contribution rows'),
+              ),
+            );
+          }
+          if (!mounted || session != _authSession) return;
           // Every page, not a hand-picked few: each read its data once, before
           // the pull, and on an empty device kept an empty answer until the
           // app restarted (BUG-010, BUG-043).

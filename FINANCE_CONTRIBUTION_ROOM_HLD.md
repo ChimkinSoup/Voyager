@@ -55,7 +55,7 @@ Status: **implemented** (2026-09-14). Deviations from the original draft, decide
 | **Year boundary** | Auto-roll **Jan 1** (calendar year) for every room. |
 | **Enable** | User enters **current remaining room** (+ annual limit + room name). No full history backfill. |
 | **Ledger entry point** | Asset **context menu** only (right-click / long-press parity). Not the global deposit button. |
-| **Ledger types** | Contribution → `TransactionType.deposit`. Withdrawal → `TransactionType.expense`. Both linked to the asset/event. |
+| **Ledger types** | Contribution → `TransactionType.expense` (cash leaves for the asset). Withdrawal → `TransactionType.deposit` (cash comes back). Both linked to the asset/event, and both left out of income / spending / budgets. *(Changed 2026-10-07, BUG-128: the v1 rule, contribution → deposit, counted each contribution twice in Net Worth and as income.)* |
 | **UI chrome** | Subtle progress bar on asset row/detail; `X/Y` text inside bar; **current year only**. |
 | **Currency** | Single non-FX unit (constant); no cross-currency room math. |
 | **Post-dated events** | Count toward room only when the calendar date **arrives** (same settled-day rule as the ledger). |
@@ -221,8 +221,8 @@ Do **not** add contribution toggles to the global add-expense/deposit chrome.
 
 ### 6.2 Ledger appearance
 
-- Contribution → deposit row; amount positive; appears in ledger / income analytics like other deposits.
-- Withdrawal → expense row; appears like other expenses.
+- Contribution → expense row (cash out); withdrawal → deposit row (cash in). Both show in the ledger and its day totals, and count toward Net Worth's cash, but not toward income, spending, the hero's net flow or budgets (`FinancialTransaction.isOwnTransfer`, BUG-128).
+- Rows written the old way round are re-typed once after the startup pull (`retypeRoomLedgerRows`).
 - Both store a link: prefer `transactionId` on the event **and** optional `assetId` / `roomEventId` on the transaction if the schema can accept a nullable FK without crowding the normal modal (normal modal leaves them null).
 
 ### 6.3 Edit / delete consistency
@@ -334,8 +334,7 @@ Domain helpers (pure, testable):
 
 - Net worth continues to use **latest `AssetValuation` per asset** — unchanged formula.
 - Contribute/withdraw change wealth only through the valuation written in the flow (and later manual marks).
-- Ledger deposit/expense from these flows **do** affect net cash-flow / income / spending charts like any other tx. Acceptable in v1; transfers intentionally omitted from ledger to avoid fake cash flow.
-- Budgets: withdrawal expenses may hit budgets if tagged; default tags empty unless user sets them in the flow.
+- Ledger rows from these flows move cash only: a contribution lowers the ledger as the valuation raises the asset, so Net Worth stays where it was. They are left out of cash-flow / income / spending charts and budgets (BUG-128; v1 counted them, and doubled every contribution in Net Worth). Transfers still write no ledger row.
 
 ---
 

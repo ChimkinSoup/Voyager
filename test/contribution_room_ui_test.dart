@@ -174,7 +174,7 @@ void main() {
     final added = events.firstWhere((e) => e.assetId == 'b');
     expect(added.amountCents, 50000);
     final tx = (await repo.getTransaction(added.transactionId!))!;
-    expect(tx.type, TransactionType.deposit);
+    expect(tx.type, TransactionType.expense);
     expect(
       (await repo.listAssetValuations(assetId: 'b')).first.valueCents,
       150000,

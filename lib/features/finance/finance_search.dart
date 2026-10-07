@@ -104,7 +104,10 @@ class FinanceLedgerFilter {
     FinancialTransaction transaction,
     List<FinanceCategory> categories,
   ) {
-    if (transaction.type != TransactionType.expense) return false;
+    if (transaction.type != TransactionType.expense ||
+        transaction.isOwnTransfer) {
+      return false;
+    }
     switch (kind) {
       case FinanceLedgerFilterKind.tag:
         return transaction.tags.contains(value);

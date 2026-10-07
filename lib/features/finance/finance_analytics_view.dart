@@ -1044,7 +1044,11 @@ class _BreakdownCard extends ConsumerWidget {
         else ...[
           SizedBox(
             height: 150,
-            child: _BreakdownPie(slices: slices, total: total),
+            child: _BreakdownPie(
+              slices: slices,
+              total: total,
+              centreLabel: 'received',
+            ),
           ),
           const SizedBox(height: 12),
           for (final slice in legend)
@@ -1282,12 +1286,16 @@ class _BreakdownPie extends StatefulWidget {
   const _BreakdownPie({
     required this.slices,
     required this.total,
+    this.centreLabel = 'spent',
     this.onSliceTap,
     this.onSliceFocus,
   });
 
   final List<BreakdownSlice> slices;
   final int total;
+
+  /// The word under the total in the ring's centre.
+  final String centreLabel;
 
   /// Called with the index of the slice a click landed on.
   final ValueChanged<int>? onSliceTap;
@@ -1460,7 +1468,7 @@ class _BreakdownPieState extends State<_BreakdownPie> {
               ),
             ),
             Text(
-              'spent',
+              widget.centreLabel,
               style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -1679,7 +1687,13 @@ class _NetWorthCard extends ConsumerWidget {
             for (final asset in assets)
               _AssetRow(
                 asset: asset,
-                valuation: latestValuation(valuations, asset.id),
+                // As of today, as the headline is: a post-dated valuation
+                // waits for its day (BUG-129).
+                valuation: latestValuation(
+                  valuations,
+                  asset.id,
+                  asOf: DateTime(now.year, now.month, now.day, 23, 59, 59),
+                ),
                 roomSummary: roomSummaries[asset.contributionRoomId],
                 roomMemberCount: asset.contributionRoomId == null
                     ? 0

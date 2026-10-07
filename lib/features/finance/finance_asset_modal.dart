@@ -16,11 +16,13 @@ import 'package:voyager/core/widgets/selector_pill.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/services/contribution_room_writer.dart';
 import 'package:voyager/domain/services/finance_analytics.dart';
 import 'package:voyager/features/finance/finance_asset_value_chart.dart';
 import 'package:voyager/features/finance/finance_contribution_room_modal.dart';
 import 'package:voyager/features/finance/finance_room_bar.dart';
 import 'package:voyager/features/finance/finance_room_history.dart';
+import 'package:voyager/features/finance/finance_soft_delete.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/features/finance/finance_amount_formatter.dart';
@@ -66,6 +68,7 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
   final _valueFocusNode = FocusNode();
   final _noteFocusNode = FocusNode();
   late DateTime _asOf;
+  late final DateTime _today;
   late int _colorValue;
   bool _datePopoverOpen = false;
   bool _saving = false;
@@ -86,7 +89,8 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
     _valueController = TextEditingController();
     _noteController = TextEditingController(text: existing?.note ?? '');
     final now = DateTime.now();
-    _asOf = DateTime(now.year, now.month, now.day);
+    _today = DateTime(now.year, now.month, now.day);
+    _asOf = _today;
     _colorValue = existing?.colorValue ?? 0xFF7C9EFF;
   }
 
@@ -186,30 +190,16 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
       );
 
       // No figure typed: this was a rename/recolour of an existing asset, so
-      // its valuation history is left exactly as it was.
+      // its valuation history is left exactly as it was. Re-valuing on a date
+      // that already has a valuation replaces that day's entry (and a day
+      // already at this figure isn't rewritten, BUG-129); any other date
+      // appends a new point to the history.
       if (cents != null) {
-        // Re-valuing on a date that already has a valuation replaces that
-        // day's entry; any other date appends a new point to the history.
-        final valuations = await repo.listAssetValuations(assetId: assetId);
-        final sameDay = valuations.cast<AssetValuation?>().firstWhere(
-          (v) =>
-              v != null &&
-              v.asOf.year == _asOf.year &&
-              v.asOf.month == _asOf.month &&
-              v.asOf.day == _asOf.day,
-          orElse: () => null,
-        );
-
-        await repo.upsertAssetValuation(
-          AssetValuation(
-            id: sameDay?.id ?? newId(),
-            createdAt: sameDay?.createdAt ?? now,
-            updatedAt: now,
-            version: sameDay == null ? 0 : sameDay.version + 1,
-            assetId: assetId,
-            valueCents: cents,
-            asOf: _asOf,
-          ),
+        await upsertValuationOnDay(
+          repo,
+          assetId: assetId,
+          day: _asOf,
+          valueCents: cents,
         );
       }
 
@@ -265,10 +255,15 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
     // from the latest figure — and keep it current while the field still
     // shows the seed: a contribution edited from this sheet can revalue the
     // asset, and saving a stale seed would write the old figure back over it.
+    // Today's worth, not a post-dated contribution's (BUG-129).
     final valuations = ref.watch(assetValuationsProvider.settled).valueOrNull;
     final latest = existing == null || valuations == null
         ? null
-        : latestValuation(valuations, existing.id);
+        : latestValuation(
+            valuations,
+            existing.id,
+            asOf: DateTime(_today.year, _today.month, _today.day, 23, 59, 59),
+          );
     final latestText = latest == null
         ? null
         : (latest.valueCents / 100).toStringAsFixed(2);
@@ -406,6 +401,18 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
               ),
               if (existing != null) ...[
                 const SizedBox(height: 20),
+                Text(
+                  'Valuations',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _ValuationHistory(
+                  assetId: existing.id,
+                  container: widget.container,
+                ),
+                const SizedBox(height: 20),
                 _RoomSection(assetId: existing.id, container: widget.container),
               ],
               const SizedBox(height: 16),
@@ -519,6 +526,91 @@ class _RoomSection extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         RoomEventHistory(asset: asset, container: container),
+      ],
+    );
+  }
+}
+
+/// Every valuation of the asset as a figure, newest first, each with a delete
+/// and Undo, so a wrong or mis-dated point can be removed (BUG-130).
+class _ValuationHistory extends ConsumerWidget {
+  const _ValuationHistory({required this.assetId, required this.container});
+
+  final String assetId;
+
+  /// The app-level container. The undo toast can outlive the sheet this list
+  /// sits in, and the sheet's own scope is disposed with it.
+  final ProviderContainer container;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final valuations = [
+      for (final v
+          in ref.watch(assetValuationsProvider.settled).valueOrNull ??
+              const <AssetValuation>[])
+        if (v.assetId == assetId) v,
+    ]..sort((a, b) => b.asOf.compareTo(a.asOf));
+    if (valuations.isEmpty) {
+      return Text(
+        'Not valued yet.',
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final valuation in valuations)
+          Builder(
+            builder: (context) {
+              final date = DateFormat('MMM d, yyyy').format(valuation.asOf);
+              final upcoming = valuation.asOf.isAfter(
+                DateTime(today.year, today.month, today.day, 23, 59, 59),
+              );
+              final value = formatNetCents(valuation.valueCents);
+              return Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        upcoming ? '$date · Upcoming' : date,
+                        style: theme.textTheme.labelMedium,
+                      ),
+                    ),
+                    Text(
+                      value,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: () => deleteValuationWithUndo(
+                        overlay: Overlay.of(context, rootOverlay: true),
+                        container: container,
+                        repo: ref.read(financeRepositoryProvider),
+                        valuation: valuation,
+                        title: '$value on $date',
+                      ),
+                      icon: Icon(
+                        PhosphorIconsRegular.trash,
+                        size: 16,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      tooltip: 'Delete',
+                      padding: EdgeInsets.zero,
+                      constraints: kMinTouchTarget,
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
       ],
     );
   }

@@ -1,0 +1,17 @@
+final now = DateTime.now().toUtc();
+final fr = c.read(financeRepositoryProvider);
+for (var i = 0; i < 40; i++) { await fr.upsertTransaction(FinancialTransaction(id: 'fx121-t$i', createdAt: now, updatedAt: now, version: 0, type: TransactionType.expense, amountCents: 1000 + i * 25, occurredAt: DateTime(2026, 10, 7, 9, 0).subtract(Duration(days: i)), origin: 'Store$i', tags: i % 3 == 0 ? const ['groceries'] : const [])); }
+await fr.upsertTransaction(FinancialTransaction(id: 'fx121-dep', createdAt: now, updatedAt: now, version: 0, type: TransactionType.deposit, amountCents: 100000, occurredAt: DateTime(2026, 10, 1, 9, 0), origin: 'Employer', tags: const []));
+await fr.upsertBudget(Budget(id: 'fx121-budget', createdAt: now, updatedAt: now, version: 0, tag: 'groceries', limitCents: 10000));
+await fr.upsertSavingsGoal(SavingsGoal(id: 'fx121-goal', createdAt: now, updatedAt: now, version: 0, name: 'Japan trip', targetCents: 200000));
+await fr.upsertGoalAllocation(GoalAllocation(id: 'fx121-al1', createdAt: now, updatedAt: now, version: 0, goalId: 'fx121-goal', amountCents: 50000, allocatedAt: DateTime(2026, 10, 7), note: 'From October paycheck'));
+await fr.upsertGoalAllocation(GoalAllocation(id: 'fx121-al2', createdAt: now, updatedAt: now, version: 0, goalId: 'fx121-goal', amountCents: 10000, allocatedAt: DateTime(2026, 10, 31)));
+await fr.upsertContributionRoom(ContributionRoom(id: 'fx121-room', createdAt: now, updatedAt: now, version: 0, name: 'TFSA', baselineRemainingCents: 1000000, baselineAsOf: DateTime(2026, 1, 1), annualLimits: const [AnnualLimit(fromYear: 2026, cents: 700000)]));
+await fr.upsertAsset(Asset(id: 'fx121-asset', createdAt: now, updatedAt: now, version: 0, name: 'TFSA A', contributionRoomId: 'fx121-room'));
+await fr.upsertAssetValuation(AssetValuation(id: 'fx121-v1', createdAt: now, updatedAt: now, version: 0, assetId: 'fx121-asset', valueCents: 30000, asOf: DateTime(2026, 9, 1)));
+await fr.upsertAssetValuation(AssetValuation(id: 'fx121-v2', createdAt: now, updatedAt: now, version: 0, assetId: 'fx121-asset', valueCents: 950000, asOf: DateTime(2026, 9, 15)));
+await fr.upsertAssetValuation(AssetValuation(id: 'fx121-v3', createdAt: now, updatedAt: now, version: 0, assetId: 'fx121-asset', valueCents: 1175000, asOf: DateTime(2026, 10, 7)));
+await fr.upsertAssetRoomEvent(AssetRoomEvent(id: 'fx121-old-ev', createdAt: now, updatedAt: now, version: 0, assetId: 'fx121-asset', roomId: 'fx121-room', kind: RoomEventKind.contribution, amountCents: 20000, occurredAt: DateTime(2026, 10, 2, 12, 0), transactionId: 'fx121-old-tx'));
+await fr.upsertTransaction(FinancialTransaction(id: 'fx121-old-tx', createdAt: now, updatedAt: now, version: 0, type: TransactionType.deposit, amountCents: 20000, occurredAt: DateTime(2026, 10, 2, 12, 0), origin: 'TFSA A', tags: const [], roomEventId: 'fx121-old-ev'));
+invalidateAllDataProvidersIn(c);
+debugPrint('FX121 seeded');

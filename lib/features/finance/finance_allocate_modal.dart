@@ -18,43 +18,59 @@ import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/features/finance/finance_amount_formatter.dart';
 
-/// Opens the "allocate funds into a goal" modal.
+/// Opens the "allocate funds into a goal" modal, or edits [existing], one of
+/// [goal]'s allocations.
+///
+/// A caller inside another sheet passes the app-level [container]: the one
+/// found from its context is that sheet's own, disposed with it.
 Future<void> showAllocateModal(
   BuildContext context,
   WidgetRef ref, {
   required SavingsGoal goal,
+  GoalAllocation? existing,
+  ProviderContainer? container,
 }) async {
   // Captured out here, not inside the sheet: the sheet builds its own
   // ProviderScope, and that container is disposed the moment the sheet is
   // dismissed — which can happen while a save is still in flight, when the
   // invalidate still has to land.
-  final container = ProviderScope.containerOf(context, listen: false);
+  final appContainer =
+      container ?? ProviderScope.containerOf(context, listen: false);
   await showVoyagerModal<void>(
     context: context,
     enableDrag: false,
     builder: (ctx) => ProviderScope(
-      parent: container,
-      child: _AllocateModal(container: container, goal: goal),
+      parent: appContainer,
+      child: _AllocateModal(
+        container: appContainer,
+        goal: goal,
+        existing: existing,
+      ),
     ),
   );
 }
 
 class _AllocateModal extends ConsumerStatefulWidget {
-  const _AllocateModal({required this.container, required this.goal});
+  const _AllocateModal({
+    required this.container,
+    required this.goal,
+    this.existing,
+  });
 
   /// The app-level container, which outlives this sheet. See
   /// [showAllocateModal].
   final ProviderContainer container;
 
   final SavingsGoal goal;
+  final GoalAllocation? existing;
 
   @override
   ConsumerState<_AllocateModal> createState() => _AllocateModalState();
 }
 
 class _AllocateModalState extends ConsumerState<_AllocateModal> {
-  final _amountController = TextEditingController();
-  final _noteController = TextEditingController();
+  late final TextEditingController _amountController;
+  late final TextEditingController _noteController;
   final _noteFocusNode = FocusNode();
   late DateTime _date;
   bool _withdrawing = false;
@@ -68,8 +84,16 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _date = DateTime(now.year, now.month, now.day);
+    final existing = widget.existing;
+    _amountController = TextEditingController(
+      text: existing == null
+          ? ''
+          : (existing.amountCents.abs() / 100).toStringAsFixed(2),
+    );
+    _noteController = TextEditingController(text: existing?.note ?? '');
+    _withdrawing = (existing?.amountCents ?? 0) < 0;
+    final at = existing?.allocatedAt ?? DateTime.now();
+    _date = DateTime(at.year, at.month, at.day);
   }
 
   @override
@@ -82,16 +106,71 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
 
   int? get _parsedCents => parseAmountCents(_amountController.text);
 
+  /// The goal's allocations other than the one being edited.
+  List<GoalAllocation> get _others => [
+    for (final a
+        in ref.read(goalAllocationsProvider.settled).valueOrNull ??
+            const <GoalAllocation>[])
+      if (a.goalId == widget.goal.id && a.id != widget.existing?.id) a,
+  ];
+
+  /// Set when saving would leave the goal holding less than nothing on the
+  /// allocation's day or on any later day, post-dated allocations included:
+  /// a withdrawal can take out only what is in it (BUG-125).
+  String? get _overdrawnError {
+    final cents = _parsedCents;
+    if (cents == null) return null;
+    final goalId = widget.goal.id;
+    final others = _others;
+    final now = utcNow();
+    final after = [
+      ...others,
+      GoalAllocation(
+        id: '',
+        createdAt: now,
+        updatedAt: now,
+        goalId: goalId,
+        amountCents: _withdrawing ? -cents : cents,
+        allocatedAt: _date,
+      ),
+    ];
+    // The balance only moves on days something is allocated, so those are
+    // the days to check.
+    final days = {
+      _date,
+      for (final a in others)
+        if (DateTime(
+          a.allocatedAt.year,
+          a.allocatedAt.month,
+          a.allocatedAt.day,
+        ).isAfter(_date))
+          DateTime(a.allocatedAt.year, a.allocatedAt.month, a.allocatedAt.day),
+    }.toList()..sort();
+    for (final day in days) {
+      final balance = goalAllocatedCents(after, goalId, asOf: day);
+      final without = goalAllocatedCents(others, goalId, asOf: day);
+      // Already below $0.00 without this one: not this one's doing.
+      if (balance >= 0 || balance >= without) continue;
+      if (day == _date && _withdrawing) {
+        return 'This goal holds ${formatNetCents(without)}';
+      }
+      return 'That leaves this goal at ${formatNetCents(balance)} on '
+          '${DateFormat('MMM d, yyyy').format(day)}';
+    }
+    return null;
+  }
+
   /// Why Save is unavailable, for the amount field to show. Null while the
   /// field is empty: an untouched field isn't an error yet.
   String? get _amountError {
     if (_amountController.text.trim().isEmpty) return null;
-    if (_parsedCents != null) return null;
+    if (_parsedCents != null) return _overdrawnError;
     return amountInputError(_amountController.text) ??
         r'Enter an amount over $0.00';
   }
 
-  bool get _canSave => _parsedCents != null && !_saving;
+  bool get _canSave =>
+      _parsedCents != null && _overdrawnError == null && !_saving;
 
   Future<void> _pickDate(BuildContext buttonContext) async {
     final accent = paletteColor(widget.goal.colorValue, context);
@@ -130,12 +209,25 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
     // Read before the first await: `ref` throws once this sheet is disposed.
     final repo = ref.read(financeRepositoryProvider);
     final container = widget.container;
+    final existing = widget.existing;
     try {
+      // Versioned off disk, as the goal sheet does: a pull can land while
+      // this sheet is open.
+      final onDisk = existing == null
+          ? null
+          : (await repo.listGoalAllocations(
+              goalId: existing.goalId,
+              includeDeleted: true,
+            )).where((a) => a.id == existing.id).firstOrNull;
+      final base = onDisk ?? existing;
       await repo.upsertGoalAllocation(
         GoalAllocation(
-          id: newId(),
-          createdAt: now,
+          id: existing?.id ?? newId(),
+          createdAt: base?.createdAt ?? now,
           updatedAt: now,
+          version: base == null ? 0 : base.version + 1,
+          // Deleted while the sheet was open stays deleted.
+          deletedAt: base?.deletedAt,
           goalId: widget.goal.id,
           // Withdrawals are stored as negative allocations so the goal's
           // total is a simple sum over its history.
@@ -165,7 +257,11 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
     final accent = paletteColor(widget.goal.colorValue, context);
     final allocations =
         ref.watch(goalAllocationsProvider.settled).valueOrNull ?? const [];
-    final allocated = goalAllocatedCents(allocations, widget.goal.id);
+    final allocated = goalAllocatedCents(
+      allocations,
+      widget.goal.id,
+      asOf: DateTime.now(),
+    );
     final remaining = widget.goal.targetCents - allocated;
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
 
@@ -314,7 +410,11 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
                 listenable: _amountController,
                 builder: (context, _) => GlassButton(
                   onPressed: _canSave ? _save : null,
-                  label: _withdrawing ? 'Withdraw' : 'Add funds',
+                  label: widget.existing != null
+                      ? 'Save'
+                      : _withdrawing
+                      ? 'Withdraw'
+                      : 'Add funds',
                   color: accent,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),

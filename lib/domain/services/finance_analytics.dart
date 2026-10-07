@@ -97,7 +97,7 @@ List<CashFlowPoint> cashFlowSeries(
   final earliest = starts.first;
 
   for (final t in transactions) {
-    if (t.occurredAt.isBefore(earliest)) continue;
+    if (t.isOwnTransfer || t.occurredAt.isBefore(earliest)) continue;
     final bucket = cashFlowPeriodStart(
       t.occurredAt,
       granularity,
@@ -160,7 +160,7 @@ List<BreakdownSlice> spendingBreakdown(
   final colors = <String, int>{};
 
   for (final t in transactions) {
-    if (t.type != TransactionType.expense) continue;
+    if (t.type != TransactionType.expense || t.isOwnTransfer) continue;
     if (t.occurredAt.isBefore(from) || !t.occurredAt.isBefore(to)) continue;
 
     String label;
@@ -230,7 +230,7 @@ List<BreakdownSlice> originBreakdown(
   final totals = <String, int>{};
 
   for (final t in transactions) {
-    if (t.type != type) continue;
+    if (t.type != type || t.isOwnTransfer) continue;
     if (t.occurredAt.isBefore(from) || !t.occurredAt.isBefore(to)) continue;
     final origin = t.origin?.trim();
     final label = origin == null || origin.isEmpty ? emptyLabel : origin;
@@ -295,7 +295,7 @@ BreakdownFocusResult spendingBreakdownFocusedByTag(
   var parentCents = 0;
 
   for (final t in transactions) {
-    if (t.type != TransactionType.expense) continue;
+    if (t.type != TransactionType.expense || t.isOwnTransfer) continue;
     if (t.occurredAt.isBefore(from) || !t.occurredAt.isBefore(to)) continue;
     if (!t.tags.contains(tag)) continue;
 
@@ -339,7 +339,7 @@ BreakdownFocusResult spendingBreakdownFocusedByCategory(
   var parentCents = 0;
 
   for (final t in transactions) {
-    if (t.type != TransactionType.expense) continue;
+    if (t.type != TransactionType.expense || t.isOwnTransfer) continue;
     if (t.occurredAt.isBefore(from) || !t.occurredAt.isBefore(to)) continue;
 
     if (t.tags.isEmpty) {
@@ -533,7 +533,7 @@ List<DailyFlow> dailyNetSeries(
   final income = List<int>.filled(length, 0);
   final expense = List<int>.filled(length, 0);
   for (final t in transactions) {
-    if (where != null && !where(t)) continue;
+    if (t.isOwnTransfer || (where != null && !where(t))) continue;
     // Differenced by calendar day, not by Duration — see
     // [calendarDaysBetween]: two local midnights either side of a DST
     // transition are 23h or 25h apart.
@@ -590,6 +590,7 @@ int _netBetween(
   final end = addCalendarDays(lastDay, 1);
   var net = 0;
   for (final t in transactions) {
+    if (t.isOwnTransfer) continue;
     if (t.occurredAt.isBefore(firstDay) || !t.occurredAt.isBefore(end)) {
       continue;
     }

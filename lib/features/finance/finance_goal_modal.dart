@@ -17,7 +17,11 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/features/finance/finance_allocate_modal.dart';
 import 'package:voyager/features/finance/finance_amount_formatter.dart';
+import 'package:voyager/features/finance/finance_soft_delete.dart';
+import 'package:voyager/features/finance/finance_transaction_modal.dart'
+    show kIncomeGreen;
 
 /// Opens the add / edit savings goal modal.
 Future<void> showGoalModal(
@@ -202,20 +206,23 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
       _saving = true;
       _saveError = null;
     });
-    final repo = ref.read(financeRepositoryProvider);
-    final container = widget.container;
-    try {
-      await repo.softDeleteSavingsGoal(existing.id);
-      container.invalidate(savingsGoalsProvider);
-      container.invalidate(goalAllocationsProvider);
-      if (mounted) Navigator.of(context).pop();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _saveError = 'Could not delete: $e';
-      });
+    // The root overlay, resolved before the sheet closes: the undo offer has
+    // to outlive the sheet that raised it, as the category sheet's does
+    // (BUG-127).
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final deleted = await deleteGoalWithUndo(
+      overlay: overlay,
+      container: widget.container,
+      repo: ref.read(financeRepositoryProvider),
+      goal: existing,
+    );
+    if (!mounted) return;
+    if (!deleted) {
+      // The helper has already said so in its own toast.
+      setState(() => _saving = false);
+      return;
     }
+    Navigator.of(context).pop();
   }
 
   @override
@@ -350,6 +357,20 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
                 onChanged: (c) => setState(() => _colorValue = c),
                 swatchRadius: 16,
               ),
+              if (widget.existing != null) ...[
+                const SizedBox(height: 20),
+                Text(
+                  'Allocations',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _AllocationHistory(
+                  goal: widget.existing!,
+                  container: widget.container,
+                ),
+              ],
               if (_saveError != null) ...[
                 const SizedBox(height: 16),
                 Text(
@@ -378,5 +399,148 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
       ),
     );
     return CtrlEnterToSubmitScope(onSubmit: _save, child: sheet);
+  }
+}
+
+/// Every allocation into [goal], newest first: date, note and amount, with
+/// post-dated ones marked Upcoming. Tap one to edit it (BUG-126).
+class _AllocationHistory extends ConsumerWidget {
+  const _AllocationHistory({required this.goal, required this.container});
+
+  final SavingsGoal goal;
+
+  /// The app-level container. The undo toast can outlive the sheet this list
+  /// sits in, and the sheet's own scope is disposed with it.
+  final ProviderContainer container;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final allocations = [
+      for (final a
+          in ref.watch(goalAllocationsProvider.settled).valueOrNull ??
+              const <GoalAllocation>[])
+        if (a.goalId == goal.id) a,
+    ];
+    if (allocations.isEmpty) {
+      return Text(
+        'Nothing added or withdrawn yet.',
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+    final now = DateTime.now();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final allocation in allocations)
+          _AllocationRow(
+            goal: goal,
+            allocation: allocation,
+            upcoming: !isGoalAllocationSettled(allocation, now),
+            container: container,
+          ),
+      ],
+    );
+  }
+}
+
+class _AllocationRow extends ConsumerWidget {
+  const _AllocationRow({
+    required this.goal,
+    required this.allocation,
+    required this.upcoming,
+    required this.container,
+  });
+
+  final SavingsGoal goal;
+  final GoalAllocation allocation;
+  final bool upcoming;
+  final ProviderContainer container;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final incoming = allocation.amountCents >= 0;
+    final color = incoming ? kIncomeGreen : theme.colorScheme.primary;
+    final date = DateFormat('MMM d, yyyy').format(allocation.allocatedAt);
+    final subtitle = [
+      date,
+      if (upcoming) 'Upcoming',
+      if (allocation.note != null) allocation.note!,
+    ].join(' · ');
+    final amount = formatCents(allocation.amountCents, signed: true);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => showAllocateModal(
+        context,
+        ref,
+        goal: goal,
+        existing: allocation,
+        container: container,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          children: [
+            Icon(
+              incoming
+                  ? PhosphorIconsRegular.arrowDown
+                  : PhosphorIconsRegular.arrowUp,
+              size: 16,
+              color: color,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    incoming ? 'Added' : 'Withdrawn',
+                    style: theme.textTheme.labelMedium,
+                  ),
+                  Text(
+                    subtitle,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              amount,
+              style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: () => deleteAllocationWithUndo(
+                overlay: Overlay.of(context, rootOverlay: true),
+                container: container,
+                repo: ref.read(financeRepositoryProvider),
+                allocation: allocation,
+                title: '$amount on $date',
+              ),
+              icon: Icon(
+                PhosphorIconsRegular.trash,
+                size: 16,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              tooltip: 'Delete',
+              padding: EdgeInsets.zero,
+              constraints: kMinTouchTarget,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

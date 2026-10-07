@@ -51,6 +51,12 @@ class FinancialTransaction extends SoftDeletable {
   /// ordinary entry. Only the asset's Contribute/Withdraw flow sets it.
   final String? roomEventId;
 
+  /// Money moved between the user's own cash and an asset (a contribution
+  /// room's cash side), not income or spending. Such rows count toward cash
+  /// and net worth only, never toward the income, spending or budget figures
+  /// (BUG-128).
+  bool get isOwnTransfer => roomEventId != null;
+
   /// The value with its sign applied: negative for expenses, positive for
   /// deposits.
   int get signedCents =>
@@ -396,7 +402,7 @@ int budgetSpentCents(
   final next = DateTime(month.year, month.month + 1, 1);
   var total = 0;
   for (final t in transactions) {
-    if (t.type != TransactionType.expense) continue;
+    if (t.type != TransactionType.expense || t.isOwnTransfer) continue;
     if (t.occurredAt.isBefore(start) || !t.occurredAt.isBefore(next)) continue;
     if (!budgetCountsTags(t.tags, tag)) continue;
     total += t.amountCents;
@@ -687,13 +693,32 @@ class GoalAllocation extends SoftDeletable {
   }
 }
 
-/// Total allocated into [goalId] across [allocations].
-int goalAllocatedCents(List<GoalAllocation> allocations, String goalId) {
+/// Total allocated into [goalId] across [allocations]. With [asOf], only the
+/// allocations that count by then (see [isGoalAllocationSettled]).
+int goalAllocatedCents(
+  List<GoalAllocation> allocations,
+  String goalId, {
+  DateTime? asOf,
+}) {
   var total = 0;
   for (final a in allocations) {
-    if (a.goalId == goalId) total += a.amountCents;
+    if (a.goalId != goalId) continue;
+    if (asOf != null && !isGoalAllocationSettled(a, asOf)) continue;
+    total += a.amountCents;
   }
   return total;
+}
+
+/// Whether [allocation] counts yet: dated on or before [now]'s calendar day,
+/// the rule ledger rows and room events follow. A post-dated one waits for its
+/// day (BUG-126).
+bool isGoalAllocationSettled(GoalAllocation allocation, DateTime now) {
+  final at = allocation.allocatedAt;
+  return !DateTime(
+    at.year,
+    at.month,
+    at.day,
+  ).isAfter(DateTime(now.year, now.month, now.day));
 }
 
 /// Fraction of a goal that's funded, clamped to 0..1 for ring rendering.

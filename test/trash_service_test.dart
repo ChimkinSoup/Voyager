@@ -9,6 +9,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
@@ -642,6 +643,73 @@ void main() {
 
       expect((await journals.getEntry('e'))!.version, version);
       expect(trashKinds[FirestoreCollections.journalEntries]!.listed, isTrue);
+    });
+  });
+
+  group('goal allocations', () {
+    late DriftFinanceRepository finance;
+
+    setUp(() async {
+      finance = DriftFinanceRepository(db);
+      await finance.upsertSavingsGoal(
+        SavingsGoal(
+          id: 'g',
+          name: 'Trip',
+          targetCents: 200000,
+          createdAt: created,
+          updatedAt: created,
+        ),
+      );
+      for (final (id, cents) in [('a1', 50000), ('a2', 10000)]) {
+        await finance.upsertGoalAllocation(
+          GoalAllocation(
+            id: id,
+            goalId: 'g',
+            amountCents: cents,
+            allocatedAt: DateTime(2026, 10, 31),
+            createdAt: created,
+            updatedAt: created,
+          ),
+        );
+      }
+    });
+
+    test('one deleted on its own is listed, named, and restores', () async {
+      await finance.softDeleteGoalAllocation('a2');
+
+      final item = (await trash.list()).single;
+      expect(item.kind.collection, FirestoreCollections.goalAllocations);
+      expect(trashItemLabel(item), '"+\$100.00 on Oct 31, 2026"');
+
+      await trash.restore(item);
+      expect((await finance.listGoalAllocations()).length, 2);
+    });
+
+    test('ones deleted with their goal are part of the goal row', () async {
+      await finance.softDeleteSavingsGoal('g');
+
+      final item = (await trash.list()).single;
+      expect(item.kind.collection, FirestoreCollections.savingsGoals);
+      expect(item.members.length, 2);
+    });
+
+    test('one whose goal is in the trash too has nowhere to go', () async {
+      await finance.softDeleteGoalAllocation('a2');
+      // See [deleteJournalWithEntries] on why the pause.
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      await finance.softDeleteSavingsGoal('g');
+
+      final allocation = (await trash.list()).firstWhere((i) => i.id == 'a2');
+      await expectLater(
+        trash.restore(allocation),
+        throwsA(
+          isA<TrashRestoreBlocked>().having(
+            (b) => b.parentNoun,
+            'noun',
+            'goal',
+          ),
+        ),
+      );
     });
   });
 }

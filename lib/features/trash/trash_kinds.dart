@@ -6,6 +6,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/text/prose_markup.dart';
 import 'package:voyager/data/database/app_database.dart';
+import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 
 /// The page a deleted item came from — the trash's filter chips.
@@ -159,6 +160,22 @@ Future<String?> _defaultJournalId(AppDatabase db) async {
 String? _name(Map<String, dynamic> data) => data['name'] as String?;
 
 String? _field(Map<String, dynamic> data, String key) => data[key] as String?;
+
+/// "+$100.00 on Oct 31, 2026", the way the finance undo toasts name a row.
+String? _amountOn(
+  Map<String, dynamic> data,
+  String centsKey,
+  String dateKey, {
+  required bool signed,
+}) {
+  final cents = (data[centsKey] as num?)?.toInt();
+  final date = parseFirestoreDate(data[dateKey]);
+  if (cents == null || date == null) return null;
+  final amount = signed
+      ? formatCents(cents, signed: true)
+      : formatNetCents(cents);
+  return '$amount on ${DateFormat('MMM d, yyyy').format(date.toLocal())}';
+}
 
 /// A title, or the first line of a prose body for a row never titled.
 String? _titleOrBody(Map<String, dynamic> data, {String body = 'body'}) {
@@ -518,12 +535,15 @@ final _kinds = <TrashKind>[
       ),
     ],
   ),
-  const TrashKind(
+  // Listed on their own since a single one can be deleted from the asset sheet
+  // (BUG-130); one deleted with its asset is shown as part of that delete.
+  TrashKind(
     collection: FirestoreCollections.assetValuations,
     feature: TrashFeature.finance,
     noun: 'valuation',
-    wipe: ['valueCents'],
-    listed: false,
+    title: (data) => _amountOn(data, 'valueCents', 'asOf', signed: false),
+    wipe: const ['valueCents'],
+    parents: const [TrashParent(FirestoreCollections.assets, 'assetId')],
   ),
   const TrashKind(
     collection: FirestoreCollections.savingsGoals,
@@ -538,12 +558,16 @@ final _kinds = <TrashKind>[
       ),
     ],
   ),
-  const TrashKind(
+  // Listed on their own since a single one can be deleted from the goal sheet
+  // (BUG-126); one deleted with its goal is shown as part of that delete.
+  TrashKind(
     collection: FirestoreCollections.goalAllocations,
     feature: TrashFeature.finance,
     noun: 'allocation',
-    wipe: ['note', 'amountCents'],
-    listed: false,
+    title: (data) =>
+        _amountOn(data, 'amountCents', 'allocatedAt', signed: true),
+    wipe: const ['note', 'amountCents'],
+    parents: const [TrashParent(FirestoreCollections.savingsGoals, 'goalId')],
   ),
   // A tracker's logged values are never tombstoned with it — they are hidden
   // by the tracker being gone — so it restores and erases on its own.
