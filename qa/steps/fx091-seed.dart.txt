@@ -1,0 +1,22 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final j = Journal(id: 'fx091-j', createdAt: now, updatedAt: now, version: 1, name: 'FX Streak');
+await jr.upsertJournal(j); r.pushJournal(j);
+final days = <DateTime>[];
+for (var d = 5; d <= 12; d++) { days.add(DateTime(2026, 3, d, 10)); }
+for (var d = 1; d <= 5; d++) { days.add(DateTime(2026, 6, d, 10)); }
+var n = 0;
+for (final day in days) {
+  final d = day.toUtc();
+  final en = JournalEntry(id: 'fx091-s$n', createdAt: now, updatedAt: now, version: 1, journalId: 'fx091-j', title: 'Streak ${day.month}/${day.day}', body: 'one two three', entryDate: d, timestamp: d);
+  await jr.upsertEntry(en); r.pushJournalEntryNow(en); n++;
+}
+final long = List.generate(40, (i) => 'Paragraph $i of the dialog entry body, long enough to scroll.').join('\n\n');
+final de = DateTime(2026, 10, 6, 9).toUtc();
+final dialogEntry = JournalEntry(id: 'fx091-dialog', createdAt: now, updatedAt: now, version: 1, journalId: 'fx091-j', title: 'Dialog entry', body: long, entryDate: de, timestamp: de);
+await jr.upsertEntry(dialogEntry); r.pushJournalEntryNow(dialogEntry);
+final dr = c.read(dreamRepositoryProvider);
+final dream = DreamEntry(id: 'fx091-dream', createdAt: now, updatedAt: now, version: 1, title: 'Dialog dream', body: long, entryDate: DateTime(2026, 10, 6, 6).toUtc());
+await dr.upsertEntry(dream); r.pushDreamEntryNow(dream);
+invalidateAllDataProvidersIn(c);

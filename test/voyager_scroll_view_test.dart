@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
@@ -186,5 +187,47 @@ void main() {
     );
 
     expect(tester.getSize(find.byType(VoyagerScrollView)).height, 42);
+  });
+
+  testWidgets('at the top, the clip leaves room for a floating label', (
+    tester,
+  ) async {
+    // A labelled field first in the content paints its floating label half
+    // its height above the viewport. Clipped to the bounds, the label was cut
+    // in half whenever the content overflowed (BUG-093). Once scrolled, the
+    // clip is the bounds again, so scrolled-out content can't peek out.
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    const contentKey = Key('content');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              height: 200,
+              child: VoyagerScrollView(
+                controller: controller,
+                child: const SizedBox(
+                  key: contentKey,
+                  width: 300,
+                  height: 1000,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final content = tester.renderObject(find.byKey(contentKey));
+    final viewport = RenderAbstractViewport.of(content);
+    Rect clip() => viewport.describeApproximatePaintClip(content)!;
+
+    expect(clip().top, lessThanOrEqualTo(-12));
+    expect(clip().bottom, 200);
+
+    controller.jumpTo(30);
+    await tester.pump();
+    expect(clip(), Offset.zero & const Size(300, 200));
   });
 }

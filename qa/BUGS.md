@@ -10,9 +10,9 @@ The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10
 |---|--:|--:|--:|
 | Blocker | 7 | 3 (BUG-001, BUG-003, BUG-061) | 4 |
 | Major | 29 | 9 (BUG-002 (see caveat), BUG-004, BUG-010, BUG-043 (dup), BUG-045, BUG-066, BUG-074, BUG-078, BUG-084) | 20 |
-| Minor | 145 | 35 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-048, BUG-050, BUG-051, BUG-052, BUG-054, BUG-055, BUG-056, BUG-059, BUG-060, BUG-062, BUG-063, BUG-065, BUG-067, BUG-068, BUG-069, BUG-072, BUG-079, BUG-080, BUG-081, BUG-082, BUG-083, BUG-085, BUG-086, BUG-087, BUG-088, BUG-089, BUG-090, BUG-167, BUG-226, BUG-227, BUG-228) | 110 |
-| Cosmetic | 47 | 12 (BUG-007, BUG-008, BUG-042, BUG-049, BUG-057, BUG-064, BUG-070, BUG-071, BUG-073, BUG-075, BUG-076, BUG-077) | 35 |
-| **Total** | **228** | **59** | **169** |
+| Minor | 145 | 36 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-048, BUG-050, BUG-051, BUG-052, BUG-054, BUG-055, BUG-056, BUG-059, BUG-060, BUG-062, BUG-063, BUG-065, BUG-067, BUG-068, BUG-069, BUG-072, BUG-079, BUG-080, BUG-081, BUG-082, BUG-083, BUG-085, BUG-086, BUG-087, BUG-088, BUG-089, BUG-090, BUG-095, BUG-167, BUG-226, BUG-227, BUG-228) | 109 |
+| Cosmetic | 47 | 14 (BUG-007, BUG-008, BUG-042, BUG-049, BUG-057, BUG-064, BUG-070, BUG-071, BUG-073, BUG-075, BUG-076, BUG-077, BUG-093, BUG-094) | 33 |
+| **Total** | **228** | **62** | **166** |
 
 "Fixed" means re-tested in the running app by a phase re-check or FV (TEST_PLAN.md "Fix verification"). "Open" means no fix was recorded, so each entry stands as it was last observed. Unit-test-only claims don't count as fixed.
 
@@ -35,6 +35,7 @@ Caveats:
 - `flutter test` on 2026-10-06 (after the BUG-076…080 fixes): 4,433 passed, 18 skipped, 0 failed. BUG-076 … BUG-080 were verified in the app the same day (TEST_PLAN.md FV-22). After BUG-077's outline was changed to the page background tone: 4,434 passed, 18 skipped, 0 failed. After the code-review follow-ups (FV-22 second follow-up): 4,437 passed, 18 skipped, 0 failed.
 - `flutter test` on 2026-10-06 (after the BUG-081…085 fixes): 4,446 passed, 18 skipped, 0 failed. BUG-081 … BUG-085 were verified in the app the same day (TEST_PLAN.md FV-23). After the code-review follow-ups (FV-23 follow-up): 4,450 passed, 18 skipped, 0 failed.
 - `flutter test` on 2026-10-06 (after the BUG-087…090 fixes; BUG-086 already fixed by BUG-006's change): 4,469 passed, 18 skipped, 0 failed. BUG-086 … BUG-090 were verified in the app the same day (TEST_PLAN.md FV-24). After the code-review follow-ups: 4,473 passed, 18 skipped, 0 failed, and BUG-087…090 re-verified in the app (FV-24 follow-up).
+- `flutter test` on 2026-10-06 (after the BUG-093…095 fixes; BUG-091 and BUG-092 skipped): 4,475 passed, 18 skipped, 0 failed. BUG-093, BUG-094 and BUG-095 were verified in the app the same day (TEST_PLAN.md FV-25). After the code-review follow-ups (BUG-093 fixed in `VoyagerScrollView` for every dialog, shared Light label ink, chip test on painted pixels): 4,476 passed, 18 skipped, 0 failed, and BUG-093/094 re-verified in the app (FV-25 follow-up).
 
 ### Counts by phase (severity × phase)
 
@@ -98,6 +99,8 @@ Bugs deliberately not being fixed for now. They still count as Open above.
 | BUG-031 | 4 | Cosmetic | Snippets dialog hides snippets beyond the fourth with no sign that the list scrolls | 2026-10-05 |
 | BUG-053 | 7 | Minor | "New entry" saves a blank entry on every click; ten quick clicks leave ten empty "Untitled" entries | 2026-10-05 |
 | BUG-058 | 7 | Minor | The journal body swallows Tab and Shift+Tab on every line, so keyboard focus can never leave it | 2026-10-06 |
+| BUG-091 | 11 | Minor | Typing a query that starts with "/dream" (e.g. "/dreamscape") switches to the dream scope halfway through the word | 2026-10-06 |
+| BUG-092 | 11 | Cosmetic | A dream that matches only through its sticky note is listed with nothing that shows why | 2026-10-06 |
 
 ---
 
@@ -1151,6 +1154,8 @@ Entry format:
 - Actual: as soon as the sixth character is typed the field reads `/dream`, which matches `^/dream($| )`, so the scope switches to "Dream journals" and the rest arrives as a dream query: the field shows `scape` beside the chip (`qa/shots/p11-69-dreamscape.png`). Only a paste of the whole word would stay a journal query. It also means the literal text "/dream…" can't be searched in journal entries by typing.
 - Notes: `_onQueryChanged` runs `dreamSearchCommandQuery` on every keystroke, and the pattern's `$` alternative is satisfied by the prefix. A unit test that passes the whole string at once wouldn't see it. Exits work: Esc (Vim off), Backspace on an empty query, the chip's ✕.
 
+- Notes (2026-10-06): skipped for now; listed under "Skipped bugs" in the summary.
+
 ### BUG-092 [Phase 11] A dream that matches only through its sticky note is listed with nothing that shows why
 - Severity: Cosmetic
 - Found: 2026-10-01, Phase 11 (qa-016)
@@ -1158,6 +1163,8 @@ Entry format:
 - Expected: the result shows the note text (or a note icon) with the keyword highlighted, as body matches do.
 - Actual: "Flying dream / I was flying over the #ocean dreamonly" with no highlight (`qa/shots/p11-62-notekw.png`); it reads as a false positive.
 - Notes: `dreamSearchCorpus` includes `notes`, but the subtitle is `searchSnippet(entry.body, …)`. After BUG-061's restart corruption the notes become body copies, so note-only matches disappear anyway (seen this session).
+
+- Notes (2026-10-06): skipped for now; listed under "Skipped bugs" in the summary.
 
 ### BUG-093 [Phase 11] Search's entry dialog: the "Title" field label is cut in half at the minimum and 2000×1100 window sizes
 - Severity: Cosmetic
@@ -1167,6 +1174,9 @@ Entry format:
 - Actual: only the lower half of "Title" shows; its top is clipped by the dialog's scroll area (`p11-91-min-dialog.png`, `p11-93-odd-dialog.png`). At 1440×1040 the 480 px body also runs below the fold and the dialog scrolls.
 - Notes: same symptom as the P4 lead on the Rankings "New category" dialog's "Name" label at 2000×1100; likely the shared `LabeledTextField` at the top of a `VoyagerScrollView`.
 
+- Notes (2026-10-06, confirmed in the app, fixed in the working tree, uncommitted; verified in the running app, FV-25; qa-048, Dark): confirmed on `7816d35` at 1440×1040 and 2000×1100, and the dream dialog clips the same way (`fx30-04`, `fx30-05`, `fx30-06`). Cause: the viewport clips only once its content overflows, which is why maximized looked fine. Both Search dialogs' `VoyagerScrollView` now has a 10 px top inset for the floating label, taken back out of the `AlertDialog`'s content padding (16 → 6), so nothing moves; the same fix as the Rankings child dialog. In the app: "Title" whole at 1440×1040 in the entry and dream dialogs, at 2000×1100, and unchanged when maximized (`fx30-11`…`fx30-14`). No widget test: the clip is a paint effect the test surface doesn't show.
+- Notes (2026-10-06, code-review follow-up, FV-25 follow-up; qa-048, Dark): the cause is shared, so the fix moved into `VoyagerScrollView` and the Search dialogs' own inset was taken back out. Its viewport now leaves 16 px above the content while the view rests at the top (nothing has scrolled out, so only a label's overhang is up there) and clips to its bounds again as soon as it scrolls. Confirmed first on the build without it, at 1440×1040: the "New journal" dialog's "Name" (`create_name_color_dialog.dart`, shared by the journal, list, calendar and jobs "New …" dialogs) and the Rankings "Add location" dialog's "Title" were cut the same way (`fx31-05`, `fx31-06`; the location dialog opened over the VM service). After: whole in all three dialogs; one wheel notch down, the top edge clips cleanly with nothing showing above it (`fx31-11`…`fx31-16`). Test: `voyager_scroll_view_test.dart` "at the top, the clip leaves room for a floating label" (fails on the old viewport). The Rankings child dialog's and the To-Do/Rankings panels' existing top insets were left as they are.
+
 ### BUG-094 [Phase 11] Light theme: the "Dream journals" scope chip is pale accent blue on cream (≈2.5:1)
 - Severity: Cosmetic
 - Found: 2026-10-01, Phase 11 (qa-016)
@@ -1175,6 +1185,9 @@ Entry format:
 - Actual: label and icon in the accent #7c9eff on a 14 % accent tint over cream; the darkest text pixel against the background measures ≈2.5:1 (`qa/shots/p11-97-light-dream.png`). Result rows, tag pills and the dialog are legible (`p11-95`, `p11-96`).
 - Notes: the chip uses the raw accent (`_DreamScopeChip`), same pattern as BUG-042/BUG-057/BUG-071.
 
+- Notes (2026-10-06, confirmed in the app, fixed in the working tree, uncommitted; verified in the running app, FV-25; qa-048, Light): confirmed on `7816d35`: the darkest label pixel against the chip's tint measured 2.0:1 (`fx30-07`). In Light the chip's label, moon icon and ✕ now use `readableInkOn(accent, tint over scaffold)`, the accent darkened with its hue kept, as BUG-057 did for scope labels; Dark is unchanged. In the app: 4.9:1 measured the same way (`fx30-08`, `fx30-09`; side by side in `fx30-10-bug094-before-after.png`). Test: `search_dream_scope_test.dart` "the scope chip label clears 4.5:1 on its tint in Light" (fails on the old chip).
+- Notes (2026-10-06, code-review follow-up, FV-25 follow-up): the Light-only darkening is now one helper, `themedLabelInk` in `voyager_theme.dart` (with an optional background), used by the scope switcher's labels (was its private `_labelInk`) and by the chip. The test now runs on `VoyagerTheme.light()` and reads the label and fill back from the painted pixels (renamed "…as painted in Voyager Light"; still fails on the old chip). In the app: chip 4.92:1 and the Journal scope label still darkened (`fx31-17`, `fx31-18`). Not changed: Dark keeps the raw accent, as everywhere else in the app.
+
 ### BUG-095 [Phase 12] "Best Streak" breaks a run at the spring-forward DST change: 8 journaled days in a row across Mar 8 show as 5
 - Severity: Minor
 - Found: 2026-10-01, Phase 12 (qa-017)
@@ -1182,6 +1195,8 @@ Entry format:
 - Expected: Best Streak "8 days" (Mar 5–12 is unbroken).
 - Actual: "5 days" (the June run) (`qa/shots/p12-02-seeded.png`). The Streak detail popup opened from the same chip says "Highest 8" (`p12-03-streak-detail.png`), so the chip and its own drill-down disagree.
 - Notes: `PeriodicPromptService.longestJournalStreak` compares local midnights with `difference(...).inDays == 1`; Mar 8 00:00 → Mar 9 00:00 is 23 h, so `inDays` = 0 and the run restarts. Every run that crosses the March change is split in two each year (the November change is 25 h and passes). The Streak sparkline (`streakTrackerValues`) walks calendar days and is right. Elsewhere the code uses `calendarDaysBetween`/`addCalendarDays` for exactly this.
+
+- Notes (2026-10-06, confirmed in the app, fixed in the working tree, uncommitted; verified in the running app, FV-25; qa-048, Eastern time): confirmed on `7816d35`: Mar 5–12 + Jun 1–5 showed "5 days" (`fx30-01`). `longestJournalStreak` now steps with `calendarDaysBetween(...) == 1`. In the app: "8 days" (`fx30-15`). Test: `domain_services_test.dart` "journal streak runs unbroken across the spring-forward night" (fails on the old code in an Eastern zone; passes either way in a zone without the March change). Not changed: the Streak detail popup's rows (BUG-096).
 
 ### BUG-096 [Phase 12] Streak detail popup: "Current streak" and "Longest streak" count every day since the first entry (211 days), and "Entries logged" counts days with no entry
 - Severity: Minor

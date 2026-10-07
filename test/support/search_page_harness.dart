@@ -26,6 +26,8 @@ const searchHarnessJournalId = 'harness-journal';
 /// fields, which changes who owns Escape.
 ///
 /// [remote] stands in for Firestore, for callers that check what was uploaded.
+///
+/// [theme] replaces the stock Material theme, for callers that check colours.
 Future<AppDatabase> pumpSearchPage(
   WidgetTester tester, {
   required List<JournalEntry> Function(DateTime now) entries,
@@ -33,6 +35,7 @@ Future<AppDatabase> pumpSearchPage(
   bool vimEnabled = false,
   List<Override> extraOverrides = const [],
   InMemorySyncRepository? remote,
+  ThemeData? theme,
 }) async {
   final db = AppDatabase.inMemory();
   addTearDown(db.close);
@@ -78,8 +81,9 @@ Future<AppDatabase> pumpSearchPage(
       // and the dialog's body field alone is 480 logical pixels.
       child: VimEnabledScope(
         enabled: vimEnabled,
-        child: const MaterialApp(
-          home: MediaQuery(
+        child: MaterialApp(
+          theme: theme,
+          home: const MediaQuery(
             data: MediaQueryData(size: Size(1200, 1400)),
             child: Scaffold(body: SearchPage()),
           ),

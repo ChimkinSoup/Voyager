@@ -1,0 +1,1 @@
+Future(() async { Element? e; void v(Element x) { if (e != null) return; if (x.widget.runtimeType.toString() == 'Scaffold') { e = x; } else { x.visitChildren(v); } } WidgetsBinding.instance.rootElement!.visitChildren(v); showRankingLocationDialog(e!, accent: const Color(0xFF7C9EFF), withTitle: true, initialTitle: 'Location title'); })

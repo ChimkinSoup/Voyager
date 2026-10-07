@@ -54,6 +54,15 @@ Color readableInkOn(Color color, Color background) {
   return _neutralInk;
 }
 
+/// [color] as a label. Pastel and accent colours read fine on dark but not on
+/// cream (BUG-057, BUG-094), so Light darkens them, hue kept, until they clear
+/// 4.5:1 on [background] — by default the scaffold, the darkest of its cream
+/// surfaces.
+Color themedLabelInk(ThemeData theme, Color color, {Color? background}) =>
+    theme.brightness == Brightness.light
+    ? readableInkOn(color, background ?? theme.scaffoldBackgroundColor)
+    : color;
+
 /// Label color for text/icons painted on a solid [background] that the user
 /// picked — the theme accent, or an event/list/category color.
 ///

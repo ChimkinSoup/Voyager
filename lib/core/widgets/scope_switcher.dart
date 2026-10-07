@@ -3,14 +3,6 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 
-/// [color] as a label. Pastel scope colours read fine on dark but not on
-/// cream (BUG-057), so Light darkens them, hue kept, until they clear 4.5:1
-/// on the scaffold, the darkest of its cream surfaces.
-Color _labelInk(ThemeData theme, Color color) =>
-    theme.brightness == Brightness.light
-    ? readableInkOn(color, theme.scaffoldBackgroundColor)
-    : color;
-
 /// One scope a page can be pointed at: a single list/journal/calendar, or the
 /// all-scope row that stands at the top of the popover.
 class ScopeSwitcherItem<T> {
@@ -78,7 +70,7 @@ class ScopeSwitcher<T> extends StatelessWidget {
     final selected = _selected;
     final label = selected?.label ?? '';
     final count = selected?.count;
-    final ink = _labelInk(theme, accent);
+    final ink = themedLabelInk(theme, accent);
 
     return Builder(
       builder: (buttonContext) => ConstrainedBox(
@@ -207,7 +199,7 @@ class _ScopeMenuRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final ink = _labelInk(theme, color);
+    final ink = themedLabelInk(theme, color);
     return InkWell(
       onTap: onTap,
       child: Padding(

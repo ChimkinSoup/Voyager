@@ -1,0 +1,3 @@
+final s = await c.read(settingsRepositoryProvider).getSettings();
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(themeMode: AppThemeMode.light));
+debugPrint('FX091 theme light');

@@ -2,7 +2,10 @@
 // handoff, what the scope filters, and the popup the dream rows open — which
 // has to reach the notepad and the body, and write both to SQLite.
 
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/data/database/app_database.dart';
@@ -10,6 +13,7 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/features/dream_journal/dream_sticky_note.dart';
 
 import 'support/search_page_harness.dart';
@@ -72,6 +76,51 @@ Future<void> _enterDreamScope(WidgetTester tester, String text) async {
   await settle(tester);
 }
 
+double _contrast(Color a, Color b) {
+  final x = a.computeLuminance();
+  final y = b.computeLuminance();
+  return (x > y ? x + 0.05 : y + 0.05) / (x > y ? y + 0.05 : x + 0.05);
+}
+
+/// Every pixel painted inside [target]'s rect (global, logical = physical
+/// here), read from the nearest repaint boundary above [target].
+Future<List<Color>> _paintedPixels(WidgetTester tester, Finder target) async {
+  final rect = tester.getRect(target);
+  RenderObject? node = tester.renderObject(target);
+  while (node is! RenderRepaintBoundary) {
+    node = node!.parent;
+  }
+  final boundary = node;
+  final origin = boundary.localToGlobal(Offset.zero);
+  return (await tester.runAsync(() async {
+    final image = await boundary.toImage();
+    final data = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+    final pixels = <Color>[];
+    for (
+      var y = (rect.top - origin.dy).ceil();
+      y < (rect.bottom - origin.dy).floor();
+      y++
+    ) {
+      for (
+        var x = (rect.left - origin.dx).ceil();
+        x < (rect.right - origin.dx).floor();
+        x++
+      ) {
+        final i = (y * image.width + x) * 4;
+        pixels.add(
+          Color.fromARGB(
+            255,
+            data.getUint8(i),
+            data.getUint8(i + 1),
+            data.getUint8(i + 2),
+          ),
+        );
+      }
+    }
+    return pixels;
+  }))!;
+}
+
 void main() {
   testWidgets('/dream swaps the command for the scope chip', (tester) async {
     await pumpSearchPage(tester, entries: _journalSeed, dreams: _dreamSeed);
@@ -103,6 +152,41 @@ void main() {
     );
     expect(find.text('Flying over water'), findsOneWidget);
     expect(find.text('Locked door'), findsNothing);
+
+    await disposeSearchPage(tester);
+  });
+
+  testWidgets('the scope chip label clears 4.5:1 as painted in Voyager Light', (
+    tester,
+  ) async {
+    // The raw accent on the chip's 14 % tint over cream measured ≈2.5:1 in
+    // the app (BUG-094). Read back from the pixels, so the check doesn't share
+    // the code's idea of what the label sits on.
+    await pumpSearchPage(
+      tester,
+      entries: _journalSeed,
+      dreams: _dreamSeed,
+      theme: VoyagerTheme.light(),
+    );
+
+    await _enterDreamScope(tester, '/dream');
+
+    final label = find.text('Dream journals');
+    final chip = find.ancestor(of: label, matching: find.byType(Container));
+    final labelPixels = await _paintedPixels(tester, label);
+    final chipPixels = await _paintedPixels(tester, chip.first);
+    final ink = labelPixels.reduce(
+      (a, b) => a.computeLuminance() <= b.computeLuminance() ? a : b,
+    );
+    // The fill is what most of the chip is painted with.
+    final counts = <Color, int>{};
+    for (final c in chipPixels) {
+      counts[c] = (counts[c] ?? 0) + 1;
+    }
+    final plate = counts.entries
+        .reduce((a, b) => a.value >= b.value ? a : b)
+        .key;
+    expect(_contrast(ink, plate), greaterThanOrEqualTo(4.5));
 
     await disposeSearchPage(tester);
   });

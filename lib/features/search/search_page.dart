@@ -1019,21 +1019,28 @@ class _DreamScopeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final fill = accentColor.withValues(alpha: 0.14);
+    // Measured against the chip's own tint over the page (BUG-094).
+    final ink = themedLabelInk(
+      theme,
+      accentColor,
+      background: Color.alphaBlend(fill, theme.scaffoldBackgroundColor),
+    );
     return Container(
       padding: const EdgeInsets.only(left: 10, right: 4),
       decoration: BoxDecoration(
-        color: accentColor.withValues(alpha: 0.14),
+        color: fill,
         borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
         border: Border.all(color: accentColor.withValues(alpha: 0.5)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(PhosphorIconsRegular.moon, size: 14, color: accentColor),
+          Icon(PhosphorIconsRegular.moon, size: 14, color: ink),
           const SizedBox(width: 6),
           Text(
             'Dream journals',
-            style: theme.textTheme.labelMedium?.copyWith(color: accentColor),
+            style: theme.textTheme.labelMedium?.copyWith(color: ink),
           ),
           IconButton(
             tooltip: 'Search journal entries',
@@ -1041,7 +1048,7 @@ class _DreamScopeChip extends StatelessWidget {
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
             padding: EdgeInsets.zero,
-            color: accentColor,
+            color: ink,
             onPressed: onRemove,
             icon: const Icon(PhosphorIconsRegular.x),
           ),

@@ -178,7 +178,9 @@ class PeriodicPromptService {
     var best = 1;
     var current = 1;
     for (var i = 1; i < days.length; i++) {
-      if (days[i].difference(days[i - 1]).inDays == 1) {
+      // Calendar days, not elapsed time: the spring-forward night is 23 h, so
+      // `difference(...).inDays` read it as 0 and split the run (BUG-095).
+      if (calendarDaysBetween(days[i - 1], days[i]) == 1) {
         current++;
         best = current > best ? current : best;
       } else {

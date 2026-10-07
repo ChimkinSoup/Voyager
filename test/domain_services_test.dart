@@ -71,6 +71,25 @@ void main() {
     expect(streak, 2);
   });
 
+  test('journal streak runs unbroken across the spring-forward night', () {
+    // Mar 8 2026 is the US change: in an Eastern zone Mar 8 → Mar 9 midnight
+    // is 23 h, which `inDays` read as 0 and split the run (BUG-095). In a
+    // zone without that change this passes either way.
+    final entries = [
+      for (var d = 5; d <= 12; d++)
+        JournalEntry(
+          id: 'm$d',
+          journalId: 'j',
+          title: '',
+          body: '',
+          entryDate: DateTime(2026, 3, d, 10),
+          createdAt: DateTime(2026, 3, d, 10),
+          updatedAt: DateTime(2026, 3, d, 10),
+        ),
+    ];
+    expect(PeriodicPromptService().longestJournalStreak(entries), 8);
+  });
+
   test('legacy snapshot operations do not synthesize duplicate char ops', () {
     final merger = CharacterSequenceCrdtMerger();
     final ops = [

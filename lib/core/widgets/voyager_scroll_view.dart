@@ -309,6 +309,24 @@ class _RenderSingleChildViewport extends RenderBox
         paintOffset.dy + child!.size.height > size.height;
   }
 
+  /// What the clip leaves showing above a vertical view resting at its top.
+  ///
+  /// A field's floating label rides half its own height above the field, so
+  /// a labelled field at the top of the content paints above the viewport.
+  /// Clipped to the bounds, the label was cut in half whenever the content
+  /// overflowed (BUG-093). At the top nothing has scrolled out, so the only
+  /// thing up there is that overhang; once the view scrolls, the clip is the
+  /// bounds again so scrolled-out content never peeks over what's above.
+  static const double _topHeadroom = 16;
+
+  Rect get _clipRect {
+    final bounds = Offset.zero & size;
+    if (axisDirection != AxisDirection.down || offset.pixels > 0) {
+      return bounds;
+    }
+    return Rect.fromLTRB(0, -_topHeadroom, size.width, size.height);
+  }
+
   @override
   void paint(PaintingContext context, Offset offset) {
     if (child == null) return;
@@ -322,7 +340,7 @@ class _RenderSingleChildViewport extends RenderBox
       _clipRectLayer.layer = context.pushClipRect(
         needsCompositing,
         offset,
-        Offset.zero & size,
+        _clipRect,
         paintContents,
         clipBehavior: Clip.hardEdge,
         oldLayer: _clipRectLayer.layer,
@@ -351,7 +369,7 @@ class _RenderSingleChildViewport extends RenderBox
   @override
   Rect? describeApproximatePaintClip(RenderObject? child) {
     if (child != null && _shouldClipAtPaintOffset(_paintOffset)) {
-      return Offset.zero & size;
+      return _clipRect;
     }
     return null;
   }

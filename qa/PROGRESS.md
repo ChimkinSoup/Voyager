@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 048.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 049.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -167,6 +167,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-045@example.com | 2026-10-06 (FV-22: BUG-076…080) | Calendar "FX Hol" (`fx079-hol`, green `0xFFA6D189` after the FV-22 colour change, was pink): "Daily walk" daily 07:00 from Oct 1 (exception Oct 16, override "Fri16 walk"), "Weekly standup" Mon 09:00 from Oct 5, "Monthly rent" all-day monthly from Oct 1, "Own blue" Oct 8 14:00 (`0xFF7C9EFF`). To-Do list "Cal Tasks" (`fx080-list`) with "Cal task A" due Oct 7 10:15 AM (open). Dark + Scatter; Vim off; week starts Monday. | Password `qavoyager2026`. |
 | voyager-qa-046@example.com | 2026-10-06 (FV-23: BUG-081…085) | Calendar "FX Cal" (`fx081-cal`, pink): Thu Oct 22 25 all-day "D50 allday 01–25" + 25 timed 09:00 "D50 timed 01–25"; "Mon review" Oct 19 10:00, "Wed holiday" Oct 21 all-day, "Daily walk" daily 07:00 from Oct 1, "Weekly standup" Mon 09:00 from Oct 5, "Oct6 item 1–5" Oct 6 10:00–14:00, "ok" Oct 19 12:00 and "Focus test ok" Oct 6 12:00 (made in FV-23), "Wed second" Oct 21 all-day and "Overnight span" Oct 21 22:00 → Oct 22 02:00 (FV-23 follow-up). Journal "FX Journal" (`fx084-j`) with "Zebra entry" (body "zebracorn sighting log\n- item one\n- item two ESCTEST KILLEDIT"); dream "Unicorn dream" (body "a unicornfish swam past"); "Moodless entry" (`fx-review-moodless`, body "quokkaroo has no mood yet KILL2", mood and weather null). Dark + Scatter; Vim off; week starts Monday. | Password `qavoyager2026`. |
 | voyager-qa-047@example.com | 2026-10-06 (FV-24: BUG-086…090) | Journal "FX Search" (`fx086-j`): "Emphasis" (`This has **boldword** and foo**bar** and ==marked== text`), "Accents" ("Coffee at the café was naïve fun"), "Deep accent" (120 × "filler" then "crème brûlée and zebra__corn__"), "Literal stars" ("Math 2*3 stays as typed"), dated Oct 1–4. Dream "Café dream" (`fx086-dream`, "a naïve moon**lit** walk", Oct 5). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-048@example.com | 2026-10-06 (FV-25: BUG-093…095) | Journal "FX Streak" (`fx091-j`): "Streak 3/5"…"Streak 3/12" and "Streak 6/1"…"Streak 6/5" (10:00 each, body "one two three"), "Dialog entry" (Oct 6, 40 short paragraphs). Dream "Dialog dream" (Oct 6, same body). Theme left on Dark. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 
 ---
 
@@ -381,6 +382,10 @@ One line per completed phase.
 ---
 
 ## 7. Handoff note
+
+**2026-10-06 (code-review follow-up to BUG-093/094):** BUG-093 fixed in `VoyagerScrollView`, so every dialog with a labelled field at the top keeps its floating label ("New journal" and Rankings "Add location" were also clipped, confirmed first); the Light label ink is one shared helper; the chip test reads painted pixels on Voyager's light theme. Re-verified in the app on qa-048 (TEST_PLAN.md FV-25 follow-up). Full suite 4,476 passed. Session ended `SIGNED-OUT`.
+
+**2026-10-06 (BUG-091…095):** BUG-093, BUG-094 and BUG-095 fixed and verified in the app (TEST_PLAN.md FV-25, qa-048), each reproduced on the unfixed build first. BUG-091 and BUG-092 skipped (listed under "Skipped bugs"). Search dialogs keep the whole "Title" label at small sizes, the Light dream chip is readable, Best Streak no longer breaks at the March DST change. Summary counts updated (62 fixed, 166 open). Full suite 4,475 passed. Session ended `SIGNED-OUT`.
 
 **2026-10-06 (code-review follow-up to BUG-086…090):** Search-only accent folding (opt-in `fold` on the shared highlighter/snippet), cached delimiter offsets and dream folds, cheaper snippet path, results list no longer remounted on typing/clearing, shared `subtreeIsVisible`, final-sigma fold. Re-verified in the app on qa-047 (TEST_PLAN.md FV-24 follow-up). Full suite 4,473 passed. Session ended `SIGNED-OUT`.
 
