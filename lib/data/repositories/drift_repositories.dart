@@ -3723,7 +3723,8 @@ class DriftFinanceRepository implements FinanceRepository {
     targetCents: row.targetCents,
     colorValue: row.colorValue,
     note: row.note,
-    targetDate: row.targetDate,
+    // Stored in UTC once pulled or restored; local like [_map]'s occurredAt.
+    targetDate: row.targetDate?.toLocal(),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -3734,7 +3735,8 @@ class DriftFinanceRepository implements FinanceRepository {
     id: row.id,
     goalId: row.goalId,
     amountCents: row.amountCents,
-    allocatedAt: row.allocatedAt,
+    // Stored in UTC once pulled or restored; local like [_map]'s occurredAt.
+    allocatedAt: row.allocatedAt.toLocal(),
     note: row.note,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -3805,7 +3807,8 @@ class DriftFinanceRepository implements FinanceRepository {
     id: row.id,
     assetId: row.assetId,
     valueCents: row.valueCents,
-    asOf: row.asOf,
+    // Stored in UTC once pulled or restored; local like [_map]'s occurredAt.
+    asOf: row.asOf.toLocal(),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,
@@ -3894,8 +3897,9 @@ class DriftFinanceRepository implements FinanceRepository {
     name: row.name,
     amountCents: row.amountCents,
     period: BillingPeriod.values.byName(row.period),
-    anchorDueDate: row.anchorDueDate,
-    paidThroughDate: row.paidThroughDate,
+    // Stored in UTC once pulled or restored; local like [_map]'s occurredAt.
+    anchorDueDate: row.anchorDueDate.toLocal(),
+    paidThroughDate: row.paidThroughDate?.toLocal(),
     colorValue: row.colorValue,
     note: row.note,
     store: row.store,

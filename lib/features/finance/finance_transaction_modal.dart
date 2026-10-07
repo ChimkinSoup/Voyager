@@ -25,6 +25,7 @@ import 'package:voyager/features/finance/finance_origin_field.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/features/finance/finance_amount_formatter.dart';
 
 /// The green used for money flowing in, across the finance feature. Chosen to
 /// stay legible on both the light and dark surfaces.
@@ -293,7 +294,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
   String? get _amountError {
     if (_amountController.text.trim().isEmpty) return null;
     if (_parsedCents != null) return null;
-    return amountOverMaxError(_amountController.text) ??
+    return amountInputError(_amountController.text) ??
         r'Enter an amount over $0.00';
   }
 
@@ -498,33 +499,40 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                 const SizedBox(height: 4),
               ],
               const SizedBox(height: 12),
-              // Expense / Deposit toggle
-              SegmentedButton<TransactionType>(
-                showSelectedIcon: false,
-                style: SegmentedButton.styleFrom(
-                  selectedBackgroundColor: amountColor.withValues(alpha: 0.18),
-                  selectedForegroundColor: amountColor,
+              // Expense / Deposit toggle. Inside the text fields' tap region,
+              // so a click on it doesn't count as a click outside the focused
+              // field: "click Deposit, type the amount" keeps typing into
+              // Amount instead of dropping focus (the button never takes it).
+              TextFieldTapRegion(
+                child: SegmentedButton<TransactionType>(
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(
+                    selectedBackgroundColor: amountColor.withValues(
+                      alpha: 0.18,
+                    ),
+                    selectedForegroundColor: amountColor,
+                  ),
+                  segments: const [
+                    ButtonSegment(
+                      value: TransactionType.expense,
+                      icon: Icon(PhosphorIconsRegular.arrowUp, size: 16),
+                      label: Text('Expense'),
+                    ),
+                    ButtonSegment(
+                      value: TransactionType.deposit,
+                      icon: Icon(PhosphorIconsRegular.arrowDown, size: 16),
+                      label: Text('Deposit'),
+                    ),
+                  ],
+                  selected: {_type},
+                  // Locked when linked: the type is what makes it a
+                  // contribution or a withdrawal.
+                  onSelectionChanged: linked
+                      ? null
+                      : (set) {
+                          if (set.isNotEmpty) _setType(set.first);
+                        },
                 ),
-                segments: const [
-                  ButtonSegment(
-                    value: TransactionType.expense,
-                    icon: Icon(PhosphorIconsRegular.arrowUp, size: 16),
-                    label: Text('Expense'),
-                  ),
-                  ButtonSegment(
-                    value: TransactionType.deposit,
-                    icon: Icon(PhosphorIconsRegular.arrowDown, size: 16),
-                    label: Text('Deposit'),
-                  ),
-                ],
-                selected: {_type},
-                // Locked when linked: the type is what makes it a
-                // contribution or a withdrawal.
-                onSelectionChanged: linked
-                    ? null
-                    : (set) {
-                        if (set.isNotEmpty) _setType(set.first);
-                      },
               ),
               const SizedBox(height: 16),
               // Amount. Only this field and the save button read the typed
@@ -543,7 +551,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
                     decimal: true,
                   ),
                   inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    AmountInputFormatter(),
                     // Bounded so a long paste can't reach the range where
                     // double.parse returns Infinity.
                     LengthLimitingTextInputFormatter(12),

@@ -22,6 +22,7 @@ import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/services/contribution_room_writer.dart';
 import 'package:voyager/domain/services/finance_analytics.dart';
 import 'package:voyager/domain/services/finance_origins.dart';
+import 'package:voyager/features/finance/finance_amount_formatter.dart';
 
 /// Opens the Contribute / Withdraw sheet for [asset], or edits [existing].
 Future<void> showRoomCashEventModal(
@@ -189,7 +190,7 @@ class _AmountField extends StatelessWidget {
       cursorColor: accent,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+        AmountInputFormatter(),
         // Bounded so a long paste can't reach the range where double.parse
         // returns Infinity.
         LengthLimitingTextInputFormatter(12),
@@ -248,14 +249,14 @@ class _ValueField extends StatelessWidget {
                 signed: true,
               ),
               inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]')),
+                AmountInputFormatter(signed: true),
                 LengthLimitingTextInputFormatter(13),
               ],
               decoration: InputDecoration(
                 labelText: label,
                 prefixText: r'$ ',
                 errorText: invalid
-                    ? amountOverMaxError(field.controller.text) ??
+                    ? amountInputError(field.controller.text, signed: true) ??
                           'Enter a number, e.g. 1250.00'
                     : null,
               ),
@@ -557,7 +558,7 @@ class _RoomCashEventModalState extends ConsumerState<_RoomCashEventModal> {
                 error:
                     _amountController.text.trim().isNotEmpty &&
                         _parsedAmount == null
-                    ? amountOverMaxError(_amountController.text) ??
+                    ? amountInputError(_amountController.text) ??
                           r'Enter an amount over $0.00'
                     : null,
                 onSubmitted: (_) => _noteFocusNode.requestFocus(),
@@ -860,7 +861,7 @@ class _RoomTransferModalState extends ConsumerState<_RoomTransferModal> {
                 error:
                     _amountController.text.trim().isNotEmpty &&
                         _parsedAmount == null
-                    ? amountOverMaxError(_amountController.text) ??
+                    ? amountInputError(_amountController.text) ??
                           r'Enter an amount over $0.00'
                     : null,
                 onSubmitted: (_) => _noteFocusNode.requestFocus(),

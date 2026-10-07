@@ -23,6 +23,7 @@ import 'package:voyager/features/finance/finance_room_bar.dart';
 import 'package:voyager/features/finance/finance_room_history.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/features/finance/finance_amount_formatter.dart';
 
 /// Opens the add / edit asset modal. Saving records a **new valuation** rather
 /// than overwriting the old one, so the net-worth graph keeps its history.
@@ -108,7 +109,7 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
   String? get _valueError {
     if (_valueController.text.trim().isEmpty) return null;
     if (_parsedCents != null) return null;
-    return amountOverMaxError(_valueController.text) ??
+    return amountInputError(_valueController.text, signed: true) ??
         'Enter a number, e.g. 1250.00';
   }
 
@@ -354,7 +355,7 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
                     signed: true,
                   ),
                   inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]')),
+                    AmountInputFormatter(signed: true),
                     // Bounded so a long paste can't reach the range where
                     // double.parse returns Infinity.
                     LengthLimitingTextInputFormatter(13),

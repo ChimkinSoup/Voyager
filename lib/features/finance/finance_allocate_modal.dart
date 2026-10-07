@@ -16,6 +16,7 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/features/finance/finance_amount_formatter.dart';
 
 /// Opens the "allocate funds into a goal" modal.
 Future<void> showAllocateModal(
@@ -86,7 +87,7 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
   String? get _amountError {
     if (_amountController.text.trim().isEmpty) return null;
     if (_parsedCents != null) return null;
-    return amountOverMaxError(_amountController.text) ??
+    return amountInputError(_amountController.text) ??
         r'Enter an amount over $0.00';
   }
 
@@ -243,7 +244,7 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
                     decimal: true,
                   ),
                   inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    AmountInputFormatter(),
                     // Bounded so a long paste can't reach the range where
                     // double.parse returns Infinity.
                     LengthLimitingTextInputFormatter(12),

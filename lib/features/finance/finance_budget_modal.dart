@@ -14,6 +14,7 @@ import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/features/finance/finance_amount_formatter.dart';
 
 /// Opens the add / edit tag-budget modal.
 Future<void> showBudgetModal(
@@ -89,7 +90,7 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
   String? get _limitError {
     if (_limitController.text.trim().isEmpty) return null;
     if (_parsedLimit != null) return null;
-    return amountOverMaxError(_limitController.text) ??
+    return amountInputError(_limitController.text) ??
         r'Enter a limit over $0.00';
   }
 
@@ -304,7 +305,7 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
                     decimal: true,
                   ),
                   inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    AmountInputFormatter(),
                     // Bounded so a long paste can't reach the range where
                     // double.parse returns Infinity.
                     LengthLimitingTextInputFormatter(12),

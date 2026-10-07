@@ -682,16 +682,37 @@ double goalProgress(int allocatedCents, int targetCents) {
 /// The largest amount any finance field accepts, in cents — $99,999,999.99.
 const int kMaxAmountCents = 9999999999;
 
+/// Hoisted like [_currencyFormat]: [amountShapeError] runs several times per
+/// keystroke in every amount field.
+final _amountShape = RegExp(r'^\d*\.?\d*$');
+final _signedAmountShape = RegExp(r'^-?\d*\.?\d*$');
+
+/// Why [text] isn't shaped like a money amount, or null when it is (or is
+/// empty).
+///
+/// Typed keys reach the amount fields unfiltered, so `1,5`, `1e12` and `-5`
+/// show up here as typed rather than being silently rewritten to 15, 112 and
+/// 5; only a [signed] field takes a leading `-`. A third decimal is refused
+/// rather than rounded, so `1.999` can't be saved as $2.00.
+String? amountShapeError(String text, {bool signed = false}) {
+  final raw = text.trim();
+  final shape = signed ? _signedAmountShape : _amountShape;
+  if (!shape.hasMatch(raw)) return 'Use digits and one dot, e.g. 12.50';
+  final dot = raw.indexOf('.');
+  if (dot >= 0 && raw.length - dot - 1 > 2) return 'At most 2 decimals';
+  return null;
+}
+
 /// Parses a money field into cents, or null when the text isn't a usable
 /// amount.
 ///
-/// The amount fields filter keystrokes down to digits and dots but don't
-/// validate the shape, so `1.2.3` and `.` arrive here unparseable and a long
-/// enough paste parses to `Infinity`, whose `round()` throws. The bound is
-/// checked on the rounded cents rather than the dollar value, so `0.001` —
-/// positive, but zero cents — is rejected rather than written as a $0.00 row.
+/// Anything [amountShapeError] refuses is null, and a long enough paste
+/// parses to `Infinity`, whose `round()` throws. The bound is checked on the
+/// rounded cents rather than the dollar value, so `0.00` — a number, but zero
+/// cents — is rejected rather than written as a $0.00 row.
 int? parseAmountCents(String text) {
-  final value = double.tryParse(text.replaceAll(RegExp(r'[^0-9.]'), ''));
+  if (amountShapeError(text) != null) return null;
+  final value = double.tryParse(text.trim());
   if (value == null || !value.isFinite) return null;
   final cents = (value * 100).round();
   if (cents <= 0 || cents > kMaxAmountCents) return null;
@@ -701,18 +722,23 @@ int? parseAmountCents(String text) {
 /// As [parseAmountCents], but signed and zero-tolerant: an asset can be worth
 /// nothing, or be a debt held as a negative value.
 ///
-/// The `-` has to be leading and alone — the value field's formatter allows it
-/// anywhere, and `1-2` is not a number even though stripping the sign would
-/// make it look like $12.00.
+/// The `-` has to be leading and alone: `1-2` is not a number even though
+/// stripping the sign would make it look like $12.00.
 int? parseSignedAmountCents(String text) {
+  if (amountShapeError(text, signed: true) != null) return null;
   final raw = text.trim();
-  if (!RegExp(r'^-?\d*\.?\d*$').hasMatch(raw)) return null;
-  final value = double.tryParse(raw.replaceAll(RegExp(r'[^0-9.]'), ''));
+  final value = double.tryParse(raw.replaceAll('-', ''));
   if (value == null || !value.isFinite) return null;
   final cents = (value * 100).round();
   if (cents > kMaxAmountCents) return null;
   return raw.startsWith('-') ? -cents : cents;
 }
+
+/// The error line for an amount field whose [text] doesn't parse, when there
+/// is a more specific one than the field's own fallback: a badly shaped
+/// amount ([amountShapeError]) or one over the maximum ([amountOverMaxError]).
+String? amountInputError(String text, {bool signed = false}) =>
+    amountShapeError(text, signed: signed) ?? amountOverMaxError(text);
 
 /// The error for an amount field whose [text] is a number, just a bigger one
 /// than [kMaxAmountCents] allows. Null for anything else, so the field can

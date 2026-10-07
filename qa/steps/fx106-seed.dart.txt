@@ -1,0 +1,10 @@
+final now = DateTime.now().toUtc();
+final fr = c.read(financeRepositoryProvider);
+await fr.upsertTransaction(FinancialTransaction(id: 'fx106-eve', createdAt: now, updatedAt: now, version: 0, type: TransactionType.expense, amountCents: 700, occurredAt: DateTime(2026, 10, 6, 21, 30), origin: 'EveStore', note: 'evening 9:30pm Oct 6', tags: const ['eve']));
+await fr.upsertTransaction(FinancialTransaction(id: 'fx106-late', createdAt: now, updatedAt: now, version: 0, type: TransactionType.expense, amountCents: 900, occurredAt: DateTime(2026, 10, 6, 22, 0), origin: 'LateStore', note: 'late 10pm Oct 6', tags: const ['eve']));
+await fr.upsertTransaction(FinancialTransaction(id: 'fx106-noon', createdAt: now, updatedAt: now, version: 0, type: TransactionType.expense, amountCents: 2000, occurredAt: DateTime(2026, 10, 6, 12, 0), origin: 'NoonStore', note: 'noon Oct 6', tags: const ['noon']));
+await fr.upsertTransaction(FinancialTransaction(id: 'fx106-sep30', createdAt: now, updatedAt: now, version: 0, type: TransactionType.expense, amountCents: 1600, occurredAt: DateTime(2026, 9, 30, 21, 45), origin: 'SepEveStore', note: 'Sep 30 9:45pm', tags: const ['eve']));
+await fr.upsertTransaction(FinancialTransaction(id: 'fx106-dep', createdAt: now, updatedAt: now, version: 0, type: TransactionType.deposit, amountCents: 100000, occurredAt: DateTime(2026, 10, 2, 9, 0), origin: 'Employer', note: 'pay', tags: const []));
+await fr.upsertTransaction(FinancialTransaction(id: 'fx109-a', createdAt: now, updatedAt: now, version: 0, type: TransactionType.expense, amountCents: 300, occurredAt: DateTime(2026, 10, 5, 10, 0), origin: 'Walmart', tags: const []));
+invalidateAllDataProvidersIn(c);
+debugPrint('FX106 seeded');

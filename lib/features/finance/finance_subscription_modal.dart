@@ -22,6 +22,7 @@ import 'package:voyager/domain/services/finance_origins.dart';
 import 'package:voyager/features/finance/finance_origin_field.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/features/finance/finance_amount_formatter.dart';
 
 /// Opens the add / edit subscription modal. When [existing] is provided the
 /// modal edits that subscription in place.
@@ -120,7 +121,7 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
   String? get _amountError {
     if (_amountController.text.trim().isEmpty) return null;
     if (_parsedCents != null) return null;
-    return amountOverMaxError(_amountController.text) ??
+    return amountInputError(_amountController.text) ??
         r'Enter an amount over $0.00';
   }
 
@@ -344,7 +345,7 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
                           decimal: true,
                         ),
                         inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                          AmountInputFormatter(),
                           // Bounded so a long paste can't reach the range
                           // where double.parse returns Infinity.
                           LengthLimitingTextInputFormatter(12),

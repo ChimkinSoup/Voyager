@@ -746,6 +746,19 @@ void main() {
       expect(parseAmountCents('99999999.99'), kMaxAmountCents);
       expect(parseAmountCents('100000000'), isNull);
     });
+
+    // BUG-108: these used to be read as 15, 112, 5 and $2.00.
+    test('refuses what it would otherwise have to rewrite, and says why', () {
+      for (final text in ['1,5', '1e12', '-5', '1.999']) {
+        expect(parseAmountCents(text), isNull, reason: text);
+      }
+      expect(amountInputError('1,5'), 'Use digits and one dot, e.g. 12.50');
+      expect(amountInputError('1e12'), 'Use digits and one dot, e.g. 12.50');
+      expect(amountInputError('-5'), 'Use digits and one dot, e.g. 12.50');
+      expect(amountInputError('1.999'), 'At most 2 decimals');
+      expect(amountInputError('-5', signed: true), isNull);
+      expect(amountInputError('12.5'), isNull);
+    });
   });
 
   group('parseSignedAmountCents', () {
@@ -785,5 +798,72 @@ void main() {
     );
     final reloaded = await settingsRepo.getSettings();
     expect(reloaded.showAnnualizedSubscriptionCost, isTrue);
+  });
+
+  // BUG-106: a cloud pull or a Trash restore writes these in UTC form, which
+  // Drift hands back as UTC DateTimes; every reader takes .year/.month/.day as
+  // the local calendar day, which is the wrong day for an evening entry west
+  // of UTC, or a local-midnight date east of it.
+  test('dates written in UTC form read back as local', () async {
+    final now = utcNow();
+    final at = DateTime.utc(2026, 10, 7, 1, 30);
+    await repo.upsertTransaction(
+      make(type: TransactionType.expense, amountCents: 700, occurredAt: at),
+    );
+    await repo.upsertSubscription(
+      Subscription(
+        id: newId(),
+        createdAt: now,
+        updatedAt: now,
+        name: 'Sub',
+        amountCents: 500,
+        period: BillingPeriod.monthly,
+        anchorDueDate: at,
+        paidThroughDate: at,
+      ),
+    );
+    final goal = SavingsGoal(
+      id: newId(),
+      createdAt: now,
+      updatedAt: now,
+      name: 'Trip',
+      targetCents: 100000,
+      targetDate: at,
+    );
+    await repo.upsertSavingsGoal(goal);
+    await repo.upsertGoalAllocation(
+      GoalAllocation(
+        id: newId(),
+        createdAt: now,
+        updatedAt: now,
+        goalId: goal.id,
+        amountCents: 100,
+        allocatedAt: at,
+      ),
+    );
+    await repo.upsertAssetValuation(
+      AssetValuation(
+        id: newId(),
+        createdAt: now,
+        updatedAt: now,
+        assetId: 'a',
+        valueCents: 100,
+        asOf: at,
+      ),
+    );
+
+    final sub = (await repo.listSubscriptions()).single;
+    final dates = {
+      'occurredAt': (await repo.listTransactions()).single.occurredAt,
+      'anchorDueDate': sub.anchorDueDate,
+      'paidThroughDate': sub.paidThroughDate!,
+      'targetDate': (await repo.listSavingsGoals()).single.targetDate!,
+      'allocatedAt': (await repo.listGoalAllocations()).single.allocatedAt,
+      'asOf': (await repo.listAssetValuations()).single.asOf,
+    };
+    for (final MapEntry(:key, :value) in dates.entries) {
+      expect(value.isUtc, isFalse, reason: key);
+      expect(value, at.toLocal(), reason: key);
+    }
   });
 }

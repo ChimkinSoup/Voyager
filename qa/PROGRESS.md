@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 051.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 052.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -170,6 +170,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-048@example.com | 2026-10-06 (FV-25: BUG-093…095) | Journal "FX Streak" (`fx091-j`): "Streak 3/5"…"Streak 3/12" and "Streak 6/1"…"Streak 6/5" (10:00 each, body "one two three"), "Dialog entry" (Oct 6, 40 short paragraphs). Dream "Dialog dream" (Oct 6, same body). Theme left on Dark. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-049@example.com | 2026-10-06 (FV-26: BUG-096…100) | Journal "FX Trackers" (`fx096-j`): "Streak 3/5"…"Streak 3/12", "Streak 6/1"…"Streak 6/5", "Streak 10/4"…"Streak 10/6" (10:00 each, body "one two three"). Trackers "Pages read" (`fx096-pages`, Number heatmap daily: Oct 1 5, Oct 2 12.34, Oct 3 25, Oct 4 8, Oct 5 999999999 plus a hidden Boolean `true` from the FV-26 follow-up) and "Weight" (`fx096-weight`, Sparkline 50–300: Sep 26 175, Oct 4 180). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-050@example.com | 2026-10-07 (FV-27: BUG-101…105) | Trackers "Mood2" (`fx101-mood`, Dropdown A/B daily, no default: Oct 5 A, Oct 6 B, Oct 7 A), "Mood3" (`fx101-mood3`, Dropdown X/Y daily: Oct 7 X), "Mood4" (`fx101-mood4`, Dropdown X/Y daily, no values), "Pages read" (`fx101-pages`, Number daily: Oct 3 9, Oct 4 7, Oct 5 12), "Gym" (`fx101-gym`, Boolean weekly: weeks of Sep 21 false, Sep 28 true, Oct 5 true). Dreams "Real dream" (Oct 6) and a blank one (Oct 7). **Show dream statistics ON.** Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-051@example.com | 2026-10-07 (FV-28: BUG-106…110) | Finance only: expenses `fx106-eve` (EveStore $7, Oct 6 9:30 PM), `fx106-late` (LateStore $9, Oct 6 10 PM), `fx106-noon` ($20, Oct 6 noon), `fx106-sep30` (SepEveStore $16, Sep 30 9:45 PM), `fx109-a` (Walmart $3, Oct 5); deposit `fx106-dep` (Employer $1,000, Oct 2); UI-made Oct 7 rows "Line1Line2" $4 and $12.34; budget none; asset "TFSA" $500 (no room). Every `occurred_at` is in UTC form after the cold re-login. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 
 ---
 
@@ -384,6 +385,8 @@ One line per completed phase.
 ---
 
 ## 7. Handoff note
+
+**2026-10-07 (BUG-106…110, BUG-109 skipped):** all four checked on the unfixed build first (TEST_PLAN.md FV-28, qa-051). BUG-106 (evening transactions on the wrong day) and BUG-110 (two-line paste into Store) were already fixed by earlier commits (`09de0ef`, `801ab25`); BUG-106's remaining finance date fields now read back local too. BUG-107 fixed (clicking Expense/Deposit keeps the caret in Amount). BUG-108 fixed: every finance amount field shows an error for `1,5`, `1e12`, `-5` or a third decimal instead of rewriting it (Juno's choice); pastes are still cleaned. Summary counts updated (76 fixed, 152 open). Full suite 4,495 passed. Session ended `SIGNED-OUT`.
 
 **2026-10-07 (code-review follow-up to BUG-101/102/105):** one close guard for the value popover (no double write or double pop; recoverable if the write fails), Enter saves in the Boolean popover, the empty dropdown no longer copies its first option (empty Inbox rows are slightly taller, accepted). Full suite 4,489 passed; verified in the app (TEST_PLAN.md FV-27 follow-up, qa-050). Session ended `SIGNED-OUT`.
 

@@ -10,6 +10,7 @@
 // flutter_test only delivers the first, so [_pressEnter] sends both.
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -254,6 +255,22 @@ void main() {
     expect(added.type, TransactionType.deposit);
     expect(added.origin, isNull);
   });
+
+  // BUG-107: the click dropped focus, so the amount typed next went nowhere.
+  testWidgets(
+    'clicking Deposit or Expense keeps the caret in Amount',
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+    (tester) async {
+      await _openTransactionSheet(tester);
+      expect(_hasFocus(tester, _amount), isTrue);
+
+      for (final label in ['Deposit', 'Deposit', 'Expense']) {
+        await tester.tap(find.text(label), kind: PointerDeviceKind.mouse);
+        await _settle(tester);
+        expect(_hasFocus(tester, _amount), isTrue, reason: label);
+      }
+    },
+  );
 
   testWidgets('switching type closes an open store list', (tester) async {
     await _openTransactionSheet(tester);

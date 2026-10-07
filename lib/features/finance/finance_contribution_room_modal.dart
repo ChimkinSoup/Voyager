@@ -14,6 +14,7 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/features/finance/finance_amount_formatter.dart';
 
 /// Opens the contribution-room sheet for [asset]: create or join a room when
 /// the asset has none, otherwise edit its room or leave it.
@@ -112,6 +113,19 @@ class _ContributionRoomModalState
   }
 
   int? get _remaining => parseSignedAmountCents(_remainingController.text);
+
+  String? get _limitError {
+    if (_limitController.text.trim().isEmpty || _limit != null) return null;
+    return amountInputError(_limitController.text) ??
+        'Enter a number, e.g. 7000.00';
+  }
+
+  String? get _remainingError {
+    final text = _remainingController.text;
+    if (text.trim().isEmpty || _remaining != null) return null;
+    return amountInputError(text, signed: true) ??
+        'Enter a number, e.g. 1250.00';
+  }
 
   bool get _editing => widget.asset.contributionRoomId != null;
 
@@ -332,48 +346,58 @@ class _ContributionRoomModalState
                   onSubmitted: (_) => _limitFocusNode.requestFocus(),
                 ),
                 const SizedBox(height: 16),
-                VoyagerTextField(
-                  controller: _limitController,
-                  focusNode: _limitFocusNode,
-                  accentColor: accent,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+                // Each field rebuilds on its own text only, for its error
+                // line; see the Save button below for why not the sheet.
+                ListenableBuilder(
+                  listenable: _limitController,
+                  builder: (context, _) => VoyagerTextField(
+                    controller: _limitController,
+                    focusNode: _limitFocusNode,
+                    accentColor: accent,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      AmountInputFormatter(),
+                      LengthLimitingTextInputFormatter(12),
+                    ],
+                    decoration: InputDecoration(
+                      labelText: _editing
+                          ? 'Annual limit from ${now.year} on'
+                          : 'Annual limit',
+                      prefixText: r'$ ',
+                      hintText: '7000.00',
+                      helperText: 'Added every Jan 1',
+                      errorText: _limitError,
+                    ),
+                    onSubmitted: (_) => _remainingFocusNode.requestFocus(),
                   ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                    LengthLimitingTextInputFormatter(12),
-                  ],
-                  decoration: InputDecoration(
-                    labelText: _editing
-                        ? 'Annual limit from ${now.year} on'
-                        : 'Annual limit',
-                    prefixText: r'$ ',
-                    hintText: '7000.00',
-                    helperText: 'Added every Jan 1',
-                  ),
-                  onSubmitted: (_) => _remainingFocusNode.requestFocus(),
                 ),
                 const SizedBox(height: 16),
-                VoyagerTextField(
-                  controller: _remainingController,
-                  focusNode: _remainingFocusNode,
-                  accentColor: accent,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                    signed: true,
+                ListenableBuilder(
+                  listenable: _remainingController,
+                  builder: (context, _) => VoyagerTextField(
+                    controller: _remainingController,
+                    focusNode: _remainingFocusNode,
+                    accentColor: accent,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                      signed: true,
+                    ),
+                    inputFormatters: [
+                      AmountInputFormatter(signed: true),
+                      LengthLimitingTextInputFormatter(13),
+                    ],
+                    decoration: InputDecoration(
+                      labelText: 'Room remaining right now',
+                      prefixText: r'$ ',
+                      helperText:
+                          'What your tax account shows today, carry-forward '
+                          'included',
+                      errorText: _remainingError,
+                    ),
+                    onSubmitted: (_) => _save(),
                   ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]')),
-                    LengthLimitingTextInputFormatter(13),
-                  ],
-                  decoration: const InputDecoration(
-                    labelText: 'Room remaining right now',
-                    prefixText: r'$ ',
-                    helperText:
-                        'What your tax account shows today, carry-forward '
-                        'included',
-                  ),
-                  onSubmitted: (_) => _save(),
                 ),
               ] else ...[
                 Wrap(

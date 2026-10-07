@@ -17,6 +17,7 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/features/finance/finance_amount_formatter.dart';
 
 /// Opens the add / edit savings goal modal.
 Future<void> showGoalModal(
@@ -98,7 +99,7 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
   String? get _targetError {
     if (_targetController.text.trim().isEmpty) return null;
     if (_parsedTarget != null) return null;
-    return amountOverMaxError(_targetController.text) ??
+    return amountInputError(_targetController.text) ??
         r'Enter a target over $0.00';
   }
 
@@ -286,7 +287,7 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
                     decimal: true,
                   ),
                   inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    AmountInputFormatter(),
                     // Bounded so a long paste can't reach the range where
                     // double.parse returns Infinity.
                     LengthLimitingTextInputFormatter(12),
