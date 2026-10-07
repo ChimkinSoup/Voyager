@@ -9,11 +9,27 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/services/media_file_store.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/media_storage.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
 class _NoopRemoteSync implements RemoteSyncService {
+  @override
+  noSuchMethod(Invocation invocation) => null;
+}
+
+/// Records which media rows were pushed through it.
+class _RecordingRemoteSync implements RemoteSyncService {
+  final pushed = <String>[];
+
+  @override
+  void pushMediaAsset(MediaAsset asset) => pushed.add('asset ${asset.id}');
+
+  @override
+  void pushMediaReference(MediaReference reference) =>
+      pushed.add('reference ${reference.id}');
+
   @override
   noSuchMethod(Invocation invocation) => null;
 }
@@ -103,5 +119,44 @@ void main() {
     container.read(mediaServiceProvider).notifyChanged();
 
     expect(container.read(mediaTransferWorkerProvider), same(worker));
+  });
+
+  test('media pushes follow the sync service across an account switch', () async {
+    // The sync service is rebuilt for each signed-in account, but the media
+    // service is not. Holding the first one sent every later image record to
+    // the previous account's path, which the rules refused (permission-denied).
+    final previousAccount = _RecordingRemoteSync();
+    final currentAccount = _RecordingRemoteSync();
+    final activeSync = StateProvider<RemoteSyncService>(
+      (ref) => previousAccount,
+    );
+    final switching = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        settingsRepositoryProvider.overrideWithValue(_StubSettingsRepository()),
+        remoteSyncServiceProvider.overrideWith((ref) => ref.watch(activeSync)),
+        mediaStorageProvider.overrideWithValue(_SignedOutStorage()),
+        mediaFileStoreProvider.overrideWithValue(
+          MediaFileStore(root: Directory('${tempDir.path}/media')),
+        ),
+      ],
+    );
+    addTearDown(switching.dispose);
+
+    final service = switching.read(mediaServiceProvider);
+    switching.read(activeSync.notifier).state = currentAccount;
+
+    final reference = await service.attachBytes(
+      bytes: pngOf(8, 8),
+      collection: FirestoreCollections.todoTasks,
+      documentId: 'task-1',
+    );
+
+    expect(switching.read(mediaServiceProvider), same(service));
+    expect(previousAccount.pushed, isEmpty);
+    expect(
+      currentAccount.pushed,
+      containsAll(['asset ${reference.mediaId}', 'reference ${reference.id}']),
+    );
   });
 }

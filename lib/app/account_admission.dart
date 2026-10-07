@@ -54,16 +54,18 @@ Future<bool> admitAccount(
   await local.wipeFor(uid);
 
   // What the app holds of the old account in memory, as a restore clears it:
-  // the data first, so the pages remounted next read the empty store.
+  // the data first, reloaded before the pages remount so they read the empty
+  // store rather than the old account's rows still held through the reload.
   ref.read(charOpRegistryProvider).clear();
   NotificationHistory.instance.clear();
   // Through the container: this runs inside the admission, which the
   // sign-in state depends on, and a provider may not invalidate its own
   // dependents.
-  invalidateAllDataProvidersIn(ref.container);
   // The one file store that keeps its file in memory, and would write the
-  // old account's drafts back on its next save.
+  // old account's drafts back on its next save. Before the reload below, so
+  // no save lands in the old store while it runs.
   ref.container.invalidate(todoSubtaskDraftStoreProvider);
+  await reloadAllDataProvidersIn(ref.container);
   restoreGeneration.value++;
   await backups.refreshStatus();
   return true;

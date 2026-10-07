@@ -297,7 +297,7 @@ final ChangeNotifierProvider<MediaService> mediaServiceProvider =
       service.downloadScheduler = () =>
           ref.read(mediaTransferWorkerProvider).drainDownloads();
       service.publisher = RemoteMediaSyncPublisher(
-        ref.read(remoteSyncServiceProvider),
+        () => ref.read(remoteSyncServiceProvider),
       );
       return service;
     });
@@ -1858,18 +1858,17 @@ extension SettledAsyncValue<T> on ProviderListenable<AsyncValue<T>> {
   );
 }
 
+/// The four lists above, for the entry points that take them all at once.
+final _allDataProviders = <ProviderOrFamily>{
+  ..._journalEntryProviders,
+  ..._primaryDataProviders,
+  ..._workoutDataProviders,
+  ..._secondaryDataProviders,
+};
+
 /// Widget-side counterpart of [invalidateAllDataProviders].
 void invalidateAllDataProvidersFrom(WidgetRef ref) {
-  for (final provider in _journalEntryProviders) {
-    ref.invalidate(provider);
-  }
-  for (final provider in _primaryDataProviders) {
-    ref.invalidate(provider);
-  }
-  for (final provider in _workoutDataProviders) {
-    ref.invalidate(provider);
-  }
-  for (final provider in _secondaryDataProviders) {
+  for (final provider in _allDataProviders) {
     ref.invalidate(provider);
   }
 }
@@ -1877,15 +1876,79 @@ void invalidateAllDataProvidersFrom(WidgetRef ref) {
 /// [invalidateAllDataProvidersFrom] for work that can outlive the widget that
 /// started it, whose `ref` is unusable once it is disposed.
 void invalidateAllDataProvidersIn(ProviderContainer container) {
-  for (final provider in [
-    ..._journalEntryProviders,
-    ..._primaryDataProviders,
-    ..._workoutDataProviders,
-    ..._secondaryDataProviders,
-  ]) {
+  for (final provider in _allDataProviders) {
     container.invalidate(provider);
   }
 }
+
+/// [invalidateAllDataProvidersIn], completing once each of them in use holds
+/// its new value.
+///
+/// An invalidated async provider keeps its previous value while it reloads,
+/// and [SettledAsyncValue.settled] hands that to watchers as data. A page
+/// remounted inside that window reads the data from before: after an account
+/// switch, the previous account's — the Journal page opened its last entry
+/// and held it until the new account's pull (BUG-005).
+///
+/// The providers built on them are waited for too: they keep their previous
+/// value the same way, until something reads them.
+///
+/// Never throws. A reload that fails, or hasn't finished by
+/// [_reloadDeadline], is reported and the rest goes ahead: that provider may
+/// still show what it held before (an error keeps the previous value too),
+/// but a sign-in or restore stuck on it would be worse.
+Future<void> reloadAllDataProvidersIn(ProviderContainer container) async {
+  final elements = <ProviderElementBase<Object?>>{};
+  void collect(ProviderElementBase<Object?> element) {
+    if (!elements.add(element)) return;
+    element.visitChildren(elementVisitor: collect, notifierVisitor: (_) {});
+  }
+
+  for (final element in container.getAllProviderElements().toList()) {
+    if (_allDataProviders.contains(element.origin) ||
+        _allDataProviders.contains(element.origin.from)) {
+      collect(element);
+    }
+  }
+  invalidateAllDataProvidersIn(container);
+
+  // Listening is what makes an invalidated provider rebuild.
+  final subscriptions = <ProviderSubscription<Object?>>[];
+  try {
+    final reloads = <Future<void>>[];
+    for (final element in elements) {
+      final done = Completer<void>();
+      reloads.add(done.future);
+      subscriptions.add(
+        container.listen<Object?>(element.origin, (_, next) {
+          if (next is AsyncValue && next.isLoading) return;
+          if (done.isCompleted) return;
+          if (next is AsyncError) {
+            done.completeError(next.error, next.stackTrace);
+          } else {
+            done.complete();
+          }
+        }, fireImmediately: true),
+      );
+    }
+    await Future.wait(reloads).timeout(_reloadDeadline);
+  } catch (error, stack) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stack,
+        library: 'providers',
+        context: ErrorDescription('while reloading the data providers'),
+      ),
+    );
+  } finally {
+    for (final subscription in subscriptions) {
+      subscription.close();
+    }
+  }
+}
+
+const _reloadDeadline = Duration(seconds: 10);
 
 /// Total published LeetCode problem counts per difficulty, used as the
 /// progress rings' denominators. Not persisted locally — on fetch failure

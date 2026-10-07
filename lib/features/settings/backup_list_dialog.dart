@@ -128,7 +128,7 @@ Future<void> confirmAndRestoreBackup(BuildContext context, File file) async {
   );
   // A restore can rewrite any collection, so nothing on screen can be assumed
   // still current: the data first, so the pages remounted next read it fresh.
-  invalidateAllDataProvidersIn(container);
+  await reloadAllDataProvidersIn(container);
   restoreGeneration.value++;
 }
 

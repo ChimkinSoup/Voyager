@@ -13,6 +13,7 @@ import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_write_gate.dart';
 import 'package:voyager/core/sync/local_account_store.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
+import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/features/auth/login_page.dart';
 import 'package:voyager/data/database/app_database.dart';
@@ -198,6 +199,68 @@ void main() {
     await worker.startDraining();
     expect(await uploaded('accountB', 'txn-a'), isFalse);
     expect(await uploaded('accountA', 'txn-a'), isFalse);
+  });
+
+  test("a page remounted after the switch doesn't read the previous "
+      "account's entries from the data providers' reload", () async {
+    await signIn('accountA');
+    final at = DateTime.utc(2026, 5, 1);
+    final journals = DriftJournalRepository(db);
+    await journals.upsertJournal(
+      Journal(id: 'journal-a', createdAt: at, updatedAt: at, name: 'A'),
+    );
+    await journals.upsertEntry(
+      JournalEntry(
+        id: 'entry-a',
+        createdAt: at,
+        updatedAt: at,
+        journalId: 'journal-a',
+        title: 'private to accountA',
+        body: 'body of accountA',
+        entryDate: at,
+      ),
+    );
+    final entries = journalListEntriesProvider(allJournalEntriesScope);
+    expect(await container.read(entries.future), isNotEmpty);
+    await signOut();
+
+    await signIn('accountB');
+
+    // What the Journal page watches as it remounts. Before the fix this still
+    // held accountA's entry, which the page opened and kept.
+    expect(container.read(entries.settled).requireValue, isEmpty);
+  });
+
+  test("a provider built on the data providers doesn't hold the previous "
+      "account's rows through the reload either", () async {
+    await signIn('accountA');
+    final at = DateTime.utc(2026, 5, 1);
+    await DriftJournalRepository(db).upsertJournal(
+      Journal(id: 'journal-a', createdAt: at, updatedAt: at, name: 'A'),
+    );
+    // Stands in for the likes of calendarViewEventsProvider, watched by a
+    // page that stays mounted through the switch.
+    final names = FutureProvider<List<String>>(
+      (ref) async => [
+        for (final journal in await ref.watch(journalsProvider.future))
+          journal.name,
+      ],
+    );
+    final page = container.listen(names, (_, _) {});
+    addTearDown(page.close);
+    expect(await container.read(names.future), ['A']);
+    await signOut();
+
+    // What the page reads as it remounts.
+    final atRemount = <List<String>>[];
+    void remounted() =>
+        atRemount.add(container.read(names.settled).requireValue);
+    restoreGeneration.addListener(remounted);
+    addTearDown(() => restoreGeneration.removeListener(remounted));
+
+    await signIn('accountB');
+
+    expect(atRemount, [isEmpty]);
   });
 
   test('while the question is open, the new account is not signed in and '
