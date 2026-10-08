@@ -9,10 +9,10 @@ The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10
 | Severity | Logged | Fixed + verified in the app | Open |
 |---|--:|--:|--:|
 | Blocker | 7 | 3 (BUG-001, BUG-003, BUG-061) | 4 |
-| Major | 29 | 17 (BUG-002 (see caveat), BUG-004, BUG-010, BUG-043 (dup), BUG-045, BUG-066, BUG-074, BUG-078, BUG-084, BUG-097, BUG-099, BUG-101, BUG-106, BUG-128, BUG-129, BUG-132, BUG-134) | 12 |
-| Minor | 145 | 61 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-048, BUG-050, BUG-051, BUG-052, BUG-054, BUG-055, BUG-056, BUG-059, BUG-060, BUG-062, BUG-063, BUG-065, BUG-067, BUG-068, BUG-069, BUG-072, BUG-079, BUG-080, BUG-081, BUG-082, BUG-083, BUG-085, BUG-086, BUG-087, BUG-088, BUG-089, BUG-090, BUG-095, BUG-096, BUG-098, BUG-100, BUG-102, BUG-103, BUG-105, BUG-107, BUG-108, BUG-110, BUG-111, BUG-112, BUG-115, BUG-117, BUG-118, BUG-119, BUG-120, BUG-121, BUG-122, BUG-125, BUG-126, BUG-127, BUG-130, BUG-135, BUG-136, BUG-137 (see caveat), BUG-167, BUG-226, BUG-227, BUG-228) | 84 |
-| Cosmetic | 47 | 20 (BUG-007, BUG-008, BUG-042, BUG-049, BUG-057, BUG-064, BUG-070, BUG-071, BUG-073, BUG-075, BUG-076, BUG-077, BUG-093, BUG-094, BUG-104, BUG-114, BUG-123, BUG-131, BUG-139, BUG-140) | 27 |
-| **Total** | **228** | **101** | **127** |
+| Major | 29 | 18 (BUG-002 (see caveat), BUG-004, BUG-010, BUG-043 (dup), BUG-045, BUG-066, BUG-074, BUG-078, BUG-084, BUG-097, BUG-099, BUG-101, BUG-106, BUG-128, BUG-129, BUG-132, BUG-134, BUG-144) | 11 |
+| Minor | 145 | 68 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-048, BUG-050, BUG-051, BUG-052, BUG-054, BUG-055, BUG-056, BUG-059, BUG-060, BUG-062, BUG-063, BUG-065, BUG-067, BUG-068, BUG-069, BUG-072, BUG-079, BUG-080, BUG-081, BUG-082, BUG-083, BUG-085, BUG-086, BUG-087, BUG-088, BUG-089, BUG-090, BUG-095, BUG-096, BUG-098, BUG-100, BUG-102, BUG-103, BUG-105, BUG-107, BUG-108, BUG-110, BUG-111, BUG-112, BUG-115, BUG-117, BUG-118, BUG-119, BUG-120, BUG-121, BUG-122, BUG-125, BUG-126, BUG-127, BUG-130, BUG-135, BUG-136, BUG-137 (see caveat), BUG-141, BUG-143, BUG-145, BUG-146 (see caveat), BUG-147, BUG-148, BUG-150, BUG-167, BUG-226, BUG-227, BUG-228) | 77 |
+| Cosmetic | 47 | 21 (BUG-007, BUG-008, BUG-042, BUG-049, BUG-057, BUG-064, BUG-070, BUG-071, BUG-073, BUG-075, BUG-076, BUG-077, BUG-093, BUG-094, BUG-104, BUG-114, BUG-123, BUG-131, BUG-139, BUG-140, BUG-142) | 26 |
+| **Total** | **228** | **110** | **118** |
 
 "Fixed" means re-tested in the running app by a phase re-check or FV (TEST_PLAN.md "Fix verification"). "Open" means no fix was recorded, so each entry stands as it was last observed. Unit-test-only claims don't count as fixed.
 
@@ -45,6 +45,9 @@ Caveats:
 - `flutter test` on 2026-10-07 (after the BUG-131…140 fixes; BUG-133 and BUG-138 skipped): 4,547 passed, 18 skipped, 0 failed. BUG-131, BUG-132, BUG-134 … BUG-137, BUG-139 and BUG-140 were verified in the app the same day (TEST_PLAN.md FV-31).
 - `flutter test` on 2026-10-07 (after the code-review follow-up to BUG-134/135; FV-31 follow-up): 4,548 passed, 18 skipped, 0 failed. Items 1 and 5 re-checked in the app the same day (FV-31 follow-up).
 - BUG-137: only the Tab leak was fixed (Juno's call). Completing or renaming a bucket-list item from the keyboard is still mouse-only.
+- `flutter test` on 2026-10-07 (after the BUG-141…150 fixes; BUG-149 skipped): 4,562 passed, 18 skipped, 0 failed. BUG-141 … BUG-148 and BUG-150 were verified in the app the same day (TEST_PLAN.md FV-32).
+- `flutter test` on 2026-10-07 (after the code-review follow-up to BUG-142/144/146/147; FV-32 follow-up): 4,564 passed, 18 skipped, 0 failed. Undo after a grade, plain Undo and the edit confirm re-checked in the app the same day.
+- BUG-146: Reset progress on a LeetCode problem now shows a toast with Undo (no confirmation, per Juno); in a review session the toast has no Undo. The Study card menu's Reset progress (the P22 note) is unchanged.
 
 ### Counts by phase (severity × phase)
 
@@ -116,6 +119,7 @@ Bugs deliberately not being fixed for now. They still count as Open above.
 | BUG-124 | 14 | Cosmetic | Breakdown percentages are rounded to whole numbers: a slice with money in it reads 0%, another 100% | 2026-10-07 |
 | BUG-133 | 15 | Minor | Right-click menus ignore Esc, Down and Enter; the click that dismisses one also acts on what is under it | 2026-10-07 |
 | BUG-138 | 16 | Minor | Nothing on the Life page shows where the bucket list is; the HLD's swing and bubble aren't drawn | 2026-10-07 |
+| BUG-149 | 17 | Minor | Track / Edit form: Tab stops at Explanation, so the code box, Notes and Save can't be reached from the keyboard | 2026-10-07 |
 
 ---
 
@@ -1663,6 +1667,7 @@ Entry format:
 - Expected: figures that are "computed live" (HLD) reflect the current time when the page is shown, and day-based ones (Weeks Left, Sleep, Full Moons) change when the day changes.
 - Actual: the page showed 1,336,396,460 heartbeats and 34,112,474,210 km, the values for 21:38 (expected at 21:39: 1,336,396,530 / 34,112,475,997, one minute later). Hovering a label rebuilt the page and the numbers jumped to the current minute (1,336,396,600). With no hover the figures never change, even while a stat popup is open.
 - Notes: `now` is taken inside the page's `LayoutBuilder` and nothing schedules a rebuild (no timer, no day-change listener), and the Life page is kept alive between visits, so its labels stay at whatever minute it last built. Voyager runs all day from the tray (launch at login), so day-based stats can be a day or more stale until the user hovers something; the minute-level drift alone is harmless. The values themselves were exact against a hand calculation every time they were refreshed (see TEST_PLAN Phase 16).
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-32; qa-055): the page and its stat popup read the time from new `lifeClockProvider`, recomputed at the turn of each minute (the figures' finest unit), so they move on their own and a revisit or a new day shows current figures. In the app, birth date June 15, 1990, pointer parked on the rail, no input: 22:59:56 → 23:01:01, Heartbeats 1,337,006,930 → 1,337,007,070 and Kilometres 34,128,056,893 → 34,128,060,467 km (two minutes' worth each; `fx50-31`, `fx50-32`). Tests: `life_settings_fixes_test.dart` "BUG-141 …" (2).
 
 ### BUG-142 [Phase 16] At the minimum window size the Kilometres value runs off the right edge of the canvas
 - Severity: Cosmetic
@@ -1671,6 +1676,7 @@ Entry format:
 - Expected: every stat label fits inside the canvas (wrapped or scaled down).
 - Actual: the label reads "34,112,486,718 k", with the "m" cut off by the canvas's rounded frame (`qa/shots/p16-043-min.png`). At 2000×1100 and maximized it fits. The other labels fit at every size tried.
 - Notes: right-side labels are positioned at their anchor with a width of `min(230, 21% of the canvas)`; the value's 17 characters are wider than what is left. Scatter was on.
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-32; qa-055): a label is never wider than the room between its anchor and the canvas edge, and a figure is kept on one line and scaled down to fit (a prose placeholder such as "No journal moods yet" still wraps). In the app at 720×520 logical: "34,128,060,467 km" ends inside the frame (`fx50-33`; before: `p16-043-min.png`). Test: `life_settings_fixes_test.dart` "BUG-142 …".
 
 ### BUG-143 [Phase 16] Birth date picker: Enter in the typed-date field does nothing
 - Severity: Minor
@@ -1679,6 +1685,7 @@ Entry format:
 - Expected: Enter accepts the date and closes the picker, like OK (or at least moves the header to the typed date).
 - Actual: nothing happens: the dialog stays open and the header still reads "Sun, Jan 1" (`qa/shots/p16-028-set.png`); only a click on OK saves it (`settings_table.birth_date` = `1990-06-15T00:00:00.000 -04:00`). A future date is refused with "Out of range." (correct), and 01/01/1900 and today are accepted.
 - Notes: this is the stock Material `showDatePicker` (Settings page), not the app's `DateSelectorPopover` (BUG-111). The Birth date row itself isn't reachable by Tab (BUG-009). The birth date is stored as local midnight and kept the same day across a restart and a cold re-login.
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-32; qa-055): the Birth date picker overrides the dialog's Enter (`NextFocusIntent`) while the typed-date field has focus: Enter runs the field's validation and, if it passes, accepts the date like OK; Tab still only moves focus. In the app: pencil → 12/25/2030 + Enter → "Out of range.", dialog stays (`fx50-29`); 06/15/1990 + Enter → dialog closes, the row reads "June 15, 1990", `settings_table.birth_date` = `1990-06-15T00:00:00.000 -04:00` (`fx50-30`). The inbox popover's own `showDatePicker` (`notification_inbox_popover.dart`) is unchanged. Tests: `life_settings_fixes_test.dart` "BUG-143 …" (2).
 
 ### BUG-144 [Phase 17] Editing a tracked problem: Esc (or the close X) throws away every change with no warning, and edits have no draft
 - Severity: Major
@@ -1687,6 +1694,7 @@ Entry format:
 - Expected: a "Discard changes?" confirmation, or the same local draft the new-problem form keeps (closing that form and reopening it brings the text back).
 - Actual: the form closes at once (`qa/shots/p17-087-edit-dirty.png` → `p17-088-edit-esc.png`). SQLite: the description and `version` 0 are unchanged, and nothing was written to `leetcode_track_draft.json`. Reopening Edit shows the saved text. A long write-up (explanation, a pasted solution, a second solution) typed into an existing problem is lost to one stray Esc; this form is where code and notes are added to a problem after it was first tracked.
 - Notes: `showLeetCodeTrackModal` passes `draft: null` for an edit ("a draft belongs to the create flow only") and the sheet's Esc / X / `Navigator.pop` have no dirty check. Same class as BUG-084 (Search entry dialog). With Vim ON, Esc only leaves Insert mode and never closes the form, so there the loss needs the X. Scatter was on.
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-32; qa-055): as Juno chose: a confirmation, no draft for edits. Esc, a click outside and the close X go through one dirty check against the form as it opened; with a change, "Discard changes?" (Keep editing / Discard) asks first; an unchanged edit, and the create form (which keeps its draft), close at once. In the app, Two Sum → Edit… → " EDITED-NOT-SAVED" + Esc → dialog (`fx50-10`); Keep editing → text kept; X → dialog (`fx50-12`); Discard → closed, SQLite description and `version` 0 unchanged (`fx50-13`); Edit… + Esc with no change → closed at once (`fx50-14`). Tests: `leetcode_form_deck_fixes_test.dart` "BUG-144 …" (2).
 
 ### BUG-145 [Phase 17] The Track / Edit form opens with nothing focused: typing goes nowhere, and Ctrl+Enter does nothing until a field is clicked
 - Severity: Minor
@@ -1695,6 +1703,7 @@ Entry format:
 - Expected: "Problem name" has focus when the form opens (it is the only required field, and a rejected save focuses it), and Ctrl+Enter reports "A problem name is required".
 - Actual: the name stays empty (`qa/shots/p17-004-typed-nofocus.png`) and Ctrl+Enter shows no message (`p17-005-empty-save.png`). After clicking the name field, Ctrl+Enter on an empty or spaces-only name shows the red "A problem name is required" and keeps focus there (`p17-065-name-required.png`), and a filled form saves.
 - Notes: the title `VoyagerTextField` has no `autofocus`; `CtrlEnterToSubmitScope` only hears keys from a focused descendant. Same family as BUG-136. Tab order once a field is focused: name → ID → Search LeetCode → Easy / Medium / Hard → Retrack → Tags → Description → Add example → Add solution → Algorithm → Time → Space → Explanation (see BUG-149); Space on a difficulty pill selects it; focus is invisible throughout (BUG-009).
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-32; qa-055): the Problem name field has `autofocus`. In the app: Track → "Draft Problem v2" typed with no click lands in the name (`fx50-06`). Test: `leetcode_form_deck_fixes_test.dart` "BUG-145 …".
 
 ### BUG-146 [Phase 17] "Reset progress" wipes a problem's review history in one click: no confirmation, no toast, no Undo
 - Severity: Minor
@@ -1704,6 +1713,7 @@ Entry format:
 - Actual: the menu closes and nothing else is shown (`qa/shots/p17-036-reset.png`). SQLite: `interval` 0, `ease` 2.5, `review_count` 0, `due_at` = now, `version` +1. The interval and ease it had can't be brought back.
 - Notes: `leetCodeProblemMenuItems` calls `resetLeetCodeProgress` directly. The item is disabled for a never-reviewed problem (correct). Same pattern as BUG-120 / BUG-127 / BUG-135 (one-click destructive actions).
 - Notes (P22, 2026-10-02): the Study card menu's Reset progress is the same, on the deck grid and mid-session. In a session (debug deck, "Fundamental limit of calculus [#12]", interval 0.5 / ease 2.3 / `review_count` 2) one click wrote interval 0 / ease 2.5 / count 0 / due now, sent the card to the back of the round, and also cleared the session's whole Previous-card history: the undo and redo arrows went grey, so the grades made earlier in the round can no longer be taken back either (`qa/shots/p22-087-reset-menu.png`, `p22-088-after-reset.png`; by design per the `_clearHistory` comment, but nothing tells the user).
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-32; qa-055): as Juno chose: a toast. Reset progress from the dashboard, the Review Deck and Cram shows `Progress reset for "…"` with Undo, which puts interval, ease, review count and due date back on the row as it is on disk; in a review session the toast has no Undo, because the session grades its own copy of the reset problem and would write the reset back over it. No confirmation step. In the app, Lower Draft (interval 10, 4 reviews, due Oct 20): Reset → toast (`fx50-19`), SQLite 0 / 0 / due now, v1; Undo → 10 / 4 / Oct 20 14:00Z, v2 (`fx50-20`). A first try on Two Sum let the 6 s toast expire before the click, so Two Sum stays reset. Not changed: the Study card menu's Reset progress (P22 note). Test: `leetcode_form_deck_fixes_test.dart` "BUG-146 …".
 
 ### BUG-147 [Phase 17] LeetCode day-based figures don't roll over at midnight: "Last 30 days" and the tiles' days-until-due stay on yesterday until something rebuilds them
 - Severity: Minor
@@ -1712,6 +1722,7 @@ Entry format:
 - Expected: after midnight the window is Sep 3 – Oct 2: the Sep 2 solve drops out (Hard 7 → 6) and a new, empty day appears at the right; a tile due later today reads "0", not "1".
 - Actual: at 12:01 AM and 12:02 AM the card still read 7 / 6 / 7 / 8 with the Sep 2 – Oct 1 curve (`qa/shots/p17-041-before-midnight.png`, `p17-042-after-midnight.png`, `p17-043-after-midnight-real.png`). Hovering the card rebuilt it: 7 / 6 / 6 / 8 and the curve shifted a day (`p17-044-midnight-hover.png`); leaving and re-entering the page shows the same (`p17-045-midnight-revisit.png`). On the Review Deck, tiles due Oct 2 10:00 still showed "1" at 12:02 AM (`p17-046-deck-after-midnight.png`, Min Stack) and "0" after a hover (`p17-050-tile-menu.png`). The "N due" count is taken the same way (at build time), so a problem that comes due while the deck is open isn't counted until a rebuild.
 - Notes: same cause as BUG-141 (Life page): `DateTime.now()` is read during build and nothing schedules a rebuild; the page is kept alive between visits and Voyager runs all day from the tray. Values were exact against SQL whenever they were rebuilt.
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-32; qa-055): the activity card (and its expanded view), the tiles' days-until-due and the deck's due count read new `leetCodeClockProvider`, recomputed at the next local midnight or the next moment a problem comes due, whichever is sooner. In the app: "Due Soon" seeded due at 22:54; the deck read "9 problems · 0 due" with Study disabled at 22:50 (`fx50-02`) and, with no input, "1 due" with Study enabled at 22:54:18 (`fx50-03`). Midnight itself was not waited for in the app (same timer; unit-tested through the due-time path). Tests: `leetcode_form_deck_fixes_test.dart` "BUG-147 …" (2).
 
 ### BUG-148 [Phase 17] LeetCode tags differing only by case are kept as separate tags
 - Severity: Minor
@@ -1720,6 +1731,7 @@ Entry format:
 - Expected: one tag per name regardless of case (the field already removes the repeated `tag2`), or the second spelling folded into the first.
 - Actual: `tags_json` = `["Draft","tag2","draft"]`. The dashboard's tag matrix shows `#Draft (1)` and `#draft (1)` as two pills (`qa/shots/p17-083-dash-long.png`), the tile and the feed row show both chips, and the Review Deck's tag filter lists both; a filter on one misses problems tagged with the other.
 - Notes: `_parsedTags` de-duplicates with an exact-case `Set`; the matrix and the filter compare exact strings. Same family as BUG-115 (budget tags). Non-ASCII tags are kept whole here (`#東京テスト`, `#café`), unlike BUG-063.
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-32; qa-055): the Tags field keeps one tag per name ignoring case (first spelling kept), and the tag matrix and the deck's tag filter fold case, so rows saved before the fix also count as one tag. In the app: `#Draft` and `#draft` on two seeded problems show as one `#Draft (2)` pill (`fx50-01`); the filter lists one "Draft", and ticking it shows both (`fx50-04`, `fx50-05`); Track → `#Draft, tag2 #draft #tag2` → `tags_json` = `["Draft","tag2"]` (SQLite). Tests: `leetcode_form_deck_fixes_test.dart` "BUG-148 …" (2).
 
 ### BUG-149 [Phase 17] Track / Edit form: Tab stops at Explanation, so the code box, Notes and Save can't be reached from the keyboard
 - Severity: Minor
@@ -1728,6 +1740,7 @@ Entry format:
 - Expected: Tab continues from Explanation to the language pills, the code box, Notes and Save (or a documented key leaves the field).
 - Actual: focus goes name → ID → Search → Easy → Medium → Hard → Retrack → Tags → Description → Add example → Add solution → Algorithm → Time → Space → Explanation, and every further Tab stays on Explanation (rect 63,596 1314×66 three times in a row). Shift+Tab walks back. The language selector, Strip, the code editor, Notes, a second solution's fields and the Save button are mouse-only; Ctrl+Enter still saves.
 - Notes: deliberate in `_SolutionFields` (`Shortcuts { Tab: DoNothingIntent }` around the Explanation field, "so a stray press mid-write-up doesn't jump to the language pills"), but it blocks forward traversal entirely. Compare BUG-058 (journal body swallows Tab).
+- Notes (2026-10-07): skipped for now (Juno's call); listed under "Skipped bugs" in the summary.
 
 ### BUG-150 [Phase 17] At the minimum window size the LeetCode dashboard's problem feed is one row tall, and the Track button covers the tag matrix
 - Severity: Minor
@@ -1736,6 +1749,7 @@ Entry format:
 - Expected: the recent-completions feed keeps a usable height (the rings or the card scroll away, or the page scrolls as a whole).
 - Actual: rings, then the "Last 30 days" card, then a feed viewport about 120 px tall showing exactly one problem ("line1"), then the tag matrix, whose right side sits under the floating Track button (`qa/shots/p17-092-min-dash.png`). The feed scrolls inside that one-row window. At 2000×1100 and maximized the layout is fine.
 - Notes: below 700 logical px the activity card takes a row of its own, and below 720 the tag matrix takes `min(160, half)` of what is left (`leetcode_dashboard.dart`), leaving the feed the remainder. At this size the form's language row also shows only python … go; "rust" and "C#" are cut off beside Strip (`p17-097-min-modal-bottom.png`). Scatter was on.
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-32; qa-055): below the 720 px split the dashboard is one scroll view: the feed and matrix fill what is left under the header, but never less than a 240 px feed plus the 160 px matrix and 80 px of room for the Track button, so in a short window the header scrolls away. Wide layout unchanged. In the app at 720×520: the feed starts under the card (`fx50-22`); scrolled to the end it shows about four rows and the matrix sits above the Track button (`fx50-23`); maximized, the side-by-side layout is as before (`fx50-24`). Not changed: the form's language row at this size ("rust" and "C#" cut, the note above). Test: `leetcode_form_deck_fixes_test.dart` "BUG-150 …".
 
 ### BUG-151 [Phase 17] Vim Normal mode in the Review Deck search field: the block caret is drawn about three characters to the left of the real position, over the magnifier icon
 - Severity: Cosmetic

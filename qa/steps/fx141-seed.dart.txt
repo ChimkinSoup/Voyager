@@ -1,0 +1,14 @@
+final repo = c.read(leetCodeRepositoryProvider);
+final sync = c.read(remoteSyncServiceProvider);
+final now = DateTime.now().toUtc();
+final ps = <LeetCodeProblem>[
+  LeetCodeProblem(id: 'fx141-twosum', createdAt: now, updatedAt: now, title: 'Two Sum', questionFrontendId: '1', difficulty: LeetCodeDifficulty.easy, tags: const ['array'], description: 'Find two numbers that add up to target.', solvedAt: DateTime(2026, 9, 20, 12).toUtc(), interval: 3, ease: 2.3, reviewCount: 3, dueAt: DateTime(2026, 10, 10, 10).toUtc()),
+  LeetCodeProblem(id: 'fx141-soon', createdAt: now, updatedAt: now, title: 'Due Soon', questionFrontendId: '2', difficulty: LeetCodeDifficulty.medium, tags: const ['Draft'], solvedAt: DateTime(2026, 10, 6, 12).toUtc(), interval: 1, ease: 2.5, reviewCount: 1, dueAt: now.add(const Duration(minutes: 4))),
+  LeetCodeProblem(id: 'fx141-lower', createdAt: now, updatedAt: now, title: 'Lower Draft', questionFrontendId: '3', difficulty: LeetCodeDifficulty.hard, tags: const ['draft'], solvedAt: DateTime(2026, 10, 5, 12).toUtc(), interval: 10, ease: 2.5, reviewCount: 4, dueAt: DateTime(2026, 10, 20, 10).toUtc()),
+];
+for (var i = 0; i < 6; i++) {
+  ps.add(LeetCodeProblem(id: 'fx141-f' + i.toString(), createdAt: now, updatedAt: now, title: 'Feed problem ' + i.toString(), questionFrontendId: (10 + i).toString(), difficulty: LeetCodeDifficulty.values[i % 3], tags: ['tag' + i.toString()], solvedAt: DateTime(2026, 10, 4 - (i ~/ 2), 12).toUtc(), interval: 30, ease: 2.5, reviewCount: 5, dueAt: DateTime(2026, 11, 20, 10).toUtc()));
+}
+for (final p in ps) { await repo.upsertProblem(p); sync.pushLeetCodeProblem(p); }
+invalidateAllDataProvidersIn(c);
+debugPrint('FX141 seeded ' + DateTime.now().toString());

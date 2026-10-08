@@ -327,7 +327,12 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
     final current = queue.first;
     setState(() => _grading = true);
 
-    final reset = await resetLeetCodeProgress(ref, current);
+    final reset = await resetLeetCodeProgress(
+      context,
+      ref,
+      current,
+      offerUndo: false,
+    );
     if (!mounted) return;
 
     setState(() {

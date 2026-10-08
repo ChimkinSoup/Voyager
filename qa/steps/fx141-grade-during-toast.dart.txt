@@ -1,0 +1,6 @@
+final repo = c.read(leetCodeRepositoryProvider);
+final p = await repo.getProblem('fx141-lower');
+final graded = p!.copyWith(reviewCount: 1, interval: 1, dueAt: DateTime.now().toUtc().add(const Duration(days: 1)));
+await repo.upsertProblem(graded);
+c.read(remoteSyncServiceProvider).pushLeetCodeProblem(graded);
+debugPrint('FX141 graded during toast v' + graded.version.toString());

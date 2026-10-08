@@ -123,8 +123,12 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
   /// One leaf on the ground for every week already lived, spread evenly around
   /// the canopy. Derived from the birth date rather than animated into place,
   /// so the page opens straight onto the settled state.
-  Set<int> _groundedLeavesFor(LifeTreeGeometry geometry, DateTime? birthDate) {
-    final weeks = weeksLivedFor(birthDate, DateTime.now()) ?? 0;
+  Set<int> _groundedLeavesFor(
+    LifeTreeGeometry geometry,
+    DateTime? birthDate,
+    DateTime now,
+  ) {
+    final weeks = weeksLivedFor(birthDate, now) ?? 0;
     if (weeks == _livedLeavesWeeks) return _livedLeaves!;
 
     final orderedIndices = geometry.leafIndicesByAngle;
@@ -154,9 +158,10 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
     final geometry = ref.watch(lifeTreeGeometryProvider);
     final settings = ref.watch(settingsProvider.settled).valueOrNull;
     final statsAsync = ref.watch(lifeTrackerStatsProvider.settled);
+    final now = ref.watch(lifeClockProvider);
     final grounded =
         ref.watch(lifeTreeGroundedLeavesProvider) ??
-        _groundedLeavesFor(geometry, settings?.birthDate);
+        _groundedLeavesFor(geometry, settings?.birthDate, now);
 
     final minorColors = (settings?.minorPetalColors ?? const <int>[])
         .map(Color.new)
@@ -179,7 +184,6 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         if (size.isEmpty) return const SizedBox.shrink();
 
-        final now = DateTime.now();
         final labelWidth = math.min(230.0, size.width * 0.21);
         final hub = geometry.branchHubRect;
         final hotspot = Rect.fromLTRB(
@@ -258,10 +262,19 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
                   child: FractionalTranslation(
                     translation: const Offset(0, -0.5),
                     child: SizedBox(
-                      width: labelWidth,
+                      // Never wider than the room left before the canvas
+                      // edge, or a long value runs off it at small sizes.
+                      width: math.max(
+                        0,
+                        math.min(
+                          labelWidth,
+                          (blossom.onLeft ? x : size.width - x) - 8,
+                        ),
+                      ),
                       child: StatLeaderLabel(
                         name: resolved.shortLabel,
                         value: resolved.value,
+                        valueIsProse: resolved.isPlaceholder,
                         onLeft: blossom.onLeft,
                         inkColor: ink,
                         accentColor: accent,

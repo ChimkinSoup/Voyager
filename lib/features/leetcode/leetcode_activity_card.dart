@@ -9,6 +9,7 @@ import 'package:voyager/features/leetcode/leetcode_activity_calendar.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_chart.dart';
 import 'package:voyager/features/leetcode/leetcode_activity_data.dart';
 import 'package:voyager/features/leetcode/leetcode_detail_view.dart';
+import 'package:voyager/features/leetcode/leetcode_providers.dart';
 
 /// Height of the dashboard card, matched to the tallest progress ring beside
 /// it so the two read as one band rather than two stacked things.
@@ -63,7 +64,7 @@ class _LeetCodeActivityCardState extends ConsumerState<LeetCodeActivityCard> {
         ref.watch(leetcodeReviewLogProvider.settled).valueOrNull ?? const [];
     final window = leetCodeActivityWindow(
       byDay: leetCodeActivityByDay(problems: problems, logs: logs),
-      today: DateTime.now(),
+      today: ref.watch(leetCodeClockProvider),
     );
 
     return MouseRegion(
@@ -308,7 +309,10 @@ class _ActivityDetailCardState extends ConsumerState<_ActivityDetailCard> {
     final logs =
         ref.watch(leetcodeReviewLogProvider.settled).valueOrNull ?? const [];
     final byDay = leetCodeActivityByDay(problems: problems, logs: logs);
-    final window = leetCodeActivityWindow(byDay: byDay, today: DateTime.now());
+    final window = leetCodeActivityWindow(
+      byDay: byDay,
+      today: ref.watch(leetCodeClockProvider),
+    );
 
     return Material(
       color: theme.colorScheme.surface,

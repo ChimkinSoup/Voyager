@@ -71,6 +71,10 @@ Future<bool> showLeetCodeTrackModal(
   final saved = await showVoyagerModal<bool>(
     context: context,
     kind: VoyagerSheetKind.editor,
+    // Android's drag-to-dismiss pops the sheet directly, past the "Discard
+    // changes?" check, and an edit has no draft to fall back on. Back still
+    // closes it, through the check. A create keeps its draft, so it drags.
+    enableDrag: existing == null ? null : false,
     constraints: BoxConstraints(
       maxWidth: screenSize.width * 0.96,
       maxHeight: screenSize.height * 0.96,
@@ -143,6 +147,9 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
   String? _slugTitle;
   String? _questionId;
   bool _saving = false;
+
+  /// "Discard changes?" is up — see [_requestClose].
+  bool _confirmingClose = false;
   bool _retracking = false;
 
   late final LeetCodeTrackDraftStore _draftStore;
@@ -541,14 +548,16 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
   static String _tagFieldText(List<String> topicTags) =>
       topicTags.map((t) => '#${leetCodeTagToken(t)}').join(' ');
 
+  /// One tag per name whatever its case — `#Draft #draft` is one tag, kept as
+  /// first typed — since the matrix and the deck's filter treat them as one.
   List<String> get _parsedTags {
     final raw = _tagsController.text.split(RegExp(r'[\s,]+'));
-    final seen = <String>{};
+    final seen = <String, String>{};
     for (final token in raw) {
       final tag = token.replaceAll('#', '').trim();
-      if (tag.isNotEmpty) seen.add(tag);
+      if (tag.isNotEmpty) seen.putIfAbsent(tag.toLowerCase(), () => tag);
     }
-    return seen.toList();
+    return seen.values.toList();
   }
 
   /// Blank boxes are dropped rather than saved as empty examples — an "Add
@@ -840,6 +849,30 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     Future.delayed(const Duration(milliseconds: 2600), dismissToast.dismiss);
   }
 
+  /// Esc, a click outside and the close X all land here. An edit has no draft
+  /// slot to fall back on, so closing one with changes asks first; a create
+  /// keeps its draft and closes straight away.
+  Future<void> _requestClose() async {
+    // A save in flight closes the sheet itself, with its result; closing
+    // under it would hand the caller null for a save that went through.
+    // A second request while the confirm is up would stack another one.
+    if (_saving || _confirmingClose) return;
+    if (_isCreate || _snapshot().sameContentAs(_baseline)) {
+      Navigator.of(context).pop();
+      return;
+    }
+    _confirmingClose = true;
+    final discard = await showConfirmDialog(
+      context,
+      title: 'Discard changes?',
+      message: "Your changes to this problem haven't been saved.",
+      cancelLabel: 'Keep editing',
+      confirmLabel: 'Discard',
+    );
+    _confirmingClose = false;
+    if (discard && mounted) Navigator.of(context).pop();
+  }
+
   Future<void> _save() async {
     if (_saving) return;
     final title = _titleController.text.trim();
@@ -963,6 +996,9 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
                             child: VoyagerTextField(
                               controller: _titleController,
                               focusNode: _titleFocusNode,
+                              // The one required field, and where typing on
+                              // open (and Ctrl+Enter) should land.
+                              autofocus: true,
                               accentColor: accent,
                               onChanged: (_) {
                                 if (_titleError != null) {
@@ -1172,7 +1208,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
             ),
             // Pinned beside the close for the same reason: the form scrolls
             // to the sheet edge, and a handle inside it would scroll away.
-            if (voyagerSheetDrags(VoyagerSheetKind.editor))
+            if (_isCreate && voyagerSheetDrags(VoyagerSheetKind.editor))
               const Positioned(
                 top: 10,
                 left: 0,
@@ -1194,7 +1230,7 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
                     // the cheat sheet returns to the form exactly as it was.
                     const LeetCodeCheatSheetIconButton(size: 18),
                     IconButton(
-                      onPressed: Navigator.of(context).pop,
+                      onPressed: _requestClose,
                       icon: const Icon(PhosphorIconsRegular.x, size: 18),
                       visualDensity: VisualDensity.compact,
                       tooltip: 'Close',
@@ -1208,7 +1244,14 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       ),
     );
     // _save guards itself, and names a missing title rather than no-opping.
-    return CtrlEnterToSubmitScope(onSubmit: _save, child: sheet);
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _requestClose();
+      },
+      child: CtrlEnterToSubmitScope(onSubmit: _save, child: sheet),
+    );
   }
 }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
@@ -8,6 +10,26 @@ import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
 /// seed), so the tree always looks like the same tree.
 final lifeTreeGeometryProvider = Provider<LifeTreeGeometry>((ref) {
   return generateLifeTreeGeometry();
+});
+
+/// The time the Life page's figures are computed for, recomputed at the turn
+/// of each minute (their finest unit). The page stays mounted between visits
+/// and the app runs all day from the tray, so a time read once at build would
+/// leave heartbeats frozen and the day-based stats on an old day.
+final lifeClockProvider = Provider.autoDispose<DateTime>((ref) {
+  final now = DateTime.now();
+  final timer = Timer(
+    DateTime(
+      now.year,
+      now.month,
+      now.day,
+      now.hour,
+      now.minute + 1,
+    ).difference(now),
+    ref.invalidateSelf,
+  );
+  ref.onDispose(timer.cancel);
+  return now;
 });
 
 /// Overrides which leaves rest on the ground, for the debug restore button

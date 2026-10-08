@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/features/life_tracker/life_tracker_providers.dart';
 import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
 import 'package:voyager/features/life_tracker/life_tracker_stats.dart';
 
@@ -36,7 +37,7 @@ class BlossomStatPopup extends ConsumerWidget {
     final resolved = resolveLifeStat(
       stat: stat,
       birthDate: settings?.birthDate,
-      now: DateTime.now(),
+      now: ref.watch(lifeClockProvider),
       // Null while the cache is still loading — see [resolveLifeStat].
       tasksConquered: statsAsync.valueOrNull?.tasksConquered,
       lifetimeMood: statsAsync.valueOrNull?.lifetimeMood,

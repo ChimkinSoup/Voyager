@@ -13,10 +13,16 @@ class LeetCodeTagMatrix extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Counted ignoring case, under the first spelling met: problems saved
+    // before tags were folded can carry both `#Draft` and `#draft`.
     final counts = <String, int>{};
+    final spellings = <String, String>{};
     for (final p in problems) {
-      for (final tag in p.tags) {
+      for (final tag in p.tags.map((t) => t.toLowerCase()).toSet()) {
         counts[tag] = (counts[tag] ?? 0) + 1;
+      }
+      for (final tag in p.tags) {
+        spellings.putIfAbsent(tag.toLowerCase(), () => tag);
       }
     }
     if (counts.isEmpty) {
@@ -42,7 +48,7 @@ class LeetCodeTagMatrix extends StatelessWidget {
         children: [
           for (final entry in entries)
             _WeightedTagPill(
-              tag: entry.key,
+              tag: spellings[entry.key]!,
               count: entry.value,
               weight: entry.value / maxCount,
             ),

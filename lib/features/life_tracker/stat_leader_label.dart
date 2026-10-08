@@ -23,6 +23,7 @@ class StatLeaderLabel extends StatefulWidget {
     super.key,
     required this.name,
     required this.value,
+    this.valueIsProse = false,
     required this.onLeft,
     required this.inkColor,
     required this.accentColor,
@@ -33,6 +34,10 @@ class StatLeaderLabel extends StatefulWidget {
 
   final String name;
   final String value;
+
+  /// A sentence in place of a figure ("Set your birth date in Settings"),
+  /// which wraps; a figure is kept on one line and shrunk to fit instead.
+  final bool valueIsProse;
   final bool onLeft;
   final Color inkColor;
   final Color accentColor;
@@ -64,6 +69,20 @@ class _StatLeaderLabelState extends State<StatLeaderLabel> {
       Shadow(color: widget.haloColor, blurRadius: 10),
     ];
 
+    final value = Text(
+      widget.value,
+      textAlign: widget.onLeft ? TextAlign.right : TextAlign.left,
+      style: TextStyle(
+        fontFamily: _monoFamily,
+        fontFamilyFallback: _monoFallback,
+        fontSize: 12.5,
+        height: 1.3,
+        letterSpacing: 0.2,
+        color: tone.withValues(alpha: _hovered ? 1.0 : 0.82),
+        shadows: halo,
+      ),
+    );
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => _setHovered(true),
@@ -90,19 +109,19 @@ class _StatLeaderLabelState extends State<StatLeaderLabel> {
                 shadows: halo,
               ),
             ),
-            Text(
-              widget.value,
-              textAlign: widget.onLeft ? TextAlign.right : TextAlign.left,
-              style: TextStyle(
-                fontFamily: _monoFamily,
-                fontFamilyFallback: _monoFallback,
-                fontSize: 12.5,
-                height: 1.3,
-                letterSpacing: 0.2,
-                color: tone.withValues(alpha: _hovered ? 1.0 : 0.82),
-                shadows: halo,
+            if (widget.valueIsProse)
+              value
+            else
+              // Kept on one line and shrunk if the label is too narrow for
+              // it: a number broken across lines (or cut at the edge)
+              // misreads.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: widget.onLeft
+                    ? Alignment.centerRight
+                    : Alignment.centerLeft,
+                child: value,
               ),
-            ),
           ],
         ),
       ),

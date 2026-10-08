@@ -465,6 +465,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                                 settings.birthDate ?? DateTime(1995, 1, 1),
                             firstDate: DateTime(1900),
                             lastDate: DateTime.now(),
+                            builder: (context, child) =>
+                                _EnterAcceptsTypedDate(child: child!),
                           );
                           if (picked != null) {
                             _save(ref, settings.copyWith(birthDate: picked));
@@ -1285,6 +1287,53 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
 /// cache size — which walks the media directory — rebuilds only this tile and
 /// not the whole settings page.
 /// The automatic-backups switch and its status row — AUTO_BACKUP_HLD.md §9.
+/// Makes Enter in the date picker's typed-date field accept the date, as OK
+/// does. The stock dialog maps Enter there to [NextFocusIntent], which only
+/// moves focus, so a typed date needed a click on OK. Tab (the same intent)
+/// still just moves focus.
+class _EnterAcceptsTypedDate extends StatelessWidget {
+  const _EnterAcceptsTypedDate({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Actions(
+      actions: {
+        NextFocusIntent: CallbackAction<NextFocusIntent>(
+          onInvoke: (_) {
+            final focus = FocusManager.instance.primaryFocus;
+            final keys = HardwareKeyboard.instance.logicalKeysPressed;
+            final field = focus?.context
+                ?.findAncestorStateOfType<EditableTextState>();
+            final form = focus?.context == null
+                ? null
+                : Form.maybeOf(focus!.context!);
+            if (field == null ||
+                form == null ||
+                !(keys.contains(LogicalKeyboardKey.enter) ||
+                    keys.contains(LogicalKeyboardKey.numpadEnter))) {
+              focus?.nextFocus();
+              return null;
+            }
+            // The field's own validator shows "Invalid format." / "Out of
+            // range." and keeps the dialog open, as OK does.
+            if (!form.validate()) return null;
+            form.save();
+            Navigator.of(context).pop(
+              MaterialLocalizations.of(
+                context,
+              ).parseCompactDate(field.textEditingValue.text),
+            );
+            return null;
+          },
+        ),
+      },
+      child: child,
+    );
+  }
+}
+
 /// One page in the navigation pages dialog: drag to reorder, eye to hide.
 class _NavPageRow extends StatelessWidget {
   const _NavPageRow({

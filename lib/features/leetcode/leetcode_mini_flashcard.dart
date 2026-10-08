@@ -11,6 +11,7 @@ import 'package:voyager/domain/services/leetcode_srs_engine.dart';
 import 'package:voyager/features/leetcode/leetcode_actions.dart';
 import 'package:voyager/features/leetcode/leetcode_detail_view.dart';
 import 'package:voyager/features/leetcode/leetcode_inline_code.dart';
+import 'package:voyager/features/leetcode/leetcode_providers.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
 
 /// What the grid's search matches on the tile's front face: everything the
@@ -163,7 +164,10 @@ class _LeetCodeMiniFlashcardState extends ConsumerState<LeetCodeMiniFlashcard> {
     final theme = Theme.of(context);
     final problem = widget.problem;
     final difficultyColor = colorForLeetCodeDifficulty(problem.difficulty);
-    final daysUntilDue = leetCodeDaysUntilDue(problem, now: widget.now);
+    final daysUntilDue = leetCodeDaysUntilDue(
+      problem,
+      now: widget.now ?? ref.watch(leetCodeClockProvider),
+    );
     final description = problem.description?.trim();
     final hasDescription = description != null && description.isNotEmpty;
 

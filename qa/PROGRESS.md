@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 055.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 056.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -174,6 +174,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-052@example.com | 2026-10-07 (FV-29: BUG-111…120) | Finance only: October expenses `fx111-qmart` (Qmart $40 #groceries), `fx111-kostco` (Kostco $70 #Groceries), `fx111-thai` (ThaiPlace $30 #food #thai), `fx111-zhell` (Zhell $25 #travel #food), `fx111-cine` (Cine $12 #fun), `fx111-future` (FutureStore $99.99, Oct 15, upcoming), `fx111-sep` (SepStore $15 #groceries, Sep 20); deposit `fx111-dep` (Employer $1,000, Oct 1). Budgets #groceries $100 and #rent $200. Categories "Zfood" (#food #groceries #thai), "Transit" (#food #travel; the shared #food predates the BUG-118 fix) and "Funs" (#fun, deleted and restored). Goal "Trip" $5,000 (nothing allocated). Assets "TFSA A" ($500) and "TFSA B" (not valued), both in room "R1" (limit $7,000, $5,000 remaining). **Vim ON**; Dark + Scatter. | Password `qavoyager2026`. Turn Vim off if reused. |
 | voyager-qa-053@example.com | 2026-10-07 (FV-30: BUG-121…130) | Finance only: 40 expenses `fx121-t0..39` (Store0..39, Oct 7 back to Aug 29, every third #groceries), deposit `fx121-dep` (Employer $1,000, Oct 1); budget #groceries $100. Goal "Japan trip" $2,000 with allocations $450 (Oct 7, "From October paycheck") and −$450 (Oct 31, upcoming). Asset "TFSA A" (note "Brokerage") in room "TFSA" (baseline $10,000 Jan 1, limit $7,000): valuations Sep 1 $300, Sep 15 $9,500, Oct 7 $9,500 (revived by the FV-30 follow-up), Oct 21 $15,750; contributions $200 (Oct 2, seeded old-style, re-typed) and $300 (Oct 7). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-054@example.com | 2026-10-07 (FV-31: BUG-131…140) | Finance: deposit `fx131-dep` (Employer $1,000, Oct 1); room "TFSA" (`fx131-room`, baseline $10,000 Jan 1, limit $7,000; deleted and restored twice) holding "TFSA A" ($10,000, Oct 1) and "TFSA B" ($5,000, Oct 1); "Car loan" (−$15,001.00; deleted and undone); contribution `fx131-ev` / ledger `fx131-tx` (TFSA B $2,000, Oct 2, deleted and restored from Trash). Life: birth date Jan 1, 1900; bucket list "Climb Kilimanjaro", a 300-char "Lxxx…Z", "See the aurora", "Skydive", "Rapid". Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-055@example.com | 2026-10-07 (FV-32: BUG-141…150) | LeetCode: seeded `fx141-twosum` "Two Sum" (#array; progress reset, not undone), `fx141-soon` "Due Soon" (#Draft, came due 22:54), `fx141-lower` "Lower Draft" (#draft; reset then undone, v2), `fx141-f0..5` "Feed problem 0..5"; UI-made "Draft Problem v2" (#Draft #tag2). Settings: birth date June 15, 1990. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 
 ---
 
@@ -388,6 +389,10 @@ One line per completed phase.
 ---
 
 ## 7. Handoff note
+
+**2026-10-07 (code-review follow-up to BUG-141…150):** applied items 1–6 (Juno's pick): an edited LeetCode problem can't be dragged shut on Android, the LeetCode clock catches up after sleep, Reset's Undo keeps a review graded since, close requests are ignored while the confirm is up or a save is running, and stat labels can't get a negative width; a misplaced doc comment fixed. Full suite 4,564 passed. Re-checked on qa-055 (TEST_PLAN.md FV-32 follow-up): Lower Draft now 1 review / interval 1 (graded during the toast, kept). Session ended `SIGNED-OUT`.
+
+**2026-10-07 (BUG-141…150, BUG-149 skipped):** all nine fixed and verified in the app (TEST_PLAN.md FV-32, qa-055). Life figures follow the clock, a long figure stays inside the canvas, Enter accepts a typed birth date; an edited LeetCode problem asks before discarding (no edit draft, per Juno), the Track form opens with the name focused, Reset progress shows a toast with Undo (per Juno), due counts and day figures roll over on their own, tags fold case, and the narrow dashboard scrolls as a whole. Summary counts updated (110 fixed, 118 open). Full suite 4,562 passed. Session ended `SIGNED-OUT`.
 
 **2026-10-07 (code-review follow-up to BUG-131…140):** applied items 1, 2, 4, 5 (Juno's pick): asset Undo restores from the row on disk (keeps a room change made while the sheet was open), room delete reads nothing before its guarded delete, room Undo re-attaches only assets untouched since the delete (same rule as Trash), and a corrected comment. Full suite 4,548 passed, 18 skipped, 0 failed. The first in-app attempt hit a locked PC; re-checked afterwards on qa-054 (sync gate forced with Juno's OK, the leftover data was the aborted run's): asset Undo keeps a room joined with the sheet open, room Undo leaves out an asset saved during the toast (TEST_PLAN.md FV-31 follow-up). Car loan now has the note "Saved during undo" and is in no room. Session ended `SIGNED-OUT`.
 

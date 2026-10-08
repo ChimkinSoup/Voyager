@@ -456,7 +456,7 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
   Future<void> _resetAndAdvance() async {
     final problem = _current;
     if (problem == null || _exiting) return;
-    await resetLeetCodeProgress(ref, problem);
+    await resetLeetCodeProgress(context, ref, problem);
     if (!mounted) return;
     _decide(false);
   }

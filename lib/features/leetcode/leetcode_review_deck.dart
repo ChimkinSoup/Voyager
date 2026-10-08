@@ -72,7 +72,10 @@ class _LeetCodeReviewDeckState extends ConsumerState<LeetCodeReviewDeck> {
       if (difficulties.isNotEmpty && !difficulties.contains(p.difficulty)) {
         return false;
       }
-      if (!tagFilter.every(p.tags.contains)) return false;
+      if (tagFilter.isNotEmpty) {
+        final tags = {for (final t in p.tags) t.toLowerCase()};
+        if (!tagFilter.every(tags.contains)) return false;
+      }
       if (needle.isEmpty) return true;
       final text = textFor(p);
       return text.front.contains(needle) || text.back.contains(needle);
@@ -81,7 +84,8 @@ class _LeetCodeReviewDeckState extends ConsumerState<LeetCodeReviewDeck> {
 
     // The counts describe what a session would actually work through, so they
     // follow the filter rather than the whole library.
-    final dueCount = filtered.where((p) => p.isDue()).length;
+    final now = ref.watch(leetCodeClockProvider).toUtc();
+    final dueCount = filtered.where((p) => p.isDue(now: now)).length;
     final filtering =
         needle.isNotEmpty || difficulties.isNotEmpty || tagFilter.isNotEmpty;
     final visibleIds = {for (final p in filtered) p.id};
@@ -403,7 +407,14 @@ class _TagFilterButton extends ConsumerWidget {
     final theme = Theme.of(context);
     // Only tags that are actually on a tracked problem — a filter that can
     // only ever return nothing isn't worth offering.
-    final tags = {for (final p in problems) ...p.tags}.toList()..sort();
+    // One entry per tag ignoring case, under the first spelling met.
+    final spellings = <String, String>{};
+    for (final p in problems) {
+      for (final tag in p.tags) {
+        spellings.putIfAbsent(tag.toLowerCase(), () => tag);
+      }
+    }
+    final tags = spellings.values.toList()..sort();
 
     return Builder(
       builder: (buttonContext) => GlassButton(
@@ -613,7 +624,8 @@ class _TagFilterList extends ConsumerWidget {
 
     void toggle(String tag) {
       final next = {...selected};
-      if (!next.remove(tag)) next.add(tag);
+      final key = tag.toLowerCase();
+      if (!next.remove(key)) next.add(key);
       ref.read(leetCodeDeckTagFilterProvider.notifier).state = next;
     }
 
@@ -637,7 +649,7 @@ class _TagFilterList extends ConsumerWidget {
             itemCount: tags.length,
             itemBuilder: (context, index) {
               final tag = tags[index];
-              final isOn = selected.contains(tag);
+              final isOn = selected.contains(tag.toLowerCase());
               return InkWell(
                 onTap: () => toggle(tag),
                 child: Padding(

@@ -131,6 +131,8 @@ If unsure and the UI is near full-screen with Save + Close, default to **`editor
 | Finance transaction | `finance_transaction_modal.dart` | Handle present; drag on | `kind: editor`; **remove** handle when drag off (desktop); **keep** handle on Android |
 | Finance subscription | `finance_subscription_modal.dart` | Handle present; drag on | Same as transaction |
 
+**Exception (2026-10-07, BUG-144 follow-up):** the LeetCode track form opened as an *edit* has drag off on Android too, and no handle. A drag-dismiss pops the sheet directly, past the form's "Discard changes?" check, and an edit has no draft to fall back on; Android Back still closes it, through the check. The *create* form keeps drag (and its handle), since its draft survives a dismiss.
+
 Close / Cancel / Save buttons unchanged. Barrier tap unchanged.
 
 ### 5.1 Handle visibility pattern

@@ -175,13 +175,70 @@ Future<void> replayLeetCodeReviewLog(
 /// Forgets how well the user knows [problem] — its content is untouched.
 /// Returns the reset problem so a session can put the same copy back in its
 /// queue.
+///
+/// Says so in a toast, with Undo when [offerUndo]. A review session passes
+/// false: it keeps its own copy of the reset problem in its queue, and grading
+/// that copy later would write the reset schedule back over the undone one.
 Future<LeetCodeProblem> resetLeetCodeProgress(
+  BuildContext context,
   WidgetRef ref,
-  LeetCodeProblem problem,
-) async {
+  LeetCodeProblem problem, {
+  bool offerUndo = true,
+}) async {
+  // Captured before the write, which can rebuild the tile that asked for it.
+  final container = ProviderScope.containerOf(context, listen: false);
+  final overlay = Overlay.of(context, rootOverlay: true);
   final reset = resetLeetCodeProblemSrs(problem);
   await _save(ref, reset);
+  showVoyagerToastIn(
+    overlay,
+    message: 'Progress reset for "${problem.title}"',
+    icon: PhosphorIconsRegular.arrowCounterClockwise,
+    dwell: const Duration(seconds: 6),
+    actions: [
+      if (offerUndo)
+        VoyagerToastAction(
+          label: 'Undo',
+          onPressed: () => _undoReset(container, overlay, problem, reset),
+        ),
+    ],
+  );
   return reset;
+}
+
+/// Puts [before]'s schedule back on the row as it is on disk now, so an edit
+/// made while the toast stood isn't rolled back with it. A review graded
+/// since [reset] has moved the schedule on, and is kept rather than undone.
+Future<void> _undoReset(
+  ProviderContainer container,
+  OverlayState overlay,
+  LeetCodeProblem before,
+  LeetCodeProblem reset,
+) async {
+  final repo = container.read(leetCodeRepositoryProvider);
+  final current = await repo.getProblem(before.id);
+  if (current == null || current.deletedAt != null) return;
+  if (current.reviewCount != reset.reviewCount ||
+      current.interval != reset.interval ||
+      current.ease != reset.ease ||
+      current.dueAt != reset.dueAt) {
+    showVoyagerToastIn(
+      overlay,
+      message: 'Reviewed since the reset, so its progress was kept',
+      icon: PhosphorIconsRegular.info,
+      dwell: const Duration(seconds: 4),
+    );
+    return;
+  }
+  final restored = current.copyWith(
+    interval: before.interval,
+    ease: before.ease,
+    dueAt: before.dueAt,
+    reviewCount: before.reviewCount,
+  );
+  await repo.upsertProblem(restored);
+  container.read(remoteSyncServiceProvider).pushLeetCodeProblem(restored);
+  container.invalidate(leetcodeProblemsProvider);
 }
 
 /// Returns whether the problem was actually deleted, so a session that was
@@ -326,7 +383,8 @@ List<ContextMenuItem> leetCodeProblemMenuItems({
       enabled: !problem.isNew,
       onTap: problem.isNew
           ? null
-          : (onResetProgress ?? () => resetLeetCodeProgress(ref, problem)),
+          : (onResetProgress ??
+                () => resetLeetCodeProgress(context, ref, problem)),
     ),
     ContextMenuItem(
       label: 'Delete',
