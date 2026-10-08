@@ -9,10 +9,10 @@ The audit ran Phases 0–26 and Fix verification (FV) from 2026-09-27 to 2026-10
 | Severity | Logged | Fixed + verified in the app | Open |
 |---|--:|--:|--:|
 | Blocker | 7 | 3 (BUG-001, BUG-003, BUG-061) | 4 |
-| Major | 29 | 15 (BUG-002 (see caveat), BUG-004, BUG-010, BUG-043 (dup), BUG-045, BUG-066, BUG-074, BUG-078, BUG-084, BUG-097, BUG-099, BUG-101, BUG-106, BUG-128, BUG-129) | 14 |
-| Minor | 145 | 58 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-048, BUG-050, BUG-051, BUG-052, BUG-054, BUG-055, BUG-056, BUG-059, BUG-060, BUG-062, BUG-063, BUG-065, BUG-067, BUG-068, BUG-069, BUG-072, BUG-079, BUG-080, BUG-081, BUG-082, BUG-083, BUG-085, BUG-086, BUG-087, BUG-088, BUG-089, BUG-090, BUG-095, BUG-096, BUG-098, BUG-100, BUG-102, BUG-103, BUG-105, BUG-107, BUG-108, BUG-110, BUG-111, BUG-112, BUG-115, BUG-117, BUG-118, BUG-119, BUG-120, BUG-121, BUG-122, BUG-125, BUG-126, BUG-127, BUG-130, BUG-167, BUG-226, BUG-227, BUG-228) | 87 |
-| Cosmetic | 47 | 17 (BUG-007, BUG-008, BUG-042, BUG-049, BUG-057, BUG-064, BUG-070, BUG-071, BUG-073, BUG-075, BUG-076, BUG-077, BUG-093, BUG-094, BUG-104, BUG-114, BUG-123) | 30 |
-| **Total** | **228** | **93** | **135** |
+| Major | 29 | 17 (BUG-002 (see caveat), BUG-004, BUG-010, BUG-043 (dup), BUG-045, BUG-066, BUG-074, BUG-078, BUG-084, BUG-097, BUG-099, BUG-101, BUG-106, BUG-128, BUG-129, BUG-132, BUG-134) | 12 |
+| Minor | 145 | 61 (BUG-006, BUG-044, BUG-046, BUG-047, BUG-048, BUG-050, BUG-051, BUG-052, BUG-054, BUG-055, BUG-056, BUG-059, BUG-060, BUG-062, BUG-063, BUG-065, BUG-067, BUG-068, BUG-069, BUG-072, BUG-079, BUG-080, BUG-081, BUG-082, BUG-083, BUG-085, BUG-086, BUG-087, BUG-088, BUG-089, BUG-090, BUG-095, BUG-096, BUG-098, BUG-100, BUG-102, BUG-103, BUG-105, BUG-107, BUG-108, BUG-110, BUG-111, BUG-112, BUG-115, BUG-117, BUG-118, BUG-119, BUG-120, BUG-121, BUG-122, BUG-125, BUG-126, BUG-127, BUG-130, BUG-135, BUG-136, BUG-137 (see caveat), BUG-167, BUG-226, BUG-227, BUG-228) | 84 |
+| Cosmetic | 47 | 20 (BUG-007, BUG-008, BUG-042, BUG-049, BUG-057, BUG-064, BUG-070, BUG-071, BUG-073, BUG-075, BUG-076, BUG-077, BUG-093, BUG-094, BUG-104, BUG-114, BUG-123, BUG-131, BUG-139, BUG-140) | 27 |
+| **Total** | **228** | **101** | **127** |
 
 "Fixed" means re-tested in the running app by a phase re-check or FV (TEST_PLAN.md "Fix verification"). "Open" means no fix was recorded, so each entry stands as it was last observed. Unit-test-only claims don't count as fixed.
 
@@ -42,6 +42,9 @@ Caveats:
 - `flutter test` on 2026-10-07 (after the BUG-111…120 fixes; BUG-113 skipped; BUG-112 already fixed in the working tree): 4,519 passed, 18 skipped, 0 failed. BUG-111, BUG-112 and BUG-114 … BUG-120 were verified in the app the same day (TEST_PLAN.md FV-29). After the code-review follow-up (BUG-116's fix reverted and the bug skipped; see FV-29 follow-up): 4,522 passed, 18 skipped, 0 failed.
 - `flutter test` on 2026-10-07 (after the BUG-121…130 fixes; BUG-124 skipped): 4,532 passed, 18 skipped, 0 failed. BUG-121, BUG-122, BUG-123 and BUG-125 … BUG-130 were verified in the app the same day (TEST_PLAN.md FV-30). BUG-128 changes the contribution-room HLD (§3, §6.2, §11), per Juno.
 - `flutter test` on 2026-10-07 (after the code-review follow-up to BUG-125/126/128/129/130; FV-30 follow-up): 4,539 passed, 18 skipped, 0 failed. Re-verified in the app the same day.
+- `flutter test` on 2026-10-07 (after the BUG-131…140 fixes; BUG-133 and BUG-138 skipped): 4,547 passed, 18 skipped, 0 failed. BUG-131, BUG-132, BUG-134 … BUG-137, BUG-139 and BUG-140 were verified in the app the same day (TEST_PLAN.md FV-31).
+- `flutter test` on 2026-10-07 (after the code-review follow-up to BUG-134/135; FV-31 follow-up): 4,548 passed, 18 skipped, 0 failed. Items 1 and 5 re-checked in the app the same day (FV-31 follow-up).
+- BUG-137: only the Tab leak was fixed (Juno's call). Completing or renaming a bucket-list item from the keyboard is still mouse-only.
 
 ### Counts by phase (severity × phase)
 
@@ -111,6 +114,8 @@ Bugs deliberately not being fixed for now. They still count as Open above.
 | BUG-113 | 13 | Cosmetic | Ledger day headers never show the year, so rows from different years can't be told apart in a search | 2026-10-07 |
 | BUG-116 | 14 | Minor | The budget Tag field accepts text that can never be a tag (spaces, several tags), so the budget stays at $0.00 | 2026-10-07 |
 | BUG-124 | 14 | Cosmetic | Breakdown percentages are rounded to whole numbers: a slice with money in it reads 0%, another 100% | 2026-10-07 |
+| BUG-133 | 15 | Minor | Right-click menus ignore Esc, Down and Enter; the click that dismisses one also acts on what is under it | 2026-10-07 |
+| BUG-138 | 16 | Minor | Nothing on the Life page shows where the bucket list is; the HLD's swing and bubble aren't drawn | 2026-10-07 |
 
 ---
 
@@ -1565,6 +1570,7 @@ Entry format:
 - Expected: "-$15,001.00", as the headline and the "… assets" line print negatives ("-$4,751.00 assets").
 - Actual: the row reads "$15,001.00" in red (`qa/shots/p15-40-two-assets.png`). The sum under the headline is right (-$4,751.00 = 10,250.00 − 15,001.00). The third decimal was rounded silently (-1500100 cents saved for "-15000.999", the BUG-108 pattern).
 - Notes: `_AssetRow` uses `formatCents` (prints the magnitude) plus an error colour; the headline uses `formatNetCents`. Same sign loss as BUG-125.
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-31; qa-054): the asset row prints its value with `formatNetCents`. In the app: "Car loan -$15,001.00" in red (`fx48-01`). Not unit-tested (one call).
 
 ### BUG-132 [Phase 15] Restoring a deleted contribution from Trash brings back its ledger deposit but not the room entry, so the room no longer counts it
 - Severity: Major
@@ -1573,6 +1579,7 @@ Entry format:
 - Expected: both halves come back (HLD §6.3: "Undo soft-delete: Restore both sides when paired"), and the room bar counts the $2,000.00 again.
 - Actual: the ledger shows "TFSA B +$2,000.00" again and the hero counts it, but the room bar stays at "$9,400/$10,300" (`qa/shots/p15-s14.png` tile of `p15-94-after-trash-restore.png`); with the entry it would read $11,400, over by $1,100.00. TFSA B's history in the asset sheet doesn't list it. SQLite: `transactions_table` row `deleted_at` NULL, `version` 2; its `asset_room_events_table` row (kind contribution, 200000) still has `deleted_at`. The room now understates what was contributed, with nothing on screen to show the two are out of step; the ledger row still opens as "Linked to a contribution room".
 - Notes: deleting either side removes both (ledger row menu → event gone; history trash → ledger row gone), and the toast's Undo restores both (checked from the history list: a transfer's two legs, `p15-74-tr-deleted.png` → both `deleted_at` NULL). Only the Trash dialog restores one side. Trash lists these rows as "Untitled transaction / Finance" with no amount, asset or kind, so a deleted $1,000.00 withdrawal and a $2,000.00 contribution can't be told apart (`p15-92-trash.png`); the room entries themselves aren't listed, so there is no way to restore the other half. The restore also rewrote `occurred_at` in UTC form (BUG-106).
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-31; qa-054): a ledger row and its room entry are now tombstoned at one instant, and the Trash treats the entry as part of the row's delete (new `asset_room_events` trash kind, a child of `transactions` by `transactionId`), so Restore brings both back. In the app: Ledger → Delete on "TFSA B −$2,000.00", toast left to expire; SQLite showed the row and `fx131-ev` with the same `deleted_at`; Trash → Restore → both `deleted_at` NULL, version 2, and the room bars read $2,000/$10,000 again (`fx48-16`). Pairs deleted before this change carry two instants and still restore one side only. Test: `trash_service_test.dart` "BUG-132 …".
 
 ### BUG-133 [Phase 15] Right-click menus can't be closed or used from the keyboard: Esc, Down and Enter do nothing, and the click that dismisses one also activates what is under it
 - Severity: Minor
@@ -1583,6 +1590,7 @@ Entry format:
 - Notes: `ContextMenuRegion` is the app-wide right-click menu (asset rows, bills, budgets, ledger rows), so this likely holds everywhere; only the Finance ledger and the asset rows were tried here. Part of the BUG-009 family (nothing on a page is reachable by keyboard), but Esc not closing a popup is new.
 - Notes (2026-10-01, Phase 17): confirmed on the LeetCode dashboard rows and Review Deck tiles (Open details… / Edit… / Open on LeetCode / Copy code / Reset progress / Delete): Esc, Down and Enter do nothing while the menu is open (`qa/shots/p17-026-menu-esc.png`, `p17-027-menu-keys.png`). Here a stray dismissing click can land on "Reset progress" (BUG-146) or flip the tile under it.
 - Notes (2026-10-02, Phase 19A): confirmed on Rankings entry rows (Pin / Status / Clear score / Open gallery / Delete) and episode rows: Esc leaves the menu open (`qa/shots/p19-066-menu-esc.png`).
+- Notes (2026-10-07): skipped for now (Juno's call); listed under "Skipped bugs" in the summary.
 
 ### BUG-134 [Phase 15] Deleting a contribution room takes one click, has no confirmation or Undo, and the room isn't in Trash, so it can't be brought back
 - Severity: Major
@@ -1592,6 +1600,7 @@ Entry format:
 - Actual: the sheet closes at once; the bar disappears from the asset (`qa/shots/p15-114-room-deleted.png`). No toast. Trash lists the asset deleted afterwards, an old transaction and other Finance items, but no room (`p15-117-trash.png`). SQLite: `contribution_rooms_table.deleted_at` set, `assets_table.contribution_room_id` cleared on the member; the nine room entries and their ledger rows stay live (as HLD §7.4 intends) but nothing reads them any more. The limit, the baseline and the link between the assets can only be re-entered by hand as a new room, and a new room starts with none of this year's entries, since they carry the old room's id.
 - Notes: `_ContributionRoomModalState._deleteRoom` calls `softDeleteContributionRoom` directly (compare BUG-120, BUG-127: categories and goals are also one click, but those are restorable from Trash). The ledger rows of the dead room still open as "Linked to a contribution room". "Detach from room" (asset menu) and "Remove … from this room" are also immediate, but reversible through Join existing.
 - Notes (same day): after a new room "TFSA 3" was made for the same assets, their bars read "$0/$5,000" while the history list in each asset's sheet still shows the dead room's entries (Withdrawal -$1,000.00, Contribution +$6,000.00, Transfer +$2,500.00 under "Contribution room · TFSA 3", `qa/shots/p15-s21.png`): the list is filtered by asset and year, the bar by room id, so the two disagree. The Track sheet's "Join existing" correctly offers only the live room.
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-31; qa-054): room delete goes through new `deleteContributionRoomWithUndo`: `Deleted "TFSA"` + Undo puts the room back and re-attaches the assets it let go, unless one joined another room meanwhile. The room and the assets it detaches are stamped with one instant, and the room is listed in Trash (`Contribution room "TFSA"`); its Restore re-attaches every asset last written at that instant (new `TrashKind.detached`). No confirmation step, as for goals and categories. In the app: delete → toast, both bars gone (`fx48-07`); Undo → both bars back (`fx48-08`); delete again, toast expired → Trash lists the room (`fx48-14`), Restore → room live and both assets back in it (SQLite, `fx48-15`, `fx48-16`). A room deleted before this change is listed too, but its Restore can't re-attach the assets (they were stamped at another instant). Tests: `finance_goals_assets_test.dart` "BUG-134 …", `trash_service_test.dart` "BUG-134 …".
 
 ### BUG-135 [Phase 15] Deleting an asset takes one click on the trash icon: no confirmation and no Undo toast, and Net Worth jumps
 - Severity: Minor
@@ -1600,6 +1609,7 @@ Entry format:
 - Expected: the `Deleted "Car loan"` toast with Undo, as for transactions, budgets, subscriptions and room entries.
 - Actual: the sheet closes and the row is gone with no toast; Net Worth goes from -$7,448.39 to $7,552.61 (`qa/shots/p15-116-carloan-deleted.png`). The trash icon sits beside the close X. Trash lists it (`"Car loan"` / "Finance · 1 valuation") and Restore brings back the asset and its valuation (`p15-s19.png`).
 - Notes: same pattern as BUG-120 (category) and BUG-127 (goal). `_AssetModalState._delete` calls `softDeleteAsset` directly.
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-31; qa-054): asset delete goes through new `deleteAssetWithUndo`: the asset and the valuations deleted with it come back on Undo; ones deleted earlier stay deleted. No confirmation step, as for goals. In the app: `Deleted "Car loan"` with Undo, Net Worth −$1,001.00 → $14,000.00 (`fx48-03`); Undo → row and Net Worth back (`fx48-04`). Test: `finance_goals_assets_test.dart` "BUG-135 …".
 
 ### BUG-136 [Phase 16] Bucket list: the add field isn't focused when the list opens, and a rejected Enter (blank or spaces) drops focus, so whatever is typed next goes nowhere
 - Severity: Minor
@@ -1608,6 +1618,7 @@ Entry format:
 - Expected: the field has focus when the popover opens (it is the popover's only text field), and a rejected Enter keeps focus in the field, as an accepted one does ("type, Enter, type, Enter" is how `_addItem` is designed to be used).
 - Actual: on open, the typed "Skydive" is lost: nothing has focus (`qa/shots/p16-004-typed-nofocus.png`). After the rejected Enter, `FocusManager.instance.primaryFocus` is the popover's `FocusScopeNode`; the spaces stay in the field with the hint hidden, and Ctrl+A / Delete, a CRLF paste, "Rapid" and five Enters all went nowhere (`p16-014-after-fail.png`). No row was added and nothing says why.
 - Notes: `_BucketListPopupState._addItem` returns early for a blank title before the `_newItemFocusNode.requestFocus()` that restores focus after an accepted submit, while `onSubmitted` has already unfocused the field. Same family as BUG-026 / BUG-050 / BUG-117 (focus lost after a rejected Enter). Scatter was on.
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-31; qa-054): the add field has `autofocus`, and a blank submit gives focus back to it. In the app: opened the list and typed "Skydive" + Enter with no click → added (`fx48-20`); five Space presses + Enter → `primaryFocus` still the add field, spaces kept; Ctrl+A, Delete, "Rapid" + Enter → added (`fx48-21`). Test: `life_bucket_list_fixes_test.dart` "BUG-136 …".
 
 ### BUG-137 [Phase 16] Bucket list items can't be completed or renamed from the keyboard, and Tab leaves the popover for an off-screen page and the title bar
 - Severity: Minor
@@ -1616,6 +1627,7 @@ Entry format:
 - Expected: the popover traps focus while it is open; each row's completion circle and title are reachable, Space/Enter completes an item (opening the note prompt) and Enter on a title renames it.
 - Actual: Tab goes add field → "+" button → a 53×32 button inside the **Study page** (not on screen; `StudyPage` in its ancestry) → two `GlassButton`s and a 56×56 button that belong to no visible page → a title-bar button at y = −25 (BUG-086). Shift+Tab reaches only the rows' ✕ delete buttons. The completion circles (a bare `GestureDetector`) and the tap-to-rename title are never reached, so completing or renaming an item needs the mouse. Enter on the off-screen Study button had no visible effect and wrote nothing. Focus is invisible throughout (BUG-009).
 - Notes: on the Life page itself Tab never moves (focus stays on a scope wrapping the canvas), so the bucket list and the stat popups can't be opened from the keyboard at all; see the BUG-009 note. Esc closes the popover (Vim off); with Vim ON Esc only leaves Insert mode and the popover stays (consistent with the Vim dialog rule).
+- Notes (2026-10-07, partly fixed in the working tree, uncommitted; verified in the running app, FV-31; qa-054): per Juno, only the Tab leak was fixed; completing and renaming from the keyboard stay mouse-only. The tree popover route uses `TraversalEdgeBehavior.closedLoop` (the default, `parentScope`, let Tab out into the shell's offstage pages); the stat popups share the route. In the app: from the add field, 10 Tabs went + → the five ✕ → add field → … and 10 Shift+Tabs the reverse, every stop inside `BucketListPopup` (VM probe). Test: `life_bucket_list_fixes_test.dart` "BUG-137 …" (nested navigator beside an outside button; fails without the fix).
 
 ### BUG-138 [Phase 16] Nothing on the Life page shows where the bucket list is: the HLD's swing and bubble aren't drawn, and the only way in is clicking the bare trunk
 - Severity: Minor
@@ -1624,6 +1636,7 @@ Entry format:
 - Expected: LIFE_TRACKER.md: "On the right side of the tree there should be a swing … In the swing will be a bubble", and "If the user clicks on the bubble it should also animate a popup" (the bucket list). Hovering the bubble expands it and raises its glow.
 - Actual: there is no swing, bubble or other object on the tree (`qa/shots/p16-001-nobirth.png`, `p16-030-tree-birth.png`). The bucket list opens from a click anywhere on the trunk and branches (`_TreeHoverRegion`), which only shows a click cursor and a whole-tree glow on hover. Nothing on the page names or hints at a bucket list, so a user who hasn't read the code won't find it.
 - Notes: the page's class comment describes "a figure resting on the trunk that opens the bucket list", and `lib/features/life_tracker/life_tree_figure.dart` (`lifeTreeFigureRect`, the figure painter) exists, but nothing references that file: the figure is never drawn. Other HLD differences, not logged separately: the stat is "Kilometres Travelled Around the Sun" (HLD: miles), labels on leader lines replace hover-only one-word captions under blossoms. Unused file noticed, not touched.
+- Notes (2026-10-07): skipped for now (Juno's call); listed under "Skipped bugs" in the summary.
 
 ### BUG-139 [Phase 16] Fallen leaves pile up into a vertical column at the right (and left) edge of the ground
 - Severity: Cosmetic
@@ -1632,6 +1645,7 @@ Entry format:
 - Expected: the pile thins out toward the edges ("thinning out steadily toward the edges", per the code comment).
 - Actual: a narrow pink pillar of leaves stacked on top of one another stands at the far right of the ground, and a smaller one at the far left (`qa/shots/p16-030-tree-birth.png`, bottom-right corner; much taller with all leaves down, `p16-037-1900-tree.png`; also at the minimum size, `p16-043-min.png`).
 - Notes: `groundPositionFor` (`life_tree_canvas.dart`) draws x from a normal distribution around the trunk base (σ = 0.22 of the width) and then clamps it to [0.04, 0.96], so every leaf in the tails lands on exactly the same x. With the trunk at ~0.61 about 5.6% of fallen leaves (~100 at 1,893 weeks, ~230 at 4,160) share x = 0.96. Scatter was on.
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-31; qa-054): an x past either edge is drawn again instead of clamped (a truncated bell curve). In the app, birth date Jan 1, 1900 (all leaves down): the pile thins out at both edges, no column (`fx48-17`, crops `fx48-18`, `fx48-19`; compare `p16-037-1900-tree.png`). Test: `life_bucket_list_fixes_test.dart` "BUG-139 …".
 
 ### BUG-140 [Phase 16] A long bucket-list title is cut after two lines with no ellipsis, so the rest can't be read
 - Severity: Cosmetic
@@ -1640,6 +1654,7 @@ Entry format:
 - Expected: the full title wraps (the row grows, as it does for a note), or the cut is marked with an ellipsis and the full text is available on hover.
 - Actual: the row shows two lines (~88 characters) and stops; the end of the title ("…Z") is never shown and there's no ellipsis, so it looks like the whole title (`qa/shots/p16-014-after-fail.png`, `p16-015-crlf-rapid.png`). Only clicking it (rename mode) shows the rest. SQLite has all 300 characters.
 - Notes: the title sits in a fixed-height `SizedBox(height: _kTitleLineHeight)` in `_BucketListRow`. CJK/Arabic/emoji titles render correctly.
+- Notes (2026-10-07, confirmed in code, fixed in the working tree, uncommitted; verified in the running app, FV-31; qa-054): the title box has a minimum height instead of a fixed one (fixed only while the one-line rename field shows), so a long title wraps and the row grows; a one-line title keeps its height. In the app: the 300-character title shows on seven lines ending in "Z" (`fx48-20`). Test: `life_bucket_list_fixes_test.dart` "BUG-140 …".
 
 ### BUG-141 [Phase 16] Life page numbers are frozen at the moment the page was last rebuilt: heartbeats and kilometres don't move, and a revisit shows old figures
 - Severity: Minor

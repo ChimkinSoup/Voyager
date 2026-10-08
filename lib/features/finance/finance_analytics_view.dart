@@ -2079,7 +2079,7 @@ class _AssetRowState extends ConsumerState<_AssetRow> {
                     ),
                   ),
                   Text(
-                    value == null ? 'Not valued' : formatCents(value),
+                    value == null ? 'Not valued' : formatNetCents(value),
                     style: theme.textTheme.labelMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                       color: value != null && value < 0

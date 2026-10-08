@@ -1,0 +1,9 @@
+final now = DateTime.now().toUtc();
+final br = c.read(bucketListRepositoryProvider);
+await br.upsertItem(BucketListItem(id: 'fx136-1', title: 'Climb Kilimanjaro', sortOrder: 1, createdAt: now, updatedAt: now));
+await br.upsertItem(BucketListItem(id: 'fx136-2', title: 'L' + ('x' * 298) + 'Z', sortOrder: 2, createdAt: now, updatedAt: now));
+await br.upsertItem(BucketListItem(id: 'fx136-3', title: 'See the aurora', sortOrder: 3, createdAt: now, updatedAt: now));
+final s = await c.read(settingsProvider.future);
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(birthDate: DateTime(1900, 1, 1)));
+invalidateAllDataProvidersIn(c);
+debugPrint('FX136 seeded');

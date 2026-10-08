@@ -88,7 +88,12 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
   Future<void> _addItem() async {
     if (_adding) return;
     final title = _newItemController.text.trim();
-    if (title.isEmpty) return;
+    if (title.isEmpty) {
+      // onSubmitted has already taken focus off the field; give it back, as
+      // an accepted add does below (BUG-136).
+      _newItemFocusNode.requestFocus();
+      return;
+    }
     // Clear the field before the await, not after: onSubmitted fires on every
     // Enter and the add button calls the same method, so a second press while
     // the write is still in flight would otherwise read the same text again
@@ -357,6 +362,9 @@ class _BucketListPopupState extends ConsumerState<BucketListPopup> {
                       child: TextField(
                         controller: _newItemController,
                         focusNode: _newItemFocusNode,
+                        // The popup's only text field, so typing on open
+                        // lands in it (BUG-136).
+                        autofocus: true,
                         style: textStyle,
                         cursorColor: vim.overlayCaretColor(
                           theme.colorScheme.primary,
@@ -461,8 +469,15 @@ class _BucketListRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(
-                      height: _kTitleLineHeight,
+                    // A long title wraps and the row grows (BUG-140); the
+                    // one-line editor keeps the fixed height.
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: _kTitleLineHeight,
+                        maxHeight: isEditing
+                            ? _kTitleLineHeight
+                            : double.infinity,
+                      ),
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: isEditing
@@ -474,12 +489,15 @@ class _BucketListRow extends StatelessWidget {
                                 onSubmit: onSubmitEdit,
                                 onCancel: onCancelEdit,
                               )
-                            // Inset by the editor's own horizontal padding so
-                            // the text doesn't jump sideways the moment the
-                            // field swaps in.
+                            // Inset by the editor's own padding so the text
+                            // doesn't jump the moment the field swaps in, and
+                            // a wrapped title's first line stays level with
+                            // the circle.
                             : Padding(
                                 padding: EdgeInsets.only(
                                   left: _kTitleEditorPadding.left,
+                                  top: _kTitleEditorPadding.top,
+                                  bottom: _kTitleEditorPadding.bottom,
                                 ),
                                 child: Text(item.title, style: titleStyle),
                               ),

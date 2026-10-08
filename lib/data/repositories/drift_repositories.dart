@@ -3060,17 +3060,22 @@ class DriftFinanceRepository implements FinanceRepository {
     )..where((t) => t.id.equals(id))).getSingleOrNull();
     if (row == null) return;
     final transaction = _map(row);
+    // One instant for the row and its room event, so the trash shows and
+    // restores them as one delete (BUG-132).
+    final now = utcNow();
     await upsertTransaction(
       transaction.copyWith(
-        updatedAt: utcNow(),
+        updatedAt: now,
         version: transaction.version + 1,
-        deletedAt: utcNow(),
+        deletedAt: now,
       ),
     );
     // A contribution or withdrawal without its cash side would keep using
     // room for money the ledger no longer says moved.
     final roomEventId = transaction.roomEventId;
-    if (roomEventId != null) await softDeleteAssetRoomEvent(roomEventId);
+    if (roomEventId != null) {
+      await _softDeleteAssetRoomEventAt(roomEventId, now);
+    }
   }
 
   @override
@@ -3425,19 +3430,19 @@ class DriftFinanceRepository implements FinanceRepository {
     )..where((t) => t.id.equals(id))).getSingleOrNull();
     if (row == null) return;
     final room = _mapRoom(row);
+    // One instant for the room and the assets it lets go: an asset last
+    // written at the room's tombstone instant is one this delete detached,
+    // which is how the trash puts it back in the room (BUG-134).
+    final now = utcNow();
     await upsertContributionRoom(
-      room.copyWith(
-        updatedAt: utcNow(),
-        version: room.version + 1,
-        deletedAt: utcNow(),
-      ),
+      room.copyWith(updatedAt: now, version: room.version + 1, deletedAt: now),
     );
     for (final asset in await listAssets()) {
       if (asset.contributionRoomId != id) continue;
       await upsertAsset(
         asset.copyWith(
           clearContributionRoomId: true,
-          updatedAt: utcNow(),
+          updatedAt: now,
           version: asset.version + 1,
         ),
       );
@@ -3508,16 +3513,21 @@ class DriftFinanceRepository implements FinanceRepository {
   }
 
   @override
-  Future<void> softDeleteAssetRoomEvent(String id) async {
+  Future<void> softDeleteAssetRoomEvent(String id) =>
+      _softDeleteAssetRoomEventAt(id, utcNow());
+
+  /// Stamps the event, its other leg and its ledger row with one [now], so
+  /// the trash shows and restores them as one delete (BUG-132).
+  Future<void> _softDeleteAssetRoomEventAt(String id, DateTime now) async {
     final event = await getAssetRoomEvent(id);
     if (event == null) return;
     for (final member in await _roomEventGroup(event)) {
       if (member.deletedAt == null) {
         await upsertAssetRoomEvent(
           member.copyWith(
-            updatedAt: utcNow(),
+            updatedAt: now,
             version: member.version + 1,
-            deletedAt: utcNow(),
+            deletedAt: now,
           ),
         );
       }
@@ -3529,9 +3539,9 @@ class DriftFinanceRepository implements FinanceRepository {
       if (transaction != null && transaction.deletedAt == null) {
         await upsertTransaction(
           transaction.copyWith(
-            updatedAt: utcNow(),
+            updatedAt: now,
             version: transaction.version + 1,
-            deletedAt: utcNow(),
+            deletedAt: now,
           ),
         );
       }

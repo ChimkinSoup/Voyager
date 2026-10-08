@@ -15,6 +15,7 @@ import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/finance/finance_amount_formatter.dart';
+import 'package:voyager/features/finance/finance_soft_delete.dart';
 
 /// Opens the contribution-room sheet for [asset]: create or join a room when
 /// the asset has none, otherwise edit its room or leave it.
@@ -244,8 +245,27 @@ class _ContributionRoomModalState
 
   Future<void> _deleteRoom() async {
     final room = _seededRoom;
-    if (room == null) return;
-    await _run((repo) => repo.softDeleteContributionRoom(room.id));
+    if (room == null || _saving) return;
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
+    // The root overlay, resolved before the sheet closes: the undo offer has
+    // to outlive the sheet that raised it (BUG-134).
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final deleted = await deleteContributionRoomWithUndo(
+      overlay: overlay,
+      container: widget.container,
+      repo: ref.read(financeRepositoryProvider),
+      room: room,
+    );
+    if (!mounted) return;
+    if (!deleted) {
+      // The helper has already said so in its own toast.
+      setState(() => _saving = false);
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   @override

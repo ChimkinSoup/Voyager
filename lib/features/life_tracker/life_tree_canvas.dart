@@ -63,10 +63,12 @@ const _groundPileStdDev = 0.22;
 Offset groundPositionFor(int leafIndex, LifeTreeGeometry geometry) {
   final r = math.Random(leafIndex * 7919 + 13);
 
-  final x = (geometry.trunkBase.dx + _gaussian(r) * _groundPileStdDev).clamp(
-    0.04,
-    0.96,
-  );
+  // Redrawn rather than clamped when it lands past an edge: clamping put every
+  // leaf in the tails on the same x, a column standing at the edge (BUG-139).
+  double x;
+  do {
+    x = geometry.trunkBase.dx + _gaussian(r) * _groundPileStdDev;
+  } while (x < 0.04 || x > 0.96);
 
   // A gentle per-position undulation keeps the pile from reading as a dead
   // flat line, echoing the grass's own irregular baseline without needing to

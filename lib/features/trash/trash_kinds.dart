@@ -46,6 +46,18 @@ class TrashChild {
   final (String, String)? counted;
 }
 
+/// Rows of [collection] a delete let go of by clearing their [key] rather
+/// than deleting them — an asset leaving a deleted contribution room.
+///
+/// Told apart by being last written at the owner's exact `deletedAt`, the
+/// instant the delete stamps on both; a row edited since stays as it is.
+class TrashDetached {
+  const TrashDetached(this.collection, this.key);
+
+  final String collection;
+  final String key;
+}
+
 /// Where a row lives, for restoring it on its own after its container was
 /// deleted too.
 class TrashParent {
@@ -110,6 +122,7 @@ class TrashKind {
     this.children = const [],
     this.parents = const [],
     this.erasedWith = const [],
+    this.detached = const [],
     this.mediaOwner,
     this.listed = true,
   });
@@ -137,6 +150,9 @@ class TrashKind {
   /// restore has nothing to bring back — a task's completions keep counting
   /// while it sits in the trash, and stop only when it is erased.
   final List<TrashChild> erasedWith;
+
+  /// Rows the delete detached from this one, which a restore points back.
+  final List<TrashDetached> detached;
 
   /// The collection media references name this row's documents under, for
   /// the images a delete detached from it.
@@ -502,6 +518,11 @@ final _kinds = <TrashKind>[
     noun: 'transaction',
     title: (data) => _field(data, 'note'),
     wipe: const ['note', 'tags', 'amountCents'],
+    // A contribution's or withdrawal's room entry goes and comes back with
+    // its ledger row (BUG-132).
+    children: const [
+      TrashChild(FirestoreCollections.assetRoomEvents, ['transactionId']),
+    ],
   ),
   const TrashKind(
     collection: FirestoreCollections.subscriptions,
@@ -534,6 +555,27 @@ final _kinds = <TrashKind>[
         counted: ('valuation', 'valuations'),
       ),
     ],
+  ),
+  // Its entries stay live, so it brings back only itself and its assets.
+  const TrashKind(
+    collection: FirestoreCollections.contributionRooms,
+    feature: TrashFeature.finance,
+    noun: 'contribution room',
+    containerLabel: 'Contribution room',
+    wipe: ['name'],
+    detached: [
+      TrashDetached(FirestoreCollections.assets, 'contributionRoomId'),
+    ],
+  ),
+  // Restorable only as part of its ledger row's delete, however it was
+  // deleted. A transfer's legs have no ledger row, so a deleted transfer
+  // isn't listed.
+  const TrashKind(
+    collection: FirestoreCollections.assetRoomEvents,
+    feature: TrashFeature.finance,
+    noun: 'room entry',
+    wipe: ['note', 'amountCents'],
+    listed: false,
   ),
   // Listed on their own since a single one can be deleted from the asset sheet
   // (BUG-130); one deleted with its asset is shown as part of that delete.

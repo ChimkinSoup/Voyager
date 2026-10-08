@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
@@ -280,6 +281,144 @@ GoalAllocation _undeletedAllocation(
   allocatedAt: allocation.allocatedAt,
   note: allocation.note,
 );
+
+/// Soft-deletes [asset] with its valuations and offers an undo that brings
+/// both back (BUG-135). See [deleteSubscriptionWithUndo] for why the overlay
+/// and container are passed in rather than looked up.
+Future<bool> deleteAssetWithUndo({
+  required OverlayState overlay,
+  required ProviderContainer container,
+  required FinanceRepository repo,
+  required Asset asset,
+}) async {
+  void refresh() {
+    container.invalidate(assetsProvider);
+    container.invalidate(assetValuationsProvider);
+  }
+
+  return softDeleteWithUndo(
+    overlay: overlay,
+    message: deletedMessage(asset.name, fallback: 'asset'),
+    delete: () async {
+      await repo.softDeleteAsset(asset.id);
+      refresh();
+    },
+    restore: () async {
+      final current = (await repo.listAssets(
+        includeDeleted: true,
+      )).where((a) => a.id == asset.id).firstOrNull;
+      abortIfAlreadyRestored(
+        found: current != null,
+        deletedAt: current?.deletedAt,
+      );
+      final now = utcNow();
+      // From the tombstone on disk rather than the sheet's snapshot: the room
+      // sheet can move the asset in or out of a room while its sheet is open.
+      final base = current ?? asset;
+      await repo.upsertAsset(
+        Asset(
+          id: base.id,
+          createdAt: base.createdAt,
+          updatedAt: now,
+          version: restoreVersionFrom(
+            preDeleteVersion: asset.version,
+            currentVersion: current?.version,
+          ),
+          name: base.name,
+          colorValue: base.colorValue,
+          note: base.note,
+          contributionRoomId: base.contributionRoomId,
+        ),
+      );
+      // The valuations the delete took share the asset's tombstone instant;
+      // any deleted on their own before it stay deleted.
+      for (final v in await repo.listAssetValuations(
+        assetId: asset.id,
+        includeDeleted: true,
+      )) {
+        if (v.deletedAt == null || v.deletedAt != current?.deletedAt) continue;
+        await repo.upsertAssetValuation(
+          AssetValuation(
+            id: v.id,
+            createdAt: v.createdAt,
+            updatedAt: now,
+            version: v.version + 1,
+            assetId: v.assetId,
+            valueCents: v.valueCents,
+            asOf: v.asOf,
+          ),
+        );
+      }
+      refresh();
+    },
+  );
+}
+
+/// Soft-deletes [room] and offers an undo that brings it back with the assets
+/// it let go of (BUG-134). See [deleteSubscriptionWithUndo] for why the
+/// overlay and container are passed in rather than looked up.
+Future<bool> deleteContributionRoomWithUndo({
+  required OverlayState overlay,
+  required ProviderContainer container,
+  required FinanceRepository repo,
+  required ContributionRoom room,
+}) async {
+  void refresh() {
+    container.invalidate(contributionRoomsProvider);
+    container.invalidate(assetsProvider);
+  }
+
+  return softDeleteWithUndo(
+    overlay: overlay,
+    message: deletedMessage(room.name, fallback: 'contribution room'),
+    delete: () async {
+      await repo.softDeleteContributionRoom(room.id);
+      refresh();
+    },
+    restore: () async {
+      final current = (await repo.listContributionRooms(
+        includeDeleted: true,
+      )).where((r) => r.id == room.id).firstOrNull;
+      abortIfAlreadyRestored(
+        found: current != null,
+        deletedAt: current?.deletedAt,
+      );
+      final now = utcNow();
+      await repo.upsertContributionRoom(
+        ContributionRoom(
+          id: room.id,
+          createdAt: room.createdAt,
+          updatedAt: now,
+          version: restoreVersionFrom(
+            preDeleteVersion: room.version,
+            currentVersion: current?.version,
+          ),
+          name: room.name,
+          baselineRemainingCents: room.baselineRemainingCents,
+          baselineAsOf: room.baselineAsOf,
+          annualLimits: room.annualLimits,
+        ),
+      );
+      // The assets the delete let go were last written at the room's
+      // tombstone instant; one written since (put in another room, or left
+      // out on purpose) stays as it is — the trash's rule too
+      // ([TrashKind.detached]).
+      for (final a in await repo.listAssets()) {
+        if (a.contributionRoomId != null || a.updatedAt != current?.deletedAt) {
+          continue;
+        }
+        await repo.upsertAsset(
+          a.copyWith(
+            contributionRoomId: room.id,
+            updatedAt: now,
+            version: a.version + 1,
+          ),
+        );
+      }
+      refresh();
+    },
+  );
+}
 
 /// Soft-deletes [valuation] and offers an undo (BUG-130). [title] names it in
 /// the toast. See [deleteSubscriptionWithUndo] for why the overlay and

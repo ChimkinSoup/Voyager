@@ -51,7 +51,11 @@ class _TreePopoverRoute<T> extends PopupRoute<T> {
     this.height,
     this.accentColor,
     required this.capturedThemes,
-  });
+  }) : super(
+         // Tab cycles inside the popup instead of leaving it for the pages
+         // kept offstage behind it and the title bar (BUG-137).
+         traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
+       );
 
   final Offset anchor;
   final Size overlaySize;

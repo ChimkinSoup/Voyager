@@ -1,0 +1,5 @@
+final fr = c.read(financeRepositoryProvider);
+final a = (await fr.listAssets()).firstWhere((x) => x.id == 'fx131-loan');
+await fr.upsertAsset(a.copyWith(note: 'Saved during undo', updatedAt: DateTime.now().toUtc(), version: a.version + 1));
+invalidateAllDataProvidersIn(c);
+debugPrint('FX131 loan re-saved: room=' + (a.contributionRoomId ?? 'none'));

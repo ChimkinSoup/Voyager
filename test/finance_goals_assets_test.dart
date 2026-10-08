@@ -5,7 +5,8 @@
 // and deletable and a post-dated one waits for its day (BUG-126), deleting a
 // goal offers Undo (BUG-127), contribution rows are left out of income and
 // spending (BUG-128), a post-dated valuation isn't today's value (BUG-129),
-// and an asset's valuations are listed and deletable (BUG-130).
+// and an asset's valuations are listed and deletable (BUG-130). Deleting a
+// contribution room (BUG-134) or an asset (BUG-135) offers Undo.
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
@@ -17,11 +18,13 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
+import 'package:voyager/domain/models/contribution_room_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/services/finance_analytics.dart';
 import 'package:voyager/features/finance/finance_allocate_modal.dart';
 import 'package:voyager/features/finance/finance_asset_modal.dart';
+import 'package:voyager/features/finance/finance_contribution_room_modal.dart';
 import 'package:voyager/features/finance/finance_goal_modal.dart';
 import 'package:voyager/features/finance/finance_page.dart';
 import 'package:voyager/features/finance/finance_subscription_modal.dart';
@@ -522,5 +525,126 @@ void main() {
     await tester.tap(find.text('Undo'));
     await _settle(tester);
     expect((await repo.listAssetValuations(assetId: 'a1')).length, 2);
+  });
+
+  testWidgets('BUG-135 deleting an asset offers Undo, which restores it all', (
+    tester,
+  ) async {
+    final asset = _asset();
+    final repo = await _pump(
+      tester,
+      seed: (repo) async {
+        await repo.upsertAsset(asset);
+        await repo.upsertAssetValuation(_valuation('v1', 30000, _today));
+      },
+      home: () => _opener(
+        (context, ref) => showAssetModal(context, ref, existing: asset),
+      ),
+    );
+    await _open(tester);
+
+    await tester.tap(find.byTooltip('Delete').first);
+    await _settle(tester);
+    expect(find.text('Deleted "TFSA A"'), findsOneWidget);
+    expect(await repo.listAssets(), isEmpty);
+    expect(await repo.listAssetValuations(), isEmpty);
+
+    await tester.tap(find.text('Undo'));
+    await _settle(tester);
+    expect((await repo.listAssets()).single.name, 'TFSA A');
+    expect((await repo.listAssetValuations()).single.id, 'v1');
+  });
+
+  testWidgets('BUG-135 Undo keeps a room change made while the sheet was '
+      'open', (tester) async {
+    final asset = _asset();
+    final repo = await _pump(
+      tester,
+      seed: (repo) => repo.upsertAsset(asset),
+      home: () => _opener(
+        (context, ref) => showAssetModal(context, ref, existing: asset),
+      ),
+    );
+    await _open(tester);
+    // What "Track…" → Join existing does underneath the open sheet.
+    final onDisk = (await repo.listAssets()).single;
+    await repo.upsertAsset(
+      onDisk.copyWith(
+        contributionRoomId: 'r1',
+        updatedAt: utcNow(),
+        version: onDisk.version + 1,
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Delete').first);
+    await _settle(tester);
+    await tester.tap(find.text('Undo'));
+    await _settle(tester);
+    expect((await repo.listAssets()).single.contributionRoomId, 'r1');
+  });
+
+  testWidgets('BUG-134 deleting a room offers Undo, which puts its assets '
+      'back in it', (tester) async {
+    final now = utcNow();
+    final asset = Asset(
+      id: 'a1',
+      createdAt: now,
+      updatedAt: now,
+      name: 'TFSA A',
+      contributionRoomId: 'r1',
+    );
+    final repo = await _pump(
+      tester,
+      seed: (repo) async {
+        await repo.upsertContributionRoom(
+          ContributionRoom(
+            id: 'r1',
+            createdAt: now,
+            updatedAt: now,
+            name: 'TFSA',
+            baselineRemainingCents: 500000,
+            baselineAsOf: now,
+            annualLimits: [AnnualLimit(fromYear: _today.year, cents: 700000)],
+          ),
+        );
+        await repo.upsertAsset(asset);
+        await repo.upsertAsset(
+          Asset(
+            id: 'a2',
+            createdAt: now,
+            updatedAt: now,
+            name: 'TFSA B',
+            contributionRoomId: 'r1',
+          ),
+        );
+      },
+      home: () => _opener(
+        (context, ref) => showContributionRoomModal(context, ref, asset: asset),
+      ),
+    );
+    await _open(tester);
+
+    await tester.tap(find.byTooltip('Delete room'));
+    await _settle(tester);
+    expect(find.text('Deleted "TFSA"'), findsOneWidget);
+    expect(await repo.listContributionRooms(), isEmpty);
+    expect((await repo.listAssets()).map((a) => a.contributionRoomId), [
+      null,
+      null,
+    ]);
+    // Saved again while the toast stands: left out of the room, as the
+    // trash's restore would leave it.
+    final b = (await repo.listAssets()).firstWhere((a) => a.id == 'a2');
+    await repo.upsertAsset(
+      b.copyWith(note: 'Moved', updatedAt: utcNow(), version: b.version + 1),
+    );
+
+    await tester.tap(find.text('Undo'));
+    await _settle(tester);
+    expect((await repo.listContributionRooms()).single.id, 'r1');
+    final rooms = {
+      for (final a in await repo.listAssets()) a.id: a.contributionRoomId,
+    };
+    expect(rooms, {'a1': 'r1', 'a2': null});
   });
 }

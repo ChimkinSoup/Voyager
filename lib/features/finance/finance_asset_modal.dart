@@ -228,20 +228,22 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
       _saving = true;
       _saveError = null;
     });
-    final repo = ref.read(financeRepositoryProvider);
-    final container = widget.container;
-    try {
-      await repo.softDeleteAsset(existing.id);
-      container.invalidate(assetsProvider);
-      container.invalidate(assetValuationsProvider);
-      if (mounted) Navigator.of(context).pop();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _saveError = 'Could not delete: $e';
-      });
+    // The root overlay, resolved before the sheet closes: the undo offer has
+    // to outlive the sheet that raised it, as the goal sheet's does (BUG-135).
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final deleted = await deleteAssetWithUndo(
+      overlay: overlay,
+      container: widget.container,
+      repo: ref.read(financeRepositoryProvider),
+      asset: existing,
+    );
+    if (!mounted) return;
+    if (!deleted) {
+      // The helper has already said so in its own toast.
+      setState(() => _saving = false);
+      return;
     }
+    Navigator.of(context).pop();
   }
 
   @override

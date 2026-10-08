@@ -9,10 +9,13 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/contribution_room_models.dart';
+import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
+import 'package:voyager/domain/services/contribution_room_writer.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
 import 'package:voyager/features/trash/trash_labels.dart';
 import 'package:voyager/features/trash/trash_kinds.dart';
@@ -710,6 +713,88 @@ void main() {
           ),
         ),
       );
+    });
+  });
+
+  group('contribution rooms', () {
+    late DriftFinanceRepository finance;
+
+    setUp(() async {
+      finance = DriftFinanceRepository(db);
+      await finance.upsertContributionRoom(
+        ContributionRoom(
+          id: 'r',
+          name: 'TFSA',
+          baselineRemainingCents: 500000,
+          baselineAsOf: created,
+          createdAt: created,
+          updatedAt: created,
+        ),
+      );
+      for (final id in ['a', 'b']) {
+        await finance.upsertAsset(
+          Asset(
+            id: id,
+            name: 'TFSA $id',
+            contributionRoomId: 'r',
+            createdAt: created,
+            updatedAt: created,
+          ),
+        );
+      }
+    });
+
+    test('BUG-132 a contribution restored from the trash brings back its '
+        'room entry too', () async {
+      final asset = (await finance.listAssets()).first;
+      await saveRoomCashEvent(
+        finance,
+        asset: asset,
+        kind: RoomEventKind.contribution,
+        amountCents: 200000,
+        occurredAt: created,
+        eventId: 'ev',
+        transactionId: 'tx',
+      );
+      await finance.softDeleteTransaction('tx');
+
+      final item = (await trash.list()).single;
+      expect(item.kind.collection, FirestoreCollections.transactions);
+      expect(item.members.map((m) => m.kind.collection), [
+        FirestoreCollections.assetRoomEvents,
+      ]);
+
+      await trash.restore(item);
+      expect((await finance.getTransaction('tx'))!.deletedAt, isNull);
+      expect((await finance.getAssetRoomEvent('ev'))!.deletedAt, isNull);
+    });
+
+    test('BUG-134 a deleted room is listed and restores with its assets; one '
+        'moved on since stays where it is', () async {
+      await finance.softDeleteContributionRoom('r');
+      expect((await finance.listAssets()).map((a) => a.contributionRoomId), [
+        null,
+        null,
+      ]);
+      // Put in another room after the delete.
+      final b = (await finance.listAssets()).firstWhere((a) => a.id == 'b');
+      await finance.upsertAsset(
+        b.copyWith(
+          contributionRoomId: 'other',
+          updatedAt: utcNow(),
+          version: b.version + 1,
+        ),
+      );
+
+      final item = (await trash.list()).single;
+      expect(trashItemLabel(item), 'Contribution room "TFSA"');
+
+      await trash.restore(item);
+      expect((await finance.listContributionRooms()).single.id, 'r');
+      final rooms = {
+        for (final a in await finance.listAssets()) a.id: a.contributionRoomId,
+      };
+      expect(rooms, {'a': 'r', 'b': 'other'});
     });
   });
 }

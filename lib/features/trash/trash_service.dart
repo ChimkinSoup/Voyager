@@ -218,6 +218,18 @@ class TrashService {
             'version': parseVersion(row.data) + 1,
           },
         ),
+      for (final row in _detachedBy(root, rows))
+        (
+          row,
+          {
+            ...row.data,
+            for (final detached in root.kind.detached)
+              if (detached.collection == row.kind.collection)
+                detached.key: root.id,
+            'updatedAt': now.toIso8601String(),
+            'version': parseVersion(row.data) + 1,
+          },
+        ),
     ]);
 
     final restoreMedia = _restoreMedia;
@@ -314,6 +326,23 @@ class TrashService {
       }
     }
     return found.values.toList();
+  }
+
+  /// The live rows [root]'s delete detached ([TrashKind.detached]) and nothing
+  /// has written since.
+  Iterable<TrashRow> _detachedBy(
+    TrashRow root,
+    Map<String, Map<String, TrashRow>> rows,
+  ) sync* {
+    final stamp = root.deletedAt!;
+    for (final detached in root.kind.detached) {
+      for (final row
+          in rows[detached.collection]?.values ?? const <TrashRow>[]) {
+        if (row.deletedAt != null || row.data[detached.key] != null) continue;
+        final updatedAt = parseFirestoreDate(row.data['updatedAt']);
+        if (updatedAt != null && updatedAt.isAtSameMomentAs(stamp)) yield row;
+      }
+    }
   }
 
   /// The rows [TrashKind.erasedWith] names for [owner], not erased already.
