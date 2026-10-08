@@ -27,6 +27,9 @@ class LeetCodePage extends ConsumerWidget {
         tooltip: 'Track a problem',
         label: 'Track',
         icon: const Icon(PhosphorIconsRegular.plus),
+        // Floats over the deck: Light's nearly clear wafer let a tile's text
+        // run through "Track" (BUG-153).
+        backdrop: Theme.of(context).scaffoldBackgroundColor,
         onPressed: () => startLeetCodeTrackFlow(context, ref),
       ),
       body: SafeArea(

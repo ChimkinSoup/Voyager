@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/constants/neetcode150.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/leetcode_api_models.dart';
@@ -167,7 +168,11 @@ class _RingTile extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             caption!,
-            style: theme.textTheme.labelMedium?.copyWith(color: color),
+            // Light darkens a pale ring colour (Medium, the accent) to read
+            // on cream (BUG-153); the ring itself keeps it.
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: themedLabelInk(theme, color),
+            ),
           ),
         ],
       ],

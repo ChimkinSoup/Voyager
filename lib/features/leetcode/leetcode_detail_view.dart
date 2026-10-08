@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -11,6 +10,7 @@ import 'package:voyager/core/widgets/tag_chip.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/features/leetcode/leetcode_code_field.dart';
+import 'package:voyager/features/leetcode/leetcode_difficulty_chip.dart';
 import 'package:voyager/features/leetcode/leetcode_examples.dart';
 import 'package:voyager/features/leetcode/leetcode_inline_code.dart';
 import 'package:voyager/features/leetcode/leetcode_track_modal.dart';
@@ -228,26 +228,7 @@ class _DetailCard extends StatelessWidget {
                       style: theme.textTheme.titleLarge,
                     ),
                     const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: colorForLeetCodeDifficulty(
-                          problem.difficulty,
-                        ).withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(
-                          VoyagerTheme.fieldRadius,
-                        ),
-                      ),
-                      child: Text(
-                        labelForLeetCodeDifficulty(problem.difficulty),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorForLeetCodeDifficulty(problem.difficulty),
-                        ),
-                      ),
-                    ),
+                    LeetCodeDifficultyChip(problem.difficulty),
                     if (problem.tags.isNotEmpty) ...[
                       const SizedBox(height: 12),
                       Wrap(

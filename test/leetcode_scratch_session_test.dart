@@ -121,6 +121,11 @@ Future<MemorySessionCheckpointStore> _pumpSession(
   Widget page, {
   bool scratchEnabled = true,
   MemorySessionCheckpointStore? store,
+
+  /// Puts the session under a navigator of its own, as the app's shell branch
+  /// does: a route pushed on the root navigator then leaves the session's
+  /// route current, which is the case the fullscreen editor is in.
+  bool nested = false,
 }) async {
   // Wide enough to stay in the side-by-side layout rather than the narrow
   // stack, and tall enough that nothing the session shows is off screen.
@@ -146,7 +151,14 @@ Future<MemorySessionCheckpointStore> _pumpSession(
         ),
         noSessionShuffle,
       ],
-      child: MaterialApp(home: page),
+      child: MaterialApp(
+        home: nested
+            ? Navigator(
+                onGenerateRoute: (_) =>
+                    MaterialPageRoute<void>(builder: (_) => page),
+              )
+            : page,
+      ),
     ),
   );
   // Settings, problems and the checkpoint slot all arrive asynchronously,
@@ -634,5 +646,104 @@ void main() {
 
       expect(find.text('No saved solution'), findsOneWidget);
     });
+  });
+
+  group('the keyboard comes back to the card', () {
+    bool padFocused() =>
+        FocusManager.instance.primaryFocus?.debugLabel == 'leetCodeScratchPad';
+
+    testWidgets('BUG-156: Esc in the pad hands the keys back to the card', (
+      tester,
+    ) async {
+      await _pumpSession(tester, [
+        twoSum,
+        addTwo,
+      ], const LeetCodeSessionPage(problemIds: {'1', '2'}));
+      await _reveal(tester);
+      await _focusPad(tester);
+      expect(padFocused(), isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(padFocused(), isFalse);
+
+      // G is the default Good binding: a grade again, not a letter.
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+      await tester.pumpAndSettle();
+      expect(tester.widget<LeetCodeScratchPad>(_pad).problem.id, '2');
+    });
+
+    testWidgets('BUG-157: a click below the code puts the caret in the pad', (
+      tester,
+    ) async {
+      await _pumpSession(tester, [
+        twoSum,
+        addTwo,
+      ], const LeetCodeSessionPage(problemIds: {'1', '2'}));
+      await _reveal(tester);
+
+      final pad = tester.getRect(_pad);
+      await tester.tapAt(pad.bottomCenter - const Offset(0, 20));
+      await tester.pump();
+      expect(padFocused(), isTrue);
+
+      // So G is typed, not graded.
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+      await tester.pumpAndSettle();
+      expect(tester.widget<LeetCodeScratchPad>(_pad).problem.id, '1');
+    });
+
+    testWidgets(
+      'BUG-157: no key reaches the session behind the fullscreen editor',
+      (tester) async {
+        await _pumpSession(
+          tester,
+          [twoSum, addTwo],
+          const LeetCodeSessionPage(problemIds: {'1', '2'}),
+          nested: true,
+        );
+        await _reveal(tester);
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+        await tester.pumpAndSettle();
+        expect(find.text('Compare'), findsOneWidget);
+
+        // The editor has lost the caret, however that came about.
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+        await tester.pumpAndSettle();
+
+        await tester.tapAt(const Offset(4, 4));
+        await tester.pumpAndSettle();
+        expect(tester.widget<LeetCodeScratchPad>(_pad).problem.id, '1');
+      },
+    );
+
+    testWidgets(
+      'BUG-157: Cram undo is blocked behind the fullscreen editor too',
+      (tester) async {
+        await _pumpSession(
+          tester,
+          [twoSum, addTwo],
+          const LeetCodeCramPage(problemIds: {'1', '2'}),
+          nested: true,
+        );
+        // One decision to take back: → passes the first card.
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pumpAndSettle();
+        expect(tester.widget<LeetCodeScratchPad>(_pad).problem.id, '2');
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+        await tester.pumpAndSettle();
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+        await tester.pumpAndSettle();
+
+        await tester.tapAt(const Offset(4, 4));
+        await tester.pumpAndSettle();
+        expect(tester.widget<LeetCodeScratchPad>(_pad).problem.id, '2');
+      },
+    );
   });
 }

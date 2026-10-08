@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
-import 'package:voyager/core/constants/leetcode_constants.dart';
-import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/tag_chip.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/features/leetcode/leetcode_actions.dart';
 import 'package:voyager/features/leetcode/leetcode_detail_view.dart';
+import 'package:voyager/features/leetcode/leetcode_difficulty_chip.dart';
 
 /// Chronological feed of tracked problems. Tapping a row opens the detail
 /// view, zooming out from that row's on-screen position.
@@ -115,28 +114,7 @@ class _CompletionRowState extends ConsumerState<_CompletionRow> {
                             _DuplicateMarker(count: widget.duplicateCount!),
                           ],
                           const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: colorForLeetCodeDifficulty(
-                                problem.difficulty,
-                              ).withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(
-                                VoyagerTheme.fieldRadius,
-                              ),
-                            ),
-                            child: Text(
-                              labelForLeetCodeDifficulty(problem.difficulty),
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: colorForLeetCodeDifficulty(
-                                  problem.difficulty,
-                                ),
-                              ),
-                            ),
-                          ),
+                          LeetCodeDifficultyChip(problem.difficulty),
                         ],
                       ),
                       if (problem.tags.isNotEmpty) ...[

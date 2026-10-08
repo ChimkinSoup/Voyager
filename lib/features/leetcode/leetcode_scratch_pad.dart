@@ -190,6 +190,10 @@ class LeetCodeScratchPad extends StatelessWidget {
                 onCodeChanged: onCodeChanged,
                 // The notepad above already draws the paper and the border.
                 framed: false,
+                // Hands the keys back to the card, so a keyboard-only session
+                // can go card → C → code → card (BUG-156). Not in the
+                // fullscreen editor, where Escape stays Vim's alone.
+                onEscape: focusNode.unfocus,
               ),
             ),
           ),
@@ -206,11 +210,15 @@ class _ScratchEditor extends StatefulWidget {
     required this.focusNode,
     required this.onCodeChanged,
     this.framed = true,
+    this.onEscape,
   });
 
   final LeetCodeCodeController controller;
   final FocusNode focusNode;
   final ValueChanged<String> onCodeChanged;
+
+  /// See [LeetCodeCodeSurface.onEscape].
+  final VoidCallback? onEscape;
 
   /// Whether the editor draws its own frame, or sits inside one the caller
   /// has already drawn — see [LeetCodeScratchPad].
@@ -260,6 +268,7 @@ class _ScratchEditorState extends State<_ScratchEditor> {
     controller: widget.controller,
     focusNode: widget.focusNode,
     framed: widget.framed,
+    onEscape: widget.onEscape,
   );
 }
 

@@ -1068,4 +1068,66 @@ void main() {
       }
     });
   });
+
+  group('BUG-158 the New tab dialog keeps the caret in Name', () {
+    Finder nameField() => find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(EditableText),
+    );
+    bool nameFocused(WidgetTester tester) =>
+        tester.widget<EditableText>(nameField()).focusNode.hasFocus;
+
+    Future<void> openNewTab(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(Tooltip, 'Edit').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Tab'));
+      await tester.pumpAndSettle();
+      expect(find.text('New tab'), findsOneWidget);
+      expect(nameFocused(tester), isTrue);
+    }
+
+    testWidgets('an empty Enter says so and keeps focus', (tester) async {
+      await _pumpSheetHost(tester);
+      await _openSheet(tester);
+      await openNewTab(tester);
+
+      // Enter in a one-line field arrives as the input action.
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.text('New tab'), findsOneWidget);
+      expect(find.text('Name cannot be empty'), findsOneWidget);
+      expect(nameFocused(tester), isTrue);
+
+      // Typing a name takes the message away.
+      await tester.enterText(nameField(), 'J');
+      await tester.pump();
+      expect(find.text('Name cannot be empty'), findsNothing);
+    });
+
+    testWidgets('a chip click keeps focus, and Enter then saves', (
+      tester,
+    ) async {
+      final container = await _pumpSheetHost(tester);
+      await _openSheet(tester);
+      await openNewTab(tester);
+
+      await tester.enterText(nameField(), 'Python tricks');
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('python'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(nameFocused(tester), isTrue);
+
+      // Enter in a one-line field arrives as the input action.
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(find.text('New tab'), findsNothing);
+      final tabs = container.read(leetCodeCheatSheetProvider).requireValue.tabs;
+      final added = tabs.singleWhere((t) => t.name == 'Python tricks');
+      expect(added.languageKey, 'python');
+    });
+  });
 }

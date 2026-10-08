@@ -74,17 +74,26 @@ class _WeightedTagPill extends StatelessWidget {
     final theme = Theme.of(context);
     final accent = theme.colorScheme.primary;
     final fontSize = 11.0 + weight * 6.0;
+    final fill = accent.withValues(alpha: 0.08 + weight * 0.18);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.08 + weight * 0.18),
+        color: fill,
         borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
       ),
       child: Text(
-        '#$tag ($count)',
+        // The tag in a first-strong isolate (FSI … PDI), so a right-to-left
+        // tag can't pull the count into its run: "#مرحبا (1)", not
+        // "#(1) مرحبا" (BUG-154).
+        '#\u2068$tag\u2069 ($count)',
         style: theme.textTheme.labelMedium?.copyWith(
           fontSize: fontSize,
-          color: accent,
+          // Light darkens the accent to read on the pale fill (BUG-153).
+          color: themedLabelInk(
+            theme,
+            accent,
+            background: Color.alphaBlend(fill, theme.scaffoldBackgroundColor),
+          ),
           fontWeight: FontWeight.w500,
         ),
       ),

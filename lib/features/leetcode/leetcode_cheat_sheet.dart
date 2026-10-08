@@ -2211,74 +2211,125 @@ Future<_TabDraft?> _showTabDialog(
   String? initialName,
   String? initialLanguage,
 }) {
-  final controller = TextEditingController(text: initialName ?? '');
-  var language = initialLanguage;
-
   return showDialog<_TabDraft>(
     context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: 360,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              VoyagerTextField(
-                controller: controller,
-                autofocus: true,
-                snippetsAllowed: false,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  border: OutlineInputBorder(),
-                ),
+    builder: (context) => _TabDialog(
+      title: title,
+      initialName: initialName,
+      initialLanguage: initialLanguage,
+    ),
+  );
+}
+
+/// The dialog itself — a widget of its own so its field's controller and
+/// focus node live exactly as long as the field, closing animation included.
+class _TabDialog extends StatefulWidget {
+  const _TabDialog({
+    required this.title,
+    this.initialName,
+    this.initialLanguage,
+  });
+
+  final String title;
+  final String? initialName;
+  final String? initialLanguage;
+
+  @override
+  State<_TabDialog> createState() => _TabDialogState();
+}
+
+class _TabDialogState extends State<_TabDialog> {
+  late final _controller = TextEditingController(text: widget.initialName);
+  final _nameFocus = FocusNode();
+  late String? _language = widget.initialLanguage;
+  bool _emptyName = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _nameFocus.dispose();
+    super.dispose();
+  }
+
+  /// Enter in Name and the Save button alike. An empty name says so and hands
+  /// the caret back, which the field's own submit had taken away (BUG-158).
+  void _submit() {
+    final name = _controller.text.trim();
+    if (name.isEmpty) {
+      setState(() => _emptyName = true);
+      _nameFocus.requestFocus();
+      return;
+    }
+    Navigator.of(context).pop((name: name, languageKey: _language));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            VoyagerTextField(
+              controller: _controller,
+              focusNode: _nameFocus,
+              autofocus: true,
+              snippetsAllowed: false,
+              onSubmitted: (_) => _submit(),
+              onChanged: (_) {
+                if (_emptyName) setState(() => _emptyName = false);
+              },
+              decoration: InputDecoration(
+                labelText: 'Name',
+                border: const OutlineInputBorder(),
+                errorText: _emptyName ? 'Name cannot be empty' : null,
               ),
-              const SizedBox(height: 16),
-              Text(
-                'Syntax highlighting',
-                style: Theme.of(context).textTheme.labelMedium,
-              ),
-              const SizedBox(height: 8),
-              Wrap(
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Syntax highlighting',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+            const SizedBox(height: 8),
+            // Part of the field for tap-outside purposes, so picking a
+            // highlighting leaves the caret in Name and Enter still saves
+            // (BUG-158).
+            TextFieldTapRegion(
+              child: Wrap(
                 spacing: 6,
                 runSpacing: 6,
                 children: [
                   SelectorPill(
                     dense: true,
                     label: 'None',
-                    isActive: language == null,
+                    isActive: _language == null,
                     fillWhenActive: true,
-                    onTap: () => setState(() => language = null),
+                    onTap: () => setState(() => _language = null),
                   ),
                   for (final key in leetCodeCodeLanguages)
                     SelectorPill(
                       dense: true,
                       label: labelForLeetCodeLanguage(key),
-                      isActive: language == key,
+                      isActive: _language == key,
                       fillWhenActive: true,
-                      onTap: () => setState(() => language = key),
+                      onTap: () => setState(() => _language = key),
                     ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final name = controller.text.trim();
-              if (name.isEmpty) return;
-              Navigator.of(context).pop((name: name, languageKey: language));
-            },
-            child: const Text('Save'),
-          ),
-        ],
       ),
-    ),
-  ).whenComplete(controller.dispose);
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('Save')),
+      ],
+    );
+  }
 }

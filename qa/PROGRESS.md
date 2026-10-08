@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 056.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 057.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -175,6 +175,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-053@example.com | 2026-10-07 (FV-30: BUG-121…130) | Finance only: 40 expenses `fx121-t0..39` (Store0..39, Oct 7 back to Aug 29, every third #groceries), deposit `fx121-dep` (Employer $1,000, Oct 1); budget #groceries $100. Goal "Japan trip" $2,000 with allocations $450 (Oct 7, "From October paycheck") and −$450 (Oct 31, upcoming). Asset "TFSA A" (note "Brokerage") in room "TFSA" (baseline $10,000 Jan 1, limit $7,000): valuations Sep 1 $300, Sep 15 $9,500, Oct 7 $9,500 (revived by the FV-30 follow-up), Oct 21 $15,750; contributions $200 (Oct 2, seeded old-style, re-typed) and $300 (Oct 7). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-054@example.com | 2026-10-07 (FV-31: BUG-131…140) | Finance: deposit `fx131-dep` (Employer $1,000, Oct 1); room "TFSA" (`fx131-room`, baseline $10,000 Jan 1, limit $7,000; deleted and restored twice) holding "TFSA A" ($10,000, Oct 1) and "TFSA B" ($5,000, Oct 1); "Car loan" (−$15,001.00; deleted and undone); contribution `fx131-ev` / ledger `fx131-tx` (TFSA B $2,000, Oct 2, deleted and restored from Trash). Life: birth date Jan 1, 1900; bucket list "Climb Kilimanjaro", a 300-char "Lxxx…Z", "See the aurora", "Skydive", "Rapid". Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-055@example.com | 2026-10-07 (FV-32: BUG-141…150) | LeetCode: seeded `fx141-twosum` "Two Sum" (#array; progress reset, not undone), `fx141-soon` "Due Soon" (#Draft, came due 22:54), `fx141-lower` "Lower Draft" (#draft; reset then undone, v2), `fx141-f0..5` "Feed problem 0..5"; UI-made "Draft Problem v2" (#Draft #tag2). Settings: birth date June 15, 1990. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-056@example.com | 2026-10-08 (FV-33: BUG-151…160) | LeetCode: seeded `fx151-valid1` "Valid Anagram" (Easy, python solution), `fx151-valid2` "Valid Parentheses" (Medium), `fx151-gamma` "Gamma Merge" (Medium, tag مرحبا), `fx151-delta` "Delta Long Code" (Hard, 1,200-line solution); Valid Anagram and Valid Parentheses graded Good once; a Study checkpoint left with 2 left; scratch code on. Cheat sheet tab "Java" (java). Dark + Scatter; Vim off; grade keys F/H/G/E. | Password `qavoyager2026`. |
 
 ---
 
@@ -389,6 +390,10 @@ One line per completed phase.
 ---
 
 ## 7. Handoff note
+
+**2026-10-08 (code-review follow-up to BUG-151…160):** applied items 1, 2, 4–9 (Juno's pick): a held Escape no longer leaves the scratch pad (only a press does), the Track button's backing is GlassButton's new `backdrop` (shrinks with the press), keys already shared by several grades all move off, a shared `LeetCodeDifficultyChip`, tap-below-code-to-focus lives in `LeetCodeCodeSurface`, the gutter caches its width, and two small Track-flow cleanups. Full suite 4,581 passed. Re-checked on qa-056 (TEST_PLAN.md FV-33 follow-up). Session ended `SIGNED-OUT`.
+
+**2026-10-08 (BUG-151…160):** all ten fixed and verified in the app (TEST_PLAN.md FV-33, qa-056). Vim caret lines up past a prefix icon; no-username drafts say "Picked up your draft"; Light difficulty labels darkened (a one-count tag pill measures 4.4:1, caveat noted); RTL tag pills keep the count at the end; a filtered resume no longer loses the rest of the round; Esc leaves the scratch pad (per Juno, Vim-aware); a click in the editor's empty area focuses it and no key reaches the session behind the fullscreen editor; the New tab dialog keeps focus and saves on Enter; a duplicate grade key swaps (per Juno); the gutter widens past line 999. Summary counts updated (120 fixed, 108 open). Full suite 4,580 passed. Session ended `SIGNED-OUT`.
 
 **2026-10-07 (code-review follow-up to BUG-141…150):** applied items 1–6 (Juno's pick): an edited LeetCode problem can't be dragged shut on Android, the LeetCode clock catches up after sleep, Reset's Undo keeps a review graded since, close requests are ignored while the confirm is up or a save is running, and stat labels can't get a negative width; a misplaced doc comment fixed. Full suite 4,564 passed. Re-checked on qa-055 (TEST_PLAN.md FV-32 follow-up): Lower Draft now 1 review / interval 1 (graded during the toast, kept). Session ended `SIGNED-OUT`.
 

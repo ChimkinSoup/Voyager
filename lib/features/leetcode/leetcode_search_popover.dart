@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/constants/leetcode_constants.dart';
-import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/search_highlight_text.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/leetcode_api_models.dart';
+import 'package:voyager/features/leetcode/leetcode_difficulty_chip.dart';
 
 /// Opens a small popover with a title search field. Returns the picked
 /// [LeetCodeApiQuestion], or `null` if dismissed without a pick.
@@ -143,20 +142,9 @@ class _SearchPopoverContentState extends ConsumerState<_SearchPopoverContent> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          trailing: Container(
+          trailing: LeetCodeDifficultyChip(
+            q.difficulty,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: colorForLeetCodeDifficulty(
-                q.difficulty,
-              ).withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
-            ),
-            child: Text(
-              labelForLeetCodeDifficulty(q.difficulty),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: colorForLeetCodeDifficulty(q.difficulty),
-              ),
-            ),
           ),
           onTap: () => Navigator.of(context).pop(q),
         );

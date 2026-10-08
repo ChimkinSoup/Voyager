@@ -251,9 +251,16 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
     _undone
       ..clear()
       ..addAll(steps(checkpoint.undone));
+    // What the filter hid from the round is left out of what the round has
+    // seen, so a later visit on a wider filter takes it back as a newcomer
+    // instead of finishing with it still due (BUG-155).
+    final hidden = {
+      for (final id in checkpoint.remainingQueue)
+        if (!byId.containsKey(id)) id,
+    };
     _sourceIds
       ..clear()
-      ..addAll(checkpoint.sourceIds)
+      ..addAll(checkpoint.sourceIds.difference(hidden))
       ..addAll([for (final problem in due) problem.id])
       ..addAll([for (final problem in _queue!) problem.id]);
     if (checkpoint.scratch case final scratch?) {
@@ -495,7 +502,9 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
                 // Watched, not read: the sheet's route sits above this one on
                 // the root navigator, so nothing else here rebuilds when it
                 // opens — and the grading row below has to dim with it.
-                suppressed: ref.watch(leetCodeCheatSheetOpenProvider),
+                suppressed:
+                    ref.watch(leetCodeCheatSheetOpenProvider) ||
+                    scratchOverlayOpen,
                 child: queue.isEmpty
                     ? _SessionComplete(
                         onDone: () => Navigator.of(context).pop(),

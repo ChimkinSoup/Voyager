@@ -27,6 +27,7 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/color_palette_codec.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/hotkeys/hotkey_service.dart';
@@ -569,53 +570,41 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                       ListTile(
                         title: const Text('Grade: Fail'),
                         subtitle: Text(formatKeyBinding(settings.srsFailKey)),
-                        onTap: () => _pickCalendarKey(
+                        onTap: () => _pickGradeKey(
                           context,
                           ref,
                           settings,
-                          title: 'Fail key',
-                          current: settings.srsFailKey,
-                          onSelected: (key) =>
-                              settings.copyWith(srsFailKey: key),
+                          StudyGrade.fail,
                         ),
                       ),
                       ListTile(
                         title: const Text('Grade: Hard'),
                         subtitle: Text(formatKeyBinding(settings.srsHardKey)),
-                        onTap: () => _pickCalendarKey(
+                        onTap: () => _pickGradeKey(
                           context,
                           ref,
                           settings,
-                          title: 'Hard key',
-                          current: settings.srsHardKey,
-                          onSelected: (key) =>
-                              settings.copyWith(srsHardKey: key),
+                          StudyGrade.hard,
                         ),
                       ),
                       ListTile(
                         title: const Text('Grade: Good'),
                         subtitle: Text(formatKeyBinding(settings.srsGoodKey)),
-                        onTap: () => _pickCalendarKey(
+                        onTap: () => _pickGradeKey(
                           context,
                           ref,
                           settings,
-                          title: 'Good key',
-                          current: settings.srsGoodKey,
-                          onSelected: (key) =>
-                              settings.copyWith(srsGoodKey: key),
+                          StudyGrade.good,
                         ),
                       ),
                       ListTile(
                         title: const Text('Grade: Easy'),
                         subtitle: Text(formatKeyBinding(settings.srsEasyKey)),
-                        onTap: () => _pickCalendarKey(
+                        onTap: () => _pickGradeKey(
                           context,
                           ref,
                           settings,
-                          title: 'Easy key',
-                          current: settings.srsEasyKey,
-                          onSelected: (key) =>
-                              settings.copyWith(srsEasyKey: key),
+                          StudyGrade.easy,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -1013,6 +1002,80 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     );
     if (picked == null || picked == current) return;
     await _save(ref, onSelected(picked));
+  }
+
+  /// Like [_pickCalendarKey], for one of the four grades. A key another grade
+  /// already has is swapped rather than shared: the other grade takes this
+  /// one's old key, so every grade keeps a key of its own — a shared one only
+  /// ever fires the grade checked first (BUG-159). Settings saved before that
+  /// can hold one key on several grades; past the first, each of those goes
+  /// back to its default key, or to any default no grade is using.
+  Future<void> _pickGradeKey(
+    BuildContext context,
+    WidgetRef ref,
+    AppSettings settings,
+    StudyGrade grade,
+  ) async {
+    String keyOf(AppSettings s, StudyGrade g) => switch (g) {
+      StudyGrade.fail => s.srsFailKey,
+      StudyGrade.hard => s.srsHardKey,
+      StudyGrade.good => s.srsGoodKey,
+      StudyGrade.easy => s.srsEasyKey,
+    };
+    AppSettings withKey(AppSettings s, StudyGrade g, String key) => switch (g) {
+      StudyGrade.fail => s.copyWith(srsFailKey: key),
+      StudyGrade.hard => s.copyWith(srsHardKey: key),
+      StudyGrade.good => s.copyWith(srsGoodKey: key),
+      StudyGrade.easy => s.copyWith(srsEasyKey: key),
+    };
+    String defaultOf(StudyGrade g) => switch (g) {
+      StudyGrade.fail => defaultStudyFailKey,
+      StudyGrade.hard => defaultStudyHardKey,
+      StudyGrade.good => defaultStudyGoodKey,
+      StudyGrade.easy => defaultStudyEasyKey,
+    };
+    String label(StudyGrade g) => switch (g) {
+      StudyGrade.fail => 'Fail',
+      StudyGrade.hard => 'Hard',
+      StudyGrade.good => 'Good',
+      StudyGrade.easy => 'Easy',
+    };
+    bool same(String a, String b) => formatKeyBinding(a) == formatKeyBinding(b);
+
+    final current = keyOf(settings, grade);
+    final picked = await showKeyBindingDialog(
+      context,
+      title: '${label(grade)} key',
+      current: current,
+    );
+    if (picked == null || picked == current) return;
+    var next = withKey(settings, grade, picked);
+    final moves = <String>[];
+    for (final other in StudyGrade.values) {
+      if (other == grade || !same(keyOf(next, other), picked)) continue;
+      bool free(String key) =>
+          StudyGrade.values.every((g) => !same(keyOf(next, g), key));
+      final String? to = moves.isEmpty
+          ? current
+          : [
+              defaultOf(other),
+              for (final g in StudyGrade.values) defaultOf(g),
+            ].where(free).firstOrNull;
+      if (to == null) continue;
+      next = withKey(next, other, to);
+      moves.add('${label(other)} moved to ${formatKeyBinding(to)}');
+    }
+    await _save(ref, next);
+    if (moves.isNotEmpty && context.mounted) {
+      showVoyagerToast(
+        context,
+        message:
+            '${moves.join(', ')}, '
+            'since ${label(grade)} took ${formatKeyBinding(picked)}',
+        icon: PhosphorIconsRegular.arrowsLeftRight,
+        dwell: const Duration(seconds: 4),
+      );
+    }
   }
 
   String _startupPageLabel(AppSettings settings) {

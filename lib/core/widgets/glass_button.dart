@@ -22,6 +22,7 @@ class GlassButton extends StatefulWidget {
     this.trailingIcon,
     this.child,
     this.color,
+    this.backdrop,
     this.textColor,
     this.iconColor,
     this.borderColor,
@@ -63,6 +64,12 @@ class GlassButton extends StatefulWidget {
   /// Base tint color for the glass surface.
   /// If null, defaults to theme accent color or surface container.
   final Color? color;
+
+  /// An opaque fill painted under the glass, inside its shape. For a button
+  /// that floats over content, where Light's nearly clear wafer would let
+  /// whatever is behind it run through the label (BUG-153). Inside the
+  /// button, so it shrinks with the press and keeps its corners.
+  final Color? backdrop;
 
   /// Override color for the text label.
   final Color? textColor;
@@ -414,6 +421,8 @@ class _GlassButtonState extends State<GlassButton>
             child: Stack(
               alignment: widget.alignment,
               children: [
+                if (widget.backdrop case final backdrop?)
+                  Positioned.fill(child: ColoredBox(color: backdrop)),
                 if (isDark)
                   Positioned.fill(
                     child: SurfaceGrain(

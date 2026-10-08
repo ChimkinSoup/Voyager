@@ -51,13 +51,15 @@ Future<void> startLeetCodeTrackFlow(BuildContext context, WidgetRef ref) async {
   _trackFlowInFlight = true;
   LeetCodeApiQuestion? recent;
   LeetCodeTrackDraft? draft;
+  final username = ref.read(settingsProvider).value?.leetcodeUsername?.trim();
+  // Null when there is no username, and so no lookup to make.
+  final lookup = username == null || username.isEmpty ? null : username;
   try {
     // Started before the network call rather than awaited first: a local file
     // read has no business adding to the time the fetch toast is up.
     final draftFuture = ref.read(leetCodeTrackDraftStoreProvider).load();
-    final username = ref.read(settingsProvider).value?.leetcodeUsername?.trim();
 
-    if (username != null && username.isNotEmpty) {
+    if (lookup != null) {
       final dismissToast = showVoyagerToast(
         context,
         message: 'Fetching your latest submission…',
@@ -65,7 +67,7 @@ Future<void> startLeetCodeTrackFlow(BuildContext context, WidgetRef ref) async {
       try {
         recent = await ref
             .read(leetCodeApiClientProvider)
-            .fetchMostRecentAcceptedSubmission(username);
+            .fetchMostRecentAcceptedSubmission(lookup);
       } catch (_) {
         // Handled the same as "no submission": the draft, or an empty form.
       }
@@ -85,9 +87,12 @@ Future<void> startLeetCodeTrackFlow(BuildContext context, WidgetRef ref) async {
       context,
       ref,
       draft: draft,
+      // With no username nothing was looked up, so nothing failed to refresh.
       draftOutcome: draft == null
           ? LeetCodeTrackDraftOutcome.none
-          : LeetCodeTrackDraftOutcome.resumedAfterFetchFailure,
+          : lookup != null
+          ? LeetCodeTrackDraftOutcome.resumedAfterFetchFailure
+          : LeetCodeTrackDraftOutcome.resumed,
     );
     return;
   }

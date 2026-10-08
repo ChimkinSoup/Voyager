@@ -365,8 +365,9 @@ void main() {
           ),
         ),
       );
-      expect(find.text('#Draft (2)'), findsOneWidget);
-      expect(find.textContaining('#draft'), findsNothing);
+      // The tag sits in a bidi isolate (BUG-154).
+      expect(find.text('#\u2068Draft\u2069 (2)'), findsOneWidget);
+      expect(find.textContaining('draft'), findsNothing);
     });
   });
 

@@ -1,0 +1,7 @@
+final repo = c.read(leetCodeRepositoryProvider);
+final p = await repo.getProblem('fx151-gamma');
+final q = p!.copyWith(tags: const ['\u0645\u0631\u062d\u0628\u0627']);
+await repo.upsertProblem(q);
+c.read(remoteSyncServiceProvider).pushLeetCodeProblem(q);
+invalidateAllDataProvidersIn(c);
+debugPrint('FX151 retagged ' + q.tags.single.length.toString());

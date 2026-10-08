@@ -1,0 +1,3 @@
+final s = await c.read(settingsProvider.future);
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(srsHardKey: 'K', srsGoodKey: 'K', vimModeEnabled: true));
+debugPrint('FX151 dup keys ' + s.srsFailKey);

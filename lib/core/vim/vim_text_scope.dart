@@ -215,6 +215,7 @@ class VimTextScope extends StatefulWidget {
     this.capsLockIndicatorAllowed = true,
     this.shiftWidth = kVimShiftWidth,
     this.smartIndent = false,
+    this.onIdleEscape,
     this.holdsEscape = false,
   });
 
@@ -265,6 +266,9 @@ class VimTextScope extends StatefulWidget {
   /// code editors, whose Enter indents the same way — see
   /// `VimSession.smartIndent`.
   final bool smartIndent;
+
+  /// See `VimSession.onIdleEscape`.
+  final VoidCallback? onIdleEscape;
 
   /// Whether Escape stops at this field while Vim is switched on although
   /// [enabled] is false — a structured input such as an amount; see
@@ -512,6 +516,8 @@ class _VimTextScopeState extends State<VimTextScope> {
         isMultiline: () => widget.multiline,
         shiftWidth: widget.shiftWidth,
         smartIndent: widget.smartIndent,
+        // Looked up live, like the snippet undo below.
+        onIdleEscape: () => widget.onIdleEscape?.call(),
         // Looked up live: settings sync can replace [_snippetSession].
         trySnippetUndo: () =>
             _snippetSession?.undoLastExpansion(

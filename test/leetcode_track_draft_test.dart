@@ -668,7 +668,7 @@ void main() {
       await _close(tester);
     });
 
-    testWidgets('no username with a draft still opens the draft', (
+    testWidgets('BUG-152: no username with a draft opens it as picked up', (
       tester,
     ) async {
       final harness = await _pump(
@@ -682,10 +682,21 @@ void main() {
 
       expect(harness.api.fetches, 0);
       expect(_textOf(tester, _titleField()), 'Three Sum');
+      // Nothing was looked up, so nothing failed to refresh (BUG-152).
+      expect(find.text('Picked up your draft'), findsOneWidget);
       expect(
         find.text("Couldn't refresh — showing your draft"),
-        findsOneWidget,
+        findsNothing,
       );
+
+      // Clear draft just empties the form: still no lookup, and no
+      // "add your username" warning.
+      await tester.tap(find.text('Clear draft'));
+      await tester.pumpAndSettle();
+      expect(harness.api.fetches, 0);
+      expect(harness.store.draft, isNull);
+      expect(_textOf(tester, _titleField()), '');
+      expect(find.textContaining('LeetCode username'), findsNothing);
 
       await _close(tester);
     });

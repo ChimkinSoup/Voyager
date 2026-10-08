@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_editor/flutter_code_editor.dart';
@@ -111,6 +113,10 @@ final double kLeetCodeCodeTopInset = _codeContentPadding.top;
 /// Width every language capsule takes, wide enough for the longest label
 /// ("javascript"/"typescript") so none of them has to ellipsize.
 const _kLanguagePillWidth = 84.0;
+
+/// The gutter's narrowest width, which fits three digits. Past line 999 it
+/// widens to the longest number, or four-digit numbers wrap onto two rows and
+/// the column drifts out of step with the code (BUG-160).
 const _lineNumberColumnWidth = 34.0;
 const _lineNumberGap = 8.0;
 const _codeGutterPad = 8.0;
@@ -169,6 +175,12 @@ class _LineNumbersState extends State<_LineNumbers> {
   late final TextEditingController _controller;
   late final FocusNode _focusNode;
 
+  /// The gutter's width, measured again only when the longest number gains
+  /// or loses a digit, or the text scale changes.
+  double _width = _lineNumberColumnWidth;
+  int? _widthDigits;
+  TextScaler? _widthScaler;
+
   @override
   void initState() {
     super.initState();
@@ -198,9 +210,18 @@ class _LineNumbersState extends State<_LineNumbers> {
   void _onSourceChanged() {
     final numbers = _numbersFor(widget.source.text);
     if (_controller.text != numbers) {
+      final widthChanged =
+          _longestNumber(numbers).length !=
+          _longestNumber(_controller.text).length;
       _controller.text = numbers;
+      // The text field redraws itself; the gutter's width is this widget's.
+      if (widthChanged) setState(() {});
     }
   }
+
+  /// The last number is the longest; the numbers run 1…n.
+  static String _longestNumber(String numbers) =>
+      numbers.substring(numbers.lastIndexOf('\n') + 1);
 
   String _numbersFor(String text) {
     final lineCount = '\n'.allMatches(text).length + 1;
@@ -209,8 +230,25 @@ class _LineNumbersState extends State<_LineNumbers> {
 
   @override
   Widget build(BuildContext context) {
+    final style = _codeTextStyle.copyWith(color: widget.color);
+    final longest = _longestNumber(_controller.text);
+    final scaler = MediaQuery.textScalerOf(context);
+    if (longest.length != _widthDigits || scaler != _widthScaler) {
+      _widthDigits = longest.length;
+      _widthScaler = scaler;
+      final painter = TextPainter(
+        text: TextSpan(text: longest, style: style),
+        textDirection: TextDirection.ltr,
+        textScaler: scaler,
+      )..layout();
+      // RenderEditable keeps 1px plus the caret's 2px clear even with the
+      // caret hidden (see `withCaretMargin`), and a pixel more so rounding
+      // can't wrap the widest number.
+      _width = math.max(_lineNumberColumnWidth, painter.width + 4);
+      painter.dispose();
+    }
     return SizedBox(
-      width: _lineNumberColumnWidth,
+      width: _width,
       child: IgnorePointer(
         child: TextField(
           controller: _controller,
@@ -219,7 +257,7 @@ class _LineNumbersState extends State<_LineNumbers> {
           showCursor: false,
           maxLines: null,
           textAlign: TextAlign.right,
-          style: _codeTextStyle.copyWith(color: widget.color),
+          style: style,
           decoration: const InputDecoration(
             isCollapsed: true,
             contentPadding: EdgeInsets.symmetric(vertical: 16),
@@ -241,7 +279,7 @@ class _LineNumbersState extends State<_LineNumbers> {
 /// different frame around it: it fills its parent instead of taking a fixed
 /// 160–320px, and its toolbar lives above the whole pad rather than above the
 /// box.
-class LeetCodeCodeSurface extends StatelessWidget {
+class LeetCodeCodeSurface extends StatefulWidget {
   const LeetCodeCodeSurface({
     super.key,
     required this.controller,
@@ -249,12 +287,13 @@ class LeetCodeCodeSurface extends StatelessWidget {
     this.readOnly = false,
     this.scrollable = true,
     this.framed = true,
+    this.onEscape,
   });
 
   final CodeController controller;
 
-  /// Supplied when the caller needs to focus the editor itself — the tap
-  /// target in [LeetCodeCodeInput], the `C` shortcut in a session.
+  /// Supplied when the caller needs to focus the editor itself — the `C`
+  /// shortcut in a session; one is created and owned here otherwise.
   final FocusNode? focusNode;
 
   final bool readOnly;
@@ -267,6 +306,45 @@ class LeetCodeCodeSurface extends StatelessWidget {
   /// that has already framed it — the scratch pad, whose expand strip and
   /// editor share one notepad border.
   final bool framed;
+
+  /// Escape in the editor, for a caller with somewhere to go — the scratch
+  /// pad hands the keyboard back to the card (BUG-156). With Vim on it fires
+  /// only once Vim has nothing left to cancel, so Escape still leaves Insert
+  /// first. Null leaves Escape alone.
+  final VoidCallback? onEscape;
+
+  @override
+  State<LeetCodeCodeSurface> createState() => _LeetCodeCodeSurfaceState();
+}
+
+class _LeetCodeCodeSurfaceState extends State<LeetCodeCodeSurface> {
+  FocusNode? _ownFocusNode;
+
+  FocusNode get _focusNode =>
+      widget.focusNode ?? (_ownFocusNode ??= FocusNode());
+
+  @override
+  void dispose() {
+    _ownFocusNode?.dispose();
+    super.dispose();
+  }
+
+  /// The box is taller than the code in it, but a [TextField] only occupies —
+  /// and so only hit-tests — the lines it actually holds. A click under the
+  /// last line landed on nothing and took the focus away (BUG-157), so the
+  /// whole box takes taps and hands them to the editor, caret at the end of
+  /// the buffer the way clicking past the last line does in a code editor.
+  ///
+  /// [HitTestBehavior.translucent] leaves the field's own recognizer in the
+  /// arena, and hit testing enters it first, so a tap that lands on text still
+  /// places the caret where it landed rather than jumping to the end.
+  void _focusAtEnd() {
+    final controller = widget.controller;
+    controller.selection = TextSelection.collapsed(
+      offset: controller.text.length,
+    );
+    _focusNode.requestFocus();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -284,7 +362,9 @@ class LeetCodeCodeSurface extends StatelessWidget {
     // view entirely. The box is the part with a fixed height, so hanging the
     // badge off that keeps it in the corner it belongs in.
     return VimTextScope(
-      enabled: VimEnabledScope.of(context) && vimSuitsField(readOnly: readOnly),
+      enabled:
+          VimEnabledScope.of(context) &&
+          vimSuitsField(readOnly: widget.readOnly),
       // Hard off, per SNIPPET.md §2.3. Tab here indents the code (see
       // [_codeEditorShortcuts]), and a prose trigger firing inside a code
       // block would corrupt the very text it is meant to be showing verbatim.
@@ -300,23 +380,24 @@ class LeetCodeCodeSurface extends StatelessWidget {
       shiftWidth: kLeetCodeEditorParams.tabSpaces,
       // `o` opens the body of a `:` or `{` line, as Enter does here.
       smartIndent: true,
-      controller: controller,
+      onIdleEscape: widget.onEscape,
+      controller: widget.controller,
       multiline: true,
       accentColor: theme.colorScheme.primary,
       builder: (context, vim) {
-        final Widget body = Padding(
+        Widget body = Padding(
           padding: const EdgeInsets.only(left: 8),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _LineNumbers(source: controller, color: lineNumberColor),
+              _LineNumbers(source: widget.controller, color: lineNumberColor),
               const SizedBox(width: _lineNumberGap),
               Expanded(
                 child: _LeetCodeCodeEditor(
-                  controller: controller,
+                  controller: widget.controller,
                   vim: vim,
-                  focusNode: focusNode,
-                  readOnly: readOnly,
+                  focusNode: _focusNode,
+                  readOnly: widget.readOnly,
                   textStyle: textStyle,
                   cursorColor: palette.foreground,
                 ),
@@ -325,16 +406,43 @@ class LeetCodeCodeSurface extends StatelessWidget {
           ),
         );
 
-        final Widget box = CodeTheme(
+        // Vim off: nothing claims Escape on its way up, so take it here. With
+        // Vim on the session owns it, and calls [onEscape] itself.
+        final onEscape = widget.onEscape;
+        if (onEscape != null) {
+          body = Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
+            onKeyEvent: (node, event) {
+              if (vim.session != null ||
+                  event is! KeyDownEvent ||
+                  event.logicalKey != LogicalKeyboardKey.escape) {
+                return KeyEventResult.ignored;
+              }
+              onEscape();
+              return KeyEventResult.handled;
+            },
+            child: body,
+          );
+        }
+
+        Widget box = CodeTheme(
           data: CodeThemeData(styles: _spanStyles(codeTheme)),
           child: Theme(
             data: theme.copyWith(
               inputDecorationTheme: const InputDecorationTheme(),
             ),
-            child: scrollable ? VoyagerScrollView(child: body) : body,
+            child: widget.scrollable ? VoyagerScrollView(child: body) : body,
           ),
         );
-        if (!framed) return box;
+        if (!widget.readOnly) {
+          box = GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: _focusAtEnd,
+            child: box,
+          );
+        }
+        if (!widget.framed) return box;
 
         return Container(
           decoration: BoxDecoration(
@@ -371,14 +479,9 @@ class LeetCodeCodeInput extends StatefulWidget {
 }
 
 class _LeetCodeCodeInputState extends State<LeetCodeCodeInput> {
-  /// Owned here rather than inside [_LeetCodeCodeEditor] so the tap target
-  /// below can focus the field — see [_focusCodeAtEnd].
-  late final FocusNode _codeFocusNode;
-
   @override
   void initState() {
     super.initState();
-    _codeFocusNode = FocusNode();
     widget.controller.language = _modeForLanguage(widget.language);
   }
 
@@ -388,12 +491,6 @@ class _LeetCodeCodeInputState extends State<LeetCodeCodeInput> {
     if (oldWidget.language != widget.language) {
       widget.controller.language = _modeForLanguage(widget.language);
     }
-  }
-
-  @override
-  void dispose() {
-    _codeFocusNode.dispose();
-    super.dispose();
   }
 
   /// Drops the selected language's line comments from the buffer.
@@ -418,23 +515,6 @@ class _LeetCodeCodeInputState extends State<LeetCodeCodeInput> {
     controller.selection = TextSelection.collapsed(
       offset: caret < 0 ? stripped.length : caret.clamp(0, stripped.length),
     );
-  }
-
-  /// The box is 160px tall from empty, but a [TextField] only occupies — and
-  /// so only hit-tests — the lines it actually holds. Everything under the
-  /// last line reads as part of the field and does nothing when clicked, so
-  /// the whole box takes taps and hands them to the editor, caret at the end
-  /// of the buffer the way clicking past the last line does in a code editor.
-  ///
-  /// [HitTestBehavior.translucent] leaves the field's own recognizer in the
-  /// arena, and hit testing enters it first, so a tap that lands on text still
-  /// places the caret where it landed rather than jumping to the end.
-  void _focusCodeAtEnd() {
-    final controller = widget.controller;
-    controller.selection = TextSelection.collapsed(
-      offset: controller.text.length,
-    );
-    _codeFocusNode.requestFocus();
   }
 
   @override
@@ -488,14 +568,7 @@ class _LeetCodeCodeInputState extends State<LeetCodeCodeInput> {
         const SizedBox(height: 8),
         ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 160, maxHeight: 320),
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: _focusCodeAtEnd,
-            child: LeetCodeCodeSurface(
-              controller: widget.controller,
-              focusNode: _codeFocusNode,
-            ),
-          ),
+          child: LeetCodeCodeSurface(controller: widget.controller),
         ),
       ],
     );
@@ -573,7 +646,7 @@ class _LeetCodeCodeEditor extends StatefulWidget {
     required this.vim,
     required this.textStyle,
     required this.cursorColor,
-    this.focusNode,
+    required this.focusNode,
     this.readOnly = false,
   });
 
@@ -583,9 +656,8 @@ class _LeetCodeCodeEditor extends StatefulWidget {
   /// [LeetCodeCodeSurface.build] for why the scope sits up there and not here.
   final VimFieldBinding vim;
 
-  /// Supplied when the caller needs to focus the field itself; one is created
-  /// and owned here otherwise.
-  final FocusNode? focusNode;
+  /// [LeetCodeCodeSurface]'s, so a tap anywhere in the box can focus it.
+  final FocusNode focusNode;
 
   final TextStyle textStyle;
   final Color cursorColor;
@@ -596,15 +668,13 @@ class _LeetCodeCodeEditor extends StatefulWidget {
 }
 
 class _LeetCodeCodeEditorState extends State<_LeetCodeCodeEditor> {
-  FocusNode? _ownFocusNode;
   String _longestLine = '';
 
-  FocusNode get _focusNode => widget.focusNode ?? _ownFocusNode!;
+  FocusNode get _focusNode => widget.focusNode;
 
   @override
   void initState() {
     super.initState();
-    if (widget.focusNode == null) _ownFocusNode = FocusNode();
     widget.controller.addListener(_onTextChanged);
     _longestLine = _longestLineOf(widget.controller.text);
   }
@@ -622,7 +692,6 @@ class _LeetCodeCodeEditorState extends State<_LeetCodeCodeEditor> {
   @override
   void dispose() {
     widget.controller.removeListener(_onTextChanged);
-    _ownFocusNode?.dispose();
     super.dispose();
   }
 

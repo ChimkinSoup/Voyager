@@ -501,7 +501,9 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
                 onFocusScratch: scratchEnabled ? focusScratch : null,
                 // See the session page: the sheet's route is above this one on
                 // the root navigator, so nothing else rebuilds when it opens.
-                suppressed: ref.watch(leetCodeCheatSheetOpenProvider),
+                suppressed:
+                    ref.watch(leetCodeCheatSheetOpenProvider) ||
+                    scratchOverlayOpen,
                 child: _complete
                     ? _CramComplete(
                         onDone: () => Navigator.of(context).pop(),

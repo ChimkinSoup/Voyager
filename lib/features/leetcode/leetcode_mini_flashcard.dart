@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/theme/srs_mastery_color.dart';
-import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/search_highlight_text.dart';
 import 'package:voyager/core/widgets/tag_chip.dart';
@@ -10,6 +8,7 @@ import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/services/leetcode_srs_engine.dart';
 import 'package:voyager/features/leetcode/leetcode_actions.dart';
 import 'package:voyager/features/leetcode/leetcode_detail_view.dart';
+import 'package:voyager/features/leetcode/leetcode_difficulty_chip.dart';
 import 'package:voyager/features/leetcode/leetcode_inline_code.dart';
 import 'package:voyager/features/leetcode/leetcode_providers.dart';
 import 'package:voyager/features/study/study_flip_card.dart';
@@ -163,7 +162,6 @@ class _LeetCodeMiniFlashcardState extends ConsumerState<LeetCodeMiniFlashcard> {
   Widget _front(BuildContext context, Color mastery) {
     final theme = Theme.of(context);
     final problem = widget.problem;
-    final difficultyColor = colorForLeetCodeDifficulty(problem.difficulty);
     final daysUntilDue = leetCodeDaysUntilDue(
       problem,
       now: widget.now ?? ref.watch(leetCodeClockProvider),
@@ -194,20 +192,11 @@ class _LeetCodeMiniFlashcardState extends ConsumerState<LeetCodeMiniFlashcard> {
               // Difficulty is a permanent property of the problem, so it sits
               // in the same corner as on the full-size card — the ring around
               // the tile is the part that changes as you study.
-              Container(
+              LeetCodeDifficultyChip(
+                problem.difficulty,
+                tint: 0.16,
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: difficultyColor.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
-                ),
-                child: Text(
-                  labelForLeetCodeDifficulty(problem.difficulty),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontSize: 9,
-                    height: 1.2,
-                    color: difficultyColor,
-                  ),
-                ),
+                style: const TextStyle(fontSize: 9, height: 1.2),
               ),
             ],
           ),

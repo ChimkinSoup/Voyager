@@ -375,11 +375,26 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
     // The inner decoration pins gapPadding to 0 and is unfilled, so there is
     // no input gap to mirror — but the decorator's density shift and the
     // caret strip the text wraps inside of both still apply.
+    var textPadding = contentPadding.resolve(Directionality.of(context));
+    // A prefix icon replaces the start padding: InputDecorator lays the icon
+    // out in its own box (48px min, density-adjusted) and starts the text 4px
+    // after it (`prefixToInputGap`, input_decorator.dart).
+    if (decoration.prefixIcon != null) {
+      final iconBox =
+          (decoration.prefixIconConstraints ??
+                  theme.visualDensity.effectiveConstraints(
+                    const BoxConstraints(
+                      minWidth: kMinInteractiveDimension,
+                      minHeight: kMinInteractiveDimension,
+                    ),
+                  ))
+              .minWidth;
+      textPadding = Directionality.of(context) == TextDirection.ltr
+          ? textPadding.copyWith(left: iconBox + 4)
+          : textPadding.copyWith(right: iconBox + 4);
+    }
     final overlayPadding = withCaretMargin(
-      withDensityShift(
-        contentPadding.resolve(Directionality.of(context)),
-        theme.visualDensity,
-      ),
+      withDensityShift(textPadding, theme.visualDensity),
       cursorWidth: vim.overlayCaretWidth,
     );
     // `==highlight==` runs carry only a mark; [ProseHighlightLayer] is what

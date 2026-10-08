@@ -3,7 +3,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
-import 'package:voyager/core/constants/leetcode_constants.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/paper_texture.dart';
 import 'package:voyager/core/widgets/surface_grain.dart';
@@ -11,6 +10,7 @@ import 'package:voyager/core/widgets/tag_chip.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/features/leetcode/leetcode_code_field.dart';
 import 'package:voyager/features/leetcode/leetcode_detail_view.dart';
+import 'package:voyager/features/leetcode/leetcode_difficulty_chip.dart';
 import 'package:voyager/features/leetcode/leetcode_examples.dart';
 import 'package:voyager/features/leetcode/leetcode_inline_code.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -273,21 +273,7 @@ class _CardFront extends ConsumerWidget {
           if (!(settings?.leetCodeHideDifficulty ?? false)) ...[
             Align(
               alignment: Alignment.centerRight,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: colorForLeetCodeDifficulty(
-                    problem.difficulty,
-                  ).withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
-                ),
-                child: Text(
-                  labelForLeetCodeDifficulty(problem.difficulty),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: colorForLeetCodeDifficulty(problem.difficulty),
-                  ),
-                ),
-              ),
+              child: LeetCodeDifficultyChip(problem.difficulty, tint: 0.16),
             ),
             const SizedBox(height: 8),
           ],

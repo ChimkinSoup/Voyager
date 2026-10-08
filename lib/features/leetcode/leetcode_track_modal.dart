@@ -516,6 +516,8 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
 
   /// Drops the draft and refills the form from a fresh lookup — the same one
   /// the Track button ran, so a failure leaves an empty form and says why.
+  /// With no username set the Track button made no lookup either, so this just
+  /// empties the form.
   Future<void> _clearDraftAndStartNew() async {
     if (!_isCreate || _retracking || _saving) return;
     _draftTimer?.cancel();
@@ -531,6 +533,10 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     _started = false;
     await _draftStore.clear();
     if (!mounted) return;
+    if (_leetCodeUsername == null) {
+      _replaceContents();
+      return;
+    }
     setState(() => _retracking = true);
     try {
       final detail = await _fetchLatestSubmission();
@@ -701,9 +707,15 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
     }
   }
 
-  Future<LeetCodeApiQuestion?> _fetchLatestSubmission() async {
+  /// The LeetCode username from Settings, or null when none is set.
+  String? get _leetCodeUsername {
     final username = ref.read(settingsProvider).value?.leetcodeUsername?.trim();
-    if (username == null || username.isEmpty) {
+    return username == null || username.isEmpty ? null : username;
+  }
+
+  Future<LeetCodeApiQuestion?> _fetchLatestSubmission() async {
+    final username = _leetCodeUsername;
+    if (username == null) {
       _reportRetrackFailure('Add your LeetCode username in Settings first');
       return null;
     }

@@ -132,6 +132,7 @@ class VimSession {
     this.pasteImage,
     this.shiftWidth = kVimShiftWidth,
     this.smartIndent = false,
+    this.onIdleEscape,
     UndoHistoryController? undoController,
   }) : undoController = undoController ?? UndoHistoryController(),
        _ownsUndoController = undoController == null;
@@ -188,6 +189,13 @@ class VimSession {
   /// `{` starts one [shiftWidth] deeper. On for code fields, whose Enter does
   /// the same — see [_autoIndent].
   final bool smartIndent;
+
+  /// Called by an Escape press (not a key repeat) in Normal mode with nothing
+  /// left to cancel, which still stops at the field. Lets a field that is safe to leave — the
+  /// LeetCode scratch pad, where leaving only hands the keys back to the
+  /// card (BUG-156) — treat that second Escape as "done typing". Null keeps
+  /// Escape a no-op there.
+  final void Function()? onIdleEscape;
 
   /// Undo stack for the host field, driven by `u` and `<C-r>`.
   ///
@@ -727,6 +735,9 @@ class VimSession {
       // the field was sitting in, losing whatever had been typed. A focused
       // Vim field owns Escape outright; the dialog is closed by its buttons,
       // by clicking away, or after tabbing out of the box.
+      // A fresh press only: a held Escape repeats, and a repeat leaving the
+      // field would send the next keys meant for it somewhere else.
+      if (event is KeyDownEvent) onIdleEscape?.call();
       return KeyEventResult.handled;
     }
 

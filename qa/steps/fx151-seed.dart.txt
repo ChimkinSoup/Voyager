@@ -1,0 +1,16 @@
+final repo = c.read(leetCodeRepositoryProvider);
+final sync = c.read(remoteSyncServiceProvider);
+final now = DateTime.now().toUtc();
+final past = now.subtract(const Duration(days: 1));
+final longCode = List.generate(1200, (i) => 'line_' + (i + 1).toString() + ' = ' + (i + 1).toString()).join('\n');
+final ps = <LeetCodeProblem>[
+  LeetCodeProblem(id: 'fx151-valid1', createdAt: now, updatedAt: now, title: 'Valid Anagram', questionFrontendId: '242', difficulty: LeetCodeDifficulty.easy, tags: const ['hash-table'], solvedAt: DateTime(2026, 10, 1, 12).toUtc(), interval: 1, ease: 2.5, reviewCount: 1, dueAt: past, solutions: const [LeetCodeSolution(code: 'class Solution:\n    def isAnagram(self, s, t):\n        return sorted(s) == sorted(t)', codeLanguage: 'python')]),
+  LeetCodeProblem(id: 'fx151-valid2', createdAt: now, updatedAt: now, title: 'Valid Parentheses', questionFrontendId: '20', difficulty: LeetCodeDifficulty.medium, tags: const ['stack'], solvedAt: DateTime(2026, 10, 2, 12).toUtc(), interval: 1, ease: 2.5, reviewCount: 1, dueAt: past),
+  LeetCodeProblem(id: 'fx151-gamma', createdAt: now, updatedAt: now, title: 'Gamma Merge', questionFrontendId: '56', difficulty: LeetCodeDifficulty.medium, tags: const ['\u0645\u0631\u062d\u0628\u0627'], solvedAt: DateTime(2026, 10, 3, 12).toUtc(), interval: 1, ease: 2.5, reviewCount: 1, dueAt: past),
+  LeetCodeProblem(id: 'fx151-delta', createdAt: now, updatedAt: now, title: 'Delta Long Code', questionFrontendId: '57', difficulty: LeetCodeDifficulty.hard, tags: const ['array'], solvedAt: DateTime(2026, 10, 4, 12).toUtc(), interval: 1, ease: 2.5, reviewCount: 1, dueAt: past, solutions: [LeetCodeSolution(code: longCode, codeLanguage: 'python')]),
+];
+for (final p in ps) { await repo.upsertProblem(p); sync.pushLeetCodeProblem(p); }
+final s = await c.read(settingsProvider.future);
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(leetCodeEnableScratchCode: true));
+invalidateAllDataProvidersIn(c);
+debugPrint('FX151 seeded ' + DateTime.now().toString());

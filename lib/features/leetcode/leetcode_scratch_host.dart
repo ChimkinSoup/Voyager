@@ -105,6 +105,11 @@ mixin LeetCodeScratchHost<T extends ConsumerStatefulWidget>
       _expanding ||
       ref.read(leetCodeCheatSheetOpenProvider);
 
+  /// Whether the fullscreen editor is up. The session's keys stay off for as
+  /// long as it is, whatever has the focus inside it: it sits on the root
+  /// navigator, so the session's own route still reads as current (BUG-157).
+  bool get scratchOverlayOpen => _expanding;
+
   @override
   void initState() {
     super.initState();

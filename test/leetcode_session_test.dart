@@ -479,6 +479,59 @@ void main() {
       expect(find.text('3 Merge Intervals'), findsOneWidget);
     });
 
+    testWidgets(
+      'BUG-155: what a filter hid from the round comes back on the full deck',
+      (tester) async {
+        final checkpoints = MemorySessionCheckpointStore();
+        final problems = [
+          _problem(id: '1', title: 'Two Sum'),
+          _problem(id: '2', title: 'Add Two Numbers'),
+          _problem(id: '3', title: 'Merge Intervals'),
+          _problem(id: '4', title: 'Valid Anagram'),
+        ];
+        const all = {'1', '2', '3', '4'};
+
+        var repo = await _pump(
+          tester,
+          problems,
+          const LeetCodeSessionPage(problemIds: all),
+          checkpoints: checkpoints,
+        );
+        await leave(tester);
+
+        // Filtered to two of the four: the round resumes with its overlap,
+        // and one of those is graded before leaving again.
+        repo = await _pump(
+          tester,
+          repo.problems,
+          const LeetCodeSessionPage(problemIds: {'1', '2'}),
+          checkpoints: checkpoints,
+        );
+        await tester.pump();
+        expect(
+          find.text('Resuming your previous session · 2 left'),
+          findsOneWidget,
+        );
+        await _reveal(tester);
+        await _grade(tester, 'Good');
+        await leave(tester);
+
+        // Back on the full deck: the problem left, plus the two the filter
+        // hid, which are still due.
+        await _pump(
+          tester,
+          repo.problems,
+          const LeetCodeSessionPage(problemIds: all),
+          checkpoints: checkpoints,
+        );
+        await tester.pump();
+        expect(
+          find.text('Resuming your previous session · 3 left'),
+          findsOneWidget,
+        );
+      },
+    );
+
     testWidgets('Study and Cram never offer each other their rounds', (
       tester,
     ) async {

@@ -58,7 +58,8 @@ class StudyKeyboardShortcuts extends ConsumerStatefulWidget {
   /// route pushed on the root navigator above a shell branch answers yes to
   /// all of them — which is why [mediaLightboxIsOpen] has to be consulted
   /// separately. This is the same escape hatch for a caller's own overlay:
-  /// the LeetCode cheat sheet passes it while its sheet is up.
+  /// the LeetCode cheat sheet passes it while its sheet is up, and the LeetCode
+  /// sessions while their fullscreen scratch editor is (BUG-157).
   final bool suppressed;
 
   @override
