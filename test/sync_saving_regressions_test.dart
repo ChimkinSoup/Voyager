@@ -4,7 +4,10 @@
 // wrong, not the shape of the fix — so a future refactor is free to move the
 // code as long as saves keep landing.
 
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/dev/perf_stall_logger.dart';
 import 'package:voyager/core/sync/debouncer.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
@@ -135,15 +138,15 @@ void main() {
     tearDown(() => device.close());
 
     /// Writes a calendar and waits for the upload that mark accompanies.
-    Future<Map<String, dynamic>> pushCalendar(String name) async {
+    Future<Map<String, dynamic>> pushCalendar(
+      String name, {
+      String id = 'cal-1',
+    }) async {
       await device.calendars.upsertCalendar(
-        Calendar(id: 'cal-1', name: name, createdAt: now, updatedAt: now),
+        Calendar(id: id, name: name, createdAt: now, updatedAt: now),
       );
       await device.settle();
-      return (await server.getDocument(
-        FirestoreCollections.calendars,
-        'cal-1',
-      ))!;
+      return (await server.getDocument(FirestoreCollections.calendars, id))!;
     }
 
     test('our own write coming back is not applied again', () async {
@@ -277,7 +280,111 @@ void main() {
       expect(applied, isFalse);
     });
 
-    test('a mark is consumed once, not left to eat the next change', () async {
+    test(
+      'an earlier write confirmed after the next one is marked is still ours',
+      () async {
+        // Back-to-back uploads on a slow network: the server's confirmation of
+        // the first write arrives once the second has already been marked.
+        // Compared against only the newest mark, it read as a foreign edit,
+        // dropped the mark, and the second write's own echo then reloaded
+        // every provider too.
+        final first = await pushCalendar('Work');
+        final second = await pushCalendar('Home');
+
+        for (final (label, stored) in [
+          ('the earlier write', first),
+          ('the later write', second),
+        ]) {
+          final applied = await device.sync.pullForCollection(
+            FirestoreCollections.calendars,
+            documentIds: {'cal-1'},
+            documentData: {'cal-1': stored},
+          );
+          expect(applied, isFalse, reason: '$label is our own echo');
+        }
+        expect((await device.calendars.getCalendar('cal-1'))?.name, 'Home');
+      },
+    );
+
+    test(
+      'content of an older write arriving after a newer echo is not ours',
+      () async {
+        // Another device writing back what our first push said — re-uploading
+        // what it pulled, or toggling back — once our second push has been
+        // confirmed. Matched against the stale first mark, it was skipped and
+        // the devices diverged.
+        final first = await pushCalendar('Work');
+        final second = await pushCalendar('Home');
+
+        await device.sync.pullForCollection(
+          FirestoreCollections.calendars,
+          documentIds: {'cal-1'},
+          documentData: {'cal-1': second},
+        );
+        final applied = await device.sync.pullForCollection(
+          FirestoreCollections.calendars,
+          documentIds: {'cal-1'},
+          documentData: {'cal-1': first},
+        );
+
+        expect(applied, isTrue);
+      },
+    );
+
+    test(
+      'a delivery matching two pushes clears the marks between them',
+      () async {
+        // Done, undone, done again while a pull was running: the listener
+        // keeps only the newest copy, so only the last push is delivered. Taken
+        // as the first push, the undone mark between them survived and
+        // swallowed another device undoing it for real.
+        final first = await pushCalendar('Work');
+        final undone = await pushCalendar('Home');
+        final last = await pushCalendar('Work');
+        expect(last, first, reason: 'the two pushes carry the same content');
+
+        final echoed = await device.sync.pullForCollection(
+          FirestoreCollections.calendars,
+          documentIds: {'cal-1'},
+          documentData: {'cal-1': last},
+        );
+        expect(echoed, isFalse);
+
+        final applied = await device.sync.pullForCollection(
+          FirestoreCollections.calendars,
+          documentIds: {'cal-1'},
+          documentData: {'cal-1': undone},
+        );
+        expect(applied, isTrue);
+      },
+    );
+
+    test(
+      'a foreign edit clears our marks, so reverting to our content lands',
+      () async {
+        // Another device edits, then undoes back to what we pushed. The leftover
+        // mark matched the undo and skipped it, leaving us on the edit.
+        final stored = await pushCalendar('Work');
+
+        final edited = await device.sync.pullForCollection(
+          FirestoreCollections.calendars,
+          documentIds: {'cal-1'},
+          documentData: {
+            'cal-1': {...stored, 'name': 'Home', 'version': 99},
+          },
+        );
+        expect(edited, isTrue);
+
+        final reverted = await device.sync.pullForCollection(
+          FirestoreCollections.calendars,
+          documentIds: {'cal-1'},
+          documentData: {'cal-1': stored},
+        );
+        expect(reverted, isTrue);
+      },
+    );
+
+    test('a mark kept after its echo does not eat the next change', () async {
       final stored = await pushCalendar('Work');
 
       await device.sync.pullForCollection(
@@ -286,7 +393,8 @@ void main() {
         documentData: {'cal-1': stored},
       );
 
-      // A second delivery of the identical document is no longer ours to skip.
+      // The mark outlives its echo, for the server's redelivery of the same
+      // content, but a different document after it is still not ours.
       final applied = await device.sync.pullForCollection(
         FirestoreCollections.calendars,
         documentIds: {'cal-1'},
@@ -297,6 +405,129 @@ void main() {
 
       expect(applied, isTrue);
       expect((await device.calendars.getCalendar('cal-1'))?.name, 'Home');
+    });
+
+    test(
+      'an expired mark is not an echo, even before a sweep drops it',
+      () async {
+        var at = Duration.zero;
+        device.sync.echoClock = () => at;
+        final stored = await pushCalendar('Work');
+
+        // No write since, so no sweep has run: the pull ages the mark itself.
+        at = const Duration(seconds: 16);
+        final applied = await device.sync.pullForCollection(
+          FirestoreCollections.calendars,
+          documentIds: {'cal-1'},
+          documentData: {'cal-1': stored},
+        );
+
+        expect(applied, isTrue);
+      },
+    );
+
+    test('expired marks are swept at most once a window', () async {
+      // Marks for documents that are never pulled back — a signed-out session —
+      // are only ever dropped by the sweep a write runs.
+      var at = Duration.zero;
+      device.sync.echoClock = () => at;
+      Future<void> pushAt(int seconds, String id) {
+        at = Duration(seconds: seconds);
+        return pushCalendar('Work', id: id);
+      }
+
+      await pushAt(0, 'cal-a');
+      await pushAt(1, 'cal-b');
+      await pushAt(15, 'cal-c');
+      expect(device.sync.selfEchoMarkCount, 2, reason: 'cal-a swept at 15s');
+
+      await pushAt(20, 'cal-d');
+      expect(
+        device.sync.selfEchoMarkCount,
+        3,
+        reason: 'cal-b expired at 16s, but the last sweep was only 5s ago',
+      );
+
+      await pushAt(30, 'cal-e');
+      expect(
+        device.sync.selfEchoMarkCount,
+        2,
+        reason: 'cal-b and cal-c swept at 30s',
+      );
+    });
+
+    group('with the perf stall log on', () {
+      final logger = PerfStallLogger.instance;
+      final defaultDirectory = PerfStallLogger.directory;
+
+      setUpAll(TestWidgetsFlutterBinding.ensureInitialized);
+
+      setUp(() {
+        final dir = Directory.systemTemp.createTempSync('echo_breadcrumbs');
+        PerfStallLogger.directory = () async => dir.path;
+        addTearDown(() async {
+          await logger.setEnabled(false);
+          // Let the queued "stopped" line land before the directory goes.
+          await logger.readLog();
+          PerfStallLogger.directory = defaultDirectory;
+          dir.deleteSync(recursive: true);
+        });
+      });
+
+      Future<String> mismatchBreadcrumb(Map<String, dynamic> stored) async {
+        await device.sync.pullForCollection(
+          FirestoreCollections.calendars,
+          documentIds: {'cal-1'},
+          documentData: {
+            'cal-1': {...stored, 'name': 'Home', 'version': 99},
+          },
+        );
+        return logger.breadcrumbMessages.singleWhere(
+          (message) => message.startsWith('echo MISMATCH'),
+        );
+      }
+
+      test('a change after our marks expired says so', () async {
+        await logger.setEnabled(true);
+        var at = Duration.zero;
+        device.sync.echoClock = () => at;
+        final stored = await pushCalendar('Work');
+
+        at = const Duration(seconds: 16);
+        await device.sync.pullForCollection(
+          FirestoreCollections.calendars,
+          documentIds: {'cal-1'},
+          documentData: {'cal-1': stored},
+        );
+
+        expect(
+          logger.breadcrumbMessages,
+          contains(startsWith('remote change after our echo marks expired')),
+        );
+      });
+
+      test('a mismatch names the fields that differ', () async {
+        await logger.setEnabled(true);
+        final stored = await pushCalendar('Work');
+
+        expect(
+          await mismatchBreadcrumb(stored),
+          contains('name: pushed "Work" (String), got "Home" (String)'),
+        );
+      });
+
+      test(
+        'a mark made before logging was on still logs its mismatch',
+        () async {
+          final stored = await pushCalendar('Work');
+          await logger.setEnabled(true);
+
+          expect(
+            await mismatchBreadcrumb(stored),
+            contains('marked before logging was on'),
+          );
+        },
+      );
     });
   });
 

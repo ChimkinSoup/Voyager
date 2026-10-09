@@ -80,6 +80,23 @@ class FirestoreSyncRepository implements SyncRepository {
   static Map<String, dynamic> _unstamped(Map<String, dynamic> data) =>
       Map<String, dynamic>.from(data)..remove(_writeTimeField);
 
+  /// Whether a snapshot of a document is this device's own [stamped] write,
+  /// still waiting in the local cache for the server.
+  ///
+  /// Such a snapshot needs no delivering: the server's acknowledgement fills
+  /// in the write time, which changes the data and so fires the listener again
+  /// — carrying our write and anything another device merged into it. A write
+  /// that skips [stamped] (the settings patch) gets no such second snapshot
+  /// when only the metadata changes, so it is never held back here.
+  @visibleForTesting
+  static bool isUnconfirmedStampedWrite({
+    required bool hasPendingWrites,
+    required Map<String, dynamic> data,
+  }) =>
+      hasPendingWrites &&
+      data.containsKey(_writeTimeField) &&
+      data[_writeTimeField] == null;
+
   Query<Map<String, dynamic>> _changedSince(
     String collection,
     DateTime? since,
@@ -117,7 +134,11 @@ class FirestoreSyncRepository implements SyncRepository {
       (snap) => {
         for (final change in snap.docChanges)
           if (change.type != DocumentChangeType.removed &&
-              change.doc.data() != null)
+              change.doc.data() != null &&
+              !isUnconfirmedStampedWrite(
+                hasPendingWrites: change.doc.metadata.hasPendingWrites,
+                data: change.doc.data()!,
+              ))
             change.doc.id: _unstamped(change.doc.data()!),
       },
     );

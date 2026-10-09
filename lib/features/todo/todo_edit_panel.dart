@@ -1236,14 +1236,14 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
         // without leaving the editor is routed through the page rather than
         // saved here, so it is the same action the row's own checkbox is —
         // including the deferred write and, on a repeating task, the roll
-        // forward to the next occurrence. The box is scaled up to a square
-        // as tall as the title field, with the same 16px gap either side.
+        // forward to the next occurrence. The box is scaled up slightly and
+        // centred on the title field, with the same 16px gap either side.
         IntrinsicHeight(
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              AspectRatio(
-                aspectRatio: 1,
+              SizedBox.square(
+                dimension: 24,
                 child: FittedBox(
                   child: VoyagerCheckbox(
                     value: widget.task.completed,

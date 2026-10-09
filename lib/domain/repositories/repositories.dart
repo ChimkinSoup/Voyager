@@ -1242,9 +1242,11 @@ abstract class SyncRepository {
   /// documents into forty more billed reads, serialised, for data that was
   /// sitting in the snapshot all along.
   ///
-  /// This includes echoes of this device's own writes — callers that already
-  /// know they just wrote a given id should treat that as a no-op rather
-  /// than re-merging it.
+  /// This includes echoes of this device's own writes once the server has
+  /// confirmed them — callers that already know they just wrote a given id
+  /// should treat that as a no-op rather than re-merging it. A write still
+  /// waiting in the local cache may be left out, since its confirmation
+  /// follows.
   ///
   /// With [changedSince], only documents the server wrote after it are
   /// watched, so the first snapshot is what changed rather than everything.

@@ -116,6 +116,10 @@ class PerfStallLogger extends ChangeNotifier {
     }
   }
 
+  /// The breadcrumbs held for the next stall's record, oldest first.
+  @visibleForTesting
+  Iterable<String> get breadcrumbMessages => _breadcrumbs.map((b) => b.$2);
+
   Future<String> logFilePath() => _pathFor(_logFileName);
 
   Future<String> readLog() async {

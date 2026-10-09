@@ -194,10 +194,19 @@ class RemoteSyncService {
   /// both write a baseline and delete each other's.
   final Set<String> _compactingDocuments = {};
 
-  /// What this device last pushed for a document, keyed by [documentKey].
+  /// What this device recently pushed for a document, oldest first, keyed by
+  /// [documentKey].
   ///
-  /// Firestore's snapshot listener fires for our own writes as soon as they
-  /// land in the local cache — not just for changes from other devices — so
+  /// Every push inside [_selfEchoWindow] is kept, not just the latest. When
+  /// uploads run back to back — a slow network after waking — the server's
+  /// confirmation of one write arrives after the next write has been marked,
+  /// and a single mark compared it against the newer content, called it a
+  /// foreign edit and reloaded every provider.
+  ///
+  /// Firestore's snapshot listener fires for our own writes, not just for
+  /// changes from other devices. The local-cache copy of a write is left out
+  /// at the source ([SyncRepository.watchCollection]), but the server's
+  /// confirmation still arrives looking like any other change, so
   /// [LiveSyncController] would otherwise CRDT-merge and re-write every
   /// document we just saved a second time. Since we already hold the freshest
   /// local state for anything we just pushed, that echo is safe to skip.
@@ -208,30 +217,61 @@ class RemoteSyncService {
   /// would ever redeliver it: two devices on one todo list would silently
   /// diverge. Comparing the delivered document against what we pushed skips
   /// only our own echo and lets everything else through.
-  final Map<String, _SelfEcho> _selfEchoes = {};
+  final Map<String, List<_SelfEcho>> _selfEchoes = {};
 
   /// How long a mark stays eligible. Only a backstop now that the test is
   /// content-based — it bounds the map rather than deciding correctness.
   static const _selfEchoWindow = Duration(seconds: 15);
+
+  /// When [_markSelfEcho] last swept every document's expired marks.
+  Duration? _lastSelfEchoSweep;
+
+  final _echoStopwatch = Stopwatch()..start();
+
+  /// The time echo marks are stamped and aged by. Monotonic, so a wall clock
+  /// stepped back by time sync can neither expire a live mark nor keep a stale
+  /// one. Replaceable so tests can step past [_selfEchoWindow] without waiting
+  /// it out.
+  @visibleForTesting
+  late Duration Function() echoClock = () => _echoStopwatch.elapsed;
+
+  /// How many echo marks are held across every document.
+  @visibleForTesting
+  int get selfEchoMarkCount =>
+      _selfEchoes.values.fold(0, (count, echoes) => count + echoes.length);
 
   void _markSelfEcho(
     String collection,
     String localDocumentId,
     Map<String, dynamic> payload,
   ) {
-    final now = DateTime.now();
-    // Pruned on every write, so a signed-out session (whose pulls never
-    // consume anything) can't accumulate one entry per document forever.
-    _selfEchoes.removeWhere(
-      (_, echo) => now.difference(echo.at) >= _selfEchoWindow,
-    );
-    _selfEchoes[documentKey(collection, localDocumentId)] = _SelfEcho(
-      at: now,
-      keys: payload.keys.toList(growable: false),
-      fingerprint: _payloadFingerprint(payload),
-      payload: payload,
-    );
+    final now = echoClock();
+    // Swept at most once per window, so a signed-out session (whose pulls
+    // never consume anything) can't accumulate one entry per document forever,
+    // without a batch upload rescanning every mark for each document it writes.
+    // [_consumeSelfEcho] drops expired marks itself, so this only bounds memory.
+    final lastSweep = _lastSelfEchoSweep;
+    if (lastSweep == null || now - lastSweep >= _selfEchoWindow) {
+      _lastSelfEchoSweep = now;
+      _selfEchoes.removeWhere((_, echoes) {
+        echoes.removeWhere((echo) => _isExpired(echo, now));
+        return echoes.isEmpty;
+      });
+    }
+    _selfEchoes
+        .putIfAbsent(documentKey(collection, localDocumentId), () => [])
+        .add(
+          _SelfEcho(
+            at: now,
+            keys: payload.keys.toList(growable: false),
+            fingerprint: _payloadFingerprint(payload),
+            payload: PerfStallLogger.instance.enabled ? payload : null,
+          ),
+        );
   }
+
+  static bool _isExpired(_SelfEcho echo, Duration now) =>
+      now - echo.at >= _selfEchoWindow;
 
   /// Whether [remote] is the echo of our own recent write to this document.
   bool _consumeSelfEcho(
@@ -240,38 +280,61 @@ class RemoteSyncService {
     Map<String, dynamic>? remote,
   ) {
     final key = documentKey(collection, localDocumentId);
-    final echo = _selfEchoes[key];
-    if (echo == null) {
+    final echoes = _selfEchoes[key];
+    final now = echoClock();
+    final hadMarks = echoes != null && echoes.isNotEmpty;
+    echoes?.removeWhere((echo) => _isExpired(echo, now));
+    if (echoes == null || echoes.isEmpty) {
+      _selfEchoes.remove(key);
       PerfStallLogger.instance.breadcrumb(
-        'remote change with no echo mark (another device, or an unmarked '
-        'write): $key',
+        hadMarks
+            ? 'remote change after our echo marks expired (a slow '
+                  'confirmation, or another device): $key'
+            : 'remote change with no echo mark (another device, or an '
+                  'unmarked write): $key',
       );
       return false;
     }
-
-    if (remote == null ||
-        DateTime.now().difference(echo.at) >= _selfEchoWindow) {
-      _selfEchoes.remove(key);
-      return false;
-    }
+    if (remote == null) return false;
 
     // Uploads write with `merge: true`, so the stored document is a superset of
     // what we sent. Comparing only the keys we actually pushed is what makes a
     // field some other writer left on the document (the weather cache on
     // `settings`, say) stop looking like a foreign edit.
-    final pushed = {
-      for (final key in echo.keys)
-        if (remote.containsKey(key)) key: remote[key],
-    };
-    final matches = _payloadFingerprint(pushed) == echo.fingerprint;
-    if (!matches && PerfStallLogger.instance.enabled) {
-      _breadcrumbEchoMismatch(key, echo, remote);
+    // Marks for one document nearly always push the same keys, so the remote
+    // is fingerprinted again only when a mark's keys differ from the last.
+    List<String>? fingerprintedKeys;
+    String? remoteFingerprint;
+    bool isEchoOf(_SelfEcho echo) {
+      if (!listEquals(echo.keys, fingerprintedKeys)) {
+        fingerprintedKeys = echo.keys;
+        remoteFingerprint = _payloadFingerprint({
+          for (final key in echo.keys)
+            if (remote.containsKey(key)) key: remote[key],
+        });
+      }
+      return remoteFingerprint == echo.fingerprint;
     }
-    // Kept on a match: one write is delivered twice — from the local cache,
-    // then again once the server fills in its write time — and both are ours.
-    // Only identical content can match, so keeping it can't swallow an edit.
-    if (!matches) _selfEchoes.remove(key);
-    return matches;
+
+    // On a match, the matched mark and newer ones are kept: the same
+    // confirmation can come round again — a failed pull re-reads it, a
+    // restarted listener resends it — and it is still ours. Older marks are
+    // dropped, since the document has moved past them; left in place, a later
+    // write that happens to restore their content would be skipped as ours.
+    // The newest match is taken for the same reason: when two pushes carried
+    // the same content, the document is at the later one, and a coalesced
+    // delivery may be all that arrives of the pushes in between. A mismatch is
+    // a foreign edit, which supersedes every mark.
+    final matched = echoes.lastIndexWhere(isEchoOf);
+    if (matched < 0) {
+      if (PerfStallLogger.instance.enabled) {
+        _breadcrumbEchoMismatch(key, echoes.last, remote);
+      }
+      _selfEchoes.remove(key);
+      return false;
+    }
+    echoes.removeRange(0, matched);
+    return true;
   }
 
   /// Names the fields that kept [remote] from matching what was pushed, so the
@@ -286,14 +349,18 @@ class RemoteSyncService {
       return text.length > 120 ? '${text.substring(0, 120)}...' : text;
     }
 
+    final pushed = echo.payload;
     final differing = [
-      for (final field in echo.keys)
-        if (!remote.containsKey(field))
-          '$field: missing remotely'
-        else if (jsonEncode(_sortedKeys(remote[field])) !=
-            jsonEncode(_sortedKeys(echo.payload[field])))
-          '$field: pushed ${show(echo.payload[field])}, '
-              'got ${show(remote[field])}',
+      if (pushed == null)
+        'marked before logging was on, so the pushed fields were not kept'
+      else
+        for (final field in echo.keys)
+          if (!remote.containsKey(field))
+            '$field: missing remotely'
+          else if (jsonEncode(_sortedKeys(remote[field])) !=
+              jsonEncode(_sortedKeys(pushed[field])))
+            '$field: pushed ${show(pushed[field])}, '
+                'got ${show(remote[field])}',
     ];
     PerfStallLogger.instance.breadcrumb(
       'echo MISMATCH (treated as a foreign edit): $key -- '
@@ -4724,10 +4791,11 @@ class RemoteSyncService {
     String? firestoreId,
   }) async {
     // Marked *before* the write, not after. `set()` resolves on server
-    // acknowledgement, while the snapshot listener fires from the local write
-    // cache almost immediately — so a mark written afterwards is always too
-    // late for its own echo, and lands in place to swallow the next, genuine
-    // change instead. Exactly backwards from what it is for.
+    // acknowledgement, and the snapshot listener delivers that same
+    // confirmation with no promise of coming second — so a mark written
+    // afterwards can be too late for its own echo, and land in place to
+    // swallow the next, genuine change instead. Exactly backwards from what
+    // it is for.
     _markSelfEcho(collection, localId, payload);
     await _syncEngine.syncDocumentImmediately(
       collection: collection,
@@ -6661,10 +6729,11 @@ class _SelfEcho {
     required this.at,
     required this.keys,
     required this.fingerprint,
-    required this.payload,
+    this.payload,
   });
 
-  final DateTime at;
+  /// When the mark was made, by [RemoteSyncService.echoClock].
+  final Duration at;
 
   /// The fields the upload actually sent, so the comparison can ignore
   /// anything else the merged document happens to hold.
@@ -6672,8 +6741,9 @@ class _SelfEcho {
 
   final String fingerprint;
 
-  /// What was pushed, kept only to name the differing fields when logging.
-  final Map<String, dynamic> payload;
+  /// What was pushed, kept only while the perf stall log is on, to name the
+  /// differing fields on a mismatch.
+  final Map<String, dynamic>? payload;
 }
 
 class _PullTiming {
