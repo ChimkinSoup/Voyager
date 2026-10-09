@@ -83,6 +83,12 @@ class MediaService extends ChangeNotifier {
   Stream<({MediaReference reference, bool removed})> get referenceEdits =>
       _referenceEdits.stream;
 
+  /// Only the new placements among [referenceEdits]: an Undo putting a
+  /// removed image back is not one. Synchronous for the same reason.
+  final _referenceAdds = StreamController<MediaReference>.broadcast(sync: true);
+
+  Stream<MediaReference> get referenceAdds => _referenceAdds.stream;
+
   /// Attaches still ingesting, each settling whether it lands or fails.
   final _attaching = <Future<void>>{};
 
@@ -238,6 +244,7 @@ class MediaService extends ChangeNotifier {
     await _repository.upsertReference(reference);
     _publisher?.publishReference(reference);
     _referenceEdits.add((reference: reference, removed: false));
+    _referenceAdds.add(reference);
     // The asset now has something pointing at it, so the retention clock that
     // started when it was ingested has to stop.
     await _refreshRefcount(mediaId);

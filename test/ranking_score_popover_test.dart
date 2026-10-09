@@ -351,8 +351,7 @@ void main() {
       return tester.getSize(find.byType(RankingScoreNumber));
     }
 
-    // A wheel notch from 1.1 to 1 must not pull the left edge out from under
-    // the pointer.
+    // A score changing width must not shift the row around it.
     final wide = await sizeAt(1.1);
     expect(await sizeAt(1), wide);
     expect(await sizeAt(10), wide);
@@ -420,94 +419,47 @@ void main() {
   });
 
   group('Closed number', () {
-    testWidgets('the wheel nudges a score by one step, written once it rests', (
-      tester,
-    ) async {
+    testWidgets('BUG-163: the wheel over the number scrolls what is behind it '
+        'and changes no score', (tester) async {
       final saved = <double?>[];
-      await tester.pumpWidget(_Host(initial: 8.4, saved: saved));
+      final scroll = ScrollController();
+      addTearDown(scroll.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ListView(
+              controller: scroll,
+              children: [
+                for (var i = 0; i < 40; i++)
+                  SizedBox(
+                    height: 40,
+                    child: RankingScoreNumber(
+                      value: 8.4,
+                      scoreMax: 10,
+                      precision: RankingScorePrecision.tenths,
+                      label: 'Entry $i',
+                      onChanged: saved.add,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
 
-      final center = tester.getCenter(find.byType(RankingScoreNumber));
       final pointer = TestPointer(1, PointerDeviceKind.mouse);
-      await tester.sendEventToBinding(pointer.hover(center));
-      await tester.sendEventToBinding(pointer.scroll(const Offset(0, -50)));
-      await tester.pump();
-      expect(saved, isEmpty);
-
-      await tester.pump(const Duration(milliseconds: 600));
-      expect(saved, [8.5]);
-      expect(find.byType(RankingScorePopover), findsNothing);
-    });
-
-    testWidgets('a spin of the wheel is written once, not once per notch', (
-      tester,
-    ) async {
-      final saved = <double?>[];
-      await tester.pumpWidget(_Host(initial: 8.4, saved: saved));
-
-      final center = tester.getCenter(find.byType(RankingScoreNumber));
-      final pointer = TestPointer(1, PointerDeviceKind.mouse);
-      await tester.sendEventToBinding(pointer.hover(center));
-      for (var i = 0; i < 5; i++) {
-        await tester.sendEventToBinding(pointer.scroll(const Offset(0, -50)));
-        await tester.pump(const Duration(milliseconds: 200));
+      await tester.sendEventToBinding(
+        pointer.hover(tester.getCenter(find.byType(RankingScoreNumber).first)),
+      );
+      for (var i = 0; i < 3; i++) {
+        await tester.sendEventToBinding(pointer.scroll(const Offset(0, 50)));
+        await tester.pump();
       }
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(scroll.offset, greaterThan(0));
       expect(saved, isEmpty);
-
-      await tester.pump(const Duration(milliseconds: 600));
-      expect(saved, [8.9]);
-    });
-
-    testWidgets('leaving the number writes the wheel score at once', (
-      tester,
-    ) async {
-      final saved = <double?>[];
-      await tester.pumpWidget(_Host(initial: 8.4, saved: saved));
-
-      final center = tester.getCenter(find.byType(RankingScoreNumber));
-      final pointer = TestPointer(1, PointerDeviceKind.mouse);
-      await tester.sendEventToBinding(pointer.hover(center));
-      await tester.sendEventToBinding(pointer.scroll(const Offset(0, -50)));
-      await tester.pump();
-      await tester.sendEventToBinding(pointer.hover(Offset.zero));
-      await tester.pump();
-
-      expect(saved, [8.5]);
-      await tester.pump(const Duration(milliseconds: 600));
-      expect(saved, [8.5]);
-    });
-
-    testWidgets('a number taken away under the pointer writes the wheel score', (
-      tester,
-    ) async {
-      final saved = <double?>[];
-      await tester.pumpWidget(_Host(initial: 8.4, saved: saved));
-
-      final center = tester.getCenter(find.byType(RankingScoreNumber));
-      final pointer = TestPointer(1, PointerDeviceKind.mouse);
-      await tester.sendEventToBinding(pointer.hover(center));
-      await tester.sendEventToBinding(pointer.scroll(const Offset(0, -50)));
-      await tester.pump();
-      // No exit: the region is unmounted, as a keyboard shortcut closing the
-      // panel would.
-      await tester.pumpWidget(const SizedBox());
-
-      expect(saved, [8.5]);
-    });
-
-    testWidgets('the wheel starts an unscored surface at the midpoint', (
-      tester,
-    ) async {
-      final saved = <double?>[];
-      await tester.pumpWidget(_Host(initial: null, saved: saved));
-
-      final center = tester.getCenter(find.byType(RankingScoreNumber));
-      final pointer = TestPointer(1, PointerDeviceKind.mouse);
-      await tester.sendEventToBinding(pointer.hover(center));
-      await tester.sendEventToBinding(pointer.scroll(const Offset(0, 50)));
-      await tester.pump(const Duration(milliseconds: 600));
-
-      // Down from the midpoint of a ten-point tenths scale.
-      expect(saved, [4.9]);
+      expect(find.byType(RankingScorePopover), findsNothing);
     });
 
     testWidgets('a tap on a scored number opens it, and clears nothing', (

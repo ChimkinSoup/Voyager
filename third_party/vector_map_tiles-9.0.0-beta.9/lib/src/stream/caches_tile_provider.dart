@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:executor_lib/executor_lib.dart';
 import 'package:vector_tile_renderer/vector_tile_renderer.dart';
 
 import '../cache/caches.dart';
@@ -58,12 +59,7 @@ class CachesTileProvider extends TileProvider {
           source, request.tileId,
           cachedOnly: localOnly, cancelled: request.cancelled);
     }
-    Map<String, TileData?> tileBySource = {};
-    for (final entry in futureBySource.entries) {
-      request.testCancelled();
-      tileBySource[entry.key] = await entry.value;
-    }
-    return tileBySource;
+    return _awaitEach(request, futureBySource);
   }
 
   Future<Map<String, Tile>> _createTiles(
@@ -73,11 +69,32 @@ class CachesTileProvider extends TileProvider {
             source,
             _tileProcessor.process(
                 request, source, tileData, request.cancelled)));
-    Map<String, Tile> tileBySource = {};
-    for (final entry in sourceToTileFuture.entries) {
-      request.testCancelled();
-      tileBySource[entry.key] = await entry.value;
+    return _awaitEach(request, sourceToTileFuture);
+  }
+
+  /// VOYAGER PATCH: awaits [futures] in turn, checking for cancellation before
+  /// each as upstream did. Upstream's check threw past the futures not yet
+  /// awaited, which then failed unwatched with the executor's
+  /// CancellationException, an uncaught error in the app's log (BUG-169).
+  /// Those are dropped; any other error from them still surfaces.
+  Future<Map<String, T>> _awaitEach<T>(
+      TileRequest request, Map<String, Future<T>> futures) async {
+    final result = <String, T>{};
+    final entries = futures.entries.toList();
+    for (var i = 0; i < entries.length; i++) {
+      if (request.isCancelled) {
+        for (final rest in entries.skip(i)) {
+          unawaited(rest.value.then<void>((_) {},
+              onError: (Object error, StackTrace stack) {
+            if (error is! CancellationException) {
+              Error.throwWithStackTrace(error, stack);
+            }
+          }));
+        }
+        request.testCancelled();
+      }
+      result[entries[i].key] = await entries[i].value;
     }
-    return tileBySource;
+    return result;
   }
 }

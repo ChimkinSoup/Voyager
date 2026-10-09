@@ -150,6 +150,11 @@ dev_dependencies:
 # And upstream fetches each tile on a client of its own, a new connection
 # and TLS handshake every time; the local copy keeps one client
 # (lib/src/provider/network_vector_tile_provider.dart).
+# And a tile request cancelled, or a cache disposed, part-way through left
+# executor futures failing with CancellationException unwatched, uncaught
+# "Cancelled" errors in the app's log; the local copy watches them
+# (lib/src/stream/caches_tile_provider.dart,
+# lib/src/cache/vector_tile_loading_cache.dart).
 # Re-apply them if upgrading past
 # 9.0.0-beta.9.
 #

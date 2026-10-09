@@ -92,7 +92,7 @@ Row click opens the **todo/Jobs-style side editor panel**; a click on a tag chip
 - Title
 - Overall score (5 or 10 scale per category parent settings; optional half-steps per parent toggle)
 - **Tags** — structured classification chips, max 10 (`RANKINGS_PARENT_TAGS_HLD.md` §5)
-- **Average from children** button: sets parent overall to rounded mean of children’s overall scores; **excludes** children with no overall score; rounds to parent’s allowed half-step rules; user may override manually afterward; does **not** auto-update when children change later
+- **Average from children** button: sets parent overall to rounded mean of children’s overall scores, carried from the child scale onto the parent scale (3.75 / 5 → 7.5 / 10); **excludes** children with no overall score; rounds to parent’s allowed half-step rules; user may override manually afterward; does **not** auto-update when children change later
 - Notes (markdown, journal-style; `#tags` in notes; vim + snippets enabled)
 - Custom template fields (parent template — see §4.3)
 - Gallery (when enabled for parent — see §4.2)
@@ -248,7 +248,7 @@ Full rules in `RANKINGS_PARENT_TAGS_HLD.md` §4.3.
 | Unranked parent | No overall score; lives in unranked section |
 | Promote to ranked | Must set parent overall score |
 | Demote | Clear overall score → **in progress** in unranked section |
-| Average button | Mean of children with overall score; round to parent half-step rules |
+| Average button | Mean of children with overall score, converted from the child scale to the parent scale; round to parent half-step rules |
 | Custom field default | Midpoint when field added to template |
 | Custom field half-steps | Inherit parent or child overall half-star toggle |
 | Divergence | Parent overall may differ from children; **no UI warning** |

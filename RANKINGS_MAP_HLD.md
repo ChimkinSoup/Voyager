@@ -31,7 +31,7 @@ Status: **proposed** (2026-09-30).
 - Per-branch scores (one score per entry, shared by every branch — §3)
 - Locations on **children**
 - Directions / routing / distance-from-me
-- Device GPS or "near me"
+- "Near me" search or sorting by distance. The device's position is used only to open and centre the map, mark it, and pick which branch the panel preview shows (§3 Initial view, §7.1)
 - Viewport-scoped stats ("best in this area") — header stats ignore the map viewport
 - Storing the pasted link or a provider place id
 - In-app map restyling (styles are fixed provider styles — §4.1)
@@ -61,7 +61,7 @@ Status: **proposed** (2026-09-30).
 | **Auto in-progress** | Location edits do **not** promote `queued` → `inProgress` |
 | **Location off** | Hides map + Locations section; stored locations kept (same as child units off) |
 | **Clustering** | Overlapping pins cluster with a count at low zoom |
-| **Initial view** | Fit visible pins; with none, the last viewport on this device |
+| **Initial view** | The device. The first map of a run opens on the device's last saved position (with none saved, it fits the visible pins), then moves to a fresh fix at street zoom (18.75) unless the map has been touched. A later map in the same run reopens where the last one was left. **Fit** re-fits to the visible pins. The opening locate never asks for permission; it uses what the OS already allows, and with no fix the opening view stands. (Changed from "fit visible pins; with none, the last viewport on this device" after BUG-168: kept as built.) |
 
 ---
 
@@ -138,7 +138,7 @@ One dialog, reached from the panel's **Add location** button and from the map co
 ### 6.1 Type a name (search)
 
 - Geoapify Address Autocomplete: `text=<query>`, `type=amenity`, `bias=proximity:<lon>,<lat>`, `filter=circle:<lon>,<lat>,30000`.
-- Bias point: the open map's center if a map is showing, else the entry's first location, else the last map viewport.
+- Bias point: the open map's center if a map is showing, else the entry's first location, else wherever the map was last left in this run, else the device's last saved position.
 - The 30 km filter is required, not a tuning knob: bias alone lets same-named places in other countries into the list (the probe got Wisconsin, New Haven and Kyoto results for Waterloo queries). When the filtered search returns nothing, the dropdown offers **Search everywhere**, which repeats the query without the filter.
 - Suggestions show name + formatted address. Choosing one moves the preview pin; `address` = the result's formatted address.
 - A result with no `amenity` match falls back naturally to addresses — the user can still type a street address.
@@ -151,11 +151,12 @@ The same input detects a URL on paste and resolves it instead of searching.
 |------------|------------------------|
 | `…/place/…/data=…!3d<lat>!4d<lng>…` | `!3d` / `!4d` — the place itself (preferred) |
 | `…/@<lat>,<lng>,<zoom>z…` | `@lat,lng` — the viewport center (fallback) |
-| `…?q=<lat>,<lng>` / `ll=<lat>,<lng>` | query parameter |
+| `…?q=<lat>,<lng>` / `ll=<lat>,<lng>` / `…/maps/search/?api=1&query=<lat>,<lng>` | query parameter |
 | `maps.app.goo.gl/…`, `goo.gl/maps/…` | follow the redirect (no auto-follow; read `Location`), then parse the target as above |
 
 - The place name in `/place/<Name>/` is URL-decoded and offered as the new entry's title when the dialog is creating an entry (§7.4).
 - After parsing, one reverse-geocode call fills `address`.
+- Only Google Maps links are read: `maps.google.<tld>`, or `google.<tld>/maps…` with or without `www.` (BUG-170). Any other site's URL gets the unparseable-link error, even one that happens to contain `@lat,lng`.
 - Unparseable link: inline error "Couldn't find a location in that link"; nothing is added.
 - The link itself is never stored.
 
@@ -176,7 +177,7 @@ Adding a location within ~25 m of one the entry already has shows "This entry al
 
 - Toolbar (`RANKINGS_UI.md` §2.1) gains a **List / Map** segmented toggle, shown only for location-enabled categories.
 - Map replaces the list area; the side panel slides over it as it does over the list (420 px, 220 ms).
-- The chosen view persists per category (existing page-prefs pattern); last viewport persists per device and does **not** sync.
+- The chosen view persists per category (existing page-prefs pattern). The viewport is kept only for the rest of the run: it is not stored and does not sync, so the next launch opens on the device again (§3 Initial view). The device's last position is stored on this device (`settings_table.rankings_device_latitude` / `_longitude`) and does **not** sync; the map marks it with a dot, and a **Show my location** button in the map controls flies there, asking for permission if needed.
 - Entries with no locations are not on the map. A small chip on the map reads `N without a location`; clicking it switches to List view.
 
 ### 7.2 Pins
@@ -339,4 +340,5 @@ Archived categories and categories with location off never appear.
 | Global view | All categories switcher row; map-only; per-category chips |
 | Mixed scales in global | Hide score range filter and average |
 | Viewport stats | Out of scope |
+| Initial view | Opens on the device, not fitted to the pins; viewport not kept across launches (BUG-168, kept as built; §3 and §7.1 updated 2026-10-09) |
 | Storage | JSON column on parent; per-location stamp keys for merge |

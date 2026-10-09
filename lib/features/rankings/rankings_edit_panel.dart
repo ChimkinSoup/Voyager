@@ -102,8 +102,8 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
 
   late final ProviderContainer _container;
 
-  /// The overall score an open popover or a turning wheel is showing, before
-  /// it is written. A record so a drafted clear — a null score — counts.
+  /// The overall score an open popover is showing, before it is written. A
+  /// record so a drafted clear — a null score — counts.
   ({double? score})? _draftScore;
 
   /// The sections a save leaves alone, by slot, with what each was built from.
@@ -547,6 +547,7 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                           final average = rankingAverageFromChildren(
                             widget.children,
                             scoreMax: category.parentScoreMax,
+                            childScoreMax: category.childScoreMax,
                             precision: category.parentScorePrecision,
                           );
                           if (average == null) return;

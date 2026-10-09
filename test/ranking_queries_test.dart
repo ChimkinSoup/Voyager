@@ -126,6 +126,7 @@ void main() {
       final average = rankingAverageFromChildren(
         [child('a', score: 4), child('b'), child('c', score: 5)],
         scoreMax: 5,
+        childScoreMax: 5,
         precision: RankingScorePrecision.half,
       );
       // 4 and 5 average to 4.5; the unscored child is not a zero.
@@ -137,6 +138,7 @@ void main() {
         rankingAverageFromChildren(
           [child('a'), child('b')],
           scoreMax: 5,
+          childScoreMax: 5,
           precision: RankingScorePrecision.half,
         ),
         isNull,
@@ -147,9 +149,38 @@ void main() {
       final average = rankingAverageFromChildren(
         [child('a', score: 4), child('b', score: 5)],
         scoreMax: 5,
+        childScoreMax: 5,
         precision: RankingScorePrecision.integers,
       );
       expect(average, 5);
+    });
+
+    test('BUG-162: average carries the child scale onto the parent scale', () {
+      final children = [
+        child('a', score: 4.5),
+        child('b', score: 3),
+        child('c'),
+      ];
+      // 3.75 of 5 is 7.5 of 10, not 3.8 of 10.
+      expect(
+        rankingAverageFromChildren(
+          children,
+          scoreMax: 10,
+          childScoreMax: 5,
+          precision: RankingScorePrecision.tenths,
+        ),
+        7.5,
+      );
+      // And back down: 7 and 8 of 10 average to 3.8 of 5 (7.5 / 2, tenths).
+      expect(
+        rankingAverageFromChildren(
+          [child('a', score: 7), child('b', score: 8)],
+          scoreMax: 5,
+          childScoreMax: 10,
+          precision: RankingScorePrecision.tenths,
+        ),
+        3.8,
+      );
     });
 
     test('rescale carries a score onto the other scale', () {

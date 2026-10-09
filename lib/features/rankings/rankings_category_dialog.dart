@@ -52,6 +52,8 @@ class _CategoryDialog extends StatefulWidget {
 
 class _CategoryDialogState extends State<_CategoryDialog> {
   late final TextEditingController _nameController;
+  final _nameFocusNode = FocusNode();
+  var _showEmptyNameError = false;
   late int _color;
   late String _iconKey;
 
@@ -66,12 +68,19 @@ class _CategoryDialogState extends State<_CategoryDialog> {
   @override
   void dispose() {
     _nameController.dispose();
+    _nameFocusNode.dispose();
     super.dispose();
   }
 
+  /// An empty name says so and hands the caret back, which the field's own
+  /// submit had taken away (BUG-161).
   void _submit() {
     final name = _nameController.text.trim();
-    if (name.isEmpty) return;
+    if (name.isEmpty) {
+      setState(() => _showEmptyNameError = true);
+      _nameFocusNode.requestFocus();
+      return;
+    }
     Navigator.pop(context, (name: name, color: _color, iconKey: _iconKey));
   }
 
@@ -93,43 +102,65 @@ class _CategoryDialogState extends State<_CategoryDialog> {
                 LabeledTextField(
                   label: 'Name',
                   controller: _nameController,
+                  focusNode: _nameFocusNode,
                   autofocus: true,
                   accentColor: Color(_color),
                   // The scope above only sees Enter while no field is focused.
                   onSubmitted: (_) => _submit(),
+                  onChanged: (_) {
+                    if (_showEmptyNameError) {
+                      setState(() => _showEmptyNameError = false);
+                    }
+                  },
                 ),
+                if (_showEmptyNameError) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Name cannot be empty',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.error,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Text('Color', style: theme.textTheme.labelMedium),
                 const SizedBox(height: 8),
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: paletteViewportHeight(28, visibleRows: 2),
-                  ),
-                  child: ColorPaletteGrid(
-                    palette: defaultColorPalette,
-                    selected: _color,
-                    onSelected: (color) => setState(() => _color = color),
-                    swatchRadius: 28,
-                    maxWidth: 380,
-                    maxHeight: paletteViewportHeight(28, visibleRows: 2),
-                    tightLayout: true,
+                // Part of the field for tap-outside purposes, so picking a
+                // colour or an icon leaves the caret in Name and Enter still
+                // creates (BUG-161).
+                TextFieldTapRegion(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: paletteViewportHeight(28, visibleRows: 2),
+                    ),
+                    child: ColorPaletteGrid(
+                      palette: defaultColorPalette,
+                      selected: _color,
+                      onSelected: (color) => setState(() => _color = color),
+                      swatchRadius: 28,
+                      maxWidth: 380,
+                      maxHeight: paletteViewportHeight(28, visibleRows: 2),
+                      tightLayout: true,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
                 Text('Icon', style: theme.textTheme.labelMedium),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: [
-                    for (final entry in rankingCategoryIcons.entries)
-                      _IconChoice(
-                        icon: entry.value,
-                        selected: entry.key == _iconKey,
-                        accent: Color(_color),
-                        onTap: () => setState(() => _iconKey = entry.key),
-                      ),
-                  ],
+                TextFieldTapRegion(
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: [
+                      for (final entry in rankingCategoryIcons.entries)
+                        _IconChoice(
+                          icon: entry.value,
+                          selected: entry.key == _iconKey,
+                          accent: Color(_color),
+                          onTap: () => setState(() => _iconKey = entry.key),
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),

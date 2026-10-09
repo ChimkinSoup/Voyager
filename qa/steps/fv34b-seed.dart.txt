@@ -1,0 +1,14 @@
+﻿final r = c.read(remoteSyncServiceProvider);
+final rr = c.read(rankingRepositoryProvider);
+final now = DateTime.now().toUtc();
+final cat = (await rr.listCategories()).firstWhere((x) => x.id == 'fv34-rcat').copyWith(imagesOnChild: true);
+await rr.upsertCategory(cat);
+r.pushRankingCategory(cat);
+final p2 = RankingParent(id: 'fv34-q2', createdAt: now, updatedAt: now, version: 1, categoryId: 'fv34-rcat', title: 'FV34 Close Early', status: RankingStatus.queued);
+final p3 = RankingParent(id: 'fv34-q3', createdAt: now, updatedAt: now, version: 1, categoryId: 'fv34-rcat', title: 'FV34 Episode Image', status: RankingStatus.queued);
+final p4 = RankingParent(id: 'fv34-q4', createdAt: now, updatedAt: now, version: 1, categoryId: 'fv34-rcat', title: 'FV34 Undo', status: RankingStatus.queued);
+for (final p in [p2, p3, p4]) { await rr.upsertParent(p); r.pushRankingParent(p); }
+final ep = RankingChild(id: 'fv34-q3-ep', createdAt: now, updatedAt: now, version: 1, parentId: 'fv34-q3', name: 'Ep A', sortOrder: 0);
+await rr.upsertChild(ep);
+r.pushRankingChild(ep);
+invalidateAllDataProvidersIn(c);

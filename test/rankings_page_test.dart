@@ -17,6 +17,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/media/media_service.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
@@ -28,6 +29,7 @@ import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/rankings/ranking_queries.dart';
+import 'package:voyager/features/rankings/rankings_actions.dart';
 import 'package:voyager/features/rankings/rankings_edit_panel.dart';
 import 'package:voyager/features/rankings/rankings_field_editor.dart';
 import 'package:voyager/features/rankings/rankings_header.dart';
@@ -217,6 +219,63 @@ void main() {
 
     expect(find.text('No categories yet'), findsOneWidget);
     expect(find.text('Create a category'), findsOneWidget);
+  });
+
+  testWidgets('BUG-161: the New category dialog keeps the caret in Name', (
+    tester,
+  ) async {
+    final harness = await pumpRankingsPage(tester, seed: (_) async {});
+    await tester.tap(find.text('Create a category'));
+    await tester.pumpAndSettle();
+
+    final name = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(EditableText),
+    );
+    bool nameFocused() =>
+        tester.widget<EditableText>(name).focusNode.hasPrimaryFocus;
+
+    // Enter on an empty name says so and keeps the caret.
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.text('Name cannot be empty'), findsOneWidget);
+    expect(nameFocused(), isTrue);
+
+    await tester.enterText(name, 'Shows');
+    await tester.pump();
+    expect(find.text('Name cannot be empty'), findsNothing);
+
+    // A colour, then an icon: the caret stays, so Ctrl+Enter still creates.
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(ColorPaletteGrid),
+            matching: find.byType(InkWell),
+          )
+          .at(2),
+    );
+    await tester.pumpAndSettle();
+    expect(nameFocused(), isTrue);
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(AlertDialog),
+            matching: find.byType(InkWell),
+          )
+          .last,
+    );
+    await tester.pumpAndSettle();
+    expect(nameFocused(), isTrue);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    final categories = await DriftRankingRepository(
+      harness.db,
+    ).listCategories();
+    expect(categories.single.name, 'Shows');
   });
 
   testWidgets('splits entries into the queue and the ranked list', (
@@ -643,28 +702,30 @@ void main() {
     await tester.pump();
     expect(inRow(find.text('Andor S2')), findsOneWidget);
 
-    // The wheel: written once it rests, shown on the row from the first notch.
-    final pointer = TestPointer(1, PointerDeviceKind.mouse);
-    await tester.sendEventToBinding(
-      pointer.hover(
-        tester.getCenter(
-          find
-              .descendant(
-                of: find.byType(RankingOverallRow),
-                matching: find.byType(RankingScoreNumber),
-              )
-              .first,
-        ),
-      ),
+    // The popover's draft: shown on the row from the first keystroke.
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(RankingOverallRow),
+            matching: find.byType(RankingScoreNumber),
+          )
+          .first,
     );
-    await tester.sendEventToBinding(pointer.scroll(const Offset(0, -50)));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(RankingScorePopover),
+        matching: find.byType(TextField),
+      ),
+      '4',
+    );
     await tester.pump();
     final drafted = numberIn(RankingOverallRow);
-    expect(drafted, isNot('2'));
+    expect(drafted, '4');
     expect(numberIn(RankingQuickRate), drafted);
 
     // Once both have landed the row reads the same off the stored entry.
-    await tester.sendEventToBinding(pointer.hover(Offset.zero));
+    await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
     final repo = DriftRankingRepository(harness.db);
@@ -2058,6 +2119,55 @@ void main() {
       expect(saved.notes, '');
     });
 
+    testWidgets('BUG-164: an image on a queued entry or its unit starts it', (
+      tester,
+    ) async {
+      late String entryId;
+      late String unitEntryId;
+      late String unitId;
+      final harness = await pumpRankingsPage(
+        tester,
+        seed: (repo) async {
+          final category = makeCategory();
+          await repo.upsertCategory(category);
+          final entry = makeParent(categoryId: category.id, title: 'Andor');
+          entryId = entry.id;
+          await repo.upsertParent(entry);
+          final unitEntry = makeParent(categoryId: category.id, title: 'Lost');
+          unitEntryId = unitEntry.id;
+          await repo.upsertParent(unitEntry);
+          final unit = makeChild(parentId: unitEntry.id, name: 'ep 1');
+          unitId = unit.id;
+          await repo.upsertChild(unit);
+        },
+      );
+      MediaReference image(String documentId) => MediaReference(
+        id: newId(),
+        mediaId: 'media',
+        collection: FirestoreCollections.rankings,
+        documentId: documentId,
+        sortOrder: 0,
+        createdAt: _now,
+        updatedAt: _now,
+      );
+
+      // What the app does with each image the media service adds, wherever
+      // it was attached from (voyager_app.dart).
+      final actions = RankingsActions.detached(harness.container);
+      await tester.runAsync(() async {
+        await actions.markInProgressForImage(image(entryId));
+        await actions.markInProgressForImage(image(unitId));
+      });
+      await tester.pumpAndSettle();
+
+      final repo = DriftRankingRepository(harness.db);
+      expect((await repo.getParent(entryId))!.status, RankingStatus.inProgress);
+      expect(
+        (await repo.getParent(unitEntryId))!.status,
+        RankingStatus.inProgress,
+      );
+    });
+
     testWidgets('Cancel takes back images attached and removed in the dialog', (
       tester,
     ) async {
@@ -2156,9 +2266,7 @@ void main() {
       );
     });
 
-    testWidgets('a child row marks the units that have images', (
-      tester,
-    ) async {
+    testWidgets('a child row marks the units that have images', (tester) async {
       late String withImageId;
       await pumpRankingsPage(
         tester,

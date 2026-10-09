@@ -32,8 +32,7 @@ int _stepsPerPoint(RankingScorePrecision precision) => switch (precision) {
 /// Snaps [value] onto the nearest allowed step and clamps it into the scale.
 ///
 /// Every path that produces a score goes through this — the popover's commit,
-/// the wheel nudge, the average-from-children button, a rescale, a precision
-/// change — so a stored score is always one the UI can draw and print exactly.
+/// the average-from-children button, a rescale, a precision change — so a stored score is always one the UI can draw and print exactly.
 double roundRankingScore(
   double value, {
   required int scoreMax,
@@ -84,14 +83,17 @@ double rankingFieldMidpoint(
   required RankingScorePrecision precision,
 }) => roundRankingScore(scoreMax / 2, scoreMax: scoreMax, precision: precision);
 
-/// Mean of the children that have an overall score, rounded to the parent's
-/// step. Null when no child has one.
+/// Mean of the children that have an overall score, carried from the
+/// children's scale ([childScoreMax]) onto the parent's and rounded to the
+/// parent's step. Null when no child has one.
 ///
 /// Children without a score are excluded rather than counted as zero — a
 /// half-watched season would otherwise drag the average toward the floor.
+/// The two scales are separate settings, so 3.75 of 5 is 7.5 of 10, not 3.8.
 double? rankingAverageFromChildren(
   Iterable<RankingChild> children, {
   required int scoreMax,
+  required int childScoreMax,
   required RankingScorePrecision precision,
 }) {
   final scores = [
@@ -100,7 +102,12 @@ double? rankingAverageFromChildren(
   ];
   if (scores.isEmpty) return null;
   final mean = scores.reduce((a, b) => a + b) / scores.length;
-  return roundRankingScore(mean, scoreMax: scoreMax, precision: precision);
+  return rescaleRankingScore(
+    mean,
+    fromMax: childScoreMax,
+    toMax: scoreMax,
+    precision: precision,
+  );
 }
 
 /// Moves a score from one scale to another, keeping its position on the scale.

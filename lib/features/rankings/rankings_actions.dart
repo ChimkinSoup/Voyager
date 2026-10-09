@@ -8,6 +8,7 @@ import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/rankings/ranking_queries.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -711,6 +712,16 @@ class RankingsActions {
     );
   }
 
+  /// An image added on this device to an entry or one of its units starts a
+  /// queued entry (§3.4, BUG-164). Heard from the media service rather than
+  /// from the editor, because an attach can land after the editor has closed
+  /// or moved to another entry.
+  Future<void> markInProgressForImage(MediaReference image) async {
+    if (image.collection != FirestoreCollections.rankings) return;
+    final child = await _repository.getChild(image.documentId);
+    await markInProgress(child?.parentId ?? image.documentId);
+  }
+
   Future<RankingParent?> setOverallScore(String parentId, double? score) =>
       _patchParent(
         parentId,
@@ -749,6 +760,7 @@ class RankingsActions {
     final average = rankingAverageFromChildren(
       children,
       scoreMax: category.parentScoreMax,
+      childScoreMax: category.childScoreMax,
       precision: category.parentScorePrecision,
     );
     if (average == null) return null;

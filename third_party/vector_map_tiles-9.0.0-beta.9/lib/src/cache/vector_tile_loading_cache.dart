@@ -111,8 +111,14 @@ class VectorTileLoadingCache {
       ..._executor.submitAll(setup),
       for (final slicer in _slicers) slicer.submit(setup),
     ];
-    for (final future in futures) {
-      await future;
+    // VOYAGER PATCH: a cache disposed while the theme is still being set up
+    // fails these with a CancellationException. Awaited one by one, the first
+    // escaped this `void async` method and the rest went unwatched, each an
+    // uncaught error in the app's log (BUG-169).
+    try {
+      await Future.wait(futures);
+    } on CancellationException {
+      return;
     }
     _ready = true;
     _readyCompleter.complete(true);

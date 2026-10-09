@@ -28,11 +28,13 @@ import 'package:voyager/core/widgets/geometric_texture.dart';
 import 'package:voyager/core/widgets/paper_texture.dart';
 import 'package:voyager/core/widgets/petal_field.dart';
 import 'package:voyager/domain/models/enums.dart';
+import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/features/finance/finance_sheet_warm_up.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_host.dart';
 import 'package:voyager/features/shell/shell_destinations.dart';
 import 'package:voyager/features/notifications/reminder_sticky_stack.dart';
+import 'package:voyager/features/rankings/rankings_actions.dart';
 import 'package:voyager/features/settings/services/folder_backup_service.dart';
 import 'package:voyager/features/settings/snippets_dialog.dart';
 import 'package:voyager/features/shell/reveal_request.dart';
@@ -60,6 +62,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
 
   AppTray? _tray;
   StreamSubscription<String>? _reminderTaps;
+  StreamSubscription<MediaReference>? _rankingImages;
 
   @override
   void initState() {
@@ -74,6 +77,15 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
         if (key != null && mounted) _focusReminder(key);
       }),
     );
+    // For as long as the app runs: an image attach can outlive the editor it
+    // was started from.
+    final rankings = RankingsActions.detached(
+      ProviderScope.containerOf(context, listen: false),
+    );
+    _rankingImages = ref
+        .read(mediaServiceProvider)
+        .referenceAdds
+        .listen((image) => unawaited(rankings.markInProgressForImage(image)));
     ref.read(autoBackupServiceProvider).start();
     if (isWindows) ref.read(folderBackupServiceProvider).start();
     _selectionOnResume.install();
@@ -142,6 +154,7 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
   @override
   void dispose() {
     unawaited(_reminderTaps?.cancel());
+    unawaited(_rankingImages?.cancel());
     if (desktopWindowChromeActive) {
       windowManager.removeListener(this);
       _instanceChannel.setMethodCallHandler(null);

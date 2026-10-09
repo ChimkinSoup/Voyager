@@ -1,0 +1,18 @@
+final r = c.read(remoteSyncServiceProvider);
+final rr = c.read(rankingRepositoryProvider);
+final now = DateTime.now().toUtc();
+final rc = RankingCategory(id: 'fv34-rcat', createdAt: now, updatedAt: now, version: 1, name: 'FV34 Shows', colorValue: 0xFF7C9EFF, iconKey: 'star', childUnitsEnabled: true, childUnitLabel: 'Episode', parentScoreMax: 10, childScoreMax: 5, parentScorePrecision: RankingScorePrecision.tenths, locationEnabled: true);
+await rr.upsertCategory(rc);
+r.pushRankingCategory(rc);
+for (var i = 1; i <= 24; i++) { final p = RankingParent(id: 'fv34-seed-$i', createdAt: now, updatedAt: now, version: 1, categoryId: 'fv34-rcat', title: 'Seed show ${i < 10 ? '0$i' : '$i'}', overallScore: 10 - i * 0.3, status: RankingStatus.inProgress, locations: [RankingLocation(id: 'fv34-loc-$i', latitude: 43.40 + i * 0.01, longitude: -80.60 + i * 0.01, address: 'Seed $i', label: '', sortOrder: 0)]); await rr.upsertParent(p); r.pushRankingParent(p); }
+final bb = RankingParent(id: 'fv34-bb', createdAt: now, updatedAt: now, version: 1, categoryId: 'fv34-rcat', title: 'FV34 Breaking Bad', overallScore: 8.0, status: RankingStatus.inProgress);
+await rr.upsertParent(bb);
+r.pushRankingParent(bb);
+final e1 = RankingChild(id: 'fv34-ep-1', createdAt: now, updatedAt: now, version: 1, parentId: 'fv34-bb', name: 'Pilot', overallScore: 4.5, sortOrder: 0);
+final e2 = RankingChild(id: 'fv34-ep-2', createdAt: now, updatedAt: now, version: 1, parentId: 'fv34-bb', name: 'Ep 2', overallScore: 3.0, sortOrder: 1);
+final e3 = RankingChild(id: 'fv34-ep-3', createdAt: now, updatedAt: now, version: 1, parentId: 'fv34-bb', name: 'Ep 3', sortOrder: 2);
+for (final e in [e1, e2, e3]) { await rr.upsertChild(e); r.pushRankingChild(e); }
+final q = RankingParent(id: 'fv34-queued', createdAt: now, updatedAt: now, version: 1, categoryId: 'fv34-rcat', title: 'FV34 Queued', status: RankingStatus.queued);
+await rr.upsertParent(q);
+r.pushRankingParent(q);
+invalidateAllDataProvidersIn(c);

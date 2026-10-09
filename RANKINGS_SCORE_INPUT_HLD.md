@@ -65,7 +65,7 @@ When inherit is on, the field’s effective mode tracks the corresponding overal
 
 Replace `rankingScoreStep(halfSteps:)` / `roundRankingScore(..., halfSteps:)` with precision-aware equivalents, e.g. `rankingScoreStep(RankingScorePrecision)` and `roundRankingScore(..., precision:)`.
 
-All producers of scores go through rounding: popover commit, average-from-children, rescale, mode-change re-round, mouse-wheel nudge.
+All producers of scores go through rounding: popover commit, average-from-children, rescale, mode-change re-round.
 
 ---
 
@@ -82,7 +82,7 @@ All producers of scores go through rounding: popover commit, average-from-childr
 | New template field | Display midpoint; **store null** until scored (unchanged) |
 | Display format | `formatRankingScore`: **strip trailing zeros** in all modes (`8`, `8.5`, `8.4`; never `8.0`) |
 
-Midpoint for roller default / wheel-first-nudge / field preview still uses `scoreMax / 2` snapped to effective step (e.g. out of 5: tenths/half → `2.5`, integers → `2`; out of 10 → `5`).
+Midpoint for roller default / field preview still uses `scoreMax / 2` snapped to effective step (e.g. out of 5: tenths/half → `2.5`, integers → `2`; out of 10 → `5`).
 
 ---
 
@@ -111,7 +111,7 @@ Surfaces: ranked/unranked list rows (overall), editor overall rows, custom field
 
 | Gesture | Behavior |
 |---------|----------|
-| **Mouse wheel** | Nudge by effective step and **commit immediately**. If unscored, first nudge = midpoint ± one step (direction of wheel), then commit. Clamp to `[0, scoreMax]`. |
+| **Mouse wheel** | Nothing: the wheel scrolls whatever the number sits in. (A wheel nudge that committed at once was removed by BUG-163: the number sits in scrolling lists, and the wheel changed whichever score scrolled under the pointer.) |
 | **Long-press** | Clear immediately (no confirm) → `null`. **No-op** if already null. Parent overall clear demotes to in progress. Same semantics as Clear in popover / context menu. |
 
 ### 6.3 Context menus
@@ -173,7 +173,7 @@ Snap-back runs **only after scroll settles** (ballistic end / item settled), not
 
 ### 7.5 Commit vs cancel (draft until dismiss)
 
-Rollers and text are **always a draft** until a commit action. No live persistence while scrolling. Wheel / long-press on the closed number (§6.2) are separate immediate commits and do not use this table.
+Rollers and text are **always a draft** until a commit action. No live persistence while scrolling. Long-press on the closed number (§6.2) is a separate immediate commit and do not use this table.
 
 | Action | Unscored, no edits | Unscored, edited | Scored, no edits | Scored, edited |
 |--------|--------------------|------------------|------------------|----------------|
@@ -289,7 +289,7 @@ Scores remain `double?`. Valid committed values are always on the effective step
 5. Floor `0` / ceiling `scoreMax` with settle snap-back; carry across integer boundary; half `0.5` + left down → stays `0.5`.
 6. Unscored `-` → open → Esc → still `-`; Enter or outside without edits → midpoint committed.
 7. Clear via popover, long-press, and context menu → null; parent overall demotes.
-8. Wheel on `-` commits midpoint±step; wheel on scored nudges and commits.
+8. Wheel over a number (scored or `-`) scrolls the surface behind it and changes no score (BUG-163).
 9. Inherit + overall mode change warns and re-rounds field scores; per-field override warns when leaving grid.
 10. Average-from-children rounds to parent overall precision.
 11. Parent overall `0` appears in Ranked section.
@@ -306,7 +306,7 @@ Scores remain `double?`. Valid committed values are always on the effective step
 - [x] `RankingStars` read-only; remove preview/commit paths
 - [x] Shared `RankingScorePopover` (text + rollers + clear + carry/snap-back)
 - [x] Wire number control on list rows, editor overall, fields, child list
-- [x] Wheel nudge + long-press clear
+- [x] Long-press clear (wheel nudge removed, BUG-163)
 - [x] Template UI: three-mode picker + inherit checkboxes
 - [x] Mode-change / inherit-off / rescale warning dialogs
 - [x] Filter slider step
@@ -334,12 +334,12 @@ Scores remain `double?`. Valid committed values are always on the effective step
 | Text on open | Focus + select-all |
 | Blur text | Clamp/snap into rollers; stay open |
 | Clear | Popover + context menu + long-press |
-| Wheel (closed) | Immediate commit; unscored starts at midpoint±step |
+| Wheel (closed) | None; scrolls the surface behind (BUG-163) |
 | Display | Strip trailing zeros; `-` only for null |
 | Mode tighten | Warn + re-round |
 | Average | Round to parent overall step |
 | Field default | Midpoint display, null until scored |
-| Extras | Wheel yes; Esc/outside rules yes; filter step yes; long-press clear yes; arrows/animate/`/max`/snap-half chip no |
+| Extras | Wheel no (BUG-163); Esc/outside rules yes; filter step yes; long-press clear yes; arrows/animate/`/max`/snap-half chip no |
 
 ---
 

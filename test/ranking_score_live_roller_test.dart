@@ -222,30 +222,6 @@ void main() {
       expect(frames.first, '8.4');
       expect(frames.skip(1), everyElement(rankingUnscoredLabel));
     });
-
-    testWidgets('two quick wheel notches both count, and never step back', (
-      tester,
-    ) async {
-      final writes = <double?>[];
-      await tester.pumpWidget(slowlySavedRow(initial: 5, writes: writes));
-
-      final pointer = TestPointer(1, PointerDeviceKind.mouse);
-      await tester.sendEventToBinding(
-        pointer.hover(tester.getCenter(find.byType(RankingScoreNumber))),
-      );
-      await tester.sendEventToBinding(pointer.scroll(const Offset(0, -50)));
-      await tester.pump();
-      expect(number(tester), '5.1');
-      await tester.sendEventToBinding(pointer.scroll(const Offset(0, -50)));
-      await tester.pump();
-      expect(number(tester), '5.2');
-
-      // Written once the wheel rests, and held from there until it lands.
-      await tester.pump(const Duration(milliseconds: 600));
-      final frames = await framesUntilSaved(tester);
-      expect(writes, [5.2]);
-      expect(frames, everyElement('5.2'));
-    });
   });
 
   group('Mouse drag', () {

@@ -373,6 +373,23 @@ void main() {
       );
     });
 
+    test('referenceAdds hears a new image, not an undone removal', () async {
+      final added = <String>[];
+      final sub = service.referenceAdds.listen((r) => added.add(r.id));
+      addTearDown(sub.cancel);
+
+      final reference = await service.attachBytes(
+        bytes: pngOf(44, 44),
+        collection: FirestoreCollections.todoTasks,
+        documentId: 'task-1',
+      );
+      expect(added, [reference.id]);
+
+      await service.removeReference(reference.id);
+      await service.restoreReference(reference);
+      expect(added, [reference.id]);
+    });
+
     test('removing one image can be undone from its snapshot', () async {
       final reference = await service.attachBytes(
         bytes: pngOf(43, 43),

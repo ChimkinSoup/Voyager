@@ -50,6 +50,67 @@ void main() {
       expect(parseGoogleMapsLink('https://maps.app.goo.gl/AbCd123'), isNull);
     });
 
+    test('BUG-170: the Maps URLs API query= form is read', () {
+      final place = parseGoogleMapsLink(
+        'https://www.google.com/maps/search/?api=1&query=43.4643,-80.5204',
+      )!;
+      expect((place.latitude, place.longitude), (43.4643, -80.5204));
+      final encoded = parseGoogleMapsLink(
+        'https://www.google.com/maps/search/?api=1&query=43.4643%2C-80.5204',
+      )!;
+      expect((encoded.latitude, encoded.longitude), (43.4643, -80.5204));
+    });
+
+    test('BUG-170: only a Google Maps link is read', () {
+      expect(parseGoogleMapsLink('https://example.com/@43.47,-80.53'), isNull);
+      expect(
+        parseGoogleMapsLink('https://example.com/maps?q=43.47,-80.53'),
+        isNull,
+      );
+      expect(
+        parseGoogleMapsLink(
+          'https://google.com.evil.example/maps/@43.47,-80.53',
+        ),
+        isNull,
+      );
+      // Google itself, but not Maps.
+      expect(
+        parseGoogleMapsLink('https://www.google.com/search?q=43.47,-80.53'),
+        isNull,
+      );
+      // Other Google Maps domains and spellings still parse.
+      for (final link in [
+        'https://google.com/maps/@43.47,-80.53,15z',
+        'https://www.google.ca/maps/@43.47,-80.53,15z',
+        'https://www.google.co.uk/maps/@43.47,-80.53,15z',
+        'https://maps.google.ca/?q=43.47,-80.53',
+        'HTTPS://WWW.GOOGLE.COM/maps/@43.47,-80.53,15z',
+      ]) {
+        expect(parseGoogleMapsLink(link), isNotNull, reason: link);
+      }
+    });
+
+    test('a short link that lands on the consent page reads its target', () {
+      final target = Uri.encodeQueryComponent(
+        'https://www.google.com/maps/place/Lazeez/data=!3d43.47!4d-80.53',
+      );
+      final place = parseGoogleMapsLink(
+        'https://consent.google.com/m?continue=$target&gl=CA&hl=en',
+      )!;
+      expect((place.latitude, place.longitude), (43.47, -80.53));
+      expect(place.name, 'Lazeez');
+      // The consent page of a site that isn't Google is any other site.
+      expect(
+        parseGoogleMapsLink('https://consent.example.com/m?continue=$target'),
+        isNull,
+      );
+      // And with nothing to continue to, there is nothing to read.
+      expect(
+        parseGoogleMapsLink('https://consent.google.com/m?gl=CA&@43.47,-80.53'),
+        isNull,
+      );
+    });
+
     test('coordinates off the globe are refused', () {
       expect(
         parseGoogleMapsLink('https://www.google.com/maps/@143.4,-80.5,15z'),
