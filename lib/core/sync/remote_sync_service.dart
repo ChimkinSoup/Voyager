@@ -262,7 +262,6 @@ class RemoteSyncService {
         .putIfAbsent(documentKey(collection, localDocumentId), () => [])
         .add(
           _SelfEcho(
-            at: now,
             keys: payload.keys.toList(growable: false),
             fingerprint: _payloadFingerprint(payload),
             payload: PerfStallLogger.instance.enabled ? payload : null,
@@ -270,8 +269,58 @@ class RemoteSyncService {
         );
   }
 
-  static bool _isExpired(_SelfEcho echo, Duration now) =>
-      now - echo.at >= _selfEchoWindow;
+  /// A mark ages only once its write has finished. Firestore holds a write
+  /// made offline until the network is back and confirms it then, however
+  /// long that took — so a window counted from the mark expired our own
+  /// offline typing before its confirmation arrived, the confirmation read as
+  /// another device's edit, and an entry open in the editor had that "edit"
+  /// injected into text that already held it: the typing appeared twice.
+  static bool _isExpired(_SelfEcho echo, Duration now) {
+    final settledAt = echo.settledAt;
+    return settledAt != null && now - settledAt >= _selfEchoWindow;
+  }
+
+  /// Runs [write] for the marks [localDocumentIds] hold right now, then starts
+  /// their [_selfEchoWindow].
+  ///
+  /// Marks still in flight from an earlier write to the same document are
+  /// settled too: uploads to one document run one at a time, so that write has
+  /// finished by the time this one has.
+  Future<void> _settleEchoesAfter(
+    String collection,
+    Iterable<String> localDocumentIds,
+    Future<void> Function() write,
+  ) async {
+    final marks = _unsettledEchoes(collection, localDocumentIds);
+    try {
+      await write();
+    } catch (error) {
+      _settleEchoes(marks, error: error);
+      rethrow;
+    }
+    _settleEchoes(marks);
+  }
+
+  List<_SelfEcho> _unsettledEchoes(
+    String collection,
+    Iterable<String> localDocumentIds,
+  ) => [
+    for (final id in localDocumentIds)
+      ...?_selfEchoes[documentKey(collection, id)]?.where(
+        (echo) => echo.settledAt == null,
+      ),
+  ];
+
+  /// Starts [marks]' window — unless their write timed out: Firestore still
+  /// holds that write and confirms it once it gets through, so its marks wait
+  /// for that, or for the next write to the document.
+  void _settleEchoes(List<_SelfEcho> marks, {Object? error}) {
+    if (error is TimeoutException) return;
+    final now = echoClock();
+    for (final mark in marks) {
+      mark.settledAt ??= now;
+    }
+  }
 
   /// Whether [remote] is the echo of our own recent write to this document.
   bool _consumeSelfEcho(
@@ -1362,6 +1411,62 @@ class RemoteSyncService {
   bool isDocumentEditing(String collection, String documentId) {
     return _activelyEditedDocuments.contains(
       documentKey(collection, documentId),
+    );
+  }
+
+  /// Folds [operations] into the document's character session and reports
+  /// the change as an open editor should take it, or null when there is no
+  /// session to fold into yet — or no operation log: the document's text is
+  /// then the snapshot's, which the session never sees.
+  ///
+  /// Read off the session itself rather than diffed from the last remote text
+  /// seen. The session holds every character the editor shows, by id, so this
+  /// device's own characters coming back change nothing, however late they
+  /// arrive and whether or not an echo mark recognised them — where the text
+  /// diff took a stale baseline as the starting point and re-inserted our own
+  /// offline typing into the editor that already held it.
+  ({String before, String after, int Function(int offset) mapOffset})?
+  _absorbForEditor(
+    String collection,
+    String documentId,
+    List<CharacterOperation> operations,
+  ) {
+    final session = _charOpRegistry.session(collection, documentId);
+    if (session == null || operations.isEmpty) return null;
+    final before = session.text;
+    // Absorbing swaps in a fresh list rather than editing this one, so it
+    // still reads as before when [mapOffset] runs in the merge listener.
+    final liveBefore = session.liveOps;
+    session.absorbRemote(operations);
+    return (
+      before: before,
+      after: session.text,
+      // The character left of the offset, found again by its id.
+      mapOffset: (offset) {
+        final i = offset.clamp(0, liveBefore.length);
+        return i == 0 ? 0 : session.offsetAfter(liveBefore[i - 1]);
+      },
+    );
+  }
+
+  /// Puts a pulled change into the document's open editor when nobody is
+  /// editing it — focus in another field. Left alone, the editor kept the old
+  /// text while the row and session moved on, and typing there later diffed
+  /// that old text against the session: this device lost the remote change
+  /// while the other device kept it.
+  void _showInOpenEditor(
+    String collection,
+    String documentId,
+    ({String before, String after, int Function(int offset) mapOffset})?
+    absorbed,
+  ) {
+    if (absorbed == null) return;
+    _pendingTextMergeBuffer.showRemoteChange(
+      collection: collection,
+      documentId: documentId,
+      previousRemoteText: absorbed.before,
+      remoteText: absorbed.after,
+      mapOffset: absorbed.mapOffset,
     );
   }
 
@@ -2800,7 +2905,7 @@ class RemoteSyncService {
           return;
         }
         final remoteCharOps = await _listRemoteCharOps(id);
-        _charOpRegistry.absorbRemote(
+        final absorbed = _absorbForEditor(
           FirestoreCollections.journalEntries,
           id,
           remoteCharOps,
@@ -2855,14 +2960,20 @@ class RemoteSyncService {
           local: local,
           crdtText: fromCrdt ? CrdtTextFields.fromJournalPayload(data) : null,
         );
-        if (local != null &&
-            isDocumentEditing(FirestoreCollections.journalEntries, id)) {
+        final editing =
+            local != null &&
+            isDocumentEditing(FirestoreCollections.journalEntries, id);
+        if (editing) {
           _pendingTextMergeBuffer.bufferWhileEditing(
             collection: FirestoreCollections.journalEntries,
             documentId: id,
-            remoteText: merged.body,
+            remoteText: absorbed?.after ?? merged.body,
+            previousRemoteText: absorbed?.before,
             remoteRichBodyJson: merged.richBodyJson,
-            remoteTags: merged.tags,
+            remoteTags: absorbed == null
+                ? merged.tags
+                : extractTags(absorbed.after),
+            mapOffset: absorbed?.mapOffset,
           );
           merged = merged.copyWith(
             body: local.body,
@@ -2922,6 +3033,9 @@ class RemoteSyncService {
           merged,
           recordLocalActivity: false,
         );
+        if (!editing) {
+          _showInOpenEditor(FirestoreCollections.journalEntries, id, absorbed);
+        }
       },
     );
   }
@@ -2950,7 +3064,7 @@ class RemoteSyncService {
           return;
         }
         final remoteCharOps = await _listRemoteCharOps(id);
-        _charOpRegistry.absorbRemote(
+        final absorbed = _absorbForEditor(
           FirestoreCollections.dreamEntries,
           id,
           remoteCharOps,
@@ -3005,13 +3119,19 @@ class RemoteSyncService {
           local: local,
           crdtText: fromCrdt ? CrdtTextFields.fromDreamPayload(data) : null,
         );
-        if (local != null &&
-            isDocumentEditing(FirestoreCollections.dreamEntries, id)) {
+        final editing =
+            local != null &&
+            isDocumentEditing(FirestoreCollections.dreamEntries, id);
+        if (editing) {
           _pendingTextMergeBuffer.bufferWhileEditing(
             collection: FirestoreCollections.dreamEntries,
             documentId: id,
-            remoteText: merged.body,
-            remoteTags: merged.tags,
+            remoteText: absorbed?.after ?? merged.body,
+            previousRemoteText: absorbed?.before,
+            remoteTags: absorbed == null
+                ? merged.tags
+                : extractTags(absorbed.after),
+            mapOffset: absorbed?.mapOffset,
           );
           merged = merged.copyWith(
             body: local.body,
@@ -3058,6 +3178,9 @@ class RemoteSyncService {
           }
         }
         await _dreamRepository.upsertEntry(merged, recordLocalActivity: false);
+        if (!editing) {
+          _showInOpenEditor(FirestoreCollections.dreamEntries, id, absorbed);
+        }
       },
     );
   }
@@ -3120,7 +3243,7 @@ class RemoteSyncService {
             return;
           }
           final remoteCharOps = await _listRemoteCharOps(id);
-          _charOpRegistry.absorbRemote(
+          final absorbed = _absorbForEditor(
             FirestoreCollections.todoTasks,
             id,
             remoteCharOps,
@@ -3164,12 +3287,16 @@ class RemoteSyncService {
             local: local,
             crdtText: fromCrdt ? CrdtTextFields.fromTodoPayload(data) : null,
           );
-          if (local != null &&
-              isDocumentEditing(FirestoreCollections.todoTasks, id)) {
+          final editing =
+              local != null &&
+              isDocumentEditing(FirestoreCollections.todoTasks, id);
+          if (editing) {
             _pendingTextMergeBuffer.bufferWhileEditing(
               collection: FirestoreCollections.todoTasks,
               documentId: id,
-              remoteText: merged.notes ?? '',
+              remoteText: absorbed?.after ?? merged.notes ?? '',
+              previousRemoteText: absorbed?.before,
+              mapOffset: absorbed?.mapOffset,
             );
             merged = merged.copyWith(notes: local.notes, bumpVersion: false);
           } else {
@@ -3220,6 +3347,9 @@ class RemoteSyncService {
           }
           await _todoRepository.upsertTask(merged, recordLocalActivity: false);
           localTasks?[id] = merged;
+          if (!editing) {
+            _showInOpenEditor(FirestoreCollections.todoTasks, id, absorbed);
+          }
         } on StateError {
           // Skip malformed remote documents.
         }
@@ -4734,6 +4864,9 @@ class RemoteSyncService {
     Map<String, Map<String, dynamic>> payloads, {
     bool logOperation = false,
   }) {
+    // Settled inside, where the failure is caught: an upload in a document
+    // chain must not throw, or the next one in the chain is skipped.
+    final echoes = _unsettledEchoes(collection, payloads.keys);
     return _runInDocumentChains(
       collection,
       payloads.keys,
@@ -4741,6 +4874,7 @@ class RemoteSyncService {
         collection,
         payloads,
         logOperation: logOperation,
+        echoes: echoes,
       ),
     );
   }
@@ -4749,6 +4883,7 @@ class RemoteSyncService {
     String collection,
     Map<String, Map<String, dynamic>> payloads, {
     required bool logOperation,
+    required List<_SelfEcho> echoes,
   }) async {
     try {
       await _syncEngine.syncDocumentsImmediately(
@@ -4756,6 +4891,7 @@ class RemoteSyncService {
         payloadsByDocumentId: payloads,
         logOperation: logOperation,
       );
+      _settleEchoes(echoes);
       for (final documentId in payloads.keys) {
         await OutboxSyncWorker.recordSuccess(
           collection: collection,
@@ -4763,6 +4899,7 @@ class RemoteSyncService {
         );
       }
     } catch (error, stackTrace) {
+      _settleEchoes(echoes, error: error);
       debugPrint(
         '[sync] batch upload failed for $collection '
         '(${payloads.length} documents): $error\n$stackTrace',
@@ -4797,11 +4934,15 @@ class RemoteSyncService {
     // swallow the next, genuine change instead. Exactly backwards from what
     // it is for.
     _markSelfEcho(collection, localId, payload);
-    await _syncEngine.syncDocumentImmediately(
-      collection: collection,
-      documentId: firestoreId ?? localId,
-      payload: payload,
-      logOperation: false,
+    await _settleEchoesAfter(
+      collection,
+      [localId],
+      () => _syncEngine.syncDocumentImmediately(
+        collection: collection,
+        documentId: firestoreId ?? localId,
+        payload: payload,
+        logOperation: false,
+      ),
     );
   }
 
@@ -4829,11 +4970,15 @@ class RemoteSyncService {
     final charOps = _charOpRegistry.takePendingOps(collection, documentId);
     _markSelfEcho(collection, documentId, payload);
     try {
-      await _syncEngine.syncDocumentImmediately(
-        collection: collection,
-        documentId: documentId,
-        payload: payload,
-        charOps: charOps,
+      await _settleEchoesAfter(
+        collection,
+        [documentId],
+        () => _syncEngine.syncDocumentImmediately(
+          collection: collection,
+          documentId: documentId,
+          payload: payload,
+          charOps: charOps,
+        ),
       );
     } catch (_) {
       _charOpRegistry.restorePendingOps(collection, documentId, charOps);
@@ -5243,10 +5388,12 @@ class RemoteSyncService {
     }
     if (payloads.isEmpty) return;
 
+    // Settled inside, as in [_runRemoteBatchSave].
+    final echoes = _unsettledEchoes(collection, localIds);
     await _runInDocumentChains(
       collection,
       localIds,
-      () => _pushRecordsNow(collection, payloads, localIds),
+      () => _pushRecordsNow(collection, payloads, localIds, echoes),
     );
   }
 
@@ -5254,6 +5401,7 @@ class RemoteSyncService {
     String collection,
     Map<String, Map<String, dynamic>> payloads,
     List<String> localIds,
+    List<_SelfEcho> echoes,
   ) async {
     try {
       await _syncEngine.syncDocumentsImmediately(
@@ -5261,6 +5409,7 @@ class RemoteSyncService {
         payloadsByDocumentId: payloads,
         logOperation: false,
       );
+      _settleEchoes(echoes);
       for (final documentId in localIds) {
         await OutboxSyncWorker.recordSuccess(
           collection: collection,
@@ -5268,6 +5417,7 @@ class RemoteSyncService {
         );
       }
     } catch (error, stackTrace) {
+      _settleEchoes(echoes, error: error);
       debugPrint(
         '[sync] upload failed for $collection '
         '${payloads.keys.toList()}: $error\n$stackTrace',
@@ -5293,12 +5443,16 @@ class RemoteSyncService {
       if (document == null) continue;
       _scheduleRemoteUpload(collection, document.id, () async {
         _markSelfEcho(collection, document.id, document.payload);
-        await _syncEngine.syncDocumentsImmediately(
-          collection: collection,
-          payloadsByDocumentId: {
-            _firestoreDocumentId(collection, document.id): document.payload,
-          },
-          logOperation: false,
+        await _settleEchoesAfter(
+          collection,
+          [document.id],
+          () => _syncEngine.syncDocumentsImmediately(
+            collection: collection,
+            payloadsByDocumentId: {
+              _firestoreDocumentId(collection, document.id): document.payload,
+            },
+            logOperation: false,
+          ),
         );
       });
     }
@@ -5361,11 +5515,15 @@ class RemoteSyncService {
     final firestoreId = _firestoreDocumentId(collection, documentId);
     await _syncRepository.deleteOperationsForDocument(firestoreId);
     _markSelfEcho(collection, documentId, payload);
-    await _syncEngine.syncDocumentImmediately(
-      collection: collection,
-      documentId: firestoreId,
-      payload: payload,
-      logOperation: false,
+    await _settleEchoesAfter(
+      collection,
+      [documentId],
+      () => _syncEngine.syncDocumentImmediately(
+        collection: collection,
+        documentId: firestoreId,
+        payload: payload,
+        logOperation: false,
+      ),
     );
   }
 
@@ -6725,15 +6883,11 @@ class RemoteSyncService {
 /// One record of "this device just pushed this" — see
 /// [RemoteSyncService._selfEchoes].
 class _SelfEcho {
-  const _SelfEcho({
-    required this.at,
-    required this.keys,
-    required this.fingerprint,
-    this.payload,
-  });
+  _SelfEcho({required this.keys, required this.fingerprint, this.payload});
 
-  /// When the mark was made, by [RemoteSyncService.echoClock].
-  final Duration at;
+  /// When the write behind the mark finished, by [RemoteSyncService.echoClock];
+  /// null while it is still in flight.
+  Duration? settledAt;
 
   /// The fields the upload actually sent, so the comparison can ignore
   /// anything else the merged document happens to hold.

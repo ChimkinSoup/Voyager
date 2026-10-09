@@ -28,7 +28,6 @@ import 'package:voyager/core/sync/pending_text_merge.dart';
 import 'package:voyager/core/sync/journal_write_coordinator.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
-import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
@@ -3593,17 +3592,11 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     if (_attachedEntryId == entryId) _attachedEntryId = null;
   }
 
-  void _handlePendingTextMerge(PendingTextMergeEvent event) {
-    if (!mounted || widget.entry?.id != event.documentId) return;
-    if (!widget.focusNode.hasFocus) return;
+  bool _handlePendingTextMerge(PendingTextMergeEvent event) {
+    if (!mounted || widget.entry?.id != event.documentId) return false;
 
-    final before = _controller.text;
-    final merged = TextDeltaInjector.injectRemoteDelta(
-      localText: before,
-      oldRemoteText: event.previousRemoteText,
-      newRemoteText: event.remoteText,
-    );
-    if (merged == before) return;
+    final value = event.mergedInto(_controller.value);
+    if (value == null) return false;
 
     widget.onDebugLog?.call(
       'EDITOR_PENDING_TEXT_MERGE',
@@ -3611,23 +3604,16 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
           'previousRemoteLen=${event.previousRemoteText.length} '
           'remoteLen=${event.remoteText.length}',
     );
-    final selection = _controller.selection;
-    _controller.value = TextEditingValue(
-      text: merged,
-      selection: TextSelection.collapsed(
-        offset: TextDeltaInjector.adjustedSelection(
-          selection: selection.baseOffset,
-          before: before,
-          after: merged,
-        ),
-      ),
-    );
+    _controller.value = value;
+    final merged = value.text;
     _lastText = merged;
     _tags = event.remoteTags.isNotEmpty
         ? event.remoteTags
         : extractTags(merged);
     widget.onDraftChanged.call(event.documentId, merged);
+    if (!event.alreadySaved) widget.onScheduleBodySave();
     if (mounted) setState(() {});
+    return true;
   }
 
   @override

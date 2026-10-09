@@ -112,6 +112,20 @@ Use two devices signed into the **same account** (e.g. Windows desktop + phone, 
 | 3 | Conflict banner appears; resolution dialog works | |
 | 4 | Disable force flag after testing | |
 
+### I. Self-echo suppression (live sync)
+
+Not yet run against real Firestore. Live sync now drops the local-cache snapshot of this device's own write (`hasPendingWrites` with an unresolved `_serverWrittenAt`, in `FirestoreSyncRepository.watchCollection`) and only matches the server's confirmation against what was pushed. The fake Firestore in the unit tests never reports pending writes, so this path is only exercised here.
+
+Run with **Developer tools → Verbose sync logging** on and the debug console visible (`flutter run`).
+
+| Step | Device A | Device B | Pass? |
+|------|----------|----------|-------|
+| 1 | Edit a todo task's title and let it save | — | Console shows **one** `[sync] skip self-echo todo_tasks/<id>` for the save (two meant the local-cache copy got through); the list does not reload a second time |
+| 2 | Toggle a task done → undone → done quickly, ideally on a slow or throttled connection | — | Only `skip self-echo` lines; no reload after the last toggle; task ends done |
+| 3 | Right after step 2 (within ~15 s) | Mark the same task undone | A shows undone (a leftover mark from step 2 must not swallow it) |
+| 4 | Rename a task | Within ~15 s, rename it back to its old title | A shows the old title again (a revert to our own earlier content must still land) |
+| 5 | Keep editing one task's title for a while | Meanwhile change that task's due date or star | B's change reaches A once A stops editing (a delay while A's writes are pending is expected; never arriving is a fail) |
+
 ---
 
 ## CRDT / journal body checks
@@ -188,6 +202,7 @@ flutter test test/crdt_document_resolver_test.dart
 Sync is **ready to release** when:
 
 - [ ] All two-device sections (A–G) pass
+- [ ] Self-echo suppression (I) passes
 - [ ] Compare all journals + todos clean on both devices after testing
 - [ ] No `opChainValid=false` in compare log during stress testing
 - [ ] No unresolved conflict banners in normal use (without force flag)
@@ -212,6 +227,7 @@ Todo create/propagate:        PASS / FAIL —
 Todo reorder/star:            PASS / FAIL —
 Offline reconnect:            PASS / FAIL —
 Fresh account restore:        PASS / FAIL —
+Self-echo suppression:        PASS / FAIL —
 Compare all (A):              PASS / FAIL —
 Compare all (B):              PASS / FAIL —
 CRDT opChainValid issues:     NONE / DETAILS —

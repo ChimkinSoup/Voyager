@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:voyager/domain/services/character_operation.dart';
 import 'package:voyager/domain/services/fractional_index.dart';
 
@@ -219,6 +221,33 @@ class CharacterOpSession {
       return incoming.logicalClock > existing.logicalClock;
     }
     return incoming.clientId.compareTo(existing.clientId) > 0;
+  }
+
+  /// The live characters in document order: a view of the session's own
+  /// list, not a copy, so it holds only until the session next changes.
+  List<CharacterOperation> get liveOps =>
+      UnmodifiableListView(_liveOrderedOps());
+
+  /// The text offset just after [op]. Found by id among the characters that
+  /// share its position, since another device can mint the same one. Deleted
+  /// since, it is where [op] stood: before every character at its position.
+  int offsetAfter(CharacterOperation op) {
+    final live = _liveOrderedOps();
+    var low = 0;
+    var high = live.length;
+    while (low < high) {
+      final mid = (low + high) >> 1;
+      if (live[mid].position.compareTo(op.position) < 0) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    for (var i = low; i < live.length; i++) {
+      if (live[i].position != op.position) break;
+      if (live[i].id == op.id) return i + 1;
+    }
+    return low;
   }
 
   /// The live operations [recordTextChange] would tombstone going from [text]

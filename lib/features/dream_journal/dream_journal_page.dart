@@ -1693,32 +1693,17 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
     );
   }
 
-  void _handlePendingTextMerge(PendingTextMergeEvent event) {
-    if (!mounted || widget.entry.id != event.documentId) return;
-    if (!widget.focusNode.hasFocus) return;
+  bool _handlePendingTextMerge(PendingTextMergeEvent event) {
+    if (!mounted || widget.entry.id != event.documentId) return false;
 
-    final before = _controller.text;
-    final merged = TextDeltaInjector.injectRemoteDelta(
-      localText: before,
-      oldRemoteText: event.previousRemoteText,
-      newRemoteText: event.remoteText,
-    );
-    if (merged == before) return;
+    final value = event.mergedInto(_controller.value);
+    if (value == null) return false;
 
-    final selection = _controller.selection;
-    _controller.value = TextEditingValue(
-      text: merged,
-      selection: TextSelection.collapsed(
-        offset: TextDeltaInjector.adjustedSelection(
-          selection: selection.baseOffset,
-          before: before,
-          after: merged,
-        ),
-      ),
-    );
-    _lastText = merged;
-    widget.onScheduleBodySave();
+    _controller.value = value;
+    _lastText = value.text;
+    if (!event.alreadySaved) widget.onScheduleBodySave();
     if (mounted) setState(() {});
+    return true;
   }
 
   @override

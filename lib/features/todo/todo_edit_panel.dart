@@ -16,7 +16,6 @@ import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/pending_text_merge.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
-import 'package:voyager/core/sync/text_delta_injector.dart';
 import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
@@ -295,33 +294,19 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     }
   }
 
-  void _handlePendingNotesMerge(PendingTextMergeEvent event) {
-    if (!mounted || widget.task.id != event.documentId) return;
-    if (!_notesFocusNode.hasFocus) return;
+  bool _handlePendingNotesMerge(PendingTextMergeEvent event) {
+    if (!mounted || widget.task.id != event.documentId) return false;
 
-    final before = _notesController.text;
-    final merged = TextDeltaInjector.injectRemoteDelta(
-      localText: before,
-      oldRemoteText: event.previousRemoteText,
-      newRemoteText: event.remoteText,
-    );
-    if (merged == before) return;
+    final value = event.mergedInto(_notesController.value);
+    if (value == null) return false;
 
-    final selection = _notesController.selection;
-    _notesController.value = TextEditingValue(
-      text: merged,
-      selection: TextSelection.collapsed(
-        offset: TextDeltaInjector.adjustedSelection(
-          selection: selection.baseOffset,
-          before: before,
-          after: merged,
-        ),
-      ),
-    );
+    _notesController.value = value;
     // The next keystroke is diffed from [_lastNotesText]. Left at the
     // pre-merge text, that diff carried the remote change back up as this
     // device's own edit.
-    _lastNotesText = merged;
+    _lastNotesText = value.text;
+    if (!event.alreadySaved) _scheduleNotesSave(value.text);
+    return true;
   }
 
   Future<void> _applyPendingNotesMerge() async {

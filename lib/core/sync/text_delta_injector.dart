@@ -12,6 +12,8 @@ class TextDeltaInjector {
   }) {
     if (oldRemoteText == newRemoteText) return localText;
     if (localText == oldRemoteText) return newRemoteText;
+    // Already holds the change — inserting it again would double it.
+    if (localText == newRemoteText) return localText;
 
     final prefixLen = _commonPrefixLength(oldRemoteText, newRemoteText);
     final suffixLen = _commonSuffixLength(

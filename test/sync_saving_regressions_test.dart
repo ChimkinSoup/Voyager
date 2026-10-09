@@ -4,13 +4,16 @@
 // wrong, not the shape of the fix — so a future refactor is free to move the
 // code as long as saves keep landing.
 
+import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/services.dart' show TextEditingValue, TextSelection;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/dev/perf_stall_logger.dart';
 import 'package:voyager/core/sync/debouncer.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
+import 'package:voyager/core/sync/pending_text_merge.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/sync/soft_delete_policy.dart';
 import 'package:voyager/core/sync/sync_engine.dart';
@@ -19,9 +22,11 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
+import 'package:voyager/domain/models/dream_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/services/character_op_session.dart';
 
 /// Counts the reads a pull actually spends, so "the snapshot already carried
@@ -32,6 +37,24 @@ class _CountingSyncRepository extends InMemorySyncRepository {
 
   /// When set, the next matching call throws instead of answering.
   String? failGetDocumentFor;
+
+  /// When set, document writes wait for it — a device that has gone offline.
+  Completer<void>? holdWrites;
+
+  /// When set, document writes land but are never acknowledged: the write
+  /// gate gives up waiting, while Firestore still delivers them.
+  bool timeOutWrites = false;
+
+  @override
+  Future<void> upsertDocument(
+    String collection,
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    await holdWrites?.future;
+    await super.upsertDocument(collection, id, data);
+    if (timeOutWrites) throw TimeoutException('unacknowledged');
+  }
 
   @override
   Future<Map<String, dynamic>?> getDocument(String collection, String id) {
@@ -56,14 +79,16 @@ class _Device {
     db = AppDatabase.inMemory();
     syncedWrites = SyncedWriteNotifier();
     journals = DriftJournalRepository(db);
+    dreams = DriftDreamRepository(db);
+    todos = DriftTodoRepository(db);
     calendars = DriftCalendarRepository(db, syncedWrites: syncedWrites);
     settings = DriftSettingsRepository(db, syncedWrites: syncedWrites);
 
     sync = RemoteSyncService(
       syncRepository: server,
       journalRepository: journals,
-      dreamRepository: DriftDreamRepository(db),
-      todoRepository: DriftTodoRepository(db),
+      dreamRepository: dreams,
+      todoRepository: todos,
       leetCodeRepository: DriftLeetCodeRepository(db),
       studyRepository: DriftStudyRepository(db),
       workoutRepository: DriftWorkoutRepository(db),
@@ -95,6 +120,8 @@ class _Device {
   late final AppDatabase db;
   late final SyncedWriteNotifier syncedWrites;
   late final DriftJournalRepository journals;
+  late final DriftDreamRepository dreams;
+  late final DriftTodoRepository todos;
   late final DriftCalendarRepository calendars;
   late final DriftSettingsRepository settings;
   late final RemoteSyncService sync;
@@ -112,6 +139,46 @@ class _Device {
   Future<void> close() => db.close();
 }
 
+/// A body or notes editor, reduced to what sync sees of it: every keystroke
+/// recorded against the character session, and remote changes merged in
+/// through the pending-merge listener.
+class _Editor {
+  _Editor(this.device, this.record, String text)
+    : value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+
+  final _Device device;
+  final void Function(String before, String after) record;
+  TextEditingValue value;
+
+  /// Off for an editor that cannot take a remote change as it arrives —
+  /// one whose text no longer lines up with it — leaving it for the flush.
+  bool takesMerges = true;
+
+  String get text => value.text;
+
+  void type(String insert, {int? at}) {
+    final offset = at ?? value.selection.baseOffset;
+    final before = text;
+    final after = before.replaceRange(offset, offset, insert);
+    value = TextEditingValue(
+      text: after,
+      selection: TextSelection.collapsed(offset: offset + insert.length),
+    );
+    record(before, after);
+  }
+
+  bool onMerge(PendingTextMergeEvent event) {
+    if (!takesMerges) return false;
+    final merged = event.mergedInto(value);
+    if (merged == null) return false;
+    value = merged;
+    return true;
+  }
+}
+
 void main() {
   final now = DateTime.utc(2026, 8, 14, 12);
 
@@ -125,6 +192,24 @@ void main() {
         createdAt: now,
         updatedAt: now,
       );
+
+  DreamEntry dream(String body) => DreamEntry(
+    id: 'doc-1',
+    title: 'Title',
+    body: body,
+    entryDate: now,
+    createdAt: now,
+    updatedAt: now,
+  );
+
+  TodoTask task(String notes) => TodoTask(
+    id: 'doc-1',
+    listId: 'list-1',
+    title: 'Title',
+    notes: notes,
+    createdAt: now,
+    updatedAt: now,
+  );
 
   group('self-echo suppression (findings #10, #11)', () {
     late _CountingSyncRepository server;
@@ -425,6 +510,60 @@ void main() {
         expect(applied, isTrue);
       },
     );
+
+    test(
+      'a write held offline past the window is still ours once confirmed',
+      () async {
+        // Wi-Fi off while typing: Firestore holds the write until the network
+        // is back and confirms it then. Aged from the mark, the confirmation
+        // read as another device's edit, and an entry open in the editor had
+        // that "edit" injected into text that already held it — doubled.
+        var at = Duration.zero;
+        device.sync.echoClock = () => at;
+        server.holdWrites = Completer<void>();
+        final pushed = pushCalendar('Work');
+        await pumpEventQueue();
+        expect(device.sync.selfEchoMarkCount, 1, reason: 'marked, write held');
+
+        at = const Duration(minutes: 5);
+        server.holdWrites!.complete();
+        final stored = await pushed;
+
+        at += const Duration(seconds: 14);
+        final applied = await device.sync.pullForCollection(
+          FirestoreCollections.calendars,
+          documentIds: {'cal-1'},
+          documentData: {'cal-1': stored},
+        );
+        expect(applied, isFalse);
+      },
+    );
+
+    test('a write that timed out is still ours once confirmed', () async {
+      // Offline past the write gate's timeout: it stops waiting, but Firestore
+      // keeps the write and confirms it when the network is back.
+      var at = Duration.zero;
+      device.sync.echoClock = () => at;
+      server.timeOutWrites = true;
+      try {
+        await pushCalendar('Work');
+      } on TimeoutException {
+        // What the gate throws; the write is still queued.
+      }
+      server.timeOutWrites = false;
+      final stored = (await server.getDocument(
+        FirestoreCollections.calendars,
+        'cal-1',
+      ))!;
+
+      at = const Duration(minutes: 5);
+      final applied = await device.sync.pullForCollection(
+        FirestoreCollections.calendars,
+        documentIds: {'cal-1'},
+        documentData: {'cal-1': stored},
+      );
+      expect(applied, isFalse);
+    });
 
     test('expired marks are swept at most once a window', () async {
       // Marks for documents that are never pulled back — a signed-out session —
@@ -771,4 +910,352 @@ void main() {
       expect(await server.listOperations(firestoreId), isEmpty);
     });
   });
+
+  group('an open editor merges remote text through its session', () {
+    late _CountingSyncRepository server;
+    late _Device a;
+    late _Device b;
+
+    setUp(() {
+      server = _CountingSyncRepository();
+      a = _Device(server, 'device-a');
+      b = _Device(server, 'device-b');
+    });
+
+    tearDown(() async {
+      await a.close();
+      await b.close();
+    });
+
+    /// Every kind of text two devices edit together, as its editor and its
+    /// saves reach sync. The document is always `doc-1`.
+    final kinds = [
+      _TextKind(
+        name: 'journal body',
+        collection: FirestoreCollections.journalEntries,
+        saveLocally: (device, text) =>
+            device.journals.upsertEntry(entry(id: 'doc-1', body: text)),
+        upload: (device, text) async =>
+            device.sync.pushJournalEntryNow(entry(id: 'doc-1', body: text)),
+        record: (device, before, after) => device.sync.recordJournalTextChange(
+          entryId: 'doc-1',
+          before: before,
+          after: after,
+        ),
+      ),
+      _TextKind(
+        name: 'dream body',
+        collection: FirestoreCollections.dreamEntries,
+        saveLocally: (device, text) => device.dreams.upsertEntry(dream(text)),
+        upload: (device, text) async =>
+            device.sync.pushDreamEntryNow(dream(text)),
+        record: (device, before, after) => device.sync.recordDreamTextChange(
+          entryId: 'doc-1',
+          before: before,
+          after: after,
+        ),
+      ),
+      _TextKind(
+        name: 'todo notes',
+        collection: FirestoreCollections.todoTasks,
+        saveLocally: (device, text) => device.todos.upsertTask(task(text)),
+        upload: (device, text) => device.sync.pushTodoTaskNow(task(text)),
+        record: (device, before, after) => device.sync.recordTodoNotesChange(
+          taskId: 'doc-1',
+          before: before,
+          after: after,
+        ),
+      ),
+    ];
+    final journal = kinds.first;
+
+    /// Opens doc-1 on [device] the way its page does.
+    Future<_Editor> openEditor(
+      _Device device,
+      _TextKind kind,
+      String text,
+    ) async {
+      await kind.saveLocally(device, text);
+      await device.sync.prepareEditingSession(
+        collection: kind.collection,
+        documentId: 'doc-1',
+        initialText: text,
+      );
+      device.sync.setDocumentEditing(
+        collection: kind.collection,
+        documentId: 'doc-1',
+        isEditing: true,
+      );
+      final editor = _Editor(
+        device,
+        (before, after) => kind.record(device, before, after),
+        text,
+      );
+      device.sync.addPendingTextMergeListener(
+        collection: kind.collection,
+        documentId: 'doc-1',
+        listener: editor.onMerge,
+      );
+      return editor;
+    }
+
+    /// Saves and uploads what [editor] shows, as an autosave would.
+    Future<void> save(_Editor editor, _TextKind kind) async {
+      await kind.saveLocally(editor.device, editor.text);
+      await kind.upload(editor.device, editor.text);
+      await pumpEventQueue();
+    }
+
+    /// What the snapshot listener hands [device] for doc-1.
+    Future<bool> deliver(_Device device, String collection) async =>
+        device.sync.pullForCollection(
+          collection,
+          documentIds: {'doc-1'},
+          documentData: {
+            'doc-1': (await server.getDocument(collection, 'doc-1'))!,
+          },
+        );
+
+    for (final kind in kinds) {
+      test(
+        '${kind.name}: our own write coming back unrecognised does not double '
+        'the text',
+        () async {
+          // Wi-Fi off, or a restart in between: the confirmation of our own
+          // upload arrives with no echo mark to recognise it by.
+          var at = Duration.zero;
+          a.sync.echoClock = () => at;
+          final editor = await openEditor(a, kind, 'hello');
+          await save(editor, kind);
+          at = const Duration(hours: 1);
+          // Leaves "hello" as the last remote text seen.
+          await deliver(a, kind.collection);
+
+          editor.type(' world');
+          await save(editor, kind);
+          editor.type('!!'); // Typed after that upload, not sent yet.
+
+          at = const Duration(hours: 2);
+          await deliver(a, kind.collection);
+
+          expect(editor.text, 'hello world!!');
+        },
+      );
+    }
+
+    test("another device's text lands once, and the caret stays put", () async {
+      final editor = await openEditor(a, journal, 'hello world');
+      await save(editor, journal);
+      editor.value = const TextEditingValue(
+        text: 'hello world',
+        selection: TextSelection.collapsed(offset: 5),
+      );
+
+      final other = await openEditor(b, journal, 'hello world');
+      other.type('Hi, ', at: 0);
+      other.type(', friend', at: other.text.length);
+      await save(other, journal);
+
+      await deliver(a, journal.collection);
+
+      expect(editor.text, 'Hi, hello world, friend');
+      expect(
+        editor.value.selection,
+        const TextSelection.collapsed(offset: 9),
+        reason: 'still after "hello": moved by the insert before it only',
+      );
+      expect(
+        await a.sync.applyPendingJournalEntryTextMerge(
+          entryId: 'doc-1',
+          currentLocalText: editor.text,
+        ),
+        isNull,
+        reason: 'applied live, so the final flush must not apply it again',
+      );
+    });
+
+    test('changes left for the flush all land, not just the last', () async {
+      final editor = await openEditor(a, journal, 'hello world');
+      await save(editor, journal);
+      editor.takesMerges = false;
+
+      final other = await openEditor(b, journal, 'hello world');
+      other.type('Hi, ', at: 0);
+      await save(other, journal);
+      await deliver(a, journal.collection);
+      other.type(', friend', at: other.text.length);
+      await save(other, journal);
+      await deliver(a, journal.collection);
+
+      expect(
+        (await a.sync.applyPendingJournalEntryTextMerge(
+          entryId: 'doc-1',
+          currentLocalText: editor.text,
+        ))?.body,
+        'Hi, hello world, friend',
+      );
+    });
+
+    test(
+      'a caret after our character stays there when theirs shares its spot',
+      () async {
+        // Both devices type after "hello" at once: the two characters get the
+        // same fractional position, told apart only by id.
+        final editor = await openEditor(a, journal, 'hello world');
+        await save(editor, journal);
+        final other = await openEditor(b, journal, 'hello world');
+
+        editor.type('!', at: 5);
+        other.type('?', at: 5);
+        await save(other, journal);
+
+        await deliver(a, journal.collection);
+
+        expect(editor.text, anyOf('hello!? world', 'hello?! world'));
+        final caret = editor.value.selection.baseOffset;
+        expect(editor.text[caret - 1], '!');
+      },
+    );
+
+    test('a change the editor already shows is not merged again', () async {
+      // No session, and our own typing back with a stale baseline: the
+      // editor already shows it, so nothing is left for the final flush.
+      await journal.saveLocally(a, 'hello');
+      a.sync.setDocumentEditing(
+        collection: journal.collection,
+        documentId: 'doc-1',
+        isEditing: true,
+      );
+      final editor = _Editor(a, (_, _) {}, 'hello');
+      a.sync.addPendingTextMergeListener(
+        collection: journal.collection,
+        documentId: 'doc-1',
+        listener: editor.onMerge,
+      );
+      await server.upsertDocument(
+        journal.collection,
+        'doc-1',
+        journalEntryToFirestore(entry(id: 'doc-1', body: 'hello')),
+      );
+      await deliver(a, journal.collection);
+
+      editor.type(' world');
+      await server.upsertDocument(
+        journal.collection,
+        'doc-1',
+        journalEntryToFirestore(
+          entry(id: 'doc-1', body: 'hello world').copyWith(version: 5),
+        ),
+      );
+      await deliver(a, journal.collection);
+      editor.type('!');
+
+      final flushed = await a.sync.applyPendingJournalEntryTextMerge(
+        entryId: 'doc-1',
+        currentLocalText: editor.text,
+      );
+      expect(flushed?.body ?? editor.text, 'hello world!');
+    });
+
+    test('an open editor nobody is typing in still shows the change', () async {
+      // Focus in the title: the body is open but not being edited, so the
+      // pull stores the change itself. The body kept the old text, and the
+      // next keystroke there dropped the change on this device only.
+      final editor = await openEditor(a, journal, 'hello world');
+      await save(editor, journal);
+      a.sync.setDocumentEditing(
+        collection: journal.collection,
+        documentId: 'doc-1',
+        isEditing: false,
+      );
+
+      final other = await openEditor(b, journal, 'hello world');
+      other.type('Hi, ', at: 0);
+      await save(other, journal);
+      await deliver(a, journal.collection);
+
+      expect(editor.text, 'Hi, hello world');
+      expect(editor.value.selection, const TextSelection.collapsed(offset: 15));
+
+      editor.type('!');
+      await save(editor, journal);
+      await deliver(b, journal.collection);
+      expect((await a.journals.getEntry('doc-1'))?.body, 'Hi, hello world!');
+      expect(other.text, 'Hi, hello world!');
+    });
+
+    test('a document with no operation log merges its snapshot', () async {
+      // The session is open, but nothing has been uploaded with operations:
+      // the text is the snapshot's alone, which the session never sees.
+      final editor = await openEditor(a, journal, 'hello');
+      await server.upsertDocument(
+        journal.collection,
+        'doc-1',
+        journalEntryToFirestore(entry(id: 'doc-1', body: 'hello')),
+      );
+      await deliver(a, journal.collection);
+      await server.upsertDocument(
+        journal.collection,
+        'doc-1',
+        journalEntryToFirestore(
+          entry(id: 'doc-1', body: 'hello there').copyWith(version: 5),
+        ),
+      );
+
+      await deliver(a, journal.collection);
+
+      expect(editor.text, 'hello there');
+    });
+
+    test('with no session yet, the text diff still merges', () async {
+      // Opened, but the operation log has not loaded: there is no session to
+      // fold into, so the last remote text seen stays the baseline.
+      await journal.saveLocally(a, 'hello');
+      a.sync.setDocumentEditing(
+        collection: journal.collection,
+        documentId: 'doc-1',
+        isEditing: true,
+      );
+      final editor = _Editor(a, (_, _) {}, 'hello');
+      a.sync.addPendingTextMergeListener(
+        collection: journal.collection,
+        documentId: 'doc-1',
+        listener: editor.onMerge,
+      );
+      await server.upsertDocument(
+        journal.collection,
+        'doc-1',
+        journalEntryToFirestore(entry(id: 'doc-1', body: 'hello')),
+      );
+      await deliver(a, journal.collection);
+      await server.upsertDocument(
+        journal.collection,
+        'doc-1',
+        journalEntryToFirestore(
+          entry(id: 'doc-1', body: 'hello there').copyWith(version: 5),
+        ),
+      );
+
+      await deliver(a, journal.collection);
+
+      expect(editor.text, 'hello there');
+    });
+  });
+}
+
+/// One kind of collaboratively edited text — see the open-editor group.
+class _TextKind {
+  const _TextKind({
+    required this.name,
+    required this.collection,
+    required this.saveLocally,
+    required this.upload,
+    required this.record,
+  });
+
+  final String name;
+  final String collection;
+  final Future<void> Function(_Device device, String text) saveLocally;
+  final Future<void> Function(_Device device, String text) upload;
+  final void Function(_Device device, String before, String after) record;
 }
