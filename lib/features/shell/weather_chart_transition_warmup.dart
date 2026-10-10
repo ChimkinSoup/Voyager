@@ -39,8 +39,8 @@ DayForecastChartSeries weatherChartWarmupSeries({double baseTemp = 14}) {
 
 /// Pre-records and caches a plot Picture for [series] at [plotSize].
 ///
-/// Called outside of frame callbacks (at idle priority) so it never blocks
-/// the rasteriser. The first live render will hit the cache instead of
+/// Called outside of frame callbacks (from a scheduler task) so it never
+/// blocks the rasteriser. The first live render will hit the cache instead of
 /// recording a new Picture on the hot path.
 void warmWeatherChartPlotCache({
   required DayForecastChartSeries series,
@@ -74,8 +74,9 @@ void warmWeatherChartPlotCache({
 /// **Timing contract with [CalendarMorphWarmup]:**
 /// The calendar warmup runs its 2 frames immediately at login. To avoid
 /// frame-budget competition we delay our start by [_startDelay], ensuring
-/// the calendar shaders finish compiling first. Plot cache population is
-/// scheduled at [Priority.idle] so it never blocks a frame.
+/// the calendar shaders finish compiling first. Plot cache population is one
+/// scheduler task per plot, so it runs between frames rather than inside one,
+/// and no single turn of the event loop records more than one plot.
 class WeatherChartTransitionWarmup extends ConsumerStatefulWidget {
   const WeatherChartTransitionWarmup({super.key});
 
@@ -122,17 +123,23 @@ class _WeatherChartTransitionWarmupState
     // synchronously during a frame callback, blocking the rasteriser.
     // The widget render below triggers paintWeatherChartPlotCached which
     // populates the cache naturally on cache miss (one frame, invisible).
-    // Real-data cache population is scheduled at idle priority below.
+    // Real-data cache population is scheduled as tasks below.
 
     _frame++;
     if (_frame >= 3) {
       setState(() => _done = true);
       if (!DevFlags.disableCache) {
-        // Schedule real forecast data cache population at idle priority so it
-        // runs between frames and never contends with visible animations.
+        // Schedule real forecast data cache population as a task so it runs
+        // between frames. Not at Priority.idle: the scheduler holds an idle
+        // task back for as long as any animation ticks, re-posting a zero
+        // timer every event-loop turn while it waits. A workout restored at
+        // launch pulses its island forever, so the task never ran and that
+        // spin on the platform thread starved Windows input: no click, key
+        // or taskbar restore reached the app until the workout ended
+        // (BUG-198).
         SchedulerBinding.instance.scheduleTask<void>(
-          _populatePlotCacheIdle,
-          Priority.idle,
+          _schedulePlotCacheWarm,
+          Priority.animation,
         );
       }
       return;
@@ -147,7 +154,11 @@ class _WeatherChartTransitionWarmupState
     WidgetsBinding.instance.addPostFrameCallback(_advance);
   }
 
-  void _populatePlotCacheIdle() {
+  /// Reads what the plots need and schedules each one as its own task.
+  /// At animation priority a task runs while the login transition is still
+  /// moving, so recording every day's plot in one turn could cost a frame;
+  /// one plot per task lets frames land in between.
+  void _schedulePlotCacheWarm() {
     if (!mounted || DevFlags.disableCache) return;
 
     final colors = weatherChartColors(ref);
@@ -155,46 +166,39 @@ class _WeatherChartTransitionWarmupState
       context,
     ).colorScheme.outlineVariant.withValues(alpha: 0.15);
 
+    void schedule(
+      DayForecastChartSeries Function() series,
+      double gradientStartHour,
+    ) => SchedulerBinding.instance.scheduleTask<void>(() {
+      if (!mounted || DevFlags.disableCache) return;
+      final built = series();
+      if (built.isEmpty) return;
+      warmWeatherChartPlotCache(
+        series: built,
+        gradientStartHour: gradientStartHour,
+        tempColor: colors.temp,
+        rainColor: colors.rain,
+        degreeGridColor: degreeGridColor,
+      );
+    }, Priority.animation);
+
     final forecast = ref.read(weatherForecastProvider).valueOrNull;
     if (forecast != null) {
       final now = DateTime.now();
       final days = visibleForecastDays(forecast.dailySummaries, now);
       for (var i = 0; i < days.length && i < forecastVisibleDayCount; i++) {
-        final series = buildDayForecastChartSeries(
-          forecast.periods,
-          days[i].date,
-          now: now,
-        );
-        if (series.isEmpty) continue;
-        warmWeatherChartPlotCache(
-          series: series,
-          gradientStartHour: forecastRainGradientStartHour(
-            days[i].date,
-            forecast.fetchedAt,
-          ),
-          tempColor: colors.temp,
-          rainColor: colors.rain,
-          degreeGridColor: degreeGridColor,
+        final date = days[i].date;
+        schedule(
+          () => buildDayForecastChartSeries(forecast.periods, date, now: now),
+          forecastRainGradientStartHour(date, forecast.fetchedAt),
         );
       }
       return;
     }
 
     // No forecast yet — warm with synthetic series so shaders are compiled.
-    warmWeatherChartPlotCache(
-      series: weatherChartWarmupSeries(baseTemp: 14),
-      gradientStartHour: 0,
-      tempColor: colors.temp,
-      rainColor: colors.rain,
-      degreeGridColor: degreeGridColor,
-    );
-    warmWeatherChartPlotCache(
-      series: weatherChartWarmupSeries(baseTemp: 18),
-      gradientStartHour: 0,
-      tempColor: colors.temp,
-      rainColor: colors.rain,
-      degreeGridColor: degreeGridColor,
-    );
+    schedule(() => weatherChartWarmupSeries(baseTemp: 14), 0);
+    schedule(() => weatherChartWarmupSeries(baseTemp: 18), 0);
   }
 
   @override

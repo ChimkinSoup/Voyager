@@ -86,6 +86,11 @@ class _StudyKeyboardShortcutsState
     if (widget.suppressed) return false;
     final route = ModalRoute.of(context);
     if (route?.isCurrent != true) return false;
+    // The card editor and the delete confirm open on the root navigator,
+    // which leaves this route current behind them; with no field focused in
+    // the editor, Space and the grade keys reached the card underneath
+    // (BUG-194).
+    if (focusIsInPopupRoute()) return false;
     if (isTextInputFocused()) return false;
     if (!subtreeIsVisible(context)) return false;
     // Inspecting a card's image puts a viewer over the whole session, and it

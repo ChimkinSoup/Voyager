@@ -1,0 +1,2 @@
+await c.read(studyRepositoryProvider).softDeleteCard('fv39-c2');
+invalidateAllDataProvidersIn(c);

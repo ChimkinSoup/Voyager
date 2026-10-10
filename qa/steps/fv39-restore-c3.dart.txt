@@ -1,0 +1,5 @@
+final trash = c.read(trashServiceProvider);
+final item = (await trash.list()).firstWhere((i) => i.id == 'fv39-c3');
+await trash.restore(item);
+invalidateAllDataProvidersIn(c);
+

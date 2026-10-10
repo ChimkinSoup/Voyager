@@ -1,0 +1,6 @@
+final sr = c.read(studyRepositoryProvider);
+final card = (await sr.getCard('fv39-c1'))!;
+final graded = card.copyWith(interval: 2.5, reviewCount: card.reviewCount + 1, dueAt: DateTime.now().toUtc().add(const Duration(days: 2)));
+await sr.upsertCard(graded); c.read(remoteSyncServiceProvider).pushStudyCard(graded);
+invalidateAllDataProvidersIn(c);
+debugPrint('FV39 elsewhere ' + graded.reviewCount.toString() + ' ' + graded.dueAt.toIso8601String());

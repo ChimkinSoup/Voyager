@@ -13,6 +13,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/utils/live_snapshot.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/study_srs_engine.dart';
@@ -34,7 +35,12 @@ import 'package:voyager/features/study/study_keyboard_shortcuts.dart';
 /// can review everything due across the whole library in one sitting; a deck
 /// opens one by handing over its own roster.
 class StudySessionPage extends ConsumerStatefulWidget {
-  const StudySessionPage({super.key, required this.cardIds, this.frameDeckId});
+  const StudySessionPage({
+    super.key,
+    required this.cardIds,
+    this.frameDeckId,
+    this.checkpointScope,
+  });
 
   /// The cards in scope for this session. Which of them are actually due is
   /// decided when the queue is built.
@@ -44,6 +50,12 @@ class StudySessionPage extends ConsumerStatefulWidget {
   /// reached through a link — carries that deck's name on its face. Null for
   /// the Hub's library-wide run, which shows no source at all.
   final String? frameDeckId;
+
+  /// The resume slot, when the entry point is not simply the Hub or a deck's
+  /// own Study: a linked subset framed as its parent, or a linked deck's own
+  /// cards, is a different round from the one that deck's Study opens, and
+  /// neither may be offered back in place of the other (BUG-193).
+  final String? checkpointScope;
 
   @override
   ConsumerState<StudySessionPage> createState() => _StudySessionPageState();
@@ -100,6 +112,10 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
   /// the cards arrive and it can be hydrated.
   SessionCheckpoint? _restored;
 
+  /// The resume toast, taken down with the page: its Start over is about this
+  /// round, and from anywhere else it would throw the saved one away unseen.
+  VoyagerToast? _resumeToast;
+
   /// Whether the slot has been read. The queue waits for it: building a fresh
   /// round first and replacing it a frame later would put a card up in front
   /// of the user and then take it away again.
@@ -113,9 +129,9 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
       kind: SessionCheckpointKind.studySession,
       // The Hub's library-wide run and a deck's own are different sessions,
       // and neither may be offered back in place of the other.
-      scopeKey: widget.frameDeckId == null
-          ? 'hub'
-          : 'deck:${widget.frameDeckId}',
+      scopeKey:
+          widget.checkpointScope ??
+          (widget.frameDeckId == null ? 'hub' : 'deck:${widget.frameDeckId}'),
       build: _buildCheckpoint,
     );
     _checkpoint.load().then((restored) {
@@ -129,6 +145,7 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
 
   @override
   void dispose() {
+    _resumeToast?.dismiss();
     // Disposal is every incomplete exit there is: the X button, Back to deck,
     // a route pop, the app being closed. Fired rather than awaited — the
     // store chains its writes, so this lands even though the page is gone.
@@ -197,7 +214,29 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
       for (final card in allCards)
         if (widget.cardIds.contains(card.id)) card.id: card,
     };
-    final remaining = [for (final id in checkpoint.remainingQueue) ?byId[id]];
+    // A card graded somewhere else since — another deck sharing it through a
+    // link, the Hub, or this round in the moment before a kill beat the
+    // checkpoint to disk — is no longer due, and grading it again here would
+    // review it twice (BUG-192). A card this round graded itself is not due
+    // either, but it is still the state the round left it in — same review
+    // count as its last grade here — and its undo is the round's to take.
+    // Nothing the round re-queues is affected: a failed or reset card is due
+    // at once.
+    final now = DateTime.now().toUtc();
+    final gradedHere = {
+      for (final dto in checkpoint.graded)
+        dto.id: StudyCard.fromJson(dto.after).reviewCount,
+    };
+    final gradedElsewhere = {
+      for (final card in byId.values)
+        if (card.dueAt.isAfter(now) &&
+            gradedHere[card.id] != card.reviewCount)
+          card.id,
+    };
+    final remaining = [
+      for (final id in checkpoint.remainingQueue)
+        if (byId[id] case final card? when !gradedElsewhere.contains(id)) card,
+    ];
     // Every card the session had left has gone. The grades it made are
     // already on disk, so there is no run here to come back to — only a file.
     if (remaining.isEmpty) {
@@ -205,14 +244,20 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
       return false;
     }
 
-    final known = {...checkpoint.sourceIds, ...checkpoint.remainingQueue};
+    // Only cards still here count as known: one deleted while the session was
+    // away and brought back later rejoins as a newcomer (BUG-197).
+    final sourceIds = checkpoint.sourceIds.where(byId.containsKey);
+    final known = {...sourceIds, ...checkpoint.remainingQueue};
     final newcomers = [
       for (final card in _eligible(allCards))
         if (!known.contains(card.id)) card,
     ]..shuffle(ref.read(sessionShuffleRandomProvider));
 
     List<StudyCard> resolve(List<String> ids) => [
-      for (final id in ids) ?byId[id],
+      // Left out of every arrangement the history can step back into too, or
+      // the first undo would put such a card back in the queue.
+      for (final id in ids)
+        if (!gradedElsewhere.contains(id)) ?byId[id],
       // Cards that came due while the session was away belong to the tail of
       // every arrangement it can step back into, not only the current one: a
       // snapshot without them would drop them again on the first undo.
@@ -222,8 +267,10 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
     List<_GradeStep> steps(List<GradeStepDto> dtos) => [
       for (final dto in dtos)
         // A step whose card has been deleted has nothing left to put a rating
-        // back on, so it is not a step this session can take.
-        if (byId.containsKey(dto.id))
+        // back on, so it is not a step this session can take. Nor is one whose
+        // card was graded elsewhere since: replaying it would write this
+        // round's rating over that newer one.
+        if (byId.containsKey(dto.id) && !gradedElsewhere.contains(dto.id))
           _GradeStep(
             before: StudyCard.fromJson(dto.before),
             after: StudyCard.fromJson(dto.after),
@@ -242,7 +289,7 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
       ..addAll(steps(checkpoint.undone));
     _sourceIds
       ..clear()
-      ..addAll(checkpoint.sourceIds)
+      ..addAll(sourceIds)
       ..addAll([for (final card in _eligible(allCards)) card.id])
       ..addAll([for (final card in _queue!) card.id]);
     // The reconciled round, written back before the user touches it.
@@ -250,7 +297,7 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      showSessionResumeToast(
+      _resumeToast = showSessionResumeToast(
         context,
         remaining: _queue?.length ?? 0,
         onStartOver: _startOver,
@@ -263,6 +310,7 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
   /// had without it: everything eligible under live SRS, newcomers included,
   /// freshly shuffled. Grades already committed stay committed.
   Future<void> _startOver() async {
+    if (!mounted) return;
     await _checkpoint.discard();
     if (!mounted) return;
     setState(() {
@@ -289,6 +337,12 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
     // re-read the queue from there instead of going on showing the pre-edit
     // copy.
     _queue = refreshFromLive(queue, allCards);
+    // A card deleted any other way — a pull from another device, its deck
+    // going — leaves the queue above; it leaves the known set too, so a
+    // restore after the session is left brings it back as a newcomer
+    // (BUG-197).
+    final live = {for (final card in allCards) card.id};
+    _sourceIds.removeWhere((id) => !live.contains(id));
   }
 
   void _handleFlip() {
@@ -391,6 +445,10 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
 
     setState(() {
       _queue = [...?_queue]..removeWhere((c) => c.id == card.id);
+      // Forgotten as well as dequeued, so a restore from the Trash after the
+      // session is left brings it back as a newcomer (BUG-197). The toast's
+      // Undo puts it back, in the queue and in the known set.
+      _sourceIds.remove(card.id);
       _clearHistory();
     });
     _showFront();
@@ -412,6 +470,9 @@ class _StudySessionPageState extends ConsumerState<StudySessionPage> {
     if (restored == null) return;
     setState(() {
       _queue = [restored, ...?_queue?.where((c) => c.id != cardId)];
+      // Known again, like every card the round started with: graded here and
+      // left, it must not come back as a newcomer once it is due again.
+      _sourceIds.add(cardId);
       // The round is arranged differently from every step already taken, for
       // the same reason a reset clears the history.
       _clearHistory();

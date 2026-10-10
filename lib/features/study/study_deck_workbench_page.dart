@@ -105,8 +105,7 @@ class _StudyDeckWorkbenchPageState
     // A sheet or dialog on the root navigator — the card editor — leaves
     // this page's own route current, so ask where the keyboard is instead:
     // focus inside a popup route means the Esc is that popup's.
-    final focused = FocusManager.instance.primaryFocus?.context;
-    if (focused != null && ModalRoute.of(focused) is PopupRoute) return false;
+    if (focusIsInPopupRoute()) return false;
     if (isTextInputFocused() || mediaLightboxIsOpen || contextMenuIsOpen) {
       return false;
     }
@@ -427,23 +426,36 @@ class _StudyDeckWorkbenchPageState
   /// A Study session framed as this deck. Its cards arrive from links as
   /// well as from here, so the framing is what tells a linked card to show
   /// where it lives.
-  void _studySession(Set<String> cardIds, {String? frameDeckId}) {
+  ///
+  /// [checkpointScope] keeps a round that is not this deck's own Study — a
+  /// linked subset, a linked deck's own cards — out of its resume slot.
+  void _studySession(
+    Set<String> cardIds, {
+    String? frameDeckId,
+    String? checkpointScope,
+  }) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => StudySessionPage(
           cardIds: cardIds,
           frameDeckId: frameDeckId ?? widget.deckId,
+          checkpointScope: checkpointScope,
         ),
       ),
     );
   }
 
-  void _cramSession(Set<String> cardIds, {String? frameDeckId}) {
+  void _cramSession(
+    Set<String> cardIds, {
+    String? frameDeckId,
+    String? checkpointScope,
+  }) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => StudyCramPage(
           deckId: frameDeckId ?? widget.deckId,
           cardIds: cardIds,
+          checkpointScope: checkpointScope,
         ),
       ),
     );
@@ -473,16 +485,29 @@ class _StudyDeckWorkbenchPageState
             c.id,
         };
         switch (action) {
+          // Its own resume slot: opening that deck and pressing Study
+          // studies its links too, a different round (BUG-193).
           case StudyLinkedDeckAction.study:
-            _studySession(ids, frameDeckId: child.id);
+            _studySession(
+              ids,
+              frameDeckId: child.id,
+              checkpointScope: 'own:${child.id}',
+            );
           case StudyLinkedDeckAction.cram:
-            _cramSession(ids, frameDeckId: child.id);
+            _cramSession(
+              ids,
+              frameDeckId: child.id,
+              checkpointScope: 'own:${child.id}',
+            );
         }
       },
       onToggle: (enabled) =>
           setStudyDeckLinkEnabled(ref, link, enabled: enabled),
       // Framed as this deck, drawing only on the linked one (§5.4).
-      onStudySubset: () => _studySession(childIds()),
+      onStudySubset: () => _studySession(
+        childIds(),
+        checkpointScope: 'subset:${widget.deckId}:${child.id}',
+      ),
       onFork: () => forkStudyDeckLink(
         context,
         ref,
@@ -549,7 +574,18 @@ class _IncludedIn extends StatelessWidget {
                     ),
                   ),
                 ),
-                child: Text(parent.name, style: style),
+                // Capped and ellipsized like the library tiles, so a long name
+                // can't fill whole lines and push the deck header down
+                // (BUG-191).
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 240),
+                  child: Text(
+                    parent.name,
+                    style: style,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
             ),
           ),

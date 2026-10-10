@@ -8,7 +8,10 @@ import 'package:voyager/core/widgets/voyager_toast.dart';
 /// Continuing is not a button: the restored session is already on screen by
 /// the time this shows, so dismissing the toast — or ignoring it — is
 /// continuing. Start over is the only thing there is to decide.
-void showSessionResumeToast(
+///
+/// The page that shows it dismisses the returned toast when it goes: Start
+/// over belongs to the round on screen (BUG-196).
+VoyagerToast showSessionResumeToast(
   BuildContext context, {
   required int remaining,
   required VoidCallback onStartOver,

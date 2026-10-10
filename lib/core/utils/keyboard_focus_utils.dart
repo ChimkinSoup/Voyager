@@ -11,6 +11,15 @@ bool isTextInputFocused() {
   return context.findAncestorWidgetOfExactType<EditableText>() != null;
 }
 
+/// True when focus sits inside a dialog, sheet or menu route — the keys are
+/// that popup's. A [HardwareKeyboard] handler's own route can't tell it: the
+/// card editor and the confirm dialogs open on the root navigator, which
+/// leaves a shell branch's page route current behind them (BUG-189, BUG-194).
+bool focusIsInPopupRoute() {
+  final focused = FocusManager.instance.primaryFocus?.context;
+  return focused != null && ModalRoute.of(focused) is PopupRoute;
+}
+
 /// Whether this widget's subtree is the one the user is actually looking at.
 ///
 /// A route being current isn't enough on its own when a shell keeps every

@@ -80,10 +80,10 @@ One active incomplete checkpoint per scope. Opening Study must not steal Cram’
 |------|------------------------|------------|
 | `leetcodeStudy` | Fixed kind (deck is the filtered Review Deck set at session start; see §5) | `problemIds` snapshot + queue |
 | `leetcodeCram` | Fixed kind | same |
-| `studySession` | `hub` **or** `deck:<deckId>` (use `frameDeckId`; hub when null) | `cardIds` + queue |
-| `studyCram` | `deck:<deckId>` | `deckId` / `cardIds` + buckets |
+| `studySession` | `hub` **or** `deck:<deckId>` (use `frameDeckId`; hub when null); `subset:<parentId>:<childId>` for "Study this linked subset"; `own:<childId>` for the linked-deck popup's Study (its own cards only) | `cardIds` + queue |
+| `studyCram` | `deck:<deckId>`; `own:<childId>` for the linked-deck popup's Cram | `deckId` / `cardIds` + buckets |
 
-Entering Study on Hub never offers a deck workbench checkpoint, and vice versa. LeetCode Study vs Cram never share a file.
+Entering Study on Hub never offers a deck workbench checkpoint, and vice versa. A linked subset, or a linked deck's own cards, is a different round from the deck's own Study and never shares its slot (BUG-193). LeetCode Study vs Cram never share a file.
 
 ### 4.2 Shared envelope
 
@@ -154,7 +154,7 @@ App pause is not a dispose — the page stays alive and the process can be kille
 
 1. Load checkpoint for kind + scope.  
 2. Resolve ids against live data (`refreshFromLive` / problem map).  
-3. **Drop** ids that no longer exist. Prune grade/cram steps that reference only missing cards; drop empty steps as needed so undo stays coherent.  
+3. **Drop** ids that no longer exist, and (Study) cards graded in another session since: not due, and not at the review count this round's own last grade left them. They leave the remaining queue, every queue the undo history can step back into, and the history itself, so they are neither reviewed twice nor overwritten by an undo (BUG-192). Only ids that still exist count as known in step 4, and a card deleted mid-session leaves `sourceIds`, so one restored from the Trash later comes back as a newcomer (BUG-197). Prune grade/cram steps that reference only missing cards; drop empty steps as needed so undo stays coherent.  
 4. Compute **newcomers**: currently eligible ids not in `sourceIds` ∪ remaining queue/buckets.  
 5. **Study:** keep `remainingQueue` order (minus dropped); **append** newcomers in a fresh shuffle (`sessionShuffleRandomProvider` or equivalent).  
 6. **Cram:** keep bucket membership for surviving ids; append newcomers to **bucket 0**, shuffled among themselves (or shuffled into the end of bucket 0 — pick one and keep it consistent in implementation).  
@@ -176,7 +176,7 @@ Eligible set for newcomers / Start over:
 
 ## 7. Resume toast UX
 
-- Show once when the session route opens and a checkpoint was loaded (or offered).  
+- Show once when the session route opens and a checkpoint was loaded (or offered). The page dismisses it when it goes: Start over belongs to the round on screen, and from the deck page or another session it would throw the saved round away unseen (BUG-196).  
 - Copy (directional): *Resuming your previous session* (optional: card count left).  
 - Action: **Start over** — discards checkpoint and rebuilds a fresh shuffled session from the live eligible set (includes new cards).  
 - Continuing is the default path: hydrate already applied before or as the toast shows so the user sees the restored card immediately.  

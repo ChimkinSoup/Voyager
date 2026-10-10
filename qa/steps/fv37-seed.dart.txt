@@ -1,0 +1,13 @@
+final now = DateTime.now().toUtc().subtract(const Duration(minutes: 1));
+final r = c.read(remoteSyncServiceProvider);
+final sr = c.read(studyRepositoryProvider);
+final longName = 'L' + List.filled(298, 'x').join() + 'Z';
+final decks = [StudyDeck(id: 'fv37-alg', name: 'Algebra', createdAt: now, updatedAt: now), StudyDeck(id: 'fv37-child', name: 'Child', createdAt: now, updatedAt: now), StudyDeck(id: 'fv37-parent', name: longName, createdAt: now, updatedAt: now)];
+final extra = [for (var i = 1; i <= 9; i++) StudyDeck(id: 'fv37-d$i', name: 'Deck $i', createdAt: now, updatedAt: now)];
+for (final d in [...decks, ...extra]) { await sr.upsertDeck(d); r.pushStudyDeck(d); }
+StudyCard card(String id, String deck, String front) => StudyCard(id: id, deckId: deck, frontText: front, backText: 'Back of $front', dueAt: now, createdAt: now, updatedAt: now);
+final cards = [card('fv37-a1', 'fv37-alg', 'Alg one'), card('fv37-a2', 'fv37-alg', 'Alg two'), card('fv37-a3', 'fv37-alg', 'Alg three'), card('fv37-c1', 'fv37-child', 'Child one'), card('fv37-c2', 'fv37-child', 'Child two'), card('fv37-p1', 'fv37-parent', 'Parent one'), card('fv37-p2', 'fv37-parent', 'Parent two')];
+for (final k in cards) { await sr.upsertCard(k); r.pushStudyCard(k); }
+final link = StudyDeckLink(id: 'fv37-link', parentDeckId: 'fv37-parent', childDeckId: 'fv37-child', createdAt: now, updatedAt: now);
+await sr.upsertDeckLink(link); r.pushStudyDeckLink(link);
+for (final p in [studyCardsProvider, studyAllCardsProvider, studyDeckStatsProvider, studyStatsProvider, studyAllDecksProvider, studyDecksProvider, studyDeckGraphProvider]) { c.invalidate(p); }

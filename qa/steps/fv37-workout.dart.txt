@@ -1,0 +1,10 @@
+final now = DateTime.now().toUtc();
+final t0 = DateTime.now();
+final day = DateTime(t0.year, t0.month, t0.day);
+final r = c.read(remoteSyncServiceProvider);
+final wr = c.read(workoutRepositoryProvider);
+final ex = Exercise(id: 'fv37-exercise', createdAt: now, updatedAt: now, version: 1, name: 'FV37 Squat');
+final ses = WorkoutSession(id: 'fv37-session', createdAt: now, updatedAt: now, version: 1, date: day, startedAt: t0);
+await wr.upsertExercise(ex); await wr.upsertSession(ses); r.pushExercise(ex); r.pushWorkoutSession(ses);
+for (var i = 0; i < 3; i++) { final sl = WorkoutSetLog(id: 'fv37-set-$i', createdAt: now, updatedAt: now, version: 1, sessionId: 'fv37-session', exerciseId: 'fv37-exercise', exerciseOrder: 0, setIndex: i, weightKg: 60, reps: 8, plannedWeightKg: 60, plannedReps: 8); await wr.upsertSetLog(sl); r.pushWorkoutSetLog(sl); }
+c.invalidate(activeWorkoutSessionProvider);

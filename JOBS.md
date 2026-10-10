@@ -286,6 +286,7 @@ Also not a Jobs entity: `AppSettings.jobExperienceSnippets`, a list of `{ id, na
 - Default: **exclude archived**
 - With **Include archived** on: include those applications in the daily counts
 - Visual: minimalistic (match existing Voyager sparkline language — e.g. finance / leetcode activity sparklines)
+- Label: "Last 30 days" above the chart, always on one line. When the chart is narrower than that (profile icons can squeeze it to ~50px at the minimum window size), it reads "30 days"
 
 ### 8.4 Sankey — removed
 

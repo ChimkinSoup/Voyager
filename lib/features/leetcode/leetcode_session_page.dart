@@ -9,6 +9,7 @@ import 'package:voyager/core/session_resume/session_resume_toast.dart';
 import 'package:voyager/core/utils/live_snapshot.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/leetcode_srs_engine.dart';
@@ -114,6 +115,10 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
   /// the problems arrive and it can be hydrated.
   SessionCheckpoint? _restored;
 
+  /// The resume toast, taken down with the page: its Start over is about this
+  /// round, and from anywhere else it would throw the saved one away unseen.
+  VoyagerToast? _resumeToast;
+
   /// Whether the slot has been read. The queue waits for it: building a fresh
   /// round first and replacing it a frame later would put a card up in front
   /// of the user and then take it away again.
@@ -141,6 +146,7 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
 
   @override
   void dispose() {
+    _resumeToast?.dismiss();
     // Disposal is every incomplete exit there is: the X button, Back to deck,
     // a route pop, the app being closed. Fired rather than awaited — the
     // store chains its writes, so this lands even though the page is gone.
@@ -271,7 +277,7 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      showSessionResumeToast(
+      _resumeToast = showSessionResumeToast(
         context,
         remaining: _queue?.length ?? 0,
         onStartOver: _startOver,
@@ -285,6 +291,7 @@ class _LeetCodeSessionPageState extends ConsumerState<LeetCodeSessionPage>
   /// freshly shuffled, with empty pads. Grades already committed stay
   /// committed.
   Future<void> _startOver() async {
+    if (!mounted) return;
     await _checkpoint.discard();
     if (!mounted) return;
     resetScratch();

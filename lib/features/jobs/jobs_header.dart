@@ -174,6 +174,7 @@ class JobsHeader extends StatelessWidget {
                         Flexible(
                           child: _LabelledChart(
                             label: 'Last 30 days',
+                            shortLabel: '30 days',
                             child: JobsSparkline(counts: dailyCounts),
                           ),
                         ),
@@ -1032,7 +1033,11 @@ class _ExperienceMenu extends StatelessWidget {
 }
 
 class _LabelledChart extends StatelessWidget {
-  const _LabelledChart({required this.label, required this.child});
+  const _LabelledChart({
+    required this.label,
+    required this.shortLabel,
+    required this.child,
+  });
 
   /// Thirty days spread across the header's full half stretch the line into a
   /// near-flat drift rather than a chart; capped, a day is ~8.7px and the
@@ -1045,11 +1050,20 @@ class _LabelledChart extends StatelessWidget {
   static const double minWidth = 140;
 
   final String label;
+
+  /// Shown instead of [label] when the chart is narrower than it. Profile
+  /// icons can push the chart below [minWidth] — at the minimum window size
+  /// it is ~50px — and the full label then wrapped onto a second line, down
+  /// over the chart.
+  final String shortLabel;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final labelStyle = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+    );
     return Align(
       alignment: Alignment.centerRight,
       // Shrink-wrap: an Align handed a bounded width otherwise fills it, and
@@ -1066,13 +1080,15 @@ class _LabelledChart extends StatelessWidget {
           // capped width.
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant.withValues(
-                  alpha: 0.7,
-                ),
+            LayoutBuilder(
+              builder: (context, constraints) => Text(
+                _textWidth(context, label, labelStyle) <= constraints.maxWidth
+                    ? label
+                    : shortLabel,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: labelStyle,
               ),
             ),
             const SizedBox(height: 4),

@@ -11,6 +11,7 @@ import 'package:voyager/core/session_resume/session_resume_toast.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/services/study_srs_engine.dart';
@@ -34,7 +35,12 @@ const _kBucketDoneColor = Color(0xFF4CAF7D);
 /// once every card reaches bucket 2. Purely in-memory — never touches the
 /// cards' persisted SRS state (STUDY.md is explicit about this).
 class StudyCramPage extends ConsumerStatefulWidget {
-  const StudyCramPage({super.key, required this.deckId, this.cardIds});
+  const StudyCramPage({
+    super.key,
+    required this.deckId,
+    this.cardIds,
+    this.checkpointScope,
+  });
 
   /// The deck the run is framed as. A card whose home is another deck — one
   /// it reached through a link — carries that deck's name on its face.
@@ -43,6 +49,11 @@ class StudyCramPage extends ConsumerStatefulWidget {
   /// The cards to cram, when they are not simply [deckId]'s own — a deck's
   /// effective set with its links, or one linked deck's subset.
   final Set<String>? cardIds;
+
+  /// The resume slot, when the run is not [deckId]'s own Cram: a linked
+  /// deck's own cards are a different run from that deck's effective set
+  /// (BUG-193).
+  final String? checkpointScope;
 
   @override
   ConsumerState<StudyCramPage> createState() => _StudyCramPageState();
@@ -110,6 +121,10 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
   /// the cards arrive and it can be hydrated.
   SessionCheckpoint? _restored;
 
+  /// The resume toast, taken down with the page: its Start over is about this
+  /// round, and from anywhere else it would throw the saved one away unseen.
+  VoyagerToast? _resumeToast;
+
   /// Whether the slot has been read. The buckets wait for it rather than
   /// being filled and then replaced a frame later.
   bool _checkpointRead = false;
@@ -121,7 +136,7 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
     _checkpoint = SessionCheckpointController(
       store: ref.read(sessionCheckpointStoreProvider),
       kind: SessionCheckpointKind.studyCram,
-      scopeKey: 'deck:${widget.deckId}',
+      scopeKey: widget.checkpointScope ?? 'deck:${widget.deckId}',
       build: _buildCheckpoint,
     );
     _checkpoint.load().then((restored) {
@@ -135,6 +150,7 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
 
   @override
   void dispose() {
+    _resumeToast?.dismiss();
     HardwareKeyboard.instance.removeHandler(_handleArrowKey);
     _cardX.dispose();
     // Disposal is every incomplete exit there is. Fired rather than awaited —
@@ -199,7 +215,14 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
     final held0 = surviving(buckets?.bucket0 ?? const []);
     final held1 = surviving(buckets?.bucket1 ?? const []);
     final held2 = surviving(buckets?.bucket2 ?? const []);
-    final known = {...checkpoint.sourceIds, ...held0, ...held1, ...held2};
+    // Only cards still here count as known: one deleted while the run was
+    // away and brought back later joins bucket 0 as a newcomer.
+    final known = {
+      ...checkpoint.sourceIds.where(byId.containsKey),
+      ...held0,
+      ...held1,
+      ...held2,
+    };
     final newcomers = [
       for (final card in cards)
         if (!known.contains(card.id)) card.id,
@@ -246,7 +269,7 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      showSessionResumeToast(
+      _resumeToast = showSessionResumeToast(
         context,
         remaining: _bucket0.length + _bucket1.length,
         onStartOver: _startOver,
@@ -258,6 +281,7 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
   /// Throws the restored run away and drills the deck as it stands now, every
   /// card back in bucket 0.
   Future<void> _startOver() async {
+    if (!mounted) return;
     await _checkpoint.discard();
     if (!mounted) return;
     setState(() {
@@ -311,6 +335,10 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
     for (final bucket in [_bucket0, _bucket1, _bucket2]) {
       bucket.removeWhere((id) => !live.contains(id));
     }
+    // Forgotten as well, so a card restored from the Trash after the run is
+    // left comes back as a newcomer rather than as one the run already had.
+    // The toast's Undo puts it back, in bucket 0 and in the known set.
+    _sourceIds.removeWhere((id) => !live.contains(id));
     for (final step in [..._decided, ..._undone]) {
       step.retainOnly(live);
     }
@@ -339,6 +367,10 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
     if (!mounted) return false;
     final route = ModalRoute.of(context);
     if (route?.isCurrent != true) return false;
+    // A dialog over the run (the card editor, the delete confirm) sits on the
+    // root navigator and leaves this route current: ask where focus is
+    // (BUG-194).
+    if (focusIsInPopupRoute()) return false;
     if (isTextInputFocused() || !subtreeIsVisible(context)) return false;
     // The viewer binds the arrows to its own pages, and grading a card blind
     // from behind it would be the worse of the two readings anyway.
@@ -516,6 +548,7 @@ class _StudyCramPageState extends ConsumerState<StudyCramPage>
     if (restored == null) return;
     setState(() {
       held[restored.id] = restored;
+      _sourceIds.add(restored.id);
       _bucket0.remove(restored.id);
       _bucket0.insert(0, restored.id);
       _showingBack = false;

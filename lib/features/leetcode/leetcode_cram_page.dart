@@ -12,6 +12,7 @@ import 'package:voyager/core/utils/keyboard_focus_utils.dart';
 import 'package:voyager/core/utils/live_snapshot.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/leetcode_models.dart';
 import 'package:voyager/domain/services/leetcode_srs_engine.dart';
 import 'package:voyager/features/leetcode/leetcode_actions.dart';
@@ -121,6 +122,10 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
   /// the problems arrive and it can be hydrated.
   SessionCheckpoint? _restored;
 
+  /// The resume toast, taken down with the page: its Start over is about this
+  /// round, and from anywhere else it would throw the saved one away unseen.
+  VoyagerToast? _resumeToast;
+
   /// Whether the slot has been read. The buckets wait for it rather than
   /// being filled and then replaced a frame later.
   bool _checkpointRead = false;
@@ -148,6 +153,7 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
 
   @override
   void dispose() {
+    _resumeToast?.dismiss();
     HardwareKeyboard.instance.removeHandler(_handleArrowKey);
     _cardX.dispose();
     // Disposal is every incomplete exit there is. Fired rather than awaited —
@@ -270,7 +276,7 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      showSessionResumeToast(
+      _resumeToast = showSessionResumeToast(
         context,
         remaining: _bucket0.length + _bucket1.length,
         onStartOver: _startOver,
@@ -282,6 +288,7 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
   /// Throws the restored run away and drills the deck as it stands now, every
   /// problem back in bucket 0 and the pads empty.
   Future<void> _startOver() async {
+    if (!mounted) return;
     await _checkpoint.discard();
     if (!mounted) return;
     resetScratch();
@@ -344,6 +351,9 @@ class _LeetCodeCramPageState extends ConsumerState<LeetCodeCramPage>
     if (!mounted) return false;
     final route = ModalRoute.of(context);
     if (route?.isCurrent != true) return false;
+    // The delete confirm opens on the root navigator and leaves this route
+    // current: an arrow pressed over it decided the problem behind it.
+    if (focusIsInPopupRoute()) return false;
     if (isTextInputFocused() || !subtreeIsVisible(context)) return false;
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
 

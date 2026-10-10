@@ -336,4 +336,40 @@ void main() {
       await tester.pumpAndSettle();
     }
   });
+
+  // FV-36 follow-up: at the minimum window (720 logical px, ~630 of it the
+  // page beside the rail) the profile icons squeeze the chart to ~50px, and
+  // "Last 30 days" wrapped onto a second line, down over the chart.
+  for (final (width, expected) in [
+    (630.0, '30 days'),
+    (1920.0, 'Last 30 days'),
+  ]) {
+    testWidgets(
+      'the chart label stays on one line at ${width.toInt()}px',
+      (tester) async {
+        await loadRealFonts(tester);
+        _setWindow(tester, width);
+        await tester.pumpWidget(
+          _header(
+            [_snippet('a', 'Initech - QA'), _snippet('b', 'Acme - SWE Intern')],
+            profileLinks: true,
+            theme: VoyagerTheme.dark(),
+          ),
+        );
+
+        final label = find.textContaining('30 days');
+        expect(label, findsOneWidget);
+        final paragraph = tester.renderObject<RenderParagraph>(label);
+        expect(paragraph.didExceedMaxLines, isFalse);
+        final oneLine = TextPainter(
+          text: TextSpan(text: 'L', style: paragraph.text.style),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        expect(paragraph.size.height, oneLine.height, reason: 'one line');
+        expect(tester.widget<Text>(label).data, expected);
+        expect(tester.takeException(), isNull);
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.windows),
+    );
+  }
 }

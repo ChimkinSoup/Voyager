@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 059.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 062.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -178,6 +178,8 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-056@example.com | 2026-10-08 (FV-33: BUG-151…160) | LeetCode: seeded `fx151-valid1` "Valid Anagram" (Easy, python solution), `fx151-valid2` "Valid Parentheses" (Medium), `fx151-gamma` "Gamma Merge" (Medium, tag مرحبا), `fx151-delta` "Delta Long Code" (Hard, 1,200-line solution); Valid Anagram and Valid Parentheses graded Good once; a Study checkpoint left with 2 left; scratch code on. Cheat sheet tab "Java" (java). Dark + Scatter; Vim off; grade keys F/H/G/E. | Password `qavoyager2026`. |
 | voyager-qa-057@example.com | 2026-10-09 (FV-34: BUG-161…170) | Rankings: category "FV34 Shows" (`fv34-rcat`, child units, Locations on, entry out of 10 Tenths, episodes out of 5) seeded with `qa/steps/fv34-seed.dart.txt`: 24 "Seed show NN" (in progress, scored, one location each near Waterloo), "FV34 Breaking Bad" (episodes Pilot 4.5 / Ep 2 3 / Ep 3 unscored; overall now 7.5), "FV34 Queued" (now in progress, one pasted image, one location at 30 Regina St S). Category "FV34 Places" (orange, TV icon). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-059@example.com | 2026-10-09 (FV-36: BUG-181…190) | Seeded with `qa/steps/fv36-seed.dart.txt` + `fv36-settings.dart.txt`: Jobs Visa / Stripe / Hooli (today) / Initech / Globex / Umbrella over six statuses, profile links, four experience snippets; Study Math › Algebra (Calc, Nested), Root deck (now 41 cards: 40 `Bulk Q000…039` imported), folder Phys. Math was deleted and restored twice (once through the trash by eval). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-061@example.com | 2026-10-10 (FV-37 code-review follow-up) | Seeded with `qa/steps/fv39-seed.dart.txt`: deck "Review" (Card 1–4; Card 1 graded twice, Card 4 once, Card 2 and 3 deleted and restored), LeetCode Two Sum / Add Two Numbers / Longest Substring (one cram decision), workout "FV39 Press" (finished by eval). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-060@example.com | 2026-10-10 (FV-37: BUG-191…198) | Seeded with `qa/steps/fv37-workout.dart.txt` (workout "FV37 Squat", one set done, then finished by eval) and `qa/steps/fv37-seed.dart.txt`: Study decks Algebra (3 cards), Child (Child one/two, graded Good), a 300-character "Lxxx…Z" deck (Parent one/two) linking Child, Deck 1…9. Parent two deleted and restored through the trash. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-058@example.com | 2026-10-09 (FV-35: BUG-171…180) | Seeded with `qa/steps/fv35-seed.dart.txt`: Rankings category "FV35 Cafes" (`fv35-rcat`, Locations on) with "FV35 Edge" (85° N 180° E, 7.5) and "FV35 Waterloo A/B". Jobs: stage "Interview" renamed "Onsite", stage "Phone screen" added, category "Fintech Co" (green); applications Visa ×2 (shared URL `https://example.com/dup`), Beta / Software Engineer (603-char URL); `vis / QA Engineer` deleted (in trash). After the FV-35 follow-up: stage "Applied" is now "Sent" (all three applications on it), "Phone screen" was deleted and re-added (the original stays deleted). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 
 ---
@@ -393,6 +395,12 @@ One line per completed phase.
 ---
 
 ## 7. Handoff note
+
+**2026-10-10 (code-review follow-up to BUG-192/194/197/198):** applied items 1–7 (Juno's pick): undo after a resume skips cards graded elsewhere, a pull's delete leaves the known set, LeetCode Cram arrows stand down behind its delete confirm, the weather warm-up runs one task per plot, a toast-undone card is known again (session and cram), and one shared `focusIsInPopupRoute()` helper. All verified in the app on qa-061 (TEST_PLAN.md FV-37). Full suite 4,684 passed, 18 skipped, 0 failed. Session ended `SIGNED-OUT`.
+
+**2026-10-10 (FV-37 follow-up):** fixed the Cram half of BUG-197 (a deleted-then-restored card now rejoins a resumed Cram run) and FV-36's "Last 30 days" wrap in the Jobs header (reads "30 days" on one line when the chart is narrow). Both verified in the app on qa-059 (TEST_PLAN.md FV-37 follow-up). Full suite 4,678 passed, 18 skipped, 0 failed (the dream split test that failed earlier passed; likely flaky). Session ended `SIGNED-OUT`.
+
+**2026-10-10 (BUG-191…200):** BUG-191 … BUG-194 and BUG-196 … BUG-198 fixed and verified in the app (TEST_PLAN.md FV-37, qa-060); BUG-195, BUG-199 and BUG-200 skipped (Juno). BUG-198 (Blocker) was an idle-priority scheduler task from the weather-chart warm-up that never ran while the restored workout island pulsed, so the scheduler spun on the platform thread and starved Windows input; it now runs at animation priority. The PC locked partway through, so the Study flows were driven by posted messages + VM frame grabs. Summary counts updated (154 fixed, 74 open). Full suite 4,674 passed, 18 skipped, 1 failed (`dream_split_resize_test.dart`, pre-existing: fails the same with these changes stashed). Session ended `SIGNED-OUT`.
 
 **2026-10-09 (BUG-181…190):** all ten fixed and verified in the app (TEST_PLAN.md FV-36, qa-059). BUG-183/184 per Juno: "+N" status chip with a menu; experience chips whole or in the caret menu; tooltips on for the Jobs header only. BUG-186 follows BUG-144 (confirm, no draft). The in-app run caught a regression in the first BUG-189 build (Esc over the card editor also left the deck), fixed and re-checked; the suite caught a negative column width (BUG-181), fixed. Summary counts updated (147 fixed, 81 open). Full suite 4,655 passed, 18 skipped, 0 failed. Session ended `SIGNED-OUT`.
 

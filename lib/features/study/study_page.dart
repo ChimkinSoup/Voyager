@@ -638,6 +638,13 @@ class _StudyLibraryGrid extends StatelessWidget {
     childAspectRatio: 1.15,
   );
 
+  /// The grid's viewport ends above the floating "+" (56 px, 16 px off the
+  /// page's bottom edge, which is 24 px below the grid) with a 16 px gap,
+  /// rather than scrolling tiles underneath it: padding inside the scroll
+  /// view only cleared the button at the very end of the scroll, and at the
+  /// minimum window size it sat on a tile's corner (BUG-191).
+  static const _fabClearance = EdgeInsets.only(bottom: 64);
+
   @override
   Widget build(BuildContext context) {
     if (loading && folders.isEmpty && decks.isEmpty) {
@@ -645,11 +652,13 @@ class _StudyLibraryGrid extends StatelessWidget {
       // known before its contents are, and showing it stops the grid from
       // appearing out of nothing.
       return IgnorePointer(
-        child: GridView.builder(
-          padding: const EdgeInsets.only(bottom: 96),
-          gridDelegate: _gridDelegate,
-          itemCount: 6,
-          itemBuilder: (context, index) => const _SkeletonTile(),
+        child: Padding(
+          padding: _fabClearance,
+          child: GridView.builder(
+            gridDelegate: _gridDelegate,
+            itemCount: 6,
+            itemBuilder: (context, index) => const _SkeletonTile(),
+          ),
         ),
       );
     }
@@ -663,27 +672,29 @@ class _StudyLibraryGrid extends StatelessWidget {
     final sortedDecks = [...decks]
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
-    return GridView.builder(
-      key: storageKey,
-      padding: const EdgeInsets.only(bottom: 96),
-      gridDelegate: _gridDelegate,
-      itemCount: sortedFolders.length + sortedDecks.length,
-      itemBuilder: (context, index) {
-        if (index < sortedFolders.length) {
-          final folder = sortedFolders[index];
-          return _FolderTile(
-            folder: folder,
-            siblingFolders: sortedFolders,
-            onTap: () => onOpenFolder(folder),
+    return Padding(
+      padding: _fabClearance,
+      child: GridView.builder(
+        key: storageKey,
+        gridDelegate: _gridDelegate,
+        itemCount: sortedFolders.length + sortedDecks.length,
+        itemBuilder: (context, index) {
+          if (index < sortedFolders.length) {
+            final folder = sortedFolders[index];
+            return _FolderTile(
+              folder: folder,
+              siblingFolders: sortedFolders,
+              onTap: () => onOpenFolder(folder),
+            );
+          }
+          final deck = sortedDecks[index - sortedFolders.length];
+          return _DeckTile(
+            deck: deck,
+            siblingDecks: sortedDecks,
+            onTap: () => onOpenDeck(deck),
           );
-        }
-        final deck = sortedDecks[index - sortedFolders.length];
-        return _DeckTile(
-          deck: deck,
-          siblingDecks: sortedDecks,
-          onTap: () => onOpenDeck(deck),
-        );
-      },
+        },
+      ),
     );
   }
 }

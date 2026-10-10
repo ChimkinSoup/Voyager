@@ -1,0 +1,16 @@
+final now = DateTime.now().toUtc().subtract(const Duration(minutes: 1));
+final t0 = DateTime.now();
+final day = DateTime(t0.year, t0.month, t0.day);
+final r = c.read(remoteSyncServiceProvider);
+final sr = c.read(studyRepositoryProvider);
+final deck = StudyDeck(id: 'fv39-deck', name: 'Review', createdAt: now, updatedAt: now);
+await sr.upsertDeck(deck); r.pushStudyDeck(deck);
+for (var i = 1; i <= 4; i++) { final k = StudyCard(id: 'fv39-c$i', deckId: 'fv39-deck', frontText: 'Card $i', backText: 'Back $i', dueAt: now, createdAt: now, updatedAt: now); await sr.upsertCard(k); r.pushStudyCard(k); }
+final lr = c.read(leetCodeRepositoryProvider);
+for (final (id, n, title) in [('fv39-p1', '1', 'Two Sum'), ('fv39-p2', '2', 'Add Two Numbers'), ('fv39-p3', '3', 'Longest Substring')]) { final p = LeetCodeProblem(id: id, createdAt: now, updatedAt: now, title: title, questionFrontendId: n, difficulty: LeetCodeDifficulty.medium, solvedAt: DateTime(2026, 10, 1, 12).toUtc(), interval: 3, ease: 2.5, reviewCount: 2, dueAt: now); await lr.upsertProblem(p); r.pushLeetCodeProblem(p); }
+final wr = c.read(workoutRepositoryProvider);
+final ex = Exercise(id: 'fv39-exercise', createdAt: now, updatedAt: now, version: 1, name: 'FV39 Press');
+final ses = WorkoutSession(id: 'fv39-session', createdAt: now, updatedAt: now, version: 1, date: day, startedAt: t0);
+await wr.upsertExercise(ex); await wr.upsertSession(ses); r.pushExercise(ex); r.pushWorkoutSession(ses);
+for (var i = 0; i < 2; i++) { final sl = WorkoutSetLog(id: 'fv39-set-$i', createdAt: now, updatedAt: now, version: 1, sessionId: 'fv39-session', exerciseId: 'fv39-exercise', exerciseOrder: 0, setIndex: i, weightKg: 40, reps: 8, plannedWeightKg: 40, plannedReps: 8); await wr.upsertSetLog(sl); r.pushWorkoutSetLog(sl); }
+invalidateAllDataProvidersIn(c);
