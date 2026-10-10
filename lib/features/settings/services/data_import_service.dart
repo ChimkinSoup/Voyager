@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
+import 'package:voyager/core/constants/app_seeds.dart';
 import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
@@ -202,16 +203,20 @@ class DataImportService {
             await collection.stampForImport?.call(record.id, data) ?? data,
           );
           (restored[collection.name] ??= []).add(model);
-          if (localData == null && _isLive(record.data)) {
+          if (localData == null &&
+              _isLive(record.data) &&
+              !isAppSeed(collection.name, record.id)) {
             (created[collection.name] ??= []).add(record.id);
           }
         }
         final backupIds = {for (final record in records) record.id};
         for (final id in deleteCreated[collection.name] ?? const <String>[]) {
           final localData = local[id];
+          // Seeds too: a list written before they were kept out of it.
           if (localData == null ||
               backupIds.contains(id) ||
-              !_isLive(localData)) {
+              !_isLive(localData) ||
+              isAppSeed(collection.name, id)) {
             continue;
           }
           final data = {

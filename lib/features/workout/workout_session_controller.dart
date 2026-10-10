@@ -527,23 +527,29 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
         for (final l in state.logs)
           if (!removedIds.contains(l.id)) l,
       ];
-      // Stays on this exercise — its first set still to do, else its last —
-      // rather than jumping to the session's first incomplete set, which
-      // pulled the wheels onto an earlier, skipped exercise mid-edit. The
-      // group is never empty: the first [target] sets are always kept.
+      // Stays on this exercise's first set still to do rather than jumping
+      // to the session's first incomplete set, which pulled the wheels onto
+      // an earlier, skipped exercise mid-edit. With every set left done it
+      // moves on to the next set still to do after it (BUG-201: parked on a
+      // done set, Complete set did nothing and the wheels rewrote it); with
+      // none after it, it stays on its last set, never going back. The group
+      // is never empty: the first [target] sets are always kept.
       final group = [
         for (final l in remaining)
           if (l.exerciseId == current.exerciseId &&
               l.exerciseOrder == current.exerciseOrder)
             l,
       ];
-      final landing = group.firstWhere(
-        (l) => !l.completed,
-        orElse: () => group.last,
-      );
+      final todo = group.where((l) => !l.completed).firstOrNull;
+      final after = remaining.indexOf(group.last) + 1;
+      final next = remaining.indexWhere((l) => !l.completed, after);
       state = state.copyWith(
         logs: remaining,
-        cursor: remaining.indexOf(landing),
+        cursor: todo != null
+            ? remaining.indexOf(todo)
+            : next != -1
+            ? next
+            : after - 1,
         segmentIndex: 0,
       );
     }

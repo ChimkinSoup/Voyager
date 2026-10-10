@@ -63,6 +63,9 @@ class WorkoutDayColumn extends ConsumerStatefulWidget {
 class _WorkoutDayColumnState extends ConsumerState<WorkoutDayColumn> {
   var _hovering = false;
 
+  /// On the day's last card, to tell a drop below it from one in a gap.
+  final _lastCardKey = GlobalKey();
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -74,7 +77,7 @@ class _WorkoutDayColumnState extends ConsumerState<WorkoutDayColumn> {
         final data = details.data;
         return data is ExerciseDragData || data is PlanEntryDragData;
       },
-      onAcceptWithDetails: (details) => _accept(details.data),
+      onAcceptWithDetails: (details) => _accept(details.data, details.offset),
       onMove: (_) {
         if (!_hovering) setState(() => _hovering = true);
       },
@@ -116,11 +119,20 @@ class _WorkoutDayColumnState extends ConsumerState<WorkoutDayColumn> {
                         itemCount: widget.entries.length,
                         separatorBuilder: (_, _) =>
                             const SizedBox(height: VoyagerSpacing.xs),
-                        itemBuilder: (context, i) => _PlanEntryCard(
-                          entry: widget.entries[i],
-                          exercise: widget
-                              .exercisesById[widget.entries[i].exerciseId],
-                          unit: widget.unit,
+                        itemBuilder: (context, i) => KeyedSubtree(
+                          key: i == widget.entries.length - 1
+                              ? _lastCardKey
+                              : null,
+                          child: _dropAbove(
+                            widget.entries[i],
+                            accent,
+                            _PlanEntryCard(
+                              entry: widget.entries[i],
+                              exercise: widget
+                                  .exercisesById[widget.entries[i].exerciseId],
+                              unit: widget.unit,
+                            ),
+                          ),
                         ),
                       ),
               ),
@@ -178,9 +190,47 @@ class _WorkoutDayColumnState extends ConsumerState<WorkoutDayColumn> {
     );
   }
 
-  Future<void> _accept(Object data) async {
+  /// A placed card dropped on [entry]'s card goes just above it, which is how
+  /// a day is put in order (BUG-203); dropped below the day's last card it
+  /// goes last (see [_accept]). A card dropped on itself is taken here too,
+  /// and stays put, rather than falling through to the day.
+  Widget _dropAbove(WorkoutPlanEntry entry, Color accent, Widget card) {
+    return DragTarget<PlanEntryDragData>(
+      onAcceptWithDetails: (details) {
+        setState(() => _hovering = false);
+        WorkoutActions(
+          ref,
+        ).movePlanEntryBefore(entry: details.data.entry, before: entry);
+      },
+      builder: (context, candidate, rejected) {
+        final marked = candidate.any((data) => data?.entry.id != entry.id);
+        return DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(
+                color: marked ? accent : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          child: card,
+        );
+      },
+    );
+  }
+
+  /// A card from this day let go anywhere but on a card or below the last
+  /// one — a gap between cards, the header — is a drag given up, and stays
+  /// put. From another day it goes last wherever it lands.
+  Future<void> _accept(Object data, Offset at) async {
     setState(() => _hovering = false);
     final actions = WorkoutActions(ref);
+    if (data is PlanEntryDragData &&
+        data.entry.dayIndex == widget.dayIndex &&
+        !_isBelowLastCard(at)) {
+      return;
+    }
     if (data is ExerciseDragData) {
       await actions.addExerciseToDay(
         planId: widget.planId,
@@ -190,6 +240,14 @@ class _WorkoutDayColumnState extends ConsumerState<WorkoutDayColumn> {
     } else if (data is PlanEntryDragData) {
       await actions.movePlanEntry(entry: data.entry, dayIndex: widget.dayIndex);
     }
+  }
+
+  /// [at] is the pointer (the feedback is anchored on it), in global
+  /// coordinates.
+  bool _isBelowLastCard(Offset at) {
+    final box = _lastCardKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return true;
+    return at.dy > box.localToGlobal(Offset(0, box.size.height)).dy;
   }
 }
 

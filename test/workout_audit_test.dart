@@ -122,6 +122,10 @@ void main() {
 
   tearDown(() async {
     container.dispose();
+    // The controller re-reads the session on every provider refresh without
+    // awaiting it; one still in flight failed the test once the database
+    // closed under it.
+    await pumpEventQueue();
     await db.close();
   });
 
@@ -364,6 +368,43 @@ void main() {
       expect(state().currentSet!.exerciseId, 'squat');
     });
 
+    test(
+      'BUG-201: shrinking to the sets already done moves on to the next set',
+      () async {
+        await _seed(repo, sets: 5);
+        await start();
+        await controller().completeCurrentSet();
+        await controller().completeCurrentSet();
+
+        await controller().setCurrentExerciseSetCount(1);
+
+        // Both done sets kept; the wheels on squat's first set, not on a
+        // completed bench set where Complete set did nothing.
+        expect(
+          state().logs.where((l) => l.exerciseId == 'bench' && l.completed),
+          hasLength(2),
+        );
+        expect(state().currentSet!.exerciseId, 'squat');
+        expect(state().currentSet!.completed, isFalse);
+      },
+    );
+
+    test('a shrink with nothing left after it stays on its exercise rather '
+        'than going back to a skipped one', () async {
+      await _seed(repo, sets: 2);
+      await start();
+      // Bench is skipped over, untouched; squat is the last exercise.
+      final squat = state().logs.where((l) => l.exerciseId == 'squat');
+      controller().focusSet(squat.first.id);
+      await controller().completeCurrentSet();
+      controller().focusSet(squat.first.id);
+
+      await controller().setCurrentExerciseSetCount(1);
+
+      expect(state().currentSet!.exerciseId, 'squat');
+      expect(state().logs.where((l) => l.exerciseId == 'bench'), hasLength(2));
+    });
+
     test('finish runs once however often it is pressed', () async {
       await _seed(repo);
       await start();
@@ -420,6 +461,17 @@ void main() {
   });
 
   group('models', () {
+    test('BUG-205: the kg wheel labels quarter steps as stored', () {
+      final labels = [
+        for (var i = 0; i < 5; i++)
+          WeightUnit.kg.formatDisplay(i * WeightUnit.kg.step),
+      ];
+      expect(labels, ['0', '1.25', '2.5', '3.75', '5']);
+      // Halves and wholes unchanged, and a converted plan still rounds.
+      expect(WeightUnit.lb.formatDisplay(137.5), '137.5');
+      expect(WeightUnit.lb.formatKilograms(60), '132.3');
+    });
+
     test('reps of 0 are read as 1', () {
       expect(SetSegment.fromJson({'weightKg': 50, 'reps': 0}).reps, 1);
       expect(SetSegment.fromJson({'weightKg': 50}).reps, 1);

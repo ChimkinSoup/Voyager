@@ -1,3 +1,5 @@
+import 'package:voyager/core/constants/app_seeds.dart';
+
 /// Stable ids for the two plans. There is exactly one of each mode, created
 /// on first launch and never deleted, so fixed ids keep both devices pointing
 /// at the same plan instead of syncing two rival copies of "the weekly plan".
@@ -26,6 +28,16 @@ const List<String> kStarterExercises = [
   'Calf Raise',
   'Plank',
 ];
+
+/// The id every device seeds [name] from [kStarterExercises] under, so a plan
+/// entry or set log naming a starter resolves on every device without the
+/// untouched starter ever being uploaded (BUG-204). The `seed-` prefix is
+/// what marks a seed elsewhere ([isAppSeed], the purge).
+String starterExerciseId(String name) => 'seed-exercise-${seedSlug(name)}';
+
+/// The created and updated time of an untouched starter: the same on every
+/// device, so the same seed is the same document everywhere.
+final kStarterExerciseSeedEpoch = DateTime.utc(2025, 1, 1);
 
 /// Wheel step for the weight picker, in each display unit. Fine enough for
 /// microplates without making a flick to 200 lb feel like a marathon.

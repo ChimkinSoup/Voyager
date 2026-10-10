@@ -797,4 +797,116 @@ void main() {
       expect(rooms, {'a': 'r', 'b': 'other'});
     });
   });
+
+  group('BUG-206 / BUG-208: finance rows and subtasks', () {
+    late DriftFinanceRepository finance;
+
+    setUp(() => finance = DriftFinanceRepository(db));
+
+    Future<void> addTransaction(String id, {String? store, String? note}) =>
+        finance.upsertTransaction(
+          FinancialTransaction(
+            id: id,
+            type: TransactionType.expense,
+            amountCents: 1234,
+            occurredAt: DateTime.utc(2026, 10, 3, 12),
+            origin: store,
+            note: note,
+            createdAt: created,
+            updatedAt: created,
+          ),
+        );
+
+    test('a transaction is named by store and note, else amount and date', () async {
+      await addTransaction('both', store: 'P24 Store', note: 'P24 tx note');
+      await addTransaction('store', store: 'Only Store');
+      await addTransaction('none');
+      for (final id in ['both', 'store', 'none']) {
+        await finance.softDeleteTransaction(id);
+      }
+
+      final labels = {
+        for (final item in await trash.list()) item.id: trashItemLabel(item),
+      };
+
+      expect(labels, {
+        'both': '"P24 Store - P24 tx note"',
+        'store': '"Only Store"',
+        'none': '"-\$12.34 on Oct 3, 2026"',
+      });
+    });
+
+    test('Delete forever empties a transaction\'s store and a '
+        'subscription\'s store', () async {
+      await addTransaction('tx', store: 'P24 Store', note: 'note');
+      await finance.upsertSubscription(
+        Subscription(
+          id: 'sub',
+          name: 'Stream',
+          amountCents: 999,
+          period: BillingPeriod.monthly,
+          anchorDueDate: DateTime.utc(2026, 10, 15),
+          store: 'P24 StreamCo',
+          createdAt: created,
+          updatedAt: created,
+        ),
+      );
+      await finance.softDeleteTransaction('tx');
+      await finance.softDeleteSubscription('sub');
+
+      await trash.erase(await trash.list());
+
+      expect((await finance.getTransaction('tx'))!.origin, isEmpty);
+      expect((await finance.getSubscription('sub'))!.store, isEmpty);
+    });
+
+    test('a subtask deleted on its own names its task', () async {
+      for (final (id, title, parent) in [
+        ('t', 'P24 task B parent', null),
+        ('s', 'P24 sub B1', 't'),
+      ]) {
+        await todos.upsertTask(
+          TodoTask(
+            id: id,
+            listId: legacyTodoListId,
+            title: title,
+            parentTaskId: parent,
+            createdAt: created,
+            updatedAt: created,
+          ),
+        );
+      }
+      await todos.softDeleteTask('s');
+
+      final item = (await trash.list()).single;
+
+      expect(
+        trashItemDetail(item, utcNow()),
+        startsWith('To-Do · subtask of "P24 task B parent" · deleted today'),
+      );
+    });
+
+    test('an occurrence split off a series names no parent', () async {
+      for (final (id, parent) in [('series', null), ('one', 'series')]) {
+        await calendars.upsertEvent(
+          CalendarEvent(
+            id: id,
+            calendarId: 'cal',
+            title: 'Standup',
+            start: created,
+            end: created,
+            recurrenceParentId: parent,
+            createdAt: created,
+            updatedAt: created,
+          ),
+        );
+      }
+      await calendars.softDeleteEvent('one');
+
+      final item = (await trash.list()).single;
+
+      expect(item.parentTitle, isNull);
+      expect(trashItemDetail(item, utcNow()), isNot(contains('sub')));
+    });
+  });
 }

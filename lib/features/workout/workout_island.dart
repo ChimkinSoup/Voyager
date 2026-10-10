@@ -161,7 +161,7 @@ class _WorkoutIslandState extends ConsumerState<WorkoutIsland>
                       if (resting) ...[
                         const SizedBox(width: VoyagerSpacing.md),
                         Text(
-                          _formatRemaining(remaining),
+                          formatRestRemaining(remaining),
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: accent,
                             fontWeight: FontWeight.w700,
@@ -179,12 +179,14 @@ class _WorkoutIslandState extends ConsumerState<WorkoutIsland>
       ),
     );
   }
+}
 
-  static String _formatRemaining(Duration remaining) {
-    final seconds = remaining.inSeconds.clamp(0, 59 * 60 + 59);
-    final minutes = seconds ~/ 60;
-    return '$minutes:${(seconds % 60).toString().padLeft(2, '0')}';
-  }
+/// A rest countdown as "m:ss", the way the island and the expanded view both
+/// show it.
+String formatRestRemaining(Duration remaining) {
+  final seconds = remaining.inSeconds.clamp(0, 59 * 60 + 59);
+  final minutes = seconds ~/ 60;
+  return '$minutes:${(seconds % 60).toString().padLeft(2, '0')}';
 }
 
 /// The "this is live" marker. A slow pulse under normal motion; a static dot

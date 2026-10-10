@@ -5,12 +5,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
-import 'package:voyager/core/constants/workout_constants.dart';
+import 'package:voyager/core/constants/app_seeds.dart';
 import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/utils/ids.dart';
-import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
 
@@ -137,21 +136,7 @@ class FullSyncCheck {
           // An untouched seed is never uploaded: every device seeds the same
           // document for itself, so a wipe loses nothing the next seeding
           // does not put back.
-          if (isJobSeedId(record.id) && parseVersion(record.data) == 0) {
-            continue;
-          }
-          // Starter exercises are seeded under random ids and uploaded only
-          // once edited, so an untouched one is told by its name instead.
-          if (name == FirestoreCollections.exercises &&
-              parseVersion(record.data) == 0 &&
-              kStarterExercises.contains(record.data['name'])) {
-            continue;
-          }
-          // The built-in plans are seeded the same way, under fixed ids.
-          if (name == FirestoreCollections.workoutPlans &&
-              parseVersion(record.data) == 0 &&
-              (record.id == kWeeklyWorkoutPlanId ||
-                  record.id == kCycleWorkoutPlanId)) {
+          if (isAppSeed(name, record.id) && parseVersion(record.data) == 0) {
             continue;
           }
           gaps.add(

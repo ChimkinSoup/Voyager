@@ -456,6 +456,46 @@ void main() {
       expect((await repo.getEntry('entry-1'))?.deletedAt, isNull);
     });
 
+    test('BUG-210: undoing a restore leaves the app\'s own seed rows live', () async {
+      final h = await Harness.create();
+      final workouts = DriftWorkoutRepository(h.db);
+      final jobs = DriftJobRepository(h.db);
+      await workouts.ensureSeeded();
+      await jobs.ensureSeeded();
+      await h.service.runIfDue();
+      final backup = File(p.join(h.dir.path, h.autoFiles().single));
+
+      // A device that never opened Workout or Jobs: no seeds yet.
+      await h.db.delete(h.db.workoutPlansTable).go();
+      await h.db.delete(h.db.jobStagesTable).go();
+
+      h.now = h.now.add(const Duration(hours: 1));
+      final restored = await h.service.restore(backup);
+      // The fixture's own plan is the restore's; the built-in two are not.
+      expect(restored.created[FirestoreCollections.workoutPlans], ['plan-1']);
+      expect(restored.created[FirestoreCollections.jobStages], ['stage-1']);
+
+      final undo = (await h.service.listBackups()).firstWhere(
+        (e) => e.isSnapshot,
+      );
+      h.now = h.now.add(const Duration(hours: 1));
+      await h.service.restore(undo.file);
+
+      expect(await workouts.listPlans(), hasLength(2));
+      expect(await jobs.listStages(), isNotEmpty);
+
+      // A list written before the fix, naming them, doesn't take them either.
+      await importerFor(h.db, RecordingUploader()).importFromZip(
+        undo.file,
+        deleteCreated: {
+          FirestoreCollections.workoutPlans: [
+            for (final plan in await workouts.listPlans()) plan.id,
+          ],
+        },
+      );
+      expect(await workouts.listPlans(), hasLength(2));
+    });
+
     test('a record deleted forever since the backup stays deleted', () async {
       final h = await Harness.create();
       final repo = DriftJournalRepository(h.db);

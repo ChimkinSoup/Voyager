@@ -628,10 +628,10 @@ abstract class StudyRepository {
 /// their set logs. Sessions are append-only history: nothing here rewrites a
 /// past workout when the plan it came from is later edited.
 abstract class WorkoutRepository {
-  /// Creates the weekly and cycle plans if they're missing, and seeds the
-  /// starter exercise library the very first time (gated on the table being
-  /// completely empty, deleted rows included, so clearing the library out
-  /// doesn't resurrect it on next launch). Idempotent.
+  /// Creates the weekly and cycle plans if they're missing, and seeds each
+  /// starter exercise under its fixed id (`starterExerciseId`) unless a row
+  /// with that id is already here, tombstones included, so a deleted starter
+  /// is not resurrected. Idempotent.
   Future<void> ensureSeeded();
 
   Future<List<Exercise>> listExercises({bool includeDeleted = false});
@@ -659,6 +659,7 @@ abstract class WorkoutRepository {
     WorkoutPlanEntry entry, {
     bool recordLocalActivity = true,
   });
+  Future<void> upsertPlanEntriesBatch(List<WorkoutPlanEntry> entries);
   Future<void> softDeletePlanEntry(String id);
 
   Future<List<WorkoutSession>> listSessions({bool includeDeleted = false});

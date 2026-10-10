@@ -6337,23 +6337,26 @@ class DriftWorkoutRepository implements WorkoutRepository {
       );
     }
 
-    // Deleted rows count toward this check on purpose â€” a library the user
-    // cleared out should stay cleared rather than re-seeding next launch.
-    final exerciseCount = (await _db.select(_db.exercisesTable).get()).length;
-    if (exerciseCount == 0) {
-      for (var i = 0; i < kStarterExercises.length; i++) {
-        await upsertExercise(
-          Exercise(
-            id: newId(),
-            name: kStarterExercises[i],
-            sortOrder: i,
-            createdAt: now,
-            updatedAt: now,
+    // Each starter under its own fixed id, insert-or-ignore, as the job
+    // stages are seeded (BUG-204): one pulled from another device, edited,
+    // or deleted — its tombstone is never purged — is left as it is, and an
+    // untouched one is the same document on every device, so it is never
+    // uploaded. Starters seeded the old way were settled by the v141
+    // migration (`moveStarterExercisesToFixedIds`).
+    await _db.batch((batch) {
+      batch.insertAll(_db.exercisesTable, [
+        for (final (i, name) in kStarterExercises.indexed)
+          _exerciseCompanion(
+            Exercise(
+              id: starterExerciseId(name),
+              name: name,
+              sortOrder: i,
+              createdAt: kStarterExerciseSeedEpoch,
+              updatedAt: kStarterExerciseSeedEpoch,
+            ),
           ),
-          recordLocalActivity: false,
-        );
-      }
-    }
+      ], mode: InsertMode.insertOrIgnore);
+    });
   }
 
   @override
@@ -6387,30 +6390,31 @@ class DriftWorkoutRepository implements WorkoutRepository {
   }) async {
     await _db
         .into(_db.exercisesTable)
-        .insertOnConflictUpdate(
-          ExercisesTableCompanion(
-            id: Value(exercise.id),
-            name: Value(exercise.name),
-            formCues: Value(exercise.formCues),
-            colorValue: Value(exercise.colorValue),
-            sortOrder: Value(exercise.sortOrder),
-            targetSets: Value(exercise.targetSets),
-            targetReps: Value(exercise.targetReps),
-            targetWeightKg: Value(exercise.targetWeightKg),
-            prescriptionMode: Value(exercise.prescriptionMode.name),
-            setPrescriptionsJson: Value(
-              encodeSetPrescriptions(exercise.setPrescriptions),
-            ),
-            createdAt: Value(exercise.createdAt),
-            updatedAt: Value(exercise.updatedAt),
-            version: Value(exercise.version),
-            deletedAt: Value(exercise.deletedAt),
-          ),
-        );
+        .insertOnConflictUpdate(_exerciseCompanion(exercise));
     if (recordLocalActivity) {
       _syncActivity?.recordLocalSave(FirestoreCollections.exercises);
     }
   }
+
+  ExercisesTableCompanion _exerciseCompanion(Exercise exercise) =>
+      ExercisesTableCompanion(
+        id: Value(exercise.id),
+        name: Value(exercise.name),
+        formCues: Value(exercise.formCues),
+        colorValue: Value(exercise.colorValue),
+        sortOrder: Value(exercise.sortOrder),
+        targetSets: Value(exercise.targetSets),
+        targetReps: Value(exercise.targetReps),
+        targetWeightKg: Value(exercise.targetWeightKg),
+        prescriptionMode: Value(exercise.prescriptionMode.name),
+        setPrescriptionsJson: Value(
+          encodeSetPrescriptions(exercise.setPrescriptions),
+        ),
+        createdAt: Value(exercise.createdAt),
+        updatedAt: Value(exercise.updatedAt),
+        version: Value(exercise.version),
+        deletedAt: Value(exercise.deletedAt),
+      );
 
   @override
   Future<void> softDeleteExercise(String id) async {
@@ -6524,23 +6528,37 @@ class DriftWorkoutRepository implements WorkoutRepository {
   }) async {
     await _db
         .into(_db.workoutPlanEntriesTable)
-        .insertOnConflictUpdate(
-          WorkoutPlanEntriesTableCompanion(
-            id: Value(entry.id),
-            planId: Value(entry.planId),
-            dayIndex: Value(entry.dayIndex),
-            exerciseId: Value(entry.exerciseId),
-            sortOrder: Value(entry.sortOrder),
-            createdAt: Value(entry.createdAt),
-            updatedAt: Value(entry.updatedAt),
-            version: Value(entry.version),
-            deletedAt: Value(entry.deletedAt),
-          ),
-        );
+        .insertOnConflictUpdate(_planEntryCompanion(entry));
     if (recordLocalActivity) {
       _syncActivity?.recordLocalSave(FirestoreCollections.workoutPlanEntries);
     }
   }
+
+  @override
+  Future<void> upsertPlanEntriesBatch(List<WorkoutPlanEntry> entries) async {
+    if (entries.isEmpty) return;
+    // One batch, so a reorder lands whole or not at all.
+    await _db.batch((batch) {
+      batch.insertAllOnConflictUpdate(_db.workoutPlanEntriesTable, [
+        for (final entry in entries) _planEntryCompanion(entry),
+      ]);
+    });
+    _syncActivity?.recordLocalSave(FirestoreCollections.workoutPlanEntries);
+  }
+
+  WorkoutPlanEntriesTableCompanion _planEntryCompanion(
+    WorkoutPlanEntry entry,
+  ) => WorkoutPlanEntriesTableCompanion(
+    id: Value(entry.id),
+    planId: Value(entry.planId),
+    dayIndex: Value(entry.dayIndex),
+    exerciseId: Value(entry.exerciseId),
+    sortOrder: Value(entry.sortOrder),
+    createdAt: Value(entry.createdAt),
+    updatedAt: Value(entry.updatedAt),
+    version: Value(entry.version),
+    deletedAt: Value(entry.deletedAt),
+  );
 
   @override
   Future<void> softDeletePlanEntry(String id) async {
@@ -6777,10 +6795,13 @@ class DriftWorkoutRepository implements WorkoutRepository {
               ),
         ))
         .go();
+    // A starter's tombstone is kept for good, as a job seed's is: it is the
+    // only thing telling ensureSeeded the starter was deleted.
     await (_db.delete(_db.exercisesTable)..where(
           (t) =>
               _expired(t.deletedAt, cutoff) &
-              _notOwedUpload(_db, FirestoreCollections.exercises, t.id),
+              _notOwedUpload(_db, FirestoreCollections.exercises, t.id) &
+              t.id.like('seed-%').not(),
         ))
         .go();
   }

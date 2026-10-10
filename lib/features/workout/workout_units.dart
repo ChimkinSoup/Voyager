@@ -35,8 +35,14 @@ extension WeightUnitDisplay on WeightUnit {
   double kilogramsForWheelIndex(int index) => toKilograms(index * step);
 
   /// Trims the trailing `.0` that whole-plate weights would otherwise carry,
-  /// while keeping the half-step visible when it matters (`137.5`).
+  /// while keeping the half-step visible when it matters (`137.5`). A
+  /// quarter step keeps both decimals: the kg wheel's 1.25 kg stops read
+  /// "1.3" and "3.8" (BUG-205).
   String formatDisplay(double display) {
+    final hundredths = (display * 100).round();
+    if (hundredths % 25 == 0 && hundredths % 10 != 0) {
+      return (hundredths / 100).toStringAsFixed(2);
+    }
     final rounded = (display * 10).roundToDouble() / 10;
     if ((rounded - rounded.roundToDouble()).abs() < 0.05) {
       return rounded.round().toString();

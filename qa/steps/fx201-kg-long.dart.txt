@@ -1,0 +1,1 @@
+﻿final wr = c.read(workoutRepositoryProvider); final ex = (await wr.getExercise('fx201-long'))!; await c.read(workoutSessionControllerProvider.notifier).addExercise(ex); final s = c.read(settingsRepositoryProvider); await s.saveSettings((await s.getSettings()).copyWith(weightUnit: WeightUnit.kg)); c.invalidate(settingsProvider);

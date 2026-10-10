@@ -1,0 +1,10 @@
+final db = c.read(databaseProvider);
+final wr = c.read(workoutRepositoryProvider);
+for (final id in ['seed-exercise-back-squat', 'seed-exercise-calf-raise', 'seed-exercise-face-pull']) { await db.customStatement('delete from exercises_table where id = ?', [id]); }
+final old = DateTime.utc(2026, 9, 1);
+await wr.upsertExercise(Exercise(id: 'old-back-squat', name: 'Back Squat', sortOrder: 6, createdAt: old, updatedAt: old), recordLocalActivity: false);
+await wr.upsertExercise(Exercise(id: 'old-calf-raise', name: 'Calf Raise', sortOrder: 16, createdAt: old, updatedAt: old), recordLocalActivity: false);
+final now = DateTime.now().toUtc();
+final pe = WorkoutPlanEntry(id: 'fx201-entry-oldsquat', planId: 'workout_plan_weekly', dayIndex: 2, exerciseId: 'old-back-squat', sortOrder: 0, createdAt: now, updatedAt: now, version: 1);
+await wr.upsertPlanEntry(pe); c.read(remoteSyncServiceProvider).pushWorkoutPlanEntry(pe);
+await db.customStatement('PRAGMA user_version = 140');

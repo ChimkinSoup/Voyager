@@ -1,0 +1,4 @@
+final s = c.read(settingsRepositoryProvider);
+final cur = await s.getSettings();
+await s.saveSettings(cur.copyWith(workoutRestTimerEnabled: true, workoutRestSeconds: 30));
+c.invalidate(settingsProvider);

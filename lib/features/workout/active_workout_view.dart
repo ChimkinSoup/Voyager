@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/workout_models.dart';
 import 'package:voyager/features/workout/exercise_detail_view.dart';
 import 'package:voyager/features/workout/workout_exercise_picker.dart';
+import 'package:voyager/features/workout/workout_island.dart';
 import 'package:voyager/features/workout/workout_session_controller.dart';
 import 'package:voyager/features/workout/workout_units.dart';
 import 'package:voyager/features/workout/workout_wheel_pair.dart';
@@ -234,7 +236,11 @@ class ActiveWorkoutView extends ConsumerWidget {
                               ),
                               label: 'Complete set',
                               color: theme.colorScheme.primary,
-                              onPressed: controller.completeCurrentSet,
+                              // A done set is reached only on purpose, to
+                              // correct it; completing it again does nothing.
+                              onPressed: set.completed
+                                  ? null
+                                  : controller.completeCurrentSet,
                             ),
                             const SizedBox(height: VoyagerSpacing.lg),
                             _ExerciseStrip(
@@ -278,15 +284,7 @@ class _Header extends StatelessWidget {
             icon: const Icon(PhosphorIconsRegular.caretUp, size: 20),
             tooltip: 'Minimise to the island',
           ),
-          Expanded(
-            child: Text(
-              '${state.completedCount} of ${state.logs.length} sets done',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
-            ),
-          ),
+          Expanded(child: _HeaderStatus(state: state)),
           GlassButton(
             label: 'Finish',
             dense: true,
@@ -333,6 +331,84 @@ class _Header extends StatelessWidget {
   }
 }
 
+/// "3 of 10 sets done", and while a rest runs its countdown beside it: this
+/// is where the next set is dialled in, and the rest showed only on the
+/// collapsed island (BUG-202). Turning a wheel still ends the rest, and the
+/// countdown going is the sign that it did.
+class _HeaderStatus extends StatefulWidget {
+  const _HeaderStatus({required this.state});
+
+  final ActiveWorkoutState state;
+
+  @override
+  State<_HeaderStatus> createState() => _HeaderStatusState();
+}
+
+class _HeaderStatusState extends State<_HeaderStatus> {
+  /// A once-a-second timer, only while resting, rather than a ticker: the
+  /// text changes once a second and nothing here animates.
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncTick();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HeaderStatus oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncTick();
+  }
+
+  void _syncTick() {
+    if (widget.state.restEndsAt == null) {
+      _tick?.cancel();
+      _tick = null;
+    } else {
+      _tick ??= Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final state = widget.state;
+    final endsAt = state.restEndsAt;
+    final remaining = endsAt?.difference(DateTime.now());
+    return Text.rich(
+      TextSpan(
+        text: '${state.completedCount} of ${state.logs.length} sets done',
+        children: [
+          if (remaining != null && remaining > Duration.zero)
+            TextSpan(
+              text: '  ·  Rest ${formatRestRemaining(remaining)}',
+              style: TextStyle(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w700,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+        ],
+      ),
+      textAlign: TextAlign.center,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.labelLarge?.copyWith(
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+      ),
+    );
+  }
+}
+
 /// The movement being lifted. Tapping it opens the same zoomed analytics page
 /// a card in the planner does — "tap an exercise, get its history" holds
 /// everywhere, including mid-set.
@@ -359,7 +435,13 @@ class _CurrentExerciseTitle extends StatelessWidget {
           ),
           child: Column(
             children: [
-              Text(exercise.name, style: theme.textTheme.headlineSmall),
+              Text(
+                exercise.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.headlineSmall,
+              ),
               Text(
                 'Set $position of ${sets.length}',
                 style: theme.textTheme.labelMedium?.copyWith(
@@ -701,9 +783,16 @@ class _ExerciseStrip extends StatelessWidget {
                               : colors.hairline,
                         ),
                       ),
-                      child: Text(
-                        exercise.name,
-                        style: theme.textTheme.labelMedium,
+                      // Capped, or one long name filled the strip and
+                      // pushed the rest out of reach (BUG-205).
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 200),
+                        child: Text(
+                          exercise.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelMedium,
+                        ),
                       ),
                     ),
                   ),

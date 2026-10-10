@@ -1,0 +1,13 @@
+await c.read(workoutSeedProvider.future);
+final now = DateTime.now().toUtc();
+final wr = c.read(workoutRepositoryProvider);
+final r = c.read(remoteSyncServiceProvider);
+final long = Exercise(id: 'fx201-long', name: 'L' + ('x' * 298) + 'Z', sortOrder: 100, createdAt: now, updatedAt: now, version: 1);
+await wr.upsertExercise(long); r.pushExercise(long);
+final today = DateTime.now().weekday % 7;
+final ids = ['seed-exercise-pull-up', 'seed-exercise-deadlift', 'seed-exercise-lat-pulldown'];
+for (var i = 0; i < ids.length; i++) { final e = WorkoutPlanEntry(id: 'fx201-entry-$i', planId: 'workout_plan_weekly', dayIndex: today, exerciseId: ids[i], sortOrder: i, createdAt: now, updatedAt: now, version: 1); await wr.upsertPlanEntry(e); r.pushWorkoutPlanEntry(e); }
+final e3 = WorkoutPlanEntry(id: 'fx201-entry-long', planId: 'workout_plan_weekly', dayIndex: (today + 1) % 7, exerciseId: 'fx201-long', sortOrder: 0, createdAt: now, updatedAt: now, version: 1); await wr.upsertPlanEntry(e3); r.pushWorkoutPlanEntry(e3);
+final e4 = WorkoutPlanEntry(id: 'fx201-entry-long2', planId: 'workout_plan_weekly', dayIndex: (today + 1) % 7, exerciseId: 'seed-exercise-plank', sortOrder: 1, createdAt: now, updatedAt: now, version: 1); await wr.upsertPlanEntry(e4); r.pushWorkoutPlanEntry(e4);
+invalidateWorkoutProvidersIn(c);
+debugPrint('FX201 today=$today exercises=${(await wr.listExercises()).length}');

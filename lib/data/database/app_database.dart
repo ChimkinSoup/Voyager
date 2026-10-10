@@ -8,11 +8,14 @@ import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
 import 'package:voyager/core/constants/job_constants.dart';
+import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart' show jobCalendarDay;
 import 'package:voyager/domain/models/journal_models.dart' show kDefaultMood;
 import 'package:voyager/domain/models/leetcode_models.dart';
+import 'package:voyager/domain/models/workout_models.dart'
+    show kDefaultTargetReps, kDefaultTargetSets;
 import 'package:voyager/domain/models/settings_models.dart'
     show JobExperienceSnippet, Snippet, defaultPetalColor;
 import 'package:voyager/domain/models/calendar_models.dart'
@@ -1976,7 +1979,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 140;
+  int get schemaVersion => 141;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3539,8 +3542,114 @@ class AppDatabase extends _$AppDatabase {
           settingsTable.localOwnerUid,
         );
       }
+      if (from < 141) {
+        await moveStarterExercisesToFixedIds();
+      }
     },
   );
+
+  /// v141 (BUG-204): starters used to be seeded under random ids, only into
+  /// an empty table, and never uploaded until edited; they are now seeded
+  /// under fixed ids on every device ([starterExerciseId]). Runs once, on a
+  /// database from before that, so it knows which starters this device
+  /// seeded the old way, and settles each one:
+  ///
+  /// - An old starter still exactly as seeded that a plan entry or set log
+  ///   uses becomes a normal record: version 1, queued for upload, so the
+  ///   other devices can resolve what points at it.
+  /// - An unused one is replaced by its fixed-id seed.
+  /// - Any other starter — already used under its old id, edited, deleted
+  ///   (its tombstone perhaps purged since), or never seeded here — gets a
+  ///   fixed-id tombstone, queued for upload at version 0 and stamped now.
+  ///   Seeding is insert-or-ignore, so that keeps the fixed-id copy from
+  ///   appearing beside the old row, or coming back after a delete, here
+  ///   and on every device it reaches; an edit to that copy elsewhere still
+  ///   outranks it.
+  ///
+  /// A database whose exercise table is empty never seeded anything, and
+  /// seeds normally.
+  Future<void> moveStarterExercisesToFixedIds() async {
+    final rows = await select(exercisesTable).get();
+    if (rows.isEmpty) return;
+    final entryIds = selectOnly(workoutPlanEntriesTable, distinct: true)
+      ..addColumns([workoutPlanEntriesTable.exerciseId]);
+    final logIds = selectOnly(workoutSetLogsTable, distinct: true)
+      ..addColumns([workoutSetLogsTable.exerciseId]);
+    final referenced = {
+      for (final row in await entryIds.get())
+        row.read(workoutPlanEntriesTable.exerciseId)!,
+      for (final row in await logIds.get())
+        row.read(workoutSetLogsTable.exerciseId)!,
+    };
+    final now = DateTime.now().toUtc();
+
+    Future<void> owe(String id) => into(pendingUploadsTable).insert(
+      PendingUploadsTableCompanion.insert(
+        documentId: id,
+        collectionName: 'exercises',
+      ),
+      mode: InsertMode.insertOrIgnore,
+    );
+
+    for (final (index, name) in kStarterExercises.indexed) {
+      final asSeeded = [
+        for (final row in rows)
+          if (row.name == name && _isUntouchedOldStarter(row, index)) row,
+      ];
+      final unused = <String>{};
+      for (final row in asSeeded) {
+        if (referenced.contains(row.id)) {
+          await (update(exercisesTable)..where((t) => t.id.equals(row.id)))
+              .write(
+                ExercisesTableCompanion(
+                  version: const Value(1),
+                  updatedAt: Value(now),
+                ),
+              );
+          await owe(row.id);
+        } else {
+          await (delete(
+            exercisesTable,
+          )..where((t) => t.id.equals(row.id))).go();
+          unused.add(row.id);
+        }
+      }
+      final id = starterExerciseId(name);
+      // Live only where an unused old starter was all this device had of it.
+      final live =
+          unused.isNotEmpty &&
+          rows.every((row) => row.name != name || unused.contains(row.id));
+      final inserted = await into(exercisesTable).insert(
+        ExercisesTableCompanion.insert(
+          id: id,
+          name: name,
+          sortOrder: Value(index),
+          createdAt: live ? kStarterExerciseSeedEpoch : now,
+          updatedAt: live ? kStarterExerciseSeedEpoch : now,
+          deletedAt: Value(live ? null : now),
+        ),
+        mode: InsertMode.insertOrIgnore,
+      );
+      if (!live && inserted != 0) await owe(id);
+    }
+  }
+
+  /// A starter as the old scheme seeded it, with nothing changed since.
+  /// Version 0 alone doesn't say so: an exercise made in the library is saved
+  /// at version 0 too, and uploaded. Seeding ran before anything could be
+  /// made, so one made in the library always sorts after the starters.
+  static bool _isUntouchedOldStarter(ExercisesTableData row, int index) =>
+      !row.id.startsWith('seed-') &&
+      row.version == 0 &&
+      row.deletedAt == null &&
+      row.sortOrder == index &&
+      row.formCues.isEmpty &&
+      row.colorValue == null &&
+      row.targetSets == kDefaultTargetSets &&
+      row.targetReps == kDefaultTargetReps &&
+      row.targetWeightKg == 0 &&
+      row.prescriptionMode == 'inherit' &&
+      (row.setPrescriptionsJson.isEmpty || row.setPrescriptionsJson == '[]');
 
   /// v115: copies the two JSON snippet lists out of the settings row into
   /// their own tables, in list order, then clears the columns.

@@ -1,3 +1,4 @@
+import 'package:voyager/core/constants/app_seeds.dart';
 import 'package:voyager/domain/models/job_models.dart';
 
 /// Trimmed, case-folded company name — the key both the duplicate check and
@@ -206,8 +207,8 @@ List<({DateTime day, int count})> jobDailyCounts(
 
 /// Seeded stages and companies get ids derived from their names, so two
 /// devices that each seeded "Applied" hold the same document rather than two.
-String jobSeedStageId(String name) => 'seed-stage-${_seedSlug(name)}';
-String jobSeedCompanyId(String name) => 'seed-company-${_seedSlug(name)}';
+String jobSeedStageId(String name) => 'seed-stage-${seedSlug(name)}';
+String jobSeedCompanyId(String name) => 'seed-company-${seedSlug(name)}';
 
 bool isJobSeedId(String id) => id.startsWith('seed-');
 
@@ -215,9 +216,6 @@ bool isJobSeedId(String id) => id.startsWith('seed-');
 /// devices are identical documents. A seed sits at version 0, which any real
 /// edit outranks.
 final jobSeedEpoch = DateTime.utc(2025, 1, 1);
-
-String _seedSlug(String name) =>
-    jobCompanyKey(name).replaceAll(RegExp(r'[^a-z0-9]+'), '-');
 
 /// Company keys the user has actually applied to, most recently first.
 ///

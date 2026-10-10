@@ -1462,9 +1462,9 @@ final studyDeckStatsProvider =
       );
     });
 
-/// Creates the two plans and (once) the starter exercise library. Every
-/// workout provider below waits on this, so the planner can never render
-/// against a half-seeded database on first launch.
+/// Creates the two plans and the starter exercise library. Every workout
+/// provider below waits on this, so the planner can never render against a
+/// half-seeded database on first launch.
 final workoutSeedProvider = FutureProvider<void>((ref) async {
   ref.keepAlive();
   await ref.watch(workoutRepositoryProvider).ensureSeeded();
@@ -1801,6 +1801,10 @@ final _secondaryDataProviders = <ProviderOrFamily>[
   ..._rankingDataProviders,
   settingsProvider,
   trashItemsProvider,
+  // A restore writes images without going through MediaService, so the
+  // Settings readout kept "0 images" until something else refreshed it
+  // (BUG-209).
+  mediaStorageUsageProvider,
 ];
 
 void invalidateSecondaryDataProviders(Ref ref) {

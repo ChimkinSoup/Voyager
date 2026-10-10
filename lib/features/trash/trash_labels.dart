@@ -49,7 +49,17 @@ String trashItemDetail(
       .inHours;
   final daysLeft = (hoursLeft / 24).ceil();
   final left = daysLeft <= 1 ? 'last day' : '$daysLeft days left';
-  return [item.kind.feature.label, ?item.summary, deleted, left].join(' · ');
+  final parent = item.parentTitle;
+  final under = parent == null
+      ? null
+      : 'subtask of "${cappedTrashTitle(parent)}"';
+  return [
+    item.kind.feature.label,
+    ?under,
+    ?item.summary,
+    deleted,
+    left,
+  ].join(' · ');
 }
 
 /// [title] cut to 60 characters, for quoting in a label or message.

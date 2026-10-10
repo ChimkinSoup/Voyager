@@ -1,6 +1,7 @@
 import 'package:voyager/core/dev/error_logger.dart';
 import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/soft_delete/restore_contract.dart';
+import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/soft_delete_policy.dart';
 import 'package:voyager/core/utils/fallback_container.dart';
@@ -38,6 +39,7 @@ class TrashItem {
     required this.row,
     required this.deletedAt,
     required this.members,
+    this.parentTitle,
   });
 
   final TrashRow row;
@@ -45,6 +47,9 @@ class TrashItem {
 
   /// Deleted with [row], by the same cascade. Not including [row] itself.
   final List<TrashRow> members;
+
+  /// For a subtask, its task's title.
+  final String? parentTitle;
 
   TrashKind get kind => row.kind;
   String get id => row.id;
@@ -118,6 +123,7 @@ class TrashService {
           row: row,
           deletedAt: row.deletedAt!,
           members: _membersOf(row, rows),
+          parentTitle: _parentItemTitle(row, rows),
         ),
     ];
     // A row taken by another row's delete is shown as part of that one.
@@ -278,6 +284,26 @@ class TrashService {
       }
     }
     await _write(writes);
+  }
+
+  /// A subtask's task, which TRASH_HLD §4.1 has its row name (BUG-208).
+  /// Other kinds that hang under their own kind (a split-off occurrence
+  /// under its series) say nothing.
+  String? _parentItemTitle(
+    TrashRow row,
+    Map<String, Map<String, TrashRow>> rows,
+  ) {
+    if (row.kind.collection != FirestoreCollections.todoTasks) return null;
+    for (final parent in row.kind.parents) {
+      if (parent.collection != row.kind.collection) continue;
+      final storedId = row.data[parent.key] as String?;
+      if (storedId == null) continue;
+      final parentRow = rows[parent.collection]?[parent.localId(storedId)];
+      if (parentRow == null) continue;
+      final title = parentRow.kind.title(parentRow.data)?.trim();
+      return title == null || title.isEmpty ? null : title;
+    }
+    return null;
   }
 
   /// Whether [row]'s [parent] is live, or among the rows [restoring].

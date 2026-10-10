@@ -400,7 +400,15 @@ final _kinds = <TrashKind>[
     feature: TrashFeature.leetcode,
     noun: 'problem',
     title: (data) => _field(data, 'title'),
-    wipe: const ['title', 'description', 'examples', 'solutions', 'tags'],
+    wipe: const [
+      'title',
+      'description',
+      'examples',
+      'solutions',
+      'tags',
+      'titleSlug',
+      'questionFrontendId',
+    ],
   ),
   const TrashKind(
     collection: FirestoreCollections.leetcodeCheatTabs,
@@ -439,7 +447,7 @@ final _kinds = <TrashKind>[
       final label = (data['label'] as String?)?.trim();
       return label == null || label.isEmpty ? _field(data, 'command') : label;
     },
-    wipe: const ['command', 'label', 'description'],
+    wipe: const ['command', 'label', 'description', 'complexity'],
     parents: const [
       TrashParent(FirestoreCollections.leetcodeCheatSections, 'sectionId'),
     ],
@@ -516,8 +524,26 @@ final _kinds = <TrashKind>[
     collection: FirestoreCollections.transactions,
     feature: TrashFeature.finance,
     noun: 'transaction',
-    title: (data) => _field(data, 'note'),
-    wipe: const ['note', 'tags', 'amountCents'],
+    // Store and note as the ledger row and the delete toast name it, else the
+    // amount and date: by note alone a store-only row was "Untitled
+    // transaction", and several of them couldn't be told apart (BUG-208).
+    title: (data) {
+      final named = [
+        for (final key in ['origin', 'note'])
+          if (_field(data, key)?.trim() case final text? when text.isNotEmpty)
+            text,
+      ].join(' - ');
+      if (named.isNotEmpty) return named;
+      // Stored unsigned; the type says which way the money went.
+      final cents = (data['amountCents'] as num?)?.toInt() ?? 0;
+      return _amountOn(
+        {...data, 'amountCents': data['type'] == 'deposit' ? cents : -cents},
+        'amountCents',
+        'occurredAt',
+        signed: true,
+      );
+    },
+    wipe: const ['origin', 'note', 'tags', 'amountCents'],
     // A contribution's or withdrawal's room entry goes and comes back with
     // its ledger row (BUG-132).
     children: const [
@@ -528,7 +554,7 @@ final _kinds = <TrashKind>[
     collection: FirestoreCollections.subscriptions,
     feature: TrashFeature.finance,
     noun: 'subscription',
-    wipe: ['name', 'note', 'amountCents'],
+    wipe: ['name', 'store', 'note', 'amountCents'],
   ),
   TrashKind(
     collection: FirestoreCollections.budgets,

@@ -1,0 +1,11 @@
+﻿final db = c.read(databaseProvider);
+final wr = c.read(workoutRepositoryProvider);
+for (final id in ['seed-exercise-front-squat', 'seed-exercise-lunge']) { await db.customStatement('delete from exercises_table where id = ?', [id]); }
+final old = DateTime.utc(2026, 9, 1);
+await wr.upsertExercise(Exercise(id: 'old-fs', name: 'Front Squat', sortOrder: 7, createdAt: old, updatedAt: old), recordLocalActivity: false);
+await wr.upsertExercise(Exercise(id: 'old-lunge', name: 'Lunge', sortOrder: 11, createdAt: old, updatedAt: old), recordLocalActivity: false);
+final now = DateTime.now().toUtc();
+final pe = WorkoutPlanEntry(id: 'fx201-entry-oldfs', planId: 'workout_plan_weekly', dayIndex: 1, exerciseId: 'old-fs', sortOrder: 0, createdAt: now, updatedAt: now, version: 1);
+await wr.upsertPlanEntry(pe); c.read(remoteSyncServiceProvider).pushWorkoutPlanEntry(pe);
+c.invalidate(workoutSeedProvider); await c.read(workoutSeedProvider.future); invalidateWorkoutProvidersIn(c);
+

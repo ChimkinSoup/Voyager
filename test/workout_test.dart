@@ -378,6 +378,119 @@ void main() {
       expect(await repo.listExercises(), isEmpty);
     });
 
+    group('BUG-204: starters under fixed ids', () {
+      // As the old scheme seeded it: a random id, the starter's position.
+      Exercise legacy(String id, String name) => Exercise(
+        id: id,
+        name: name,
+        sortOrder: kStarterExercises.indexOf(name),
+        createdAt: DateTime.utc(2026, 9),
+        updatedAt: DateTime.utc(2026, 9),
+      );
+
+      Future<Set<String>> owed() async => {
+        for (final row in await db.select(db.pendingUploadsTable).get())
+          if (row.collectionName == 'exercises') row.documentId,
+      };
+
+      test('every device seeds the same untouched documents', () async {
+        // A pulled exercise no longer stops the starters being seeded.
+        await repo.upsertExercise(legacy('pulled', 'My lift').copyWith());
+
+        await repo.ensureSeeded();
+
+        final pullUp = await repo.getExercise(starterExerciseId('Pull-up'));
+        expect(pullUp?.id, 'seed-exercise-pull-up');
+        expect(pullUp?.version, 0);
+        expect(pullUp?.createdAt, kStarterExerciseSeedEpoch);
+        expect(
+          await repo.listExercises(),
+          hasLength(kStarterExercises.length + 1),
+        );
+      });
+
+      test('a deleted starter is not seeded again, even after the purge '
+          'window', () async {
+        await repo.ensureSeeded();
+        final id = starterExerciseId('Plank');
+        await repo.softDeleteExercise(id);
+        await repo.purgeExpiredDeleted(
+          utcNow().add(const Duration(days: 60)),
+        );
+
+        await repo.ensureSeeded();
+
+        expect((await repo.getExercise(id))?.deletedAt, isNotNull);
+      });
+
+      test('the v141 migration settles each starter the old scheme seeded',
+          () async {
+        final now = utcNow();
+        // In use: planned on a day.
+        await repo.upsertExercise(legacy('old-pullup', 'Pull-up'));
+        await repo.upsertPlanEntry(
+          WorkoutPlanEntry(
+            id: 'entry',
+            planId: kWeeklyWorkoutPlanId,
+            dayIndex: 1,
+            exerciseId: 'old-pullup',
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+        // Unused, and untouched.
+        await repo.upsertExercise(legacy('old-plank', 'Plank'));
+        // Edited (uploaded), and made in the library under a starter name.
+        await repo.upsertExercise(
+          legacy('old-bench', 'Bench Press').copyWith(targetSets: 5),
+        );
+        await repo.upsertExercise(
+          Exercise(
+            id: 'mine',
+            name: 'Lunge',
+            sortOrder: 40,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+        // Every other starter was deleted here and purged long ago.
+
+        await db.moveStarterExercisesToFixedIds();
+        await repo.ensureSeeded();
+
+        expect((await repo.getExercise('old-pullup'))?.version, 1);
+        expect(await repo.getExercise('old-plank'), isNull);
+        expect((await repo.getExercise('mine'))?.version, 0);
+        expect((await repo.getExercise('old-bench'))?.version, 1);
+        final plank = await repo.getExercise(starterExerciseId('Plank'));
+        expect(plank?.deletedAt, isNull);
+        expect(plank?.createdAt, kStarterExerciseSeedEpoch);
+        for (final name in ['Pull-up', 'Bench Press', 'Lunge', 'Deadlift']) {
+          expect(
+            (await repo.getExercise(starterExerciseId(name)))?.deletedAt,
+            isNotNull,
+            reason: '$name: held by another row, or gone',
+          );
+        }
+        expect(
+          (await repo.listExercises()).map((e) => e.name).toList()..sort(),
+          ['Bench Press', 'Lunge', 'Plank', 'Pull-up'],
+        );
+        // The in-use starter and the tombstones go up; the live seed doesn't.
+        expect(await owed(), contains('old-pullup'));
+        expect(await owed(), contains(starterExerciseId('Deadlift')));
+        expect(await owed(), isNot(contains(starterExerciseId('Plank'))));
+      });
+
+      test('the migration leaves a database that never seeded alone', () async {
+        await db.moveStarterExercisesToFixedIds();
+        await repo.ensureSeeded();
+
+        expect(await repo.listExercises(), hasLength(kStarterExercises.length));
+        expect(await owed(), isEmpty);
+      });
+    });
+
     test('setActivePlan leaves exactly one plan active', () async {
       await repo.ensureSeeded();
       await repo.setActivePlan(kCycleWorkoutPlanId);
