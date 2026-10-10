@@ -595,7 +595,12 @@ class AutoBackupService extends ChangeNotifier {
     final damaged = [...?(state['recheckDamaged'] as List?)];
     final unchecked = [...?(state['recheckUnchecked'] as List?)];
     final opened = [...?(state['openedDays'] as List?)?.cast<String>()];
-    final newest = autos.isEmpty ? null : autos.first.capturedAt;
+    // A backup dated in the future (the clock went backwards) is left out of
+    // the age maths (§5.3).
+    final newest = autos
+        .map((e) => e.capturedAt)
+        .where((t) => backupAgeDays(t, now) >= 0)
+        .firstOrNull;
     final todayKey = backupDayKey(now);
 
     // An open day after the newest backup and before today: the app ran then
@@ -627,7 +632,11 @@ class AutoBackupService extends ChangeNotifier {
       health = (
         AutoBackupHealth.off,
         'Automatic backups are off · '
-            '${newest == null ? 'no backups yet' : 'last backup ${backupAgoLabel(newest, now)}'}',
+            '${newest != null
+                ? 'last backup ${backupAgoLabel(newest, now)}'
+                : autos.isEmpty
+                ? 'no backups yet'
+                : 'every backup is dated in the future'}',
       );
     } else if (lastAttemptFailed) {
       health = (
@@ -719,6 +728,7 @@ String _describeTime(DateTime capturedAt, DateTime now) =>
 /// 14:02".
 String backupAgeLabel(BackupFileEntry entry, DateTime now) {
   final age = backupAgeDays(entry.capturedAt, now);
+  if (age < 0) return 'Dated in the future';
   if (entry.isSnapshot) {
     return 'Before restore · ${_describeTime(entry.capturedAt, now)}';
   }
@@ -745,9 +755,13 @@ Future<Map<String, dynamic>> readBackupManifest(File file) {
 Map<String, dynamic> _readManifestIsolate(String path) {
   final input = InputFileStream(path);
   try {
-    final manifest = ZipDecoder()
-        .decodeBuffer(input)
-        .findFile(backupManifestFileName);
+    final Archive archive;
+    try {
+      archive = ZipDecoder().decodeBuffer(input);
+    } catch (_) {
+      throw BackupDamagedException('That file could not be read as a ZIP.');
+    }
+    final manifest = archive.findFile(backupManifestFileName);
     if (manifest == null) return const {};
     return Map<String, dynamic>.from(
       jsonDecode(utf8.decode(manifest.content as List<int>)) as Map,

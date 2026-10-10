@@ -315,10 +315,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                           context,
                           ref,
                           settings,
-                          title: 'Previous period key',
-                          current: settings.calendarNavigateLeftKey,
-                          onSelected: (key) =>
-                              settings.copyWith(calendarNavigateLeftKey: key),
+                          previous: true,
                         ),
                       ),
                       ListTile(
@@ -331,10 +328,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                           context,
                           ref,
                           settings,
-                          title: 'Next period key',
-                          current: settings.calendarNavigateRightKey,
-                          onSelected: (key) =>
-                              settings.copyWith(calendarNavigateRightKey: key),
+                          previous: false,
                         ),
                       ),
                       if (isWindows) ...[
@@ -987,21 +981,49 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     return ref.read(settingsProvider.notifier).saveSettings(settings);
   }
 
+  /// Rebinds the calendar's previous or next period key. A key the other
+  /// direction already has is swapped rather than shared: the other direction
+  /// takes this one's old key, since a shared key only ever moves back
+  /// (BUG-212).
   Future<void> _pickCalendarKey(
     BuildContext context,
     WidgetRef ref,
     AppSettings settings, {
-    required String title,
-    required String current,
-    required AppSettings Function(String key) onSelected,
+    required bool previous,
   }) async {
+    final current = previous
+        ? settings.calendarNavigateLeftKey
+        : settings.calendarNavigateRightKey;
+    final other = previous
+        ? settings.calendarNavigateRightKey
+        : settings.calendarNavigateLeftKey;
     final picked = await showKeyBindingDialog(
       context,
-      title: title,
+      title: previous ? 'Previous period key' : 'Next period key',
       current: current,
     );
     if (picked == null || picked == current) return;
-    await _save(ref, onSelected(picked));
+    final swapped = formatKeyBinding(picked) == formatKeyBinding(other);
+    final otherKey = swapped ? current : other;
+    await _save(
+      ref,
+      settings.copyWith(
+        calendarNavigateLeftKey: previous ? picked : otherKey,
+        calendarNavigateRightKey: previous ? otherKey : picked,
+      ),
+    );
+    if (swapped && context.mounted) {
+      showVoyagerToast(
+        context,
+        message:
+            '${previous ? 'Next' : 'Previous'} period moved to '
+            '${formatKeyBinding(current)}, since '
+            '${previous ? 'previous' : 'next'} period took '
+            '${formatKeyBinding(picked)}',
+        icon: PhosphorIconsRegular.arrowsLeftRight,
+        dwell: const Duration(seconds: 4),
+      );
+    }
   }
 
   /// Like [_pickCalendarKey], for one of the four grades. A key another grade

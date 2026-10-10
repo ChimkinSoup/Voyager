@@ -93,6 +93,19 @@ class _ShellBranchContainerState extends State<ShellBranchContainer>
       if (i == widget.currentIndex || !widget.mountLater.contains(i)) i,
   };
 
+  /// Each branch's focus node, which keeps a hidden branch out of Tab and
+  /// arrow-key traversal (BUG-215).
+  final Map<int, (_BranchFocusNode, FocusAttachment)> _focusNodes = {};
+
+  _BranchFocusNode _focusNodeFor(int index) {
+    final (node, attachment) = _focusNodes.putIfAbsent(index, () {
+      final node = _BranchFocusNode(debugLabel: 'shell branch $index');
+      return (node, node.attach(context));
+    });
+    attachment.reparent();
+    return node;
+  }
+
   /// Settle time before the warm-up starts, so it doesn't compete with the
   /// startup sync and the login warm-ups; and the gap between branches, so
   /// each one's cost lands in a frame of its own.
@@ -207,6 +220,10 @@ class _ShellBranchContainerState extends State<ShellBranchContainer>
   void dispose() {
     _warmTimer?.cancel();
     _progress.dispose();
+    for (final (node, attachment) in _focusNodes.values) {
+      attachment.detach();
+      node.dispose();
+    }
     super.dispose();
   }
 
@@ -267,26 +284,54 @@ class _ShellBranchContainerState extends State<ShellBranchContainer>
       key: ValueKey(index),
       child: IgnorePointer(
         ignoring: !isCurrent,
-        child: VoyagerFade(
-          opacity: opacity,
-          // The fade repaints every frame; this keeps that to re-compositing
-          // the branch instead of re-recording it.
-          child: RepaintBoundary(
-            child: TickerMode(
-              // The departing branch keeps ticking while it dissolves, so its
-              // own animations don't freeze mid-fade. A warming one counts as
-              // in sight, so pages that hold their builds while hidden catch
-              // up now rather than on arrival.
-              enabled: isCurrent || departing || warming,
-              child: _mounted.contains(index)
-                  ? widget.children[index]
-                  : const SizedBox.shrink(),
+        // Tab and the arrow keys never walk into a page that isn't on
+        // screen: a hidden text field would take what is typed next
+        // (BUG-215). Focus already inside a page is left alone, so returning
+        // to it finds it where it was.
+        child: Focus(
+          parentNode: _focusNodeFor(index)..onStage = isCurrent,
+          canRequestFocus: false,
+          skipTraversal: true,
+          child: VoyagerFade(
+            opacity: opacity,
+            // The fade repaints every frame; this keeps that to re-compositing
+            // the branch instead of re-recording it.
+            child: RepaintBoundary(
+              child: TickerMode(
+                // The departing branch keeps ticking while it dissolves, so its
+                // own animations don't freeze mid-fade. A warming one counts as
+                // in sight, so pages that hold their builds while hidden catch
+                // up now rather than on arrival.
+                enabled: isCurrent || departing || warming,
+                child: _mounted.contains(index)
+                    ? widget.children[index]
+                    : const SizedBox.shrink(),
+              ),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+/// A branch's focus node: its descendants are traversable only while it is on
+/// screen. Every traversal (Tab, the arrow keys) reads that through
+/// [skipTraversal], and a node already focused in a hidden branch still Tabs
+/// out of it.
+///
+/// A getter over a plain field rather than [Focus.descendantsAreTraversable],
+/// and attached by hand above the branch's [Focus] rather than given to it: a
+/// [Focus] rebuilds whenever its node's flags have changed by the time the
+/// node is next notified, a frame after every switch.
+class _BranchFocusNode extends FocusNode {
+  _BranchFocusNode({super.debugLabel})
+    : super(canRequestFocus: false, skipTraversal: true);
+
+  bool onStage = true;
+
+  @override
+  bool get descendantsAreTraversable => onStage;
 }
 
 /// See [ShellBranchContainer.mountLater] and [ShellBranchContainer.shouldWarm].

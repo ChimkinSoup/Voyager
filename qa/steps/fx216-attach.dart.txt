@@ -1,0 +1,10 @@
+﻿final png = Uint8List.fromList([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,16,0,0,0,16,8,2,0,0,0,144,145,104,54,0,0,0,35,73,68,65,84,120,156,99,60,97,19,197,64,10,96,34,73,53,195,168,6,226,0,19,145,234,224,96,84,3,49,128,228,80,2,0,97,222,1,126,61,102,212,66,0,0,0,0,73,69,78,68,174,66,96,130]);
+final m = c.read(mediaServiceProvider);
+final ref1 = await m.attachBytes(bytes: png, collection: 'journal_entries', documentId: 'fx211-je-2');
+final s = c.read(settingsRepositoryProvider);
+final cur = await s.getSettings();
+await s.saveSettings(cur.copyWith(mediaRemoteDownloadsEnabled: false));
+c.invalidate(settingsProvider);
+debugPrint('FX216 attached ' + ref1.assetId);
+
+

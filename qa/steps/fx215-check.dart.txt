@@ -1,0 +1,1 @@
+﻿final es = await c.read(journalRepositoryProvider).listEntries(); debugPrint('FX215 entries=' + es.length.toString() + ' marked=' + es.where((e) => e.body.contains('zztab') || e.title.contains('zztab')).map((e) => e.id).join(',') + ' focus=' + FocusManager.instance.primaryFocus.toString());

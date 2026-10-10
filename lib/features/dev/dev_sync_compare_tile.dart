@@ -70,12 +70,16 @@ class _DevSyncCompareSectionState extends ConsumerState<DevSyncCompareSection> {
   Future<void> _compareJournalEntries() async {
     if (_comparing) return;
     setState(() => _comparing = true);
+    // Read before any await: the report belongs to the account it ran on,
+    // even if another signs in meanwhile, and is kept even if this tile is
+    // gone by the time it is ready.
+    final uid = ref.read(authRepositoryProvider).currentUserId;
+    final lastCompare = ref.read(lastJournalCompareProvider.notifier);
+    final compareService = ref.read(remoteSyncCompareServiceProvider);
     try {
       await _flushPendingEdits();
-      if (!mounted) return;
-      final report = await ref
-          .read(remoteSyncCompareServiceProvider)
-          .compareAllJournalEntries();
+      final report = await compareService.compareAllJournalEntries();
+      lastCompare.state = uid == null ? null : (uid: uid, report: report);
       if (!mounted) return;
       await _showJournalResultDialog(context, report);
     } finally {

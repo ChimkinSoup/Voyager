@@ -2700,6 +2700,11 @@ final remoteSyncCompareServiceProvider = Provider<RemoteSyncCompareService>((
   );
 });
 
+/// This session's last "Compare all journal entries" run and the account it
+/// ran on: what the Dev purge offers to delete (BUG-219).
+final lastJournalCompareProvider =
+    StateProvider<({String uid, JournalCompareReport report})?>((ref) => null);
+
 final fullSyncCheckProvider = Provider<FullSyncCheck>((ref) {
   return FullSyncCheck(
     collections: ref.watch(backupCollectionsProvider),

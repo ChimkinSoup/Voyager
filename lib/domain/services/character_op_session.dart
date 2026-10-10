@@ -54,11 +54,24 @@ class CharacterOpSession {
     _pendingOpIds.clear();
     _logicalClock = 0;
     _seedFromText(text, markAsPending: true);
+    _editedSinceSeed = false;
   }
+
+  /// Whether [recordTextChange] has recorded an edit since the session was
+  /// seeded or last reset.
+  bool _editedSinceSeed = false;
+
+  /// Whether what is pending is only the seed the session was opened with:
+  /// a copy of the stored text, not an edit made here (BUG-220).
+  bool get onlySeedPending => hasPendingOps && !_editedSinceSeed;
 
   void recordTextChange(String before, String after) {
     if (before == after) return;
+    _recordTextChange(before, after);
+    _editedSinceSeed = true;
+  }
 
+  void _recordTextChange(String before, String after) {
     final live = _liveOrderedOps();
     // When the session already spells `before`, the edit below leaves it
     // spelling exactly `after`, so the rebuild the final check would do can be

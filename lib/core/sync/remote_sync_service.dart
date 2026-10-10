@@ -1434,6 +1434,25 @@ class RemoteSyncService {
     final session = _charOpRegistry.session(collection, documentId);
     if (session == null || operations.isEmpty) return null;
     final before = session.text;
+    // Opened but never typed in, with no log then: the session's characters
+    // are this device's unuploaded seed of the old text. Folded in beside
+    // another device's, both copies would show, and upload, doubled. The
+    // session becomes the log's characters instead (BUG-220).
+    if (session.onlySeedPending &&
+        operations.any((op) => op.clientId != session.clientId)) {
+      _charOpRegistry.loadSession(
+        collection: collection,
+        documentId: documentId,
+        clientId: session.clientId,
+        operations: operations,
+      );
+      final after = _charOpRegistry.session(collection, documentId)!.text;
+      return (
+        before: before,
+        after: after,
+        mapOffset: (offset) => offset.clamp(0, after.length),
+      );
+    }
     // Absorbing swaps in a fresh list rather than editing this one, so it
     // still reads as before when [mapOffset] runs in the merge listener.
     final liveBefore = session.liveOps;
@@ -2969,6 +2988,16 @@ class RemoteSyncService {
             documentId: id,
             remoteText: absorbed?.after ?? merged.body,
             previousRemoteText: absorbed?.before,
+            // Only for a newer revision: our own older write coming back
+            // diffed from the row would undo typing saved since (BUG-220).
+            localText:
+                _localIsNewer(
+                  data,
+                  version: local.version,
+                  updatedAt: local.updatedAt,
+                )
+                ? null
+                : local.body,
             remoteRichBodyJson: merged.richBodyJson,
             remoteTags: absorbed == null
                 ? merged.tags
@@ -3128,6 +3157,14 @@ class RemoteSyncService {
             documentId: id,
             remoteText: absorbed?.after ?? merged.body,
             previousRemoteText: absorbed?.before,
+            localText:
+                _localIsNewer(
+                  data,
+                  version: local.version,
+                  updatedAt: local.updatedAt,
+                )
+                ? null
+                : local.body,
             remoteTags: absorbed == null
                 ? merged.tags
                 : extractTags(absorbed.after),
@@ -3296,6 +3333,14 @@ class RemoteSyncService {
               documentId: id,
               remoteText: absorbed?.after ?? merged.notes ?? '',
               previousRemoteText: absorbed?.before,
+              localText:
+                  _localIsNewer(
+                    data,
+                    version: local.version,
+                    updatedAt: local.updatedAt,
+                  )
+                  ? null
+                  : local.notes ?? '',
               mapOffset: absorbed?.mapOffset,
             );
             merged = merged.copyWith(notes: local.notes, bumpVersion: false);
@@ -3721,6 +3766,26 @@ class RemoteSyncService {
       return localText;
     }
     final session = _charOpRegistry.session(collection, documentId);
+    // Opened but never typed in, and the log still a snapshot: the pending
+    // seed is a copy of the old text, not an edit owed. Kept, it won over a
+    // newer revision from another device and went up over it on the next
+    // keystroke (BUG-220). The session and the open editor take the pulled
+    // text instead. (A log with characters replaced the seed already, in
+    // [_absorbForEditor].)
+    if (session != null &&
+        session.onlySeedPending &&
+        session.text != logText &&
+        !localIsNewer &&
+        !localIsSameRevision) {
+      final before = session.text;
+      session.resetFromText(logText);
+      _pendingTextMergeBuffer.showRemoteChange(
+        collection: collection,
+        documentId: documentId,
+        previousRemoteText: before,
+        remoteText: logText,
+      );
+    }
     if (session != null && session.hasPendingOps && session.text != logText) {
       return session.text;
     }

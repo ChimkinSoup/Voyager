@@ -1,51 +1,35 @@
+import 'package:voyager/core/dev/remote_sync_compare_service.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
-/// Journal entries flagged by the latest sync compare run.
+/// A journal entry a sync compare run flagged.
 class OutOfSyncJournalEntryTarget {
-  const OutOfSyncJournalEntryTarget({
-    required this.id,
-    required this.title,
-    this.searchHint,
-  });
+  const OutOfSyncJournalEntryTarget({required this.id, required this.reason});
 
   final String id;
-  final String title;
-  final String? searchHint;
+
+  /// What the compare found: "Mismatch: body", "Missing on remote", …
+  final String reason;
 }
 
-/// Targets from sync_compare.log (2026-06-28T03:02:58Z compare).
 abstract final class OutOfSyncJournalEntryPurge {
-  static const targets = <OutOfSyncJournalEntryTarget>[
-    OutOfSyncJournalEntryTarget(
-      id: '78726f1c-ff0e-44a5-9599-1b6173cfb852',
-      title: 'test',
-      searchHint: 'body mismatch / invalid CRDT op chain',
-    ),
-    OutOfSyncJournalEntryTarget(
-      id: '11f53e90-395f-48c9-90bf-5348cd7090ad',
-      title: '(untitled)',
-      searchHint: 'body was aarrssttarstarst',
-    ),
-    OutOfSyncJournalEntryTarget(
-      id: '64e3d931-58eb-4715-86b2-bba61a7d2405',
-      title: '(untitled)',
-      searchHint: 'body starts with roasiethaoriefdnoaresthoarisdkarst',
-    ),
-    OutOfSyncJournalEntryTarget(
-      id: 'b5ada03c-3bbb-4367-8752-6dc7be87a14e',
-      title: '(untitled)',
-      searchHint: 'updatedAt-only mismatch',
-    ),
-    OutOfSyncJournalEntryTarget(
-      id: 'eaf8ee6e-5c8b-4e55-8783-8c19e5c792a1',
-      title: '(untitled)',
-      searchHint: 'body was "this"',
-    ),
+  /// The entries [report] found different here and in the cloud. One missing
+  /// on either side is left out: that is usually an upload or a pull still on
+  /// its way, and this deletes without a trash.
+  static List<OutOfSyncJournalEntryTarget> targetsFrom(
+    JournalCompareReport report,
+  ) => [
+    for (final result in report.results)
+      if (result.status == SyncCompareSyncStatus.mismatch)
+        OutOfSyncJournalEntryTarget(
+          id: result.entryId,
+          reason: 'Mismatch: ${result.diffs.map((d) => d.field).join(', ')}',
+        ),
   ];
 
   static Future<List<String>> purgeAll({
+    required List<OutOfSyncJournalEntryTarget> targets,
     required RemoteSyncService remoteSync,
     required JournalRepository journalRepository,
     bool purgeRemote = true,
@@ -81,7 +65,7 @@ abstract final class OutOfSyncJournalEntryPurge {
           documentId: target.id,
         );
       } on Object catch (error) {
-        return '${target.title} (${target.id}): remote purge failed ($error)';
+        return '${target.id}: remote purge failed ($error)';
       }
     }
 
@@ -94,7 +78,6 @@ abstract final class OutOfSyncJournalEntryPurge {
       }
     }
 
-    return '${target.title} (${target.id}): '
-        'remoteOps=$remoteOps localDeleted=$localDeleted';
+    return '${target.id}: remoteOps=$remoteOps localDeleted=$localDeleted';
   }
 }

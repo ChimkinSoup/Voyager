@@ -1379,6 +1379,25 @@ Keep this table and each phase's **Status** line in sync.
     - [x] (3) Pull-up (last exercise) 2 sets, one done, Sets 1 → stays on Pull-up, Complete set greyed (`fx201-60`). Test workout discarded by eval.
     - Logs clean; session ended `SIGNED-OUT`. qa-062 keeps two "Front Squat" rows from the first build's in-app test (see BUGS.md BUG-204).
 
+### FV-39 — BUG-211 … BUG-220
+- **Change (2026-10-10, uncommitted, on `d14d203`):** BUG-211: an unreadable ZIP says "That file could not be read as a ZIP."; a future-dated backup is left out of "last backup" and labelled "Dated in the future". BUG-212: the calendar period keys swap instead of sharing a letter. BUG-213: the accent picker ticks nothing for an accent outside the palette; Save keeps it. BUG-214: "Add event" darkened in Light (the rest was already fixed by BUG-042/057/153). BUG-215: hidden shell branches are out of Tab order (a traversal policy per branch). BUG-216: a placeholder under 56 px shows its icon alone. BUG-217: no change (fixed 2026-10-06). BUG-218: skipped (Juno). BUG-219 (Juno's pick): the Dev purge follows the last journal compare. BUG-220: a seed-only session no longer owes text, and the editing buffer diffs a first snapshot from the stored row.
+- **Tests:** `auto_backup_service_test.dart` (BUG-211 ×2), `calendar_period_key_swap_test.dart` (2), `accent_picker_default_test.dart` (3), `calendar_last_viewed_page_test.dart` (BUG-214), `shell_hidden_branch_focus_test.dart` (2), `media_image_small_placeholder_test.dart` (4), `sync_saving_regressions_test.dart` (BUG-220 ×3). Each new BUG case fails with the lib change stashed. The first full run caught BUG-215's first build scheduling an extra frame per switch (`shell_instant_switch_test.dart`). Full suite: 4,718 passed, 17 skipped, 0 failed.
+- **Flows (new account qa-063, Dark + Scatter, later Light; seed `qa/steps/fx211-seed.dart.txt`; evals `fx220-remote1`, `fx220-read1`, `fx220-cloud1`, `fx215-check`, `fx216-attach`, `fx216-off`, `fx219-dev`, `fx219-diverge`):**
+  - [x] BUG-220: "FX211 entry 1" open, not focused → second-device snapshot "…REMOTEF" by eval → row and editor take it (`fx220-03`) → typed " AFTER" → cloud resolves "…REMOTEF AFTER". Before the fix (same build minus the session change) the row went to v2 with the old body.
+  - [x] BUG-215: Journal entry open → Settings → Pages → switch ×2 → Tab ×40 → "zztabmarker" → in no journal entry; focus on a Settings tile (`fx215-03`).
+  - [x] BUG-212: next period → H → swapped with a toast (`fx212-02`); swapped back.
+  - [x] BUG-213: accent picker: no tick, Enter then Save → #7c9eff kept (`fx213-02`, `fx213-04`).
+  - [x] BUG-214 (Light): Add event 4.64:1, switcher 4.77:1; pale calendar 4.68 / 4.72:1; Show in folder 5.29:1; tag pills 4.40:1 (`fx214-01` … `fx214-05`).
+  - [x] BUG-211: `p25-truncated.zip`, `p25-notzip.zip` → "Import failed: That file could not be read as a ZIP."; planted 17 Oct backup → "Last backup today 17:45, verified", "Dated in the future" (`fx211-12` … `fx211-15`).
+  - [x] BUG-217: Workout opened, full check by eval: no plan gaps (one gap: `__legacy_calendar__`, see BUGS.md).
+  - [x] BUG-216: image attached, downloads off, blob deleted, relaunch → icon-only placeholder, no overflow (`fx216-01`).
+  - [x] BUG-219: "Run … first" → compare → "flagged nothing" → local-only change → flagged → purged (`fx219-02` … `fx219-06`).
+- **Result (2026-10-10):** passed. Run logs: no exception or overflow; `voyager_errors.log` gained only app-start lines. Session ended `SIGNED-OUT`.
+- **Not covered:** a real second device's character-op edit (BUG-220); dreams and to-do notes under BUG-220's buffer change (unit-tested paths shared with journal); the month title's pastel colour and the default-calendar gap (leads).
+
+- **Code review follow-up (2026-10-10, uncommitted; Juno's pick: findings 1–7 and 10):** (1) BUG-220: a seed-only session meeting another device's character operations becomes them instead of doubling; (2) the snapshot reset needs a strictly newer revision; (3) BUG-219: the purge offers mismatches only and compares again before asking; (4) the compare is recorded under the account it started on; (5, 6) BUG-215: a hand-attached branch focus node keeps hidden pages out of arrow-key traversal and lets focus Tab out of one; (7) BUG-216: the threshold scales with text size; (10) BUG-211: "every backup is dated in the future" when off. Tests added for each; full suite 4,725 passed, 17 skipped, 0 failed.
+  - **In the app (qa-063, cold sign-in):** [x] entry 1 kept "…REMOTEF AFTER" through the re-login; [x] BUG-220 on "FX211 entry 2": remote "…REMOTEF" shown, " AFTER2" typed, cloud "…REMOTEF AFTER2"; [x] BUG-215: Tab ×40, Down ×20, Up ×20 with typing after each, no journal entry changed; [x] BUG-219: a flagged entry pushed back in sync, then the purge → no confirm, "The last compare flagged nothing." (`fx2xx-07-stale`). Logs clean; session ended `SIGNED-OUT`.
+
 ## Phase 27 — Final Review
 - **Status:** Done (2026-10-05). No new bugs; one duplicate marked (BUG-043 → BUG-010). Summary at the top of BUGS.md.
 - **Scope:** no new testing except re-checks.

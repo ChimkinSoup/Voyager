@@ -171,6 +171,26 @@ void main() {
     expect(triggerColor('All calendars'), accent);
   });
 
+  testWidgets('BUG-214: Light darkens a pale calendar colour on "Add event"', (
+    tester,
+  ) async {
+    await _pumpCalendar(
+      tester,
+      configureSettings: (s) => s.copyWith(lastViewedCalendarId: 'work'),
+    );
+    final theme = Theme.of(tester.element(find.byType(CalendarPage)));
+    final label = tester.widget<Text>(find.text('Add event'));
+    final ink = DefaultTextStyle.of(
+      tester.element(find.text('Add event')),
+    ).style.merge(label.style).color!;
+    final a = ink.computeLuminance();
+    final b = theme.scaffoldBackgroundColor.computeLuminance();
+    expect(
+      (a > b ? a + 0.05 : b + 0.05) / (a > b ? b + 0.05 : a + 0.05),
+      greaterThanOrEqualTo(4.5),
+    );
+  });
+
   testWidgets('and does on a cold start into the all-view too', (tester) async {
     await _pumpCalendar(
       tester,

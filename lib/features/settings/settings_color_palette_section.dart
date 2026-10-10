@@ -445,11 +445,10 @@ Future<void> pickAccentColor(
   AppSettings settings,
   Future<void> Function(AppSettings settings) onSave,
 ) async {
-  var selected = normalizeColorValue(settings.accentColor);
+  // An accent outside the palette (the default one) ticks no swatch, and
+  // Save without a choice keeps it (BUG-213).
+  final selected = normalizeColorValue(settings.accentColor);
   final palette = ref.read(colorPaletteProvider);
-  if (!paletteContains(palette, selected)) {
-    selected = normalizeColorValue(palette.first);
-  }
 
   final picked = await pickColorFromPalette(
     context,
@@ -457,7 +456,7 @@ Future<void> pickAccentColor(
     current: selected,
     title: 'Accent color',
   );
-  if (picked != null) {
+  if (picked != null && picked != selected) {
     await onSave(settings.copyWith(accentColor: picked));
   }
 }

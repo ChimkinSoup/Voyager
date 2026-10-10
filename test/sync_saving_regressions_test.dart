@@ -1207,6 +1207,128 @@ void main() {
       expect(editor.text, 'hello there');
     });
 
+    test('BUG-220: a snapshot change to an entry just opened reaches its '
+        'editor', () async {
+      // Opened, and nothing pulled for it since: the buffer has no remote
+      // text to diff from. It used the new text as its own baseline, saw no
+      // change, and the editor kept the old text; the next keystroke then
+      // uploaded it over the change.
+      final editor = await openEditor(a, journal, 'hello');
+      await server.upsertDocument(
+        journal.collection,
+        'doc-1',
+        journalEntryToFirestore(
+          entry(id: 'doc-1', body: 'hello there').copyWith(version: 5),
+        ),
+      );
+
+      await deliver(a, journal.collection);
+      expect(editor.text, 'hello there');
+
+      editor.type('!');
+      await save(editor, journal);
+      expect((await a.journals.getEntry('doc-1'))?.body, 'hello there!');
+    });
+
+    test('BUG-220: an entry opened but not typed in takes a newer snapshot, '
+        'and typing then keeps it', () async {
+      // The entry's log holds a snapshot only, so opening it seeds a session
+      // whose characters are all pending. Those counted as text this device
+      // owed: the pull kept the old body under the new version, and the next
+      // keystroke uploaded the old text over the other device's.
+      await journal.saveLocally(a, 'hello');
+      await journal.upload(a, 'hello');
+      await pumpEventQueue();
+      final editor = await openEditor(a, journal, 'hello');
+      a.sync.setDocumentEditing(
+        collection: journal.collection,
+        documentId: 'doc-1',
+        isEditing: false,
+      );
+
+      b.sync.pushJournalEntryNow(
+        entry(id: 'doc-1', body: 'hello there').copyWith(version: 5),
+      );
+      await pumpEventQueue();
+      await deliver(a, journal.collection);
+
+      expect((await a.journals.getEntry('doc-1'))?.body, 'hello there');
+      expect(editor.text, 'hello there');
+
+      editor.type('!');
+      await save(editor, journal);
+      await deliver(b, journal.collection);
+      expect((await b.journals.getEntry('doc-1'))?.body, 'hello there!');
+    });
+
+    test('BUG-220: an untouched entry taking another device\'s typing does not '
+        'double it', () async {
+      // Both devices opened the snapshot-only entry, so both seeded; the
+      // other one typed and uploaded its seed and edit. Re-seeding here from
+      // the pulled text minted a second copy of every character.
+      await journal.saveLocally(a, 'hello');
+      await journal.upload(a, 'hello');
+      await pumpEventQueue();
+      final editor = await openEditor(a, journal, 'hello');
+      a.sync.setDocumentEditing(
+        collection: journal.collection,
+        documentId: 'doc-1',
+        isEditing: false,
+      );
+      await deliver(b, journal.collection);
+      final other = await openEditor(b, journal, 'hello');
+      other.type(' there');
+      await save(other, journal);
+
+      await deliver(a, journal.collection);
+      expect(editor.text, 'hello there');
+
+      editor.type('!', at: editor.text.length);
+      await save(editor, journal);
+      await deliver(b, journal.collection);
+      expect((await a.journals.getEntry('doc-1'))?.body, 'hello there!');
+      expect(other.text, 'hello there!');
+    });
+
+    test('BUG-220: a snapshot at the same revision leaves an untouched '
+        'session\'s text owed', () async {
+      // The seed can hold text typed offline before a restart; only a newer
+      // revision may replace it.
+      final editor = await openEditor(a, journal, 'hello offline');
+      a.sync.setDocumentEditing(
+        collection: journal.collection,
+        documentId: 'doc-1',
+        isEditing: false,
+      );
+      await journal.upload(b, 'hello');
+      await pumpEventQueue();
+
+      await deliver(a, journal.collection);
+
+      expect((await a.journals.getEntry('doc-1'))?.body, 'hello offline');
+      expect(editor.text, 'hello offline');
+    });
+
+    test('BUG-220: our own older snapshot coming back keeps what was typed '
+        'since', () async {
+      final editor = await openEditor(a, journal, 'hello');
+      editor.type(' X');
+      await a.journals.upsertEntry(
+        entry(id: 'doc-1', body: editor.text).copyWith(version: 3),
+      );
+      await server.upsertDocument(
+        journal.collection,
+        'doc-1',
+        journalEntryToFirestore(
+          entry(id: 'doc-1', body: 'hello').copyWith(version: 2),
+        ),
+      );
+
+      await deliver(a, journal.collection);
+
+      expect(editor.text, 'hello X');
+    });
+
     test('with no session yet, the text diff still merges', () async {
       // Opened, but the operation log has not loaded: there is no session to
       // fold into, so the last remote text seen stays the baseline.

@@ -146,11 +146,15 @@ class PendingTextMergeBuffer {
   /// folded in — what the editor is showing. Left out, the last remote text
   /// this buffer saw stands in, which goes stale whenever our own write comes
   /// back looking like someone else's and re-inserts text the editor holds.
+  /// With no remote text seen yet (nothing pulled since the document was
+  /// opened), [localText], the stored row's, does: taking [remoteText] as its
+  /// own baseline found no change, and the editor kept the old text (BUG-220).
   void bufferWhileEditing({
     required String collection,
     required String documentId,
     required String remoteText,
     String? previousRemoteText,
+    String? localText,
     String? remoteRichBodyJson,
     List<String> remoteTags = const [],
     int Function(int offset)? mapOffset,
@@ -160,6 +164,7 @@ class PendingTextMergeBuffer {
         previousRemoteText ??
         _pending[key]?.remoteText ??
         _lastKnownRemoteText[key] ??
+        localText ??
         remoteText;
     // A change still waiting for the editor is folded into this one, so the
     // final flush applies both rather than only the latest.

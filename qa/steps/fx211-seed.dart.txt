@@ -1,0 +1,13 @@
+final now = DateTime.now().toUtc();
+final today = DateTime.now();
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final j = Journal(id: 'fx211-journal', createdAt: now, updatedAt: now, version: 1, name: 'FX211 Journal');
+await jr.upsertJournal(j); r.pushJournal(j);
+for (var i = 0; i < 3; i++) { final en = JournalEntry(id: 'fx211-je-' + i.toString(), createdAt: now, updatedAt: now, version: 1, journalId: 'fx211-journal', title: 'FX211 entry ' + i.toString(), body: 'FX211 body ' + i.toString() + ' lorem ipsum dolor sit amet', entryDate: DateTime(today.year, today.month, today.day - i)); await jr.upsertEntry(en); r.pushJournalEntryNow(en); }
+final lc = LeetCodeProblem(id: 'fx211-lc', createdAt: now, updatedAt: now, version: 1, title: 'FX211 Two Sum', difficulty: LeetCodeDifficulty.easy, solvedAt: now, tags: ['array', 'hash-table']);
+await c.read(leetCodeRepositoryProvider).upsertProblem(lc); r.pushLeetCodeProblem(lc);
+final cal = Calendar(id: 'fx211-cal', createdAt: now, updatedAt: now, version: 1, name: 'FX211 Pastel', colorValue: 0xFFB5D8F5);
+await c.read(calendarRepositoryProvider).upsertCalendar(cal);
+c.invalidate(journalsProvider); c.invalidate(journalEntriesProvider); c.invalidate(calendarsProvider); c.invalidate(leetcodeProblemsProvider);
+debugPrint('FX211 seeded');

@@ -1,0 +1,5 @@
+﻿final jr = c.read(journalRepositoryProvider);
+final local = await jr.getEntry('fx211-je-2');
+final r = c.read(remoteSyncServiceProvider);
+debugPrint('FX220 local v' + local!.version.toString() + ' body=' + local.body + ' editing=' + r.isDocumentEditing('journal_entries', 'fx211-je-2').toString());
+

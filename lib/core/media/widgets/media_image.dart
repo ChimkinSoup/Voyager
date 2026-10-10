@@ -286,25 +286,44 @@ class _PlaceholderMessage extends StatelessWidget {
   final Color color;
   final Future<void> Function()? onTap;
 
+  /// The least height the icon and a two-line label need at the default text
+  /// size; scaled with the text, which is most of it.
+  static const _labelHeight = 56.0;
+
   @override
   Widget build(BuildContext context) {
-    final column = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
-        ),
-      ],
+    final content = LayoutBuilder(
+      builder: (context, constraints) {
+        // A thumbnail too small for the label (the editor's 40 px fan) shows
+        // the icon alone, the label as its tooltip (BUG-216).
+        if (constraints.maxHeight <
+            MediaQuery.textScalerOf(context).scale(_labelHeight)) {
+          return Tooltip(
+            message: label,
+            child: Icon(icon, size: 18, color: color),
+          );
+        }
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: color),
+            ),
+          ],
+        );
+      },
     );
     final tap = onTap;
-    if (tap == null) return column;
-    return InkWell(onTap: tap, child: column);
+    if (tap == null) return content;
+    return InkWell(onTap: tap, child: content);
   }
 }
 

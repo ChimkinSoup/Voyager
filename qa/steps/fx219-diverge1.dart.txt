@@ -1,0 +1,1 @@
+﻿final jr = c.read(journalRepositoryProvider); final en = await jr.getEntry('fx211-je-1'); await jr.upsertEntry(en!.copyWith(body: 'FX219 local only', bumpVersion: false), recordLocalActivity: false); debugPrint('FX219 saved ' + en.body);

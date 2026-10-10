@@ -1,0 +1,1 @@
+﻿final p = await c.read(syncEngineProvider).resolveDocumentPayload('fx211-je-1', collection: 'journal_entries'); final l = await c.read(journalRepositoryProvider).getEntry('fx211-je-1'); debugPrint('FX220 cloud=' + p!['body'].toString() + ' | local=' + l!.body);

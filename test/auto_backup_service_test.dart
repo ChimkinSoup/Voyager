@@ -331,6 +331,31 @@ void main() {
       );
     });
 
+    test('BUG-211: a file that is not a ZIP says so, not FormatException', () async {
+      final h = await Harness.create();
+      await h.service.runIfDue();
+      final good = File(p.join(h.dir.path, h.autoFiles().single));
+      final truncated = File(p.join(h.dir.path, 'half.zip'))
+        ..writeAsBytesSync(
+          good.readAsBytesSync().sublist(0, good.lengthSync() ~/ 2),
+        );
+      final notZip = File(p.join(h.dir.path, 'not.zip'))
+        ..writeAsStringSync('plain text');
+
+      for (final file in [truncated, notZip]) {
+        await expectLater(
+          readBackupManifest(file),
+          throwsA(
+            isA<BackupDamagedException>().having(
+              (e) => e.toString(),
+              'message',
+              'That file could not be read as a ZIP.',
+            ),
+          ),
+        );
+      }
+    });
+
     test('media names cannot point outside the cache', () async {
       final root = await Directory.systemTemp.createTemp('voyager_media');
       addTearDown(() => root.delete(recursive: true));
@@ -652,6 +677,42 @@ void main() {
       h.nextDay();
       final status = await h.service.refreshStatus();
       expect(status.health, AutoBackupHealth.attention);
+    });
+
+    test('BUG-211: a backup dated in the future is not the last backup', () async {
+      final h = await Harness.create();
+      await h.service.runIfDue();
+      final today = h.autoFiles().single;
+      // The clock went backwards: a backup named a week ahead sits beside it.
+      final future = h.now.add(const Duration(days: 7, hours: 3));
+      File(p.join(h.dir.path, today)).copySync(
+        p.join(h.dir.path, '$autoBackupPrefix${backupTimestamp(future)}.zip'),
+      );
+      h.now = h.now.add(const Duration(hours: 2));
+
+      final status = await h.service.refreshStatus();
+      expect(status.health, AutoBackupHealth.healthy);
+      expect(status.detail, 'Last backup today 09:00, verified');
+
+      final entries = await h.service.listBackups();
+      expect(backupAgeLabel(entries.first, h.now), 'Dated in the future');
+      expect(backupAgeLabel(entries.last, h.now), 'Today');
+    });
+
+    test('BUG-211: with only future-dated backups, off does not say none '
+        'exist', () async {
+      final h = await Harness.create();
+      await h.service.runIfDue();
+      await h.service.setEnabled(false);
+      // The clock went back a week.
+      h.now = h.now.subtract(const Duration(days: 7));
+
+      final status = await h.service.refreshStatus();
+      expect(status.backupCount, 1);
+      expect(
+        status.detail,
+        'Automatic backups are off · every backup is dated in the future',
+      );
     });
 
     test('an old backup with no open day since is just due', () async {

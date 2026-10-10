@@ -1,0 +1,18 @@
+﻿final repo = c.read(syncRepositoryProvider);
+final jr = c.read(journalRepositoryProvider);
+final local = await jr.getEntry('fx211-je-2');
+final remote = await repo.getDocument('journal_entries', 'fx211-je-2');
+final ops = await repo.listOperations('fx211-je-2');
+var maxSeq = 0; for (final o in ops) { if (o.sequence > maxSeq) maxSeq = o.sequence; }
+final now = DateTime.now().toUtc();
+final payload = Map<String, dynamic>.from(remote!);
+payload['body'] = 'FX211 body 2 lorem ipsum dolor sit amet REMOTEF';
+payload['version'] = (local!.version > (remote['version'] as num).toInt() ? local.version : (remote['version'] as num).toInt()) + 1;
+payload['updatedAt'] = now.toIso8601String();
+final opId = 'fx220-devB_fx211-je-2_' + now.microsecondsSinceEpoch.toString() + '_' + (maxSeq + 1).toString();
+final bytes = const JSONMessageCodec().encodeMessage(payload)!;
+final encoded = String.fromCharCodes(bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes));
+await repo.appendOperation(SyncOperation(id: opId, documentId: 'fx211-je-2', sequence: maxSeq + 1, payload: encoded, deviceId: 'fx220-devB', timestamp: now));
+await repo.upsertDocument('journal_entries', 'fx211-je-2', payload);
+debugPrint('FX220 wrote v' + payload['version'].toString() + ' local v' + local.version.toString() + ' ops ' + ops.length.toString() + ' localbody ' + local.body);
+

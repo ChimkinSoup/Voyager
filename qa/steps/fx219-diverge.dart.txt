@@ -1,0 +1,1 @@
+﻿final jr = c.read(journalRepositoryProvider); final e0 = await jr.getEntry('fx211-je-0'); await jr.upsertEntry(e0!.copyWith(body: 'FX219 local only', bumpVersion: false), recordLocalActivity: false); c.invalidate(journalEntriesProvider); debugPrint('FX219 diverged');

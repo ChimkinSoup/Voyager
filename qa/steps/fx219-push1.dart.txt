@@ -1,0 +1,1 @@
+﻿final en = await c.read(journalRepositoryProvider).getEntry('fx211-je-1'); c.read(remoteSyncServiceProvider).pushJournalEntryNow(en!); debugPrint('FX219 pushed');

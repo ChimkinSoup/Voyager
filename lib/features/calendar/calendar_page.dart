@@ -2983,9 +2983,13 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
                           builder: (btnCtx) => ExcludeFocus(
                             child: OutlinedButton.icon(
                               style: OutlinedButton.styleFrom(
-                                foregroundColor:
-                                    calendarAccentColor ??
-                                    Theme.of(context).colorScheme.primary,
+                                // Light darkens a pale tint to read on cream
+                                // (BUG-214).
+                                foregroundColor: themedLabelInk(
+                                  Theme.of(context),
+                                  calendarAccentColor ??
+                                      Theme.of(context).colorScheme.primary,
+                                ),
                                 elevation: 0,
                                 // The view selector's height.
                                 fixedSize: const Size.fromHeight(34),
