@@ -1,0 +1,1 @@
+final s = c.read(settingsRepositoryProvider); final cur = await s.getSettings(); await s.saveSettings(cur.copyWith(devDisableCache: true)); DevFlags.disableCache = true; c.invalidate(settingsProvider); debugPrint('FX222 disable cache on');

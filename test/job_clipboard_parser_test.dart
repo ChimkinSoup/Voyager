@@ -233,6 +233,67 @@ void main() {
     expect(normalizeJobUrl('obsidian://open?vault=x'), isNull);
   });
 
+  test('a markdown link to a scheme without // keeps its title only', () {
+    // BUG-224: these used to become `https://mailto:hr@acme.com` and so on.
+    for (final (raw, title) in [
+      ('[z](mailto:hr@acme.com)', 'z'),
+      ('[w](javascript:void)', 'w'),
+      ('[y](javascript:alert(1))', 'y'),
+      ('[t](tel:+15551234)', 't'),
+      ('[d](data:text/html,hi)', 'd'),
+    ]) {
+      final parsed = parseJobClipboard(raw);
+      expect(parsed.title, title, reason: raw);
+      expect(parsed.url, isNull, reason: raw);
+    }
+  });
+
+  test('a markdown target with parentheses is read whole', () {
+    final parsed = parseJobClipboard(
+      '[Mercury](https://en.wikipedia.org/wiki/Mercury_(planet))',
+    );
+    expect(parsed.title, 'Mercury');
+    expect(parsed.url, 'https://en.wikipedia.org/wiki/Mercury_(planet)');
+  });
+
+  test('a host and port is not mistaken for a scheme', () {
+    expect(normalizeJobUrl('example.com:8080/x'), 'https://example.com:8080/x');
+    expect(
+      normalizeJobUrl('localhost:3000/jobs'),
+      'https://localhost:3000/jobs',
+    );
+    expect(
+      parseJobClipboard('[Dev](example.com:8080/x)').url,
+      'https://example.com:8080/x',
+    );
+  });
+
+  test('a host without a dot, with a port, is still a host', () {
+    expect(
+      normalizeJobUrl('intranet:8080/jobs/42'),
+      'https://intranet:8080/jobs/42',
+    );
+    expect(
+      parseJobClipboard('[Role](jobs-server:3000/x)').url,
+      'https://jobs-server:3000/x',
+    );
+  });
+
+  test('two markdown links run together are not read as one target', () {
+    // As before BUG-224's change: no garbled `…)[b](…` target is stored;
+    // the text stays as the title for the user to sort out.
+    const raw = '[a](https://x.com/jobs)[b](https://y.com)';
+    final parsed = parseJobClipboard(raw);
+    expect(parsed.url, isNull);
+    expect(parsed.title, raw);
+  });
+
+  test('a stored link with a user before its host does not open', () {
+    // What BUG-224 stored before its fix.
+    expect(launchableJobUri('https://mailto:hr@acme.com'), isNull);
+    expect(launchableJobUri('mailto:hr@acme.com'), isNull);
+  });
+
   test('only a web link with a host is launchable', () {
     expect(
       launchableJobUri('https://acme.com/jobs/1'),

@@ -28,7 +28,12 @@ typedef JobClipboardParse = ({String? title, String? url});
 const JobClipboardParse _nothing = (title: null, url: null);
 
 /// `[Role title](https://…)` — a link copied out of a markdown document.
-final _markdownLink = RegExp(r'^\[([^\]]*)\]\(([^)\s]+)\)$');
+///
+/// The target may hold balanced parentheses of its own, one level deep —
+/// `…/wiki/Mercury_(planet)`, `javascript:alert(1)` — and is still read as the
+/// target (BUG-224). An unbalanced `)` inside, as two links run together
+/// leave, doesn't match, and the text is read token by token instead.
+final _markdownLink = RegExp(r'^\[([^\]]*)\]\(((?:[^()\s]|\([^()\s]*\))+)\)$');
 
 /// The prefix an address bar leaves glued to the front of text pasted through
 /// it: its scheme, and the `www.` an omnibox completes after it.
@@ -61,6 +66,16 @@ final _hostBehindPrefix = RegExp(
 /// one. A scheme other than http(s) is then dropped, not kept — see
 /// [launchableJobUri].
 final _anyScheme = RegExp(r'^[a-z][a-z0-9+.-]*://', caseSensitive: false);
+
+/// A scheme written without `//`, as `mailto:`, `tel:`, `javascript:` and
+/// `data:` are. Its name is the group. A colon followed by a port — up to
+/// five digits, then the end or a path, query or fragment — is a host and
+/// port instead (`intranet:8080/jobs`); [_hasSchemeWithoutSlashes] also takes
+/// a dotted name or `localhost` for a host.
+final _schemeWithoutSlashes = RegExp(
+  r'^([a-z][a-z0-9+.-]*):(?!\d{1,5}(?:[/?#]|$))',
+  caseSensitive: false,
+);
 
 /// `host.tld`, optionally with a path, query or fragment after it.
 ///
@@ -136,6 +151,9 @@ JobClipboardParse parseJobClipboard(String raw) {
 String? normalizeJobUrl(String token) {
   final trimmed = _trimTrailingPunctuation(token.trim());
   if (trimmed.isEmpty) return null;
+  // `mailto:hr@acme.com` is not a host to put `https://` in front of: that
+  // made a link to acme.com with `mailto:hr` as its user (BUG-224).
+  if (_hasSchemeWithoutSlashes(trimmed)) return null;
   if (!_anyScheme.hasMatch(trimmed)) return 'https://$trimmed';
   return launchableJobUri(trimmed) == null ? null : trimmed;
 }
@@ -150,7 +168,19 @@ Uri? launchableJobUri(String url) {
   final uri = Uri.tryParse(_anyScheme.hasMatch(url) ? url : 'https://$url');
   if (uri == null) return null;
   if (uri.scheme != 'http' && uri.scheme != 'https') return null;
+  // A user before the host is how `https://mailto:hr@acme.com`, stored before
+  // BUG-224's fix, reads: no posting link has one.
+  if (uri.userInfo.isNotEmpty) return null;
   return uri.host.isEmpty ? null : uri;
+}
+
+/// Whether [url] opens with a scheme that has no `//` after it. What comes
+/// before a colon is a host instead when a port follows it, or when it has a
+/// dot or is `localhost` — `intranet:8080/x`, `example.com:8080/x`.
+bool _hasSchemeWithoutSlashes(String url) {
+  if (_anyScheme.hasMatch(url)) return false;
+  final name = _schemeWithoutSlashes.firstMatch(url)?.group(1)?.toLowerCase();
+  return name != null && name != 'localhost' && !name.contains('.');
 }
 
 /// Whether [token] reads as a link rather than as a word of the title.

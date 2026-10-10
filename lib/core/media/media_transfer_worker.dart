@@ -47,6 +47,14 @@ class MediaTransferWorker {
   final int maxAttempts;
 
   final _attempts = <String, int>{};
+
+  /// Assets parked this session after [maxAttempts] transient failures,
+  /// which is what an outage does to every transfer it catches. Reconnecting
+  /// retries these and nothing else that is parked: a permanent refusal
+  /// waits for the next launch, so a flapping connection doesn't re-send a
+  /// blob the bucket will never accept (BUG-223). Ones parked in an earlier
+  /// session are covered by that launch's requeue.
+  final _parkedByOutage = <String>{};
   bool _uploadDraining = false;
   bool _downloadDraining = false;
 
@@ -180,7 +188,12 @@ class MediaTransferWorker {
   /// "stop burning bandwidth on a blob the bucket will never accept" property
   /// the parking exists for: a permanent refusal costs one attempt at startup
   /// and a transient one at most [maxAttempts], and either way the asset then
-  /// stays quiet until the next launch.
+  /// stays quiet until the next launch — or, for one an outage parked, the
+  /// next reconnect ([resumeAfterReconnect]).
+  ///
+  /// Drains even when nothing was parked: an asset whose last attempt failed
+  /// transiently is left `pending`, and nothing else drains the queue until
+  /// another image is attached (BUG-223).
   Future<int> requeueFailedUploads() async {
     final settings = await _readSettings();
     if (!settings.mediaRemoteUploadsEnabled) return 0;
@@ -198,8 +211,7 @@ class MediaTransferWorker {
         clearFailureReason: true,
       );
     }
-    if (parked.isEmpty) return 0;
-    _service.notifyChanged();
+    if (parked.isNotEmpty) _service.notifyChanged();
     await drainUploads();
     return parked.length;
   }
@@ -234,8 +246,7 @@ class MediaTransferWorker {
         clearFailureReason: true,
       );
     }
-    if (parked.isEmpty) return 0;
-    _service.notifyChanged();
+    if (parked.isNotEmpty) _service.notifyChanged();
     await drainDownloads();
     return parked.length;
   }
@@ -370,6 +381,11 @@ class MediaTransferWorker {
     final permanent = error is MediaStoragePermanentFailure;
     if (permanent || attempts >= maxAttempts) {
       _attempts.remove(asset.id);
+      if (permanent) {
+        _parkedByOutage.remove(asset.id);
+      } else {
+        _parkedByOutage.add(asset.id);
+      }
       debugPrint(
         '[media] parking ${asset.id} after $attempts attempt(s): $error',
       );
@@ -380,6 +396,36 @@ class MediaTransferWorker {
       '[media] transfer attempt $attempts failed for ${asset.id}: $error',
     );
     await requeue();
+  }
+
+  /// What the connectivity lifecycle calls on the offline→online edge: puts
+  /// back what the outage parked (see [_parkedByOutage]) and drains both
+  /// queues, which also sends whatever a transient failure left `pending`.
+  /// Downloads are drained even when the uploads throw.
+  Future<void> resumeAfterReconnect() async {
+    final ids = Set.of(_parkedByOutage);
+    _parkedByOutage.clear();
+    var requeued = false;
+    for (final id in ids) {
+      final asset = await _repository.getAsset(id);
+      if (asset == null) continue;
+      final upload = asset.uploadState == MediaUploadState.failed;
+      final download = asset.downloadState == MediaDownloadState.failed;
+      if (!upload && !download) continue;
+      await _repository.updateAssetTransferState(
+        id,
+        uploadState: upload ? MediaUploadState.pending : null,
+        downloadState: download ? MediaDownloadState.pending : null,
+        clearFailureReason: true,
+      );
+      requeued = true;
+    }
+    if (requeued) _service.notifyChanged();
+    try {
+      await drainUploads();
+    } finally {
+      await drainDownloads();
+    }
   }
 
   /// Puts a parked asset back in its queue, for the retry affordance on a

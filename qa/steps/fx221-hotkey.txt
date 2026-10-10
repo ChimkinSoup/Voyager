@@ -1,0 +1,11 @@
+activate
+shot fx221-01-pull-before
+hotkey ctrl+alt+t
+wait 700
+shot fx221-02-todo-during-pull
+type fx221 pull task
+key enter
+wait 600
+shot fx221-03-after-enter
+wait 30000
+shot fx221-04-after-pull

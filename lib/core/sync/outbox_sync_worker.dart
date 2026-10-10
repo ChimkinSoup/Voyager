@@ -245,6 +245,9 @@ class OutboxSyncWorker {
         var pushed = false;
 
         for (final entry in byCollection.entries) {
+          // Signed out during the round: what is left stays queued for the
+          // account's next sign-in — see the push below.
+          if (_userId() != userId) break;
           final collection = entry.key;
 
           // Documents with a character-operation log go back out through the
@@ -263,11 +266,18 @@ class OutboxSyncWorker {
                   pending.documentId,
                   forceCrdtOverwrite: pending.crdtOverwrite,
                 );
+                // A sign-out during the push swaps in a sync service whose
+                // writes return without sending anything, so this push may
+                // have gone nowhere. The row stays queued; sending it again
+                // on the next sign-in is harmless (BUG-225).
+                if (_userId() != userId) break;
                 // Also the right outcome for a row whose entity is gone: the
                 // push is a no-op and the row has nothing left to stand for.
                 await _clearPending([pending]);
                 pushed = true;
               } catch (error) {
+                // A sign-out's refusal, not the row's: keep it queued.
+                if (_userId() != userId) break;
                 if (await _handleUploadFailure(pending, error)) pushed = true;
               }
             }
@@ -295,6 +305,8 @@ class OutboxSyncWorker {
                 await _clearPending([pending]);
                 pushed = true;
               } catch (error) {
+                // A sign-out's refusal, not the row's: keep it queued.
+                if (_userId() != userId) break;
                 if (await _handleUploadFailure(pending, error)) pushed = true;
               }
             }
@@ -338,6 +350,8 @@ class OutboxSyncWorker {
           }
         }
 
+        if (_userId() != userId) break;
+
         // 3. Commit to Cloud, in chunks rather than as one batch of the whole
         // round — see [firestoreWriteChunkSize]. A round is up to 500 rows,
         // which is the batch API's ceiling and well past what the write stream
@@ -347,6 +361,10 @@ class OutboxSyncWorker {
         var committed = false;
         var chunkFailed = false;
         for (var i = 0; i < uploads.length; i += firestoreWriteChunkSize) {
+          // Signed out since the last chunk: the rest would go out without
+          // the account's sign-in, be refused, and be parked for good. They
+          // stay queued for its next sign-in instead (BUG-225).
+          if (_userId() != userId) break;
           final end = i + firestoreWriteChunkSize;
           final chunk = uploads.sublist(
             i,
@@ -359,6 +377,9 @@ class OutboxSyncWorker {
           try {
             await _writeGate.run(batch.commit, weight: chunk.length);
           } catch (error) {
+            // Refused because the account signed out during the commit: not
+            // the rows' fault, so they are left queued rather than parked.
+            if (_userId() != userId) break;
             // The batch is all-or-nothing, so a single rejected document
             // fails every document beside it and the error doesn't say which
             // one. Re-send them individually to find out: the healthy ones

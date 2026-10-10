@@ -835,11 +835,12 @@ final bundledQuotesProvider = FutureProvider<List<Quote>>((ref) {
 /// step with this device's draws by [QuoteBank] itself; invalidated after the
 /// startup pull and each live-sync change, which bring in draws made on other
 /// devices.
-final quoteHistoryProvider =
-    FutureProvider<Map<String, Map<String, DateTime>>>((ref) {
-      ref.keepAlive();
-      return ref.read(journalRepositoryProvider).lastQuoteUseByJournal();
-    });
+final quoteHistoryProvider = FutureProvider<Map<String, Map<String, DateTime>>>(
+  (ref) {
+    ref.keepAlive();
+    return ref.read(journalRepositoryProvider).lastQuoteUseByJournal();
+  },
+);
 
 /// Rebuilds [quoteBankProvider] whenever the pool or the history changes, so a
 /// quote the user just added is immediately eligible to be drawn.
@@ -2555,6 +2556,12 @@ final geometricWaveParamsProvider =
     StateNotifierProvider<GeometricWaveParamsNotifier, GeometricWaveParams>(
       (ref) => GeometricWaveParamsNotifier(ref),
     );
+
+/// True from the moment a sign-in's startup pull is scheduled until it ends,
+/// however it ends. Set by the app's bootstrap. To-Do holds a task typed
+/// while it has no lists and this is on, rather than creating its built-in
+/// list over the account's lists that are still on their way (BUG-221).
+final startupPullPendingProvider = StateProvider<bool>((ref) => false);
 
 /// Whether the dev-menu geometric texture slider panel is expanded.
 final devGeometricTexturePanelOpenProvider = StateProvider<bool>(

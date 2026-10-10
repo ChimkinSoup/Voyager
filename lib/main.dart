@@ -27,6 +27,7 @@ import 'package:voyager/features/finance/finance_ui_prefs.dart';
 import 'package:voyager/features/settings/settings_tab_memory.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/hotkey_service.dart';
+import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/contribution_room_writer.dart';
 import 'package:voyager/firebase_options.dart';
@@ -123,6 +124,12 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
   Timer? _weatherRefreshTimer;
   var _postAuthWarmupStarted = false;
 
+  /// Whether [_bootstrap] has read the dev flags from settings. A sign-in
+  /// reported before then would schedule the warmup with
+  /// [DevFlags.disableCache] still at its default (BUG-222); [_bootstrap]
+  /// schedules it itself once the flags are in.
+  var _devFlagsLoaded = false;
+
   /// Last connectivity state seen, so the offline→online *edge* can be told
   /// apart from a notification that merely repeats it.
   bool? _wasOnline;
@@ -210,6 +217,10 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
         // Idempotent — a drain already running simply keeps going.
         unawaited(OutboxSyncWorker.instance.startDraining());
       }
+      // Images too: a transfer that failed while offline is left queued or
+      // parked, and nothing else retries it (BUG-223). Not before the startup
+      // pull is done: its own requeue sends all of them then.
+      if (_startupPullDone) unawaited(_resumeMediaAfterReconnect());
       // Weather isn't part of it: it runs on its own minute timer.
       await ref.read(remoteSyncServiceProvider).pullAll();
     } catch (error, stackTrace) {
@@ -223,6 +234,21 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
       );
     } finally {
       _resumingSync = false;
+    }
+  }
+
+  Future<void> _resumeMediaAfterReconnect() async {
+    try {
+      await ref.read(mediaTransferWorkerProvider).resumeAfterReconnect();
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'VoyagerBootstrap',
+          context: ErrorDescription('while resuming image transfers'),
+        ),
+      );
     }
   }
 
@@ -255,13 +281,24 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     );
 
     final settingsRepo = ref.read(settingsRepositoryProvider);
-    final deviceId = await ensureDeviceId(settingsRepo);
-    if (!mounted) return;
-    ref.read(deviceIdProvider.notifier).state = deviceId;
-
-    final settings = await settingsRepo.getSettings();
+    final AppSettings settings;
+    try {
+      final deviceId = await ensureDeviceId(settingsRepo);
+      if (!mounted) return;
+      ref.read(deviceIdProvider.notifier).state = deviceId;
+      settings = await settingsRepo.getSettings();
+    } catch (_) {
+      // The flags stay at their defaults, but the warmup that waits for them
+      // must still run: before it waited, a failed read here didn't stop it.
+      _devFlagsLoaded = true;
+      if (mounted && ref.read(authNotifierProvider).isAuthenticated) {
+        _onAuthStateChanged(true);
+      }
+      rethrow;
+    }
     if (!mounted) return;
     DevFlags.disableCache = settings.devDisableCache;
+    _devFlagsLoaded = true;
     try {
       final floaters = ref.read(floaterControllerProvider);
       final taken = await _hotkeys.register(
@@ -312,14 +349,21 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
   }
 
   void _schedulePostAuthWarmup() {
-    if (_postAuthWarmupStarted) return;
+    if (_postAuthWarmupStarted || !_devFlagsLoaded) return;
     if (DevFlags.disableCache) return;
     _postAuthWarmupStarted = true;
+    ref.read(startupPullPendingProvider.notifier).state = true;
     _postAuthWarmupTimer?.cancel();
     _postAuthWarmupTimer = Timer(const Duration(milliseconds: 900), () {
       if (!mounted) return;
-      unawaited(_warmUpAfterFirstShellFrame());
+      // The backstop for the warmup's early returns; a pull that runs ends
+      // the pending state as soon as it is done, not after the weather.
+      unawaited(_warmUpAfterFirstShellFrame().whenComplete(_endStartupPull));
     });
+  }
+
+  void _endStartupPull() {
+    if (mounted) ref.read(startupPullPendingProvider.notifier).state = false;
   }
 
   Future<void> _warmUpAfterFirstShellFrame() async {
@@ -452,6 +496,8 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     } catch (_) {
       warmupTracker.fail('Startup sync');
       rethrow;
+    } finally {
+      _endStartupPull();
     }
     if (!mounted) return;
     await weatherWarmup;
@@ -541,6 +587,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
       // So signing in to another account pulls it the way a launch does,
       // progress toast and all, instead of trickling in through live sync.
       _postAuthWarmupTimer?.cancel();
+      _endStartupPull();
       _authSession++;
       _postAuthWarmupStarted = false;
       _startupPullDone = false;

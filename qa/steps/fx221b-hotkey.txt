@@ -1,0 +1,9 @@
+activate
+hotkey ctrl+alt+t
+wait 700
+type fx221b held task
+key enter
+wait 500
+shot fx221b-01-held
+wait 35000
+shot fx221b-02-after-pull

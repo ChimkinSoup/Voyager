@@ -1,12 +1,12 @@
 // BUG-225 (qa/BUGS.md): signing out while a drain round is pushing journal
 // entries. Those go back out through the sync service (`pushDocument`), which
 // a sign-out swaps for the no-op repository, whose writes all "succeed" — so
-// the worker clears rows it never sent. Skipped until that is fixed; run it
-// with `flutter test --run-skipped`.
+// the worker cleared rows it never sent.
 
 import 'dart:async';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseException;
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +17,7 @@ import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
 class _Auth implements AuthRepository {
@@ -42,6 +43,30 @@ class _Auth implements AuthRepository {
 
   @override
   noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// Signs the account out once the first write it admits has gone through;
+/// every later write is refused the way Firestore refuses one without a
+/// sign-in.
+class _SignOutAfterFirstWriteGate extends FirestoreWriteGate {
+  _SignOutAfterFirstWriteGate(this.signOut)
+    : super(waitForPendingWrites: () async {});
+
+  final void Function() signOut;
+  var _writes = 0;
+
+  @override
+  Future<T> run<T>(Future<T> Function() write, {int weight = 1}) async {
+    if (_writes++ > 0) {
+      throw FirebaseException(
+        plugin: 'cloud_firestore',
+        code: 'permission-denied',
+      );
+    }
+    final result = await write();
+    signOut();
+    return result;
+  }
 }
 
 void main() {
@@ -148,6 +173,50 @@ void main() {
             'queued: ${queued.map((r) => r.documentId)}',
       );
     },
-    skip: 'BUG-225: fails until the mid-round sign-out is handled',
   );
+
+  test('signing out between chunk commits leaves the rest queued, '
+      'not parked', () async {
+    final db = AppDatabase.inMemory();
+    addTearDown(db.close);
+    final firestore = FakeFirebaseFirestore();
+    String? uid = 'accountA';
+    final worker = OutboxSyncWorker(
+      db,
+      firestore,
+      () => uid,
+      yieldDelay: Duration.zero,
+      writeGate: _SignOutAfterFirstWriteGate(() => uid = null),
+    );
+    final tasks = DriftTodoRepository(db);
+    final at = DateTime.utc(2026, 5, 1);
+    // More than one chunk (40) of rows written straight to the mirror.
+    for (var i = 0; i < 50; i++) {
+      final id = 'task-$i';
+      await tasks.upsertTask(
+        TodoTask(
+          id: id,
+          listId: 'list-1',
+          title: 'offline task $i',
+          createdAt: at,
+          updatedAt: at,
+        ),
+        recordLocalActivity: false,
+      );
+      await worker.enqueue(
+        collection: FirestoreCollections.todoTasks,
+        documentId: id,
+      );
+    }
+
+    await worker.startDraining();
+
+    final rows = await db.select(db.pendingUploadsTable).get();
+    expect(rows, hasLength(10), reason: 'the first chunk of 40 went up');
+    expect(
+      rows.where((r) => r.failureReason != null).map((r) => r.documentId),
+      isEmpty,
+      reason: 'a sign-out refusal must not park the rows',
+    );
+  });
 }

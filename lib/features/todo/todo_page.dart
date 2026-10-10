@@ -1237,10 +1237,41 @@ class _TodoPageState extends ConsumerState<TodoPage>
     if (title.isEmpty) return Future.value();
     // Before the awaits, so a quick second Enter can't read the same title.
     _taskController.clear();
+    if (_holdingForPull) {
+      setState(() => _heldForPull.add(title));
+      return Future.value();
+    }
+    return _queueInsert(title);
+  }
+
+  Future<void> _queueInsert(String title) {
     // A failed add still reports to its own caller; the queue carries on.
     return _pendingAdd = _pendingAdd
         .catchError((Object _) {})
         .then((_) => _insertTask(title));
+  }
+
+  /// Tasks typed while the page had no lists and a sign-in's startup pull was
+  /// still running. Adding one then would create the built-in list with a
+  /// fresh stamp over the account's own, still on their way: a renamed
+  /// built-in list renamed back on every device, or a stray "To-do" next to
+  /// the user's lists (BUG-221). Held here and added, in order, once the
+  /// pull is done.
+  final _heldForPull = <String>[];
+
+  bool get _holdingForPull =>
+      ref.read(startupPullPendingProvider) &&
+      (ref.read(todoListsProvider).valueOrNull ?? const []).isEmpty;
+
+  void _releaseHeldForPull() {
+    if (_heldForPull.isEmpty) return;
+    // Signed out before the pull finished: kept for the next sign-in's pull.
+    if (!ref.read(authNotifierProvider).isAuthenticated) return;
+    final titles = List.of(_heldForPull);
+    setState(_heldForPull.clear);
+    for (final title in titles) {
+      unawaited(_queueInsert(title));
+    }
   }
 
   Future<void> _insertTask(String title) async {
@@ -2416,7 +2447,10 @@ class _TodoPageState extends ConsumerState<TodoPage>
         _composerBarHint == hintText) {
       return cached;
     }
+    // Keyed so the field keeps its focus when the page moves it, as when the
+    // lists arrive while it is being typed into (BUG-221).
     final bar = Row(
+      key: _composerBarKey,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
@@ -2604,6 +2638,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
   List<TodoListModel>? _editPanelCacheLists;
 
   Widget? _composerBarCache;
+  final _composerBarKey = GlobalKey();
   Color? _composerBarColor;
   String? _composerBarHint;
 
@@ -2846,6 +2881,9 @@ class _TodoPageState extends ConsumerState<TodoPage>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<bool>(startupPullPendingProvider, (_, pending) {
+      if (!pending) _releaseHeldForPull();
+    });
     ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
       if (request?.kind == QuickCaptureKind.todo) {
         unawaited(_takeQuickCaptureDraft());
@@ -2898,10 +2936,44 @@ class _TodoPageState extends ConsumerState<TodoPage>
       skipLoadingOnReload: true,
       data: (lists) {
         if (lists.isEmpty) {
+          // The composer too: the todo hotkey focuses it, and on a cold
+          // sign-in the lists are often still being pulled, so without it the
+          // typed task went nowhere (BUG-221). While they are, a task typed
+          // here is held for them (see [_heldForPull]); otherwise it files
+          // under the built-in list, created on demand as the hotkey's bar
+          // does.
+          final pulling = ref.watch(startupPullPendingProvider);
+          final held = _heldForPull.length;
           return Center(
-            child: GlassButton(
-              onPressed: () => unawaited(_openListManageSheet()),
-              label: 'Create your first list',
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _composerBar(
+                      Theme.of(context).colorScheme.primary,
+                      'Add task',
+                    ),
+                    const SizedBox(height: 16),
+                    if (pulling)
+                      Text(
+                        held == 0
+                            ? 'Your lists are on their way…'
+                            : 'Your lists are on their way. '
+                                  '${held == 1 ? '1 task' : '$held tasks'} '
+                                  'will be added when they arrive.',
+                        textAlign: TextAlign.center,
+                      )
+                    else
+                      GlassButton(
+                        onPressed: () => unawaited(_openListManageSheet()),
+                        label: 'Create your first list',
+                      ),
+                  ],
+                ),
+              ),
             ),
           );
         }

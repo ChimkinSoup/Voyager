@@ -271,6 +271,61 @@ void main() {
       },
     );
 
+    test(
+      'requeueFailedUploads sends an asset a transient failure left pending',
+      () async {
+        // BUG-223: attempt 1 failed offline; nothing parked, so the old
+        // requeue returned before draining and the image never went up.
+        final asset = await attach();
+        storage.failuresRemaining = 1;
+        await worker.drainUploads();
+        expect(
+          (await repository.getAsset(asset.id))!.uploadState,
+          MediaUploadState.pending,
+        );
+
+        expect(await worker.requeueFailedUploads(), 0);
+        expect(
+          (await repository.getAsset(asset.id))!.uploadState,
+          MediaUploadState.uploaded,
+        );
+      },
+    );
+
+    test('reconnecting retries an upload an outage parked', () async {
+      final asset = await attach();
+      storage.failuresRemaining = 4;
+      for (var i = 0; i < 4; i++) {
+        await worker.drainUploads();
+      }
+      expect(
+        (await repository.getAsset(asset.id))!.uploadState,
+        MediaUploadState.failed,
+      );
+
+      await worker.resumeAfterReconnect();
+      expect(
+        (await repository.getAsset(asset.id))!.uploadState,
+        MediaUploadState.uploaded,
+      );
+    });
+
+    test('reconnecting leaves a permanent refusal parked', () async {
+      final asset = await attach();
+      storage
+        ..failuresRemaining = 1
+        ..failPermanently = true;
+      await worker.drainUploads();
+
+      storage.failPermanently = false;
+      await worker.resumeAfterReconnect();
+      expect(storage.uploads, isEmpty);
+      expect(
+        (await repository.getAsset(asset.id))!.uploadState,
+        MediaUploadState.failed,
+      );
+    });
+
     test('retry puts a parked asset back on the queue', () async {
       final asset = await attach();
       storage
@@ -368,6 +423,62 @@ void main() {
         );
       },
     );
+
+    test(
+      'requeueFailedDownloads fetches a referenced asset parked offline',
+      () async {
+        // BUG-223's download half: parked after maxAttempts while offline.
+        final asset = await remoteOnlyAsset();
+        await repository.updateAssetTransferState(
+          asset.id,
+          downloadState: MediaDownloadState.failed,
+          failureReason: 'SocketException',
+        );
+
+        expect(await worker.requeueFailedDownloads(), 1);
+        expect(
+          (await repository.getAsset(asset.id))!.downloadState,
+          MediaDownloadState.present,
+        );
+      },
+    );
+
+    test('requeueFailedDownloads fetches an asset a transient failure left '
+        'pending', () async {
+      final asset = await remoteOnlyAsset();
+      await repository.updateAssetTransferState(
+        asset.id,
+        downloadState: MediaDownloadState.pending,
+      );
+
+      expect(await worker.requeueFailedDownloads(), 0);
+      expect(
+        (await repository.getAsset(asset.id))!.downloadState,
+        MediaDownloadState.present,
+      );
+    });
+
+    test('reconnecting retries a download an outage parked', () async {
+      final asset = await remoteOnlyAsset();
+      await repository.updateAssetTransferState(
+        asset.id,
+        downloadState: MediaDownloadState.pending,
+      );
+      storage.failuresRemaining = 4;
+      for (var i = 0; i < 4; i++) {
+        await worker.drainDownloads();
+      }
+      expect(
+        (await repository.getAsset(asset.id))!.downloadState,
+        MediaDownloadState.failed,
+      );
+
+      await worker.resumeAfterReconnect();
+      expect(
+        (await repository.getAsset(asset.id))!.downloadState,
+        MediaDownloadState.present,
+      );
+    });
 
     test('prefetch does nothing while it is switched off', () async {
       settings = const AppSettings(mediaBackgroundPrefetchEnabled: false);
