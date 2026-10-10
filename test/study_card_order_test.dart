@@ -193,4 +193,18 @@ void main() {
       expect(studyDaysUntilDue(fresh, now: now), 0);
     });
   });
+
+  test('BUG-190 cards tied on every key keep one order, whatever comes in', () {
+    // Imported before the fix: one shared stamp for the whole batch.
+    final cards = [
+      for (var i = 0; i < 60; i++) _card('card-${'$i'.padLeft(2, '0')}'),
+    ];
+    final expected = [for (final card in cards) card.id];
+    for (var seed = 0; seed < 5; seed++) {
+      final shuffled = [...cards]..shuffle(Random(seed));
+      expect([
+        for (final c in sortStudyCardsByMastery(shuffled)) c.id,
+      ], expected);
+    }
+  });
 }

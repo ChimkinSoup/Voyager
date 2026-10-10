@@ -8,6 +8,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/palette_color_picker.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/study_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -15,11 +16,20 @@ import 'package:voyager/domain/services/study_srs_engine.dart';
 import 'package:voyager/features/study/study_deck_link_actions.dart';
 import 'package:voyager/features/study/study_move_destination_modal.dart';
 import 'package:voyager/features/study/study_name_modal.dart';
+import 'package:voyager/features/trash/trash_labels.dart';
 
 void _invalidateStudyLibrary(WidgetRef ref) {
-  ref.invalidate(studyFoldersProvider);
-  ref.invalidate(studyDecksProvider);
-  ref.invalidate(studyAllDecksProvider);
+  _invalidateStudyLibraryIn(
+    ProviderScope.containerOf(ref.context, listen: false),
+  );
+}
+
+/// [_invalidateStudyLibrary] for a caller holding a container rather than a
+/// ref — a delete, whose tile unmounts under it.
+void _invalidateStudyLibraryIn(ProviderContainer container) {
+  container.invalidate(studyFoldersProvider);
+  container.invalidate(studyDecksProvider);
+  container.invalidate(studyAllDecksProvider);
 }
 
 /// The names of live decks outside [deckIds] that link one of them — what a
@@ -277,18 +287,9 @@ Future<StudyCard> resetStudyCardProgress(WidgetRef ref, StudyCard card) async {
 /// [MediaService.restoreReferencesForOwner] matches that stamp exactly, so
 /// there is one instant to remember per card — the card's own `deletedAt` is a
 /// different `utcNow()` and would match nothing.
-Future<Map<String, DateTime>> detachStudyCardMedia(
-  WidgetRef ref,
-  Iterable<String> cardIds,
-) {
-  return detachStudyCardMediaIn(
-    ProviderScope.containerOf(ref.context, listen: false),
-    cardIds,
-  );
-}
-
-/// [detachStudyCardMedia] for a caller holding a container rather than a ref —
-/// which is every delete that has to survive its own row unmounting.
+///
+/// Takes a container rather than a ref: every delete has to survive its own
+/// row unmounting.
 Future<Map<String, DateTime>> detachStudyCardMediaIn(
   ProviderContainer container,
   Iterable<String> cardIds,
@@ -457,43 +458,99 @@ Future<void> deleteStudyDeck(
   WidgetRef ref,
   StudyDeck deck,
 ) async {
+  // Captured while the caller is still mounted: the delete unmounts the tile
+  // that asked for it, and the toast offering the undo has to outlive it.
   final container = ProviderScope.containerOf(context, listen: false);
+  final overlay = Overlay.of(context, rootOverlay: true);
   final repo = ref.read(studyRepositoryProvider);
-  final cards = await repo.listCards(deck.id);
+  final cardCount = (await repo.listCards(deck.id)).length;
   final parents = await _linkingParentNames(repo, {deck.id});
   if (!context.mounted) return;
   final confirmed = await showConfirmDialog(
     context,
     title: 'Delete "${deck.name}"?',
     message:
-        (cards.isEmpty
+        (cardCount == 0
             ? 'This deck has no cards and will be removed.'
-            : 'This deck and its ${cards.length} card${cards.length == 1 ? '' : 's'} will be deleted.') +
+            : 'This deck and its $cardCount card${cardCount == 1 ? '' : 's'} will be deleted.') +
         _includedInWarning(parents),
   );
   if (!confirmed) return;
 
-  final remoteSync = ref.read(remoteSyncServiceProvider);
-  // One instant for the deck and everything it takes with it, so the trash
-  // can restore exactly this delete.
-  final deletedAt = utcNow();
-  for (final card in cards) {
-    await repo.softDeleteCard(card.id, at: deletedAt);
-  }
-  await detachStudyCardMedia(ref, [for (final card in cards) card.id]);
-  await repo.softDeleteDeck(deck.id, at: deletedAt);
-  final deleted = await repo.getDeck(deck.id);
-  if (deleted != null) remoteSync.pushStudyDeck(deleted);
-  await softDeleteStudyDeckLinksTouching(container, {deck.id}, at: deletedAt);
-  final deletedCards = <StudyCard>[];
-  for (final card in cards) {
-    final c = await repo.getCard(card.id);
-    if (c != null) deletedCards.add(c);
-  }
-  await remoteSync.pushStudyCardsBatch(deletedCards);
+  final remoteSync = container.read(remoteSyncServiceProvider);
+  await softDeleteWithUndo(
+    overlay: overlay,
+    message: deletedMessage(deck.name, fallback: 'deck'),
+    delete: () async {
+      // One instant for the deck and everything it takes with it, so the
+      // trash — and the undo, which goes through it — restores exactly this
+      // delete.
+      final deletedAt = utcNow();
+      // Listed again rather than taken from the confirm's count, so a card
+      // synced in while the dialog was up goes with its deck.
+      final cards = await repo.listCards(deck.id);
+      for (final card in cards) {
+        await repo.softDeleteCard(card.id, at: deletedAt);
+      }
+      await detachStudyCardMediaIn(container, [
+        for (final card in cards) card.id,
+      ]);
+      await repo.softDeleteDeck(deck.id, at: deletedAt);
+      final deleted = await repo.getDeck(deck.id);
+      if (deleted != null) remoteSync.pushStudyDeck(deleted);
+      await softDeleteStudyDeckLinksTouching(container, {
+        deck.id,
+      }, at: deletedAt);
+      final deletedCards = <StudyCard>[];
+      for (final card in cards) {
+        final c = await repo.getCard(card.id);
+        if (c != null) deletedCards.add(c);
+      }
+      await remoteSync.pushStudyCardsBatch(deletedCards);
 
-  invalidateStudyCards(ref);
-  _invalidateStudyLibrary(ref);
+      invalidateStudyCardsIn(container);
+      _invalidateStudyLibraryIn(container);
+    },
+    restore: () => _restoreFromTrash(
+      container,
+      overlay,
+      FirestoreCollections.studyDecks,
+      deck.id,
+    ),
+  );
+}
+
+/// Undoes a deck or folder delete through the trash, which brings back
+/// exactly what that delete took — cards, subfolders, deck links and images
+/// — as Settings → Data → Trash does (BUG-188).
+///
+/// A folder that went while the toast stood can't take the item back, so the
+/// trash puts it at the top of Study instead, and the toast says so.
+Future<void> _restoreFromTrash(
+  ProviderContainer container,
+  OverlayState overlay,
+  String collection,
+  String id,
+) async {
+  final trash = container.read(trashServiceProvider);
+  final item = (await trash.list())
+      .where((i) => i.kind.collection == collection && i.id == id)
+      .firstOrNull;
+  if (item == null) throw const RestoreSuperseded();
+  final String? movedTo;
+  try {
+    movedTo = await trash.restore(item);
+  } finally {
+    invalidateAllDataProvidersIn(container);
+  }
+  if (movedTo != null && overlay.mounted) {
+    showVoyagerToastIn(
+      overlay,
+      message: 'Restored ${trashItemLabel(item)} to $movedTo',
+      icon: PhosphorIconsRegular.arrowCounterClockwise,
+      dwell: const Duration(seconds: 4),
+    );
+  }
 }
 
 /// Recursively collects every descendant folder/deck of [folderId] (depth-first).
@@ -521,54 +578,76 @@ Future<void> deleteStudyFolder(
   WidgetRef ref,
   StudyFolder folder,
 ) async {
+  // Captured while mounted — see [deleteStudyDeck].
   final container = ProviderScope.containerOf(context, listen: false);
+  final overlay = Overlay.of(context, rootOverlay: true);
   final repo = ref.read(studyRepositoryProvider);
   final contents = await _collectFolderContents(repo, folder.id);
   final deckIds = {for (final deck in contents.decks) deck.id};
+  // For the dialog only. The delete lists the cards again once confirmed, so
+  // a card synced in while the dialog was up goes with its deck.
+  final cardCount = (await Future.wait([
+    for (final deck in contents.decks) repo.listCards(deck.id),
+  ])).fold<int>(0, (sum, cards) => sum + cards.length);
   final parents = await _linkingParentNames(repo, deckIds);
   if (!context.mounted) return;
   final itemCount = contents.folders.length + contents.decks.length;
+  String count(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
   final confirmed = await showConfirmDialog(
     context,
     title: 'Delete "${folder.name}"?',
     message:
         (itemCount == 0
             ? 'This folder is empty and will be removed.'
-            : 'This folder and everything inside it (${contents.folders.length} subfolder${contents.folders.length == 1 ? '' : 's'}, ${contents.decks.length} deck${contents.decks.length == 1 ? '' : 's'}) will be deleted.') +
+            : 'This folder and everything inside it (${count(contents.folders.length, 'subfolder')}, ${count(contents.decks.length, 'deck')}, ${count(cardCount, 'card')}) will be deleted.') +
         _includedInWarning(parents),
   );
   if (!confirmed) return;
 
-  final remoteSync = ref.read(remoteSyncServiceProvider);
-  // One instant for the whole tree — see [deleteStudyDeck].
-  final deletedAt = utcNow();
+  final remoteSync = container.read(remoteSyncServiceProvider);
+  await softDeleteWithUndo(
+    overlay: overlay,
+    message: deletedMessage(folder.name, fallback: 'folder'),
+    delete: () async {
+      // One instant for the whole tree — see [deleteStudyDeck].
+      final deletedAt = utcNow();
 
-  for (final deck in contents.decks) {
-    final cards = await repo.listCards(deck.id);
-    for (final card in cards) {
-      await repo.softDeleteCard(card.id, at: deletedAt);
-    }
-    await detachStudyCardMedia(ref, [for (final card in cards) card.id]);
-    await repo.softDeleteDeck(deck.id, at: deletedAt);
-    final deleted = await repo.getDeck(deck.id);
-    if (deleted != null) remoteSync.pushStudyDeck(deleted);
-    final deletedCards = <StudyCard>[];
-    for (final card in cards) {
-      final c = await repo.getCard(card.id);
-      if (c != null) deletedCards.add(c);
-    }
-    await remoteSync.pushStudyCardsBatch(deletedCards);
-  }
-  for (final subfolder in contents.folders.reversed) {
-    await repo.softDeleteFolder(subfolder.id, at: deletedAt);
-    final deleted = await repo.getFolder(subfolder.id);
-    if (deleted != null) remoteSync.pushStudyFolder(deleted);
-  }
-  await repo.softDeleteFolder(folder.id, at: deletedAt);
-  final deletedFolder = await repo.getFolder(folder.id);
-  if (deletedFolder != null) remoteSync.pushStudyFolder(deletedFolder);
-  await softDeleteStudyDeckLinksTouching(container, deckIds, at: deletedAt);
+      for (final deck in contents.decks) {
+        final cards = await repo.listCards(deck.id);
+        for (final card in cards) {
+          await repo.softDeleteCard(card.id, at: deletedAt);
+        }
+        await detachStudyCardMediaIn(container, [
+          for (final card in cards) card.id,
+        ]);
+        await repo.softDeleteDeck(deck.id, at: deletedAt);
+        final deleted = await repo.getDeck(deck.id);
+        if (deleted != null) remoteSync.pushStudyDeck(deleted);
+        final deletedCards = <StudyCard>[];
+        for (final card in cards) {
+          final c = await repo.getCard(card.id);
+          if (c != null) deletedCards.add(c);
+        }
+        await remoteSync.pushStudyCardsBatch(deletedCards);
+      }
+      for (final subfolder in contents.folders.reversed) {
+        await repo.softDeleteFolder(subfolder.id, at: deletedAt);
+        final deleted = await repo.getFolder(subfolder.id);
+        if (deleted != null) remoteSync.pushStudyFolder(deleted);
+      }
+      await repo.softDeleteFolder(folder.id, at: deletedAt);
+      final deletedFolder = await repo.getFolder(folder.id);
+      if (deletedFolder != null) remoteSync.pushStudyFolder(deletedFolder);
+      await softDeleteStudyDeckLinksTouching(container, deckIds, at: deletedAt);
 
-  invalidateStudyCards(ref);
-  _invalidateStudyLibrary(ref);
+      invalidateStudyCardsIn(container);
+      _invalidateStudyLibraryIn(container);
+    },
+    restore: () => _restoreFromTrash(
+      container,
+      overlay,
+      FirestoreCollections.studyFolders,
+      folder.id,
+    ),
+  );
 }

@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/media/widgets/media_lightbox.dart';
 import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
+import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/utils/keyboard_focus_utils.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_text_field.dart';
 import 'package:voyager/domain/models/study_models.dart';
@@ -63,6 +67,53 @@ class _StudyDeckWorkbenchPageState
   /// up as the user works through the grid and are only dropped when the deck
   /// closes, since this state lives and dies with the page.
   final Set<String> _flipped = {};
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_handleKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleKey);
+    super.dispose();
+  }
+
+  /// Esc or Alt+← goes back to the library, the way the breadcrumb does
+  /// (BUG-189). A [HardwareKeyboard] handler rather than a [Focus], because
+  /// a deck opened with Enter leaves focus on the library tile behind it.
+  /// Held back while anything else owns the keyboard: a field (Esc there is
+  /// the field's, and Vim's), a dialog or menu over the page, a session
+  /// pushed over it, or an image viewer.
+  bool _handleKey(KeyEvent event) {
+    if (event is! KeyDownEvent || !mounted) return false;
+    final keyboard = HardwareKeyboard.instance;
+    final back =
+        (event.logicalKey == LogicalKeyboardKey.escape &&
+            !keyboard.isAltPressed &&
+            !keyboard.isControlPressed &&
+            !keyboard.isShiftPressed &&
+            !keyboard.isMetaPressed) ||
+        (event.logicalKey == LogicalKeyboardKey.arrowLeft &&
+            keyboard.isAltPressed &&
+            !keyboard.isControlPressed &&
+            !keyboard.isShiftPressed &&
+            !keyboard.isMetaPressed);
+    if (!back) return false;
+    if (ModalRoute.of(context)?.isCurrent != true) return false;
+    // A sheet or dialog on the root navigator — the card editor — leaves
+    // this page's own route current, so ask where the keyboard is instead:
+    // focus inside a popup route means the Esc is that popup's.
+    final focused = FocusManager.instance.primaryFocus?.context;
+    if (focused != null && ModalRoute.of(focused) is PopupRoute) return false;
+    if (isTextInputFocused() || mediaLightboxIsOpen || contextMenuIsOpen) {
+      return false;
+    }
+    if (!subtreeIsVisible(context)) return false;
+    widget.onBack();
+    return true;
+  }
 
   @override
   Widget build(BuildContext context) {

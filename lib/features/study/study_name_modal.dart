@@ -43,16 +43,25 @@ class _StudyNameModalState extends State<_StudyNameModal> {
   late final TextEditingController _controller = TextEditingController(
     text: widget.initialValue ?? '',
   );
+  final _focusNode = FocusNode();
+  String? _error;
 
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
   void _submit() {
     final name = _controller.text.trim();
-    if (name.isEmpty) return;
+    if (name.isEmpty) {
+      // Said, and the caret handed back: the field's own submit unfocuses it,
+      // and typing went nowhere until it was clicked (BUG-185).
+      setState(() => _error = 'Name cannot be empty');
+      _focusNode.requestFocus();
+      return;
+    }
     Navigator.of(context).pop(name);
   }
 
@@ -101,9 +110,16 @@ class _StudyNameModalState extends State<_StudyNameModal> {
             const SizedBox(height: 12),
             VoyagerTextField(
               controller: _controller,
+              focusNode: _focusNode,
               autofocus: true,
               onSubmitted: (_) => _submit(),
-              decoration: InputDecoration(hintText: widget.hintText),
+              onChanged: (_) {
+                if (_error != null) setState(() => _error = null);
+              },
+              decoration: InputDecoration(
+                hintText: widget.hintText,
+                errorText: _error,
+              ),
             ),
             const SizedBox(height: 18),
             GlassButton(

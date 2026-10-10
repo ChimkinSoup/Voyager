@@ -38,6 +38,7 @@ class _JobsPageState extends ConsumerState<JobsPage>
   late final AnimationController _panelController;
   late final Animation<double> _panelAnimation;
   final _searchController = TextEditingController();
+  final _columnMeasurer = JobColumnMeasurer();
 
   /// Rebuilds the page as the day turns over. Shell branches stay mounted, so
   /// a page left open overnight would otherwise keep yesterday as the
@@ -250,57 +251,87 @@ class _JobsPageState extends ConsumerState<JobsPage>
                             onClearFilters: _clearFilters,
                           );
                         }
-                        return Column(
-                          children: [
-                            JobsTableHeader(columns: columns),
-                            Expanded(
-                              child: ListView.builder(
-                                itemCount: rows.length,
-                                itemBuilder: (context, index) {
-                                  final application = rows[index];
-                                  return JobsTableRow(
-                                    key: ValueKey(application.id),
-                                    application: application,
-                                    columns: columns,
-                                    color: colors.of(application.company),
-                                    statusColor: statusColors.of(
-                                      application.status,
-                                    ),
-                                    isDuplicate: duplicates.contains(
-                                      application.id,
-                                    ),
-                                    isSelected: application.id == selectedId,
-                                    isArchived: jobIsArchived(
-                                      application,
-                                      archivedSeasonIds,
-                                    ),
-                                    seasonNames: namesFor(application),
-                                    onTap: () => _openPanel(application.id),
-                                    onStatusTap: (pillContext) => _editStatus(
-                                      pillContext,
-                                      application,
-                                      stages,
-                                    ),
-                                    menuItems: () => jobApplicationMenuItems(
-                                      application: application,
-                                      stages: stages,
-                                      seasons: jobSelectableSeasons(seasons),
-                                      onChangeStatus: (status) =>
-                                          _setStatus(application, status),
-                                      onSetSeasons: (seasonIds) =>
-                                          _setSeasons(application, seasonIds),
-                                      onOpenUrl: () =>
-                                          _openUrl(application.applicationUrl!),
-                                      onDuplicate: () =>
-                                          _duplicate(application),
-                                      onDelete: () =>
-                                          _confirmDelete(application),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
+                        final measures = _columnMeasurer.measure(
+                          context,
+                          columns: columns,
+                          rows: rows,
+                        );
+                        return LayoutBuilder(
+                          builder: (context, constraints) {
+                            final widths = jobColumnWidths(
+                              measures,
+                              tableWidth: constraints.maxWidth,
+                              columns: columns,
+                            );
+                            return Column(
+                              children: [
+                                JobsTableHeader(
+                                  columns: columns,
+                                  widths: widths,
+                                ),
+                                Expanded(
+                                  child: ListView.builder(
+                                    itemCount: rows.length,
+                                    itemBuilder: (context, index) {
+                                      final application = rows[index];
+                                      return JobsTableRow(
+                                        key: ValueKey(application.id),
+                                        application: application,
+                                        columns: columns,
+                                        widths: widths,
+                                        color: colors.of(application.company),
+                                        statusColor: statusColors.of(
+                                          application.status,
+                                        ),
+                                        isDuplicate: duplicates.contains(
+                                          application.id,
+                                        ),
+                                        isSelected:
+                                            application.id == selectedId,
+                                        isArchived: jobIsArchived(
+                                          application,
+                                          archivedSeasonIds,
+                                        ),
+                                        seasonNames: namesFor(application),
+                                        onTap: () => _openPanel(application.id),
+                                        onStatusTap: (pillContext) =>
+                                            _editStatus(
+                                              pillContext,
+                                              application,
+                                              stages,
+                                            ),
+                                        menuItems: () =>
+                                            jobApplicationMenuItems(
+                                              application: application,
+                                              stages: stages,
+                                              seasons: jobSelectableSeasons(
+                                                seasons,
+                                              ),
+                                              onChangeStatus: (status) =>
+                                                  _setStatus(
+                                                    application,
+                                                    status,
+                                                  ),
+                                              onSetSeasons: (seasonIds) =>
+                                                  _setSeasons(
+                                                    application,
+                                                    seasonIds,
+                                                  ),
+                                              onOpenUrl: () => _openUrl(
+                                                application.applicationUrl!,
+                                              ),
+                                              onDuplicate: () =>
+                                                  _duplicate(application),
+                                              onDelete: () =>
+                                                  _confirmDelete(application),
+                                            ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         );
                       },
                     ),

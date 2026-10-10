@@ -43,6 +43,7 @@ An **Include archived** control (toggle/chip) affects the sparkline and the main
 - The **season** column names the season an application is filed under, or `—` for none. Whether that season is retired is carried by the archive marker at the end of the row, not repeated here
 - Column visibility is user-togglable via a small dropdown; preference should persist locally (and sync if other UI prefs for this page sync — follow existing shell/page preference patterns)
 - Notes column shows a truncated preview; full markdown lives in the editor panel
+- **Status** and **date applied** are as wide as the widest capsule and date among the rows (a capsule caps at 160px), so neither is cut when the editor panel or a small window narrows the table. The free-text columns share what is left, none narrower than its own header; when even that doesn't fit they ellipsize, down to half their headers' width. Narrower still, every column gives way in proportion, so none disappears (BUG-181)
 - Rows that link to the same posting URL as another row (see §7.3) show a **soft visual warning** in the table only. Warning is informational; no block on create/edit
 - Row click / edit affordance opens a **todo-style side editor panel**
 
@@ -93,9 +94,9 @@ Copy is the whole interaction. No long-press, no open-in-browser, no per-applica
 Forms ask for a description of each past role; the header carries those too. Full design: `JOBS_EXPERIENCE_SNIPPETS_HLD.md`.
 
 - An ordered list of named snippets held in app settings (§4.8). Only the **description** is copied; the name is the chip label and the toast ("Acme - SWE Intern copied")
-- Compact text chips, between the profile icons and the sparkline, 12px apart. Long names ellipsize on the chip (cap 160px); the tooltip carries the name only, never the body
+- Compact text chips, between the profile icons and the sparkline, 12px apart. A name longer than the chip's cap (160px) ellipsizes; the tooltip carries the name only, never the body. Tooltips are off app-wide, so the header turns them back on for its own icons and chips (BUG-184)
 - The first **three** in Settings order are chips; the rest sit behind a **caret menu** that lists full names and copies on pick
-- When the header's half is too narrow, chips that cannot show at least ~90px move into the caret menu rather than squeezing the sparkline below **140px**. Order is still the priority: it is always the leading snippets that stay chips
+- When the header's half is too narrow, a chip that cannot show its whole name (up to the cap) moves into the caret menu rather than squeezing the sparkline below **140px**. Chips are never cut down to make room: "Acme - SWE Intern" and "Acme - Backend SWE" would both read "Acme - …" (BUG-184). Order is still the priority: it is always the leading snippets that stay chips
 - An empty description still copies (as `""`) with the usual toast. Copy never rewrites the text
 - No snippets, no group — its spacing included. The Jobs page never edits these
 
@@ -276,6 +277,7 @@ Also not a Jobs entity: `AppSettings.jobExperienceSnippets`, a list of `{ id, na
 
 - Active applications only (`seasonId == null`)
 - Grouped by current `status` string
+- The chips that don't fit the header's half fold into a trailing **+N** chip, in stage order (the leading ones stay chips). Its menu lists each hidden status with its count, and picking one filters like its chip; the +N chip is outlined while it hides a status being filtered by (BUG-183)
 
 ### 8.3 30-day sparkline
 

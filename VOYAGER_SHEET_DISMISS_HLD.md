@@ -133,6 +133,8 @@ If unsure and the UI is near full-screen with Save + Close, default to **`editor
 
 **Exception (2026-10-07, BUG-144 follow-up):** the LeetCode track form opened as an *edit* has drag off on Android too, and no handle. A drag-dismiss pops the sheet directly, past the form's "Discard changes?" check, and an edit has no draft to fall back on; Android Back still closes it, through the check. The *create* form keeps drag (and its handle), since its draft survives a dismiss.
 
+**Drag that asks (2026-10-09, BUG-186 follow-up):** the Study card editor and import sheet keep drag on Android, with their handle, and ask "Discard changes?" before closing: they open with `dragAsksFirst: true`. The route's own drag pops past a `PopScope`, so with that set the sheet drags itself and closes through `Navigator.maybePop`, the way Back does; a sheet that stays open slides back up. Desktop is unchanged: the modal is a dialog there, and doesn't drag.
+
 Close / Cancel / Save buttons unchanged. Barrier tap unchanged.
 
 ### 5.1 Handle visibility pattern

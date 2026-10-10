@@ -220,35 +220,102 @@ class VoyagerSheetHandle extends StatelessWidget {
 /// solid fill, drag-to-dismiss with velocity (built into [showModalBottomSheet])
 /// where [kind] allows it — see [voyagerSheetDrags]. [enableDrag] overrides the
 /// kind; prefer the kind.
+///
+/// [dragAsksFirst] is for a sheet whose [PopScope] asks before it closes —
+/// "Discard changes?". The route's own drag pops straight past a [PopScope];
+/// with this set, a drag that would close the sheet asks it the way Back
+/// does, and the sheet slides back up if it stays.
 Future<T?> showVoyagerSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   VoyagerSheetKind kind = VoyagerSheetKind.sheet,
   bool? enableDrag,
+  bool dragAsksFirst = false,
   BorderRadius borderRadius = const BorderRadius.vertical(
     top: Radius.circular(20),
   ),
   BoxConstraints? constraints,
 }) {
+  final drags = enableDrag ?? voyagerSheetDrags(kind);
   return showModalBottomSheet<T>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,
     useSafeArea: true,
-    enableDrag: enableDrag ?? voyagerSheetDrags(kind),
+    enableDrag: drags && !dragAsksFirst,
     backgroundColor: Colors.transparent,
     elevation: 0,
     constraints: constraints,
     shape: RoundedRectangleBorder(borderRadius: borderRadius),
-    builder: (ctx) => GlassSurface(
-      weight: GlassWeight.heavy,
-      borderRadius: borderRadius,
-      // The frosted fill sits between the BottomSheet's Material and the
-      // sheet's content, so ink (ListTile rows, InkWells) would paint under
-      // it. A Material of its own above the fill brings the ink back on top.
-      child: Material(type: MaterialType.transparency, child: builder(ctx)),
-    ),
+    builder: (ctx) {
+      final sheet = GlassSurface(
+        weight: GlassWeight.heavy,
+        borderRadius: borderRadius,
+        // The frosted fill sits between the BottomSheet's Material and the
+        // sheet's content, so ink (ListTile rows, InkWells) would paint under
+        // it. A Material of its own above the fill brings the ink back on top.
+        child: Material(type: MaterialType.transparency, child: builder(ctx)),
+      );
+      return drags && dragAsksFirst ? _DragAsksFirst(child: sheet) : sheet;
+    },
   );
+}
+
+/// The drag-to-dismiss of a [showVoyagerSheet] opened with `dragAsksFirst`.
+///
+/// A [BottomSheet] of its own, with its own controller, so the drag behaves
+/// as the route's does; only the close differs. Where the route's calls
+/// [Navigator.pop], this calls [Navigator.maybePop], which the sheet's
+/// [PopScope] can turn into a question.
+class _DragAsksFirst extends StatefulWidget {
+  const _DragAsksFirst({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_DragAsksFirst> createState() => _DragAsksFirstState();
+}
+
+class _DragAsksFirstState extends State<_DragAsksFirst>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _position =
+      BottomSheet.createAnimationController(this)..value = 1;
+
+  @override
+  void dispose() {
+    _position.dispose();
+    super.dispose();
+  }
+
+  Future<void> _closing() async {
+    final route = ModalRoute.of(context);
+    await Navigator.of(context).maybePop();
+    // Still up: nothing to discard closed it, or the sheet asked and is
+    // waiting on the answer. Either way it comes back into view.
+    if (mounted && (route?.isActive ?? false)) _position.forward();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _position,
+      builder: (context, child) => FractionalTranslation(
+        translation: Offset(0, 1 - _position.value),
+        child: child,
+      ),
+      child: BottomSheet(
+        animationController: _position,
+        onClosing: _closing,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        // Unconstrained and unshaped: the route has already sized and
+        // shaped the sheet, and the theme's defaults would do it again.
+        constraints: const BoxConstraints(),
+        shape: const RoundedRectangleBorder(),
+        builder: (_) => widget.child,
+      ),
+    );
+  }
 }
 
 /// Opens [builder] as the app's standard modal, shaped for the platform.
@@ -259,14 +326,15 @@ Future<T?> showVoyagerSheet<T>({
 /// the width the bottom sheets had — and closed by the backdrop or Esc.
 ///
 /// On Android it stays a bottom sheet, where a downward flick is the expected
-/// cancel gesture; [kind] and [enableDrag] only decide that sheet's drag
-/// (VOYAGER_SHEET_DISMISS_HLD.md §4).
+/// cancel gesture; [kind], [enableDrag] and [dragAsksFirst] only decide that
+/// sheet's drag (VOYAGER_SHEET_DISMISS_HLD.md §4).
 Future<T?> showVoyagerModal<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   BoxConstraints? constraints,
   VoyagerSheetKind kind = VoyagerSheetKind.sheet,
   bool? enableDrag,
+  bool dragAsksFirst = false,
 }) {
   if (isAndroid) {
     return showVoyagerSheet<T>(
@@ -274,6 +342,7 @@ Future<T?> showVoyagerModal<T>({
       builder: builder,
       kind: kind,
       enableDrag: enableDrag,
+      dragAsksFirst: dragAsksFirst,
       constraints: constraints,
     );
   }

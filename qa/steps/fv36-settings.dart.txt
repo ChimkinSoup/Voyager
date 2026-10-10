@@ -1,0 +1,5 @@
+final n = c.read(settingsProvider.notifier);
+final s = await c.read(settingsProvider.future);
+await n.saveSettings(s.copyWith(jobProfileLinkedInUrl: 'https://linkedin.com/in/fv36', jobProfileGitHubUrl: 'https://github.com/fv36', jobProfilePortfolioUrl: 'https://fv36.dev'));
+const snippets = [JobExperienceSnippet(id: 'fv36-s1', name: 'Initech - QA', description: 'QA body'), JobExperienceSnippet(id: 'fv36-s2', name: 'Acme - SWE Intern', description: 'Intern body'), JobExperienceSnippet(id: 'fv36-s3', name: 'Globex - Backend SWE', description: 'Backend body'), JobExperienceSnippet(id: 'fv36-s4', name: 'Acme - Backend SWE', description: 'Acme backend body')];
+await n.saveJobExperienceSnippets(s.jobExperienceSnippets, snippets);

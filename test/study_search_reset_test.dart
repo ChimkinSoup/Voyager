@@ -301,6 +301,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(repo.deletedIds, ['card-Benzene']);
+    // Chemistry's first tile: its cards tie on every sort key, so the id
+    // decides (BUG-190).
+    expect(repo.deletedIds, ['card-Alkane']);
   });
 }

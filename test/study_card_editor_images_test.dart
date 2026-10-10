@@ -248,6 +248,9 @@ void main() {
 
     await tester.tap(find.byTooltip('Close'));
     await settle(tester);
+    // The images go with an unsaved card, so closing asks first (BUG-186).
+    await tester.tap(find.text('Discard'));
+    await settle(tester);
 
     expect(
       await referencesFor(cardId),

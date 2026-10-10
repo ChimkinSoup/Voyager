@@ -130,7 +130,11 @@ List<StudyCard> sortStudyCardsByMastery(List<StudyCard> cards) {
     if (byInterval != 0) return byInterval;
     final byDue = a.dueAt.compareTo(b.dueAt);
     if (byDue != 0) return byDue;
-    return a.createdAt.compareTo(b.createdAt);
+    final byCreated = a.createdAt.compareTo(b.createdAt);
+    if (byCreated != 0) return byCreated;
+    // Last, so cards tied on everything else — imported before BUG-190 with
+    // one shared stamp — keep one order: List.sort isn't stable.
+    return a.id.compareTo(b.id);
   });
   return sorted;
 }

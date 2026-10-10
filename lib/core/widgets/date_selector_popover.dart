@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/layout/touch_target.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 
 class DateSelectorPopover extends StatefulWidget {
   final DateTime initialStartDate;
@@ -214,6 +215,16 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = widget.accentColor ?? theme.colorScheme.primary;
+    // The selected day and chip, made opaque the way the range highlight
+    // below is: a translucent accent (Jobs' outline grey) let the popover
+    // show through, and no label colour could be worked out against that.
+    final selectedFill = Color.alphaBlend(accent, theme.colorScheme.surface);
+    // Read off that fill: each page passes its own accent, and the theme's
+    // onPrimary is made for the app accent, not this one (BUG-182).
+    final onAccent = onColorLabel(
+      selectedFill,
+      themeInk: theme.colorScheme.onSurface,
+    );
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
@@ -253,6 +264,11 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
     Widget content = Focus(
       focusNode: _focusNode,
       onKeyEvent: (node, event) {
+        // Esc goes on to the popover's route, which closes without a pick
+        // as a click outside does.
+        if (event.logicalKey == LogicalKeyboardKey.escape) {
+          return KeyEventResult.ignored;
+        }
         _handleKeyEvent(event);
         return KeyEventResult.handled;
       },
@@ -289,11 +305,13 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                     c['label'] as String,
                     style: TextStyle(
                       color: isSelected
-                          ? theme.colorScheme.onPrimary
+                          ? onAccent
                           : theme.colorScheme.onSurface,
                     ),
                   ),
-                  backgroundColor: isSelected ? accent : Colors.transparent,
+                  backgroundColor: isSelected
+                      ? selectedFill
+                      : Colors.transparent,
                   side: isSelected
                       ? BorderSide(color: accent, width: 1)
                       : BorderSide(
@@ -392,7 +410,7 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                     textColor = textColor.withValues(alpha: 0.3);
                   }
                   if (isSelected) {
-                    textColor = theme.colorScheme.onPrimary;
+                    textColor = onAccent;
                   }
 
                   final highlightColor = Color.alphaBlend(
@@ -499,7 +517,9 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
                             width: 36,
                             height: 36,
                             decoration: BoxDecoration(
-                              color: isSelected ? accent : Colors.transparent,
+                              color: isSelected
+                                  ? selectedFill
+                                  : Colors.transparent,
                               border: (isHovered && _showHoverRing)
                                   ? Border.all(
                                       color: theme.colorScheme.onSurface,

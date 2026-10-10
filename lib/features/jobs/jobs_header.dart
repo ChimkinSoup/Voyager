@@ -94,94 +94,119 @@ class JobsHeader extends StatelessWidget {
         ),
     ];
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-      child: SizedBox(
-        height: 76,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _LifetimeTotal(total: lifetimeTotal),
-            const SizedBox(width: 18),
-            Expanded(
-              flex: 5,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: _StatusChips(
-                      statusCounts: statusCounts,
-                      stageNames: stageNames,
-                      activeStatuses: activeStatuses,
-                      onStatusTapped: onStatusTapped,
-                      statusColors: statusColors,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  _IncludeArchivedToggle(
-                    value: includeArchived,
-                    onChanged: onIncludeArchivedChanged,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 18),
-            Expanded(
-              flex: 5,
-              // The chart caps itself at 260px and sits right-aligned, so the
-              // slack in this half is to its left — which is exactly where the
-              // copy buttons belong (§3.4). Sharing the half keeps them beside
-              // the chart at any width instead of stranded mid-row.
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  // Everything in this half but the chips has a known width,
-                  // so what is left for them is settled before they lay out.
-                  // The chart's floor comes off too: chips that would squeeze
-                  // it below that move into the overflow menu instead.
-                  final chipBudget =
-                      constraints.maxWidth -
-                      (profileLinks.isEmpty
-                          ? 0
-                          : profileLinks.length * _ProfileCopyButton.extent +
-                                _groupGap) -
-                      _groupGap -
-                      _LabelledChart.minWidth;
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (profileLinks.isNotEmpty) ...[
-                        _ProfileCopyButtons(links: profileLinks),
-                        const SizedBox(width: _groupGap),
-                      ],
-                      if (experienceSnippets.isNotEmpty) ...[
-                        _ExperienceCopyButtons(
-                          snippets: experienceSnippets,
-                          budget: chipBudget,
-                        ),
-                        const SizedBox(width: _groupGap),
-                      ],
-                      // Flexible so the chart gives ground first when the
-                      // half is narrow. It caps itself at 260px and takes no
-                      // more than that, so it only ever shrinks — and the
-                      // copy buttons, which cannot, stay whole.
-                      Flexible(
-                        child: _LabelledChart(
-                          label: 'Last 30 days',
-                          child: JobsSparkline(counts: dailyCounts),
-                        ),
+    // The app turns tooltips off everywhere, but this header's icons and
+    // chips are named only by theirs (§3.4, §3.5): an icon has no label, and
+    // a long experience name is cut on its chip (BUG-184).
+    return TooltipVisibility(
+      visible: true,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+        child: SizedBox(
+          height: 76,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _LifetimeTotal(total: lifetimeTotal),
+              const SizedBox(width: 18),
+              Expanded(
+                flex: 5,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: _StatusChips(
+                        statusCounts: statusCounts,
+                        stageNames: stageNames,
+                        activeStatuses: activeStatuses,
+                        onStatusTapped: onStatusTapped,
+                        statusColors: statusColors,
                       ),
-                    ],
-                  );
-                },
+                    ),
+                    const SizedBox(height: 6),
+                    _IncludeArchivedToggle(
+                      value: includeArchived,
+                      onChanged: onIncludeArchivedChanged,
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              const SizedBox(width: 18),
+              Expanded(
+                flex: 5,
+                // The chart caps itself at 260px and sits right-aligned, so the
+                // slack in this half is to its left — which is exactly where the
+                // copy buttons belong (§3.4). Sharing the half keeps them beside
+                // the chart at any width instead of stranded mid-row.
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Everything in this half but the chips has a known width,
+                    // so what is left for them is settled before they lay out.
+                    // The chart's floor comes off too: chips that would squeeze
+                    // it below that move into the overflow menu instead.
+                    final chipBudget =
+                        constraints.maxWidth -
+                        (profileLinks.isEmpty
+                            ? 0
+                            : profileLinks.length * _ProfileCopyButton.extent +
+                                  _groupGap) -
+                        _groupGap -
+                        _LabelledChart.minWidth;
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (profileLinks.isNotEmpty) ...[
+                          _ProfileCopyButtons(links: profileLinks),
+                          const SizedBox(width: _groupGap),
+                        ],
+                        if (experienceSnippets.isNotEmpty) ...[
+                          _ExperienceCopyButtons(
+                            snippets: experienceSnippets,
+                            budget: chipBudget,
+                          ),
+                          const SizedBox(width: _groupGap),
+                        ],
+                        // Flexible so the chart gives ground first when the
+                        // half is narrow. It caps itself at 260px and takes no
+                        // more than that, so it only ever shrinks — and the
+                        // copy buttons, which cannot, stay whole.
+                        Flexible(
+                          child: _LabelledChart(
+                            label: 'Last 30 days',
+                            child: JobsSparkline(counts: dailyCounts),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+/// [text]'s width in [style], as a widget built under [context] draws it.
+double _textWidth(BuildContext context, String text, TextStyle? style) {
+  // Merged the way [Text] merges it, so the measured width is the drawn one.
+  final painter = TextPainter(
+    text: TextSpan(
+      text: text,
+      style: DefaultTextStyle.of(context).style.merge(style),
+    ),
+    textDirection: TextDirection.ltr,
+    textScaler: MediaQuery.textScalerOf(context),
+    maxLines: 1,
+  )..layout();
+  // Rounded up so a chip given exactly its natural width never ellipsizes
+  // over a fraction of a pixel.
+  final width = painter.width.ceilToDouble();
+  painter.dispose();
+  return width;
 }
 
 class _LifetimeTotal extends StatelessWidget {
@@ -251,25 +276,262 @@ class _StatusChips extends StatelessWidget {
       );
     }
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (final entry in statusCounts) ...[
-            _StatusChip(
-              status: entry.status,
-              count: entry.count,
-              color: statusColors(entry.status),
-              selected: activeStatuses.contains(entry.status),
-              // A status no longer in the stage list is an orphan (§7.5). It
-              // stays countable and filterable; the marker is the only thing
-              // that says the stage behind it is gone.
-              orphan: !stageNames.contains(entry.status),
-              onTap: () => onStatusTapped(entry.status),
+    final labelStyle = theme.textTheme.labelSmall;
+    final widths = [
+      for (final entry in statusCounts)
+        _StatusChip.chrome +
+            _textWidth(
+              context,
+              _StatusChip.label(entry.status),
+              labelStyle?.copyWith(
+                fontStyle: stageNames.contains(entry.status)
+                    ? null
+                    : FontStyle.italic,
+              ),
+            ) +
+            _textWidth(
+              context,
+              '${entry.count}',
+              labelStyle?.copyWith(fontWeight: FontWeight.w600),
             ),
-            const SizedBox(width: 6),
+    ];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final visible = layoutStatusChips(
+          widths: widths,
+          budget: constraints.maxWidth,
+          overflowWidth:
+              _StatusOverflowChip.chrome +
+              _textWidth(
+                context,
+                '+${statusCounts.length}',
+                labelStyle?.copyWith(fontWeight: FontWeight.w600),
+              ),
+        );
+        final hidden = statusCounts.skip(visible).toList();
+        return Row(
+          children: [
+            for (final entry in statusCounts.take(visible)) ...[
+              _StatusChip(
+                status: entry.status,
+                count: entry.count,
+                color: statusColors(entry.status),
+                selected: activeStatuses.contains(entry.status),
+                // A status no longer in the stage list is an orphan (§7.5).
+                // It stays countable and filterable; the marker is the only
+                // thing that says the stage behind it is gone.
+                orphan: !stageNames.contains(entry.status),
+                onTap: () => onStatusTapped(entry.status),
+              ),
+              const SizedBox(width: _kStatusChipGap),
+            ],
+            if (hidden.isNotEmpty)
+              // Flexible for a half too narrow for even this chip: it clips
+              // its label rather than overflowing the row.
+              Flexible(
+                child: _StatusOverflowChip(
+                  hidden: hidden,
+                  stageNames: stageNames,
+                  activeStatuses: activeStatuses,
+                  onStatusTapped: onStatusTapped,
+                  statusColors: statusColors,
+                ),
+              ),
           ],
-        ],
+        );
+      },
+    );
+  }
+}
+
+const double _kStatusChipGap = 6;
+
+/// How many of the status chips, [widths] wide in stage order, fit in
+/// [budget] (BUG-183): all of them, or as many leading ones as leave room for
+/// the [overflowWidth] "+N" chip that reaches the rest.
+@visibleForTesting
+int layoutStatusChips({
+  required List<double> widths,
+  required double budget,
+  required double overflowWidth,
+  double gap = _kStatusChipGap,
+}) {
+  var used = 0.0;
+  for (final width in widths) {
+    used += width + gap;
+  }
+  if (used - gap <= budget) return widths.length;
+  for (var k = widths.length - 1; k > 0; k--) {
+    used -= widths[k] + gap;
+    if (used + overflowWidth <= budget) return k;
+  }
+  return 0;
+}
+
+/// The chip that stands for the statuses past the row's width: "+N", and a
+/// menu listing each with its count that filters like the chips (BUG-183).
+class _StatusOverflowChip extends StatelessWidget {
+  const _StatusOverflowChip({
+    required this.hidden,
+    required this.stageNames,
+    required this.activeStatuses,
+    required this.onStatusTapped,
+    required this.statusColors,
+  });
+
+  final List<({String status, int count})> hidden;
+  final Set<String> stageNames;
+  final Set<String> activeStatuses;
+  final ValueChanged<String> onStatusTapped;
+  final Color Function(String status) statusColors;
+
+  static const double _horizontalPadding = 10;
+  static const double _border = 1.4;
+
+  /// Everything but the label, for measuring the chip before layout.
+  static const double chrome = (_horizontalPadding + _border) * 2;
+
+  Future<void> _open(BuildContext context) async {
+    final picked = await showContextualPopover<String>(
+      context: context,
+      buttonContext: context,
+      width: 240,
+      builder: (_) => _StatusMenu(
+        entries: hidden,
+        stageNames: stageNames,
+        activeStatuses: activeStatuses,
+        statusColors: statusColors,
+      ),
+    );
+    if (picked != null) onStatusTapped(picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // Marked like a selected chip while it hides a status being filtered by,
+    // so the filter is never invisible.
+    final filtering = hidden.any(
+      (entry) => activeStatuses.contains(entry.status),
+    );
+    return Tooltip(
+      message: '${hidden.length} more status${hidden.length == 1 ? '' : 'es'}',
+      waitDuration: const Duration(milliseconds: 500),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: () => _open(context),
+          borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: _horizontalPadding,
+              vertical: 5,
+            ),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.4,
+              ),
+              borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
+              border: Border.all(
+                color: filtering
+                    ? theme.colorScheme.onSurfaceVariant
+                    : theme.colorScheme.outlineVariant,
+                width: filtering ? _border : 1,
+              ),
+            ),
+            child: Text(
+              '+${hidden.length}',
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.clip,
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusMenu extends StatelessWidget {
+  const _StatusMenu({
+    required this.entries,
+    required this.stageNames,
+    required this.activeStatuses,
+    required this.statusColors,
+  });
+
+  final List<({String status, int count})> entries;
+  final Set<String> stageNames;
+  final Set<String> activeStatuses;
+  final Color Function(String status) statusColors;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 280),
+      child: VoyagerScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final entry in entries)
+              InkWell(
+                onTap: () => Navigator.of(context).pop(entry.status),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: statusColors(entry.status),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _StatusChip.label(entry.status),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontStyle: stageNames.contains(entry.status)
+                                ? null
+                                : FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${entry.count}',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      SizedBox(
+                        width: 22,
+                        child: activeStatuses.contains(entry.status)
+                            ? const Align(
+                                alignment: Alignment.centerRight,
+                                child: Icon(
+                                  PhosphorIconsRegular.check,
+                                  size: 13,
+                                ),
+                              )
+                            : null,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -292,6 +554,18 @@ class _StatusChip extends StatelessWidget {
   final bool orphan;
   final VoidCallback onTap;
 
+  static const double _horizontalPadding = 10;
+  static const double _selectedBorder = 1.4;
+  static const double _dot = 6;
+  static const double _gap = 6;
+
+  /// Everything in a chip but its two labels, at the selected border — the
+  /// wider one — for measuring it before layout.
+  static const double chrome =
+      (_horizontalPadding + _selectedBorder) * 2 + _dot + _gap * 2;
+
+  static String label(String status) => status.isEmpty ? 'No status' : status;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -306,7 +580,10 @@ class _StatusChip extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            padding: const EdgeInsets.symmetric(
+              horizontal: _horizontalPadding,
+              vertical: 5,
+            ),
             decoration: BoxDecoration(
               color: selected
                   ? color.withValues(alpha: 0.20)
@@ -316,28 +593,28 @@ class _StatusChip extends StatelessWidget {
               borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
               border: Border.all(
                 color: selected ? color : color.withValues(alpha: 0.35),
-                width: selected ? 1.4 : 1,
+                width: selected ? _selectedBorder : 1,
               ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 6,
-                  height: 6,
+                  width: _dot,
+                  height: _dot,
                   decoration: BoxDecoration(
                     color: color,
                     shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: _gap),
                 Text(
-                  status.isEmpty ? 'No status' : status,
+                  label(status),
                   style: theme.textTheme.labelSmall?.copyWith(
                     fontStyle: orphan ? FontStyle.italic : null,
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: _gap),
                 Text(
                   '$count',
                   style: theme.textTheme.labelSmall?.copyWith(
@@ -484,58 +761,38 @@ class _ProfileCopyButton extends StatelessWidget {
 }
 
 const int _kMaxExperienceChips = 3;
-const double _kExperienceChipMinWidth = 90;
 const double _kExperienceChipMaxWidth = 160;
 const double _kExperienceChipGap = 6;
 const double _kExperienceOverflowWidth = 28;
 
-/// How many experience chips fit in [budget], and the widest any may be.
+/// How many experience chips fit in [budget].
 ///
 /// [naturalWidths] are the untruncated widths of the leading chips, in the
 /// user's order; [total] counts every snippet, so whatever is not shown can
 /// reserve room for the overflow button. Chips fill from the front, up to
-/// [maxVisible] — a chip fits if it can show at least [minChipWidth] of itself
-/// (all of itself, when shorter). Among those that fit, space is shared
-/// water-level style: short names keep their full width and only the longest
-/// are truncated to the returned cap.
+/// [maxVisible], and a chip fits only at its whole width — up to
+/// [maxChipWidth], past which a name ellipsizes. Cutting every chip down to
+/// make room showed "Acme - …" twins that only the toast told apart
+/// (BUG-184); the caret menu lists full names instead.
 @visibleForTesting
-({int visible, double maxChipWidth}) layoutExperienceChips({
+int layoutExperienceChips({
   required List<double> naturalWidths,
   required int total,
   required double budget,
   int maxVisible = _kMaxExperienceChips,
-  double minChipWidth = _kExperienceChipMinWidth,
   double maxChipWidth = _kExperienceChipMaxWidth,
   double gap = _kExperienceChipGap,
   double overflowWidth = _kExperienceOverflowWidth,
 }) {
   for (var k = math.min(maxVisible, naturalWidths.length); k > 0; k--) {
-    final widths = [
-      for (final width in naturalWidths.take(k)) math.min(width, maxChipWidth),
-    ];
     final space =
         budget - gap * (k - 1) - (k < total ? gap + overflowWidth : 0);
-    final floor = widths.fold<double>(
-      0,
-      (sum, width) => sum + math.min(width, minChipWidth),
-    );
-    if (floor > space) continue;
-    return (visible: k, maxChipWidth: _waterLevel(widths, space, maxChipWidth));
+    final needed = naturalWidths
+        .take(k)
+        .fold<double>(0, (sum, width) => sum + math.min(width, maxChipWidth));
+    if (needed <= space) return k;
   }
-  return (visible: 0, maxChipWidth: maxChipWidth);
-}
-
-/// The largest cap, up to [ceiling], at which [widths] — each clipped to the
-/// cap — still sum to no more than [space].
-double _waterLevel(List<double> widths, double space, double ceiling) {
-  final sorted = [...widths]..sort();
-  var remaining = space;
-  for (var i = 0; i < sorted.length; i++) {
-    final share = remaining / (sorted.length - i);
-    if (sorted[i] > share) return share;
-    remaining -= sorted[i];
-  }
-  return ceiling;
+  return 0;
 }
 
 /// Copies [snippet]'s description exactly as stored — an empty one included —
@@ -566,37 +823,19 @@ class _ExperienceCopyButtons extends StatelessWidget {
   final List<JobExperienceSnippet> snippets;
   final double budget;
 
-  static double _textWidth(String text, TextStyle style, TextScaler scaler) {
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: TextDirection.ltr,
-      textScaler: scaler,
-      maxLines: 1,
-    )..layout();
-    // Rounded up so a chip given exactly its natural width never ellipsizes
-    // over a fraction of a pixel.
-    final width = painter.width.ceilToDouble();
-    painter.dispose();
-    return width;
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Merged the way [Text] merges it, so the measured width is the drawn one.
-    final style = DefaultTextStyle.of(
-      context,
-    ).style.merge(_ExperienceChip.labelStyle(Theme.of(context)));
-    final scaler = MediaQuery.textScalerOf(context);
-    final layout = layoutExperienceChips(
+    final style = _ExperienceChip.labelStyle(Theme.of(context));
+    final visible = layoutExperienceChips(
       naturalWidths: [
         for (final snippet in snippets.take(_kMaxExperienceChips))
-          _ExperienceChip.chrome + _textWidth(snippet.name, style, scaler),
+          _ExperienceChip.chrome + _textWidth(context, snippet.name, style),
       ],
       total: snippets.length,
       budget: budget,
     );
-    final shown = snippets.take(layout.visible).toList();
-    final hidden = snippets.skip(layout.visible).toList();
+    final shown = snippets.take(visible).toList();
+    final hidden = snippets.skip(visible).toList();
 
     return Center(
       child: Row(
@@ -605,7 +844,9 @@ class _ExperienceCopyButtons extends StatelessWidget {
           for (var i = 0; i < shown.length; i++) ...[
             if (i > 0) const SizedBox(width: _kExperienceChipGap),
             ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: layout.maxChipWidth),
+              constraints: const BoxConstraints(
+                maxWidth: _kExperienceChipMaxWidth,
+              ),
               child: _ExperienceChip(snippet: shown[i]),
             ),
           ],

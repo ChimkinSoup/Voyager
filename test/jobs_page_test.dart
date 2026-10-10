@@ -5,10 +5,12 @@
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -26,15 +28,18 @@ import 'package:voyager/features/jobs/jobs_providers.dart';
 import 'package:voyager/features/jobs/jobs_table.dart';
 
 import 'fakes/fake_weather_api_client.dart';
+import 'narrow_window_harness.dart' show loadRealFonts;
 
 Future<({AppDatabase db, ProviderContainer container})> pumpJobsPage(
   WidgetTester tester, {
   required Future<void> Function(DriftJobRepository repo) seed,
   AppSettings Function(AppSettings settings)? settings,
-}) async {
   // Wide and tall: the header is a four-element row and the table sits beside
   // a 420px panel once one is open.
-  tester.view.physicalSize = const Size(1600, 1200);
+  Size size = const Size(1600, 1200),
+  ThemeData? theme,
+}) async {
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
 
@@ -70,7 +75,7 @@ Future<({AppDatabase db, ProviderContainer container})> pumpJobsPage(
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(home: JobsPage()),
+      child: MaterialApp(theme: theme, home: const JobsPage()),
     ),
   );
   await tester.pumpAndSettle();
@@ -101,7 +106,220 @@ JobApplication makeApplication({
   );
 }
 
+/// Whether [finder]'s one [Text] shows all of itself on one line: not
+/// ellipsized, and not wrapped onto a second.
+bool _showsWhole(WidgetTester tester, Finder finder) {
+  final paragraph = tester.renderObject<RenderParagraph>(finder);
+  return !paragraph.didExceedMaxLines &&
+      paragraph.getMaxIntrinsicWidth(double.infinity) <=
+          paragraph.size.width + 0.01;
+}
+
+Finder _inRow(String text) =>
+    find.descendant(of: find.byType(JobsTableRow), matching: find.text(text));
+
+Future<void> _seedBug181(DriftJobRepository repo) async {
+  await repo.upsertApplication(
+    makeApplication(
+      company: 'Visa',
+      title: 'Software Engineer Intern',
+      status: 'Interview',
+      dateApplied: DateTime(2026, 10, 2),
+      notes: 'Referral from a friend; follow up after the onsite',
+    ),
+  );
+  await repo.upsertApplication(
+    makeApplication(
+      company: 'Stripe',
+      title: 'Backend Engineer',
+      status: 'Online Assessment',
+      dateApplied: DateTime(2026, 9, 30),
+    ),
+  );
+}
+
 void main() {
+  group('BUG-181 dates and statuses are never cut', () {
+    void expectWhole(WidgetTester tester) {
+      for (final text in [
+        'Oct 2, 2026',
+        'Sep 30, 2026',
+        'Interview',
+        'Online Assessment',
+      ]) {
+        expect(_showsWhole(tester, _inRow(text)), isTrue, reason: text);
+      }
+    }
+
+    testWidgets(
+      'with the editor panel open',
+      (tester) async {
+        await loadRealFonts(tester);
+        await pumpJobsPage(
+          tester,
+          seed: _seedBug181,
+          size: const Size(1300, 820),
+          theme: VoyagerTheme.dark(),
+        );
+        await tester.tap(_inRow('Visa'));
+        await tester.pumpAndSettle();
+        expect(find.byType(JobsEditPanel), findsOneWidget);
+
+        expectWhole(tester);
+        expect(tester.takeException(), isNull);
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.windows),
+    );
+
+    testWidgets(
+      'in a narrow window, and the headers stay on one line',
+      (tester) async {
+        await loadRealFonts(tester);
+        await pumpJobsPage(
+          tester,
+          seed: _seedBug181,
+          size: const Size(560, 900),
+          theme: VoyagerTheme.dark(),
+        );
+
+        expectWhole(tester);
+        final header = find.byType(JobsTableHeader);
+        for (final label in ['Company', 'Title', 'Status', 'Date applied']) {
+          expect(
+            _showsWhole(
+              tester,
+              find.descendant(of: header, matching: find.text(label)),
+            ),
+            isTrue,
+            reason: label,
+          );
+        }
+        expect(tester.takeException(), isNull);
+      },
+      variant: TargetPlatformVariant.only(TargetPlatform.windows),
+    );
+  });
+
+  group('BUG-181 column widths', () {
+    const columns = [
+      JobColumn.company,
+      JobColumn.title,
+      JobColumn.status,
+      JobColumn.dateApplied,
+      JobColumn.notes,
+    ];
+    final rows = [
+      makeApplication(
+        company: 'Visa',
+        title: 'SWE',
+        status: 'Second Round Technical Interview',
+      ),
+    ];
+
+    /// Measures [rows] in the app's theme, as the page does.
+    Future<JobColumnMeasures> measure(
+      WidgetTester tester,
+      JobColumnMeasurer measurer,
+      List<JobApplication> rows,
+    ) async {
+      late JobColumnMeasures measures;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: VoyagerTheme.dark(),
+          home: Builder(
+            builder: (context) {
+              measures = measurer.measure(
+                context,
+                columns: columns,
+                rows: rows,
+              );
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
+      return measures;
+    }
+
+    // Narrower than Status and Date applied alone, every column but those two
+    // went to zero width and the rows showed only a capsule and a date.
+    testWidgets('no column is squeezed out, however narrow', (tester) async {
+      final measures = await measure(tester, JobColumnMeasurer(), rows);
+      for (var tableWidth = 120.0; tableWidth <= 900; tableWidth += 10) {
+        final widths = jobColumnWidths(
+          measures,
+          tableWidth: tableWidth,
+          columns: columns,
+        );
+        for (final column in columns) {
+          expect(
+            widths[column],
+            greaterThan(0),
+            reason: '$column at ${tableWidth}px',
+          );
+        }
+        // Row padding, the warning gutter and the archive button.
+        final available = tableWidth - 40 - 22 - 28;
+        if (available > 0) {
+          expect(
+            widths.values.fold<double>(0, (a, b) => a + b),
+            lessThanOrEqualTo(available + 0.01),
+            reason: 'at ${tableWidth}px',
+          );
+        }
+      }
+    });
+
+    testWidgets('Status and Date applied stay whole while text columns can '
+        'give way', (tester) async {
+      final measures = await measure(tester, JobColumnMeasurer(), rows);
+      final roomy = jobColumnWidths(
+        measures,
+        tableWidth: 1400,
+        columns: columns,
+      );
+      // Narrow enough that the text columns are under their headers, but
+      // still above half of them.
+      final headers = [
+        JobColumn.company,
+        JobColumn.title,
+        JobColumn.notes,
+      ].fold<double>(0, (sum, column) => sum + measures.floors[column]!);
+      final narrow = jobColumnWidths(
+        measures,
+        tableWidth:
+            90 +
+            roomy[JobColumn.status]! +
+            roomy[JobColumn.dateApplied]! +
+            headers * 0.75,
+        columns: columns,
+      );
+      expect(
+        narrow[JobColumn.company]! +
+            narrow[JobColumn.title]! +
+            narrow[JobColumn.notes]!,
+        lessThan(headers),
+      );
+      expect(narrow[JobColumn.status], roomy[JobColumn.status]);
+      expect(narrow[JobColumn.dateApplied], roomy[JobColumn.dateApplied]);
+    });
+
+    // The text was laid out on every frame of the editor panel's slide, and
+    // on every rebuild for a selection or a keystroke in search.
+    testWidgets('measures once until the labels change', (tester) async {
+      final measurer = JobColumnMeasurer();
+      final first = await measure(tester, measurer, rows);
+      // A new list of the same rows, as each rebuild makes.
+      expect(await measure(tester, measurer, [...rows]), same(first));
+
+      final moreRows = [
+        ...rows,
+        makeApplication(company: 'Acme', title: 'SWE', status: 'Offer'),
+      ];
+      expect(await measure(tester, measurer, moreRows), isNot(same(first)));
+    });
+  });
+
   test('the row menu offers no Open for a URL it would refuse', () {
     List<String> labelsFor(String url) => [
       for (final item in jobApplicationMenuItems(

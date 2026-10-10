@@ -24,7 +24,7 @@ Most soft deletes in Voyager end silently after a confirm dialog (where one exis
 
 ## 3. Non-goals (v1)
 
-- Container / cascade deletes (journal list, todo list, calendar list, study deck/folder). These are restorable from the trash instead (`TRASH_HLD.md`).
+- Container / cascade deletes (journal list, todo list, calendar list). These are restorable from the trash instead (`TRASH_HLD.md`). A Study deck or folder delete has the toast since BUG-188; its Undo goes through the trash.
 - Study workbench **multi-select** batch delete.
 - Finance modal deletes (category, budget, goal, subscription, asset).
 - Settings mutations (snippets, quotes, dictionary, petal colors).
@@ -54,6 +54,7 @@ Most soft deletes in Voyager end silently after a confirm dialog (where one exis
 | **Study** | Delete single card | Yes | Yes | + media restore |
 | **Study** | Delete card from session / cram | Yes | Yes | Advance session after delete; undo restores card |
 | **Study** | Multi-select delete (workbench) | **No** | — | Explicitly excluded |
+| **Study** | Delete deck / folder (library, workbench) | Yes (BUG-188) | Yes | Undo is `TrashService.restore` on the deck or folder: subfolders, decks, cards, links and images |
 | **LeetCode** | Delete tracked problem | Yes | Yes | |
 | **LeetCode** | Delete from session / cram | Yes | Yes | |
 | **Rankings** | Delete parent / child / category | Yes (done) | Yes | Refactor onto shared helper |

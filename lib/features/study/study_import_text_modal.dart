@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
@@ -30,6 +32,9 @@ Future<void> showStudyImportTextModal(
   final outcome = await showVoyagerModal<_ImportOutcome>(
     context: context,
     kind: VoyagerSheetKind.editor,
+    // Android's drag-to-dismiss goes through the "Discard" check, as Back
+    // does. Desktop opens a dialog, which doesn't drag.
+    dragAsksFirst: true,
     builder: (ctx) => ProviderScope(
       parent: ProviderScope.containerOf(context),
       child: _StudyImportTextModal(deckId: deckId),
@@ -69,6 +74,9 @@ class _StudyImportTextModalState extends ConsumerState<_StudyImportTextModal> {
   );
   bool _importing = false;
 
+  /// "Discard pasted cards?" is up — see [_requestClose].
+  bool _confirmingClose = false;
+
   @override
   void initState() {
     super.initState();
@@ -101,10 +109,15 @@ class _StudyImportTextModalState extends ConsumerState<_StudyImportTextModal> {
     final remoteSync = ref.read(remoteSyncServiceProvider);
 
     try {
-      for (final entry in cards) {
+      for (final (index, entry) in cards.indexed) {
         final card = StudyCard(
           id: newId(),
-          createdAt: now,
+          // A millisecond apart, in paste order and none after `now`: one
+          // shared stamp tied every card on every sort key, and the grid
+          // came out scrambled (BUG-190).
+          createdAt: now.subtract(
+            Duration(milliseconds: cards.length - 1 - index),
+          ),
           updatedAt: now,
           deckId: widget.deckId,
           frontText: entry.front,
@@ -146,6 +159,26 @@ class _StudyImportTextModalState extends ConsumerState<_StudyImportTextModal> {
     }
   }
 
+  /// Esc, a click outside and the close X: a pasted list has no draft, so
+  /// closing over one asks first (BUG-186).
+  Future<void> _requestClose() async {
+    if (_importing || _confirmingClose) return;
+    if (_controller.text.trim().isEmpty) {
+      Navigator.of(context).pop();
+      return;
+    }
+    _confirmingClose = true;
+    final discard = await showConfirmDialog(
+      context,
+      title: 'Discard pasted cards?',
+      message: "These cards haven't been imported.",
+      cancelLabel: 'Keep editing',
+      confirmLabel: 'Discard',
+    );
+    _confirmingClose = false;
+    if (discard && mounted) Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -168,7 +201,7 @@ class _StudyImportTextModalState extends ConsumerState<_StudyImportTextModal> {
                   Text('Import cards', style: theme.textTheme.titleMedium),
                   const Spacer(),
                   IconButton(
-                    onPressed: Navigator.of(context).pop,
+                    onPressed: _requestClose,
                     icon: const Icon(PhosphorIconsRegular.x, size: 18),
                     tooltip: 'Close',
                     padding: EdgeInsets.zero,
@@ -248,7 +281,14 @@ class _StudyImportTextModalState extends ConsumerState<_StudyImportTextModal> {
         ),
       ),
     );
-    return CtrlEnterToSubmitScope(onSubmit: _import, child: sheet);
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _requestClose();
+      },
+      child: CtrlEnterToSubmitScope(onSubmit: _import, child: sheet),
+    );
   }
 
   String _previewSummary() {
@@ -270,48 +310,58 @@ Future<void> _showSkippedLinesDialog(
   final theme = Theme.of(context);
   return showVoyagerDialog<void>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(
-        'Skipped ${skipped.length} line${skipped.length == 1 ? '' : 's'}',
-      ),
-      content: SizedBox(
-        width: 420,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 360),
-          child: VoyagerScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final line in skipped) ...[
-                  Text(
-                    'Line ${line.lineNumber}: ${line.reason}',
-                    style: theme.textTheme.labelLarge,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    line.rawLine,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.65,
+    // Enter answers OK, as on the confirm dialogs (BUG-189).
+    builder: (ctx) => CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.enter): () =>
+            Navigator.pop(ctx),
+      },
+      child: Focus(
+        autofocus: true,
+        child: AlertDialog(
+          title: Text(
+            'Skipped ${skipped.length} line${skipped.length == 1 ? '' : 's'}',
+          ),
+          content: SizedBox(
+            width: 420,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 360),
+              child: VoyagerScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final line in skipped) ...[
+                      Text(
+                        'Line ${line.lineNumber}: ${line.reason}',
+                        style: theme.textTheme.labelLarge,
                       ),
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-              ],
+                      const SizedBox(height: 2),
+                      Text(
+                        line.rawLine,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.65,
+                          ),
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
+          actions: [
+            GlassButton(
+              onPressed: () => Navigator.pop(ctx),
+              label: 'OK',
+              dense: true,
+            ),
+          ],
         ),
       ),
-      actions: [
-        GlassButton(
-          onPressed: () => Navigator.pop(ctx),
-          label: 'OK',
-          dense: true,
-        ),
-      ],
     ),
   );
 }

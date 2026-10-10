@@ -168,6 +168,18 @@ class ContextMenuRegionState extends State<ContextMenuRegion> {
   }
 }
 
+int _openContextMenus = 0;
+
+/// Whether a right-click menu is on screen anywhere in the app.
+///
+/// The menu is an [OverlayEntry], not a route, so a page's route stays current
+/// under it. Every [HardwareKeyboard] handler hears the Esc that closes it, so
+/// one whose key would also act on the page — leaving it, say — consults
+/// this, as it does `mediaLightboxIsOpen`. The count drops as the menu
+/// unmounts, a frame after that Esc, so every handler of the keypress still
+/// reads it open, whichever order they run in.
+bool get contextMenuIsOpen => _openContextMenus > 0;
+
 // ---------------------------------------------------------------------------
 // Internal overlay widget
 // ---------------------------------------------------------------------------
@@ -200,10 +212,6 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
   final GlobalKey _menuKey = GlobalKey();
   final GlobalKey _submenuKey = GlobalKey();
 
-  // FocusNode stored in state so it is created ONCE and disposed properly.
-  // Creating it inside build() leaked nodes and caused focus churn on hover.
-  late final FocusNode _focusNode;
-
   int? _hoveredIndex;
   int? _hoveredSubIndex;
 
@@ -226,7 +234,10 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
   @override
   void initState() {
     super.initState();
-    _focusNode = FocusNode();
+    _openContextMenus++;
+    // Esc through the keyboard itself rather than a focus node: the page under
+    // the menu keeps focus, so a listener that waited for it never heard Esc.
+    HardwareKeyboard.instance.addHandler(_handleKey);
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 220),
@@ -249,9 +260,19 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
 
   @override
   void dispose() {
+    _openContextMenus--;
+    HardwareKeyboard.instance.removeHandler(_handleKey);
     _controller.dispose();
-    _focusNode.dispose();
     super.dispose();
+  }
+
+  bool _handleKey(KeyEvent event) {
+    if (event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.escape) {
+      return false;
+    }
+    _dismiss();
+    return true;
   }
 
   /// Dismiss the menu SYNCHRONOUSLY — removes the overlay entry immediately
@@ -351,53 +372,43 @@ class _ContextMenuOverlayState extends State<_ContextMenuOverlay>
   @override
   Widget build(BuildContext context) {
     return widget.capturedThemes.wrap(
-      KeyboardListener(
-        focusNode: _focusNode,
-        autofocus: true,
-        onKeyEvent: (event) {
-          if (event is KeyDownEvent &&
-              event.logicalKey == LogicalKeyboardKey.escape) {
-            _dismiss();
-          }
-        },
-        child: Listener(
-          onPointerMove: _handlePointerMove,
-          behavior: HitTestBehavior.translucent,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Transparent full-screen barrier.
-              // We use Listener with onPointerDown so any click anywhere (even if absorbed by
-              // a child widget's gesture recognizer) will dismiss the menu immediately.
-              Listener(
-                onPointerDown: _handlePointerDown,
-                behavior: HitTestBehavior.translucent,
-                child: const SizedBox.expand(),
+      Listener(
+        onPointerMove: _handlePointerMove,
+        behavior: HitTestBehavior.translucent,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Transparent full-screen barrier.
+            // We use Listener with onPointerDown so any click anywhere (even if absorbed by
+            // a child widget's gesture recognizer) will dismiss the menu immediately.
+            Listener(
+              onPointerDown: _handlePointerDown,
+              behavior: HitTestBehavior.translucent,
+              child: const SizedBox.expand(),
+            ),
+            // The positioned, animated menu.
+            CustomSingleChildLayout(
+              delegate: _ContextMenuLayoutDelegate(
+                anchor: widget.anchor,
+                minWidth: _minWidth,
               ),
-              // The positioned, animated menu.
-              CustomSingleChildLayout(
-                delegate: _ContextMenuLayoutDelegate(
-                  anchor: widget.anchor,
-                  minWidth: _minWidth,
-                ),
-                child: FadeTransition(
-                  opacity: _anim,
-                  child: ScaleTransition(
-                    // Anchored to the pointer position that opened the menu
-                    // (topLeft of the panel sits at the anchor — see
-                    // _ContextMenuLayoutDelegate), so the menu visibly grows
-                    // from the right-click point instead of its own center.
-                    scale: Tween<double>(begin: 0.92, end: 1.0).animate(_anim),
-                    alignment: Alignment.topLeft,
-                    child: _buildRootMenu(context),
-                  ),
+              child: FadeTransition(
+                opacity: _anim,
+                child: ScaleTransition(
+                  // Anchored to the pointer position that opened the menu
+                  // (topLeft of the panel sits at the anchor — see
+                  // _ContextMenuLayoutDelegate), so the menu visibly grows
+                  // from the right-click point instead of its own center.
+                  scale: Tween<double>(begin: 0.92, end: 1.0).animate(_anim),
+                  alignment: Alignment.topLeft,
+                  child: _buildRootMenu(context),
                 ),
               ),
-              // The submenu flyout (if any) anchored to the parent tile.
-              if (_openSubmenuIndex != null && _submenuAnchor != null)
-                _buildSubmenu(context),
-            ],
-          ),
+            ),
+            // The submenu flyout (if any) anchored to the parent tile.
+            if (_openSubmenuIndex != null && _submenuAnchor != null)
+              _buildSubmenu(context),
+          ],
         ),
       ),
     );

@@ -167,6 +167,8 @@ If many wide names crowd the row, ellipsize chip labels aggressively; do not wra
 
 > **Revised at implementation (2026-09-10).** "Chart yields first" would have erased the sparkline at ~1280–1500px windows once three chips were set. Instead the chart keeps a **140px floor**; chips that cannot show at least ~90px move into the overflow menu (leading snippets stay chips, so order is still the priority). With room, it is exactly §7.2's 3 + overflow. Chip cap is 160px.
 
+> **Revised again (2026-10-09, BUG-184).** At ~90px a chip read "Acme - …", and two snippets sharing a prefix were identical chips. A chip now shows its whole name, up to the 160px cap, or moves into the overflow menu; chips are never cut to fit. Tooltips are off app-wide, so the Jobs header turns them back on for its own chips and icons.
+
 ---
 
 ## 8. Settings UI

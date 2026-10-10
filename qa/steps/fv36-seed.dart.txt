@@ -1,0 +1,18 @@
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(jobRepositoryProvider);
+final sr = c.read(studyRepositoryProvider);
+final now = DateTime.now().toUtc();
+final today = DateTime.now();
+await jr.ensureSeeded();
+JobApplication app(String id, String company, String title, String status, DateTime date) => JobApplication(id: id, company: company, title: title, status: status, dateApplied: date, seasonIds: const [], notes: 'Referral from a friend; follow up after the onsite', createdAt: now, updatedAt: now);
+final apps = [app('fv36-visa', 'Visa', 'Software Engineer Intern', 'Interview', DateTime(2026, 10, 2)), app('fv36-stripe', 'Stripe', 'Backend Engineer', 'Online Assessment', DateTime(2026, 9, 30)), app('fv36-hooli', 'Hooli', 'Platform Engineer', 'Applied', DateTime(today.year, today.month, today.day)), app('fv36-initech', 'Initech', 'QA Analyst', 'Phone Screen', DateTime(2026, 9, 28)), app('fv36-globex', 'Globex', 'Backend SWE', 'Onsite', DateTime(2026, 9, 25)), app('fv36-umbrella', 'Umbrella', 'Data Engineer', 'Rejected', DateTime(2026, 9, 20))];
+for (final a in apps) { final co = await jr.writeApplication(a, registerCompany: a.company); r.pushJobApplication(a); if (co != null) r.pushJobCompany(co); }
+final math = StudyFolder(id: 'fv36-math', name: 'Math', createdAt: now, updatedAt: now);
+final alg = StudyFolder(id: 'fv36-alg', name: 'Algebra', parentFolderId: 'fv36-math', createdAt: now, updatedAt: now);
+for (final f in [math, alg]) { await sr.upsertFolder(f); r.pushStudyFolder(f); }
+final decks = [StudyDeck(id: 'fv36-calc', name: 'Calc', parentFolderId: 'fv36-math', createdAt: now, updatedAt: now), StudyDeck(id: 'fv36-nested', name: 'Nested', parentFolderId: 'fv36-alg', createdAt: now, updatedAt: now), StudyDeck(id: 'fv36-root', name: 'Root deck', createdAt: now, updatedAt: now)];
+for (final d in decks) { await sr.upsertDeck(d); r.pushStudyDeck(d); }
+StudyCard card(String id, String deck, String front) => StudyCard(id: id, deckId: deck, frontText: front, backText: 'Back of $front', dueAt: now, createdAt: now, updatedAt: now);
+final cards = [card('fv36-c1', 'fv36-calc', 'Derivative of x^2'), card('fv36-n1', 'fv36-nested', 'Nested one'), card('fv36-n2', 'fv36-nested', 'Nested two'), card('fv36-r1', 'fv36-root', r'Area $\pi r^2$')];
+for (final k in cards) { await sr.upsertCard(k); r.pushStudyCard(k); }
+invalidateAllDataProvidersIn(c);

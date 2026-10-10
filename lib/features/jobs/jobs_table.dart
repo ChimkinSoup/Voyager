@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/voyager_prose_text.dart';
@@ -9,34 +12,271 @@ import 'package:voyager/features/jobs/job_clipboard_parser.dart';
 import 'package:voyager/features/jobs/jobs_providers.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 
-/// Relative widths of the flat table's columns (§3.2). Color is a fixed-width
-/// swatch gutter; the rest share the remaining space by flex.
+/// Relative widths of the flat table's free-text columns (§3.2). Color is a
+/// fixed-width swatch gutter, and Status and Date applied are sized to what
+/// they show — see [jobColumnWidths].
 const _columnFlex = <JobColumn, int>{
   JobColumn.company: 2,
   JobColumn.title: 5,
-  JobColumn.status: 2,
-  JobColumn.dateApplied: 2,
   JobColumn.season: 2,
   JobColumn.notes: 4,
 };
 
 const _colorColumnWidth = 22.0;
 const _warningColumnWidth = 22.0;
+const _archiveColumnWidth = 28.0;
+const _rowHorizontalPadding = 20.0;
 
-class JobsTableHeader extends StatelessWidget {
-  const JobsTableHeader({super.key, required this.columns});
+/// The space after every cell.
+const _cellGap = 12.0;
 
-  final List<JobColumn> columns;
+/// A status capsule's padding and border, around its label.
+const _statusCapsuleChrome = 8.0 * 2 + 2;
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final style = theme.textTheme.labelSmall?.copyWith(
+/// The widest a status capsule grows; a longer stage name ellipsizes.
+const _statusCapsuleMaxWidth = 160.0;
+
+TextStyle? _headerStyle(ThemeData theme) =>
+    theme.textTheme.labelSmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
       fontWeight: FontWeight.w600,
     );
+
+String _dateLabel(JobApplication application) =>
+    DateFormat.yMMMd().format(jobDayKey(application.dateApplied));
+
+String _statusLabel(JobApplication application) =>
+    application.status.isEmpty ? '—' : application.status;
+
+/// What [jobColumnWidths] needs measured, none of which depends on the
+/// table's width: each shown column's header, and the widest date and status
+/// capsule among the rows.
+class JobColumnMeasures {
+  const JobColumnMeasures._({required this.floors, required this.content});
+
+  /// Each shown column's header width, its trailing gap included — the
+  /// narrowest a free-text column goes while there is room.
+  final Map<JobColumn, double> floors;
+
+  /// Date applied's and Status's widths, sized to the widest of their values.
+  final Map<JobColumn, double> content;
+}
+
+/// Measures for [jobColumnWidths], kept until the columns, the labels or the
+/// text style change. Laying text out is the costly part: the table's width
+/// changes every frame while the editor panel slides, and the page rebuilds
+/// on a selection or a keystroke in search.
+class JobColumnMeasurer {
+  _MeasureKey? _key;
+  JobColumnMeasures? _measures;
+
+  JobColumnMeasures measure(
+    BuildContext context, {
+    required List<JobColumn> columns,
+    required List<JobApplication> rows,
+  }) {
+    final theme = Theme.of(context);
+    final key = _MeasureKey(
+      columns: columns,
+      dates: {
+        if (columns.contains(JobColumn.dateApplied))
+          for (final row in rows) _dateLabel(row),
+      },
+      statuses: {
+        if (columns.contains(JobColumn.status))
+          for (final row in rows) _statusLabel(row),
+      },
+      base: DefaultTextStyle.of(context).style,
+      headerStyle: _headerStyle(theme),
+      dateStyle: theme.textTheme.bodySmall,
+      statusStyle: theme.textTheme.labelSmall,
+      scaler: MediaQuery.textScalerOf(context),
+    );
+    final cached = _measures;
+    if (cached != null && key == _key) return cached;
+    _key = key;
+    return _measures = _measureJobColumns(key);
+  }
+}
+
+class _MeasureKey {
+  const _MeasureKey({
+    required this.columns,
+    required this.dates,
+    required this.statuses,
+    required this.base,
+    required this.headerStyle,
+    required this.dateStyle,
+    required this.statusStyle,
+    required this.scaler,
+  });
+
+  final List<JobColumn> columns;
+  final Set<String> dates;
+  final Set<String> statuses;
+  final TextStyle base;
+  final TextStyle? headerStyle;
+  final TextStyle? dateStyle;
+  final TextStyle? statusStyle;
+  final TextScaler scaler;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _MeasureKey &&
+      listEquals(other.columns, columns) &&
+      setEquals(other.dates, dates) &&
+      setEquals(other.statuses, statuses) &&
+      other.base == base &&
+      other.headerStyle == headerStyle &&
+      other.dateStyle == dateStyle &&
+      other.statusStyle == statusStyle &&
+      other.scaler == scaler;
+
+  @override
+  int get hashCode => Object.hash(
+    Object.hashAll(columns),
+    dates.length,
+    statuses.length,
+    base,
+    headerStyle,
+    dateStyle,
+    statusStyle,
+    scaler,
+  );
+}
+
+JobColumnMeasures _measureJobColumns(_MeasureKey key) {
+  double measure(String text, TextStyle? style) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: key.base.merge(style)),
+      textDirection: TextDirection.ltr,
+      textScaler: key.scaler,
+      maxLines: 1,
+    )..layout();
+    // Rounded up so a cell given exactly its text's width never ellipsizes
+    // over a fraction of a pixel.
+    final width = painter.width.ceilToDouble();
+    painter.dispose();
+    return width;
+  }
+
+  final floors = {
+    for (final column in key.columns)
+      if (column != JobColumn.color)
+        column: measure(column.label, key.headerStyle) + _cellGap,
+  };
+  final content = <JobColumn, double>{};
+  if (floors.containsKey(JobColumn.dateApplied)) {
+    var widest = floors[JobColumn.dateApplied]!;
+    for (final label in key.dates) {
+      widest = math.max(widest, measure(label, key.dateStyle) + _cellGap);
+    }
+    content[JobColumn.dateApplied] = widest;
+  }
+  if (floors.containsKey(JobColumn.status)) {
+    var widest = floors[JobColumn.status]!;
+    for (final label in key.statuses) {
+      final capsule = measure(label, key.statusStyle) + _statusCapsuleChrome;
+      widest = math.max(
+        widest,
+        math.min(capsule, _statusCapsuleMaxWidth) + _cellGap,
+      );
+    }
+    content[JobColumn.status] = widest;
+  }
+  return JobColumnMeasures._(floors: floors, content: content);
+}
+
+/// Each shown column's width, its trailing gap included, for a table
+/// [tableWidth] wide (BUG-181).
+///
+/// Date applied and Status take the width of the widest date and status
+/// capsule among the rows, so neither is cut when the editor panel or a small
+/// window narrows the table. The free-text columns share what is left by
+/// [_columnFlex], none narrower than its own header, which would otherwise
+/// break mid-word. When even that doesn't fit they share it and ellipsize,
+/// down to half their headers' width; narrower still, every column gives way
+/// in proportion, so none is squeezed out altogether.
+Map<JobColumn, double> jobColumnWidths(
+  JobColumnMeasures measures, {
+  required double tableWidth,
+  required List<JobColumn> columns,
+}) {
+  final floors = measures.floors;
+  final widths = Map.of(measures.content);
+  final flexible = [
+    for (final column in columns)
+      if (column != JobColumn.color && !widths.containsKey(column)) column,
+  ];
+
+  final available =
+      tableWidth -
+      _rowHorizontalPadding * 2 -
+      _warningColumnWidth -
+      (columns.contains(JobColumn.color) ? _colorColumnWidth : 0) -
+      _archiveColumnWidth;
+  final fixed = widths.values.fold<double>(0, (sum, width) => sum + width);
+  final keep =
+      flexible.fold<double>(0, (sum, column) => sum + floors[column]!) / 2;
+  var rest = available - fixed;
+  if (rest < keep) {
+    final scale = math.max(0.0, available) / (fixed + keep);
+    widths.updateAll((_, width) => width * scale);
+    rest = keep * scale;
+  }
+  // Water-fill: a column whose share is under its header takes the header's
+  // width, and the rest share what that leaves.
+  while (true) {
+    final totalFlex = flexible.fold<int>(
+      0,
+      (sum, column) => sum + _columnFlex[column]!,
+    );
+    final short = [
+      for (final column in flexible)
+        if (rest * _columnFlex[column]! / totalFlex < floors[column]!) column,
+    ];
+    final shortFloors = short.fold<double>(
+      0,
+      (sum, column) => sum + floors[column]!,
+    );
+    if (short.isEmpty ||
+        short.length == flexible.length ||
+        shortFloors > rest) {
+      for (final column in flexible) {
+        widths[column] = rest * _columnFlex[column]! / totalFlex;
+      }
+      return widths;
+    }
+    for (final column in short) {
+      widths[column] = floors[column]!;
+      rest -= floors[column]!;
+      flexible.remove(column);
+    }
+  }
+}
+
+class JobsTableHeader extends StatelessWidget {
+  const JobsTableHeader({
+    super.key,
+    required this.columns,
+    required this.widths,
+  });
+
+  final List<JobColumn> columns;
+
+  /// From [jobColumnWidths].
+  final Map<JobColumn, double> widths;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = _headerStyle(Theme.of(context));
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
+      padding: const EdgeInsets.fromLTRB(
+        _rowHorizontalPadding,
+        0,
+        _rowHorizontalPadding,
+        6,
+      ),
       child: Row(
         children: [
           // Always reserved, whether or not the color column is on: the
@@ -47,14 +287,20 @@ class JobsTableHeader extends StatelessWidget {
             const SizedBox(width: _colorColumnWidth),
           for (final column in columns)
             if (column != JobColumn.color)
-              Expanded(
-                flex: _columnFlex[column]!,
+              SizedBox(
+                width: widths[column],
                 child: Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: Text(column.label, style: style),
+                  padding: const EdgeInsets.only(right: _cellGap),
+                  child: Text(
+                    column.label,
+                    style: style,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
-          const SizedBox(width: 28),
+          const SizedBox(width: _archiveColumnWidth),
         ],
       ),
     );
@@ -148,6 +394,7 @@ class JobsTableRow extends StatelessWidget {
     super.key,
     required this.application,
     required this.columns,
+    required this.widths,
     required this.color,
     required this.statusColor,
     required this.isDuplicate,
@@ -161,6 +408,9 @@ class JobsTableRow extends StatelessWidget {
 
   final JobApplication application;
   final List<JobColumn> columns;
+
+  /// From [jobColumnWidths].
+  final Map<JobColumn, double> widths;
 
   /// The category colour of the application's company, or the neutral default
   /// when the company is uncategorised or unrecognised (§4.5).
@@ -204,7 +454,10 @@ class JobsTableRow extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 9),
+            padding: const EdgeInsets.symmetric(
+              horizontal: _rowHorizontalPadding,
+              vertical: 9,
+            ),
             decoration: BoxDecoration(
               color: isSelected
                   ? theme.colorScheme.primary.withValues(alpha: 0.08)
@@ -251,15 +504,15 @@ class JobsTableRow extends StatelessWidget {
                   ),
                 for (final column in columns)
                   if (column != JobColumn.color)
-                    Expanded(
-                      flex: _columnFlex[column]!,
+                    SizedBox(
+                      width: widths[column],
                       child: Padding(
-                        padding: const EdgeInsets.only(right: 12),
+                        padding: const EdgeInsets.only(right: _cellGap),
                         child: _cell(context, column),
                       ),
                     ),
                 SizedBox(
-                  width: 28,
+                  width: _archiveColumnWidth,
                   child: isArchived
                       ? Tooltip(
                           message: seasonNames.isEmpty
@@ -332,7 +585,7 @@ class JobsTableRow extends StatelessWidget {
                     ),
                   ),
                   child: Text(
-                    application.status.isEmpty ? '—' : application.status,
+                    _statusLabel(application),
                     style: theme.textTheme.labelSmall,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -343,7 +596,7 @@ class JobsTableRow extends StatelessWidget {
         );
       case JobColumn.dateApplied:
         return Text(
-          DateFormat.yMMMd().format(jobDayKey(application.dateApplied)),
+          _dateLabel(application),
           style: muted,
           overflow: TextOverflow.ellipsis,
         );

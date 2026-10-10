@@ -12,6 +12,7 @@ import 'package:voyager/core/media/widgets/media_gallery_strip.dart';
 import 'package:voyager/core/media/widgets/media_paste_scope.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/ctrl_enter_to_submit_scope.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/glass_surface.dart';
@@ -41,6 +42,9 @@ Future<void> showStudyCardEditorModal(
   return showVoyagerModal<void>(
     context: context,
     kind: VoyagerSheetKind.editor,
+    // Android's drag-to-dismiss goes through the "Discard changes?" check,
+    // as Back does (BUG-186). Desktop opens a dialog, which doesn't drag.
+    dragAsksFirst: true,
     // The opener's own container, not a child one: a scope that owned its
     // container would dispose it as the sheet closes — which the trash button
     // does straight after deleting — and the toast's Undo reads through it.
@@ -82,6 +86,9 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
 
   bool _saving = false;
   bool _saved = false;
+
+  /// "Discard changes?" is up — see [_requestClose].
+  bool _confirmingClose = false;
 
   @override
   void initState() {
@@ -180,6 +187,48 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
     }
   }
 
+  /// Whether closing now would lose something: typing that differs from what
+  /// the card opened with, or — on a new card, whose images go with it — any
+  /// text or image at all.
+  bool _hasChanges() {
+    final existing = widget.existing;
+    if (existing == null) {
+      final images = ref.read(studyCardImagesProvider).valueOrNull?[_cardId];
+      return _front.text.trim().isNotEmpty ||
+          _back.text.trim().isNotEmpty ||
+          (images != null &&
+              (images.front.isNotEmpty || images.back.isNotEmpty));
+    }
+    // Trimmed like the save, so a stray space alone is no change.
+    return _front.text.trim() != existing.frontText ||
+        _back.text.trim() != existing.backText;
+  }
+
+  /// Esc, a click outside and the close X all land here. There is no draft
+  /// for a card, so closing one with changes asks first (BUG-186), as the
+  /// LeetCode form does (BUG-144).
+  Future<void> _requestClose() async {
+    // A save in flight closes the sheet itself; a second request while the
+    // confirm is up would stack another one.
+    if (_saving || _confirmingClose) return;
+    if (!_hasChanges()) {
+      Navigator.of(context).pop();
+      return;
+    }
+    _confirmingClose = true;
+    final discard = await showConfirmDialog(
+      context,
+      title: 'Discard changes?',
+      message: widget.existing == null
+          ? "This card hasn't been saved."
+          : "Your changes to this card haven't been saved.",
+      cancelLabel: 'Keep editing',
+      confirmLabel: 'Discard',
+    );
+    _confirmingClose = false;
+    if (discard && mounted) Navigator.of(context).pop();
+  }
+
   Future<void> _delete() async {
     final existing = widget.existing;
     if (existing == null) return;
@@ -274,7 +323,7 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
                       constraints: kMinTouchTarget,
                     ),
                   IconButton(
-                    onPressed: Navigator.of(context).pop,
+                    onPressed: _requestClose,
                     icon: const Icon(PhosphorIconsRegular.x, size: 18),
                     tooltip: 'Close',
                     padding: EdgeInsets.zero,
@@ -326,11 +375,18 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
     // Gated like the button: _save itself doesn't check that both faces are
     // filled. Checked on press rather than handed a build-time verdict, which
     // no longer refreshes on every keystroke.
-    return CtrlEnterToSubmitScope(
-      onSubmit: () {
-        if (canSave()) _save();
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _requestClose();
       },
-      child: sheet,
+      child: CtrlEnterToSubmitScope(
+        onSubmit: () {
+          if (canSave()) _save();
+        },
+        child: sheet,
+      ),
     );
   }
 }
@@ -367,7 +423,6 @@ class _CardSide extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final hasLatex = controller.text.contains(r'$');
 
     return MediaDropTarget(
       collection: FirestoreCollections.studyCards,
@@ -395,22 +450,40 @@ class _CardSide extends ConsumerWidget {
               minLines: 2,
               decoration: InputDecoration(labelText: label, hintText: hintText),
             ),
-            if (images.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              SizedBox(
-                height: _previewHeight,
-                child: StudyCardFace(
-                  text: controller.text,
-                  images: images,
-                  compact: true,
-                  style: theme.textTheme.bodySmall,
-                ),
-              ),
-            ] else if (hasLatex ||
-                stripStudyMediaTokens(controller.text) != controller.text) ...[
-              const SizedBox(height: 6),
-              StudyRichText(controller.text, style: theme.textTheme.bodySmall),
-            ],
+            // Rebuilt with the text, and only this: the sheet itself doesn't
+            // rebuild per keystroke (see its build), which left the preview
+            // showing the text the card opened with (BUG-187).
+            ListenableBuilder(
+              listenable: controller,
+              builder: (context, _) {
+                final text = controller.text;
+                if (images.isNotEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: SizedBox(
+                      height: _previewHeight,
+                      child: StudyCardFace(
+                        text: text,
+                        images: images,
+                        compact: true,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  );
+                }
+                if (text.contains(r'$') ||
+                    stripStudyMediaTokens(text) != text) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: StudyRichText(
+                      text,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+            ),
             const SizedBox(height: 8),
             if (images.isEmpty)
               _AddImageButton(cardId: cardId, facet: facet)
