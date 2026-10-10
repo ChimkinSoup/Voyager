@@ -7136,6 +7136,27 @@ class DriftJobRepository implements JobRepository {
   }
 
   @override
+  Future<({JobStage stage, List<JobApplication> applications})> renameStage(
+    JobStage stage,
+    String name,
+  ) => _db.transaction(() async {
+    final renamed = stage.copyWith(name: name);
+    await upsertStage(renamed);
+    final moved = [
+      for (final application in await listApplications(includeDeleted: true))
+        if (application.status == stage.name)
+          application.copyWith(status: name),
+    ];
+    for (final application in moved) {
+      await upsertApplication(application, recordLocalActivity: false);
+    }
+    if (moved.isNotEmpty) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.jobApplications);
+    }
+    return (stage: renamed, applications: moved);
+  });
+
+  @override
   Future<List<JobStage>> reorderStages(List<String> orderedIds) async {
     final stages = await listStages();
     final byId = {for (final stage in stages) stage.id: stage};

@@ -305,9 +305,11 @@ That is enough to turn “copy title, switch, copy URL, switch” into “copy o
 Three points §6 and §8 left to the implementation, and how they were settled:
 
 - **Parse budget.** The first of the two policies: the first `500` characters
-  (`kJobClipboardParseBudget`), cut back to the last whitespace so the budget can
-  never end halfway through a link and hand the URL field one that goes nowhere.
-  No line analysis, and a title plus a link never come close to the cap.
+  (`kJobClipboardParseBudget`). A link the budget lands in runs on to its end
+  (up to `kJobClipboardLinkLimit`, 4,096 characters), so the budget can never
+  end halfway through a link and hand the URL field one that goes nowhere: a
+  tracking-laden link longer than 500 characters arrives whole. Anything else
+  is cut back to the last whitespace. No line analysis.
 - **Chip scope.** The “From clipboard” chip marks *any* field this feature wrote
   — sniff or smart paste — not just a sniff. A paste into Title that lands a URL
   in the URL box is exactly as surprising as a sniff is, and one dismiss covers

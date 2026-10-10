@@ -398,11 +398,15 @@ class _ExperienceEditorDialogState extends State<_ExperienceEditorDialog> {
             ),
             const SizedBox(height: 6),
             // Only the status under the field follows each keystroke; the
-            // fields themselves are not rebuilt by it.
-            ValueListenableBuilder<TextEditingValue>(
-              valueListenable: _description,
-              builder: (context, value, _) =>
-                  _DescriptionStatus(text: value.text),
+            // fields themselves are not rebuilt by it. Part of the field for
+            // taps, so "Details" leaves the caret where it was and Ctrl+Enter
+            // still saves (BUG-179).
+            TextFieldTapRegion(
+              child: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _description,
+                builder: (context, value, _) =>
+                    _DescriptionStatus(text: value.text),
+              ),
             ),
           ],
         ),

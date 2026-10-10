@@ -234,6 +234,30 @@ List<String> jobRecentCompanyKeys(Iterable<JobApplication> applications) {
   ];
 }
 
+/// Whether a stage in [stages] already has [name], case and surrounding space
+/// ignored: a status is matched by name, so two stages sharing one would both
+/// claim every application on it.
+bool jobStageNameTaken(Iterable<JobStage> stages, String name) {
+  final key = jobCompanyKey(name);
+  return stages.any((stage) => jobCompanyKey(stage.name) == key);
+}
+
+/// The companies the typeahead may offer (§4.4): every seeded one, and a
+/// user-added one only while an application still names it. So a typo is
+/// gone from the suggestions once the applications that carry it are deleted
+/// or corrected (BUG-177).
+List<JobCompany> jobSuggestedCompanies(
+  List<JobCompany> companies,
+  List<String> recentKeys,
+) {
+  final used = recentKeys.toSet();
+  return [
+    for (final company in companies)
+      if (isJobSeedId(company.id) || used.contains(jobCompanyKey(company.name)))
+        company,
+  ];
+}
+
 /// Case-insensitive substring match over the company suggestion list (§4.4),
 /// with the user's own companies ranked ahead of the seeded catalogue.
 ///

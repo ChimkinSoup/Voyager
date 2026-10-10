@@ -87,11 +87,25 @@ void main() {
   test('the budget never cuts a link in half', () {
     // The link starts inside the budget and ends past it.
     final padding = 'word ' * 98;
-    final parsed = parseJobClipboard(
-      '$padding https://example.com/${'a' * 60}',
-    );
-    expect(parsed.url, isNull);
-    expect(parsed.title, isNot(contains('example.com')));
+    final link = 'https://example.com/${'a' * 60}';
+    final parsed = parseJobClipboard('$padding $link more words after');
+    expect(parsed.url, link);
+    expect(parsed.title, isNot(contains('after')));
+  });
+
+  test('text with no spaces is still cut to the budget', () {
+    final parsed = parseJobClipboard('x' * 20000);
+    expect(parsed.title!.length, lessThanOrEqualTo(kJobClipboardParseBudget));
+    final link = parseJobClipboard('https://example.com/${'p' * 20000}');
+    expect(link.url, isNull);
+  });
+
+  test('BUG-174: a link longer than the budget arrives whole', () {
+    final link = 'https://jobs.example.com/apply?token=${'a' * 560}&end=1';
+    expect(parseJobClipboard(link).url, link);
+    final titled = parseJobClipboard('T https://example.com/${'p' * 600}');
+    expect(titled.url, 'https://example.com/${'p' * 600}');
+    expect(titled.title, 'T');
   });
 
   test('a scheme glued to the front of the title is not the link', () {

@@ -1018,6 +1018,15 @@ abstract class JobRepository {
   /// written, for the caller to push. Null when there was no live stage.
   Future<JobStage?> softDeleteStage(String id);
 
+  /// Renames [stage] to [name] and moves every application on its old name
+  /// there, in one transaction. Deleted applications move too, so an Undo or
+  /// a Trash restore brings one back on the new name. Returns what was
+  /// written, for the caller to push.
+  Future<({JobStage stage, List<JobApplication> applications})> renameStage(
+    JobStage stage,
+    String name,
+  );
+
   /// Rewrites [sortOrder] across [orderedIds] in one transaction. Returns the
   /// stages it wrote so the caller can push them.
   Future<List<JobStage>> reorderStages(List<String> orderedIds);

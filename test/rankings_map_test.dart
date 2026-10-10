@@ -964,7 +964,7 @@ void main() {
       buttons: kSecondaryButton,
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add this location to an existing entry…'));
+    await tester.tap(find.text('Add to an existing entry…'));
     await tester.pumpAndSettle();
     // The picker holds the whole scope, the entry with no pin included.
     await tester.enterText(labeledField('Search entries'), 'enn');
@@ -1021,7 +1021,7 @@ void main() {
       buttons: kSecondaryButton,
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Add this location to an existing entry…'));
+    await tester.tap(find.text('Add to an existing entry…'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ennio'));
     await tester.pump();
@@ -1144,9 +1144,10 @@ void main() {
       fakeDevice(tester, recent: () => recent, fresh: () => fresh.future);
       await pumpRankingsPage(tester, seed: seedOnePin);
       await openMap(tester);
-      // Nothing saved and no fix yet: the pins.
+      // Nothing saved and no fix yet: the pins. A few pixels off centre in
+      // longitude, since the fit leaves more room on the buttons' side.
       expect(mapCamera(tester).center.latitude, closeTo(43.46, 1e-6));
-      expect(mapCamera(tester).center.longitude, closeTo(-80.52, 1e-6));
+      expect(mapCamera(tester).center.longitude, closeTo(-80.52, 1e-3));
 
       recent = const LatLng(42, -76);
       await tester.tap(find.byTooltip('Show my location'));
@@ -1719,6 +1720,114 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsOneWidget);
       expect((await storedParents(harness.db)).single.locations, isEmpty);
+    });
+
+    mapTest('BUG-171: a link that fails takes the earlier pin down', (
+      tester,
+    ) async {
+      await openEntry(tester);
+      await tester.tap(find.text('Add location'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        dialogInput(),
+        'https://www.google.com/maps/@43.4723,-80.5449,15z',
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(find.text('1 Reverse Street'), findsOneWidget);
+
+      await tester.enterText(
+        dialogInput(),
+        'https://www.google.com/maps/@95.0,-200.0,15z',
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(
+        find.text("Couldn't find a location in that link"),
+        findsOneWidget,
+      );
+      expect(find.text('1 Reverse Street'), findsNothing);
+      expect(
+        tester
+            .widget<GlassButton>(
+              find.ancestor(
+                of: dialogAdd(),
+                matching: find.byType(GlassButton),
+              ),
+            )
+            .enabled,
+        isFalse,
+      );
+    });
+
+    mapTest('BUG-171: a search the provider refuses does not blame the '
+        'connection', (tester) async {
+      await openEntry(
+        tester,
+        geoapify: GeoapifyClient(
+          apiKey: 'test-key',
+          httpClient: MockClient((_) async => http.Response('', 400)),
+        ),
+      );
+      await tester.tap(find.text('Add location'));
+      await tester.pumpAndSettle();
+      await tester.enterText(dialogInput(), 'x' * 5000);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(find.text("Couldn't search for that"), findsOneWidget);
+      expect(find.text('Search needs a connection'), findsNothing);
+    });
+
+    mapTest('a link that fails puts back the pin dropped before it', (
+      tester,
+    ) async {
+      final harness = await openEntry(tester);
+      await tester.tap(find.text('Add location'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(FlutterMap),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      expect(find.text('1 Reverse Street'), findsOneWidget);
+
+      await tester.enterText(
+        dialogInput(),
+        'https://www.google.com/maps/@95.0,-200.0,15z',
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(
+        find.text("Couldn't find a location in that link"),
+        findsOneWidget,
+      );
+      expect(find.text('1 Reverse Street'), findsOneWidget);
+      await tester.tap(dialogAdd());
+      await tester.pumpAndSettle();
+      expect(
+        (await storedParents(harness.db)).single.locations.single.address,
+        '1 Reverse Street',
+      );
+    });
+
+    mapTest('a search the service fails on blames neither query nor '
+        'connection', (tester) async {
+      await openEntry(
+        tester,
+        geoapify: GeoapifyClient(
+          apiKey: 'test-key',
+          httpClient: MockClient((_) async => http.Response('', 401)),
+        ),
+      );
+      await tester.tap(find.text('Add location'));
+      await tester.pumpAndSettle();
+      await tester.enterText(dialogInput(), 'pasta');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(find.text("Place search isn't working right now"), findsOneWidget);
     });
 
     mapTest('adds a place by dropping a pin on the dialog map', (tester) async {

@@ -115,7 +115,7 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ## 2. QA accounts
 
-Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 057.**
+Password for all unless noted: `qavoyager2026`. Domain `example.com` (reserved; no mail is delivered). **Next unused number: 059.**
 
 | Account | Created | Contents in its cloud copy | Notes |
 |---|---|---|---|
@@ -177,6 +177,7 @@ line2"; "P9 task 13" starred; "P9 task 29" daily, bell; holds 3 orphaned subtask
 | voyager-qa-055@example.com | 2026-10-07 (FV-32: BUG-141…150) | LeetCode: seeded `fx141-twosum` "Two Sum" (#array; progress reset, not undone), `fx141-soon` "Due Soon" (#Draft, came due 22:54), `fx141-lower` "Lower Draft" (#draft; reset then undone, v2), `fx141-f0..5` "Feed problem 0..5"; UI-made "Draft Problem v2" (#Draft #tag2). Settings: birth date June 15, 1990. Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 | voyager-qa-056@example.com | 2026-10-08 (FV-33: BUG-151…160) | LeetCode: seeded `fx151-valid1` "Valid Anagram" (Easy, python solution), `fx151-valid2` "Valid Parentheses" (Medium), `fx151-gamma` "Gamma Merge" (Medium, tag مرحبا), `fx151-delta` "Delta Long Code" (Hard, 1,200-line solution); Valid Anagram and Valid Parentheses graded Good once; a Study checkpoint left with 2 left; scratch code on. Cheat sheet tab "Java" (java). Dark + Scatter; Vim off; grade keys F/H/G/E. | Password `qavoyager2026`. |
 | voyager-qa-057@example.com | 2026-10-09 (FV-34: BUG-161…170) | Rankings: category "FV34 Shows" (`fv34-rcat`, child units, Locations on, entry out of 10 Tenths, episodes out of 5) seeded with `qa/steps/fv34-seed.dart.txt`: 24 "Seed show NN" (in progress, scored, one location each near Waterloo), "FV34 Breaking Bad" (episodes Pilot 4.5 / Ep 2 3 / Ep 3 unscored; overall now 7.5), "FV34 Queued" (now in progress, one pasted image, one location at 30 Regina St S). Category "FV34 Places" (orange, TV icon). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
+| voyager-qa-058@example.com | 2026-10-09 (FV-35: BUG-171…180) | Seeded with `qa/steps/fv35-seed.dart.txt`: Rankings category "FV35 Cafes" (`fv35-rcat`, Locations on) with "FV35 Edge" (85° N 180° E, 7.5) and "FV35 Waterloo A/B". Jobs: stage "Interview" renamed "Onsite", stage "Phone screen" added, category "Fintech Co" (green); applications Visa ×2 (shared URL `https://example.com/dup`), Beta / Software Engineer (603-char URL); `vis / QA Engineer` deleted (in trash). After the FV-35 follow-up: stage "Applied" is now "Sent" (all three applications on it), "Phone screen" was deleted and re-added (the original stays deleted). Dark + Scatter; Vim off. | Password `qavoyager2026`. |
 
 ---
 
@@ -391,6 +392,10 @@ One line per completed phase.
 ---
 
 ## 7. Handoff note
+
+**2026-10-09 (code-review follow-up to BUG-171…180):** applied items 1–9 (Juno's pick; item 10 left as is): see TEST_PLAN.md FV-35 follow-up. Full suite 4,628 passed. Re-checked on qa-058. Harness note: Juno's installed release was running signed out after the last wipe, so `session_start.ps1` tripped the sync gate (no check on a signed-out launch); `stop.ps1` → `launch.ps1` → `login.ps1` was used, as for the FV-34 follow-up. Session ended `SIGNED-OUT`.
+
+**2026-10-09 (BUG-171…180):** all ten fixed and verified in the app (TEST_PLAN.md FV-35, qa-058). BUG-175 is documentation only (JOBS.md now specifies the shared-URL duplicate warning), BUG-177 suggests a user-added company only while an application names it, and BUG-180 carries a renamed stage's applications along (Juno's calls). A failing map link drops the pin, refused searches aren't blamed on the connection, the map menu label fits, Fit clears the buttons, long pasted links survive, stage deletes have Undo, the Jobs panel says when Company / Title is blank and closes on Esc, and Jobs dialogs keep focus (stage names validated in place). The in-app run caught a regression in the first validate build (typing lost after the message: the field was remounted); fixed before the rest of the run. Summary counts updated (137 fixed, 91 open). Full suite 4,621 passed. Session ended `SIGNED-OUT`.
 
 **2026-10-09 (code-review follow-up to BUG-161…170):** applied items 1–4, 6, 7 (Juno's pick): BUG-164's promotion is app-wide (attaches that land after the panel closes, episode images, Undo restores don't count), BUG-170 reads consent-page redirects, BUG-169's patch narrowed to cancellations, stale wheel comments fixed. Full suite 4,610 passed. Re-checked on qa-057 (TEST_PLAN.md FV-34 follow-up). Harness notes: Juno's Caps Lock was on and `login.ps1` typed the account in capitals (sign-in failed); turned off for the run with a `keybd_event` VK_CAPITAL toggle and turned back on after. A `session_start.ps1` rerun after a failed login trips the sync gate (no check on a signed-out wiped launch); `stop.ps1` → `launch.ps1` → `login.ps1` is enough there. Session ended `SIGNED-OUT`.
 

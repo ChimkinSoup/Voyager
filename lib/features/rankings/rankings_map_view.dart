@@ -79,7 +79,10 @@ class RankingsMapView extends ConsumerStatefulWidget {
 
 class _RankingsMapViewState extends ConsumerState<RankingsMapView>
     with TickerProviderStateMixin {
-  static const _fitPadding = EdgeInsets.all(56);
+  /// Wider on the right, where the zoom / Fit / locate column sits: 12 from
+  /// the edge, 28 wide, then a gap and half a pin, so a fitted pin never lands
+  /// under a button (BUG-173).
+  static const _fitPadding = EdgeInsets.fromLTRB(56, 56, 72, 56);
   static const _fitMaxZoom = 16.0;
 
   /// A few streets around the device, for Locate and an empty map's opening.
@@ -543,7 +546,7 @@ class _RankingsMapViewState extends ConsumerState<RankingsMapView>
       ),
       if (widget.scope.isNotEmpty)
         ContextMenuItem(
-          label: 'Add this location to an existing entry…',
+          label: 'Add to an existing entry…',
           icon: PhosphorIconsRegular.mapPinPlus,
           onTap: () => _addToExisting(point),
         ),

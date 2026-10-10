@@ -11,9 +11,15 @@ library;
 /// A copied job description runs to thousands of characters and none of it is
 /// a role title, so past this point the text is dropped rather than folded
 /// into one. The first of §6.1's two budget policies, kept because it is the
-/// one that needs no line analysis: a posting's title and link together never
-/// come close to 500 characters.
+/// one that needs no line analysis. A link the budget ends inside is kept
+/// whole, up to [kJobClipboardLinkLimit], so a tracking-laden posting URL
+/// still arrives intact.
 const int kJobClipboardParseBudget = 500;
+
+/// How far past [kJobClipboardParseBudget] a link the budget ends inside may
+/// run. Generous for any real posting URL, and still a bound on text with no
+/// spaces in it at all.
+const int kJobClipboardLinkLimit = 4096;
 
 /// What one clipboard string turned out to hold. Either half may be null —
 /// a bare URL has no title in it, and most text has no link.
@@ -167,10 +173,17 @@ String _withinBudget(String raw) {
   final text = raw.trim();
   if (text.length <= kJobClipboardParseBudget) return text;
   final clipped = text.substring(0, kJobClipboardParseBudget);
-  // Cut back to the last whitespace so the budget can never end halfway
-  // through a link and hand the field a URL that goes nowhere.
   final lastBreak = clipped.lastIndexOf(RegExp(r'\s'));
-  return (lastBreak <= 0 ? clipped : clipped.substring(0, lastBreak)).trim();
+  final before = lastBreak <= 0 ? '' : clipped.substring(0, lastBreak).trim();
+  final nextBreak = text.indexOf(RegExp(r'\s'), kJobClipboardParseBudget);
+  final end = nextBreak < 0 ? text.length : nextBreak;
+  // A link the budget lands in runs on to its end, so the field never gets a
+  // URL that goes nowhere (BUG-174); one past the limit is left out whole.
+  if (_isUrlToken(text.substring(lastBreak + 1, end))) {
+    return end <= kJobClipboardLinkLimit ? text.substring(0, end) : before;
+  }
+  // Anything else is cut back to the last whitespace.
+  return lastBreak <= 0 ? clipped : before;
 }
 
 String _unwrap(String text) {

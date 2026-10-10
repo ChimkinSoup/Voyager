@@ -18,6 +18,7 @@ import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/core/constants/job_constants.dart';
+import 'package:voyager/features/jobs/jobs_actions.dart';
 import 'package:voyager/features/jobs/jobs_charts.dart';
 import 'package:voyager/features/jobs/jobs_edit_panel.dart';
 import 'package:voyager/features/jobs/jobs_page.dart';
@@ -1018,7 +1019,7 @@ void main() {
 
   // The name-taken toast carries no actions and used to carry no dwell, so it
   // sat on screen — click-through — for the life of the app.
-  testWidgets('the duplicate stage name toast dismisses itself', (
+  testWidgets('BUG-179: a taken or empty stage name keeps the dialog open', (
     tester,
   ) async {
     await pumpJobsPage(tester, seed: (repo) async {});
@@ -1027,18 +1028,276 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('New stage'));
     await tester.pumpAndSettle();
-    // A seeded stage, so the name is already taken.
-    await tester.enterText(find.byType(TextField).last, jobDefaultStage);
+    final field = find.byType(TextField).last;
+
+    await tester.showKeyboard(field);
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(find.text('Name cannot be empty'), findsOneWidget);
+
+    // A seeded stage, so the name is already taken (any case).
+    await tester.enterText(field, jobDefaultStage.toLowerCase());
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'A stage named "${jobDefaultStage.toLowerCase()}" already exists',
+      ),
+      findsOneWidget,
+    );
+    // Still open, the name still there to be corrected.
+    expect(find.text('OK'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(field).controller!.text,
+      jobDefaultStage.toLowerCase(),
+    );
+    expect(FocusManager.instance.primaryFocus, isNot(isA<FocusScopeNode>()));
+
+    await tester.enterText(field, 'Onsite');
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(find.text('OK'), findsNothing);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(JobsPage)),
+    );
+    expect(
+      (await container.read(jobStagesProvider.future)).map((s) => s.name),
+      contains('Onsite'),
+    );
+  });
+
+  Finder stageButton(String stage, String tooltip) => find.descendant(
+    of: find.widgetWithText(ListTile, stage),
+    matching: find.byTooltip(tooltip),
+  );
+
+  Future<void> openStages(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('Manage stages, categories and seasons'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('BUG-176: a deleted stage comes back with Undo', (tester) async {
+    final harness = await pumpJobsPage(
+      tester,
+      seed: (repo) async {
+        await repo.upsertApplication(
+          makeApplication(company: 'Acme', title: 'SWE', status: 'Interview'),
+        );
+      },
+    );
+    final repo = DriftJobRepository(harness.db);
+    final before = (await repo.listStages()).firstWhere(
+      (stage) => stage.name == 'Interview',
+    );
+
+    await openStages(tester);
+    await tester.tap(stageButton('Interview', 'Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(GlassButton, 'Delete'));
+    await tester.pumpAndSettle();
+    expect(
+      (await repo.listStages()).map((s) => s.name),
+      isNot(contains('Interview')),
+    );
+    expect(find.text('Deleted "Interview"'), findsOneWidget);
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    final after = (await repo.listStages()).firstWhere(
+      (stage) => stage.name == 'Interview',
+    );
+    expect(after.id, before.id);
+    expect(after.sortOrder, before.sortOrder);
+    expect(after.deletedAt, isNull);
+    expect(find.text('1 application'), findsOneWidget);
+  });
+
+  testWidgets('BUG-180: renaming a stage carries its applications along', (
+    tester,
+  ) async {
+    late JobApplication onInterview;
+    final harness = await pumpJobsPage(
+      tester,
+      seed: (repo) async {
+        onInterview = makeApplication(
+          company: 'Acme',
+          title: 'SWE',
+          status: 'Interview',
+        );
+        await repo.upsertApplication(onInterview);
+        await repo.upsertApplication(
+          makeApplication(company: 'Beta', title: 'QA', status: 'Applied'),
+        );
+      },
+    );
+    final repo = DriftJobRepository(harness.db);
+
+    await openStages(tester);
+    await tester.tap(stageButton('Interview', 'Rename'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Onsite');
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
 
+    final byCompany = {
+      for (final application in await repo.listApplications())
+        application.company: application,
+    };
+    expect(byCompany['Acme']!.status, 'Onsite');
+    expect(byCompany['Beta']!.status, 'Applied');
+    // A rename, not a move: no timeline entry.
+    expect(await repo.listStatusEvents(onInterview.id), isEmpty);
     expect(
-      find.text('A stage named "$jobDefaultStage" already exists'),
+      find.descendant(
+        of: find.widgetWithText(ListTile, 'Onsite'),
+        matching: find.text('1 application'),
+      ),
       findsOneWidget,
     );
+  });
 
-    await tester.pump(const Duration(seconds: 4));
+  testWidgets('BUG-178: the panel says a blank title or company is refused, '
+      'and Esc closes it', (tester) async {
+    final harness = await pumpJobsPage(
+      tester,
+      seed: (repo) async {
+        await repo.upsertApplication(
+          makeApplication(company: 'Visa', title: 'QA Engineer'),
+        );
+      },
+    );
+
+    await tester.tap(find.text('QA Engineer'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('already exists'), findsNothing);
+    final panel = find.byType(JobsEditPanel);
+    // Company, then Title: the labels sit outside the boxes.
+    Finder field(String label) => find
+        .descendant(of: panel, matching: find.byType(TextField))
+        .at(label == 'Company' ? 0 : 1);
+
+    await tester.enterText(field('Title'), '');
+    await tester.enterText(field('Company'), '');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(find.text('A role title is required'), findsOneWidget);
+    expect(find.text('A company is required'), findsOneWidget);
+    final stored = (await DriftJobRepository(
+      harness.db,
+    ).listApplications()).single;
+    expect(stored.title, 'QA Engineer');
+    expect(stored.company, 'Visa');
+
+    await tester.enterText(field('Title'), 'Senior QA');
+    await tester.pumpAndSettle();
+    expect(find.text('A role title is required'), findsNothing);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(panel, findsNothing);
+  });
+
+  testWidgets('a stage Undo is refused once the name is taken again', (
+    tester,
+  ) async {
+    final harness = await pumpJobsPage(tester, seed: (repo) async {});
+    final actions = JobsActions.detached(harness.container);
+    final repo = DriftJobRepository(harness.db);
+    final interview = (await repo.listStages()).firstWhere(
+      (stage) => stage.name == 'Interview',
+    );
+
+    await actions.deleteStage(interview);
+    expect(await actions.addStage('interview'), isTrue);
+    expect(await actions.restoreStage(interview), isFalse);
+    expect(
+      (await repo.listStages()).where(
+        (stage) => stage.name.toLowerCase() == 'interview',
+      ),
+      hasLength(1),
+    );
+  });
+
+  testWidgets('a rename moves deleted applications too, so Undo brings them '
+      'back on the new name', (tester) async {
+    late JobApplication application;
+    final harness = await pumpJobsPage(
+      tester,
+      seed: (repo) async {
+        application = makeApplication(
+          company: 'Acme',
+          title: 'SWE',
+          status: 'Interview',
+        );
+        await repo.upsertApplication(application);
+      },
+    );
+    final actions = JobsActions.detached(harness.container);
+    final repo = DriftJobRepository(harness.db);
+    final interview = (await repo.listStages()).firstWhere(
+      (stage) => stage.name == 'Interview',
+    );
+
+    final snapshot = await actions.deleteApplication(
+      (await repo.getApplication(application.id))!,
+    );
+    expect(await actions.renameStage(interview, 'Onsite'), isTrue);
+    await actions.restoreApplication(snapshot);
+    expect((await repo.getApplication(application.id))!.status, 'Onsite');
+  });
+
+  testWidgets('a status filter on a renamed stage follows it', (tester) async {
+    final harness = await pumpJobsPage(
+      tester,
+      seed: (repo) async {
+        await repo.upsertApplication(
+          makeApplication(company: 'Acme', title: 'SWE', status: 'Interview'),
+        );
+      },
+    );
+    final container = harness.container;
+    container.read(jobStatusFilterProvider.notifier).state = {'Interview'};
+    final interview = (await DriftJobRepository(
+      harness.db,
+    ).listStages()).firstWhere((stage) => stage.name == 'Interview');
+
+    await JobsActions.detached(container).renameStage(interview, 'Onsite');
+    await tester.pumpAndSettle();
+    expect(container.read(jobStatusFilterProvider), {'Onsite'});
+    expect(find.text('SWE'), findsOneWidget);
+  });
+
+  testWidgets('the panel keeps offering the company it opened on while it is '
+      'retyped', (tester) async {
+    await pumpJobsPage(
+      tester,
+      seed: (repo) async {
+        await repo.upsertApplication(
+          makeApplication(company: 'Acme Corp', title: 'SWE'),
+        );
+        await repo.ensureCompany('Acme Corp');
+      },
+    );
+    await tester.tap(find.text('SWE'));
+    await tester.pumpAndSettle();
+    final company = find
+        .descendant(
+          of: find.byType(JobsEditPanel),
+          matching: find.byType(TextField),
+        )
+        .first;
+
+    await tester.enterText(company, 'Ac');
+    // Past the autosave, which commits "Ac" as the only application's company.
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(find.text('Acme Corp'), findsWidgets);
+    expect(
+      find.descendant(
+        of: find.byType(JobsEditPanel),
+        matching: find.text('Acme Corp'),
+      ),
+      findsNothing,
+      reason: 'the suggestion is in the overlay, not in the box',
+    );
   });
 }

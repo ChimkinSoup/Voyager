@@ -3,6 +3,7 @@
 // editor whose warnings never block Save and whose Clean paste only rewrites
 // when pressed — and not even then, if the edit is cancelled.
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -139,9 +140,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(_warning), findsOneWidget);
 
-    await tester.tap(find.text('Details'));
+    // A mouse click, which is what drops a field's focus on a tap outside it.
+    await tester.tap(find.text('Details'), kind: PointerDeviceKind.mouse);
     await tester.pumpAndSettle();
     expect(find.text('• Double spaces'), findsOneWidget);
+    // BUG-179: the click leaves the caret in Description.
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(
+              of: descriptionField(),
+              matching: find.byType(EditableText),
+            ),
+          )
+          .focusNode
+          .hasFocus,
+      isTrue,
+    );
     expect(find.text('• Curly quotes'), findsOneWidget);
 
     await tester.tap(find.text('Save'));

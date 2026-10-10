@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
@@ -73,10 +74,16 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
   /// diffing against a stale copy would record the same status change twice.
   late JobApplication _current;
 
+  /// The company this application had when the panel opened. Offered for as
+  /// long as the panel is open: the box autosaves as it is retyped, and the
+  /// suggestions only keep a user-added company some application still names.
+  late String _openedCompanyKey;
+
   @override
   void initState() {
     super.initState();
     _current = widget.application;
+    _openedCompanyKey = jobCompanyKey(_current.company);
     _companyController = TextEditingController(text: _current.company);
     _titleController = TextEditingController(text: _current.title);
     _urlController = TextEditingController(text: _current.applicationUrl ?? '');
@@ -93,6 +100,7 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
       _saveTimer?.cancel();
       _commit();
       _current = widget.application;
+      _openedCompanyKey = jobCompanyKey(_current.company);
       _companyController.text = _current.company;
       _titleController.text = _current.title;
       _urlController.text = _current.applicationUrl ?? '';
@@ -193,115 +201,148 @@ class _JobsEditPanelState extends ConsumerState<JobsEditPanel> {
     final theme = Theme.of(context);
     final accent = widget.accentColor;
 
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          left: BorderSide(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-          ),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _PanelHeader(onClose: widget.onClose),
-          Expanded(
-            child: VoyagerScrollView(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  JobsCompanyField(
-                    controller: _companyController,
-                    companies: widget.companies,
-                    recentKeys: widget.recentCompanyKeys,
-                    accentColor: accent,
-                    categoryColorFor: widget.categoryColorFor,
-                    contentPadding: jobsFieldContentPadding,
-                    onChanged: (_) => _scheduleSave(),
-                  ),
-                  const SizedBox(height: 12),
-                  LabeledTextField(
-                    label: 'Title',
-                    controller: _titleController,
-                    accentColor: accent,
-                    dense: true,
-                    contentPadding: jobsFieldContentPadding,
-                    onChanged: (_) => _scheduleSave(),
-                  ),
-                  const SizedBox(height: 12),
-                  // The two capsules that say what this application *is* —
-                  // where it stands and which run of applications it belongs
-                  // to — share the row, half each. The date it was sent is a
-                  // fact about its history, so it sits with the history.
-                  Row(
-                    children: [
-                      Expanded(child: _statusPill(accent)),
-                      const SizedBox(width: 8),
-                      Expanded(child: _seasonPill(accent)),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  LabeledTextField(
-                    label: 'Application URL',
-                    controller: _urlController,
-                    accentColor: accent,
-                    dense: true,
-                    contentPadding: jobsFieldContentPadding,
-                    keyboardType: TextInputType.url,
-                    onChanged: (_) => _scheduleSave(),
-                  ),
-                  if (_current.applicationUrl case final url?
-                      when launchableJobUri(url) != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: GlassButton(
-                          dense: true,
-                          // No colour override and no icon-size override: the
-                          // panel's accent is the company's *category* colour,
-                          // which falls back to the theme's grey outline for
-                          // an uncategorised company and left this reading as
-                          // a flat grey button rather than a glass one. It
-                          // takes the app accent and the dense icon size every
-                          // other glass button in the app has.
-                          icon: const Icon(PhosphorIconsRegular.arrowSquareOut),
-                          label: 'Open',
-                          tooltip: 'Open the application URL in your browser',
-                          onPressed: () => _openUrl(url),
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    // The todo panel's notes box is the canonical one, and
-                    // both editors now read at the same size.
-                    height: 120,
-                    child: TagHighlightedTextField(
-                      controller: _notesController,
-                      focusNode: _notesFocusNode,
-                      label: 'Notes',
-                      accentColor: accent,
-                      style: theme.textTheme.bodySmall,
-                      expands: true,
-                      maxLines: null,
-                      onChanged: (_) => _scheduleSave(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _StatusTimeline(
-                    applicationId: _current.id,
-                    trailing: _datePill(accent),
-                  ),
-                ],
-              ),
+    // Esc closes the panel from anywhere in it, as the X does. A field that
+    // wants Esc first (the company list, Vim) claims it before it gets here.
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): widget.onClose,
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
             ),
           ),
-        ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _PanelHeader(onClose: widget.onClose),
+            Expanded(
+              child: VoyagerScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    JobsCompanyField(
+                      controller: _companyController,
+                      companies: widget.companies,
+                      recentKeys:
+                          widget.recentCompanyKeys.contains(_openedCompanyKey)
+                          ? widget.recentCompanyKeys
+                          : [...widget.recentCompanyKeys, _openedCompanyKey],
+                      accentColor: accent,
+                      categoryColorFor: widget.categoryColorFor,
+                      contentPadding: jobsFieldContentPadding,
+                      onChanged: (_) => _onRequiredChanged(),
+                    ),
+                    if (_companyController.text.trim().isEmpty)
+                      _requiredError(theme, 'A company is required'),
+                    const SizedBox(height: 12),
+                    LabeledTextField(
+                      label: 'Title',
+                      controller: _titleController,
+                      accentColor: accent,
+                      dense: true,
+                      contentPadding: jobsFieldContentPadding,
+                      onChanged: (_) => _onRequiredChanged(),
+                    ),
+                    if (_titleController.text.trim().isEmpty)
+                      _requiredError(theme, 'A role title is required'),
+                    const SizedBox(height: 12),
+                    // The two capsules that say what this application *is* —
+                    // where it stands and which run of applications it belongs
+                    // to — share the row, half each. The date it was sent is a
+                    // fact about its history, so it sits with the history.
+                    Row(
+                      children: [
+                        Expanded(child: _statusPill(accent)),
+                        const SizedBox(width: 8),
+                        Expanded(child: _seasonPill(accent)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    LabeledTextField(
+                      label: 'Application URL',
+                      controller: _urlController,
+                      accentColor: accent,
+                      dense: true,
+                      contentPadding: jobsFieldContentPadding,
+                      keyboardType: TextInputType.url,
+                      onChanged: (_) => _scheduleSave(),
+                    ),
+                    if (_current.applicationUrl case final url?
+                        when launchableJobUri(url) != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: GlassButton(
+                            dense: true,
+                            // No colour override and no icon-size override: the
+                            // panel's accent is the company's *category* colour,
+                            // which falls back to the theme's grey outline for
+                            // an uncategorised company and left this reading as
+                            // a flat grey button rather than a glass one. It
+                            // takes the app accent and the dense icon size every
+                            // other glass button in the app has.
+                            icon: const Icon(
+                              PhosphorIconsRegular.arrowSquareOut,
+                            ),
+                            label: 'Open',
+                            tooltip: 'Open the application URL in your browser',
+                            onPressed: () => _openUrl(url),
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      // The todo panel's notes box is the canonical one, and
+                      // both editors now read at the same size.
+                      height: 120,
+                      child: TagHighlightedTextField(
+                        controller: _notesController,
+                        focusNode: _notesFocusNode,
+                        label: 'Notes',
+                        accentColor: accent,
+                        style: theme.textTheme.bodySmall,
+                        expands: true,
+                        maxLines: null,
+                        onChanged: (_) => _scheduleSave(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _StatusTimeline(
+                      applicationId: _current.id,
+                      trailing: _datePill(accent),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+
+  /// Company and title can't be saved empty: [_commit] keeps the stored
+  /// value, and the message under the box says so while it is blank.
+  void _onRequiredChanged() {
+    setState(() {});
+    _scheduleSave();
+  }
+
+  Widget _requiredError(ThemeData theme, String message) => Padding(
+    padding: const EdgeInsets.only(top: 6),
+    child: Text(
+      message,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.error,
+      ),
+    ),
+  );
 
   Widget _statusPill(Color accent) {
     return Builder(

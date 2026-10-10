@@ -149,7 +149,7 @@ class _JobsCompanyFieldState extends State<JobsCompanyField> {
 
   void _refreshMatches() {
     final matches = filterJobCompanies(
-      widget.companies,
+      jobSuggestedCompanies(widget.companies, widget.recentKeys),
       widget.controller.text,
       recentKeys: widget.recentKeys,
     );

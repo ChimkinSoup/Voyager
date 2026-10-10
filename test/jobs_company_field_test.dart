@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/features/jobs/jobs_company_field.dart';
 
@@ -12,6 +13,14 @@ JobCompany company(String name) {
   final now = utcNow();
   return JobCompany(id: newId(), name: name, createdAt: now, updatedAt: now);
 }
+
+/// One of the companies the app seeds, under its name-derived id.
+JobCompany seededCompany(String name) => JobCompany(
+  id: jobSeedCompanyId(name),
+  name: name,
+  createdAt: jobSeedEpoch,
+  updatedAt: jobSeedEpoch,
+);
 
 /// The suggestion list is an [OverlayEntry], so it is only reachable once the
 /// field is inside a real Overlay — which [MaterialApp] provides.
@@ -154,7 +163,7 @@ void main() {
     // be found — that is the whole point of keeping it.
     final controller = await pumpField(
       tester,
-      companies: [company('Tesla'), company('Stripe')],
+      companies: [company('Tesla'), seededCompany('Stripe')],
       recentKeys: const ['tesla'],
     );
     await focusField(tester);
@@ -166,6 +175,31 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(controller.text, 'Stripe');
+  });
+
+  testWidgets('BUG-177: a user-added company is offered only while an '
+      'application names it', (tester) async {
+    await pumpField(tester, companies: [company('Vis'), seededCompany('Visa')]);
+    await focusField(tester);
+    await tester.enterText(find.byType(TextField), 'Vi');
+    await tester.pumpAndSettle();
+    expect(find.text('Visa'), findsOneWidget);
+    expect(find.text('Vis'), findsNothing);
+  });
+
+  testWidgets('BUG-177: a user-added company in use is offered', (
+    tester,
+  ) async {
+    await pumpField(
+      tester,
+      companies: [company('Vis'), seededCompany('Visa')],
+      recentKeys: const ['vis'],
+    );
+    await focusField(tester);
+    await tester.enterText(find.byType(TextField), 'Vi');
+    await tester.pumpAndSettle();
+    expect(find.text('Visa'), findsOneWidget);
+    expect(find.text('Vis'), findsOneWidget);
   });
 
   // Run on every platform: the bug this covers only bites on desktop, where

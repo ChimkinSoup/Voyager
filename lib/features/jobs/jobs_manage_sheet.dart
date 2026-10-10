@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/caps_lock/caps_lock_caret_indicator.dart';
+import 'package:voyager/core/soft_delete/soft_delete_toast.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
@@ -318,7 +319,11 @@ class _StagesTabState extends ConsumerState<_StagesTab> {
   }
 
   Future<void> _add() async {
-    final name = await showPromptNameDialog(context, title: 'New stage');
+    final name = await showPromptNameDialog(
+      context,
+      title: 'New stage',
+      validate: (name) => _nameProblem(name),
+    );
     if (name == null) return;
     if (!await actions.addStage(name)) _showNameTaken(name);
   }
@@ -328,9 +333,26 @@ class _StagesTabState extends ConsumerState<_StagesTab> {
       context,
       title: 'Rename stage',
       initial: stage.name,
+      validate: (name) => _nameProblem(name, except: stage),
     );
     if (name == null) return;
     if (!await actions.renameStage(stage, name)) _showNameTaken(name);
+  }
+
+  /// Why [name] can't be a stage's name, or null when it can. Checked in the
+  /// dialog so a refused name stays there to be corrected (BUG-179); the
+  /// actions still refuse a clash a sync brings in meanwhile.
+  String? _nameProblem(String name, {JobStage? except}) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return 'Name cannot be empty';
+    final stages = ref.read(jobStagesProvider).valueOrNull ?? const [];
+    final others = [
+      for (final stage in stages)
+        if (stage.id != except?.id) stage,
+    ];
+    return jobStageNameTaken(others, trimmed)
+        ? 'A stage named "$trimmed" already exists'
+        : null;
   }
 
   void _showNameTaken(String name) {
@@ -361,6 +383,9 @@ class _StagesTabState extends ConsumerState<_StagesTab> {
   }
 
   Future<void> _delete(JobStage stage, int inUse) async {
+    // Captured first: Undo can be pressed after this sheet has closed.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final overlay = Overlay.of(context, rootOverlay: true);
     final confirmed = await showConfirmDialog(
       context,
       title: 'Delete "${stage.name}"?',
@@ -371,7 +396,21 @@ class _StagesTabState extends ConsumerState<_StagesTab> {
                 'Their history is not changed.',
     );
     if (!confirmed) return;
-    await actions.deleteStage(stage);
+    final detached = JobsActions.detached(container);
+    await softDeleteWithUndo(
+      overlay: overlay,
+      message: deletedMessage(stage.name, fallback: 'stage'),
+      delete: () => detached.deleteStage(stage),
+      restore: () async {
+        if (await detached.restoreStage(stage)) return;
+        showVoyagerToastIn(
+          overlay,
+          message: 'A stage named "${stage.name}" already exists',
+          icon: PhosphorIconsRegular.warningCircle,
+          dwell: const Duration(seconds: 4),
+        );
+      },
+    );
   }
 }
 

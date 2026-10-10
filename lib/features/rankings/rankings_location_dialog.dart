@@ -124,6 +124,12 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
 
   LatLng? _pin;
   String _address = '';
+
+  /// The pin, and its address, from before the input held a link: what a link
+  /// that fails goes back to (BUG-171).
+  LatLng? _pinBeforeLink;
+  String _addressBeforeLink = '';
+  var _inputWasLink = false;
   String? _error;
   List<GeoapifyPlace> _suggestions = const [];
   bool _offerEverywhere = false;
@@ -236,6 +242,11 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
     _debounce?.cancel();
     _searchRequest++;
     final link = looksLikeLink(text);
+    if (link && !_inputWasLink) {
+      _pinBeforeLink = _pin;
+      _addressBeforeLink = _address;
+    }
+    _inputWasLink = link;
     setState(() {
       _error = null;
       _suggestions = const [];
@@ -277,11 +288,19 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
         longitude: widget.near?.longitude,
         everywhere: everywhere,
       );
-    } catch (_) {
+    } catch (error) {
       if (!mounted || request != _searchRequest) return;
       setState(() {
         _pendingSearch = null;
-        _error = 'Search needs a connection';
+        // Only a request that got no answer is the connection's fault, and
+        // only a 400 / 414 is the query's (an over-long one, say). A bad key,
+        // a quota or an outage is the service's.
+        _error = switch (error) {
+          GeoapifyRequestFailed(statusCode: 400 || 414) =>
+            "Couldn't search for that",
+          GeoapifyRequestFailed() => "Place search isn't working right now",
+          _ => 'Search needs a connection',
+        };
       });
       return;
     }
@@ -312,20 +331,14 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
         link = '${await ref.read(googleMapsShortLinkResolverProvider)(uri)}';
       } catch (_) {
         if (!mounted || request != _searchRequest) return;
-        setState(() {
-          _pendingSearch = null;
-          _error = 'Short links need a connection';
-        });
+        _refuseLink('Short links need a connection');
         return;
       }
       if (!mounted || request != _searchRequest) return;
     }
     final place = parseGoogleMapsLink(link);
     if (place == null) {
-      setState(() {
-        _pendingSearch = null;
-        _error = "Couldn't find a location in that link";
-      });
+      _refuseLink("Couldn't find a location in that link");
       return;
     }
     if (widget.withTitle && _title.text.trim().isEmpty && place.name != null) {
@@ -333,6 +346,23 @@ class _LocationDialogState extends ConsumerState<_LocationDialog> {
     }
     _setPin(LatLng(place.latitude, place.longitude));
     unawaited(_reverseGeocode());
+  }
+
+  /// A link that resolves to nowhere puts back the pin from before the input
+  /// held a link (none, or the one the entry already had). Left up, an
+  /// earlier link's place would sit under the error with Add enabled, as if
+  /// this link had found it (BUG-171).
+  void _refuseLink(String error) {
+    _geocodeRequest++;
+    final pin = _pinBeforeLink;
+    setState(() {
+      _pendingSearch = null;
+      _error = error;
+      _pin = pin;
+      _address = _addressBeforeLink;
+    });
+    if (pin != null && _client != null) _map.move(pin, _map.camera.zoom);
+    if (pin != null && _address.isEmpty) unawaited(_reverseGeocode());
   }
 
   /// Pins a searched [place], and names a new entry after it if it has no

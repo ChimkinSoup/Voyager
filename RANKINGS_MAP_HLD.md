@@ -54,7 +54,7 @@ Status: **proposed** (2026-09-30).
 | **Unranked pins** | Hollow, no number — covers `queued` and `inProgress` alike |
 | **Pin click** | Opens the entry's editor panel |
 | **Quick-rate** | From the pin's context menu → existing score popover |
-| **Right-click map** | New entry here / Add this location to an existing entry… |
+| **Right-click map** | New entry here / Add to an existing entry… |
 | **Search / filters** | Same providers as the list; sort does not apply to the map |
 | **Header stats** | Unchanged — follow search + filters, not the viewport |
 | **Global map** | **All categories** entry in the category switcher; per-category visibility chips |
@@ -157,7 +157,8 @@ The same input detects a URL on paste and resolves it instead of searching.
 - The place name in `/place/<Name>/` is URL-decoded and offered as the new entry's title when the dialog is creating an entry (§7.4).
 - After parsing, one reverse-geocode call fills `address`.
 - Only Google Maps links are read: `maps.google.<tld>`, or `google.<tld>/maps…` with or without `www.` (BUG-170). Any other site's URL gets the unparseable-link error, even one that happens to contain `@lat,lng`.
-- Unparseable link: inline error "Couldn't find a location in that link"; nothing is added.
+- Unparseable link: inline error "Couldn't find a location in that link"; nothing is added. The pin goes back to where it was before a link was entered (none, or the location being edited), so an earlier link's place can't be added as if this link had found it (the same for a short link that can't be followed).
+- A search the provider refuses as a query (HTTP 400 / 414, an over-long query, say) says "Couldn't search for that"; any other error status (a bad key, a quota, an outage) says "Place search isn't working right now"; only a request that never got an answer says "Search needs a connection".
 - The link itself is never stored.
 
 ### 6.3 Drop a pin
@@ -206,7 +207,7 @@ A chain's branches are separate pins that each cluster normally.
 | Item | Result |
 |------|--------|
 | **New entry here** | Opens the Add location dialog seeded with the clicked point (reverse-geocoded); on **Add**, runs the same create flow as the Add FAB with the location attached — title required, prefilled from a pasted link's place name if the user pastes one; status `queued` |
-| **Add this location to an existing entry…** | Picker listing the current scope's entries (searchable by title); choosing one appends the location to it |
+| **Add to an existing entry…** | Picker listing the current scope's entries (searchable by title); choosing one appends the location to it |
 
 Hidden in archived (view-only) categories.
 

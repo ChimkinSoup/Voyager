@@ -1,0 +1,16 @@
+final r = c.read(remoteSyncServiceProvider);
+final rr = c.read(rankingRepositoryProvider);
+final jr = c.read(jobRepositoryProvider);
+final now = DateTime.now().toUtc();
+final rc = RankingCategory(id: 'fv35-rcat', createdAt: now, updatedAt: now, version: 1, name: 'FV35 Cafes', colorValue: 0xFF4CAF50, iconKey: 'star', parentScoreMax: 10, parentScorePrecision: RankingScorePrecision.tenths, locationEnabled: true);
+await rr.upsertCategory(rc);
+r.pushRankingCategory(rc);
+final edge = RankingParent(id: 'fv35-edge', createdAt: now, updatedAt: now, version: 1, categoryId: 'fv35-rcat', title: 'FV35 Edge', overallScore: 7.5, status: RankingStatus.inProgress, locations: [RankingLocation(id: 'fv35-loc-edge', latitude: 85.0, longitude: 180.0, address: '', label: '', sortOrder: 0)]);
+final wa = RankingParent(id: 'fv35-wa', createdAt: now, updatedAt: now, version: 1, categoryId: 'fv35-rcat', title: 'FV35 Waterloo A', overallScore: 6.0, status: RankingStatus.inProgress, locations: [RankingLocation(id: 'fv35-loc-wa', latitude: 43.4723, longitude: -80.5449, address: 'Seed A', label: '', sortOrder: 0)]);
+final wb = RankingParent(id: 'fv35-wb', createdAt: now, updatedAt: now, version: 1, categoryId: 'fv35-rcat', title: 'FV35 Waterloo B', overallScore: 5.0, status: RankingStatus.inProgress, locations: [RankingLocation(id: 'fv35-loc-wb', latitude: 43.4643, longitude: -80.5204, address: 'Seed B', label: '', sortOrder: 0)]);
+for (final p in [edge, wa, wb]) { await rr.upsertParent(p); r.pushRankingParent(p); }
+await jr.ensureSeeded();
+JobApplication app(String id, String company, String title, String status, String? url) => JobApplication(id: id, company: company, title: title, status: status, dateApplied: DateTime(2026, 10, 2), applicationUrl: url, seasonIds: const [], createdAt: now, updatedAt: now);
+final apps = [app('fv35-vis', 'vis', 'QA Engineer', 'Interview', null), app('fv35-visa', 'Visa', 'Software Engineer', 'Applied', 'https://example.com/dup'), app('fv35-visa2', 'Visa', 'Data Engineer', 'Applied', 'https://example.com/dup')];
+for (final a in apps) { final co = await jr.writeApplication(a, registerCompany: a.company); r.pushJobApplication(a); if (co != null) r.pushJobCompany(co); }
+invalidateAllDataProvidersIn(c);

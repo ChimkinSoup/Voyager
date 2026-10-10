@@ -43,7 +43,7 @@ An **Include archived** control (toggle/chip) affects the sparkline and the main
 - The **season** column names the season an application is filed under, or `—` for none. Whether that season is retired is carried by the archive marker at the end of the row, not repeated here
 - Column visibility is user-togglable via a small dropdown; preference should persist locally (and sync if other UI prefs for this page sync — follow existing shell/page preference patterns)
 - Notes column shows a truncated preview; full markdown lives in the editor panel
-- Rows with an exact duplicate (same company + same title as another row, case-insensitive company match for the pair identity — see §7.3) show a **soft visual warning** in the table only. Warning is informational; no block on create/edit
+- Rows that link to the same posting URL as another row (see §7.3) show a **soft visual warning** in the table only. Warning is informational; no block on create/edit
 - Row click / edit affordance opens a **todo-style side editor panel**
 
 ### 3.3 Editor panel (todo-page pattern)
@@ -120,12 +120,12 @@ Forms ask for a description of each past role; the header carries those too. Ful
 
 **Explicitly deferred fields** (do not add in v1): location, remote/hybrid, salary, referral, job type, source, deadlines, next-action, recruiter/contact, offer comparison.
 
-**Duplicates allowed**: same company + title may exist as separate rows (e.g. re-apply next year). Soft table warning only (§7.3).
+**Duplicates allowed**: same company + title may exist as separate rows (e.g. re-apply next year, or two postings with one title); only a shared posting URL draws the soft table warning (§7.3).
 
 ### 4.2 Status-change history
 
 - Every status change appends a timeline entry: `{ fromStatus, toStatus, changedAt, optional label/note if needed later }`
-- On **stage rename**: timeline keeps the **old display strings** as recorded; only the stage list label changes for future selections
+- On **stage rename**: applications currently on the stage move to the new name (their status follows; no timeline entry is added, since the application did not move). The timeline keeps the **old display strings** as recorded
 - On **stage delete**: applications may keep the old status string (orphan). Timeline unchanged. UI should still render orphan statuses readably (e.g. show the string even if not in the stage list)
 - Moving freely between any stages always records history; no validation that transitions are “forward”
 - **Multiple interviews**: no dedicated multi-interview feature — users stay on Interview (or move away and back); timeline reflects status changes only. Extra interview detail belongs in notes if desired
@@ -136,8 +136,8 @@ Forms ask for a description of each past role; the header carries those too. Ful
 - **No fixed order** for valid transitions; order is display order only
 - **Seed stages** on first use: `Applied`, `Online Assessment`, `Interview`, `Accepted`, `Rejected`
 - Withdrawn / Ghosted are **not** first-class stages — fold into Rejected and/or notes
-- Deleting a stage that still has applications: **allowed**; apps keep orphan status strings
-- Renaming does not rewrite history entries
+- Deleting a stage that still has applications: **allowed**; apps keep orphan status strings. The delete offers Undo for 8 seconds, which brings the stage back with its name, order and colour
+- Renaming carries the stage's applications to the new name but does not rewrite history entries
 - **Colour** is optional and per-stage, set from the app palette in Manage jobs. A stage with no colour of its own falls back to a hue derived from its position in the list — which is what every stage showed before colours existed, so adding the field changes nothing on screen until one is picked. Two stages may share a colour; nothing depends on them being distinct
 - The stage's colour is what the header chips and the table's status capsules are drawn in. It is a display property of the pipeline: recolouring a stage writes nothing to the applications sitting on it, and an orphan status (no stage by that name any more) keeps the muted fallback that marks it apart
 
@@ -147,7 +147,7 @@ Forms ask for a description of each past role; the header carries those too. Ful
 - Contents: **seed common companies** + **user-added** entries
 - When the user commits a company name that is not already on the list (after matching rules), add it to the global suggestion list for future dropdowns
 - **Sync**: global company list syncs across devices for the same user account
-- **Delete suggestion**: removing a company from the suggestion list does **not** mutate past applications; their `company` strings remain as stored
+- **Which are offered**: every seeded company, and a user-added company only while at least one application (archived included, deleted not) still names it, compared case-insensitively. There is no separate delete control: a mistyped company (`Vis` for Visa) stops being suggested once the applications carrying it are deleted or corrected. Suggestions never mutate applications; their `company` strings remain as stored
 - Matching in the dropdown: **case-insensitive substring** — typing `visa` surfaces `Visa Inc.`, `US Visa`, etc., so the user picks an existing suggestion instead of creating near-duplicates
 
 ### 4.5 Company categories (colors)
@@ -238,12 +238,15 @@ Also not a Jobs entity: `AppSettings.jobExperienceSnippets`, a list of `{ id, na
 
 - Explicit “Duplicate” copies all fields into a new application record
 - New UUID; appears as its own row
-- If the copy shares exact company + title with existing rows, soft duplicate warning applies in the table
+- If the copy keeps the source's posting URL, soft duplicate warning applies in the table until one of them is changed
 
 ### 7.3 Duplicate warning (table)
 
 - Soft warning only, **table view only**
-- Trigger: another application exists with the **exact same title** and **exact same company** (normalize company comparison case-insensitively; title exact per stored string unless we normalize trim — trim whitespace on save)
+- Trigger: another application links to the **same posting URL**, compared case-insensitively with the scheme, a leading `www.` and trailing slashes ignored. Company and title are not compared: the same company + title is often a legitimate re-application or a second posting, while one posting URL is one job
+- An application with no URL is never flagged
+- Computed over the rows on screen (after search, filters and the archive toggle), so a row is never flagged against one the user can't see
+- The Track form shows the same check as a soft hint under the URL field while typing
 - Shown after the duplicate already exists (including after Duplicate action or manual re-entry)
 - Does not block create/edit; no modal required for the warning itself
 
@@ -335,7 +338,7 @@ JobPagePrefs      // column visibility, include-archived default, etc.
 1. User can create an application with only company + title; date defaults to today and is editable
 2. Custom stages: add / rename / reorder; free status moves; seed stages present for new users
 3. Status history timeline on each application; renames do not rewrite past events; stage delete allows orphans
-4. Company typeahead: seed + user-added, substring match, syncs; deleting a suggestion leaves apps intact
+4. Company typeahead: seed + user-added, substring match, syncs; a user-added company is suggested only while an application names it, and suggestions never change apps
 5. Categories popup: one category per company, color on category, neutral default otherwise
 6. Flat table with toggleable columns; todo-like editor; duplicate action; soft duplicate warning in table
 7. Search contains-match on title/company/notes/status; status filter; seasons archive with include-archived toggle

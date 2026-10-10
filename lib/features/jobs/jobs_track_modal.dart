@@ -301,6 +301,8 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       _resumedDraft = false;
       _started = false;
     });
+    // The banner goes, and the focus Start over took with it (BUG-179).
+    _companyFocusNode.requestFocus();
     _lastWritten = null;
     _baseline = _snapshot();
     // Start over is a fresh open (JOBS_SMART_PASTE_HLD §5.3), and a fresh open
@@ -423,6 +425,8 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       if (title != null) _titleController.clear();
       if (url != null) _urlController.clear();
     });
+    // The chip goes, and the focus its ✕ took with it (BUG-179).
+    _companyFocusNode.requestFocus();
   }
 
   /// One paste into Title or URL, split between the two (§8).

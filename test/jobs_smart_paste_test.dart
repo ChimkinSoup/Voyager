@@ -354,4 +354,43 @@ void main() {
     expect(find.text('Phone Screen'), findsNothing);
     expect(find.text('Applied'), findsWidgets);
   });
+
+  // BUG-179: the ✕ and Start over go with their banners, and so did the focus.
+  bool companyHasFocus(WidgetTester tester) => tester
+      .widget<EditableText>(
+        find.descendant(
+          of: fieldLabelled('Company').first,
+          matching: find.byType(EditableText),
+        ),
+      )
+      .focusNode
+      .hasFocus;
+
+  testWidgets('BUG-179: after the chip is dismissed the caret is in Company', (
+    tester,
+  ) async {
+    clipboardText = 'Software Engineer https://acme.com/jobs/1';
+    await pumpJobs(tester);
+    await openForm(tester);
+    await focusField(tester, 'Role title');
+
+    await tester.tap(find.byTooltip('Clear what the clipboard filled in'));
+    await tester.pumpAndSettle();
+    expect(companyHasFocus(tester), isTrue);
+  });
+
+  testWidgets('BUG-179: after Start over the caret is in Company', (
+    tester,
+  ) async {
+    await pumpJobs(
+      tester,
+      draft: JobsTrackDraft(title: 'Data Scientist', savedAt: utcNow()),
+    );
+    await openForm(tester);
+    await focusField(tester, 'Role title');
+
+    await tester.tap(find.text('Start over'));
+    await tester.pumpAndSettle();
+    expect(companyHasFocus(tester), isTrue);
+  });
 }

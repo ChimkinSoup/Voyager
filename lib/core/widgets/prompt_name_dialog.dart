@@ -15,6 +15,7 @@ Future<String?> showPromptNameDialog(
   String label = 'Name',
   double? contentWidth,
   bool enterToSubmit = true,
+  String? Function(String name)? validate,
 }) {
   return showVoyagerDialog<String>(
     context: context,
@@ -24,6 +25,7 @@ Future<String?> showPromptNameDialog(
       label: label,
       contentWidth: contentWidth,
       enterToSubmit: enterToSubmit,
+      validate: validate,
     ),
   );
 }
@@ -35,6 +37,7 @@ class _PromptNameDialog extends StatefulWidget {
     required this.label,
     required this.contentWidth,
     required this.enterToSubmit,
+    required this.validate,
   });
 
   final String title;
@@ -42,6 +45,10 @@ class _PromptNameDialog extends StatefulWidget {
   final String label;
   final double? contentWidth;
   final bool enterToSubmit;
+
+  /// A message when the name can't be used, shown under the field with the
+  /// dialog kept open and the name kept; null when it can.
+  final String? Function(String name)? validate;
 
   @override
   State<_PromptNameDialog> createState() => _PromptNameDialogState();
@@ -51,23 +58,59 @@ class _PromptNameDialogState extends State<_PromptNameDialog> {
   late final TextEditingController _controller = TextEditingController(
     text: widget.initial ?? '',
   );
+  final _focusNode = FocusNode();
+  String? _error;
 
   @override
   void dispose() {
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
-  void _submit() => Navigator.pop(context, _controller.text);
+  void _submit() {
+    final error = widget.validate?.call(_controller.text);
+    if (error != null) {
+      setState(() => _error = error);
+      // The field's own submit unfocuses it; hand focus back so the name can
+      // be corrected straight away.
+      _focusNode.requestFocus();
+      return;
+    }
+    Navigator.pop(context, _controller.text);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final field = LabeledTextField(
+    final error = _error;
+    final input = LabeledTextField(
       label: widget.label,
       controller: _controller,
+      focusNode: _focusNode,
       autofocus: true,
       textInputAction: TextInputAction.done,
       onSubmitted: (_) => _submit(),
+      onChanged: (_) {
+        if (_error != null) setState(() => _error = null);
+      },
+    );
+    // One shape with or without the message: swapping the field into a
+    // Column remounts it and loses its text input connection.
+    final field = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        input,
+        if (error != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            error,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.error,
+            ),
+          ),
+        ],
+      ],
     );
     final content = widget.contentWidth == null
         ? field

@@ -98,7 +98,7 @@ class GeoapifyClient {
     // on an address it can do without.
     final response = await _http.get(uri).timeout(requestTimeout);
     if (response.statusCode >= 400) {
-      throw Exception('Geoapify request failed (${response.statusCode}).');
+      throw GeoapifyRequestFailed(response.statusCode);
     }
     final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map;
     return [
@@ -106,6 +106,17 @@ class GeoapifyClient {
         Map<String, dynamic>.from(result as Map),
     ];
   }
+}
+
+/// Geoapify answered with an error status, which is not the same as the
+/// connection being down.
+class GeoapifyRequestFailed implements Exception {
+  const GeoapifyRequestFailed(this.statusCode);
+
+  final int statusCode;
+
+  @override
+  String toString() => 'Geoapify request failed ($statusCode).';
 }
 
 /// Follows a Google Maps short link one hop and returns the link it stands

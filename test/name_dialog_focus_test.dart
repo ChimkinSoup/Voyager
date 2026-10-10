@@ -3,11 +3,13 @@
 // focus nowhere; the custom quotes dialog dropped focus the same way on a
 // rejected quote (BUG-050).
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/widgets/create_name_color_dialog.dart';
+import 'package:voyager/core/widgets/palette_color_picker.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/features/settings/custom_quotes_dialog.dart';
@@ -61,6 +63,43 @@ void main() {
       expect(find.text('Alpha'), findsOneWidget);
       expect(find.text('Name cannot be empty'), findsNothing);
     },
+  );
+
+  testWidgets(
+    'BUG-179: a colour click keeps the caret in Name, so Enter creates',
+    (tester) async {
+      ({String name, int color})? created;
+      await tester.pumpWidget(
+        _launcher((context) async {
+          created = await showCreateNameColorDialog(
+            context,
+            title: 'New category',
+            palette: const [0xFF3366FF, 0xFFFF6633],
+            initialColor: 0xFF3366FF,
+          );
+        }),
+      );
+      await _open(tester);
+      tester.testTextInput.enterText('Fintech');
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find
+            .descendant(
+              of: find.byType(ColorPaletteGrid),
+              matching: find.byType(InkWell),
+            )
+            .last,
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pumpAndSettle();
+      expect(_fieldHasFocus(tester), isTrue);
+
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(created, (name: 'Fintech', color: 0xFFFF6633));
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
   );
 
   testWidgets('a rejected custom quote keeps the field focused', (

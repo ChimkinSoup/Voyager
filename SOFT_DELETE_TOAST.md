@@ -31,7 +31,7 @@ Most soft deletes in Voyager end silently after a confirm dialog (where one exis
 - Global media purge (`deleteAssetEverywhere`).
 - Dev-tool bulk purges.
 - Rankings **archive** toast.
-- Jobs metadata deletes (stage, category, company, season).
+- Jobs metadata deletes (category, company, season). A stage delete has the toast since BUG-176: the stage comes back with its name, order and colour, so its applications stop being orphans.
 - Notification inbox **complete task** toast.
 - New confirm dialogs on low-friction deletes (subtasks, bucket items, media detach, finance transaction row).
 - Redo support.
@@ -59,6 +59,7 @@ Most soft deletes in Voyager end silently after a confirm dialog (where one exis
 | **Rankings** | Delete parent / child / category | Yes (done) | Yes | Refactor onto shared helper |
 | **Rankings** | Archive category | No | — | |
 | **Jobs** | Delete application | Yes | Yes | **Behavior change** — §7 |
+| **Jobs** | Delete stage (Manage → Stages) | Yes (BUG-176) | Yes | `JobsActions.restoreStage`; not listed in Trash |
 | **Finance** | Delete transaction (ledger row) | Yes (done) | **No** | Migrate `SnackBar` → `VoyagerToast` |
 | **Finance** | Delete category / budget / goal / subscription / asset | **No** | — | |
 | **Analytics** | Delete custom tracker | Yes | Yes | |

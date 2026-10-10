@@ -10,6 +10,7 @@ import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/job_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
+import 'package:voyager/features/jobs/jobs_providers.dart';
 
 /// Every write the Jobs page makes, in one place.
 ///
@@ -251,7 +252,11 @@ class JobsActions {
       ),
       company: application.company,
       title: application.title,
-      status: application.status,
+      // The row on disk, where it still has one: a stage renamed while the
+      // offer stood has moved it to the new name (BUG-180).
+      status: (current?.status.isNotEmpty ?? false)
+          ? current!.status
+          : application.status,
       dateApplied: application.dateApplied,
       applicationUrl: application.applicationUrl,
       notes: application.notes,
@@ -325,7 +330,7 @@ class JobsActions {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return true;
     final stages = await _repository.listStages();
-    if (_stageNameTaken(stages, trimmed)) return false;
+    if (jobStageNameTaken(stages, trimmed)) return false;
     final now = utcNow();
     final stage = JobStage(
       id: newId(),
@@ -340,10 +345,10 @@ class JobsActions {
     return true;
   }
 
-  /// Renames the stage for future selections only. Applications keep the
-  /// status string they were set to and the timeline keeps its recorded
-  /// strings (§4.2), so an application on the old name becomes an orphan —
-  /// which the table and the Sankey both render as its own entry.
+  /// Renames the stage, and the applications on it follow: their status
+  /// moves to the new name (BUG-180). No timeline event is added and the
+  /// timeline keeps its recorded strings (§4.2) — the application didn't
+  /// move, its stage was renamed.
   ///
   /// False, with nothing written, when another live stage already has the
   /// name — see [addStage].
@@ -354,20 +359,21 @@ class JobsActions {
       for (final other in await _repository.listStages())
         if (other.id != stage.id) other,
     ];
-    if (_stageNameTaken(others, trimmed)) return false;
-    final updated = stage.copyWith(name: trimmed);
-    await _repository.upsertStage(updated);
-    _sync.pushJobStage(updated);
+    if (jobStageNameTaken(others, trimmed)) return false;
+    final written = await _repository.renameStage(stage, trimmed);
+    _sync.pushJobStage(written.stage);
+    await _sync.pushJobApplicationsBatch(written.applications);
+    // A status filter on the old name follows it, or the table empties.
+    final filter = _read(jobStatusFilterProvider.notifier);
+    if (filter.state.contains(stage.name)) {
+      filter.state = {
+        for (final status in filter.state)
+          status == stage.name ? trimmed : status,
+      };
+    }
     _invalidate(jobStagesProvider);
-    // The rename can strand applications on the old string, and whether a
-    // status is an orphan is what decides where it sorts.
     _refreshApplications();
     return true;
-  }
-
-  bool _stageNameTaken(Iterable<JobStage> stages, String name) {
-    final key = jobCompanyKey(name);
-    return stages.any((stage) => jobCompanyKey(stage.name) == key);
   }
 
   /// One past the highest order in use. Not the list's length: deleting never
@@ -394,6 +400,42 @@ class JobsActions {
     if (tombstone != null) _sync.pushJobStage(tombstone);
     _invalidate(jobStagesProvider);
     _refreshApplications();
+  }
+
+  /// Undoes [deleteStage] from the stage as it was before the delete. Rebuilt
+  /// rather than `copyWith`'d, which cannot clear a tombstone.
+  ///
+  /// False, with nothing written, when a stage added since has the name — see
+  /// [addStage].
+  Future<bool> restoreStage(JobStage stage) async {
+    final all = await _repository.listStages(includeDeleted: true);
+    final current = all.where((s) => s.id == stage.id).firstOrNull;
+    abortIfAlreadyRestored(
+      found: current != null,
+      deletedAt: current?.deletedAt,
+    );
+    final live = [
+      for (final other in all)
+        if (other.deletedAt == null) other,
+    ];
+    if (jobStageNameTaken(live, stage.name)) return false;
+    final restored = JobStage(
+      id: stage.id,
+      createdAt: stage.createdAt,
+      updatedAt: utcNow(),
+      version: restoreVersionFrom(
+        preDeleteVersion: stage.version,
+        currentVersion: current?.version,
+      ),
+      name: stage.name,
+      sortOrder: stage.sortOrder,
+      colorValue: stage.colorValue,
+    );
+    await _repository.upsertStage(restored);
+    _sync.pushJobStage(restored);
+    _invalidate(jobStagesProvider);
+    _refreshApplications();
+    return true;
   }
 
   Future<void> reorderStages(List<String> orderedIds) async {
