@@ -1772,6 +1772,12 @@ class RankingCategoriesTable extends Table {
   BoolColumn get progressEnabled =>
       boolean().withDefault(const Constant(false))();
 
+  /// Whether entries, and units, carry a repeat count. See `RankingCount`.
+  BoolColumn get parentCountEnabled =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get childCountEnabled =>
+      boolean().withDefault(const Constant(false))();
+
   /// Set = hidden from the picker and view-only. Not [deletedAt]: archiving
   /// does not cascade.
   DateTimeColumn get archivedAt => dateTime().nullable()();
@@ -1821,6 +1827,23 @@ class RankingParentsTable extends Table {
   /// `stampKey -> ISO instant`, one per field — see `RankingFieldStamps`.
   TextColumn get fieldUpdatedAtJson =>
       text().withDefault(const Constant('{}'))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(0))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// One device's net change to an entry's or unit's repeat count. See
+/// `RankingCount`.
+@TableIndex(name: 'idx_ranking_counts_entry', columns: {#entryId})
+class RankingCountsTable extends Table {
+  TextColumn get id => text()();
+  TextColumn get entryId => text()();
+  TextColumn get deviceId => text()();
+  IntColumn get delta => integer()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -1979,6 +2002,7 @@ class LeetCodeCheatEntriesTable extends Table {
     RankingCategoriesTable,
     RankingParentsTable,
     RankingChildrenTable,
+    RankingCountsTable,
     LeetCodeCheatTabsTable,
     LeetCodeCheatSectionsTable,
     LeetCodeCheatEntriesTable,
@@ -1989,7 +2013,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 142;
+  int get schemaVersion => 143;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3573,6 +3597,27 @@ class AppDatabase extends _$AppDatabase {
           'ranking_parents_table',
           rankingParentsTable,
           rankingParentsTable.progressSeconds,
+        );
+      }
+      if (from < 143) {
+        await migrator.createTable(rankingCountsTable);
+        // Declared via @TableIndex, so createAll() covers fresh databases;
+        // createTable doesn't make it.
+        await customStatement(
+          'CREATE INDEX IF NOT EXISTS idx_ranking_counts_entry '
+          'ON ranking_counts_table (entry_id)',
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'ranking_categories_table',
+          rankingCategoriesTable,
+          rankingCategoriesTable.parentCountEnabled,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'ranking_categories_table',
+          rankingCategoriesTable,
+          rankingCategoriesTable.childCountEnabled,
         );
       }
     },

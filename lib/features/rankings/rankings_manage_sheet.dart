@@ -389,6 +389,20 @@ class _CategorySettings extends ConsumerWidget {
                   (stored) => stored.copyWith(progressEnabled: value),
                 ),
               ),
+              _Toggle(
+                label:
+                    'Count repeats of '
+                    '${category.childUnitLabel.toLowerCase()}s',
+                help:
+                    'How many times you have had each '
+                    '${category.childUnitLabel.toLowerCase()}.',
+                value: category.childCountEnabled,
+                accent: accent,
+                onChanged: (value) => actions.patchCategory(
+                  category.id,
+                  (stored) => stored.copyWith(childCountEnabled: value),
+                ),
+              ),
             ],
             const Divider(height: 24),
             _Toggle(
@@ -410,6 +424,16 @@ class _CategorySettings extends ConsumerWidget {
                   (stored) => stored.copyWith(imagesOnChild: value),
                 ),
               ),
+            _Toggle(
+              label: 'Count repeats',
+              help: 'How many times you have watched, visited or had an entry.',
+              value: category.parentCountEnabled,
+              accent: accent,
+              onChanged: (value) => actions.patchCategory(
+                category.id,
+                (stored) => stored.copyWith(parentCountEnabled: value),
+              ),
+            ),
             _Toggle(
               label: 'Locations',
               help: 'Pin entries to places and show them on a map.',

@@ -28,6 +28,7 @@ import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/rankings/ranking_queries.dart';
 import 'package:voyager/features/rankings/rankings_actions.dart';
+import 'package:voyager/features/rankings/rankings_count.dart';
 import 'package:voyager/features/rankings/rankings_field_editor.dart';
 import 'package:voyager/features/rankings/rankings_providers.dart';
 import 'package:voyager/features/rankings/rankings_score_input.dart';
@@ -507,6 +508,21 @@ class _ChildRowState extends ConsumerState<_ChildRow>
                             ),
                           ),
                         ],
+                        if (widget.category.showsChildCount) ...[
+                          const SizedBox(width: 6),
+                          RankingCountSlot(
+                            entryId: child.id,
+                            hovered: _hovered,
+                            accent: widget.accent,
+                            onIncrement: widget.readOnly
+                                ? null
+                                : () => RankingsActions(ref).adjustCount(
+                                    child.id,
+                                    parentId: child.parentId,
+                                    delta: 1,
+                                  ),
+                          ),
+                        ],
                         const SizedBox(width: 8),
                         // A fixed slot, and a dash rather than nothing in it:
                         // the numbers down the list stay in a column, and an
@@ -602,7 +618,8 @@ class RankingProgressBadge extends StatelessWidget {
             const SizedBox(width: 3),
             Text(
               formatRankingProgressTime(seconds),
-              style: theme.textTheme.labelSmall?.copyWith(
+              // The count beside it's style, so the two sit on one baseline.
+              style: theme.textTheme.labelMedium?.copyWith(
                 color: accent,
                 fontWeight: FontWeight.w600,
                 fontFeatures: const [FontFeature.tabularFigures()],
@@ -676,6 +693,36 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
   /// The bookmark this dialog last wrote, null until it writes one — Cancel
   /// takes back only that, and only while it still stands.
   ({String? childId, int? seconds})? _writtenProgress;
+
+  /// The net of the count taps made here, for Cancel to take back by tapping
+  /// the other way — taps made elsewhere meanwhile stay.
+  var _countTaps = 0;
+
+  /// Taps still being written, which Cancel waits for: [_countTaps] only
+  /// learns what a tap applied once its write lands.
+  final _pendingCounts = <Future<void>>{};
+
+  Future<void> _adjustCount(int delta) async {
+    late final Future<void> write;
+    write = () async {
+      try {
+        final made = await _actions.adjustCount(
+          widget.child.id,
+          parentId: widget.child.parentId,
+          delta: delta,
+        );
+        // Added after the await, not with `+= await`: that reads the total
+        // before waiting, and two quick taps would each add to the same stale
+        // value.
+        _countTaps += made;
+      } finally {
+        // A failed tap too, or Cancel would wait on it forever.
+        _pendingCounts.remove(write);
+      }
+    }();
+    _pendingCounts.add(write);
+    await write;
+  }
 
   ({String? childId, int? seconds}) _readProgress(
     T Function<T>(ProviderListenable<T> provider) read,
@@ -868,6 +915,23 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
         ),
       );
     }
+    unawaited(
+      // A tap that failed applied nothing, so it has nothing to take back —
+      // the rest still are.
+      Future.wait([
+        for (final write in _pendingCounts) write.catchError((Object _) {}),
+      ]).then((_) async {
+        if (_countTaps != 0) {
+          // Taking back a − is a +, and that isn't having it.
+          await _actions.adjustCount(
+            widget.child.id,
+            parentId: widget.child.parentId,
+            delta: -_countTaps,
+            starts: false,
+          );
+        }
+      }),
+    );
     unawaited(_restoreImages());
     Navigator.pop(context);
   }
@@ -930,41 +994,58 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
         ),
         const SizedBox(width: 10),
         SizedBox(
-          width: 120,
-          child: LabeledTextField(
-            label: 'At',
-            hintText: '0:00',
-            controller: _progressController,
-            focusNode: _progressFocusNode,
-            enabled: !widget.readOnly,
-            accentColor: accent,
-            // The unit list's add box sizing, not `dense`: dense loses its
-            // vertical padding to the desktop's compact density, and the
-            // borders sat on the text.
-            allowShortHeight: true,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 12,
-            ),
-            keyboardType: TextInputType.datetime,
-            inputFormatters: [
-              TextInputFormatter.withFunction(
-                (oldValue, newValue) =>
-                    rankingProgressTimeTyping.hasMatch(newValue.text)
-                    ? newValue
-                    : oldValue,
+          width: 88,
+          // The field has no style of its own to take; a smaller body font
+          // keeps `1:23:45` clear of the box's edges at this width. The
+          // tighter line is for the caret, which takes its height from it:
+          // at the font's own leading it reached up to the `At` label.
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              textTheme: Theme.of(context).textTheme.copyWith(
+                bodyLarge: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(height: 1.25),
               ),
-            ],
-            onChanged: (_) => _scheduleProgressSave(),
-            onSubmitted: (_) {
-              _progressTimer?.cancel();
-              unawaited(_commitProgressTime());
-              final parsed = parseRankingProgressTime(_progressController.text);
-              final seconds = parsed?.seconds;
-              if (seconds != null) {
-                _progressController.text = formatRankingProgressTime(seconds);
-              }
-            },
+            ),
+            child: LabeledTextField(
+              label: 'At',
+              hintText: '0:00',
+              controller: _progressController,
+              focusNode: _progressFocusNode,
+              enabled: !widget.readOnly,
+              accentColor: accent,
+              // Explicit padding, not `dense`: dense loses its vertical
+              // padding to the desktop's compact density, and the borders sat
+              // on the text. 9 around the 15px line makes the box the dense
+              // pill's 25px once the desktop's compact density has taken its
+              // 8px back.
+              allowShortHeight: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 9,
+              ),
+              keyboardType: TextInputType.datetime,
+              inputFormatters: [
+                TextInputFormatter.withFunction(
+                  (oldValue, newValue) =>
+                      rankingProgressTimeTyping.hasMatch(newValue.text)
+                      ? newValue
+                      : oldValue,
+                ),
+              ],
+              onChanged: (_) => _scheduleProgressSave(),
+              onSubmitted: (_) {
+                _progressTimer?.cancel();
+                unawaited(_commitProgressTime());
+                final parsed = parseRankingProgressTime(
+                  _progressController.text,
+                );
+                final seconds = parsed?.seconds;
+                if (seconds != null) {
+                  _progressController.text = formatRankingProgressTime(seconds);
+                }
+              },
+            ),
           ),
         ),
       ],
@@ -978,9 +1059,12 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
 
     final takesImages = widget.category.imagesOnChild && !widget.readOnly;
 
-    final body = SizedBox(
-      width: 460,
-      height: 520,
+    // A cap, not a fixed height: a unit with little to it gets a short
+    // dialog instead of one padded out with empty space.
+    final body = ConstrainedBox(
+      constraints: const BoxConstraints.tightFor(
+        width: 560,
+      ).copyWith(maxHeight: 520),
       child: VoyagerScrollView(
         // Headroom for the name field's floating label, which rides half its
         // own height above the field and would otherwise be shaved off by the
@@ -1017,6 +1101,14 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
             if (widget.category.showsProgress) ...[
               const SizedBox(height: 12),
               _buildProgressRow(accent),
+            ],
+            if (widget.category.showsChildCount) ...[
+              const SizedBox(height: 12),
+              RankingCountStepper(
+                entryId: widget.child.id,
+                accent: accent,
+                onAdjust: widget.readOnly ? null : _adjustCount,
+              ),
             ],
             if (fields.isNotEmpty) ...[
               const SizedBox(height: 20),

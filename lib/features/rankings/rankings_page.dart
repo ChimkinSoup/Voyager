@@ -1039,6 +1039,9 @@ class _Row extends ConsumerWidget {
       onToggleStar: () => RankingsActions(ref).toggleStar(parent.id),
       onScoreChanged: (score) =>
           RankingsActions(ref).setOverallScore(parent.id, score),
+      onIncrementCount: () => RankingsActions(
+        ref,
+      ).adjustCount(parent.id, parentId: parent.id, delta: 1),
       // Set, never toggled (§6.4): re-clicking the active tag leaves the
       // filter alone rather than dropping it out from under the pointer.
       onTagTapped: (tag) {

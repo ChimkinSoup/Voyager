@@ -2142,6 +2142,11 @@ class RemoteSyncService {
           documentIds: documentIds,
           documentData: documentData,
         );
+      case FirestoreCollections.rankingCounts:
+        return pullRankingCounts(
+          documentIds: documentIds,
+          documentData: documentData,
+        );
       case FirestoreCollections.customQuotes:
         return pullCustomQuotes(
           documentIds: documentIds,
@@ -2751,6 +2756,25 @@ class RemoteSyncService {
         );
         // See [pullRankingParents].
         if (result.localWon) pushRankingChild(result.merged);
+      },
+    );
+  }
+
+  Future<bool> pullRankingCounts({
+    Set<String>? documentIds,
+    Map<String, Map<String, dynamic>>? documentData,
+  }) {
+    return _pullCollection(
+      FirestoreCollections.rankingCounts,
+      onlyFirestoreDocumentIds: documentIds,
+      documentData: documentData,
+      resolveCrdt: false,
+      apply: (id, data, {required fromCrdt}) async {
+        final local = await _rankingRepository.getCount(id);
+        await _rankingRepository.upsertCount(
+          mergeRankingCountFromRemote(data, id, local: local),
+          recordLocalActivity: false,
+        );
       },
     );
   }
@@ -5501,8 +5525,14 @@ class RemoteSyncService {
   /// row, rather than once per tap: a burst of ten taps is ten writes to one
   /// document, and only the last of them needs to reach the server. Flushed
   /// with every other pending upload on teardown.
-  void pushCounterAdjustments(List<Object> records) {
-    const collection = FirestoreCollections.counterAdjustments;
+  void pushCounterAdjustments(List<Object> records) =>
+      _pushDebounced(FirestoreCollections.counterAdjustments, records);
+
+  /// [pushCounterAdjustments] for repeat counts on rankings.
+  void pushRankingCounts(List<RankingCount> counts) =>
+      _pushDebounced(FirestoreCollections.rankingCounts, counts);
+
+  void _pushDebounced(String collection, List<Object> records) {
     for (final record in records) {
       final document = _recordDocument(collection, record);
       if (document == null) continue;
@@ -5831,6 +5861,9 @@ class RemoteSyncService {
       case FirestoreCollections.rankingChildren:
         if (record is! RankingChild) return null;
         return (id: record.id, payload: rankingChildToFirestore(record));
+      case FirestoreCollections.rankingCounts:
+        if (record is! RankingCount) return null;
+        return (id: record.id, payload: rankingCountToFirestore(record));
       case FirestoreCollections.mediaAssets:
         if (record is! MediaAsset) return null;
         return (id: record.id, payload: mediaAssetToFirestore(record));
@@ -6758,6 +6791,7 @@ class RemoteSyncService {
         pullRankingCategories,
         pullRankingParents,
         pullRankingChildren,
+        pullRankingCounts,
       ]),
       _inOrder([pullCalendars, pullCalendarEvents]),
       _inOrder([pullTrackers, pullTrackerValues, pullCounterAdjustments]),
@@ -7103,6 +7137,7 @@ class LiveSyncController {
     FirestoreCollections.rankingCategories,
     FirestoreCollections.rankingParents,
     FirestoreCollections.rankingChildren,
+    FirestoreCollections.rankingCounts,
     FirestoreCollections.mediaAssets,
     FirestoreCollections.mediaReferences,
     FirestoreCollections.tagColors,

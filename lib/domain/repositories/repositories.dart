@@ -1206,6 +1206,31 @@ abstract class RankingRepository {
   Future<List<RankingCategory>> getAllCategories({bool includeDeleted = true});
   Future<List<RankingParent>> getAllParents({bool includeDeleted = true});
   Future<List<RankingChild>> getAllChildren({bool includeDeleted = true});
+
+  /// The sum of every live [RankingCount] delta, by entry or unit id. An id
+  /// with no rows is absent.
+  Future<Map<String, int>> sumCountsByEntry();
+
+  /// [sumCountsByEntry] for one entry or unit: 0 when it has no rows.
+  Future<int> sumCountsFor(String entryId);
+  Future<RankingCount?> getCount(String id);
+  Future<List<RankingCount>> getAllCounts();
+
+  /// Writes [count] only over an older copy — a lower version. A row has one
+  /// writer, so a higher version is always newer content; a pull or a restore
+  /// carrying an older one would otherwise put back a tap's worth less.
+  Future<void> upsertCount(
+    RankingCount count, {
+    bool recordLocalActivity = true,
+  });
+
+  /// Adds [delta] to this device's row for [entryId] in one statement, and
+  /// returns the row as written.
+  Future<RankingCount> adjustCount({
+    required String entryId,
+    required String deviceId,
+    required int delta,
+  });
 }
 
 abstract class AuthRepository {

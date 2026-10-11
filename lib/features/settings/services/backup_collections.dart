@@ -1161,6 +1161,18 @@ List<BackupCollection> buildBackupCollections({
       },
     ),
     BackupCollection(
+      name: FirestoreCollections.rankingCounts,
+      read: () async => [
+        for (final count in await rankingRepository.getAllCounts())
+          BackupRecord(id: count.id, data: rankingCountToFirestore(count)),
+      ],
+      restore: (id, data) async {
+        final count = mergeRankingCountFromRemote(data, id);
+        await rankingRepository.upsertCount(count, recordLocalActivity: false);
+        return count;
+      },
+    ),
+    BackupCollection(
       name: FirestoreCollections.mediaAssets,
       read: () async => [
         for (final asset in await mediaRepository.getAllAssets())

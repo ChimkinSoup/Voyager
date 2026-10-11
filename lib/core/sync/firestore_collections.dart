@@ -78,6 +78,10 @@ abstract final class FirestoreCollections {
   static const rankingParents = 'ranking_parents';
   static const rankingChildren = 'ranking_children';
 
+  /// Repeat counts, one document per device per entry or unit — see
+  /// `RankingCount`.
+  static const rankingCounts = 'ranking_counts';
+
   /// The owner tag rankings' images carry on their [MediaReference]s, per
   /// `MEDIA.md`. Not a collection of records — a picture hangs off either a
   /// parent or a child, and one tag over both is what lets the page ask "does
@@ -164,6 +168,7 @@ abstract final class FirestoreCollections {
     rankingCategories,
     rankingParents,
     rankingChildren,
+    rankingCounts,
     mediaAssets,
     mediaReferences,
     tagColors,

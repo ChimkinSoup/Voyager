@@ -961,6 +961,55 @@ class RankingsActions {
     sync.pushRankingChild(child);
   }
 
+  // -------------------------------------------------------------------- counts
+
+  /// Moves the repeat count of entry or unit [entryId] by [delta], through
+  /// this device's own row. A repeat added counts as starting entry
+  /// [parentId] — you only rewatch something you started — unless [starts]
+  /// is false, for a Cancel whose + only takes back a −.
+  ///
+  /// Never takes the count below 1: the move is cut short at 1, and one with
+  /// nothing left to do writes nothing. On the entry's queue, so two quick
+  /// takes-back at 2 can't both see 2. Never writes the entry or unit row
+  /// itself (`RANKINGS_COUNTER_HLD.md` §3). Returns the move as made.
+  Future<int> adjustCount(
+    String entryId, {
+    required String parentId,
+    required int delta,
+    bool starts = true,
+  }) async {
+    final repository = _repository;
+    final sync = _sync;
+    final deviceId = _container.read(deviceIdProvider);
+    // Every device shares the placeholder, so a row under it would have more
+    // than one writer and their uploads would overwrite each other.
+    if (deviceId == kUnresolvedDeviceId) return 0;
+    final written = await _serialized('count:$entryId', () async {
+      final sum = await repository.sumCountsFor(entryId);
+      var step = delta;
+      // A sum below 0 shows as 1 (two devices each took the last repeat back
+      // offline). A + lifts it to 0 as well, so the count shown moves.
+      if (step > 0 && sum < 0) step -= sum;
+      if (step < 0) {
+        final total = rankingCountTotal(sum);
+        if (total + step < 1) step = 1 - total;
+      }
+      if (step == 0) return null;
+      final row = await repository.adjustCount(
+        entryId: entryId,
+        deviceId: deviceId,
+        delta: step,
+      );
+      return (row: row, step: step);
+    });
+    if (written == null) return 0;
+    _container.invalidate(rankingCountsProvider);
+    sync.pushRankingCounts([written.row]);
+    // Only a repeat starts an entry; taking one back isn't having it.
+    if (written.step > 0 && starts) await markInProgress(parentId);
+    return written.step;
+  }
+
   // --------------------------------------------------------------------- media
 
   /// Detaches the images on every row a delete took, and reports the instant

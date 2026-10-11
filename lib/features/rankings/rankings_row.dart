@@ -9,6 +9,7 @@ import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/rankings/ranking_queries.dart';
+import 'package:voyager/features/rankings/rankings_count.dart';
 import 'package:voyager/features/rankings/rankings_media_grid.dart';
 import 'package:voyager/features/rankings/rankings_score_stars.dart';
 
@@ -40,6 +41,7 @@ class RankingsRow extends ConsumerStatefulWidget {
     required this.onToggleStar,
     required this.onScoreChanged,
     required this.onTagTapped,
+    required this.onIncrementCount,
     required this.menuItems,
     this.rank,
     this.showRankSlot = false,
@@ -61,6 +63,10 @@ class RankingsRow extends ConsumerStatefulWidget {
   /// that toggled would make the row the user is aiming at disappear under the
   /// pointer. Clearing lives in the filter popover.
   final ValueChanged<String> onTagTapped;
+
+  /// The hover `+` on the repeat count. Only read while the category counts
+  /// entries.
+  final Future<void> Function() onIncrementCount;
 
   /// Built when the menu is actually opened rather than on every rebuild of
   /// the list — see [ContextMenuRegion.itemsBuilder].
@@ -171,6 +177,15 @@ class _RankingsRowState extends ConsumerState<RankingsRow> {
                   child: stoppedIn,
                   seconds: parent.progressSeconds,
                   accent: accent,
+                ),
+              ],
+              if (category.parentCountEnabled) ...[
+                const SizedBox(width: 12),
+                RankingCountSlot(
+                  entryId: parent.id,
+                  hovered: _hovered,
+                  accent: accent,
+                  onIncrement: widget.readOnly ? null : widget.onIncrementCount,
                 ),
               ],
               const SizedBox(width: 12),

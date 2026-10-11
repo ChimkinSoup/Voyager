@@ -593,6 +593,11 @@ class OutboxSyncWorker {
           DriftRankingRepository(_db).getChild,
           rankingChildToFirestore,
         );
+      case FirestoreCollections.rankingCounts:
+        return byId(
+          DriftRankingRepository(_db).getCount,
+          rankingCountToFirestore,
+        );
       case FirestoreCollections.jobSeasons:
         return fromList(
           await DriftJobRepository(_db).getAllSeasons(),

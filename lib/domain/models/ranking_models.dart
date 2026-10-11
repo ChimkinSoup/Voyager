@@ -278,6 +278,8 @@ class RankingCategory extends SoftDeletable {
     this.sortAscending = false,
     this.locationEnabled = false,
     this.progressEnabled = false,
+    this.parentCountEnabled = false,
+    this.childCountEnabled = false,
     this.archivedAt,
   });
 
@@ -335,6 +337,17 @@ class RankingCategory extends SoftDeletable {
   /// when the units do.
   bool get showsProgress => progressEnabled && childUnitsEnabled;
 
+  /// Whether entries carry a repeat count ([RankingCount]). Turning it off
+  /// hides the count and keeps it.
+  final bool parentCountEnabled;
+
+  /// [parentCountEnabled] for units. Only meaningful while
+  /// [childUnitsEnabled].
+  final bool childCountEnabled;
+
+  /// Whether units show their count at all: it goes when the units do.
+  bool get showsChildCount => childCountEnabled && childUnitsEnabled;
+
   /// Set = archived: hidden from the strip, and view-only until it is
   /// unarchived. Distinct from [deletedAt], which cascades to the entries.
   final DateTime? archivedAt;
@@ -374,6 +387,8 @@ class RankingCategory extends SoftDeletable {
     bool? sortAscending,
     bool? locationEnabled,
     bool? progressEnabled,
+    bool? parentCountEnabled,
+    bool? childCountEnabled,
     DateTime? archivedAt,
     bool clearArchivedAt = false,
     DateTime? deletedAt,
@@ -405,6 +420,8 @@ class RankingCategory extends SoftDeletable {
     sortAscending: sortAscending ?? this.sortAscending,
     locationEnabled: locationEnabled ?? this.locationEnabled,
     progressEnabled: progressEnabled ?? this.progressEnabled,
+    parentCountEnabled: parentCountEnabled ?? this.parentCountEnabled,
+    childCountEnabled: childCountEnabled ?? this.childCountEnabled,
     archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
   );
 }
@@ -947,3 +964,39 @@ class RankingChild extends SoftDeletable {
     );
   }
 }
+
+/// One device's net change to the repeat count of one entry or unit.
+///
+/// The count is never stored whole: it is [rankingCountTotal] of every live
+/// row for the entry. A row has exactly one writer — the device it is named
+/// for — so a blind upload of it can never overwrite another device's taps,
+/// which a count kept on the entry's own document could not promise (see
+/// `RANKINGS_COUNTER_HLD.md` §4.1).
+class RankingCount extends SoftDeletable {
+  const RankingCount({
+    required super.id,
+    required super.createdAt,
+    required super.updatedAt,
+    super.version,
+    super.deletedAt,
+    required this.entryId,
+    required this.deviceId,
+    required this.delta,
+  });
+
+  /// A [RankingParent] or [RankingChild] id. Both are UUIDs, so one column
+  /// holds either without a kind beside it.
+  final String entryId;
+  final String deviceId;
+
+  /// Can be negative: a device may take back a repeat another device added.
+  final int delta;
+}
+
+String rankingCountId(String entryId, String deviceId) =>
+    '${entryId}_$deviceId';
+
+/// How many times an entry has been had, from the sum of its rows' deltas.
+/// Having one at all is the first time, so it starts at 1 — and stays there
+/// if two devices each took the last repeat back offline.
+int rankingCountTotal(int deltaSum) => deltaSum < 0 ? 1 : 1 + deltaSum;

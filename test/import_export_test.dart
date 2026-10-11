@@ -815,6 +815,11 @@ Future<void> seedOneOfEverything(AppDatabase db) async {
       updatedAt: now,
     ),
   );
+  await rankingRepo.adjustCount(
+    entryId: 'ranking-child-1',
+    deviceId: 'device-1',
+    delta: 2,
+  );
   await jobRepo.upsertStage(
     JobStage(
       id: 'stage-1',
@@ -1246,6 +1251,7 @@ void main() {
         'ranking_categories_table',
         'ranking_parents_table',
         'ranking_children_table',
+        'ranking_counts_table',
         'media_assets_table',
         'media_references_table',
         'tag_colors_table',

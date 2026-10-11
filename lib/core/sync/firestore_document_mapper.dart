@@ -4135,6 +4135,8 @@ Map<String, dynamic> rankingCategoryToFirestore(RankingCategory category) => {
   'sortAscending': category.sortAscending,
   'locationEnabled': category.locationEnabled,
   'progressEnabled': category.progressEnabled,
+  'parentCountEnabled': category.parentCountEnabled,
+  'childCountEnabled': category.childCountEnabled,
   'archivedAt': _dateToFirestore(category.archivedAt),
   'createdAt': _dateToFirestoreRequired(category.createdAt),
   'updatedAt': _dateToFirestoreRequired(category.updatedAt),
@@ -4240,6 +4242,12 @@ RankingCategory mergeRankingCategoryFromRemote(
         data['locationEnabled'] as bool? ?? local?.locationEnabled ?? false,
     progressEnabled:
         data['progressEnabled'] as bool? ?? local?.progressEnabled ?? false,
+    parentCountEnabled:
+        data['parentCountEnabled'] as bool? ??
+        local?.parentCountEnabled ??
+        false,
+    childCountEnabled:
+        data['childCountEnabled'] as bool? ?? local?.childCountEnabled ?? false,
     archivedAt: data.containsKey('archivedAt')
         ? parseFirestoreDate(data['archivedAt'])
         : local?.archivedAt,
@@ -4651,6 +4659,43 @@ Map<String, dynamic> rankingChildToFirestore(RankingChild child) => {
   'version': child.version,
   'deletedAt': _dateToFirestore(child.deletedAt),
 };
+
+Map<String, dynamic> rankingCountToFirestore(RankingCount count) => {
+  'id': count.id,
+  'entryId': count.entryId,
+  'deviceId': count.deviceId,
+  'delta': count.delta,
+  'createdAt': _dateToFirestoreRequired(count.createdAt),
+  'updatedAt': _dateToFirestoreRequired(count.updatedAt),
+  'version': count.version,
+  'deletedAt': _dateToFirestore(count.deletedAt),
+};
+
+/// Version wins, as for a counter tracker's rows: each row has one writer, so
+/// the higher version is the newer content and there is nothing to merge.
+/// No tiebreak on `updatedAt`: `RankingRepository.upsertCount` only takes a
+/// strictly higher version, so an equal one picked here would not be stored.
+RankingCount mergeRankingCountFromRemote(
+  Map<String, dynamic> data,
+  String id, {
+  RankingCount? local,
+}) {
+  if (local != null && parseVersion(data) <= local.version) return local;
+  final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
+  return RankingCount(
+    id: id,
+    entryId: data['entryId'] as String? ?? local?.entryId ?? '',
+    deviceId: data['deviceId'] as String? ?? local?.deviceId ?? '',
+    delta: (data['delta'] as num?)?.toInt() ?? local?.delta ?? 0,
+    createdAt:
+        parseFirestoreDate(data['createdAt']) ??
+        local?.createdAt ??
+        remoteUpdated,
+    updatedAt: remoteUpdated,
+    version: parseVersion(data),
+    deletedAt: mergeDeletedAtFromRemote(data, local?.deletedAt),
+  );
+}
 
 RankingChild mergeRankingChildFromRemote(
   Map<String, dynamic> data,

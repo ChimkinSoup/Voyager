@@ -45472,6 +45472,35 @@ class $RankingCategoriesTableTable extends RankingCategoriesTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _parentCountEnabledMeta =
+      const VerificationMeta('parentCountEnabled');
+  @override
+  late final GeneratedColumn<bool> parentCountEnabled = GeneratedColumn<bool>(
+    'parent_count_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("parent_count_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _childCountEnabledMeta = const VerificationMeta(
+    'childCountEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> childCountEnabled = GeneratedColumn<bool>(
+    'child_count_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("child_count_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _archivedAtMeta = const VerificationMeta(
     'archivedAt',
   );
@@ -45550,6 +45579,8 @@ class $RankingCategoriesTableTable extends RankingCategoriesTable
     sortAscending,
     locationEnabled,
     progressEnabled,
+    parentCountEnabled,
+    childCountEnabled,
     archivedAt,
     createdAt,
     updatedAt,
@@ -45733,6 +45764,24 @@ class $RankingCategoriesTableTable extends RankingCategoriesTable
         ),
       );
     }
+    if (data.containsKey('parent_count_enabled')) {
+      context.handle(
+        _parentCountEnabledMeta,
+        parentCountEnabled.isAcceptableOrUnknown(
+          data['parent_count_enabled']!,
+          _parentCountEnabledMeta,
+        ),
+      );
+    }
+    if (data.containsKey('child_count_enabled')) {
+      context.handle(
+        _childCountEnabledMeta,
+        childCountEnabled.isAcceptableOrUnknown(
+          data['child_count_enabled']!,
+          _childCountEnabledMeta,
+        ),
+      );
+    }
     if (data.containsKey('archived_at')) {
       context.handle(
         _archivedAtMeta,
@@ -45859,6 +45908,14 @@ class $RankingCategoriesTableTable extends RankingCategoriesTable
         DriftSqlType.bool,
         data['${effectivePrefix}progress_enabled'],
       )!,
+      parentCountEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}parent_count_enabled'],
+      )!,
+      childCountEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}child_count_enabled'],
+      )!,
       archivedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}archived_at'],
@@ -45923,6 +45980,10 @@ class RankingCategoriesTableData extends DataClass
   /// units. Only offered while [childUnitsEnabled].
   final bool progressEnabled;
 
+  /// Whether entries, and units, carry a repeat count. See `RankingCount`.
+  final bool parentCountEnabled;
+  final bool childCountEnabled;
+
   /// Set = hidden from the picker and view-only. Not [deletedAt]: archiving
   /// does not cascade.
   final DateTime? archivedAt;
@@ -45951,6 +46012,8 @@ class RankingCategoriesTableData extends DataClass
     required this.sortAscending,
     required this.locationEnabled,
     required this.progressEnabled,
+    required this.parentCountEnabled,
+    required this.childCountEnabled,
     this.archivedAt,
     required this.createdAt,
     required this.updatedAt,
@@ -45982,6 +46045,8 @@ class RankingCategoriesTableData extends DataClass
     map['sort_ascending'] = Variable<bool>(sortAscending);
     map['location_enabled'] = Variable<bool>(locationEnabled);
     map['progress_enabled'] = Variable<bool>(progressEnabled);
+    map['parent_count_enabled'] = Variable<bool>(parentCountEnabled);
+    map['child_count_enabled'] = Variable<bool>(childCountEnabled);
     if (!nullToAbsent || archivedAt != null) {
       map['archived_at'] = Variable<DateTime>(archivedAt);
     }
@@ -46018,6 +46083,8 @@ class RankingCategoriesTableData extends DataClass
       sortAscending: Value(sortAscending),
       locationEnabled: Value(locationEnabled),
       progressEnabled: Value(progressEnabled),
+      parentCountEnabled: Value(parentCountEnabled),
+      childCountEnabled: Value(childCountEnabled),
       archivedAt: archivedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(archivedAt),
@@ -46062,6 +46129,8 @@ class RankingCategoriesTableData extends DataClass
       sortAscending: serializer.fromJson<bool>(json['sortAscending']),
       locationEnabled: serializer.fromJson<bool>(json['locationEnabled']),
       progressEnabled: serializer.fromJson<bool>(json['progressEnabled']),
+      parentCountEnabled: serializer.fromJson<bool>(json['parentCountEnabled']),
+      childCountEnabled: serializer.fromJson<bool>(json['childCountEnabled']),
       archivedAt: serializer.fromJson<DateTime?>(json['archivedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -46093,6 +46162,8 @@ class RankingCategoriesTableData extends DataClass
       'sortAscending': serializer.toJson<bool>(sortAscending),
       'locationEnabled': serializer.toJson<bool>(locationEnabled),
       'progressEnabled': serializer.toJson<bool>(progressEnabled),
+      'parentCountEnabled': serializer.toJson<bool>(parentCountEnabled),
+      'childCountEnabled': serializer.toJson<bool>(childCountEnabled),
       'archivedAt': serializer.toJson<DateTime?>(archivedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -46122,6 +46193,8 @@ class RankingCategoriesTableData extends DataClass
     bool? sortAscending,
     bool? locationEnabled,
     bool? progressEnabled,
+    bool? parentCountEnabled,
+    bool? childCountEnabled,
     Value<DateTime?> archivedAt = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -46148,6 +46221,8 @@ class RankingCategoriesTableData extends DataClass
     sortAscending: sortAscending ?? this.sortAscending,
     locationEnabled: locationEnabled ?? this.locationEnabled,
     progressEnabled: progressEnabled ?? this.progressEnabled,
+    parentCountEnabled: parentCountEnabled ?? this.parentCountEnabled,
+    childCountEnabled: childCountEnabled ?? this.childCountEnabled,
     archivedAt: archivedAt.present ? archivedAt.value : this.archivedAt,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -46208,6 +46283,12 @@ class RankingCategoriesTableData extends DataClass
       progressEnabled: data.progressEnabled.present
           ? data.progressEnabled.value
           : this.progressEnabled,
+      parentCountEnabled: data.parentCountEnabled.present
+          ? data.parentCountEnabled.value
+          : this.parentCountEnabled,
+      childCountEnabled: data.childCountEnabled.present
+          ? data.childCountEnabled.value
+          : this.childCountEnabled,
       archivedAt: data.archivedAt.present
           ? data.archivedAt.value
           : this.archivedAt,
@@ -46241,6 +46322,8 @@ class RankingCategoriesTableData extends DataClass
           ..write('sortAscending: $sortAscending, ')
           ..write('locationEnabled: $locationEnabled, ')
           ..write('progressEnabled: $progressEnabled, ')
+          ..write('parentCountEnabled: $parentCountEnabled, ')
+          ..write('childCountEnabled: $childCountEnabled, ')
           ..write('archivedAt: $archivedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -46272,6 +46355,8 @@ class RankingCategoriesTableData extends DataClass
     sortAscending,
     locationEnabled,
     progressEnabled,
+    parentCountEnabled,
+    childCountEnabled,
     archivedAt,
     createdAt,
     updatedAt,
@@ -46302,6 +46387,8 @@ class RankingCategoriesTableData extends DataClass
           other.sortAscending == this.sortAscending &&
           other.locationEnabled == this.locationEnabled &&
           other.progressEnabled == this.progressEnabled &&
+          other.parentCountEnabled == this.parentCountEnabled &&
+          other.childCountEnabled == this.childCountEnabled &&
           other.archivedAt == this.archivedAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -46331,6 +46418,8 @@ class RankingCategoriesTableCompanion
   final Value<bool> sortAscending;
   final Value<bool> locationEnabled;
   final Value<bool> progressEnabled;
+  final Value<bool> parentCountEnabled;
+  final Value<bool> childCountEnabled;
   final Value<DateTime?> archivedAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -46358,6 +46447,8 @@ class RankingCategoriesTableCompanion
     this.sortAscending = const Value.absent(),
     this.locationEnabled = const Value.absent(),
     this.progressEnabled = const Value.absent(),
+    this.parentCountEnabled = const Value.absent(),
+    this.childCountEnabled = const Value.absent(),
     this.archivedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -46386,6 +46477,8 @@ class RankingCategoriesTableCompanion
     this.sortAscending = const Value.absent(),
     this.locationEnabled = const Value.absent(),
     this.progressEnabled = const Value.absent(),
+    this.parentCountEnabled = const Value.absent(),
+    this.childCountEnabled = const Value.absent(),
     this.archivedAt = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
@@ -46418,6 +46511,8 @@ class RankingCategoriesTableCompanion
     Expression<bool>? sortAscending,
     Expression<bool>? locationEnabled,
     Expression<bool>? progressEnabled,
+    Expression<bool>? parentCountEnabled,
+    Expression<bool>? childCountEnabled,
     Expression<DateTime>? archivedAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -46449,6 +46544,9 @@ class RankingCategoriesTableCompanion
       if (sortAscending != null) 'sort_ascending': sortAscending,
       if (locationEnabled != null) 'location_enabled': locationEnabled,
       if (progressEnabled != null) 'progress_enabled': progressEnabled,
+      if (parentCountEnabled != null)
+        'parent_count_enabled': parentCountEnabled,
+      if (childCountEnabled != null) 'child_count_enabled': childCountEnabled,
       if (archivedAt != null) 'archived_at': archivedAt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -46479,6 +46577,8 @@ class RankingCategoriesTableCompanion
     Value<bool>? sortAscending,
     Value<bool>? locationEnabled,
     Value<bool>? progressEnabled,
+    Value<bool>? parentCountEnabled,
+    Value<bool>? childCountEnabled,
     Value<DateTime?>? archivedAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -46507,6 +46607,8 @@ class RankingCategoriesTableCompanion
       sortAscending: sortAscending ?? this.sortAscending,
       locationEnabled: locationEnabled ?? this.locationEnabled,
       progressEnabled: progressEnabled ?? this.progressEnabled,
+      parentCountEnabled: parentCountEnabled ?? this.parentCountEnabled,
+      childCountEnabled: childCountEnabled ?? this.childCountEnabled,
       archivedAt: archivedAt ?? this.archivedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -46583,6 +46685,12 @@ class RankingCategoriesTableCompanion
     if (progressEnabled.present) {
       map['progress_enabled'] = Variable<bool>(progressEnabled.value);
     }
+    if (parentCountEnabled.present) {
+      map['parent_count_enabled'] = Variable<bool>(parentCountEnabled.value);
+    }
+    if (childCountEnabled.present) {
+      map['child_count_enabled'] = Variable<bool>(childCountEnabled.value);
+    }
     if (archivedAt.present) {
       map['archived_at'] = Variable<DateTime>(archivedAt.value);
     }
@@ -46627,6 +46735,8 @@ class RankingCategoriesTableCompanion
           ..write('sortAscending: $sortAscending, ')
           ..write('locationEnabled: $locationEnabled, ')
           ..write('progressEnabled: $progressEnabled, ')
+          ..write('parentCountEnabled: $parentCountEnabled, ')
+          ..write('childCountEnabled: $childCountEnabled, ')
           ..write('archivedAt: $archivedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -48389,6 +48499,517 @@ class RankingChildrenTableCompanion
           ..write('fieldValuesJson: $fieldValuesJson, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('fieldUpdatedAtJson: $fieldUpdatedAtJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RankingCountsTableTable extends RankingCountsTable
+    with TableInfo<$RankingCountsTableTable, RankingCountsTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RankingCountsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _entryIdMeta = const VerificationMeta(
+    'entryId',
+  );
+  @override
+  late final GeneratedColumn<String> entryId = GeneratedColumn<String>(
+    'entry_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
+  @override
+  late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
+    'device_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deltaMeta = const VerificationMeta('delta');
+  @override
+  late final GeneratedColumn<int> delta = GeneratedColumn<int>(
+    'delta',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    entryId,
+    deviceId,
+    delta,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'ranking_counts_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RankingCountsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('entry_id')) {
+      context.handle(
+        _entryIdMeta,
+        entryId.isAcceptableOrUnknown(data['entry_id']!, _entryIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entryIdMeta);
+    }
+    if (data.containsKey('device_id')) {
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['device_id']!, _deviceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deviceIdMeta);
+    }
+    if (data.containsKey('delta')) {
+      context.handle(
+        _deltaMeta,
+        delta.isAcceptableOrUnknown(data['delta']!, _deltaMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deltaMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RankingCountsTableData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RankingCountsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      entryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entry_id'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}device_id'],
+      )!,
+      delta: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}delta'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+    );
+  }
+
+  @override
+  $RankingCountsTableTable createAlias(String alias) {
+    return $RankingCountsTableTable(attachedDatabase, alias);
+  }
+}
+
+class RankingCountsTableData extends DataClass
+    implements Insertable<RankingCountsTableData> {
+  final String id;
+  final String entryId;
+  final String deviceId;
+  final int delta;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  const RankingCountsTableData({
+    required this.id,
+    required this.entryId,
+    required this.deviceId,
+    required this.delta,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['entry_id'] = Variable<String>(entryId);
+    map['device_id'] = Variable<String>(deviceId);
+    map['delta'] = Variable<int>(delta);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  RankingCountsTableCompanion toCompanion(bool nullToAbsent) {
+    return RankingCountsTableCompanion(
+      id: Value(id),
+      entryId: Value(entryId),
+      deviceId: Value(deviceId),
+      delta: Value(delta),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory RankingCountsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RankingCountsTableData(
+      id: serializer.fromJson<String>(json['id']),
+      entryId: serializer.fromJson<String>(json['entryId']),
+      deviceId: serializer.fromJson<String>(json['deviceId']),
+      delta: serializer.fromJson<int>(json['delta']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'entryId': serializer.toJson<String>(entryId),
+      'deviceId': serializer.toJson<String>(deviceId),
+      'delta': serializer.toJson<int>(delta),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  RankingCountsTableData copyWith({
+    String? id,
+    String? entryId,
+    String? deviceId,
+    int? delta,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+  }) => RankingCountsTableData(
+    id: id ?? this.id,
+    entryId: entryId ?? this.entryId,
+    deviceId: deviceId ?? this.deviceId,
+    delta: delta ?? this.delta,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+  );
+  RankingCountsTableData copyWithCompanion(RankingCountsTableCompanion data) {
+    return RankingCountsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      entryId: data.entryId.present ? data.entryId.value : this.entryId,
+      deviceId: data.deviceId.present ? data.deviceId.value : this.deviceId,
+      delta: data.delta.present ? data.delta.value : this.delta,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RankingCountsTableData(')
+          ..write('id: $id, ')
+          ..write('entryId: $entryId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('delta: $delta, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    entryId,
+    deviceId,
+    delta,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RankingCountsTableData &&
+          other.id == this.id &&
+          other.entryId == this.entryId &&
+          other.deviceId == this.deviceId &&
+          other.delta == this.delta &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt);
+}
+
+class RankingCountsTableCompanion
+    extends UpdateCompanion<RankingCountsTableData> {
+  final Value<String> id;
+  final Value<String> entryId;
+  final Value<String> deviceId;
+  final Value<int> delta;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const RankingCountsTableCompanion({
+    this.id = const Value.absent(),
+    this.entryId = const Value.absent(),
+    this.deviceId = const Value.absent(),
+    this.delta = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RankingCountsTableCompanion.insert({
+    required String id,
+    required String entryId,
+    required String deviceId,
+    required int delta,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       entryId = Value(entryId),
+       deviceId = Value(deviceId),
+       delta = Value(delta),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<RankingCountsTableData> custom({
+    Expression<String>? id,
+    Expression<String>? entryId,
+    Expression<String>? deviceId,
+    Expression<int>? delta,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (entryId != null) 'entry_id': entryId,
+      if (deviceId != null) 'device_id': deviceId,
+      if (delta != null) 'delta': delta,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RankingCountsTableCompanion copyWith({
+    Value<String>? id,
+    Value<String>? entryId,
+    Value<String>? deviceId,
+    Value<int>? delta,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<int>? rowid,
+  }) {
+    return RankingCountsTableCompanion(
+      id: id ?? this.id,
+      entryId: entryId ?? this.entryId,
+      deviceId: deviceId ?? this.deviceId,
+      delta: delta ?? this.delta,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (entryId.present) {
+      map['entry_id'] = Variable<String>(entryId.value);
+    }
+    if (deviceId.present) {
+      map['device_id'] = Variable<String>(deviceId.value);
+    }
+    if (delta.present) {
+      map['delta'] = Variable<int>(delta.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RankingCountsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('entryId: $entryId, ')
+          ..write('deviceId: $deviceId, ')
+          ..write('delta: $delta, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -50575,6 +51196,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $RankingParentsTableTable(this);
   late final $RankingChildrenTableTable rankingChildrenTable =
       $RankingChildrenTableTable(this);
+  late final $RankingCountsTableTable rankingCountsTable =
+      $RankingCountsTableTable(this);
   late final $LeetCodeCheatTabsTableTable leetCodeCheatTabsTable =
       $LeetCodeCheatTabsTableTable(this);
   late final $LeetCodeCheatSectionsTableTable leetCodeCheatSectionsTable =
@@ -50630,6 +51253,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final Index idxRankingChildrenParent = Index(
     'idx_ranking_children_parent',
     'CREATE INDEX idx_ranking_children_parent ON ranking_children_table (parent_id)',
+  );
+  late final Index idxRankingCountsEntry = Index(
+    'idx_ranking_counts_entry',
+    'CREATE INDEX idx_ranking_counts_entry ON ranking_counts_table (entry_id)',
   );
   late final Index idxLeetcodeCheatSectionsTab = Index(
     'idx_leetcode_cheat_sections_tab',
@@ -50705,6 +51332,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     rankingCategoriesTable,
     rankingParentsTable,
     rankingChildrenTable,
+    rankingCountsTable,
     leetCodeCheatTabsTable,
     leetCodeCheatSectionsTable,
     leetCodeCheatEntriesTable,
@@ -50721,6 +51349,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     idxMediaReferencesMediaId,
     idxRankingParentsCategory,
     idxRankingChildrenParent,
+    idxRankingCountsEntry,
     idxLeetcodeCheatSectionsTab,
     idxLeetcodeCheatEntriesSection,
   ];
@@ -72214,6 +72843,8 @@ typedef $$RankingCategoriesTableTableCreateCompanionBuilder =
       Value<bool> sortAscending,
       Value<bool> locationEnabled,
       Value<bool> progressEnabled,
+      Value<bool> parentCountEnabled,
+      Value<bool> childCountEnabled,
       Value<DateTime?> archivedAt,
       required DateTime createdAt,
       required DateTime updatedAt,
@@ -72243,6 +72874,8 @@ typedef $$RankingCategoriesTableTableUpdateCompanionBuilder =
       Value<bool> sortAscending,
       Value<bool> locationEnabled,
       Value<bool> progressEnabled,
+      Value<bool> parentCountEnabled,
+      Value<bool> childCountEnabled,
       Value<DateTime?> archivedAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -72357,6 +72990,16 @@ class $$RankingCategoriesTableTableFilterComposer
 
   ColumnFilters<bool> get progressEnabled => $composableBuilder(
     column: $table.progressEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get parentCountEnabled => $composableBuilder(
+    column: $table.parentCountEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get childCountEnabled => $composableBuilder(
+    column: $table.childCountEnabled,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -72495,6 +73138,16 @@ class $$RankingCategoriesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get parentCountEnabled => $composableBuilder(
+    column: $table.parentCountEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get childCountEnabled => $composableBuilder(
+    column: $table.childCountEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get archivedAt => $composableBuilder(
     column: $table.archivedAt,
     builder: (column) => ColumnOrderings(column),
@@ -72620,6 +73273,16 @@ class $$RankingCategoriesTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get parentCountEnabled => $composableBuilder(
+    column: $table.parentCountEnabled,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get childCountEnabled => $composableBuilder(
+    column: $table.childCountEnabled,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get archivedAt => $composableBuilder(
     column: $table.archivedAt,
     builder: (column) => column,
@@ -72704,6 +73367,8 @@ class $$RankingCategoriesTableTableTableManager
                 Value<bool> sortAscending = const Value.absent(),
                 Value<bool> locationEnabled = const Value.absent(),
                 Value<bool> progressEnabled = const Value.absent(),
+                Value<bool> parentCountEnabled = const Value.absent(),
+                Value<bool> childCountEnabled = const Value.absent(),
                 Value<DateTime?> archivedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -72731,6 +73396,8 @@ class $$RankingCategoriesTableTableTableManager
                 sortAscending: sortAscending,
                 locationEnabled: locationEnabled,
                 progressEnabled: progressEnabled,
+                parentCountEnabled: parentCountEnabled,
+                childCountEnabled: childCountEnabled,
                 archivedAt: archivedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -72760,6 +73427,8 @@ class $$RankingCategoriesTableTableTableManager
                 Value<bool> sortAscending = const Value.absent(),
                 Value<bool> locationEnabled = const Value.absent(),
                 Value<bool> progressEnabled = const Value.absent(),
+                Value<bool> parentCountEnabled = const Value.absent(),
+                Value<bool> childCountEnabled = const Value.absent(),
                 Value<DateTime?> archivedAt = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
@@ -72787,6 +73456,8 @@ class $$RankingCategoriesTableTableTableManager
                 sortAscending: sortAscending,
                 locationEnabled: locationEnabled,
                 progressEnabled: progressEnabled,
+                parentCountEnabled: parentCountEnabled,
+                childCountEnabled: childCountEnabled,
                 archivedAt: archivedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -73655,6 +74326,276 @@ typedef $$RankingChildrenTableTableProcessedTableManager =
         >,
       ),
       RankingChildrenTableData,
+      PrefetchHooks Function()
+    >;
+typedef $$RankingCountsTableTableCreateCompanionBuilder =
+    RankingCountsTableCompanion Function({
+      required String id,
+      required String entryId,
+      required String deviceId,
+      required int delta,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$RankingCountsTableTableUpdateCompanionBuilder =
+    RankingCountsTableCompanion Function({
+      Value<String> id,
+      Value<String> entryId,
+      Value<String> deviceId,
+      Value<int> delta,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<int> rowid,
+    });
+
+class $$RankingCountsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $RankingCountsTableTable> {
+  $$RankingCountsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entryId => $composableBuilder(
+    column: $table.entryId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get delta => $composableBuilder(
+    column: $table.delta,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RankingCountsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $RankingCountsTableTable> {
+  $$RankingCountsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entryId => $composableBuilder(
+    column: $table.entryId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deviceId => $composableBuilder(
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get delta => $composableBuilder(
+    column: $table.delta,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RankingCountsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RankingCountsTableTable> {
+  $$RankingCountsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get entryId =>
+      $composableBuilder(column: $table.entryId, builder: (column) => column);
+
+  GeneratedColumn<String> get deviceId =>
+      $composableBuilder(column: $table.deviceId, builder: (column) => column);
+
+  GeneratedColumn<int> get delta =>
+      $composableBuilder(column: $table.delta, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$RankingCountsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RankingCountsTableTable,
+          RankingCountsTableData,
+          $$RankingCountsTableTableFilterComposer,
+          $$RankingCountsTableTableOrderingComposer,
+          $$RankingCountsTableTableAnnotationComposer,
+          $$RankingCountsTableTableCreateCompanionBuilder,
+          $$RankingCountsTableTableUpdateCompanionBuilder,
+          (
+            RankingCountsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $RankingCountsTableTable,
+              RankingCountsTableData
+            >,
+          ),
+          RankingCountsTableData,
+          PrefetchHooks Function()
+        > {
+  $$RankingCountsTableTableTableManager(
+    _$AppDatabase db,
+    $RankingCountsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RankingCountsTableTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RankingCountsTableTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RankingCountsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> entryId = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<int> delta = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RankingCountsTableCompanion(
+                id: id,
+                entryId: entryId,
+                deviceId: deviceId,
+                delta: delta,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String entryId,
+                required String deviceId,
+                required int delta,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RankingCountsTableCompanion.insert(
+                id: id,
+                entryId: entryId,
+                deviceId: deviceId,
+                delta: delta,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RankingCountsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RankingCountsTableTable,
+      RankingCountsTableData,
+      $$RankingCountsTableTableFilterComposer,
+      $$RankingCountsTableTableOrderingComposer,
+      $$RankingCountsTableTableAnnotationComposer,
+      $$RankingCountsTableTableCreateCompanionBuilder,
+      $$RankingCountsTableTableUpdateCompanionBuilder,
+      (
+        RankingCountsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $RankingCountsTableTable,
+          RankingCountsTableData
+        >,
+      ),
+      RankingCountsTableData,
       PrefetchHooks Function()
     >;
 typedef $$LeetCodeCheatTabsTableTableCreateCompanionBuilder =
@@ -74920,6 +75861,8 @@ class $AppDatabaseManager {
       $$RankingParentsTableTableTableManager(_db, _db.rankingParentsTable);
   $$RankingChildrenTableTableTableManager get rankingChildrenTable =>
       $$RankingChildrenTableTableTableManager(_db, _db.rankingChildrenTable);
+  $$RankingCountsTableTableTableManager get rankingCountsTable =>
+      $$RankingCountsTableTableTableManager(_db, _db.rankingCountsTable);
   $$LeetCodeCheatTabsTableTableTableManager get leetCodeCheatTabsTable =>
       $$LeetCodeCheatTabsTableTableTableManager(
         _db,

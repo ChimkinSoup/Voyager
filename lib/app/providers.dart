@@ -1713,6 +1713,15 @@ final rankingParentCountsProvider =
       (ref) => ref.watch(rankingRepositoryProvider).countParentsByCategory(),
     );
 
+/// The sum of each entry's and unit's repeat-count deltas, by id — read
+/// through `rankingCountTotal`. One map for every category: the rows are a
+/// handful of integers, and a tap re-reads only this. Kept out of
+/// [_rankingDataProviders] so an edit that can't move a count doesn't re-sum
+/// them all; a sync tick and a restore still reach it below.
+final rankingCountsProvider = FutureProvider<Map<String, int>>(
+  (ref) => ref.watch(rankingRepositoryProvider).sumCountsByEntry(),
+);
+
 final _rankingDataProviders = <ProviderOrFamily>[
   rankingCategoriesProvider,
   rankingParentsProvider,
@@ -1800,6 +1809,7 @@ final _secondaryDataProviders = <ProviderOrFamily>[
   flaggedWordsProvider,
   ..._jobDataProviders,
   ..._rankingDataProviders,
+  rankingCountsProvider,
   settingsProvider,
   trashItemsProvider,
   // A restore writes images without going through MediaService, so the

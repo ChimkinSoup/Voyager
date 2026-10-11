@@ -22,6 +22,7 @@ import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/rankings/ranking_queries.dart';
 import 'package:voyager/features/rankings/rankings_actions.dart';
 import 'package:voyager/features/rankings/rankings_child_list.dart';
+import 'package:voyager/features/rankings/rankings_count.dart';
 import 'package:voyager/features/rankings/rankings_field_editor.dart';
 import 'package:voyager/features/rankings/rankings_locations_section.dart';
 import 'package:voyager/features/rankings/rankings_providers.dart';
@@ -452,6 +453,20 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                       ),
                     ),
                   ),
+                  if (category.parentCountEnabled) ...[
+                    const SizedBox(height: 12),
+                    RankingCountStepper(
+                      entryId: _current.id,
+                      accent: accent,
+                      onAdjust: widget.readOnly
+                          ? null
+                          : (delta) => _actions.adjustCount(
+                              _current.id,
+                              parentId: _current.id,
+                              delta: delta,
+                            ),
+                    ),
+                  ],
                   if (category.locationEnabled) ...[
                     const SizedBox(height: 12),
                     RankingLocationsSection(

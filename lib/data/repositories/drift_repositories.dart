@@ -8011,6 +8011,133 @@ class DriftRankingRepository implements RankingRepository {
   }
 
   @override
+  Future<Map<String, int>> sumCountsByEntry() => _sumCounts();
+
+  @override
+  Future<int> sumCountsFor(String entryId) async =>
+      (await _sumCounts(entryId: entryId))[entryId] ?? 0;
+
+  /// The live rows' deltas summed by entry, for [entryId] alone when given.
+  Future<Map<String, int>> _sumCounts({String? entryId}) async {
+    final table = _db.rankingCountsTable;
+    final sum = table.delta.sum();
+    final rows =
+        await (_db.selectOnly(table)
+              ..addColumns([table.entryId, sum])
+              ..where(
+                entryId == null
+                    ? table.deletedAt.isNull()
+                    : table.entryId.equals(entryId) & table.deletedAt.isNull(),
+              )
+              ..groupBy([table.entryId]))
+            .get();
+    return {
+      for (final row in rows) row.read(table.entryId)!: row.read(sum) ?? 0,
+    };
+  }
+
+  @override
+  Future<RankingCount?> getCount(String id) async {
+    final row = await (_db.select(
+      _db.rankingCountsTable,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _mapCount(row);
+  }
+
+  @override
+  Future<List<RankingCount>> getAllCounts() async =>
+      (await _db.select(_db.rankingCountsTable).get()).map(_mapCount).toList();
+
+  @override
+  Future<void> upsertCount(
+    RankingCount count, {
+    bool recordLocalActivity = true,
+  }) async {
+    final companion = RankingCountsTableCompanion(
+      id: Value(count.id),
+      entryId: Value(count.entryId),
+      deviceId: Value(count.deviceId),
+      delta: Value(count.delta),
+      createdAt: Value(count.createdAt),
+      updatedAt: Value(count.updatedAt),
+      version: Value(count.version),
+      deletedAt: Value(count.deletedAt),
+    );
+    // The guard is in the statement rather than a read before it: a tap that
+    // lands between such a read and the write would be written over.
+    await _db
+        .into(_db.rankingCountsTable)
+        .insert(
+          companion,
+          onConflict: DoUpdate(
+            (_) => companion,
+            where: (old) => old.version.isSmallerThanValue(count.version),
+          ),
+        );
+    if (recordLocalActivity) {
+      _syncActivity?.recordLocalSave(FirestoreCollections.rankingCounts);
+    }
+  }
+
+  @override
+  Future<RankingCount> adjustCount({
+    required String entryId,
+    required String deviceId,
+    required int delta,
+  }) async {
+    final id = rankingCountId(entryId, deviceId);
+    final now = utcNow();
+    final table = _db.rankingCountsTable;
+    // One statement, not a read-modify-write: taps arriving faster than a
+    // round-trip would otherwise each read the same delta and lose all but
+    // the last.
+    // RETURNING rather than a read after: a write landing in between would be
+    // returned as this tap's.
+    final row = await _db
+        .into(table)
+        .insertReturning(
+          RankingCountsTableCompanion.insert(
+            id: id,
+            entryId: entryId,
+            deviceId: deviceId,
+            delta: delta,
+            createdAt: now,
+            updatedAt: now,
+            version: const Value(1),
+          ),
+          // A soft-deleted row comes back holding this tap alone: what it
+          // held was dropped from the sums with it, and a tap left on a
+          // deleted row would never be counted at all.
+          onConflict: DoUpdate.withExcluded(
+            (old, excluded) => RankingCountsTableCompanion.custom(
+              delta: CaseWhenExpression(
+                cases: [
+                  CaseWhen(old.deletedAt.isNotNull(), then: excluded.delta),
+                ],
+                orElse: old.delta + excluded.delta,
+              ),
+              version: old.version + const Constant(1),
+              updatedAt: excluded.updatedAt,
+              deletedAt: const Constant<DateTime>(null),
+            ),
+          ),
+        );
+    _syncActivity?.recordLocalSave(FirestoreCollections.rankingCounts);
+    return _mapCount(row);
+  }
+
+  RankingCount _mapCount(RankingCountsTableData row) => RankingCount(
+    id: row.id,
+    entryId: row.entryId,
+    deviceId: row.deviceId,
+    delta: row.delta,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    version: row.version,
+    deletedAt: row.deletedAt,
+  );
+
+  @override
   Future<RankingParent?> getParent(String id) async {
     final row = await (_db.select(
       _db.rankingParentsTable,
@@ -8308,6 +8435,8 @@ class DriftRankingRepository implements RankingRepository {
     sortAscending: Value(category.sortAscending),
     locationEnabled: Value(category.locationEnabled),
     progressEnabled: Value(category.progressEnabled),
+    parentCountEnabled: Value(category.parentCountEnabled),
+    childCountEnabled: Value(category.childCountEnabled),
     archivedAt: Value(category.archivedAt),
     createdAt: Value(category.createdAt),
     updatedAt: Value(category.updatedAt),
@@ -8383,6 +8512,8 @@ class DriftRankingRepository implements RankingRepository {
         sortAscending: row.sortAscending,
         locationEnabled: row.locationEnabled,
         progressEnabled: row.progressEnabled,
+        parentCountEnabled: row.parentCountEnabled,
+        childCountEnabled: row.childCountEnabled,
         archivedAt: row.archivedAt,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
