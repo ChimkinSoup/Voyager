@@ -1,0 +1,16 @@
+final repo = c.read(financeRepositoryProvider);
+var taken = false;
+debugPrint('V120 watching');
+for (var i = 0; i < 400 && !taken; i++) {
+  final live = await repo.listCategories();
+  if (!live.any((x) => x.id == 'v120-a')) {
+    final now = DateTime.now().toUtc();
+    await repo.upsertCategory(FinanceCategory(id: 'v120-b', createdAt: now, updatedAt: now, version: 1, name: 'V120 Other', tags: const ['snack']));
+    c.invalidate(financeCategoriesProvider);
+    taken = true;
+    debugPrint('V120 B took snack after A was deleted');
+  } else {
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+  }
+}
+debugPrint('V120 watch done taken=$taken');

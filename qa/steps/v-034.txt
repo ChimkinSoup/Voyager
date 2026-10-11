@@ -1,0 +1,15 @@
+# BUG-034 re-check: after the holder exits, leave Voyager and come back, then press Ctrl+Alt+R
+activate
+place 1000 600 1800 1100
+wait 800
+other-open
+wait 800
+ostatus
+status
+activate
+wait 1500
+status
+hotkey ctrl+alt+r
+wait 1800
+shot v-034-after
+status

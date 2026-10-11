@@ -1,0 +1,39 @@
+# BUG-108 re-check (2026-10-07 behaviour change): typed invalid keys are refused
+activate
+hotkey ctrl+alt+f
+wait 1800
+shot v-108-open
+type 1e12
+wait 400
+shot v-108-1e12
+key ctrl+a
+key backspace
+type 1 5
+wait 400
+shot v-108-1sp5
+key ctrl+a
+key backspace
+type $7a
+wait 400
+shot v-108-dollar
+key ctrl+a
+key backspace
+type 1,5
+wait 600
+shot v-108-comma
+key ctrl+a
+key backspace
+type 12.345
+wait 600
+shot v-108-3dec
+key ctrl+a
+key backspace
+type 1234
+key left
+key left
+key backspace
+wait 400
+shot v-108-midbksp
+key esc
+wait 800
+shot v-108-closed

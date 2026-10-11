@@ -1,0 +1,5 @@
+final now = DateTime.now().toUtc();
+final repo = c.read(financeRepositoryProvider);
+await repo.upsertCategory(FinanceCategory(id: 'v120-a', createdAt: now, updatedAt: now, version: 1, name: 'V120 Food', tags: const ['food', 'snack']));
+c.invalidate(financeCategoriesProvider);
+debugPrint('V120 seeded');

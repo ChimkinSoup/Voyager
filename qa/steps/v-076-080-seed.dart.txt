@@ -1,0 +1,25 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final cr = c.read(calendarRepositoryProvider);
+const blue = 4286356735;
+final cal = Calendar(id: 'v076-cal', createdAt: now, updatedAt: now, version: 1, name: 'V076 Cal', colorValue: blue);
+await cr.upsertCalendar(cal);
+final b = CalendarEvent(id: 'v076-b', createdAt: now, updatedAt: now, version: 1, calendarId: 'v076-cal', title: 'Alpha same time', start: DateTime(2026, 10, 15, 9), end: DateTime(2026, 10, 15, 10), isFullDay: false, colorValue: blue);
+final a = CalendarEvent(id: 'v076-a', createdAt: now, updatedAt: now, version: 1, calendarId: 'v076-cal', title: 'Zeta same time', start: DateTime(2026, 10, 15, 9), end: DateTime(2026, 10, 15, 10), isFullDay: false, colorValue: blue);
+await cr.upsertEvent(b);
+await cr.upsertEvent(a);
+await r.pushRecords(FirestoreCollections.calendars, [cal]);
+await r.pushRecords(FirestoreCollections.calendarEvents, [b, a]);
+final tr = c.read(todoRepositoryProvider);
+final list = TodoListModel(id: 'v080-list', createdAt: now, updatedAt: now, version: 1, name: 'V080 Tasks', colorValue: 0xFFE78284);
+await tr.upsertList(list); r.pushTodoList(list);
+for (var i = 0; i < 8; i++) {
+  final t = TodoTask(id: 'v080-done-$i', createdAt: now, updatedAt: now, version: 1, listId: 'v080-list', title: 'Done morning $i', dueDate: DateTime(2026, 10, 14, 8, i * 5).toUtc(), dueDateSetAt: now, completed: true, completedAt: now, sortOrder: 1000000 + i);
+  await tr.upsertTask(t); await r.pushTodoTaskNow(t);
+}
+final open = TodoTask(id: 'v080-open', createdAt: now, updatedAt: now, version: 1, listId: 'v080-list', title: 'Open evening', dueDate: DateTime(2026, 10, 14, 17).toUtc(), dueDateSetAt: now, sortOrder: 2000000);
+await tr.upsertTask(open); await r.pushTodoTaskNow(open);
+final s = await c.read(settingsRepositoryProvider).getSettings();
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(lastViewedCalendarId: 'v076-cal'));
+debugPrint('V076 seeded hide=${s.hideCompletedTasks}');
+invalidateAllDataProvidersIn(c);

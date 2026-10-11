@@ -1,0 +1,56 @@
+# BUG-035 re-check: replace one floater with another from another app, many gaps
+place 1000 600 1800 1100
+wait 500
+other-open
+wait 500
+hotkey ctrl+alt+t
+hotkey ctrl+alt+f
+hotkey ctrl+alt+j
+hotkey ctrl+alt+r
+hotkey ctrl+alt+t
+wait 1500
+hotkey ctrl+alt+f
+wait 100
+hotkey ctrl+alt+j
+wait 100
+hotkey ctrl+alt+r
+wait 100
+hotkey ctrl+alt+t
+wait 1500
+hotkey ctrl+alt+f
+wait 300
+hotkey ctrl+alt+j
+wait 300
+hotkey ctrl+alt+r
+wait 300
+hotkey ctrl+alt+t
+wait 300
+hotkey ctrl+alt+f
+wait 1500
+hotkey ctrl+alt+t
+wait 700
+type x
+hotkey ctrl+alt+f
+wait 700
+type 5
+hotkey ctrl+alt+r
+wait 700
+type y
+hotkey ctrl+alt+t
+wait 700
+hotkey ctrl+alt+f
+wait 50
+hotkey ctrl+alt+t
+wait 50
+hotkey ctrl+alt+f
+wait 50
+hotkey ctrl+alt+t
+wait 50
+hotkey ctrl+alt+r
+wait 2000
+shot v-035-end
+ostatus
+status
+other-click
+wait 1500
+activate

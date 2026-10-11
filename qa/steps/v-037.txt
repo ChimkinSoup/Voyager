@@ -1,0 +1,24 @@
+# BUG-037 re-check: Enter on an empty / spaces-only floater keeps focus
+place 1000 600 1800 1100
+wait 500
+other-open
+wait 500
+hotkey ctrl+alt+t
+wait 1500
+status
+key enter
+wait 400
+type abc
+wait 400
+shot v-037-empty
+key ctrl+a
+key backspace
+type
+key enter
+wait 400
+type def
+wait 400
+shot v-037-spaces
+other-click
+wait 1200
+activate

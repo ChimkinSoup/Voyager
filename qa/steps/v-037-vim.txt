@@ -1,0 +1,31 @@
+# BUG-037 re-check with Vim ON (Insert mode)
+place 1000 600 1800 1100
+wait 500
+other-open
+wait 500
+hotkey ctrl+alt+t
+wait 1500
+status
+shot v-037v-open
+key ctrl+a
+key backspace
+wait 300
+key enter
+wait 400
+type abc
+wait 400
+shot v-037v-empty
+key ctrl+a
+key backspace
+type
+key enter
+wait 400
+type def
+wait 400
+shot v-037v-spaces
+key ctrl+a
+key backspace
+wait 300
+other-click
+wait 1200
+activate

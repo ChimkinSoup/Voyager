@@ -1413,6 +1413,27 @@ Keep this table and each phase's **Status** line in sync.
 - **Code review follow-up (2026-10-10, uncommitted; Juno's pick: findings 1, 4, 5, 7, 8, 10, and 3 and 6 the thorough way):** (1) BUG-225: the account check also runs per chunk and in failure paths; (3) BUG-221: a task typed during the first pull is held until it ends (`startupPullPendingProvider`), and the empty state says the lists are on their way; (4) BUG-222: a failed settings read still lets the warmup run; (5, 10) BUG-223: the reconnect media call reports its own errors and waits for the startup pull; (6) BUG-223: reconnect retries only what an outage parked this session (`resumeAfterReconnect`); (7, 8) BUG-224: dot-less host:port kept, markdown target balanced to one level. Full suite: 4,742 passed, 16 skipped, 0 failed.
   - **In the app (qa-026, cold sign-in):** [x] BUG-221: Ctrl+Alt+T at "1,583 of 3,952", task held with "1 task will be added when they arrive" (`fx221b-01`), then in "To-do" after the pull, list stamp unchanged (`fx221b-02`); [x] BUG-223: offline image `pending` → `uploaded` after reconnecting. Logs clean; session ended `SIGNED-OUT`.
 
+### FV-41 — closing re-check of unit-test-only fixes
+- **Scope (2026-10-10, no code change, on `ebcb6b8`):** every fix whose BUGS.md entry was checked only by unit tests, run in the app: BUG-012, 021, 022, 029, 030, 033, 034 (the press after the retry), 035, 036, 037 (Vim OFF and ON), 039, 040, 041, 108 (the 2026-10-07 key filter), plus the unit-only code-review follow-ups to BUG-018, 076, 080, 120 and 224.
+- **Flows (new account qa-064, Dark + Scatter; steps `qa/steps/v-*.txt` / `v-*.tsv`, seeds `v-076-080-seed.dart.txt`, `v-120-seed.dart.txt`, `v-120-watch.dart.txt`, `v-034-read.dart.txt`):**
+  - [x] BUG-012: first list "QA List" + a task → no `__legacy_todo__`; after a cold re-login To-Do opened on QA List (`v-012-cold`).
+  - [x] BUG-021 / BUG-022: 16 autocorrect cases pass (`v-ac.tsv`, `v-ac2.tsv`); all ten misspellings squiggle (`v-022-squig-crop`).
+  - [x] BUG-029: scrolled body cut square at the border, no faded strip (`v-029-topcrop`).
+  - [x] BUG-030: previews "1. apple", "Met Dr. Smith at 3 p.…", "Read J. R. R. Tolkien." (`v-030-sheet`).
+  - [x] BUG-033: carried draft has the caret at the end → "draft xy" saved (`v-033-typed`).
+  - [x] BUG-034: combo held at launch → `{reminder}`; holder exits, real foreground switch → Ctrl+Alt+R opens New reminder, provider `{}` (`v-034-after`).
+  - [x] BUG-035: about 70 floater replacements in three runs, with no assertion or error. Not reproduced, so it stays unverifiable.
+  - [x] BUG-036: Title label and On row whole at 2000×1100 and the minimum size (`v-036-2000`, `v-036-min`); the Devices section scrolls with no cue at the minimum size.
+  - [x] BUG-037: Enter on an empty / spaces-only bar keeps focus, Vim OFF and ON (`v-037-sheet`, `v-037v-sheet`).
+  - [x] BUG-039: past once-rule refused with "Pick a time that hasn't passed yet"; a retime clears it, and the rule saved and fired (`v-039-create`).
+  - [x] BUG-040: evaluated in the app isolate (Mar 14 2027: due Mar 15 → semi, Mar 16 → none, Mar 14 → important).
+  - [x] BUG-041: two due stickies hide under the Inbox and the reminder editor and come back after (`v-041-sheet`, `v-041-back4`).
+  - [x] BUG-108: typed `1e12`/`1 5`/`$7a` filtered to `112`/`15`/`7`; `1,5` and `12.345` show their errors, in the transaction and subscription sheets (`v-108-sheet`, `v-108-sub-sheet`).
+  - [x] Follow-ups: BUG-018 `yk`/`ygg`/`yy`/`yj` (`v-018.tsv`, 4/4); BUG-076 same-time pair ordered by id (`v-076-cell`); BUG-080 open task takes a month-cell slot first (`v-080-icons`); BUG-120 Undo leaves out a tag taken meanwhile (SQLite); BUG-224 `jobs-server:3000` kept as a host, adjacent links left as the title (`v-224-a`, `v-224-c`).
+  - [ ] BUG-225: not run (its window can't be hit from the harness).
+- **Result (2026-10-10):** passed. `voyager_errors.log` gained only app-start lines; the run logs had no errors. Session ended `SIGNED-OUT`. BUGS.md summary updated: 202 fixed + verified, 2 fixed but not verifiable in the app (BUG-035, BUG-225), 5 closed without a code change, 19 skipped, 0 open.
+- **Not covered:** follow-ups whose trigger the harness can't produce (BUG-006/082 Android, 102, 118, 157 Cram, 170, 179, 204, 206 cheat/problem fields, 220, 222), as listed in the BUGS.md caveats.
+
 ## Phase 27 — Final Review
 - **Status:** Done (2026-10-05). No new bugs; one duplicate marked (BUG-043 → BUG-010). Summary at the top of BUGS.md.
 - **Scope:** no new testing except re-checks.

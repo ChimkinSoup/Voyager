@@ -1,0 +1,27 @@
+﻿# BUG-033 re-check: carried to-do draft must arrive with the caret at the end
+place 1000 600 1800 1100
+wait 500
+other-open
+wait 500
+ostatus
+hotkey ctrl+alt+t
+wait 1500
+status
+type draft x
+wait 300
+shot v-033-floater
+other-click
+wait 1200
+activate
+wait 300
+hotkey ctrl+alt+j
+wait 1800
+hotkey ctrl+alt+t
+wait 1800
+shot v-033-composer
+type y
+wait 400
+shot v-033-typed
+key enter
+wait 1500
+shot v-033-saved
