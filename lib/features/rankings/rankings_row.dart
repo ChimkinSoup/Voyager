@@ -92,6 +92,9 @@ class _RankingsRowState extends ConsumerState<RankingsRow> {
     final category = widget.category;
     final accent = paletteColor(category.colorValue, context);
     final progress = rankingChildProgress(widget.children);
+    final stoppedIn = category.showsProgress
+        ? rankingProgressChild(parent, widget.children)
+        : null;
 
     final row = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -160,6 +163,14 @@ class _RankingsRowState extends ConsumerState<RankingsRow> {
                     documentId: parent.id,
                     title: parent.title.isEmpty ? 'Images' : parent.title,
                   ),
+                ),
+              ],
+              if (roomy && stoppedIn != null) ...[
+                const SizedBox(width: 12),
+                _StoppedInChip(
+                  child: stoppedIn,
+                  seconds: parent.progressSeconds,
+                  accent: accent,
                 ),
               ],
               const SizedBox(width: 12),
@@ -409,6 +420,64 @@ class _StatusChip extends StatelessWidget {
       child: Text(
         inProgress ? 'In progress' : 'Queued',
         style: theme.textTheme.labelSmall?.copyWith(color: color),
+      ),
+    );
+  }
+}
+
+/// Where the user stopped in the entry — the unit, and how far into it. Its
+/// own chip rather than part of the subtitle, which already does one job.
+class _StoppedInChip extends StatelessWidget {
+  const _StoppedInChip({
+    required this.child,
+    required this.seconds,
+    required this.accent,
+  });
+
+  final RankingChild child;
+  final int? seconds;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final seconds = this.seconds;
+    final time = seconds == null ? null : formatRankingProgressTime(seconds);
+    final style = theme.textTheme.labelSmall?.copyWith(
+      color: accent,
+      fontWeight: FontWeight.w600,
+    );
+    return Tooltip(
+      message: time == null
+          ? 'Stopped in ${child.name}'
+          : 'Stopped in ${child.name} at $time',
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 260),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(PhosphorIconsFill.bookmarkSimple, size: 12, color: accent),
+              const SizedBox(width: 4),
+              // The name gives way, never the time: the time is the part that
+              // says where to pick up.
+              Flexible(
+                child: Text(
+                  child.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: style,
+                ),
+              ),
+              if (time != null) Text(' · $time', style: style),
+            ],
+          ),
+        ),
       ),
     );
   }

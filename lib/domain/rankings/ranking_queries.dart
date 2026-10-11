@@ -479,7 +479,8 @@ List<int?> rankingDisplayRanks(List<RankingParent> rankedInListOrder) {
 /// * crossing between the ranked and unranked sections clears the star (§7.2),
 ///   and clearing a score lands in **in progress** rather than back in the
 ///   queue — the entry has been started, whatever its score says now;
-/// * any non-title edit promotes a queued entry to in progress (§3.4). The
+/// * any non-title edit promotes a queued entry to in progress (§3.4), and so
+///   does bookmarking a unit — you only stop in something you started. The
 ///   title is excluded by design: naming something you mean to watch is not
 ///   starting it. So is a status the user set by hand in the same save, which
 ///   would otherwise be overwritten by the very edit carrying it.
@@ -653,7 +654,9 @@ bool _promotesToInProgress(RankingParent previous, RankingParent next) {
   if (next.status != RankingStatus.queued) return false;
   return next.notes != previous.notes ||
       !_sameFieldValues(next.fieldValues, previous.fieldValues) ||
-      next.createdAt != previous.createdAt;
+      next.createdAt != previous.createdAt ||
+      (next.progressChildId != null &&
+          next.progressChildId != previous.progressChildId);
 }
 
 bool _sameFieldValues(
@@ -803,7 +806,12 @@ List<RankingChild> sortRankingChildrenForView(
   rows.sort((a, b) {
     switch (sort) {
       case RankingChildSort.saved:
-        return a.sortOrder.compareTo(b.sortOrder);
+        // Two units can share a place — two devices each appending one — and
+        // without a tiebreak "the next unit" between them came out either way.
+        final bySortOrder = a.sortOrder.compareTo(b.sortOrder);
+        if (bySortOrder != 0) return bySortOrder;
+        final byCreated = a.createdAt.compareTo(b.createdAt);
+        return byCreated != 0 ? byCreated : a.id.compareTo(b.id);
       case RankingChildSort.name:
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       case RankingChildSort.overallScore:
@@ -837,4 +845,102 @@ int _compareNullableDesc(
   if (b == null) return -1;
   final result = b.compareTo(a);
   return result != 0 ? result : childA.sortOrder.compareTo(childB.sortOrder);
+}
+
+/// The unit [parent]'s bookmark points at, among [children] — the live units.
+/// Null when there is no bookmark, or its unit is deleted or gone.
+RankingChild? rankingProgressChild(
+  RankingParent parent,
+  Iterable<RankingChild> children,
+) {
+  final id = parent.progressChildId;
+  if (id == null) return null;
+  return children.where((child) => child.id == id).firstOrNull;
+}
+
+/// `14:32`, or `1:02:30` past the hour.
+String formatRankingProgressTime(int seconds) {
+  final h = seconds ~/ 3600;
+  final m = seconds % 3600 ~/ 60;
+  final s = (seconds % 60).toString().padLeft(2, '0');
+  return h > 0 ? '$h:${m.toString().padLeft(2, '0')}:$s' : '$m:$s';
+}
+
+/// Reads what the user typed as a bookmark time: `32` (minutes), `14:32`,
+/// `1:02:30`. Empty is `(seconds: null)` — the start of the unit. Null for
+/// anything else.
+({int? seconds})? parseRankingProgressTime(String text) {
+  final trimmed = text.trim();
+  if (trimmed.isEmpty) return (seconds: null);
+  final parts = trimmed.split(':');
+  if (parts.length > 3) return null;
+  final numbers = <int>[];
+  for (final part in parts) {
+    final value = int.tryParse(part);
+    if (value == null || value < 0) return null;
+    numbers.add(value);
+  }
+  // A bare number is minutes: nobody bookmarks forty seconds in.
+  if (numbers.length == 1) return (seconds: numbers[0] * 60);
+  for (final value in numbers.skip(1)) {
+    if (value > 59) return null;
+  }
+  return (
+    seconds: numbers.length == 2
+        ? numbers[0] * 60 + numbers[1]
+        : numbers[0] * 3600 + numbers[1] * 60 + numbers[2],
+  );
+}
+
+/// What a bookmark time box may hold at any point while it is typed: up to
+/// three `:`-separated groups, every group after the first a valid 0–59 so
+/// far, and a trailing `:` only where another group can follow. Anything else
+/// is refused at the keystroke.
+final rankingProgressTimeTyping = RegExp(
+  r'^(\d{1,3}(:[0-5]?\d){0,2}|\d{1,3}(:[0-5]?\d)?:)?$',
+);
+
+/// Where a new unit goes in the saved order: after the last one, whatever the
+/// list is currently sorted by.
+int rankingNextChildSortOrder(Iterable<RankingChild> children) {
+  var next = 0;
+  for (final child in children) {
+    if (child.sortOrder >= next) next = child.sortOrder + 1;
+  }
+  return next;
+}
+
+/// The unit after [current] in the saved order, or null when it is the last.
+RankingChild? rankingNextChild(
+  RankingChild current,
+  Iterable<RankingChild> children,
+) {
+  final ordered = sortRankingChildrenForView(children);
+  final index = ordered.indexWhere((child) => child.id == current.id);
+  return index < 0 || index + 1 >= ordered.length ? null : ordered[index + 1];
+}
+
+/// A name for the unit after [current] when there is none yet: the first word
+/// holding a number, with its last number moved on by one and padding kept —
+/// `S3E07 Emission Impossible` → `S3E08`, `Episode 9` → `Episode 10`. What
+/// follows that word is the unit's own title, which the next one does not
+/// share. With no number in it, [label] and the unit's place.
+String rankingNextChildName(
+  RankingChild current, {
+  required String label,
+  required int count,
+}) {
+  final word = RegExp(r'\S*\d\S*').firstMatch(current.name);
+  if (word == null) return '$label ${count + 1}';
+  final token = word.group(0)!;
+  final digits = RegExp(r'(\d+)(?!.*\d)').firstMatch(token)!;
+  final run = digits.group(1)!;
+  // BigInt: a run past 19 digits — an ID or a timestamp in the name — is
+  // beyond an int.
+  final next = (BigInt.parse(run) + BigInt.one).toString().padLeft(
+    run.length,
+    '0',
+  );
+  return current.name.substring(0, word.start) +
+      token.replaceRange(digits.start, digits.end, next);
 }

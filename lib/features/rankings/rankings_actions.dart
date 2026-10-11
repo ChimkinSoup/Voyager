@@ -789,6 +789,84 @@ class RankingsActions {
     unawaited(sync.pushRankingChildrenBatch(result.children));
   }
 
+  // ------------------------------------------------------------------ progress
+
+  /// Bookmarks [childId] as where the user stopped in [parentId], [seconds]
+  /// in (null is its start). Takes the bookmark off whichever unit had it —
+  /// a deleted one included, so undoing that delete brings the unit back
+  /// without it.
+  Future<RankingParent?> setProgress(
+    String parentId,
+    String childId, {
+    int? seconds,
+  }) => _patchParent(
+    parentId,
+    (parent) =>
+        parent.progressChildId == childId && parent.progressSeconds == seconds
+        ? parent
+        : parent.copyWith(progressChildId: childId, progressSeconds: seconds),
+  );
+
+  Future<RankingParent?> clearProgress(String parentId) => _patchParent(
+    parentId,
+    (parent) => parent.progressChildId == null
+        ? parent
+        : parent.copyWith(clearProgress: true),
+  );
+
+  /// Puts [parentId]'s bookmark back to [to] (no unit clears it), but only
+  /// while it still reads [from] — what the caller itself last wrote. A move
+  /// made since, on this device or another, stays.
+  Future<RankingParent?> revertProgress(
+    String parentId, {
+    required ({String? childId, int? seconds}) from,
+    required ({String? childId, int? seconds}) to,
+  }) => _patchParent(parentId, (parent) {
+    if (parent.progressChildId != from.childId ||
+        parent.progressSeconds != from.seconds ||
+        (to.childId == from.childId && to.seconds == from.seconds)) {
+      return parent;
+    }
+    return to.childId == null
+        ? parent.copyWith(clearProgress: true)
+        : parent.copyWith(
+            progressChildId: to.childId,
+            progressSeconds: to.seconds,
+          );
+  });
+
+  /// The bookmarked unit is finished: the bookmark moves to the start of the
+  /// next unit in the saved order, which is added when there is none. Returns
+  /// that unit, or null when [parentId] has no live bookmark to move on from.
+  ///
+  /// One entry's Finisheds run one after another, each from where the last
+  /// left the bookmark: run side by side, both found no next unit and each
+  /// added one.
+  Future<RankingChild?> finishProgress(
+    String parentId,
+    RankingCategory category,
+  ) => _serialized('finish:$parentId', () async {
+    final repository = _repository;
+    final parent = await repository.getParent(parentId);
+    if (parent == null || parent.isDeleted) return null;
+    final children = await repository.listChildren(parentId);
+    final current = rankingProgressChild(parent, children);
+    if (current == null) return null;
+    final next =
+        rankingNextChild(current, children) ??
+        await createChild(
+          parent: parent,
+          name: rankingNextChildName(
+            current,
+            label: category.childUnitLabel,
+            count: children.length,
+          ),
+          sortOrder: rankingNextChildSortOrder(children),
+        );
+    await setProgress(parentId, next.id);
+    return next;
+  });
+
   // ------------------------------------------------------------------ children
 
   /// New children go to the bottom of the saved order (§3.5), and adding one

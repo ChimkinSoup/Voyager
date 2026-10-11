@@ -4134,6 +4134,7 @@ Map<String, dynamic> rankingCategoryToFirestore(RankingCategory category) => {
   'sortFieldId': category.sortFieldId,
   'sortAscending': category.sortAscending,
   'locationEnabled': category.locationEnabled,
+  'progressEnabled': category.progressEnabled,
   'archivedAt': _dateToFirestore(category.archivedAt),
   'createdAt': _dateToFirestoreRequired(category.createdAt),
   'updatedAt': _dateToFirestoreRequired(category.updatedAt),
@@ -4237,6 +4238,8 @@ RankingCategory mergeRankingCategoryFromRemote(
         data['sortAscending'] as bool? ?? local?.sortAscending ?? false,
     locationEnabled:
         data['locationEnabled'] as bool? ?? local?.locationEnabled ?? false,
+    progressEnabled:
+        data['progressEnabled'] as bool? ?? local?.progressEnabled ?? false,
     archivedAt: data.containsKey('archivedAt')
         ? parseFirestoreDate(data['archivedAt'])
         : local?.archivedAt,
@@ -4485,6 +4488,8 @@ Map<String, dynamic> rankingParentToFirestore(RankingParent parent) => {
   'status': parent.status.name,
   'starred': parent.starred,
   'queueSortOrder': parent.queueSortOrder,
+  'progressChildId': parent.progressChildId,
+  'progressSeconds': parent.progressSeconds,
   'fieldUpdatedAt': _fieldStampsToFirestore(parent.fieldUpdatedAt),
   'fieldStampsVersion': parent.version,
   'createdAt': _dateToFirestoreRequired(parent.createdAt),
@@ -4562,6 +4567,14 @@ RankingMergeResult<RankingParent> resolveRankingParentFromRemote(
     starred: data['starred'] as bool? ?? local?.starred ?? false,
     queueSortOrder:
         (data['queueSortOrder'] as num?)?.toInt() ?? local?.queueSortOrder ?? 0,
+    // Presence, as with the overall score: clearing the bookmark writes a null
+    // that has to clear it here too.
+    progressChildId: data.containsKey('progressChildId')
+        ? data['progressChildId'] as String?
+        : local?.progressChildId,
+    progressSeconds: data.containsKey('progressChildId')
+        ? (data['progressSeconds'] as num?)?.toInt()
+        : local?.progressSeconds,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??
@@ -4600,6 +4613,16 @@ RankingMergeResult<RankingParent> resolveRankingParentFromRemote(
       'queueSortOrder',
       local.queueSortOrder,
       remote.queueSortOrder,
+    ),
+    progressChildId: pick(
+      'progress',
+      local.progressChildId,
+      remote.progressChildId,
+    ),
+    progressSeconds: pick(
+      'progress',
+      local.progressSeconds,
+      remote.progressSeconds,
     ),
     createdAt: pick('createdAt', local.createdAt, remote.createdAt),
     deletedAt: pick('deletedAt', local.deletedAt, remote.deletedAt),

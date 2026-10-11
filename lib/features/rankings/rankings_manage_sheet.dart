@@ -377,6 +377,18 @@ class _CategorySettings extends ConsumerWidget {
                 key: ValueKey('unit-label-${category.id}'),
                 category: category,
               ),
+              _Toggle(
+                label: 'Track progress',
+                help:
+                    'Mark the ${category.childUnitLabel.toLowerCase()} you '
+                    'stopped in, and how far in.',
+                value: category.progressEnabled,
+                accent: accent,
+                onChanged: (value) => actions.patchCategory(
+                  category.id,
+                  (stored) => stored.copyWith(progressEnabled: value),
+                ),
+              ),
             ],
             const Divider(height: 24),
             _Toggle(

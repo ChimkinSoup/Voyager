@@ -393,6 +393,40 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                       _publishDraft();
                     },
                   ),
+                  if (category.showsProgress)
+                    _section(
+                      'progress',
+                      [
+                        accent,
+                        widget.readOnly,
+                        category,
+                        widget.children,
+                        _current.id,
+                        _current.progressChildId,
+                        _current.progressSeconds,
+                      ],
+                      () {
+                        final child = rankingProgressChild(
+                          _current,
+                          widget.children,
+                        );
+                        if (child == null) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: _ContinueLine(
+                            parentId: _current.id,
+                            child: child,
+                            seconds: _current.progressSeconds,
+                            category: category,
+                            hasNext:
+                                rankingNextChild(child, widget.children) !=
+                                null,
+                            accent: accent,
+                            readOnly: widget.readOnly,
+                          ),
+                        );
+                      },
+                    ),
                   const SizedBox(height: 12),
                   _section(
                     'tags',
@@ -536,6 +570,8 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
                         widget.children,
                         widget.readOnly,
                         scoredChildren,
+                        _current.progressChildId,
+                        _current.progressSeconds,
                       ],
                       () => RankingsChildList(
                         parent: _current,
@@ -626,6 +662,96 @@ class _PanelHeader extends StatelessWidget {
             icon: const Icon(PhosphorIconsRegular.x),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Where the user stopped, at the top of the panel so it is found without
+/// scrolling to the unit list: opens that unit, or moves on past it.
+class _ContinueLine extends ConsumerWidget {
+  const _ContinueLine({
+    required this.parentId,
+    required this.child,
+    required this.seconds,
+    required this.category,
+    required this.hasNext,
+    required this.accent,
+    required this.readOnly,
+  });
+
+  final String parentId;
+  final RankingChild child;
+  final int? seconds;
+  final RankingCategory category;
+
+  /// Whether finishing moves to a unit that exists, or adds one.
+  final bool hasNext;
+  final Color accent;
+  final bool readOnly;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final label = category.childUnitLabel.toLowerCase();
+    final seconds = this.seconds;
+    return Material(
+      color: accent.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => showRankingChildEditor(
+          context,
+          child: child,
+          category: category,
+          readOnly: readOnly,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 4, 4, 4),
+          child: Row(
+            children: [
+              Icon(PhosphorIconsFill.bookmarkSimple, size: 14, color: accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Row(
+                  children: [
+                    // The name gives way, never the time.
+                    Flexible(
+                      child: Text(
+                        child.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
+                    if (seconds != null)
+                      Text(
+                        ' · ${formatRankingProgressTime(seconds)}',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: accent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (!readOnly)
+                IconButton(
+                  onPressed: () =>
+                      RankingsActions(ref).finishProgress(parentId, category),
+                  iconSize: 16,
+                  visualDensity: VisualDensity.compact,
+                  color: accent,
+                  tooltip: hasNext
+                      ? 'Finished, next $label'
+                      : 'Finished, add the next $label',
+                  icon: const Icon(PhosphorIconsRegular.skipForward),
+                )
+              else
+                const SizedBox(height: 32),
+            ],
+          ),
+        ),
       ),
     );
   }

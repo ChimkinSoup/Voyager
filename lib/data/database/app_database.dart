@@ -1767,6 +1767,11 @@ class RankingCategoriesTable extends Table {
   BoolColumn get locationEnabled =>
       boolean().withDefault(const Constant(false))();
 
+  /// Whether entries carry a "where I stopped" bookmark on one of their
+  /// units. Only offered while [childUnitsEnabled].
+  BoolColumn get progressEnabled =>
+      boolean().withDefault(const Constant(false))();
+
   /// Set = hidden from the picker and view-only. Not [deletedAt]: archiving
   /// does not cascade.
   DateTimeColumn get archivedAt => dateTime().nullable()();
@@ -1802,6 +1807,11 @@ class RankingParentsTable extends Table {
   /// [tagsJson] is one: they are only read with their parent, and the map
   /// reads parents anyway.
   TextColumn get locationsJson => text().withDefault(const Constant('[]'))();
+
+  /// The unit the user stopped in, and how far into it. One pointer on the
+  /// entry rather than a flag per unit, so there can never be two.
+  TextColumn get progressChildId => text().nullable()();
+  IntColumn get progressSeconds => integer().nullable()();
 
   /// [RankingStatus] by `name`. Only read while unranked.
   TextColumn get status => text().withDefault(const Constant('queued'))();
@@ -1979,7 +1989,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 141;
+  int get schemaVersion => 142;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3544,6 +3554,26 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 141) {
         await moveStarterExercisesToFixedIds();
+      }
+      if (from < 142) {
+        await _addColumnIfNotExists(
+          migrator,
+          'ranking_categories_table',
+          rankingCategoriesTable,
+          rankingCategoriesTable.progressEnabled,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'ranking_parents_table',
+          rankingParentsTable,
+          rankingParentsTable.progressChildId,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'ranking_parents_table',
+          rankingParentsTable,
+          rankingParentsTable.progressSeconds,
+        );
       }
     },
   );

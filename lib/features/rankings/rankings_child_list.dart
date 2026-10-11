@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:intl/intl.dart';
@@ -86,12 +87,7 @@ class _RankingsChildListState extends ConsumerState<RankingsChildList> {
       name: name,
       // Appended, never inserted: a new unit joins the end of the saved order
       // whatever the list is currently sorted by.
-      sortOrder: widget.children.isEmpty
-          ? 0
-          : widget.children
-                    .map((child) => child.sortOrder)
-                    .reduce((a, b) => a > b ? a : b) +
-                1,
+      sortOrder: rankingNextChildSortOrder(widget.children),
     );
     if (mounted) _addFocusNode.requestFocus();
   }
@@ -189,6 +185,8 @@ class _RankingsChildListState extends ConsumerState<RankingsChildList> {
                   key: ValueKey(child.id),
                   index: index,
                   child: child,
+                  parent: widget.parent,
+                  hasNext: rankingNextChild(child, widget.children) != null,
                   category: widget.category,
                   accent: accent,
                   draggable: isSavedOrder && !widget.readOnly,
@@ -312,6 +310,8 @@ class _ChildRow extends ConsumerStatefulWidget {
     super.key,
     required this.index,
     required this.child,
+    required this.parent,
+    required this.hasNext,
     required this.category,
     required this.accent,
     required this.draggable,
@@ -321,6 +321,13 @@ class _ChildRow extends ConsumerStatefulWidget {
 
   final int index;
   final RankingChild child;
+
+  /// Read for its bookmark only.
+  final RankingParent parent;
+
+  /// Whether a unit follows this one in the saved order, so Finished says
+  /// when it will add one.
+  final bool hasNext;
   final RankingCategory category;
   final Color accent;
   final bool draggable;
@@ -360,9 +367,48 @@ class _ChildRowState extends ConsumerState<_ChildRow>
                 .valueOrNull
                 ?.contains(child.id) ??
             false);
+    final bookmarked =
+        widget.category.showsProgress &&
+        widget.parent.progressChildId == child.id;
 
     return ContextMenuRegion(
       itemsBuilder: () => [
+        if (!widget.readOnly && widget.category.showsProgress) ...[
+          if (bookmarked) ...[
+            ContextMenuItem(
+              label: widget.hasNext
+                  ? 'Finished, next ${widget.category.childUnitLabel.toLowerCase()}'
+                  : 'Finished, add the next ${widget.category.childUnitLabel.toLowerCase()}',
+              icon: PhosphorIconsRegular.skipForward,
+              onTap: () => RankingsActions(
+                ref,
+              ).finishProgress(widget.parent.id, widget.category),
+            ),
+            ContextMenuItem(
+              label: 'Clear where I stopped',
+              icon: PhosphorIconsRegular.bookmarkSimple,
+              onTap: () => RankingsActions(ref).clearProgress(widget.parent.id),
+            ),
+          ] else
+            ContextMenuItem(
+              label: 'Mark where I stopped…',
+              icon: PhosphorIconsRegular.bookmarkSimple,
+              // Marks the unit at its start, then opens it on the time box
+              // for a time to go with it.
+              onTap: () async {
+                await RankingsActions(
+                  ref,
+                ).setProgress(widget.parent.id, child.id);
+                if (!context.mounted) return;
+                await showRankingChildEditor(
+                  context,
+                  child: child,
+                  category: widget.category,
+                  focusProgress: true,
+                );
+              },
+            ),
+        ],
         if (!widget.readOnly && scored)
           ContextMenuItem(
             label: 'Clear score',
@@ -396,6 +442,10 @@ class _ChildRowState extends ConsumerState<_ChildRow>
               decoration: BoxDecoration(
                 color: _hovered
                     ? VoyagerListItemSurface.hoverColor(context)
+                    // The bookmarked unit is tinted so it can be found by eye
+                    // while scrolling a long season.
+                    : bookmarked
+                    ? widget.accent.withValues(alpha: 0.1)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
               ),
@@ -439,6 +489,13 @@ class _ChildRowState extends ConsumerState<_ChildRow>
                             style: theme.textTheme.bodyMedium,
                           ),
                         ),
+                        if (bookmarked) ...[
+                          const SizedBox(width: 6),
+                          RankingProgressBadge(
+                            seconds: widget.parent.progressSeconds,
+                            accent: widget.accent,
+                          ),
+                        ],
                         if (hasImages) ...[
                           const SizedBox(width: 6),
                           Tooltip(
@@ -504,6 +561,7 @@ Future<void> showRankingChildEditor(
   required RankingChild child,
   required RankingCategory category,
   bool readOnly = false,
+  bool focusProgress = false,
 }) {
   return showVoyagerDialog<void>(
     context: context,
@@ -511,8 +569,50 @@ Future<void> showRankingChildEditor(
       child: child,
       category: category,
       readOnly: readOnly,
+      focusProgress: focusProgress,
     ),
   );
+}
+
+/// Where the user stopped in a unit: a bookmark and the time, or just the
+/// bookmark when they stopped at its start.
+class RankingProgressBadge extends StatelessWidget {
+  const RankingProgressBadge({
+    super.key,
+    required this.seconds,
+    required this.accent,
+  });
+
+  final int? seconds;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final seconds = this.seconds;
+    return Tooltip(
+      message: seconds == null
+          ? 'Stopped here'
+          : 'Stopped at ${formatRankingProgressTime(seconds)}',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(PhosphorIconsFill.bookmarkSimple, size: 13, color: accent),
+          if (seconds != null) ...[
+            const SizedBox(width: 3),
+            Text(
+              formatRankingProgressTime(seconds),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: accent,
+                fontWeight: FontWeight.w600,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _ChildEditorDialog extends ConsumerStatefulWidget {
@@ -520,11 +620,16 @@ class _ChildEditorDialog extends ConsumerStatefulWidget {
     required this.child,
     required this.category,
     required this.readOnly,
+    required this.focusProgress,
   });
 
   final RankingChild child;
   final RankingCategory category;
   final bool readOnly;
+
+  /// Opens with the cursor in the progress time — the row's "Mark where I
+  /// stopped".
+  final bool focusProgress;
 
   @override
   ConsumerState<_ChildEditorDialog> createState() => _ChildEditorDialogState();
@@ -560,6 +665,51 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
 
   bool _cancelling = false;
 
+  late final TextEditingController _progressController;
+  late final FocusNode _progressFocusNode;
+  Timer? _progressTimer;
+
+  /// The entry's bookmark as this dialog found it, for Cancel to put back —
+  /// it lives on the entry, so reverting the unit alone would leave it.
+  late final ({String? childId, int? seconds}) _openingProgress;
+
+  /// The bookmark this dialog last wrote, null until it writes one — Cancel
+  /// takes back only that, and only while it still stands.
+  ({String? childId, int? seconds})? _writtenProgress;
+
+  ({String? childId, int? seconds}) _readProgress(
+    T Function<T>(ProviderListenable<T> provider) read,
+  ) => read(_progressProvider);
+
+  ProviderListenable<({String? childId, int? seconds})> get _progressProvider =>
+      rankingParentsProvider(widget.category.id).select((parents) {
+        final parent = parents.valueOrNull
+            ?.where((parent) => parent.id == widget.child.parentId)
+            .firstOrNull;
+        return (
+          childId: parent?.progressChildId,
+          seconds: parent?.progressSeconds,
+        );
+      });
+
+  /// Keeps the time box on the bookmark as it moves under the dialog — off
+  /// this unit by Finished or another device, or to another time — so the pill
+  /// never writes back a time that no longer stands. A time being typed wins.
+  void _followProgress(
+    ({String? childId, int? seconds})? previous,
+    ({String? childId, int? seconds}) next,
+  ) {
+    if (_progressTimer?.isActive ?? false) return;
+    final seconds = next.childId == widget.child.id ? next.seconds : null;
+    if (parseRankingProgressTime(_progressController.text)?.seconds ==
+        seconds) {
+      return;
+    }
+    _progressController.text = seconds == null
+        ? ''
+        : formatRankingProgressTime(seconds);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -571,17 +721,75 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
     _nameController = TextEditingController(text: _current.name);
     _notesController = TextEditingController(text: _current.notes);
     _notesFocusNode = FocusNode();
+    _openingProgress = _readProgress(ref.read);
+    final openingSeconds = _openingProgress.childId == widget.child.id
+        ? _openingProgress.seconds
+        : null;
+    _progressController = TextEditingController(
+      text: openingSeconds == null
+          ? ''
+          : formatRankingProgressTime(openingSeconds),
+    );
+    _progressFocusNode = FocusNode();
+    if (widget.focusProgress) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _progressFocusNode.requestFocus();
+      });
+    }
   }
 
   @override
   void dispose() {
     _saveTimer?.cancel();
     unawaited(_commitText());
+    if (_progressTimer?.isActive ?? false) {
+      _progressTimer!.cancel();
+      unawaited(_commitProgressTime());
+    }
     if (!_cancelling) unawaited(_imageEdits.cancel());
     _nameController.dispose();
     _notesController.dispose();
     _notesFocusNode.dispose();
+    _progressController.dispose();
+    _progressFocusNode.dispose();
     super.dispose();
+  }
+
+  void _scheduleProgressSave() {
+    _progressTimer?.cancel();
+    _progressTimer = Timer(
+      _saveDebounce,
+      () => unawaited(_commitProgressTime()),
+    );
+  }
+
+  /// Typing a time bookmarks this unit at it. Something that does not read as
+  /// a time is left unsaved until it does.
+  Future<void> _commitProgressTime() async {
+    final parsed = parseRankingProgressTime(_progressController.text);
+    if (parsed == null) return;
+    _writtenProgress = (childId: widget.child.id, seconds: parsed.seconds);
+    await _actions.setProgress(
+      widget.child.parentId,
+      widget.child.id,
+      seconds: parsed.seconds,
+    );
+  }
+
+  Future<void> _toggleProgress({required bool bookmarked}) async {
+    _progressTimer?.cancel();
+    if (bookmarked) {
+      _progressController.clear();
+      _writtenProgress = (childId: null, seconds: null);
+      await _actions.clearProgress(widget.child.parentId);
+    } else {
+      // A time only half typed (`14:`) bookmarks the start rather than
+      // leaving the tap to do nothing.
+      if (parseRankingProgressTime(_progressController.text) == null) {
+        _progressController.clear();
+      }
+      await _commitProgressTime();
+    }
   }
 
   void _scheduleTextSave() {
@@ -649,6 +857,17 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
     _nameController.text = widget.child.name;
     _notesController.text = widget.child.notes;
     unawaited(_save(widget.child));
+    _progressTimer?.cancel();
+    final written = _writtenProgress;
+    if (written != null) {
+      unawaited(
+        _actions.revertProgress(
+          widget.child.parentId,
+          from: written,
+          to: _openingProgress,
+        ),
+      );
+    }
     unawaited(_restoreImages());
     Navigator.pop(context);
   }
@@ -687,6 +906,69 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
         // A pull already put it back.
       }
     }
+  }
+
+  /// Whether the entry's bookmark is on this unit, and the time to type it at.
+  Widget _buildProgressRow(Color accent) {
+    ref.listen(_progressProvider, _followProgress);
+    final progress = _readProgress(ref.watch);
+    final bookmarked = progress.childId == widget.child.id;
+    return Row(
+      children: [
+        SelectorPill(
+          label: 'Stopped here',
+          icon: bookmarked
+              ? PhosphorIconsFill.bookmarkSimple
+              : PhosphorIconsRegular.bookmarkSimple,
+          dense: true,
+          accentColor: accent,
+          isActive: bookmarked,
+          fillWhenActive: true,
+          onTap: widget.readOnly
+              ? () {}
+              : () => _toggleProgress(bookmarked: bookmarked),
+        ),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: 120,
+          child: LabeledTextField(
+            label: 'At',
+            hintText: '0:00',
+            controller: _progressController,
+            focusNode: _progressFocusNode,
+            enabled: !widget.readOnly,
+            accentColor: accent,
+            // The unit list's add box sizing, not `dense`: dense loses its
+            // vertical padding to the desktop's compact density, and the
+            // borders sat on the text.
+            allowShortHeight: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 12,
+            ),
+            keyboardType: TextInputType.datetime,
+            inputFormatters: [
+              TextInputFormatter.withFunction(
+                (oldValue, newValue) =>
+                    rankingProgressTimeTyping.hasMatch(newValue.text)
+                    ? newValue
+                    : oldValue,
+              ),
+            ],
+            onChanged: (_) => _scheduleProgressSave(),
+            onSubmitted: (_) {
+              _progressTimer?.cancel();
+              unawaited(_commitProgressTime());
+              final parsed = parseRankingProgressTime(_progressController.text);
+              final seconds = parsed?.seconds;
+              if (seconds != null) {
+                _progressController.text = formatRankingProgressTime(seconds);
+              }
+            },
+          ),
+        ),
+      ],
+    );
   }
 
   @override
@@ -732,6 +1014,10 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
                           : _current.copyWith(overallScore: score),
                     ),
             ),
+            if (widget.category.showsProgress) ...[
+              const SizedBox(height: 12),
+              _buildProgressRow(accent),
+            ],
             if (fields.isNotEmpty) ...[
               const SizedBox(height: 20),
               RankingTemplateFieldsBand(

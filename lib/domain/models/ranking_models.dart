@@ -277,6 +277,7 @@ class RankingCategory extends SoftDeletable {
     this.sortFieldId,
     this.sortAscending = false,
     this.locationEnabled = false,
+    this.progressEnabled = false,
     this.archivedAt,
   });
 
@@ -325,6 +326,15 @@ class RankingCategory extends SoftDeletable {
   /// off hides both and keeps what is stored, the same as [childUnitsEnabled].
   final bool locationEnabled;
 
+  /// Whether entries carry a "where I stopped" bookmark on one of their units
+  /// ([RankingParent.progressChildId]). Only meaningful while
+  /// [childUnitsEnabled]; turning it off hides the bookmark and keeps it.
+  final bool progressEnabled;
+
+  /// Whether the bookmark is shown at all: it hangs off a unit, so it goes
+  /// when the units do.
+  bool get showsProgress => progressEnabled && childUnitsEnabled;
+
   /// Set = archived: hidden from the strip, and view-only until it is
   /// unarchived. Distinct from [deletedAt], which cascades to the entries.
   final DateTime? archivedAt;
@@ -363,6 +373,7 @@ class RankingCategory extends SoftDeletable {
     bool clearSortFieldId = false,
     bool? sortAscending,
     bool? locationEnabled,
+    bool? progressEnabled,
     DateTime? archivedAt,
     bool clearArchivedAt = false,
     DateTime? deletedAt,
@@ -393,6 +404,7 @@ class RankingCategory extends SoftDeletable {
     sortFieldId: clearSortFieldId ? null : (sortFieldId ?? this.sortFieldId),
     sortAscending: sortAscending ?? this.sortAscending,
     locationEnabled: locationEnabled ?? this.locationEnabled,
+    progressEnabled: progressEnabled ?? this.progressEnabled,
     archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
   );
 }
@@ -623,6 +635,11 @@ Map<String, Object?> rankingParentStampValues(RankingParent parent) => {
   'status': parent.status.name,
   'starred': parent.starred,
   'queueSortOrder': parent.queueSortOrder,
+  // One key for both halves: a unit from one device and a time from another
+  // would be a bookmark nobody set.
+  'progress': parent.progressChildId == null
+      ? null
+      : '${parent.progressChildId}@${parent.progressSeconds ?? ''}',
   'createdAt': parent.createdAt.toUtc(),
   'deletedAt': parent.deletedAt?.toUtc(),
   ..._fieldValueStampValues(parent.fieldValues),
@@ -672,6 +689,8 @@ class RankingParent extends SoftDeletable {
     this.status = RankingStatus.queued,
     this.starred = false,
     this.queueSortOrder = 0,
+    this.progressChildId,
+    this.progressSeconds,
     this.fieldUpdatedAt = const {},
   });
 
@@ -708,6 +727,16 @@ class RankingParent extends SoftDeletable {
   /// own rules and ignore it.
   final int queueSortOrder;
 
+  /// The unit the user stopped in — see [RankingCategory.progressEnabled].
+  /// Left pointing at a unit that is deleted, so an undo brings the bookmark
+  /// back with it; readers treat a unit they cannot find as no bookmark.
+  /// Bookmarking another unit in the meantime moves it for good.
+  final String? progressChildId;
+
+  /// How far into [progressChildId] the user got, in seconds. Null with a unit
+  /// set means the start of it.
+  final int? progressSeconds;
+
   /// See [RankingFieldStamps]. Kept up to date by [copyWith], which stamps
   /// whichever fields it actually changed.
   final RankingFieldStamps fieldUpdatedAt;
@@ -730,6 +759,9 @@ class RankingParent extends SoftDeletable {
     RankingStatus? status,
     bool? starred,
     int? queueSortOrder,
+    String? progressChildId,
+    int? progressSeconds,
+    bool clearProgress = false,
     DateTime? createdAt,
     DateTime? deletedAt,
     bool clearDeletedAt = false,
@@ -755,6 +787,16 @@ class RankingParent extends SoftDeletable {
       status: status ?? this.status,
       starred: starred ?? this.starred,
       queueSortOrder: queueSortOrder ?? this.queueSortOrder,
+      // The two halves move together: a new unit without a time starts at its
+      // beginning rather than inheriting the old unit's time.
+      progressChildId: clearProgress
+          ? null
+          : (progressChildId ?? this.progressChildId),
+      progressSeconds: clearProgress
+          ? null
+          : progressChildId != null
+          ? progressSeconds
+          : (progressSeconds ?? this.progressSeconds),
       fieldUpdatedAt: stamps,
     );
 
@@ -793,6 +835,8 @@ bool rankingParentsMatch(RankingParent a, RankingParent b) {
       a.status != b.status ||
       a.starred != b.starred ||
       a.queueSortOrder != b.queueSortOrder ||
+      a.progressChildId != b.progressChildId ||
+      a.progressSeconds != b.progressSeconds ||
       a.tags.length != b.tags.length ||
       a.locations.length != b.locations.length ||
       a.fieldValues.length != b.fieldValues.length) {

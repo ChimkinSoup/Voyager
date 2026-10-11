@@ -1,0 +1,12 @@
+final r = c.read(remoteSyncServiceProvider);
+final rr = c.read(rankingRepositoryProvider);
+final now = DateTime.now().toUtc();
+final rc = RankingCategory(id: 'prog-tv', createdAt: now, updatedAt: now, version: 1, name: 'TV', colorValue: 0xFF7C9EFF, iconKey: 'star', childUnitsEnabled: true, childUnitLabel: 'Episode', imagesOnParent: false);
+await rr.upsertCategory(rc);
+r.pushRankingCategory(rc);
+final fg = RankingParent(id: 'prog-fg', createdAt: now, updatedAt: now, version: 1, categoryId: 'prog-tv', title: 'Family Guy', status: RankingStatus.inProgress);
+final sv = RankingParent(id: 'prog-sv', createdAt: now, updatedAt: now, version: 1, categoryId: 'prog-tv', title: 'Severance', overallScore: 4.5);
+for (final p in [fg, sv]) { await rr.upsertParent(p); r.pushRankingParent(p); }
+final names = ['S3E05 Mr. Saturday Knight', 'S3E06 A Fish Out of Water', 'S3E07 Emission Impossible'];
+for (var i = 0; i < names.length; i++) { final ch = RankingChild(id: 'prog-e' + (i + 5).toString(), parentId: 'prog-fg', name: names[i], sortOrder: i, overallScore: i == 0 ? 4.0 : null, createdAt: now, updatedAt: now, version: 1); await rr.upsertChild(ch); r.pushRankingChild(ch); }
+invalidateAllDataProvidersIn(c);

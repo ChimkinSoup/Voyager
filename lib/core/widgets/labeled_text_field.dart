@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/text/newline_normalization.dart';
 import 'package:voyager/core/text/prose_editing_controller.dart';
@@ -46,6 +47,7 @@ class LabeledTextField extends StatefulWidget {
     this.snippetsAllowed = true,
     this.autocorrectAllowed = true,
     this.showLineBreaks = false,
+    this.inputFormatters = const [],
   });
 
   final String label;
@@ -98,6 +100,10 @@ class LabeledTextField extends StatefulWidget {
   /// Marks every line ended with Enter with a faint ↵, for multi-line fields
   /// whose text is pasted somewhere verbatim — see [LineBreakMarkLayer].
   final bool showLineBreaks;
+
+  /// Run after the field's own newline handling, to keep out what the field
+  /// can never hold.
+  final List<TextInputFormatter> inputFormatters;
 
   @override
   State<LabeledTextField> createState() => _LabeledTextFieldState();
@@ -216,12 +222,14 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
     final suits = vimSuitsField(
       obscureText: widget.obscureText,
       keyboardType: widget.keyboardType,
+      inputFormatters: widget.inputFormatters,
     );
     return VimTextScope(
       enabled: VimEnabledScope.of(context) && suits,
       holdsEscape: vimHoldsEscapeIn(
         obscureText: widget.obscureText,
         keyboardType: widget.keyboardType,
+        inputFormatters: widget.inputFormatters,
       ),
       snippetsAllowed: widget.snippetsAllowed && suits,
       autocorrectAllowed: widget.autocorrectAllowed && suits,
@@ -310,6 +318,7 @@ class _LabeledTextFieldState extends State<LabeledTextField> {
         // A pasted `\r\n` would otherwise leave an invisible `\r` behind.
         inputFormatters: [
           newlineFormatterFor(widget.expands ? null : widget.maxLines),
+          ...widget.inputFormatters,
         ],
         obscureText: widget.obscureText,
         enabled: widget.enabled,

@@ -45457,6 +45457,21 @@ class $RankingCategoriesTableTable extends RankingCategoriesTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _progressEnabledMeta = const VerificationMeta(
+    'progressEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> progressEnabled = GeneratedColumn<bool>(
+    'progress_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("progress_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _archivedAtMeta = const VerificationMeta(
     'archivedAt',
   );
@@ -45534,6 +45549,7 @@ class $RankingCategoriesTableTable extends RankingCategoriesTable
     sortFieldId,
     sortAscending,
     locationEnabled,
+    progressEnabled,
     archivedAt,
     createdAt,
     updatedAt,
@@ -45708,6 +45724,15 @@ class $RankingCategoriesTableTable extends RankingCategoriesTable
         ),
       );
     }
+    if (data.containsKey('progress_enabled')) {
+      context.handle(
+        _progressEnabledMeta,
+        progressEnabled.isAcceptableOrUnknown(
+          data['progress_enabled']!,
+          _progressEnabledMeta,
+        ),
+      );
+    }
     if (data.containsKey('archived_at')) {
       context.handle(
         _archivedAtMeta,
@@ -45830,6 +45855,10 @@ class $RankingCategoriesTableTable extends RankingCategoriesTable
         DriftSqlType.bool,
         data['${effectivePrefix}location_enabled'],
       )!,
+      progressEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}progress_enabled'],
+      )!,
       archivedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}archived_at'],
@@ -45890,6 +45919,10 @@ class RankingCategoriesTableData extends DataClass
   final bool sortAscending;
   final bool locationEnabled;
 
+  /// Whether entries carry a "where I stopped" bookmark on one of their
+  /// units. Only offered while [childUnitsEnabled].
+  final bool progressEnabled;
+
   /// Set = hidden from the picker and view-only. Not [deletedAt]: archiving
   /// does not cascade.
   final DateTime? archivedAt;
@@ -45917,6 +45950,7 @@ class RankingCategoriesTableData extends DataClass
     this.sortFieldId,
     required this.sortAscending,
     required this.locationEnabled,
+    required this.progressEnabled,
     this.archivedAt,
     required this.createdAt,
     required this.updatedAt,
@@ -45947,6 +45981,7 @@ class RankingCategoriesTableData extends DataClass
     }
     map['sort_ascending'] = Variable<bool>(sortAscending);
     map['location_enabled'] = Variable<bool>(locationEnabled);
+    map['progress_enabled'] = Variable<bool>(progressEnabled);
     if (!nullToAbsent || archivedAt != null) {
       map['archived_at'] = Variable<DateTime>(archivedAt);
     }
@@ -45982,6 +46017,7 @@ class RankingCategoriesTableData extends DataClass
           : Value(sortFieldId),
       sortAscending: Value(sortAscending),
       locationEnabled: Value(locationEnabled),
+      progressEnabled: Value(progressEnabled),
       archivedAt: archivedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(archivedAt),
@@ -46025,6 +46061,7 @@ class RankingCategoriesTableData extends DataClass
       sortFieldId: serializer.fromJson<String?>(json['sortFieldId']),
       sortAscending: serializer.fromJson<bool>(json['sortAscending']),
       locationEnabled: serializer.fromJson<bool>(json['locationEnabled']),
+      progressEnabled: serializer.fromJson<bool>(json['progressEnabled']),
       archivedAt: serializer.fromJson<DateTime?>(json['archivedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -46055,6 +46092,7 @@ class RankingCategoriesTableData extends DataClass
       'sortFieldId': serializer.toJson<String?>(sortFieldId),
       'sortAscending': serializer.toJson<bool>(sortAscending),
       'locationEnabled': serializer.toJson<bool>(locationEnabled),
+      'progressEnabled': serializer.toJson<bool>(progressEnabled),
       'archivedAt': serializer.toJson<DateTime?>(archivedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -46083,6 +46121,7 @@ class RankingCategoriesTableData extends DataClass
     Value<String?> sortFieldId = const Value.absent(),
     bool? sortAscending,
     bool? locationEnabled,
+    bool? progressEnabled,
     Value<DateTime?> archivedAt = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -46108,6 +46147,7 @@ class RankingCategoriesTableData extends DataClass
     sortFieldId: sortFieldId.present ? sortFieldId.value : this.sortFieldId,
     sortAscending: sortAscending ?? this.sortAscending,
     locationEnabled: locationEnabled ?? this.locationEnabled,
+    progressEnabled: progressEnabled ?? this.progressEnabled,
     archivedAt: archivedAt.present ? archivedAt.value : this.archivedAt,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -46165,6 +46205,9 @@ class RankingCategoriesTableData extends DataClass
       locationEnabled: data.locationEnabled.present
           ? data.locationEnabled.value
           : this.locationEnabled,
+      progressEnabled: data.progressEnabled.present
+          ? data.progressEnabled.value
+          : this.progressEnabled,
       archivedAt: data.archivedAt.present
           ? data.archivedAt.value
           : this.archivedAt,
@@ -46197,6 +46240,7 @@ class RankingCategoriesTableData extends DataClass
           ..write('sortFieldId: $sortFieldId, ')
           ..write('sortAscending: $sortAscending, ')
           ..write('locationEnabled: $locationEnabled, ')
+          ..write('progressEnabled: $progressEnabled, ')
           ..write('archivedAt: $archivedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -46227,6 +46271,7 @@ class RankingCategoriesTableData extends DataClass
     sortFieldId,
     sortAscending,
     locationEnabled,
+    progressEnabled,
     archivedAt,
     createdAt,
     updatedAt,
@@ -46256,6 +46301,7 @@ class RankingCategoriesTableData extends DataClass
           other.sortFieldId == this.sortFieldId &&
           other.sortAscending == this.sortAscending &&
           other.locationEnabled == this.locationEnabled &&
+          other.progressEnabled == this.progressEnabled &&
           other.archivedAt == this.archivedAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -46284,6 +46330,7 @@ class RankingCategoriesTableCompanion
   final Value<String?> sortFieldId;
   final Value<bool> sortAscending;
   final Value<bool> locationEnabled;
+  final Value<bool> progressEnabled;
   final Value<DateTime?> archivedAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -46310,6 +46357,7 @@ class RankingCategoriesTableCompanion
     this.sortFieldId = const Value.absent(),
     this.sortAscending = const Value.absent(),
     this.locationEnabled = const Value.absent(),
+    this.progressEnabled = const Value.absent(),
     this.archivedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -46337,6 +46385,7 @@ class RankingCategoriesTableCompanion
     this.sortFieldId = const Value.absent(),
     this.sortAscending = const Value.absent(),
     this.locationEnabled = const Value.absent(),
+    this.progressEnabled = const Value.absent(),
     this.archivedAt = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
@@ -46368,6 +46417,7 @@ class RankingCategoriesTableCompanion
     Expression<String>? sortFieldId,
     Expression<bool>? sortAscending,
     Expression<bool>? locationEnabled,
+    Expression<bool>? progressEnabled,
     Expression<DateTime>? archivedAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -46398,6 +46448,7 @@ class RankingCategoriesTableCompanion
       if (sortFieldId != null) 'sort_field_id': sortFieldId,
       if (sortAscending != null) 'sort_ascending': sortAscending,
       if (locationEnabled != null) 'location_enabled': locationEnabled,
+      if (progressEnabled != null) 'progress_enabled': progressEnabled,
       if (archivedAt != null) 'archived_at': archivedAt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -46427,6 +46478,7 @@ class RankingCategoriesTableCompanion
     Value<String?>? sortFieldId,
     Value<bool>? sortAscending,
     Value<bool>? locationEnabled,
+    Value<bool>? progressEnabled,
     Value<DateTime?>? archivedAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -46454,6 +46506,7 @@ class RankingCategoriesTableCompanion
       sortFieldId: sortFieldId ?? this.sortFieldId,
       sortAscending: sortAscending ?? this.sortAscending,
       locationEnabled: locationEnabled ?? this.locationEnabled,
+      progressEnabled: progressEnabled ?? this.progressEnabled,
       archivedAt: archivedAt ?? this.archivedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -46527,6 +46580,9 @@ class RankingCategoriesTableCompanion
     if (locationEnabled.present) {
       map['location_enabled'] = Variable<bool>(locationEnabled.value);
     }
+    if (progressEnabled.present) {
+      map['progress_enabled'] = Variable<bool>(progressEnabled.value);
+    }
     if (archivedAt.present) {
       map['archived_at'] = Variable<DateTime>(archivedAt.value);
     }
@@ -46570,6 +46626,7 @@ class RankingCategoriesTableCompanion
           ..write('sortFieldId: $sortFieldId, ')
           ..write('sortAscending: $sortAscending, ')
           ..write('locationEnabled: $locationEnabled, ')
+          ..write('progressEnabled: $progressEnabled, ')
           ..write('archivedAt: $archivedAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -46672,6 +46729,28 @@ class $RankingParentsTableTable extends RankingParentsTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
     defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _progressChildIdMeta = const VerificationMeta(
+    'progressChildId',
+  );
+  @override
+  late final GeneratedColumn<String> progressChildId = GeneratedColumn<String>(
+    'progress_child_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _progressSecondsMeta = const VerificationMeta(
+    'progressSeconds',
+  );
+  @override
+  late final GeneratedColumn<int> progressSeconds = GeneratedColumn<int>(
+    'progress_seconds',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
   );
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
   @override
@@ -46777,6 +46856,8 @@ class $RankingParentsTableTable extends RankingParentsTable
     fieldValuesJson,
     tagsJson,
     locationsJson,
+    progressChildId,
+    progressSeconds,
     status,
     starred,
     queueSortOrder,
@@ -46855,6 +46936,24 @@ class $RankingParentsTableTable extends RankingParentsTable
         locationsJson.isAcceptableOrUnknown(
           data['locations_json']!,
           _locationsJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('progress_child_id')) {
+      context.handle(
+        _progressChildIdMeta,
+        progressChildId.isAcceptableOrUnknown(
+          data['progress_child_id']!,
+          _progressChildIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('progress_seconds')) {
+      context.handle(
+        _progressSecondsMeta,
+        progressSeconds.isAcceptableOrUnknown(
+          data['progress_seconds']!,
+          _progressSecondsMeta,
         ),
       );
     }
@@ -46960,6 +47059,14 @@ class $RankingParentsTableTable extends RankingParentsTable
         DriftSqlType.string,
         data['${effectivePrefix}locations_json'],
       )!,
+      progressChildId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}progress_child_id'],
+      ),
+      progressSeconds: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}progress_seconds'],
+      ),
       status: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}status'],
@@ -47023,6 +47130,11 @@ class RankingParentsTableData extends DataClass
   /// reads parents anyway.
   final String locationsJson;
 
+  /// The unit the user stopped in, and how far into it. One pointer on the
+  /// entry rather than a flag per unit, so there can never be two.
+  final String? progressChildId;
+  final int? progressSeconds;
+
   /// [RankingStatus] by `name`. Only read while unranked.
   final String status;
   final bool starred;
@@ -47043,6 +47155,8 @@ class RankingParentsTableData extends DataClass
     required this.fieldValuesJson,
     required this.tagsJson,
     required this.locationsJson,
+    this.progressChildId,
+    this.progressSeconds,
     required this.status,
     required this.starred,
     required this.queueSortOrder,
@@ -47065,6 +47179,12 @@ class RankingParentsTableData extends DataClass
     map['field_values_json'] = Variable<String>(fieldValuesJson);
     map['tags_json'] = Variable<String>(tagsJson);
     map['locations_json'] = Variable<String>(locationsJson);
+    if (!nullToAbsent || progressChildId != null) {
+      map['progress_child_id'] = Variable<String>(progressChildId);
+    }
+    if (!nullToAbsent || progressSeconds != null) {
+      map['progress_seconds'] = Variable<int>(progressSeconds);
+    }
     map['status'] = Variable<String>(status);
     map['starred'] = Variable<bool>(starred);
     map['queue_sort_order'] = Variable<int>(queueSortOrder);
@@ -47090,6 +47210,12 @@ class RankingParentsTableData extends DataClass
       fieldValuesJson: Value(fieldValuesJson),
       tagsJson: Value(tagsJson),
       locationsJson: Value(locationsJson),
+      progressChildId: progressChildId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(progressChildId),
+      progressSeconds: progressSeconds == null && nullToAbsent
+          ? const Value.absent()
+          : Value(progressSeconds),
       status: Value(status),
       starred: Value(starred),
       queueSortOrder: Value(queueSortOrder),
@@ -47117,6 +47243,8 @@ class RankingParentsTableData extends DataClass
       fieldValuesJson: serializer.fromJson<String>(json['fieldValuesJson']),
       tagsJson: serializer.fromJson<String>(json['tagsJson']),
       locationsJson: serializer.fromJson<String>(json['locationsJson']),
+      progressChildId: serializer.fromJson<String?>(json['progressChildId']),
+      progressSeconds: serializer.fromJson<int?>(json['progressSeconds']),
       status: serializer.fromJson<String>(json['status']),
       starred: serializer.fromJson<bool>(json['starred']),
       queueSortOrder: serializer.fromJson<int>(json['queueSortOrder']),
@@ -47141,6 +47269,8 @@ class RankingParentsTableData extends DataClass
       'fieldValuesJson': serializer.toJson<String>(fieldValuesJson),
       'tagsJson': serializer.toJson<String>(tagsJson),
       'locationsJson': serializer.toJson<String>(locationsJson),
+      'progressChildId': serializer.toJson<String?>(progressChildId),
+      'progressSeconds': serializer.toJson<int?>(progressSeconds),
       'status': serializer.toJson<String>(status),
       'starred': serializer.toJson<bool>(starred),
       'queueSortOrder': serializer.toJson<int>(queueSortOrder),
@@ -47161,6 +47291,8 @@ class RankingParentsTableData extends DataClass
     String? fieldValuesJson,
     String? tagsJson,
     String? locationsJson,
+    Value<String?> progressChildId = const Value.absent(),
+    Value<int?> progressSeconds = const Value.absent(),
     String? status,
     bool? starred,
     int? queueSortOrder,
@@ -47178,6 +47310,12 @@ class RankingParentsTableData extends DataClass
     fieldValuesJson: fieldValuesJson ?? this.fieldValuesJson,
     tagsJson: tagsJson ?? this.tagsJson,
     locationsJson: locationsJson ?? this.locationsJson,
+    progressChildId: progressChildId.present
+        ? progressChildId.value
+        : this.progressChildId,
+    progressSeconds: progressSeconds.present
+        ? progressSeconds.value
+        : this.progressSeconds,
     status: status ?? this.status,
     starred: starred ?? this.starred,
     queueSortOrder: queueSortOrder ?? this.queueSortOrder,
@@ -47205,6 +47343,12 @@ class RankingParentsTableData extends DataClass
       locationsJson: data.locationsJson.present
           ? data.locationsJson.value
           : this.locationsJson,
+      progressChildId: data.progressChildId.present
+          ? data.progressChildId.value
+          : this.progressChildId,
+      progressSeconds: data.progressSeconds.present
+          ? data.progressSeconds.value
+          : this.progressSeconds,
       status: data.status.present ? data.status.value : this.status,
       starred: data.starred.present ? data.starred.value : this.starred,
       queueSortOrder: data.queueSortOrder.present
@@ -47231,6 +47375,8 @@ class RankingParentsTableData extends DataClass
           ..write('fieldValuesJson: $fieldValuesJson, ')
           ..write('tagsJson: $tagsJson, ')
           ..write('locationsJson: $locationsJson, ')
+          ..write('progressChildId: $progressChildId, ')
+          ..write('progressSeconds: $progressSeconds, ')
           ..write('status: $status, ')
           ..write('starred: $starred, ')
           ..write('queueSortOrder: $queueSortOrder, ')
@@ -47253,6 +47399,8 @@ class RankingParentsTableData extends DataClass
     fieldValuesJson,
     tagsJson,
     locationsJson,
+    progressChildId,
+    progressSeconds,
     status,
     starred,
     queueSortOrder,
@@ -47274,6 +47422,8 @@ class RankingParentsTableData extends DataClass
           other.fieldValuesJson == this.fieldValuesJson &&
           other.tagsJson == this.tagsJson &&
           other.locationsJson == this.locationsJson &&
+          other.progressChildId == this.progressChildId &&
+          other.progressSeconds == this.progressSeconds &&
           other.status == this.status &&
           other.starred == this.starred &&
           other.queueSortOrder == this.queueSortOrder &&
@@ -47294,6 +47444,8 @@ class RankingParentsTableCompanion
   final Value<String> fieldValuesJson;
   final Value<String> tagsJson;
   final Value<String> locationsJson;
+  final Value<String?> progressChildId;
+  final Value<int?> progressSeconds;
   final Value<String> status;
   final Value<bool> starred;
   final Value<int> queueSortOrder;
@@ -47312,6 +47464,8 @@ class RankingParentsTableCompanion
     this.fieldValuesJson = const Value.absent(),
     this.tagsJson = const Value.absent(),
     this.locationsJson = const Value.absent(),
+    this.progressChildId = const Value.absent(),
+    this.progressSeconds = const Value.absent(),
     this.status = const Value.absent(),
     this.starred = const Value.absent(),
     this.queueSortOrder = const Value.absent(),
@@ -47331,6 +47485,8 @@ class RankingParentsTableCompanion
     this.fieldValuesJson = const Value.absent(),
     this.tagsJson = const Value.absent(),
     this.locationsJson = const Value.absent(),
+    this.progressChildId = const Value.absent(),
+    this.progressSeconds = const Value.absent(),
     this.status = const Value.absent(),
     this.starred = const Value.absent(),
     this.queueSortOrder = const Value.absent(),
@@ -47354,6 +47510,8 @@ class RankingParentsTableCompanion
     Expression<String>? fieldValuesJson,
     Expression<String>? tagsJson,
     Expression<String>? locationsJson,
+    Expression<String>? progressChildId,
+    Expression<int>? progressSeconds,
     Expression<String>? status,
     Expression<bool>? starred,
     Expression<int>? queueSortOrder,
@@ -47373,6 +47531,8 @@ class RankingParentsTableCompanion
       if (fieldValuesJson != null) 'field_values_json': fieldValuesJson,
       if (tagsJson != null) 'tags_json': tagsJson,
       if (locationsJson != null) 'locations_json': locationsJson,
+      if (progressChildId != null) 'progress_child_id': progressChildId,
+      if (progressSeconds != null) 'progress_seconds': progressSeconds,
       if (status != null) 'status': status,
       if (starred != null) 'starred': starred,
       if (queueSortOrder != null) 'queue_sort_order': queueSortOrder,
@@ -47395,6 +47555,8 @@ class RankingParentsTableCompanion
     Value<String>? fieldValuesJson,
     Value<String>? tagsJson,
     Value<String>? locationsJson,
+    Value<String?>? progressChildId,
+    Value<int?>? progressSeconds,
     Value<String>? status,
     Value<bool>? starred,
     Value<int>? queueSortOrder,
@@ -47414,6 +47576,8 @@ class RankingParentsTableCompanion
       fieldValuesJson: fieldValuesJson ?? this.fieldValuesJson,
       tagsJson: tagsJson ?? this.tagsJson,
       locationsJson: locationsJson ?? this.locationsJson,
+      progressChildId: progressChildId ?? this.progressChildId,
+      progressSeconds: progressSeconds ?? this.progressSeconds,
       status: status ?? this.status,
       starred: starred ?? this.starred,
       queueSortOrder: queueSortOrder ?? this.queueSortOrder,
@@ -47452,6 +47616,12 @@ class RankingParentsTableCompanion
     }
     if (locationsJson.present) {
       map['locations_json'] = Variable<String>(locationsJson.value);
+    }
+    if (progressChildId.present) {
+      map['progress_child_id'] = Variable<String>(progressChildId.value);
+    }
+    if (progressSeconds.present) {
+      map['progress_seconds'] = Variable<int>(progressSeconds.value);
     }
     if (status.present) {
       map['status'] = Variable<String>(status.value);
@@ -47494,6 +47664,8 @@ class RankingParentsTableCompanion
           ..write('fieldValuesJson: $fieldValuesJson, ')
           ..write('tagsJson: $tagsJson, ')
           ..write('locationsJson: $locationsJson, ')
+          ..write('progressChildId: $progressChildId, ')
+          ..write('progressSeconds: $progressSeconds, ')
           ..write('status: $status, ')
           ..write('starred: $starred, ')
           ..write('queueSortOrder: $queueSortOrder, ')
@@ -72041,6 +72213,7 @@ typedef $$RankingCategoriesTableTableCreateCompanionBuilder =
       Value<String?> sortFieldId,
       Value<bool> sortAscending,
       Value<bool> locationEnabled,
+      Value<bool> progressEnabled,
       Value<DateTime?> archivedAt,
       required DateTime createdAt,
       required DateTime updatedAt,
@@ -72069,6 +72242,7 @@ typedef $$RankingCategoriesTableTableUpdateCompanionBuilder =
       Value<String?> sortFieldId,
       Value<bool> sortAscending,
       Value<bool> locationEnabled,
+      Value<bool> progressEnabled,
       Value<DateTime?> archivedAt,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -72178,6 +72352,11 @@ class $$RankingCategoriesTableTableFilterComposer
 
   ColumnFilters<bool> get locationEnabled => $composableBuilder(
     column: $table.locationEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get progressEnabled => $composableBuilder(
+    column: $table.progressEnabled,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -72311,6 +72490,11 @@ class $$RankingCategoriesTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get progressEnabled => $composableBuilder(
+    column: $table.progressEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get archivedAt => $composableBuilder(
     column: $table.archivedAt,
     builder: (column) => ColumnOrderings(column),
@@ -72431,6 +72615,11 @@ class $$RankingCategoriesTableTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get progressEnabled => $composableBuilder(
+    column: $table.progressEnabled,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get archivedAt => $composableBuilder(
     column: $table.archivedAt,
     builder: (column) => column,
@@ -72514,6 +72703,7 @@ class $$RankingCategoriesTableTableTableManager
                 Value<String?> sortFieldId = const Value.absent(),
                 Value<bool> sortAscending = const Value.absent(),
                 Value<bool> locationEnabled = const Value.absent(),
+                Value<bool> progressEnabled = const Value.absent(),
                 Value<DateTime?> archivedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -72540,6 +72730,7 @@ class $$RankingCategoriesTableTableTableManager
                 sortFieldId: sortFieldId,
                 sortAscending: sortAscending,
                 locationEnabled: locationEnabled,
+                progressEnabled: progressEnabled,
                 archivedAt: archivedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -72568,6 +72759,7 @@ class $$RankingCategoriesTableTableTableManager
                 Value<String?> sortFieldId = const Value.absent(),
                 Value<bool> sortAscending = const Value.absent(),
                 Value<bool> locationEnabled = const Value.absent(),
+                Value<bool> progressEnabled = const Value.absent(),
                 Value<DateTime?> archivedAt = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
@@ -72594,6 +72786,7 @@ class $$RankingCategoriesTableTableTableManager
                 sortFieldId: sortFieldId,
                 sortAscending: sortAscending,
                 locationEnabled: locationEnabled,
+                progressEnabled: progressEnabled,
                 archivedAt: archivedAt,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -72640,6 +72833,8 @@ typedef $$RankingParentsTableTableCreateCompanionBuilder =
       Value<String> fieldValuesJson,
       Value<String> tagsJson,
       Value<String> locationsJson,
+      Value<String?> progressChildId,
+      Value<int?> progressSeconds,
       Value<String> status,
       Value<bool> starred,
       Value<int> queueSortOrder,
@@ -72660,6 +72855,8 @@ typedef $$RankingParentsTableTableUpdateCompanionBuilder =
       Value<String> fieldValuesJson,
       Value<String> tagsJson,
       Value<String> locationsJson,
+      Value<String?> progressChildId,
+      Value<int?> progressSeconds,
       Value<String> status,
       Value<bool> starred,
       Value<int> queueSortOrder,
@@ -72717,6 +72914,16 @@ class $$RankingParentsTableTableFilterComposer
 
   ColumnFilters<String> get locationsJson => $composableBuilder(
     column: $table.locationsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get progressChildId => $composableBuilder(
+    column: $table.progressChildId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get progressSeconds => $composableBuilder(
+    column: $table.progressSeconds,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -72810,6 +73017,16 @@ class $$RankingParentsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get progressChildId => $composableBuilder(
+    column: $table.progressChildId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get progressSeconds => $composableBuilder(
+    column: $table.progressSeconds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get status => $composableBuilder(
     column: $table.status,
     builder: (column) => ColumnOrderings(column),
@@ -72889,6 +73106,16 @@ class $$RankingParentsTableTableAnnotationComposer
 
   GeneratedColumn<String> get locationsJson => $composableBuilder(
     column: $table.locationsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get progressChildId => $composableBuilder(
+    column: $table.progressChildId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get progressSeconds => $composableBuilder(
+    column: $table.progressSeconds,
     builder: (column) => column,
   );
 
@@ -72972,6 +73199,8 @@ class $$RankingParentsTableTableTableManager
                 Value<String> fieldValuesJson = const Value.absent(),
                 Value<String> tagsJson = const Value.absent(),
                 Value<String> locationsJson = const Value.absent(),
+                Value<String?> progressChildId = const Value.absent(),
+                Value<int?> progressSeconds = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<int> queueSortOrder = const Value.absent(),
@@ -72990,6 +73219,8 @@ class $$RankingParentsTableTableTableManager
                 fieldValuesJson: fieldValuesJson,
                 tagsJson: tagsJson,
                 locationsJson: locationsJson,
+                progressChildId: progressChildId,
+                progressSeconds: progressSeconds,
                 status: status,
                 starred: starred,
                 queueSortOrder: queueSortOrder,
@@ -73010,6 +73241,8 @@ class $$RankingParentsTableTableTableManager
                 Value<String> fieldValuesJson = const Value.absent(),
                 Value<String> tagsJson = const Value.absent(),
                 Value<String> locationsJson = const Value.absent(),
+                Value<String?> progressChildId = const Value.absent(),
+                Value<int?> progressSeconds = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<bool> starred = const Value.absent(),
                 Value<int> queueSortOrder = const Value.absent(),
@@ -73028,6 +73261,8 @@ class $$RankingParentsTableTableTableManager
                 fieldValuesJson: fieldValuesJson,
                 tagsJson: tagsJson,
                 locationsJson: locationsJson,
+                progressChildId: progressChildId,
+                progressSeconds: progressSeconds,
                 status: status,
                 starred: starred,
                 queueSortOrder: queueSortOrder,
