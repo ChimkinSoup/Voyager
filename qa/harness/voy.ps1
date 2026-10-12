@@ -6,18 +6,33 @@
 #   voy.ps1 run <steps.txt>             run a scenario file in ONE process (preferred)
 #   voy.ps1 do "<step>; <step>; ..."    same, inline
 #
+# Two input modes. Each run starts in bg:
+#   bg  Messages posted to Voyager's own window (Bg.cs). No foreground needed, works
+#       covered, parked off-screen or locked, can't reach another app. Clicks/drags
+#       are instant bursts: no hover, long-press or slow drags (use fg).
+#   fg  Real OS input (Probe.cs), refused unless Voyager is the foreground window.
+#       Takes over Juno's screen: only for focus/blur, hover, timed gestures,
+#       global hotkeys and the "other app" forms.
+#
 # Step language (one per line, or ';'-separated with `do`; '#' starts a comment):
-#   activate                   focus Voyager (fails the run if it can't)
+#   mode bg|fg                 switch input mode for the rest of the run
+#   activate                   focus Voyager (fails the run if it can't); switches to fg
+#   park | unpark              bg: move the window off-screen (client 2880x1800, same coords
+#                              as maximized) / back to (0,0), never activating it
 #   key <chord>                e.g. key ctrl+slash | key esc | key ctrl+shift+tab | key f5
 #   type <text>                real VK typing; \n = Enter. Leading/trailing spaces kept after the first space.
 #   click <x> <y> [right] [N]  physical client px (same as screenshot px); N = click count
+#   tap <query> [#N] [right]   click the N-th clickable widget whose whole label is <query>:
+#                              Text, tip:<tooltip> or key:<ValueKey value> (vm.ps1 locate)
+#   find [query]               list on-screen texts/tooltips/keys with centre coords (vm.ps1 find)
+#   field                      focused text field: selection|vimMode|length|text (vm.ps1 field)
 #   move <x> <y> | wheel <x> <y> <notches> (+up/-down) | drag <x1> <y1> <x2> <y2>
-#   hotkey <chord>             global hotkey (only sent if registered), e.g. hotkey ctrl+alt+t
+#   hotkey <chord>             fg: global hotkey (only sent if registered), e.g. hotkey ctrl+alt+t
 #   wait <ms>                  sleep
-#   shot <name>                client-area PNG
+#   shot <name>                client-area PNG (bg: VM-service frame grab; fg: PrintWindow)
 #   status                     print window state
-#   place <x> <y> <w> <h>      restore + move/resize outer window (physical px)
-#   maximize | restore | minimize | close (WM_CLOSE -> hides to tray) | tray-open | tray-quit
+#   place <x> <y> <w> <h>      fg: restore + move/resize outer window (physical px)
+#   maximize | restore | minimize (fg) | close (WM_CLOSE -> hides to tray) | tray-open | tray-quit (fg)
 # "Another app" (OtherApp.cs, a WinForms form owned by this probe process; lives for the run):
 #   other-open [x y w h]       open it topmost, raise it with a real click, then drop topmost
 #   other-click [dx dy]        real click on it (centre, or offset from its top-left); guarded
@@ -25,7 +40,7 @@
 #   other-topmost on|off | other-close | ostatus (foreground owner, its text, hotkey hits)
 #   otherb-open x y w h | otherb-click [dx dy] | otherb-close   a second probe form "B" (FV-7)
 #   zorder                     top-to-bottom order of form A, form B and Voyager's main window
-#   tray-menu                  open the real tray context menu (posted right-click)
+#   tray-menu                  fg: open the real tray context menu (posted right-click; activates Voyager)
 #   other-grab <chord> [id]    register a global hotkey to it (another process owns the combo)
 param([Parameter(Position = 0)][string]$Cmd = 'status', [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]]$Rest)
 
@@ -33,8 +48,19 @@ $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $shots = Join-Path (Split-Path -Parent $here) 'shots'
 New-Item -ItemType Directory -Force $shots | Out-Null
-if (-not ('Voy' -as [type])) {
-  Add-Type -Path (Join-Path $here 'Probe.cs'), (Join-Path $here 'OtherApp.cs') -ReferencedAssemblies System.Drawing, System.Windows.Forms
+if (-not ('Bg' -as [type])) {
+  Add-Type -Path (Join-Path $here 'Probe.cs'), (Join-Path $here 'OtherApp.cs'), (Join-Path $here 'Bg.cs') -ReferencedAssemblies System.Drawing, System.Windows.Forms
+}
+$vm = Join-Path $here 'vm.ps1'
+$script:mode = 'bg'
+$fgOnly = @('hotkey', 'place', 'maximize', 'restore', 'minimize', 'other-open', 'other-click', 'other-type', 'other-topmost',
+  'otherb-open', 'otherb-click', 'zorder', 'other-grab', 'tray-open', 'tray-menu', 'tray-quit')
+
+# Runs vm.ps1 and fails the run on a non-zero exit (stale vm_uri.txt, eval error, capture timeout).
+function Invoke-Vm {
+  $out = @(& $vm @args)
+  if ($LASTEXITCODE -ne 0) { throw "vm.ps1 $($args[0]): $($out -join "`n")" }
+  $out
 }
 
 function Invoke-Step([string]$line) {
@@ -44,25 +70,48 @@ function Invoke-Step([string]$line) {
   $verb = if ($sp -lt 0) { $line } else { $line.Substring(0, $sp) }
   $arg = if ($sp -lt 0) { '' } else { $line.Substring($sp + 1) }
   $a = @($arg -split '\s+' | Where-Object { $_ -ne '' })
-  switch ($verb.ToLowerInvariant()) {
-    'activate' { if (-not [Voy]::Activate()) { throw "activate failed: $([Voy]::Status())" } }
-    'key' { [Voy]::Chord($arg.Trim()) }
-    'type' { [Voy]::Type($arg.Replace('\n', "`n")) }
+  $verb = $verb.ToLowerInvariant()
+  if ($script:mode -eq 'bg' -and $fgOnly -contains $verb) { throw "'$verb' needs real input or activates the window: add 'mode fg' (takes Juno's screen) before it" }
+  $bg = $script:mode -eq 'bg'
+  switch ($verb) {
+    'mode' {
+      if ($a[0] -ne 'bg' -and $a[0] -ne 'fg') { throw "mode must be bg or fg: $line" }
+      $script:mode = $a[0]
+    }
+    'activate' { $script:mode = 'fg'; if (-not [Voy]::Activate()) { throw "activate failed: $([Voy]::Status())" } }
+    'park' { [Bg]::Park() }
+    'unpark' { [Bg]::Unpark() }
+    'key' { if ($bg) { [Bg]::Chord($arg.Trim()) } else { [Voy]::Chord($arg.Trim()) } }
+    'type' { if ($bg) { [Bg]::Type($arg.Replace('\n', "`n")) } else { [Voy]::Type($arg.Replace('\n', "`n")) } }
     'click' {
       $right = $a -contains 'right'
       $n = 1; if ($a.Count -ge 3 -and $a[-1] -match '^\d+$') { $n = [int]$a[-1] }
-      [Voy]::Click([int]$a[0], [int]$a[1], $right, $n)
+      if ($bg) { [Bg]::Click([int]$a[0], [int]$a[1], $right, $n) } else { [Voy]::Click([int]$a[0], [int]$a[1], $right, $n) }
     }
-    'move' { [Voy]::Move([int]$a[0], [int]$a[1]) }
-    'wheel' { [Voy]::Wheel([int]$a[0], [int]$a[1], [int]$a[2]) }
-    'drag' { [Voy]::Drag([int]$a[0], [int]$a[1], [int]$a[2], [int]$a[3], 20) }
+    'tap' {
+      $q = $arg.Trim(); $n = 1; $right = $false
+      if ($q -match '\s+right$') { $right = $true; $q = $q -replace '\s+right$', '' }
+      if ($q -match '\s+#(\d+)$') { $n = [int]$Matches[1]; $q = $q -replace '\s+#\d+$', '' }
+      $q = $q.Trim('"', "'")
+      $out = @(& $vm locate $n $q)
+      if ($LASTEXITCODE -ne 0) { throw "tap: $($out -join "`n")" }
+      $xy = $out[-1].Split(' ')
+      if ($bg) { [Bg]::Click([int]$xy[0], [int]$xy[1], $right, 1) } else { [Voy]::Click([int]$xy[0], [int]$xy[1], $right, 1) }
+      Write-Output "tap '$q' #$n at $($out[-1])"
+    }
+    'find' { Invoke-Vm find $arg.Trim().Trim('"', "'") }
+    'field' { Invoke-Vm field }
+    'move' { if ($bg) { [Bg]::Move([int]$a[0], [int]$a[1]) } else { [Voy]::Move([int]$a[0], [int]$a[1]) } }
+    'wheel' { if ($bg) { Invoke-Vm scroll $a[0] $a[1] $a[2] | Out-Null; Start-Sleep -Milliseconds 150 } else { [Voy]::Wheel([int]$a[0], [int]$a[1], [int]$a[2]) } }
+    'drag' { if ($bg) { [Bg]::Drag([int]$a[0], [int]$a[1], [int]$a[2], [int]$a[3], 20) } else { [Voy]::Drag([int]$a[0], [int]$a[1], [int]$a[2], [int]$a[3], 20) } }
     'hotkey' { [Voy]::GlobalHotkey($arg.Trim()) }
     'wait' { Start-Sleep -Milliseconds ([int]$a[0]) }
     'shot' {
       $p = Join-Path $shots ($a[0] + '.png')
-      if ([Voy]::Shot($p)) { Write-Output "shot: $p" } else { Write-Output "shot FAILED ($($a[0])): $([Voy]::Status())" }
+      if ($bg) { Invoke-Vm shot $p }
+      elseif ([Voy]::Shot($p)) { Write-Output "shot: $p" } else { Write-Output "shot FAILED ($($a[0])): $([Voy]::Status())" }
     }
-    'status' { Write-Output ([Voy]::Status()) }
+    'status' { Write-Output ("mode=$($script:mode) " + [Voy]::Status()) }
     'place' { [Voy]::Place([int]$a[0], [int]$a[1], [int]$a[2], [int]$a[3]) }
     'maximize' { [Voy]::Maximize() }
     'restore' { [Voy]::Restore() }
@@ -98,6 +147,7 @@ function Invoke-Step([string]$line) {
   }
 }
 
+[Bg]::KeepAwake()
 switch ($Cmd) {
   'run' { foreach ($l in Get-Content -LiteralPath $Rest[0]) { Invoke-Step $l } }
   'do' { foreach ($l in (($Rest -join ' ') -split ';')) { Invoke-Step $l } }

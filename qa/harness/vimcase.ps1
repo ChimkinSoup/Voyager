@@ -14,10 +14,10 @@ $root = Split-Path -Parent (Split-Path -Parent $here)
 Set-Location $root
 if (-not ('Voy' -as [type])) { Add-Type -Path (Join-Path $here 'Probe.cs') -ReferencedAssemblies System.Drawing }
 
-function Vm([string]$expr) {
+function Vm {
   $ErrorActionPreference = 'Continue'
-  if ($VmExe -ne '') { $o = & $VmExe eval 'core/vim/vim_text_scope.dart' $expr 2>&1 }
-  else { $o = & dart run qa/harness/vm.dart eval 'core/vim/vim_text_scope.dart' $expr 2>&1 }
+  if ($VmExe -ne '') { $o = & $VmExe @args 2>&1 }
+  else { $o = & dart run qa/harness/vm.dart @args 2>&1 }
   return (($o | ForEach-Object { "$_" } | Where-Object { $_ -notmatch 'Running build hooks' }) -join "`n")
 }
 
@@ -26,8 +26,6 @@ function DartStr([string]$s) {
 }
 
 $edit = 'FocusManager.instance.primaryFocus?.context?.findAncestorStateOfType<EditableTextState>()'
-$scope = 'FocusManager.instance.primaryFocus?.context?.findAncestorStateOfType<_VimTextScopeState>()'
-$readExpr = "(() { final s = $edit; if (s == null) return 'NOFIELD'; final v = s.textEditingValue; return v.selection.baseOffset.toString() + ',' + v.selection.extentOffset.toString() + '|' + ($($scope)?._session?.mode.name ?? 'nosession') + '|' + v.text.length.toString() + '|' + v.text.runes.map((r) => r == 10 ? r'\n' : (r < 128 ? String.fromCharCode(r) : r'\u{' + r.toRadixString(16) + '}')).join(); })()"
 
 function Send-Keys([string]$keys) {
   foreach ($tok in ($keys -split ' ')) {
@@ -49,13 +47,13 @@ foreach ($line in Get-Content -LiteralPath $Cases -Encoding UTF8) {
   # Deferred with Future so the write runs outside the eval's stack (a synchronous
   # write can trip debug assertions that can't parse the `Eval` frame).
   $setExpr = "(() { final s = $edit; if (s == null) return 'NOFIELD'; Future(() { s.widget.controller.value = TextEditingValue(text: $(DartStr $text), selection: TextSelection.collapsed(offset: $caret)); }); return 'ok'; })()"
-  $r = Vm $setExpr
+  $r = Vm eval 'core/vim/vim_text_scope.dart' $setExpr
   if ($r -ne 'ok') { Write-Output "ERROR $name set: $r"; $fail++; continue }
   Start-Sleep -Milliseconds 150
   if (-not [Voy]::Activate()) { throw "activate failed: $([Voy]::Status())" }
   Send-Keys $keys
   Start-Sleep -Milliseconds 250
-  $got = Vm $readExpr
+  $got = Vm field
   # got = sel|mode|length|text (text last: the VM service truncates long strings)
   $p = $got.Split([char]'|', 4)
   $ok = $true

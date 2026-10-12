@@ -2016,7 +2016,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 144;
+  int get schemaVersion => 145;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3642,6 +3642,23 @@ class AppDatabase extends _$AppDatabase {
           transactionsTable,
           transactionsTable.paidThroughBefore,
         );
+      }
+      if (from < 145) {
+        // A development build ran the v144 step before paid_through_before
+        // was part of it, leaving databases at 144 without the column (and
+        // every transaction insert failing). Re-check all three.
+        for (final column in [
+          transactionsTable.subscriptionId,
+          transactionsTable.settlesDueDate,
+          transactionsTable.paidThroughBefore,
+        ]) {
+          await _addColumnIfNotExists(
+            migrator,
+            'transactions_table',
+            transactionsTable,
+            column,
+          );
+        }
       }
     },
   );
