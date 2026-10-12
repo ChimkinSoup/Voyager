@@ -111,7 +111,7 @@ Surfaces: ranked/unranked list rows (overall), editor overall rows, custom field
 
 | Gesture | Behavior |
 |---------|----------|
-| **Mouse wheel** | Nothing: the wheel scrolls whatever the number sits in. (A wheel nudge that committed at once was removed by BUG-163: the number sits in scrolling lists, and the wheel changed whichever score scrolled under the pointer.) |
+| **Mouse wheel** | **Editor panels only** (entry editor and child editor: the overall row and template fields): each notch steps the score by one precision step (up = higher), shown at once as a draft and written once the wheel rests (600 ms), or sooner if the pointer leaves or the panel closes. Clicking the number mid-spin opens the popover on the wheel's score instead: it is written when the popover closes, by the popover's own commit or, on Esc, as the wheel left it. Cancel in the child editor drops a score not yet written, even when pressed from the keyboard with the pointer still on the number. An unscored number starts from the midpoint. The notch is claimed by the number, so the panel does not scroll under it. **Everywhere else** (list rows, and the child unit list inside the entry editor): nothing; the wheel scrolls whatever the number sits in (BUG-163: in a scrolling list the wheel changed whichever score scrolled under the pointer). Opt-in per surface via `RankingScoreNumber.wheelNudges`. |
 | **Long-press** | Clear immediately (no confirm) → `null`. **No-op** if already null. Parent overall clear demotes to in progress. Same semantics as Clear in popover / context menu. |
 
 ### 6.3 Context menus
@@ -289,7 +289,7 @@ Scores remain `double?`. Valid committed values are always on the effective step
 5. Floor `0` / ceiling `scoreMax` with settle snap-back; carry across integer boundary; half `0.5` + left down → stays `0.5`.
 6. Unscored `-` → open → Esc → still `-`; Enter or outside without edits → midpoint committed.
 7. Clear via popover, long-press, and context menu → null; parent overall demotes.
-8. Wheel over a number (scored or `-`) scrolls the surface behind it and changes no score (BUG-163).
+8. Wheel over a list or child-list number (scored or `-`) scrolls the surface behind it and changes no score (BUG-163); wheel over an editor-panel number (overall or field) steps the score, writes once on rest, and does not scroll the panel.
 9. Inherit + overall mode change warns and re-rounds field scores; per-field override warns when leaving grid.
 10. Average-from-children rounds to parent overall precision.
 11. Parent overall `0` appears in Ranked section.
@@ -306,7 +306,8 @@ Scores remain `double?`. Valid committed values are always on the effective step
 - [x] `RankingStars` read-only; remove preview/commit paths
 - [x] Shared `RankingScorePopover` (text + rollers + clear + carry/snap-back)
 - [x] Wire number control on list rows, editor overall, fields, child list
-- [x] Long-press clear (wheel nudge removed, BUG-163)
+- [x] Long-press clear
+- [x] Wheel nudge in editor panels only; removed from lists (BUG-163)
 - [x] Template UI: three-mode picker + inherit checkboxes
 - [x] Mode-change / inherit-off / rescale warning dialogs
 - [x] Filter slider step
@@ -334,12 +335,12 @@ Scores remain `double?`. Valid committed values are always on the effective step
 | Text on open | Focus + select-all |
 | Blur text | Clamp/snap into rollers; stay open |
 | Clear | Popover + context menu + long-press |
-| Wheel (closed) | None; scrolls the surface behind (BUG-163) |
+| Wheel (closed) | Editor panels: nudge, write on rest. Lists and child unit list: none, scrolls the surface behind (BUG-163) |
 | Display | Strip trailing zeros; `-` only for null |
 | Mode tighten | Warn + re-round |
 | Average | Round to parent overall step |
 | Field default | Midpoint display, null until scored |
-| Extras | Wheel no (BUG-163); Esc/outside rules yes; filter step yes; long-press clear yes; arrows/animate/`/max`/snap-half chip no |
+| Extras | Wheel in editor panels only (BUG-163); Esc/outside rules yes; filter step yes; long-press clear yes; arrows/animate/`/max`/snap-half chip no |
 
 ---
 

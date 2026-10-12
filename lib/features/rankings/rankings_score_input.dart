@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
@@ -580,11 +581,11 @@ class _RankingScorePopoverState extends State<RankingScorePopover> {
 }
 
 /// The number every score surface is set from: click to open the popover,
-/// long-press to clear.
+/// long-press to clear, and — where [wheelNudges] is on — wheel to nudge.
 ///
-/// The mouse wheel does nothing here and falls through to whatever scrolls
-/// behind the number: a nudge on the wheel changed whichever score the list
-/// carried under the pointer (BUG-163).
+/// Off by default, the mouse wheel does nothing here and falls through to
+/// whatever scrolls behind the number: in a list, a nudge on the wheel changed
+/// whichever score the list carried under the pointer (BUG-163).
 ///
 /// The stars beside it are decoration — this is the whole control, and it is
 /// the same one on a list row, an overall row and a template field.
@@ -602,6 +603,7 @@ class RankingScoreNumber extends StatefulWidget {
     this.textAlign = TextAlign.left,
     this.accentColor,
     this.unscoredColor,
+    this.wheelNudges = false,
   });
 
   final double? value;
@@ -618,6 +620,7 @@ class RankingScoreNumber extends StatefulWidget {
 
   /// The score the open popover is currently sitting on, reported on every
   /// tick of a roller, and null once the popover has closed without writing.
+  /// The wheel reports each notch here too, until it rests and writes.
   ///
   /// A popover that writes reports the score through [onChanged] instead, and
   /// sends no null after it: the surface keeps showing what was written until
@@ -630,18 +633,49 @@ class RankingScoreNumber extends StatefulWidget {
   final Color? accentColor;
   final Color? unscoredColor;
 
+  /// Whether the wheel steps the score instead of scrolling past it. Only for
+  /// an editor panel's numbers, never one in a list the wheel scrolls through
+  /// (BUG-163).
+  final bool wheelNudges;
+
   @override
   State<RankingScoreNumber> createState() => _RankingScoreNumberState();
 }
 
 class _RankingScoreNumberState extends State<RankingScoreNumber> {
+  /// How long the wheel has to rest before its notches are written. The same
+  /// gap the sync layer's scroll gate allows between the notches of one spin.
+  static const _wheelIdle = Duration(milliseconds: 600);
+
+  /// The score the wheel has reached and not yet written.
+  double? _pending;
+  Timer? _wheelTimer;
+
   bool get _isInteractive => widget.onChanged != null;
 
+  @override
+  void dispose() {
+    // onExit does not fire when the region is unmounted, so a control taken
+    // away under the pointer — a keyboard shortcut closing the panel — writes
+    // the wheel's score here instead of dropping it. After the frame: the tree
+    // is locked while it is torn down, and the write rebuilds what holds it.
+    _wheelTimer?.cancel();
+    final score = _pending;
+    final write = widget.onChanged;
+    if (score != null && write != null) scheduleMicrotask(() => write(score));
+    super.dispose();
+  }
+
   Future<void> _open() async {
+    // The wheel's score is what the popover opens on, and what Esc goes back
+    // to; it is written either way, by the popover or on the way out.
+    _wheelTimer?.cancel();
+    final wheeled = _pending;
+    _pending = null;
     final outcome = await showRankingScorePopover(
       context: context,
       anchorContext: context,
-      value: widget.value,
+      value: wheeled ?? widget.value,
       scoreMax: widget.scoreMax,
       precision: widget.precision,
       label: widget.label,
@@ -652,10 +686,46 @@ class _RankingScoreNumberState extends State<RankingScoreNumber> {
     // popover closes, and dropping the draft here showed the old score for
     // those frames.
     if (outcome == null || outcome.cancelled) {
-      widget.onDraftChanged?.call(null);
+      if (wheeled != null) {
+        widget.onChanged!(wheeled);
+      } else {
+        widget.onDraftChanged?.call(null);
+      }
     } else {
       widget.onChanged!(outcome.score);
     }
+  }
+
+  /// One step in the direction of the wheel (§6.2). An unscored surface starts
+  /// from the midpoint, so the first notch lands one step either side of it.
+  ///
+  /// Shown as a draft at once and written once the wheel rests: a write per
+  /// notch re-read and rebuilt the whole category, and a spin of the wheel
+  /// dropped the page to a handful of frames a second.
+  void _nudge(int direction) {
+    final base =
+        _pending ??
+        widget.value ??
+        rankingFieldMidpoint(widget.scoreMax, precision: widget.precision);
+    final next = roundRankingScore(
+      base + direction * rankingScoreStep(widget.precision),
+      scoreMax: widget.scoreMax,
+      precision: widget.precision,
+    );
+    // A notch past either end of the scale.
+    if (next == (_pending ?? widget.value)) return;
+    _wheelTimer?.cancel();
+    _wheelTimer = Timer(_wheelIdle, _flushWheel);
+    _pending = next;
+    widget.onDraftChanged?.call(next);
+  }
+
+  void _flushWheel() {
+    _wheelTimer?.cancel();
+    final score = _pending;
+    if (score == null) return;
+    _pending = null;
+    widget.onChanged?.call(score);
   }
 
   /// The widest thing the number can show on this scale, for a surface that
@@ -719,18 +789,49 @@ class _RankingScoreNumberState extends State<RankingScoreNumber> {
       label: semanticLabel,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _open,
-          onLongPress: scored ? () => widget.onChanged!(null) : null,
-          child: Tooltip(
-            message: scored ? 'Edit score' : 'Set score',
-            waitDuration: const Duration(milliseconds: 600),
-            // Hover still raises it; long-press must not. Tooltip's default
-            // long-press trigger is a gesture recognizer *inside* this
-            // control's, so it would win the arena and swallow the clear.
-            triggerMode: TooltipTriggerMode.manual,
-            child: sized,
+        // Leaving is how the pointer gets to anything that could take this
+        // control away — the panel's close, another category — so the wheel's
+        // score is written before it can be dropped with it.
+        onExit: (_) => _flushWheel(),
+        child: Listener(
+          onPointerSignal: widget.wheelNudges
+              ? (event) {
+                  // A sideways scroll is left to whatever scrolls sideways.
+                  if (event is! PointerScrollEvent ||
+                      event.scrollDelta.dy == 0) {
+                    return;
+                  }
+                  // Registering resolves the notch in this control's favour,
+                  // so the panel the number sits in does not scroll under the
+                  // pointer as well.
+                  GestureBinding.instance.pointerSignalResolver.register(
+                    event,
+                    (resolved) {
+                      final scroll = resolved as PointerScrollEvent;
+                      _nudge(scroll.scrollDelta.dy < 0 ? 1 : -1);
+                    },
+                  );
+                }
+              : null,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _open,
+            onLongPress: scored
+                ? () {
+                    _wheelTimer?.cancel();
+                    _pending = null;
+                    widget.onChanged!(null);
+                  }
+                : null,
+            child: Tooltip(
+              message: scored ? 'Edit score' : 'Set score',
+              waitDuration: const Duration(milliseconds: 600),
+              // Hover still raises it; long-press must not. Tooltip's default
+              // long-press trigger is a gesture recognizer *inside* this
+              // control's, so it would win the arena and swallow the clear.
+              triggerMode: TooltipTriggerMode.manual,
+              child: sized,
+            ),
           ),
         ),
       ),
@@ -779,8 +880,12 @@ mixin RankingScoreHold<T extends StatefulWidget> on State<T> {
     };
   }
 
-  void _hold(double? score) =>
-      setState(() => _held = score == storedScore ? null : (score: score));
+  void _hold(double? score) {
+    // A wheel's score written as its number is taken away, after the surface
+    // holding it has gone too.
+    if (!mounted) return;
+    setState(() => _held = score == storedScore ? null : (score: score));
+  }
 
   /// Released on a match rather than on any change: two quick writes
   /// land one after the other, and the first landing must not pull the number

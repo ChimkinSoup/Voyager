@@ -24,11 +24,16 @@ import 'package:voyager/domain/models/media_models.dart';
 /// thumbnails are too small to carry a control of their own. The callback
 /// detaches the asset from the parent; the confirmation is asked here, so
 /// every surface asks it in the same words.
+///
+/// [reload] re-reads the owner's images, for the surfaces where one can be
+/// attached while the viewer is open — an upload still in flight when the fan
+/// was tapped. Without it the viewer shows only what it was opened on.
 Future<void> showMediaLightbox(
   BuildContext context, {
   required List<MediaAsset> assets,
   int initialIndex = 0,
   Future<void> Function(MediaAsset asset)? onRemove,
+  Future<List<MediaAsset>> Function()? reload,
   double viewportFraction = 1.0,
   List<String>? captions,
 }) {
@@ -36,6 +41,10 @@ Future<void> showMediaLightbox(
   assert(
     captions == null || captions.length == assets.length,
     'captions must line up one-for-one with assets',
+  );
+  assert(
+    captions == null || reload == null,
+    'a reload cannot keep captions in step with the images it brings',
   );
   _openLightboxes++;
   return Navigator.of(context, rootNavigator: true)
@@ -49,6 +58,7 @@ Future<void> showMediaLightbox(
             assets: assets,
             initialIndex: initialIndex,
             onRemove: onRemove,
+            reload: reload,
             viewportFraction: viewportFraction,
             captions: captions,
           ),
@@ -79,6 +89,7 @@ class _MediaLightbox extends ConsumerStatefulWidget {
     required this.assets,
     required this.initialIndex,
     this.onRemove,
+    this.reload,
     this.viewportFraction = 1.0,
     this.captions,
   });
@@ -86,6 +97,7 @@ class _MediaLightbox extends ConsumerStatefulWidget {
   final List<MediaAsset> assets;
   final int initialIndex;
   final Future<void> Function(MediaAsset asset)? onRemove;
+  final Future<List<MediaAsset>> Function()? reload;
 
   /// One line under each image, in step with [assets] — where a picture came
   /// from, for the surfaces that gather several owners' galleries into one
@@ -116,9 +128,14 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
   /// caption with the picture it belonged to.
   late List<String>? _captions;
 
-  /// One controller per page, so zooming one image and swiping away does not
-  /// carry that zoom onto the next.
-  final _transformControllers = <int, TransformationController>{};
+  /// One controller per image, so zooming one image and swiping away does not
+  /// carry that zoom onto the next. Keyed by asset id rather than page: a
+  /// removal or a reload moves images to other pages.
+  final _transformControllers = <String, TransformationController>{};
+
+  /// A reload is out, and another notification came in behind it.
+  bool _reloading = false;
+  bool _reloadAgain = false;
 
   /// The swipe this viewer is running on the [PageView]'s behalf.
   ///
@@ -160,7 +177,7 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
 
   TransformationController _controllerFor(int index) {
     return _transformControllers.putIfAbsent(
-      index,
+      _assets[index].id,
       TransformationController.new,
     );
   }
@@ -366,7 +383,9 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
     if (!confirmed || !mounted) return;
     await onRemove(asset);
     if (!mounted) return;
-    final index = _assets.indexOf(asset);
+    // By id, not identity: a reload landing while the confirmation was up
+    // replaces the list with fresh copies of the same images.
+    final index = _assets.indexWhere((it) => it.id == asset.id);
     if (index < 0) return;
     if (_assets.length == 1) {
       Navigator.of(context).maybePop();
@@ -385,8 +404,48 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
     _pageController.jumpToPage(_index);
   }
 
+  /// Takes up the owner's images afresh, staying on the one being looked at.
+  ///
+  /// One read at a time, and only the last is taken up: the worker notifies in
+  /// bursts, and reads overlapping could land out of order, putting back an
+  /// image removed in between.
+  Future<void> _refresh() async {
+    if (_reloading) {
+      _reloadAgain = true;
+      return;
+    }
+    _reloading = true;
+    List<MediaAsset> assets;
+    try {
+      do {
+        _reloadAgain = false;
+        assets = await widget.reload!();
+        if (!mounted) return;
+      } while (_reloadAgain);
+    } finally {
+      _reloading = false;
+    }
+    // An empty owner is left to [_remove], which closes the viewer on its
+    // last image; closing it here as well would pop the page underneath.
+    if (assets.isEmpty) return;
+    final currentId = _current.id;
+    final found = assets.indexWhere((it) => it.id == currentId);
+    final index = found < 0 ? _index.clamp(0, assets.length - 1) : found;
+    final moved = index != _index;
+    setState(() {
+      _assets = assets;
+      _index = index;
+    });
+    // Same reason as in [_remove]: the PageView reads the controller, not
+    // [_index].
+    if (moved && _pageController.hasClients) _pageController.jumpToPage(index);
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.reload != null) {
+      ref.listen(mediaServiceProvider, (_, _) => _refresh());
+    }
     final assets = _assets;
     return CallbackShortcuts(
       bindings: {

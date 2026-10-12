@@ -115,6 +115,10 @@ class _MediaFanStackState extends ConsumerState<MediaFanStack> {
             .read(mediaServiceProvider)
             .removeReference(_images[index].reference.id);
       },
+      reload: () async {
+        if (mounted) await _reload();
+        return [for (final image in _images) image.asset];
+      },
     );
   }
 

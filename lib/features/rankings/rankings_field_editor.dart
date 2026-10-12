@@ -154,6 +154,8 @@ class _RankingFieldEditorState extends State<RankingFieldEditor>
                     label: widget.field.label,
                     accentColor: fieldScoreAccent,
                     onDraftChanged: holdDraft,
+                    // Only ever in an editor panel, never a list (BUG-163).
+                    wheelNudges: true,
                     // Against the stars, whatever the score's width.
                     textAlign: TextAlign.right,
                     style: theme.textTheme.labelSmall?.copyWith(

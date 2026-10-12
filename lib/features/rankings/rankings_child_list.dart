@@ -888,6 +888,10 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
   /// Writes only what changed since [_current] — the unit and its entry may
   /// both have moved on since this dialog opened, on this device or another.
   Future<void> _save(RankingChild next) async {
+    // Nothing after Cancel's own write: a wheel's score is written as its
+    // number is taken away, and Cancel pressed from the keyboard takes it away
+    // without the pointer ever leaving it.
+    if (_cancelling) return;
     final previous = _current;
     _current = next;
     await _actions.saveChild(next, previous: previous);
@@ -900,10 +904,10 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
   /// by [dispose].
   void _cancel() {
     _saveTimer?.cancel();
-    _cancelling = true;
     _nameController.text = widget.child.name;
     _notesController.text = widget.child.notes;
     unawaited(_save(widget.child));
+    _cancelling = true;
     _progressTimer?.cancel();
     final written = _writtenProgress;
     if (written != null) {

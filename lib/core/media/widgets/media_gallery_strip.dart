@@ -163,7 +163,15 @@ class _MediaGalleryStripState extends ConsumerState<MediaGalleryStrip> {
   }
 
   void _openLightbox(int index) {
-    showMediaLightbox(context, assets: _assets, initialIndex: index);
+    showMediaLightbox(
+      context,
+      assets: _assets,
+      initialIndex: index,
+      reload: () async {
+        await _reload();
+        return _assets;
+      },
+    );
   }
 
   @override

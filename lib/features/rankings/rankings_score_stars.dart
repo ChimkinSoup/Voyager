@@ -275,6 +275,8 @@ class _RankingOverallRowState extends State<RankingOverallRow>
             widget.onDraftChanged?.call(draft);
           },
           accentColor: widget.accentColor,
+          // Only ever in an editor panel, never a list (BUG-163).
+          wheelNudges: true,
           width: RankingOverallRow._numberWidth,
           // Right-aligned inside a fixed slot: the strip stays in the same
           // column whatever the score is, and the number still sits against

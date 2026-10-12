@@ -17,6 +17,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/media/media_service.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/utils/ids.dart';
+import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
 import 'package:voyager/core/widgets/labeled_text_field.dart';
 import 'package:voyager/core/widgets/tag_highlighted_text_field.dart';
@@ -2117,6 +2118,56 @@ void main() {
       final saved = await repo.getChild(childId);
       expect(saved!.name, 'ep 1');
       expect(saved.notes, '');
+    });
+
+    testWidgets('Cancel pressed from the keyboard mid-spin leaves the score '
+        'as it opened', (tester) async {
+      late String childId;
+      final harness = await pumpRankingsPage(
+        tester,
+        seed: (repo) async {
+          final category = makeCategory();
+          await repo.upsertCategory(category);
+          final parent = makeParent(categoryId: category.id, title: 'Andor');
+          await repo.upsertParent(parent);
+          final child = makeChild(parentId: parent.id, name: 'ep 1', score: 4);
+          childId = child.id;
+          await repo.upsertChild(child);
+        },
+      );
+
+      await tester.tap(rowTitle('Andor'));
+      await tester.pumpAndSettle();
+      await tester.tap(inPanel(find.text('ep 1')));
+      await tester.pumpAndSettle();
+
+      final dialog = find.byType(AlertDialog);
+      final number = find.descendant(
+        of: find.descendant(
+          of: dialog,
+          matching: find.byType(RankingOverallRow),
+        ),
+        matching: find.byType(RankingScoreNumber),
+      );
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(pointer.hover(tester.getCenter(number)));
+      await tester.sendEventToBinding(pointer.scroll(const Offset(0, -50)));
+      await tester.pump();
+
+      // Tab to Cancel and Enter: the pointer stays on the number.
+      tester
+          .widget<GlassButton>(
+            find.descendant(
+              of: dialog,
+              matching: find.widgetWithText(GlassButton, 'Cancel'),
+            ),
+          )
+          .onPressed!();
+      await tester.pumpAndSettle();
+
+      expect(dialog, findsNothing);
+      final saved = await DriftRankingRepository(harness.db).getChild(childId);
+      expect(saved!.overallScore, 4);
     });
 
     testWidgets('BUG-164: an image on a queued entry or its unit starts it', (

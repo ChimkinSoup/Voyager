@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -449,6 +450,159 @@ void main() {
       findsOneWidget,
       reason: 'a magnified page keeps the drag for its own panning',
     );
+  });
+
+  testWidgets('an image attached while the viewer is open joins it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final assets = await attachMany(tester, 2);
+    Future<List<MediaAsset>> reload() async => service.assetsFor(
+      await service.referencesFor(FirestoreCollections.todoTasks, 'task-many'),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mediaServiceProvider.overrideWith((ref) => service),
+          mediaFileStoreProvider.overrideWithValue(fileStore),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: ElevatedButton(
+                  onPressed: () => showMediaLightbox(
+                    context,
+                    assets: assets,
+                    initialIndex: 1,
+                    reload: reload,
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await settle(tester);
+    expect(find.text('2 / 2'), findsOneWidget);
+
+    // The upload that was still in flight when the viewer was opened.
+    await tester.runAsync(() async {
+      await service.attachBytes(
+        bytes: pngOf(40, 40),
+        collection: FirestoreCollections.todoTasks,
+        documentId: 'task-many',
+      );
+      // The reload's own reads, which also only complete in real time.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await settle(tester);
+
+    expect(
+      find.text('2 / 3'),
+      findsOneWidget,
+      reason: 'the new image joins the end and the viewer stays where it was',
+    );
+  });
+
+  Future<void> openReloading(
+    WidgetTester tester,
+    List<MediaAsset> assets,
+    Future<List<MediaAsset>> Function() reload, {
+    int initialIndex = 0,
+  }) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mediaServiceProvider.overrideWith((ref) => service),
+          mediaFileStoreProvider.overrideWithValue(fileStore),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: ElevatedButton(
+                  onPressed: () => showMediaLightbox(
+                    context,
+                    assets: assets,
+                    initialIndex: initialIndex,
+                    reload: reload,
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await settle(tester);
+  }
+
+  testWidgets('a burst of notifications reads once at a time, and takes up '
+      'only the read started after the last', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final assets = await attachMany(tester, 3);
+    final reads = <Completer<List<MediaAsset>>>[];
+    await openReloading(tester, assets, () {
+      reads.add(Completer());
+      return reads.last.future;
+    });
+    expect(find.text('1 / 3'), findsOneWidget);
+
+    service.notifyChanged();
+    service.notifyChanged();
+    service.notifyChanged();
+    await tester.pump();
+    expect(reads, hasLength(1), reason: 'the later notifications wait');
+
+    // The first read, from before an image was removed.
+    reads[0].complete(assets);
+    await tester.pump();
+    expect(reads, hasLength(2), reason: 'one more read for those that waited');
+    reads[1].complete(assets.sublist(0, 2));
+    await settle(tester);
+
+    expect(find.text('1 / 2'), findsOneWidget);
+  });
+
+  testWidgets('a reload that moves the image keeps its zoom with it', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final assets = await attachMany(tester, 3);
+    var next = assets.sublist(1);
+    await openReloading(
+      tester,
+      assets.sublist(1),
+      () async => next,
+      initialIndex: 1,
+    );
+    TransformationController shown() => tester
+        .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+        .transformationController!;
+    shown().value = Matrix4.identity()..scaleByDouble(3, 3, 3, 1);
+
+    // An image lands in front of the one being looked at.
+    next = assets;
+    service.notifyChanged();
+    await settle(tester);
+
+    expect(find.text('3 / 3'), findsOneWidget);
+    expect(shown().value.getMaxScaleOnAxis(), 3);
   });
 
   testWidgets('a single image does not drag anywhere', (tester) async {

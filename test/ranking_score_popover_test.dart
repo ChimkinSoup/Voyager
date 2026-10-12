@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/features/rankings/rankings_score_input.dart';
+import 'package:voyager/features/rankings/rankings_score_stars.dart';
 
 /// Hosts one number control and records every score it commits.
 ///
@@ -460,6 +461,191 @@ void main() {
       expect(scroll.offset, greaterThan(0));
       expect(saved, isEmpty);
       expect(find.byType(RankingScorePopover), findsNothing);
+    });
+
+    testWidgets('with wheelNudges, the wheel steps the score, writes once it '
+        'rests, and does not scroll what is behind it', (tester) async {
+      final saved = <double?>[];
+      final drafts = <double?>[];
+      final scroll = ScrollController();
+      addTearDown(scroll.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ListView(
+              controller: scroll,
+              children: [
+                for (var i = 0; i < 40; i++)
+                  SizedBox(
+                    height: 40,
+                    child: RankingScoreNumber(
+                      value: 8.4,
+                      scoreMax: 10,
+                      precision: RankingScorePrecision.tenths,
+                      label: 'Field $i',
+                      wheelNudges: true,
+                      onChanged: saved.add,
+                      onDraftChanged: drafts.add,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(
+        pointer.hover(tester.getCenter(find.byType(RankingScoreNumber).first)),
+      );
+      for (var i = 0; i < 3; i++) {
+        await tester.sendEventToBinding(pointer.scroll(const Offset(0, -50)));
+        await tester.pump();
+      }
+      expect(drafts, [8.5, 8.6, 8.7]);
+      expect(saved, isEmpty);
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(saved, [8.7]);
+      expect(scroll.offset, 0);
+    });
+
+    testWidgets('with wheelNudges, a sideways scroll still reaches what '
+        'scrolls sideways', (tester) async {
+      final drafts = <double?>[];
+      final scroll = ScrollController();
+      addTearDown(scroll.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              height: 40,
+              child: ListView(
+                controller: scroll,
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (var i = 0; i < 40; i++)
+                    SizedBox(
+                      width: 80,
+                      child: RankingScoreNumber(
+                        value: 8.4,
+                        scoreMax: 10,
+                        precision: RankingScorePrecision.tenths,
+                        label: 'Field $i',
+                        wheelNudges: true,
+                        onChanged: (_) {},
+                        onDraftChanged: drafts.add,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(
+        pointer.hover(tester.getCenter(find.byType(RankingScoreNumber).first)),
+      );
+      await tester.sendEventToBinding(pointer.scroll(const Offset(50, 0)));
+      await tester.pump();
+
+      expect(drafts, isEmpty);
+      expect(scroll.offset, greaterThan(0));
+    });
+
+    testWidgets('a number taken away mid-spin writes its score once the tree '
+        'is unlocked', (tester) async {
+      final saved = <double?>[];
+      final show = ValueNotifier(true);
+      final writes = ValueNotifier(0);
+      addTearDown(show.dispose);
+      addTearDown(writes.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                // Something that stays, and rebuilds on every write.
+                ValueListenableBuilder<int>(
+                  valueListenable: writes,
+                  builder: (_, count, _) => Text('$count writes'),
+                ),
+                ValueListenableBuilder<bool>(
+                  valueListenable: show,
+                  builder: (_, shown, _) => shown
+                      ? RankingOverallRow(
+                          value: 8.4,
+                          scoreMax: 10,
+                          precision: RankingScorePrecision.tenths,
+                          accentColor: Colors.red,
+                          label: 'Overall',
+                          onChanged: (score) {
+                            saved.add(score);
+                            writes.value++;
+                          },
+                        )
+                      : const SizedBox(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(
+        pointer.hover(tester.getCenter(find.text('8.4'))),
+      );
+      await tester.sendEventToBinding(pointer.scroll(const Offset(0, -50)));
+      await tester.pump();
+      // A keyboard shortcut closing the panel: the pointer never leaves.
+      show.value = false;
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(saved, [8.5]);
+      await tester.pump();
+      expect(find.text('1 writes'), findsOneWidget);
+    });
+
+    testWidgets('Esc on a popover opened mid-spin keeps the wheel score', (
+      tester,
+    ) async {
+      final saved = <double?>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              // The stored score never moves: the save has not landed yet.
+              child: RankingOverallRow(
+                value: 8.4,
+                scoreMax: 10,
+                precision: RankingScorePrecision.tenths,
+                accentColor: Colors.red,
+                label: 'Overall',
+                onChanged: saved.add,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(
+        pointer.hover(tester.getCenter(find.text('8.4'))),
+      );
+      await tester.sendEventToBinding(pointer.scroll(const Offset(0, -50)));
+      await tester.pump();
+      await tester.tap(find.text('8.5'));
+      await tester.pumpAndSettle();
+      expect(find.byType(RankingScorePopover), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(saved, [8.5]);
+      expect(find.text('8.5'), findsOneWidget);
     });
 
     testWidgets('a tap on a scored number opens it, and clears nothing', (
