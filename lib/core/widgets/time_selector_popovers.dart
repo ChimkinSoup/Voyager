@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/time_format.dart';
-import 'package:voyager/core/widgets/field_scroll_padding.dart';
-import 'package:voyager/core/widgets/select_all_on_click.dart';
+import 'package:voyager/core/widgets/time_entry_field.dart';
 import 'package:voyager/core/widgets/time_text_input_formatter.dart';
 import 'voyager_time_picker_spinner.dart';
 
@@ -213,91 +211,6 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
     });
   }
 
-  Widget _timeField({
-    required ThemeData theme,
-    required TextEditingController controller,
-    required FocusNode focusNode,
-    required bool isActive,
-    required String hintText,
-    required VoidCallback onTap,
-    required bool Function() selectAllPending,
-    required ValueChanged<String> onSubmitted,
-  }) {
-    final accent = theme.colorScheme.primary;
-    final fieldTheme = theme.copyWith(
-      inputDecorationTheme: const InputDecorationTheme(
-        filled: false,
-        isDense: true,
-        border: InputBorder.none,
-        enabledBorder: InputBorder.none,
-        focusedBorder: InputBorder.none,
-        disabledBorder: InputBorder.none,
-        errorBorder: InputBorder.none,
-        focusedErrorBorder: InputBorder.none,
-      ),
-      splashFactory: NoSplash.splashFactory,
-      highlightColor: Colors.transparent,
-    );
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
-        border: Border.all(
-          color: isActive
-              ? accent
-              : theme.colorScheme.onSurface.withValues(alpha: 0.2),
-          width: isActive ? 2 : 1,
-        ),
-      ),
-      child: Theme(
-        data: fieldTheme,
-        child: Material(
-          type: MaterialType.transparency,
-          child: SelectAllOnClick(
-            controller: controller,
-            focusNode: focusNode,
-            selectAllPending: selectAllPending,
-            child: TextField(
-              contextMenuBuilder: (context, editableTextState) =>
-                  const SizedBox.shrink(),
-              textAlign: TextAlign.center,
-              controller: controller,
-              focusNode: focusNode,
-              scrollPadding: kVoyagerFieldScrollPadding,
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: isActive
-                    ? accent
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
-              decoration: InputDecoration(
-                hintText: hintText,
-                hintStyle: theme.textTheme.titleMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                ),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                disabledBorder: InputBorder.none,
-                errorBorder: InputBorder.none,
-                focusedErrorBorder: InputBorder.none,
-                isCollapsed: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 8,
-                ),
-              ),
-              onTap: onTap,
-              onSubmitted: onSubmitted,
-              textInputAction: TextInputAction.done,
-              inputFormatters: [TimeTextInputFormatter()],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -355,11 +268,10 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
                   child: AnimatedOpacity(
                     duration: const Duration(milliseconds: 150),
                     opacity: _activeIsStart ? 1.0 : 0.25,
-                    child: _timeField(
-                      theme: theme,
+                    child: TimeEntryField(
                       controller: _startController,
                       focusNode: _startFocus,
-                      isActive: _activeIsStart,
+                      active: _activeIsStart,
                       hintText: 'Start...',
                       onTap: () {
                         if (_startSelectAllNextTap) {
@@ -386,11 +298,10 @@ class _TimeRangePopoverState extends State<TimeRangePopover> {
                   child: AnimatedOpacity(
                     duration: const Duration(milliseconds: 150),
                     opacity: !_activeIsStart ? 1.0 : 0.25,
-                    child: _timeField(
-                      theme: theme,
+                    child: TimeEntryField(
                       controller: _endController,
                       focusNode: _endFocus,
-                      isActive: !_activeIsStart,
+                      active: !_activeIsStart,
                       hintText: 'End...',
                       onTap: () {
                         if (_endSelectAllNextTap) {
@@ -636,81 +547,6 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
     });
   }
 
-  Widget _timeField({
-    required ThemeData theme,
-    required TextEditingController controller,
-    required FocusNode focusNode,
-    required String hintText,
-    required VoidCallback onTap,
-    required bool Function() selectAllPending,
-    required ValueChanged<String> onSubmitted,
-  }) {
-    final accent = theme.colorScheme.primary;
-    final fieldTheme = theme.copyWith(
-      inputDecorationTheme: const InputDecorationTheme(
-        filled: false,
-        isDense: true,
-        border: InputBorder.none,
-        enabledBorder: InputBorder.none,
-        focusedBorder: InputBorder.none,
-        disabledBorder: InputBorder.none,
-        errorBorder: InputBorder.none,
-        focusedErrorBorder: InputBorder.none,
-      ),
-      splashFactory: NoSplash.splashFactory,
-      highlightColor: Colors.transparent,
-    );
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
-        border: Border.all(color: accent, width: 2),
-      ),
-      child: Theme(
-        data: fieldTheme,
-        child: Material(
-          type: MaterialType.transparency,
-          child: SelectAllOnClick(
-            controller: controller,
-            focusNode: focusNode,
-            selectAllPending: selectAllPending,
-            child: TextField(
-              contextMenuBuilder: (context, editableTextState) =>
-                  const SizedBox.shrink(),
-              textAlign: TextAlign.center,
-              controller: controller,
-              focusNode: focusNode,
-              scrollPadding: kVoyagerFieldScrollPadding,
-              style: theme.textTheme.titleMedium?.copyWith(color: accent),
-              decoration: InputDecoration(
-                hintText: hintText,
-                hintStyle: theme.textTheme.titleMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                ),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                disabledBorder: InputBorder.none,
-                errorBorder: InputBorder.none,
-                focusedErrorBorder: InputBorder.none,
-                isCollapsed: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 8,
-                ),
-              ),
-              onTap: onTap,
-              onSubmitted: onSubmitted,
-              textInputAction: TextInputAction.done,
-              inputFormatters: [TimeTextInputFormatter()],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -747,8 +583,8 @@ class _TimeSelectorPopoverState extends State<TimeSelectorPopover> {
             child: Row(
               children: [
                 Expanded(
-                  child: _timeField(
-                    theme: theme,
+                  child: TimeEntryField(
+                    active: true,
                     controller: _timeController,
                     focusNode: _timeFocus,
                     hintText: 'Time...',

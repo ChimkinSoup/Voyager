@@ -828,8 +828,8 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
       picked = await showContextualPopover<DateTime>(
         context: context,
         buttonContext: buttonContext,
-        width: 500,
-        height: 380,
+        width: kDateTimeSelectorPopoverSize.width,
+        height: kDateTimeSelectorPopoverSize.height,
         accentColor: accent,
         builder: (ctx) => DateTimeSelectorPopover(
           initialDateTime: entry.entryDate.toLocal(),

@@ -27,7 +27,7 @@ class _FinanceFloaterState extends ConsumerState<FinanceFloater> {
     return financeTransactionForm(
       container: container,
       draft: ref.read(financeCaptureDraftProvider),
-      onSaved: () async => _saved = true,
+      onSaved: (_) async => _saved = true,
       onClose: () {
         final floaters = container.read(floaterControllerProvider);
         unawaited(

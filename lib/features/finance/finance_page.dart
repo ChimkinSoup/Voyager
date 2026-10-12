@@ -1063,6 +1063,10 @@ class _TransactionRow extends ConsumerWidget {
         if (snapshot.roomEventId != null) {
           container.invalidate(assetRoomEventsProvider);
         }
+        if (snapshot.subscriptionId != null) {
+          await unsettleSubscriptionPayment(repo, snapshot);
+          container.invalidate(subscriptionsProvider);
+        }
       },
       restore: () async {
         // Rebuilt rather than copyWith'd: copyWith reads
@@ -1091,6 +1095,9 @@ class _TransactionRow extends ConsumerWidget {
             note: snapshot.note,
             tags: snapshot.tags,
             roomEventId: snapshot.roomEventId,
+            subscriptionId: snapshot.subscriptionId,
+            settlesDueDate: snapshot.settlesDueDate,
+            paidThroughBefore: snapshot.paidThroughBefore,
           ),
         );
         // The delete took the paired room event with it; bring it back too.
@@ -1098,6 +1105,10 @@ class _TransactionRow extends ConsumerWidget {
         if (roomEventId != null) {
           await repo.restoreAssetRoomEvent(roomEventId);
           container.invalidate(assetRoomEventsProvider);
+        }
+        if (snapshot.subscriptionId != null) {
+          await resettleSubscriptionPayment(repo, snapshot);
+          container.invalidate(subscriptionsProvider);
         }
         container.invalidate(transactionsProvider);
       },

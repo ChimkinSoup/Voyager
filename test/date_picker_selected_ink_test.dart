@@ -12,6 +12,8 @@ import 'package:voyager/core/widgets/date_selector_popover.dart';
 
 import 'narrow_window_harness.dart' show loadRealFonts;
 
+import 'date_picker_settings_scope.dart';
+
 double _contrast(Color a, Color b) {
   final x = a.computeLuminance();
   final y = b.computeLuminance();
@@ -35,20 +37,22 @@ void main() {
           final now = DateTime.now();
           final today = DateTime(now.year, now.month, now.day);
           await tester.pumpWidget(
-            MaterialApp(
-              theme: theme,
-              home: Scaffold(
-                body: Center(
-                  child: SizedBox(
-                    width: 320,
-                    height: 380,
-                    child: DateSelectorPopover(
-                      initialStartDate: today,
-                      initialEndDate: today,
-                      singleDateMode: true,
-                      inlineMode: true,
-                      accentColor: accent,
-                      onDateSelected: (_) {},
+            datePickerSettingsScope(
+              MaterialApp(
+                theme: theme,
+                home: Scaffold(
+                  body: Center(
+                    child: SizedBox(
+                      width: 320,
+                      height: 380,
+                      child: DateSelectorPopover(
+                        initialStartDate: today,
+                        initialEndDate: today,
+                        singleDateMode: true,
+                        inlineMode: true,
+                        accentColor: accent,
+                        onDateSelected: (_) {},
+                      ),
                     ),
                   ),
                 ),

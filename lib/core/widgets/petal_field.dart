@@ -1,10 +1,10 @@
-import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/motion/ambient_clock.dart';
 import 'package:voyager/core/motion/window_visibility.dart';
 import 'package:voyager/core/widgets/leaf_shapes.dart';
 
@@ -310,14 +310,13 @@ class PetalField extends StatefulWidget {
 
 class _PetalFieldState extends State<PetalField>
     with WindowVisibility<PetalField> {
-  // Driven by a Timer rather than a Ticker for the same reason the geometric
-  // background is (see geometric_texture.dart): a Ticker requests a frame on
-  // every vsync and pins the whole app's pipeline at the display's refresh
-  // rate. A drifting petal gains nothing from 120fps.
+  // Driven by the shared [AmbientClock] rather than a Ticker for the same
+  // reason the geometric background is (see geometric_texture.dart): a Ticker
+  // requests a frame on every vsync and pins the whole app's pipeline at the
+  // display's refresh rate. A drifting petal gains nothing from 120fps.
   //
   // The half of the Ticker contract that swap gave up — stopping when the app
   // has nothing on screen — is restored by [WindowVisibility]; see there.
-  static const _frameInterval = Duration(milliseconds: 16); // ~60fps
 
   /// How long a petal takes to fade out once it reaches the bottom band.
   static const _settleDuration = 2.0;
@@ -329,7 +328,7 @@ class _PetalFieldState extends State<PetalField>
   final List<PetalGust> _gusts = [];
   final math.Random _random = math.Random(20260723);
 
-  Timer? _timer;
+  var _subscribed = false;
   final Stopwatch _clock = Stopwatch();
   double _time = 0;
   double _lastTick = 0;
@@ -364,7 +363,7 @@ class _PetalFieldState extends State<PetalField>
     super.didChangeDependencies();
     // Same rationale as GeometricTexture: this page can stay mounted offstage
     // (go_router's StatefulShellRoute keeps branches alive for state
-    // preservation), and a bare Timer.periodic doesn't know that — it would
+    // preservation), and the clock doesn't know that — it would
     // otherwise keep ticking setState at ~60fps on a tab nobody is looking at.
     final enabled = TickerMode.valuesOf(context).enabled;
     if (enabled == _tickerModeEnabled) return;
@@ -377,16 +376,16 @@ class _PetalFieldState extends State<PetalField>
 
   void _syncTimer() {
     final shouldRun = _tickerModeEnabled && windowVisible;
-    if (shouldRun == (_timer != null)) return;
+    if (shouldRun == _subscribed) return;
+    _subscribed = shouldRun;
     if (shouldRun) {
       // The stopwatch runs through the pause, so restart the simulation from
       // now rather than from whenever it last ticked — otherwise coming back
       // from a minimised window spends its first frame on one huge step.
       _lastTick = _clock.elapsedMicroseconds / 1e6;
-      _timer = Timer.periodic(_frameInterval, (_) => _tick());
+      AmbientClock.instance.subscribe(_tick);
     } else {
-      _timer?.cancel();
-      _timer = null;
+      AmbientClock.instance.unsubscribe(_tick);
     }
   }
 
@@ -409,7 +408,7 @@ class _PetalFieldState extends State<PetalField>
   @override
   void dispose() {
     widget.controller?.removeListener(_onControllerBurst);
-    _timer?.cancel();
+    AmbientClock.instance.unsubscribe(_tick);
     _repaint.dispose();
     _disposeSprites();
     super.dispose();
@@ -427,7 +426,7 @@ class _PetalFieldState extends State<PetalField>
     _gusts.addAll(widget.controller!._drainPending());
   }
 
-  void _tick() {
+  void _tick(Duration _) {
     if (!mounted) return;
     if (DevFlags.disablePetalField) return;
     final now = _clock.elapsedMicroseconds / 1e6;

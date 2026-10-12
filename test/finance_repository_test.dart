@@ -5,6 +5,7 @@ import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/features/finance/finance_bill_radar.dart';
 
 void main() {
   late AppDatabase db;
@@ -306,6 +307,195 @@ void main() {
           .copyWith(paidThroughDate: DateTime(2026, 5, 15))
           .nextDue(DateTime(2026, 6, 10)),
       DateTime(2026, 6, 15),
+    );
+  });
+
+  group('overdue', () {
+    Subscription rent({DateTime? createdAt, DateTime? paidThrough}) =>
+        Subscription(
+          id: 'rent',
+          createdAt: createdAt ?? DateTime(2026, 9, 29),
+          updatedAt: DateTime(2026, 9, 29),
+          name: 'Rent',
+          amountCents: 141500,
+          period: BillingPeriod.monthly,
+          anchorDueDate: DateTime(2026, 10, 1),
+          paidThroughDate: paidThrough,
+        );
+
+    test('an unpaid past occurrence is due until it is paid', () {
+      final bill = rent(paidThrough: DateTime(2026, 9, 1));
+      expect(bill.nextDue(DateTime(2026, 10, 3)), DateTime(2026, 10, 1));
+      expect(bill.daysUntilDue(DateTime(2026, 10, 3)), -2);
+      // Paying it settles October, not November.
+      final paid = bill.copyWith(
+        paidThroughDate: bill.nextDue(DateTime(2026, 10, 3)),
+      );
+      expect(paid.nextDue(DateTime(2026, 10, 3)), DateTime(2026, 11, 1));
+    });
+
+    test('only the latest missed occurrence is overdue', () {
+      final bill = rent(paidThrough: DateTime(2026, 9, 1));
+      expect(bill.nextDue(DateTime(2026, 12, 10)), DateTime(2026, 12, 1));
+    });
+
+    test('a bill never logged as paid is never overdue', () {
+      // Autopay, or a bill from before Log payment: nothing says it went
+      // unpaid, however long it has been on the radar.
+      final bill = rent(createdAt: DateTime(2026, 7, 1));
+      expect(bill.nextDue(DateTime(2026, 10, 3)), DateTime(2026, 11, 1));
+      expect(bill.nextDue(DateTime(2026, 12, 10)), DateTime(2027, 1, 1));
+    });
+
+    test('on a due day the new cycle is due, not the missed one', () {
+      final bill = rent(paidThrough: DateTime(2026, 9, 1));
+      expect(bill.nextDue(DateTime(2026, 11, 1)), DateTime(2026, 11, 1));
+      expect(bill.daysUntilDue(DateTime(2026, 11, 1)), 0);
+      // Paid that day, it stays paid the day after.
+      final paid = bill.copyWith(paidThroughDate: DateTime(2026, 11, 1));
+      expect(paid.nextDue(DateTime(2026, 11, 2)), DateTime(2026, 12, 1));
+      // Unpaid, it is overdue the day after.
+      expect(bill.nextDue(DateTime(2026, 11, 2)), DateTime(2026, 11, 1));
+    });
+
+    test('a bill paid ahead is not overdue', () {
+      final bill = rent(paidThrough: DateTime(2026, 11, 1));
+      expect(bill.nextDue(DateTime(2026, 10, 11)), DateTime(2026, 12, 1));
+    });
+  });
+
+  test('previousDueDate steps back from the anchor, not the clamped date', () {
+    final anchor = DateTime(2026, 1, 31);
+    expect(
+      previousDueDate(anchor, BillingPeriod.monthly, DateTime(2026, 3, 15)),
+      DateTime(2026, 2, 28),
+    );
+    expect(
+      previousDueDate(anchor, BillingPeriod.monthly, DateTime(2026, 4, 1)),
+      DateTime(2026, 3, 31),
+    );
+    expect(
+      previousDueDate(anchor, BillingPeriod.monthly, DateTime(2026, 1, 31)),
+      isNull,
+    );
+    expect(
+      previousDueDate(
+        DateTime(2026, 7, 1),
+        BillingPeriod.weekly,
+        DateTime(2026, 7, 18),
+      ),
+      DateTime(2026, 7, 15),
+    );
+  });
+
+  test(
+    'deleting a bill payment takes it back; restoring re-records it',
+    () async {
+      final now = utcNow();
+      await repo.upsertSubscription(
+        Subscription(
+          id: 'rent',
+          createdAt: now,
+          updatedAt: now,
+          name: 'Rent',
+          amountCents: 141500,
+          period: BillingPeriod.monthly,
+          anchorDueDate: DateTime(2026, 10, 1),
+          paidThroughDate: DateTime(2026, 11, 1),
+        ),
+      );
+      final payment = FinancialTransaction(
+        id: 'pay',
+        createdAt: now,
+        updatedAt: now,
+        type: TransactionType.expense,
+        amountCents: 141500,
+        occurredAt: DateTime(2026, 10, 3),
+        subscriptionId: 'rent',
+        settlesDueDate: DateTime(2026, 11, 1),
+        paidThroughBefore: DateTime(2026, 10, 1),
+      );
+      await repo.upsertTransaction(payment);
+      final loaded = (await repo.getTransaction('pay'))!;
+      expect(loaded.subscriptionId, 'rent');
+      expect(loaded.settlesDueDate, DateTime(2026, 11, 1));
+      expect(loaded.paidThroughBefore, DateTime(2026, 10, 1));
+
+      await unsettleSubscriptionPayment(repo, loaded);
+      expect(
+        (await repo.getSubscription('rent'))!.paidThroughDate,
+        DateTime(2026, 10, 1),
+      );
+
+      await resettleSubscriptionPayment(repo, loaded);
+      expect(
+        (await repo.getSubscription('rent'))!.paidThroughDate,
+        DateTime(2026, 11, 1),
+      );
+    },
+  );
+
+  test('deleting a first bill payment leaves nothing recorded', () async {
+    final now = utcNow();
+    await repo.upsertSubscription(
+      Subscription(
+        id: 'rent',
+        createdAt: now,
+        updatedAt: now,
+        name: 'Rent',
+        amountCents: 141500,
+        period: BillingPeriod.monthly,
+        anchorDueDate: DateTime(2026, 10, 1),
+        paidThroughDate: DateTime(2026, 11, 1),
+      ),
+    );
+    await unsettleSubscriptionPayment(
+      repo,
+      FinancialTransaction(
+        id: 'first',
+        createdAt: now,
+        updatedAt: now,
+        type: TransactionType.expense,
+        amountCents: 141500,
+        occurredAt: DateTime(2026, 10, 30),
+        subscriptionId: 'rent',
+        settlesDueDate: DateTime(2026, 11, 1),
+      ),
+    );
+    // Not the October occurrence before it: nobody logged that one.
+    expect((await repo.getSubscription('rent'))!.paidThroughDate, isNull);
+  });
+
+  test('deleting an older bill payment leaves a later one alone', () async {
+    final now = utcNow();
+    await repo.upsertSubscription(
+      Subscription(
+        id: 'rent',
+        createdAt: now,
+        updatedAt: now,
+        name: 'Rent',
+        amountCents: 141500,
+        period: BillingPeriod.monthly,
+        anchorDueDate: DateTime(2026, 10, 1),
+        paidThroughDate: DateTime(2026, 11, 1),
+      ),
+    );
+    await unsettleSubscriptionPayment(
+      repo,
+      FinancialTransaction(
+        id: 'old',
+        createdAt: now,
+        updatedAt: now,
+        type: TransactionType.expense,
+        amountCents: 141500,
+        occurredAt: DateTime(2026, 10, 1),
+        subscriptionId: 'rent',
+        settlesDueDate: DateTime(2026, 10, 1),
+      ),
+    );
+    expect(
+      (await repo.getSubscription('rent'))!.paidThroughDate,
+      DateTime(2026, 11, 1),
     );
   });
 

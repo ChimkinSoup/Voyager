@@ -371,6 +371,9 @@ class TransactionsTable extends Table {
   TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
   DateTimeColumn get occurredAt => dateTime()();
   TextColumn get roomEventId => text().nullable()();
+  TextColumn get subscriptionId => text().nullable()();
+  DateTimeColumn get settlesDueDate => dateTime().nullable()();
+  DateTimeColumn get paidThroughBefore => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(0))();
@@ -2013,7 +2016,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 143;
+  int get schemaVersion => 144;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3618,6 +3621,26 @@ class AppDatabase extends _$AppDatabase {
           'ranking_categories_table',
           rankingCategoriesTable,
           rankingCategoriesTable.childCountEnabled,
+        );
+      }
+      if (from < 144) {
+        await _addColumnIfNotExists(
+          migrator,
+          'transactions_table',
+          transactionsTable,
+          transactionsTable.subscriptionId,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'transactions_table',
+          transactionsTable,
+          transactionsTable.settlesDueDate,
+        );
+        await _addColumnIfNotExists(
+          migrator,
+          'transactions_table',
+          transactionsTable,
+          transactionsTable.paidThroughBefore,
         );
       }
     },

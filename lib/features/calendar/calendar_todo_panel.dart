@@ -363,8 +363,8 @@ class _CalendarTodoPanelState extends ConsumerState<CalendarTodoPanel> {
                                 await showContextualPopover<DateTime>(
                                   context: context,
                                   buttonContext: context,
-                                  width: 500,
-                                  height: 380,
+                                  width: kDateTimeSelectorPopoverSize.width,
+                                  height: kDateTimeSelectorPopoverSize.height,
                                   accentColor: accent,
                                   builder: (ctx) => DateTimeSelectorPopover(
                                     initialDateTime: initialDt,

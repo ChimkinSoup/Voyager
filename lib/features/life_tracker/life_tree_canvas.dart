@@ -4,7 +4,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
+import 'package:voyager/core/motion/ambient_clock.dart';
+import 'package:voyager/core/motion/window_visibility.dart';
 import 'package:voyager/core/widgets/leaf_shapes.dart';
 import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
 
@@ -194,14 +195,12 @@ class LifeTreeCanvas extends StatefulWidget {
   /// tones by [buildTonePalette] before anything is painted.
   final List<Color> leafColors;
 
-  /// Pigment the woody parts and the paper grain are painted in.
+  /// Pigment the woody parts are painted in.
   final Color inkColor;
 
-  /// The paper itself. In light this is only bled through the dry brush and
-  /// behind the labels — the stock the washes sit on is the app's own paper
-  /// background, showing through a transparent canvas. In dark the background
-  /// behind is the animated triangle grid instead, so the canvas paints this
-  /// as its own opaque stock (see [brightness]).
+  /// The paper itself. Only bled through the dry brush — the stock the washes
+  /// sit on is the app's own background, showing through a transparent
+  /// canvas.
   final Color paperColor;
 
   final Color grassColor;
@@ -215,11 +214,10 @@ class LifeTreeCanvas extends StatefulWidget {
   final Color accentColor;
 
   /// Which of the two authored worlds this is painting. Dark is not the light
-  /// painting dimmed: the canvas lays down its own toned stock and its fibre,
-  /// the wash thins right back so the canopy reads as a mass in shadow rather
-  /// than a lit slab, its dried edges catch the light instead of pooling
-  /// darker, and the per-week specks brighten to the blossom actually catching
-  /// it. Everything the [inkColor] / [paperColor] / [grassColor] the page
+  /// painting dimmed: the wash thins right back so the canopy reads as a mass
+  /// in shadow rather than a lit slab, its dried edges catch the light instead
+  /// of pooling darker, and the per-week specks brighten to the blossom
+  /// actually catching it. Everything the [inkColor] / [paperColor] / [grassColor] the page
   /// hands down doesn't already cover.
   final Brightness brightness;
 
@@ -239,7 +237,7 @@ class LifeTreeCanvas extends StatefulWidget {
 }
 
 class _LifeTreeCanvasState extends State<LifeTreeCanvas>
-    with SingleTickerProviderStateMixin {
+    with WindowVisibility<LifeTreeCanvas> {
   static const _spriteExtent = 96.0;
 
   bool get _night => widget.brightness == Brightness.dark;
@@ -274,21 +272,25 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
 
   int get _landedAlpha => _night ? _nightLandedLeafAlpha : _landedLeafAlpha;
 
-  static const _grainExtent = 128;
-
   /// How finely the canopy's shedding is quantized. Each new step re-bakes the
   /// background, so this trades smoothness of the thinning against the number
   /// of re-bakes as the week count moves.
   static const _shedSteps = 24;
 
-  late final Ticker _ticker = createTicker(_tick);
+  /// Advanced by the shared [AmbientClock] at about 60fps rather than by a
+  /// [Ticker], which would ask for a frame on every vsync — each one redrawing
+  /// the whole window — for a sway nobody can tell apart from 60. The pause a
+  /// Ticker would give for free with its tab or a hidden window is done by
+  /// hand, in [_syncAnimation].
+  var _subscribed = false;
 
   /// Everything that changes per frame. Painted from, not rebuilt from — see
   /// [_TreeAnimation]. The glow is eased toward [LifeTreeCanvas.hovered] every
   /// tick rather than snapping, so it fades in and out.
   final _animation = _TreeAnimation();
 
-  double _lastTick = 0;
+  /// The vsync time of the last tick; null until the first since starting.
+  double? _lastTick;
   var _tickerModeEnabled = true;
 
   List<_LeafShudder> get _gusts => _animation.gusts;
@@ -303,10 +305,6 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
   ui.Image? _landedAtlas;
   List<Color>? _landedAtlasColors;
   int? _landedAtlasAlpha;
-
-  ui.Image? _grain;
-  Color? _grainInk;
-  ui.ImageShader? _grainShader;
 
   // Every leaf is drawn every frame — in the canopy or on the ground — so the
   // atlas buffers are allocated once and refilled in place rather than
@@ -397,33 +395,46 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
   @override
   void initState() {
     super.initState();
-    _ticker.start();
+    _syncAnimation();
     widget.controller.addListener(_onControllerEvent);
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // The ticker itself is muted and unmuted by the mixin. The gusts are
-    // ours: they are only aged inside [_tick], so one queued while nothing is
+    // The gusts are only aged inside [_tick], so one queued while nothing is
     // drawing would sit at zero elapsed and replay in full on return.
     final enabled = TickerMode.valuesOf(context).enabled;
     if (enabled == _tickerModeEnabled) return;
     _tickerModeEnabled = enabled;
     if (!enabled) _gusts.clear();
+    _syncAnimation();
+  }
+
+  @override
+  void onWindowVisibilityChanged() => _syncAnimation();
+
+  void _syncAnimation() {
+    final run = _tickerModeEnabled && windowVisible;
+    if (run == _subscribed) return;
+    _subscribed = run;
+    if (run) {
+      _lastTick = null;
+      AmbientClock.instance.subscribe(_tick);
+    } else {
+      AmbientClock.instance.unsubscribe(_tick);
+    }
   }
 
   @override
   void dispose() {
     widget.controller.removeListener(_onControllerEvent);
-    _ticker.dispose();
+    AmbientClock.instance.unsubscribe(_tick);
     _animation.dispose();
     _resizeSettle?.cancel();
     _bakeGeneration++;
     _atlas?.dispose();
     _landedAtlas?.dispose();
-    _grainShader?.dispose();
-    _grain?.dispose();
     _disposeScene();
     super.dispose();
   }
@@ -443,17 +454,19 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
     }
   }
 
-  void _tick(Duration elapsed) {
-    final now = elapsed.inMicroseconds / 1e6;
-    final dt = math.min(now - _lastTick, 0.1);
+  void _tick(Duration timeStamp) {
+    final now = timeStamp.inMicroseconds / 1e6;
+    final last = _lastTick;
     _lastTick = now;
+    if (last == null) return;
+    final dt = math.min(now - last, 0.1);
     if (dt <= 0) return;
 
-    // Accumulated rather than assigned: a muted ticker's elapsed time keeps
-    // running (see Ticker.muted), so on return from another shell branch the
-    // raw value has jumped by however long the page was away — and every sway
-    // term is sin(time * k + phase), which would land the canopy at a
-    // completely different point in its cycle than the frame before it left.
+    // Accumulated rather than assigned: the clock's timestamps keep running
+    // while the page is away, so on return from another shell branch the raw
+    // value has jumped by however long it was gone — and every sway term is
+    // sin(time * k + phase), which would land the canopy at a completely
+    // different point in its cycle than the frame before it left.
     _animation.time += dt;
 
     final glowTarget = widget.hovered ? 1.0 : 0.0;
@@ -584,50 +597,6 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
     );
   }
 
-  /// A small tile of scattered specks, repeated across the canvas. Paper fibre
-  /// is the single strongest cue that a painting was made with water and
-  /// pigment rather than vectors, so it goes under everything on the stock
-  /// this canvas lays down itself. Light doesn't call this at all — the stock
-  /// there is the app's own paper background, which brings its own grain.
-  void _ensureGrain(Color ink) {
-    if (_grain != null && _grainInk == ink) return;
-    // The shader holds its own native handle and references the image below,
-    // so it has to go first, and it has to go at all — dropping it on the
-    // floor leaks it and leaves it pointing at an image that was just freed.
-    _grainShader?.dispose();
-    _grainShader = null;
-    _grain?.dispose();
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    final rand = math.Random(917);
-    final paint = Paint();
-    // Sparse and very faint. This is the tooth of the stock catching light,
-    // and it tiles across the whole canvas — at any density where an
-    // individual speck is findable it stops reading as paper and starts
-    // reading as sensor noise over the picture.
-    for (var i = 0; i < 900; i++) {
-      paint.color = ink.withValues(alpha: 0.006 + rand.nextDouble() * 0.014);
-      canvas.drawCircle(
-        Offset(
-          rand.nextDouble() * _grainExtent,
-          rand.nextDouble() * _grainExtent,
-        ),
-        0.35 + rand.nextDouble() * 0.75,
-        paint,
-      );
-    }
-
-    _grain = recorder.endRecording().toImageSync(_grainExtent, _grainExtent);
-    _grainInk = ink;
-    _grainShader = ui.ImageShader(
-      _grain!,
-      TileMode.repeated,
-      TileMode.repeated,
-      Matrix4.identity().storage,
-    );
-  }
-
   /// The woody skeleton and grass, which don't depend on the shed level (or
   /// the leaf palette) at all — see [_staticLayer].
   ui.Picture _recordStaticLayer(Size size, double scale) {
@@ -636,22 +605,8 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
     final canvas = Canvas(recorder, Offset.zero & pixelSize);
     canvas.scale(scale);
 
-    // Light leaves the stock transparent and composites onto the app's paper
-    // background. Dark can't: the background there is the animated triangle
-    // grid, and every wash above would stack over live geometry.
-    canvas.drawColor(
-      _night ? widget.paperColor : const Color(0x00000000),
-      BlendMode.src,
-    );
-    if (_night) {
-      canvas.drawRect(
-        Offset.zero & size,
-        // Non-null on every path that reaches here: build() bakes it before
-        // it asks for a scene, and the off-frame re-bakes reuse it.
-        Paint()..shader = _grainShader!,
-      );
-    }
-
+    // No stock of its own: the canvas composites straight onto the app's
+    // background — the paper in light, the triangle grid in dark.
     _paintWood(canvas, size);
     _paintGrass(canvas, size);
     return recorder.endRecording();
@@ -1362,9 +1317,6 @@ class _LifeTreeCanvasState extends State<LifeTreeCanvas>
             : palette;
         _ensureAtlas(stipplePalette);
         _ensureLandedAtlas(stipplePalette);
-        // Baked into the background rather than laid over it per frame, so it
-        // has to exist before the scene does.
-        if (_night) _ensureGrain(widget.inkColor);
         _ensureScene(size, palette, MediaQuery.devicePixelRatioOf(context));
 
         final atlas = _atlas;

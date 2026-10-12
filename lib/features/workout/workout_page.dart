@@ -459,8 +459,8 @@ class _CycleAnchorControl extends ConsumerWidget {
           final range = await showContextualPopover<DateTimeRange>(
             context: buttonContext,
             buttonContext: buttonContext,
-            width: 320,
-            height: 380,
+            width: kDateSelectorPopoverSize.width,
+            height: kDateSelectorPopoverSize.height,
             accentColor: Theme.of(buttonContext).colorScheme.primary,
             builder: (_) => DateSelectorPopover(
               initialStartDate: anchor,

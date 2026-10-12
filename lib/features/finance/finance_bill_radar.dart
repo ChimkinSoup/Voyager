@@ -8,6 +8,7 @@ import 'package:voyager/core/widgets/context_menu.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/finance_models.dart';
+import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/features/finance/finance_soft_delete.dart';
 import 'package:voyager/features/finance/finance_subscription_modal.dart';
 import 'package:voyager/features/finance/finance_transaction_modal.dart';
@@ -149,24 +150,93 @@ Future<void> logSubscriptionPayment(
       note: sub.note,
       occurredAt: DateTime.now(),
     ),
-    onSaved: () async {
+    onSaved: (saved) async {
+      // Re-read, and the cycle resolved now rather than when the sheet
+      // opened: it can sit open past midnight, or the bill be paid elsewhere
+      // meanwhile, and either changes which occurrence is due.
+      final current = await repo.getSubscription(sub.id) ?? sub;
+      var payment = saved;
+      // A retry after a failed bill write keeps what the first attempt linked.
+      if (payment.settlesDueDate == null) {
+        // Always the earliest unpaid occurrence — the overdue one if there is
+        // one — whatever date the user puts on the expense: the press is what
+        // says "this bill is paid", and reading the cycle off an editable
+        // field would make Log payment silently do nothing whenever the
+        // expense was backdated.
+        payment = saved.copyWith(
+          // So deleting the expense can take the payment back.
+          subscriptionId: sub.id,
+          settlesDueDate: current.nextDue(DateTime.now()),
+          paidThroughBefore: current.paidThroughDate,
+          updatedAt: utcNow(),
+          version: saved.version + 1,
+        );
+        await repo.upsertTransaction(payment);
+        container.invalidate(transactionsProvider);
+      }
       // The settled occurrence is recorded; the anchor is left alone. Moving
       // the anchor onto the paid date instead would clamp a bill due the
       // 31st onto Feb 28 the first February it was paid, permanently.
-      //
-      // Always the upcoming occurrence, whatever date the user put on the
-      // expense: the press is what says "this bill is paid", and
-      // reading the cycle off an editable field would make Log payment
-      // silently do nothing whenever the expense was backdated.
       await repo.upsertSubscription(
-        sub.copyWith(
-          paidThroughDate: sub.nextDue(DateTime.now()),
+        current.copyWith(
+          paidThroughDate: payment.settlesDueDate,
           updatedAt: utcNow(),
-          version: sub.version + 1,
+          version: current.version + 1,
         ),
       );
       container.invalidate(subscriptionsProvider);
     },
+  );
+}
+
+/// Takes back the payment [transaction] recorded on its bill, once the
+/// expense is deleted, restoring the bill's paid-through date to what it was
+/// before.
+///
+/// Only while that payment is still the bill's latest: a later one has
+/// already moved past it, and restoring from there would unsettle a cycle
+/// this expense never paid.
+Future<void> unsettleSubscriptionPayment(
+  FinanceRepository repo,
+  FinancialTransaction transaction,
+) async {
+  final sub = await repo.getSubscription(transaction.subscriptionId!);
+  final settles = transaction.settlesDueDate;
+  final paid = sub?.paidThroughDate;
+  if (sub == null ||
+      settles == null ||
+      paid == null ||
+      !DateUtils.isSameDay(paid, settles)) {
+    return;
+  }
+  final before = transaction.paidThroughBefore;
+  await repo.upsertSubscription(
+    sub.copyWith(
+      paidThroughDate: before,
+      clearPaidThrough: before == null,
+      updatedAt: utcNow(),
+      version: sub.version + 1,
+    ),
+  );
+}
+
+/// Records [transaction]'s bill payment again, when its deleted expense is
+/// restored. A bill already paid through that occurrence is left alone.
+Future<void> resettleSubscriptionPayment(
+  FinanceRepository repo,
+  FinancialTransaction transaction,
+) async {
+  final sub = await repo.getSubscription(transaction.subscriptionId!);
+  final settles = transaction.settlesDueDate;
+  if (sub == null || settles == null) return;
+  final paid = sub.paidThroughDate;
+  if (paid != null && !paid.isBefore(settles)) return;
+  await repo.upsertSubscription(
+    sub.copyWith(
+      paidThroughDate: settles,
+      updatedAt: utcNow(),
+      version: sub.version + 1,
+    ),
   );
 }
 
@@ -343,7 +413,8 @@ class _SubscriptionTile extends ConsumerWidget {
   }
 
   String _dueLabel(int days) {
-    if (days <= 0) return 'Due today';
+    if (days < 0) return 'Overdue by ${-days} day${days == -1 ? '' : 's'}';
+    if (days == 0) return 'Due today';
     if (days == 1) return 'Due tomorrow';
     return 'Due in $days days';
   }

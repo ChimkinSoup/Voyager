@@ -2631,6 +2631,9 @@ Map<String, dynamic> transactionToFirestore(FinancialTransaction tx) => {
   'note': tx.note,
   'tags': tx.tags,
   'roomEventId': tx.roomEventId,
+  'subscriptionId': tx.subscriptionId,
+  'settlesDueDate': _dateToFirestore(tx.settlesDueDate),
+  'paidThroughBefore': _dateToFirestore(tx.paidThroughBefore),
   'createdAt': _dateToFirestoreRequired(tx.createdAt),
   'updatedAt': _dateToFirestoreRequired(tx.updatedAt),
   'version': tx.version,
@@ -2673,6 +2676,15 @@ FinancialTransaction mergeTransactionFromRemote(
     roomEventId: data.containsKey('roomEventId')
         ? data['roomEventId'] as String?
         : local?.roomEventId,
+    subscriptionId: data.containsKey('subscriptionId')
+        ? data['subscriptionId'] as String?
+        : local?.subscriptionId,
+    settlesDueDate: data.containsKey('settlesDueDate')
+        ? parseFirestoreDate(data['settlesDueDate'])
+        : local?.settlesDueDate,
+    paidThroughBefore: data.containsKey('paidThroughBefore')
+        ? parseFirestoreDate(data['paidThroughBefore'])
+        : local?.paidThroughBefore,
     createdAt:
         parseFirestoreDate(data['createdAt']) ??
         local?.createdAt ??

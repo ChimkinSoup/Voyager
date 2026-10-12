@@ -1,8 +1,8 @@
-import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/motion/ambient_clock.dart';
 import 'package:voyager/core/motion/window_visibility.dart';
 import 'package:voyager/domain/models/enums.dart' show GeometricWaveShape;
 
@@ -427,7 +427,7 @@ class GeometricTexture extends StatefulWidget {
 class _GeometricTextureState extends State<GeometricTexture>
     with WindowVisibility<GeometricTexture> {
   FragmentShader? _shader;
-  Timer? _timer;
+  var _subscribed = false;
   final Stopwatch _clock = Stopwatch();
   Duration _elapsed = Duration.zero;
 
@@ -443,7 +443,8 @@ class _GeometricTextureState extends State<GeometricTexture>
   // A Timer only wakes us when we actually intend to redraw, so the app
   // produces ~60 frames/sec instead of ~119 and stays idle in between. The
   // wave is a slow ambient effect; it gains nothing from native refresh rate.
-  static const _frameInterval = Duration(milliseconds: 16); // ~60fps
+  // That Timer is now the shared [AmbientClock], so the wave redraws in the
+  // same frames as the other ambient animations rather than between them.
 
   // The wave animates on its own; the debug visualiser also needs the clock
   // running so its rows can fade.
@@ -502,23 +503,23 @@ class _GeometricTextureState extends State<GeometricTexture>
   }
 
   void _syncAnimation() {
-    if (_animating) {
-      if (_timer != null) return;
+    final run = _animating;
+    if (run == _subscribed) return;
+    _subscribed = run;
+    if (run) {
       _clock.start();
-      _timer = Timer.periodic(_frameInterval, (_) {
-        if (!mounted) return;
-        setState(() => _elapsed = _clock.elapsed);
-      });
+      AmbientClock.instance.subscribe(_tick);
     } else {
-      _timer?.cancel();
-      _timer = null;
+      AmbientClock.instance.unsubscribe(_tick);
       _clock.stop();
     }
   }
 
+  void _tick(Duration _) => setState(() => _elapsed = _clock.elapsed);
+
   @override
   void dispose() {
-    _timer?.cancel();
+    AmbientClock.instance.unsubscribe(_tick);
     _shader?.dispose();
     super.dispose();
   }

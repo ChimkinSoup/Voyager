@@ -7,6 +7,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/core/theme/palette_color.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
@@ -263,16 +264,6 @@ bool calendarDateInWeek(DateTime date, DateTime weekStart) {
   // into the eighth day in a week containing a spring-forward.
   final end = DateTime(start.year, start.month, start.day + 7);
   return !day.isBefore(start) && day.isBefore(end);
-}
-
-/// Local-midnight start of the week containing [date].
-DateTime calendarWeekStart(DateTime date, bool weekStartsMonday) {
-  final weekday = date.weekday;
-  final firstDay = weekStartsMonday ? DateTime.monday : DateTime.sunday;
-  // Field-based subtraction (not Duration), so this stays correct across
-  // DST transitions — Duration(days:) is a fixed elapsed-time delta and can
-  // land on the wrong calendar day for a local DateTime.
-  return DateTime(date.year, date.month, date.day - (weekday - firstDay) % 7);
 }
 
 /// True when any day of [weekStart]'s week falls in [month]'s calendar month.
@@ -563,6 +554,8 @@ class CalendarDayCell extends StatelessWidget {
     this.frozenEntryLayoutHeight,
     this.isFirstColumn = false,
     this.isLastColumn = false,
+    this.previousDayEvents,
+    this.previousDayHasIndicators = false,
     this.editingEventId,
     this.weekHighlightAlpha = 0,
     this.accentColor,
@@ -583,6 +576,12 @@ class CalendarDayCell extends StatelessWidget {
   final bool isSelected;
   final bool isFirstColumn;
   final bool isLastColumn;
+
+  /// The lanes of the grid cell before this one, and whether it shows
+  /// indicator dots: a bar carried over from a day that drew it stays
+  /// untitled. Null for the grid's first cell.
+  final List<CalendarEvent?>? previousDayEvents;
+  final bool previousDayHasIndicators;
 
   /// When set, the matching event bar in this cell glows while being edited.
   final String? editingEventId;
@@ -764,13 +763,29 @@ class CalendarDayCell extends StatelessWidget {
     final adjacentFade = inMonth ? 1.0 : calendarAdjacentMonthEventOpacity;
     final eventOpacity = entryOpacity.clamp(0.0, 1.0) * adjacentFade;
 
-    final displayedEventCount = visibleEvents.clamp(0, style.maxEventLines);
+    // Through the same helper the next day's titles are worked out from, so
+    // the two can't disagree about which lanes this cell drew.
+    final displayedEventCount = calendarMonthCellShownEvents(
+      events,
+      cellHeight: layoutHeight,
+      style: style,
+      hasIndicators: indicators.isNotEmpty,
+    ).length;
     // Everything not drawn as a bar, however few bars this cell had room for.
     final overflowEvents = events
         .skip(displayedEventCount)
         .whereType<CalendarEvent>()
         .toList(growable: false);
     final overflowCount = overflowEvents.length;
+    // Rows share one height, so the day before laid out at this one's.
+    final previousDayShown = previousDayEvents == null
+        ? null
+        : calendarMonthCellShownEvents(
+            previousDayEvents!,
+            cellHeight: layoutHeight,
+            style: style,
+            hasIndicators: previousDayHasIndicators,
+          ).toList(growable: false);
 
     return Stack(
       clipBehavior: Clip.none,
@@ -867,6 +882,13 @@ class CalendarDayCell extends StatelessWidget {
                                             ),
                                             isFirstColumn: isFirstColumn,
                                             isLastColumn: isLastColumn,
+                                            showTitle:
+                                                calendarEventBarShowsTitle(
+                                                  event,
+                                                  date,
+                                                  previousDayShown:
+                                                      previousDayShown,
+                                                ),
                                             isBottom:
                                                 displayedEventCount >= 4 &&
                                                 i == displayedEventCount - 1,
@@ -1186,6 +1208,63 @@ int calendarVisibleEventCount({
   ).clamp(0, eventCount);
 }
 
+/// The height a full-layout month cell lays its entries out in, from its
+/// slot (margin included): what [CalendarDayCell]'s content measures.
+double calendarMonthCellLayoutHeight(double slotHeight) =>
+    slotHeight -
+    MonthDayCellStyle.full.cellMargin.vertical -
+    2 * _cellBorderWidth -
+    MonthDayCellStyle.full.cellPadding.vertical;
+
+/// The lanes a full-layout month cell draws as bars; the rest go to "+N".
+Iterable<CalendarEvent?> calendarMonthCellShownEvents(
+  List<CalendarEvent?> events, {
+  required double cellHeight,
+  required MonthDayCellStyle style,
+  required bool hasIndicators,
+}) => events.take(
+  calendarVisibleEventCount(
+    cellHeight: cellHeight,
+    style: style,
+    eventCount: events.length,
+    hasIndicators: hasIndicators,
+  ).clamp(0, style.maxEventLines),
+);
+
+/// What each of a run of full-layout month cells draws as bars: [dayEvents]
+/// are their packed lanes, in date order alongside [dates], all laid out at
+/// one [cellHeight] (see [calendarMonthCellLayoutHeight]). For anything
+/// standing in for [MonthDayGrid] — the morphs — so the bars they draw and
+/// the titles they hand over agree with the grid's cells.
+List<List<CalendarEvent?>> calendarMonthCellsShownEvents(
+  List<List<CalendarEvent?>> dayEvents, {
+  required List<DateTime> dates,
+  required List<CalendarDayIndicator> indicators,
+  required double cellHeight,
+}) => [
+  for (var i = 0; i < dayEvents.length; i++)
+    calendarMonthCellShownEvents(
+      dayEvents[i],
+      cellHeight: cellHeight,
+      style: MonthDayCellStyle.full,
+      hasIndicators: indicators.any((d) => calendarSameDay(d.day, dates[i])),
+    ).toList(growable: false),
+];
+
+/// Whether [event]'s month bar on [date] carries its title: on the event's
+/// first day, and on a later day only where the day before drew no bar for
+/// it — the grid's first cell, or a day that folded it into "+N" — so the
+/// title shows on the first bar actually drawn. [previousDayShown] is what
+/// the day before drew as bars; null when that day is outside the grid.
+bool calendarEventBarShowsTitle(
+  CalendarEvent event,
+  DateTime date, {
+  required Iterable<CalendarEvent?>? previousDayShown,
+}) =>
+    calendarEventBarStartsOnDay(event, date) ||
+    previousDayShown == null ||
+    !previousDayShown.any((e) => e?.id == event.id);
+
 /// Per-event bar height matching [CalendarDayCell]'s expanded month layout.
 double calendarMonthEventBarHeight({
   required double cellHeight,
@@ -1342,6 +1421,7 @@ class MorphDayEventStack extends StatefulWidget {
     required this.dayLayoutSize,
     required this.morphReverse,
     this.isFirstColumn = false,
+    this.previousDayShown,
     this.layoutDayLayoutSize,
     this.frozenMetrics,
     this.opacity = 1,
@@ -1350,9 +1430,14 @@ class MorphDayEventStack extends StatefulWidget {
   final List<CalendarEvent?> events;
   final DateTime date;
 
-  /// Whether this day opens its week row, where a carried-over bar is
-  /// labelled again.
+  /// Whether this day opens its week row, where a carried-over bar stops at
+  /// the cell edge.
   final bool isFirstColumn;
+
+  /// What the month grid draws as bars on the day before, for
+  /// [calendarEventBarShowsTitle]; null for the grid's first cell. Worked out
+  /// at the month end's cell size so titles match the grid at the handoff.
+  final List<CalendarEvent?>? previousDayShown;
   final double styleT;
   final double maxWidth;
   final double cellHeight;
@@ -1574,9 +1659,12 @@ class _MorphDayEventStackState extends State<MorphDayEventStack> {
 
     final isStart = calendarEventBarStartsOnDay(event, widget.date);
     final isEnd = calendarEventBarEndsOnDay(event, widget.date);
-    // Labelled where [CalendarDayEventBar] labels it: the event's first day,
-    // and the start of each week row it carries into (BUG-075).
-    final labelled = isStart || widget.isFirstColumn;
+    // Labelled where [CalendarDayEventBar] labels it: on the first bar drawn.
+    final labelled = calendarEventBarShowsTitle(
+      event,
+      widget.date,
+      previousDayShown: widget.previousDayShown,
+    );
     // isStart/isEnd sides extend into the cell padding to exactly match
     // CalendarDayEventBar (left: -cellPadding.left). Without this the morph
     // layer bar would be narrower than the regular-grid bar at t=0, producing
@@ -2308,6 +2396,7 @@ class CalendarDayEventBar extends StatelessWidget {
     this.isEnd = true,
     this.isFirstColumn = false,
     this.isLastColumn = false,
+    this.showTitle,
     this.isBottom = false,
     this.cellMargin = EdgeInsets.zero,
     this.cellPadding = EdgeInsets.zero,
@@ -2323,6 +2412,10 @@ class CalendarDayEventBar extends StatelessWidget {
   final bool isEnd;
   final bool isFirstColumn;
   final bool isLastColumn;
+
+  /// Whether the bar carries the event title; on its first day when null.
+  /// See [calendarEventBarShowsTitle].
+  final bool? showTitle;
   final bool isBottom;
   final EdgeInsets cellMargin;
   final EdgeInsets cellPadding;
@@ -2378,9 +2471,7 @@ class CalendarDayEventBar extends StatelessWidget {
                 hollow: done,
               ),
               alignment: Alignment.centerLeft,
-              // A bar carried over into a new week row is labelled again: it
-              // is the only place that row's part can be told apart (BUG-075).
-              child: isStart || isFirstColumn
+              child: showTitle ?? isStart
                   ? Text(
                       event.title,
                       maxLines: 1,
@@ -2927,13 +3018,14 @@ class MonthDayGrid extends StatelessWidget {
         });
       });
     } else {
-      final packedFor = (month, weekStartsMonday, hiddenWeekRow);
+      final packedFor = (month, weekStartsMonday);
       final cached = _packedMonths[events];
       if (cached != null && cached.$1 == packedFor) {
         packedWeeks = cached.$2;
       } else {
+        // The hidden row is packed too, though not drawn: the row below
+        // titles its carried-over bars against its last day.
         packedWeeks = List.generate(6, (row) {
-          if (hiddenWeekRow == row) return <List<CalendarEvent?>>[];
           return calendarPackWeekEvents(
             cells.sublist(row * 7, row * 7 + 7),
             events,
@@ -2942,6 +3034,12 @@ class MonthDayGrid extends StatelessWidget {
         _packedMonths[events] = (packedFor, packedWeeks);
       }
     }
+
+    // Once per cell: each is read for its own dots and for the next day's.
+    final cellIndicators = [
+      for (final cell in cells)
+        indicators.where((i) => calendarSameDay(i.day, cell)).take(3).toList(),
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2963,12 +3061,10 @@ class MonthDayGrid extends StatelessWidget {
               return Expanded(
                 child: Row(
                   children: List.generate(7, (col) {
-                    final date = cells[row * 7 + col];
+                    final index = row * 7 + col;
+                    final date = cells[index];
                     final dayEvents = packedWeeks[row][col];
-                    final dayIndicators = indicators
-                        .where((i) => calendarSameDay(i.day, date))
-                        .take(3)
-                        .toList();
+                    final dayIndicators = cellIndicators[index];
                     final dayTodos = calendarTodoMarkersForDay(
                       todoMarkers,
                       date,
@@ -3000,6 +3096,13 @@ class MonthDayGrid extends StatelessWidget {
                         isSelected: isSelected,
                         isFirstColumn: col == 0,
                         isLastColumn: col == 6,
+                        // Compact cells draw no bars, and leave a hidden
+                        // row unpacked.
+                        previousDayEvents: style.isCompactLayout || index == 0
+                            ? null
+                            : packedWeeks[(index - 1) ~/ 7][(index - 1) % 7],
+                        previousDayHasIndicators:
+                            index > 0 && cellIndicators[index - 1].isNotEmpty,
                         weekHighlightAlpha: weekHighlightAlpha,
                         onTap: onDayTap == null ? null : () => onDayTap!(date),
                         onEntryTap: onEntryTap,

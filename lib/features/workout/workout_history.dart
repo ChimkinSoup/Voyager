@@ -336,8 +336,8 @@ class _LogPastWorkoutState extends ConsumerState<_LogPastWorkout> {
     final range = await showContextualPopover<DateTimeRange>(
       context: buttonContext,
       buttonContext: buttonContext,
-      width: 320,
-      height: 380,
+      width: kDateSelectorPopoverSize.width,
+      height: kDateSelectorPopoverSize.height,
       accentColor: accent,
       builder: (_) => DateSelectorPopover(
         initialStartDate: _date,
@@ -785,8 +785,8 @@ class _SessionEditorState extends ConsumerState<_SessionEditor> {
     final range = await showContextualPopover<DateTimeRange>(
       context: buttonContext,
       buttonContext: buttonContext,
-      width: 320,
-      height: 380,
+      width: kDateSelectorPopoverSize.width,
+      height: kDateSelectorPopoverSize.height,
       accentColor: accent,
       builder: (_) => DateSelectorPopover(
         initialStartDate: current,

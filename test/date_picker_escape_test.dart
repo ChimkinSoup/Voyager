@@ -8,31 +8,35 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 
+import 'date_picker_settings_scope.dart';
+
 void main() {
   testWidgets('Esc closes the picker without picking a day', (tester) async {
     var closed = false;
     DateTimeRange? result;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: Builder(
-              builder: (buttonContext) => TextButton(
-                onPressed: () async {
-                  result = await showContextualPopover<DateTimeRange>(
-                    context: buttonContext,
-                    buttonContext: buttonContext,
-                    width: 320,
-                    height: 380,
-                    builder: (_) => DateSelectorPopover(
-                      initialStartDate: DateTime(2026, 10, 3),
-                      initialEndDate: DateTime(2026, 10, 3),
-                      singleDateMode: true,
-                    ),
-                  );
-                  closed = true;
-                },
-                child: const Text('open'),
+      datePickerSettingsScope(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: Builder(
+                builder: (buttonContext) => TextButton(
+                  onPressed: () async {
+                    result = await showContextualPopover<DateTimeRange>(
+                      context: buttonContext,
+                      buttonContext: buttonContext,
+                      width: 320,
+                      height: 380,
+                      builder: (_) => DateSelectorPopover(
+                        initialStartDate: DateTime(2026, 10, 3),
+                        initialEndDate: DateTime(2026, 10, 3),
+                        singleDateMode: true,
+                      ),
+                    );
+                    closed = true;
+                  },
+                  child: const Text('open'),
+                ),
               ),
             ),
           ),

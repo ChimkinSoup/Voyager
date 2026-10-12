@@ -61,8 +61,9 @@ class FinanceTransactionDraft {
 ///
 /// [onSaved] runs after a successful write and before the sheet closes, for
 /// the bookkeeping that only makes sense once the money is actually recorded —
-/// advancing a bill's due date, say. It does not run when the sheet is
-/// dismissed, and a throw from it is the caller's to handle.
+/// advancing a bill's due date, say. It receives the row as written. It does
+/// not run when the sheet is dismissed, and a throw from it is the caller's to
+/// handle.
 ///
 /// [onDraft] receives the unsaved fields when the sheet closes without a save
 /// (null when they are all empty), and null after a save.
@@ -71,7 +72,7 @@ Future<void> showFinanceTransactionModal(
   WidgetRef ref, {
   FinancialTransaction? existing,
   FinanceTransactionDraft? draft,
-  Future<void> Function()? onSaved,
+  Future<void> Function(FinancialTransaction saved)? onSaved,
   ValueChanged<FinanceTransactionDraft?>? onDraft,
 }) async {
   // Captured out here, not inside the sheet: the sheet builds its own
@@ -110,7 +111,7 @@ Widget financeTransactionForm({
   required ProviderContainer container,
   required VoidCallback onClose,
   FinanceTransactionDraft? draft,
-  Future<void> Function()? onSaved,
+  Future<void> Function(FinancialTransaction saved)? onSaved,
   ValueChanged<FinanceTransactionDraft?>? onDraft,
   ValueChanged<double>? onSaveErrorHeight,
   Widget? leading,
@@ -147,7 +148,7 @@ class _TransactionModal extends ConsumerStatefulWidget {
 
   final FinancialTransaction? existing;
   final FinanceTransactionDraft? draft;
-  final Future<void> Function()? onSaved;
+  final Future<void> Function(FinancialTransaction saved)? onSaved;
   final VoidCallback? onClose;
   final ValueChanged<FinanceTransactionDraft?>? onDraft;
 
@@ -317,8 +318,8 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     final range = await showContextualPopover<DateTimeRange>(
       context: context,
       buttonContext: buttonContext,
-      width: 320,
-      height: 380,
+      width: kDateSelectorPopoverSize.width,
+      height: kDateSelectorPopoverSize.height,
       accentColor: accent,
       builder: (_) => DateSelectorPopover(
         initialStartDate: _date,
@@ -397,6 +398,10 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
         tags: tags,
         // A room event attached or detached while the sheet was open.
         roomEventId: base?.roomEventId,
+        // A bill payment [widget.onSaved] linked on an earlier attempt.
+        subscriptionId: base?.subscriptionId,
+        settlesDueDate: base?.settlesDueDate,
+        paidThroughBefore: base?.paidThroughBefore,
       );
       await financeRepo.upsertTransaction(transaction);
       written = true;
@@ -415,7 +420,7 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       // After the write, before the pop: a caller advancing a bill's due date
       // is recording a consequence of *this* save, and a failure there has to
       // land in this sheet's error line rather than on a dismissed one.
-      await widget.onSaved?.call();
+      await widget.onSaved?.call(transaction);
       if (mounted) _close();
     } catch (e) {
       if (!mounted) return;

@@ -20,11 +20,9 @@ import 'package:voyager/features/life_tracker/stat_leader_label.dart';
 /// bucket list, and one leaf already resting on the ground for every week
 /// already lived. See LIFE_TRACKER.md for the spec.
 ///
-/// The look is ink and wash on paper. In light the canvas is transparent and
-/// composites straight onto the app's own paper background; in dark it paints
-/// its own toned stock instead, because the background there is the animated
-/// triangle grid and a transparent canvas leaves the washes stacking over it
-/// — see [_nightPaperColor] and the framing at the end of [build].
+/// The look is ink and wash on paper. The canvas is transparent in both
+/// themes and composites straight onto the app's own background — the paper
+/// in light, the animated triangle grid in dark.
 class LifeTrackerPage extends ConsumerStatefulWidget {
   const LifeTrackerPage({super.key});
 
@@ -34,7 +32,9 @@ class LifeTrackerPage extends ConsumerStatefulWidget {
 
 /// The paper and the ink it is painted with. Light is the cream stock the
 /// painting was authored on; dark is the same painting worked on toned stock,
-/// with the ink pulled up to bone so the brushwork still reads.
+/// with the ink pulled up to bone so the brushwork still reads. The canvas
+/// doesn't fill with the paper — it's the bark's dry-brush and the labels'
+/// halo.
 const _paperColor = Color(0xFFF3F1EA);
 const _inkColor = Color(0xFF241F1B);
 const _grassColor = Color(0xFF8C9A79);
@@ -306,10 +306,11 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
       },
     );
 
-    // Dark frames the canvas: inset, rounded, hairline-edged and shadowed like
-    // a card, so the theme's chrome holds the toned stock rather than letting
-    // it run full-bleed into the grid. The wrapper is the same widgets in both
-    // themes, so switching theme does not remount the canvas.
+    // Dark frames the canvas: inset, rounded and hairline-edged, so the
+    // painting sits in the theme's chrome rather than running full-bleed into
+    // the grid. No shadow — under a transparent canvas it would bleed through
+    // as a dark smear. The wrapper is the same widgets in both themes, so
+    // switching theme does not remount the canvas.
     final vc = VoyagerColors.of(context);
     const frameRadius = BorderRadius.all(Radius.circular(18));
 
@@ -319,22 +320,14 @@ class _LifeTrackerPageState extends ConsumerState<LifeTrackerPage> {
         decoration: isDark
             ? BoxDecoration(
                 borderRadius: frameRadius,
-                boxShadow: vc.surfaceShadow(),
+                border: Border.all(color: vc.strongHairline),
               )
             : const BoxDecoration(),
-        child: DecoratedBox(
-          decoration: isDark
-              ? BoxDecoration(
-                  borderRadius: frameRadius,
-                  border: Border.all(color: vc.strongHairline),
-                )
-              : const BoxDecoration(),
-          position: DecorationPosition.foreground,
-          child: ClipRRect(
-            borderRadius: isDark ? frameRadius : BorderRadius.zero,
-            clipBehavior: isDark ? Clip.antiAlias : Clip.none,
-            child: canvas,
-          ),
+        position: DecorationPosition.foreground,
+        child: ClipRRect(
+          borderRadius: isDark ? frameRadius : BorderRadius.zero,
+          clipBehavior: isDark ? Clip.antiAlias : Clip.none,
+          child: canvas,
         ),
       ),
     );

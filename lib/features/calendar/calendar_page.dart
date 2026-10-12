@@ -11,6 +11,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/theme/palette_color.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/core/widgets/color_picker_field.dart';
@@ -2765,6 +2766,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
           accentColor: accentColor,
         ),
         events: activeEvents,
+        indicators: activeIndicators,
         todoMarkers: activeTodos,
         workoutDays: _workoutDays,
         highlightedWeekStart: calendarCurrentWeekHighlightStart(
@@ -3581,6 +3583,7 @@ class _MorphAnimationLayer extends StatefulWidget {
     required this.events,
     required this.todoMarkers,
     required this.monthMorphEventMetrics,
+    this.indicators = const [],
     this.workoutDays = const {},
     this.highlightedWeekStart,
     this.chainedYearWeekTransition = false,
@@ -3607,6 +3610,7 @@ class _MorphAnimationLayer extends StatefulWidget {
   /// morph. Falls back to the theme accent when null.
   final Color? accentColor;
   final List<CalendarEvent> events;
+  final List<CalendarDayIndicator> indicators;
   final List<CalendarTodoMarker> todoMarkers;
   final List<MorphDayEventFrozenMetrics> monthMorphEventMetrics;
   final bool chainedYearWeekTransition;
@@ -3712,6 +3716,14 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
       );
     });
 
+    // The month end's cell, which the grid hands over to: titles follow its
+    // "+N" cut-off, not the zoom's own.
+    final shown = calendarMonthCellsShownEvents(
+      [for (final week in packedWeeks) ...week],
+      dates: widget.dates,
+      indicators: widget.indicators,
+      cellHeight: calendarMonthCellLayoutHeight(monthCellRects.first.height),
+    );
     _cellChildren = [
       for (var i = 0; i < 42; i++)
         LayoutId(
@@ -3722,6 +3734,7 @@ class _MorphAnimationLayerState extends State<_MorphAnimationLayer> {
             month: widget.morphMonth,
             events: packedWeeks[i ~/ 7][i % 7],
             isFirstColumn: i % 7 == 0,
+            previousDayShown: i == 0 ? null : shown[i - 1],
             todoMarkers: calendarTodoMarkersForDay(
               widget.todoMarkers,
               widget.dates[i],
@@ -3910,6 +3923,7 @@ class _MorphCell extends StatelessWidget {
     required this.month,
     required this.events,
     required this.isFirstColumn,
+    required this.previousDayShown,
     required this.todoMarkers,
     required this.hasWorkout,
     required this.weekHighlightAlpha,
@@ -3919,6 +3933,7 @@ class _MorphCell extends StatelessWidget {
   final DateTime month;
   final List<CalendarEvent?> events;
   final bool isFirstColumn;
+  final List<CalendarEvent?>? previousDayShown;
   final List<CalendarTodoMarker> todoMarkers;
   final bool hasWorkout;
 
@@ -4167,6 +4182,7 @@ class _MorphCell extends StatelessWidget {
                         events: events,
                         date: date,
                         isFirstColumn: isFirstColumn,
+                        previousDayShown: previousDayShown,
                         // During a chained week↔year transition styleT rises
                         // from 0→1, which would grow year dots into bars while
                         // they fade out. Clamping to 0 keeps them as settled

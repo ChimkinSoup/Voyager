@@ -695,8 +695,8 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
                                       >(
                                         context: context,
                                         buttonContext: buttonContext,
-                                        width: 320,
-                                        height: 380,
+                                        width: kDateSelectorPopoverSize.width,
+                                        height: kDateSelectorPopoverSize.height,
                                         accentColor: accent,
                                         builder: (ctx) => DateSelectorPopover(
                                           initialStartDate: _start,

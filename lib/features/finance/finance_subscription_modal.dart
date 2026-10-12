@@ -151,8 +151,8 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
     final range = await showContextualPopover<DateTimeRange>(
       context: context,
       buttonContext: buttonContext,
-      width: 320,
-      height: 380,
+      width: kDateSelectorPopoverSize.width,
+      height: kDateSelectorPopoverSize.height,
       accentColor: accent,
       builder: (_) => DateSelectorPopover(
         initialStartDate: _dueDate,
@@ -460,7 +460,8 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
               if (nextDue != _dueDate) ...[
                 const SizedBox(height: 6),
                 Text(
-                  'Next due ${DateFormat('MMM d, yyyy').format(nextDue)}',
+                  '${nextDue.isBefore(DateUtils.dateOnly(DateTime.now())) ? 'Overdue since' : 'Next due'} '
+                  '${DateFormat('MMM d, yyyy').format(nextDue)}',
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

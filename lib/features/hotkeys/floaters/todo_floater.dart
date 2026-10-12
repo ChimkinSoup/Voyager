@@ -18,7 +18,7 @@ import 'package:voyager/features/hotkeys/quick_capture.dart';
 enum _Panel { due, list }
 
 /// The picker plus the "No due date" button under it.
-const double _datePanelHeight = 430;
+final double _datePanelHeight = kDateSelectorPopoverSize.height + 50;
 const double _listRowHeight = 40;
 
 /// The todo hotkey's Spotlight-style quick-add bar.

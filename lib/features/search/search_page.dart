@@ -1468,8 +1468,8 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog>
     final pickedDt = await showContextualPopover<DateTime>(
       context: context,
       buttonContext: buttonContext,
-      width: 500,
-      height: 380,
+      width: kDateTimeSelectorPopoverSize.width,
+      height: kDateTimeSelectorPopoverSize.height,
       accentColor: accentColor,
       builder: (ctx) => DateTimeSelectorPopover(
         initialDateTime: _entry.entryDate.toLocal(),
@@ -1992,8 +1992,8 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog>
     final pickedDt = await showContextualPopover<DateTime>(
       context: context,
       buttonContext: buttonContext,
-      width: 500,
-      height: 380,
+      width: kDateTimeSelectorPopoverSize.width,
+      height: kDateTimeSelectorPopoverSize.height,
       accentColor: widget.accentColor,
       builder: (ctx) => DateTimeSelectorPopover(
         initialDateTime: _entry.entryDate.toLocal(),

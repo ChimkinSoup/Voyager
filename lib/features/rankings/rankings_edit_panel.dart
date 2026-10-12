@@ -285,8 +285,8 @@ class _RankingsEditPanelState extends ConsumerState<RankingsEditPanel> {
       buttonContext: pillContext,
       // Both are needed: the calendar hangs its grid off an Expanded, so a
       // popover left to size itself gives that grid no height at all.
-      width: 320,
-      height: 380,
+      width: kDateSelectorPopoverSize.width,
+      height: kDateSelectorPopoverSize.height,
       accentColor: _accent,
       builder: (context) => DateSelectorPopover(
         initialStartDate: initial,

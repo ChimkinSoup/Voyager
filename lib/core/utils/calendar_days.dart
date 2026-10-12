@@ -36,3 +36,13 @@ int calendarDaysBetween(DateTime from, DateTime to) => DateTime.utc(
   to.month,
   to.day,
 ).difference(DateTime.utc(from.year, from.month, from.day)).inDays;
+
+/// Local-midnight start of the week containing [date].
+DateTime calendarWeekStart(DateTime date, bool weekStartsMonday) {
+  final weekday = date.weekday;
+  final firstDay = weekStartsMonday ? DateTime.monday : DateTime.sunday;
+  // Field-based subtraction (not Duration), so this stays correct across
+  // DST transitions — Duration(days:) is a fixed elapsed-time delta and can
+  // land on the wrong calendar day for a local DateTime.
+  return DateTime(date.year, date.month, date.day - (weekday - firstDay) % 7);
+}

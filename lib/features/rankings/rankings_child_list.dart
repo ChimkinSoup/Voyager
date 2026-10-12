@@ -865,8 +865,8 @@ class _ChildEditorDialogState extends ConsumerState<_ChildEditorDialog> {
     final picked = await showContextualPopover<DateTime>(
       context: context,
       buttonContext: pillContext,
-      width: 320,
-      height: 380,
+      width: kDateSelectorPopoverSize.width,
+      height: kDateSelectorPopoverSize.height,
       accentColor: accent,
       builder: (context) => DateSelectorPopover(
         initialStartDate: initial,

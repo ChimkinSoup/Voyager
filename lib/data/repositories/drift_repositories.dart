@@ -3042,6 +3042,9 @@ class DriftFinanceRepository implements FinanceRepository {
             tagsJson: Value(jsonEncode(transaction.tags)),
             occurredAt: Value(transaction.occurredAt),
             roomEventId: Value(transaction.roomEventId),
+            subscriptionId: Value(transaction.subscriptionId),
+            settlesDueDate: Value(transaction.settlesDueDate),
+            paidThroughBefore: Value(transaction.paidThroughBefore),
             createdAt: Value(transaction.createdAt),
             updatedAt: Value(transaction.updatedAt),
             version: Value(transaction.version),
@@ -3594,6 +3597,9 @@ class DriftFinanceRepository implements FinanceRepository {
             note: transaction.note,
             tags: transaction.tags,
             roomEventId: transaction.roomEventId,
+            subscriptionId: transaction.subscriptionId,
+            settlesDueDate: transaction.settlesDueDate,
+            paidThroughBefore: transaction.paidThroughBefore,
           ),
         );
       }
@@ -3934,6 +3940,9 @@ class DriftFinanceRepository implements FinanceRepository {
     // finance view buckets by the local calendar day, so convert here once.
     occurredAt: row.occurredAt.toLocal(),
     roomEventId: row.roomEventId,
+    subscriptionId: row.subscriptionId,
+    settlesDueDate: row.settlesDueDate?.toLocal(),
+    paidThroughBefore: row.paidThroughBefore?.toLocal(),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     version: row.version,

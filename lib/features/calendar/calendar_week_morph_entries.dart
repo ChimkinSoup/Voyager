@@ -104,6 +104,22 @@ List<CalendarWeekMorphEntry> calendarWeekMorphEntries({
 
   // Month: the lanes [CalendarDayCell] shows, clipped to the cell.
   final packed = calendarPackWeekEvents(weekDates, events);
+  // What each day draws as bars, the row above's too: its last day titles
+  // this row's carried-over bars, unless the row opens the month and the day
+  // before is outside the grid. Rows share one height.
+  final opensGrid = weekDates.any(
+    (d) => d.year == month.year && d.month == month.month && d.day == 1,
+  );
+  final rowAboveDates = [
+    for (final d in weekDates) DateTime(d.year, d.month, d.day - 7),
+  ];
+  final cellHeight = calendarMonthCellLayoutHeight(monthRowRects.first.height);
+  final shown = calendarMonthCellsShownEvents(
+    [...calendarPackWeekEvents(rowAboveDates, events), ...packed],
+    dates: [...rowAboveDates, ...weekDates],
+    indicators: indicators,
+    cellHeight: cellHeight,
+  );
   for (var c = 0; c < 7; c++) {
     final date = weekDates[c];
     final monthOpacity = date.month == month.month
@@ -114,14 +130,17 @@ List<CalendarWeekMorphEntry> calendarWeekMorphEntries({
     final clip = calendarWeekMorphMonthClip(monthRowRects[c]).outerRect;
     final content = monthStyle.cellPadding.deflateRect(clip);
     final visible = calendarVisibleEventCount(
-      cellHeight: content.height,
+      cellHeight: cellHeight,
       style: monthStyle,
       eventCount: dayEvents.length,
       hasIndicators: hasIndicators,
     );
-    final displayed = visible.clamp(0, monthStyle.maxEventLines);
+    final displayed = shown[7 + c].length;
+    // The day before sits just ahead in [shown], the row above's last day
+    // for the first column.
+    final previousDayShown = c == 0 && opensGrid ? null : shown[6 + c];
     final barHeight = calendarMonthEventBarHeight(
-      cellHeight: content.height,
+      cellHeight: cellHeight,
       style: monthStyle,
       visibleEventCount: visible,
       hasIndicators: hasIndicators,
@@ -160,9 +179,12 @@ List<CalendarWeekMorphEntry> calendarWeekMorphEntries({
             bottomLeft: isStart && !isBottom ? radius : Radius.zero,
             bottomRight: isEnd && !isBottom ? radius : Radius.zero,
           ),
-          // Matches [CalendarDayEventBar]: a carried-over bar is labelled
-          // again at the start of the week row.
-          showTitle: isStart || c == 0,
+          // Matches [CalendarDayEventBar]: titled on the first bar drawn.
+          showTitle: calendarEventBarShowsTitle(
+            event,
+            date,
+            previousDayShown: previousDayShown,
+          ),
         ),
         fontSize,
         monthOpacity,

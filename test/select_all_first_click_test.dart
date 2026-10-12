@@ -13,14 +13,18 @@ import 'package:voyager/core/widgets/time_selector_popovers.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/features/rankings/rankings_score_input.dart';
 
+import 'date_picker_settings_scope.dart';
+
 void main() {
   final eightPm = DateTime(2026, 9, 21, 20, 0);
   final desktop = TargetPlatformVariant.only(TargetPlatform.windows);
 
   Future<void> pump(WidgetTester tester, Widget child) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(body: Center(child: child)),
+      datePickerSettingsScope(
+        MaterialApp(
+          home: Scaffold(body: Center(child: child)),
+        ),
       ),
     );
     await tester.pump();
@@ -86,22 +90,24 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => TextButton(
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (_) => Center(
-                child: SizedBox(
-                  width: 700,
-                  height: 500,
-                  child: Material(
-                    child: DateTimeSelectorPopover(initialDateTime: eightPm),
+      datePickerSettingsScope(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => Center(
+                  child: SizedBox(
+                    width: 700,
+                    height: 500,
+                    child: Material(
+                      child: DateTimeSelectorPopover(initialDateTime: eightPm),
+                    ),
                   ),
                 ),
               ),
+              child: const Text('open'),
             ),
-            child: const Text('open'),
           ),
         ),
       ),

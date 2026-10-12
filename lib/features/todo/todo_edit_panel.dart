@@ -1356,8 +1356,8 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
                                 await showContextualPopover<DateTime>(
                                   context: context,
                                   buttonContext: context,
-                                  width: 500,
-                                  height: 380,
+                                  width: kDateTimeSelectorPopoverSize.width,
+                                  height: kDateTimeSelectorPopoverSize.height,
                                   accentColor: listColor,
                                   builder: (ctx) => DateTimeSelectorPopover(
                                     initialDateTime: initialDt,

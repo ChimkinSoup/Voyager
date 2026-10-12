@@ -18,6 +18,8 @@ import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/features/notifications/scheduled_reminders_section.dart';
 
+import 'date_picker_settings_scope.dart';
+
 Future<void> _openEditor(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1400, 1000);
   tester.view.devicePixelRatio = 1;
@@ -151,24 +153,26 @@ void main() {
     addTearDown(tester.view.reset);
     DateTime? picked;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () async {
-                  picked = await showContextualPopover<DateTime>(
-                    context: context,
-                    buttonContext: context,
-                    width: 500,
-                    height: 380,
-                    builder: (_) => DateTimeSelectorPopover(
-                      initialDateTime: DateTime(2026, 10, 5, 9, 30),
-                      optionalTime: true,
-                    ),
-                  );
-                },
-                child: const Text('open'),
+      datePickerSettingsScope(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () async {
+                    picked = await showContextualPopover<DateTime>(
+                      context: context,
+                      buttonContext: context,
+                      width: 500,
+                      height: 380,
+                      builder: (_) => DateTimeSelectorPopover(
+                        initialDateTime: DateTime(2026, 10, 5, 9, 30),
+                        optionalTime: true,
+                      ),
+                    );
+                  },
+                  child: const Text('open'),
+                ),
               ),
             ),
           ),

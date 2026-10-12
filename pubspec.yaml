@@ -183,6 +183,7 @@ flutter:
   shaders:
     - shaders/geometric_texture.frag
     - shaders/paper_texture.frag
+    - shaders/weeping_crossfade.frag
   assets:
     - assets/quotes.json
     - assets/rankings_map_style.json

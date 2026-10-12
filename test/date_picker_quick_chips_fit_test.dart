@@ -16,6 +16,8 @@ import 'package:voyager/domain/models/enums.dart';
 
 import 'narrow_window_harness.dart' show loadRealFonts;
 
+import 'date_picker_settings_scope.dart';
+
 /// The left pane of `DateTimeSelectorPopover` — a 500pt popover split 3:2 with
 /// a 1pt divider — and the whole of the standalone 320pt date popover.
 const _paneWidths = [299.4, 320.0];
@@ -31,22 +33,24 @@ void main() {
       final date = DateTime(2026, 9, 17);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: VoyagerTheme.forMode(
-            AppThemeMode.dark,
-            accent: const Color(0xFF7C9EFF),
-          ),
-          home: Scaffold(
-            body: Center(
-              child: SizedBox(
-                width: width,
-                height: 380,
-                child: DateSelectorPopover(
-                  initialStartDate: date,
-                  initialEndDate: date,
-                  singleDateMode: true,
-                  inlineMode: true,
-                  onDateSelected: (_) {},
+        datePickerSettingsScope(
+          MaterialApp(
+            theme: VoyagerTheme.forMode(
+              AppThemeMode.dark,
+              accent: const Color(0xFF7C9EFF),
+            ),
+            home: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: width,
+                  height: 380,
+                  child: DateSelectorPopover(
+                    initialStartDate: date,
+                    initialEndDate: date,
+                    singleDateMode: true,
+                    inlineMode: true,
+                    onDateSelected: (_) {},
+                  ),
                 ),
               ),
             ),

@@ -1852,8 +1852,8 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       pickedDt = await showContextualPopover<DateTime>(
         context: context,
         buttonContext: buttonContext,
-        width: 500,
-        height: 380,
+        width: kDateTimeSelectorPopoverSize.width,
+        height: kDateTimeSelectorPopoverSize.height,
         accentColor: accentColor,
         builder: (ctx) => DateTimeSelectorPopover(
           initialDateTime: entry.entryDate.toLocal(),

@@ -27,6 +27,7 @@ import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/widgets/geometric_texture.dart';
 import 'package:voyager/core/widgets/paper_texture.dart';
 import 'package:voyager/core/widgets/petal_field.dart';
+import 'package:voyager/core/widgets/single_line_vertical_caret.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/domain/models/media_models.dart';
 import 'package:voyager/features/finance/finance_sheet_warm_up.dart';
@@ -278,6 +279,13 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
       title: 'Voyager',
       theme: theme,
       scrollBehavior: const _NoScrollbarScrollBehavior(),
+      // Replaces the defaults rather than adding to them, so they're spread
+      // back in. Every centred single-line field otherwise trips a Flutter
+      // assertion on Arrow Up/Down — see [SingleLineVerticalCaretAction].
+      actions: {
+        ...WidgetsApp.defaultActions,
+        DirectionalCaretMovementIntent: SingleLineVerticalCaretAction(),
+      },
       builder: (context, child) {
         // Above the Navigator, so every route's snackbars go through it and
         // into the notification history.

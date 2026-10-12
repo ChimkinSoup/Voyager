@@ -178,8 +178,8 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
     final range = await showContextualPopover<DateTimeRange>(
       context: context,
       buttonContext: buttonContext,
-      width: 320,
-      height: 380,
+      width: kDateSelectorPopoverSize.width,
+      height: kDateSelectorPopoverSize.height,
       accentColor: accent,
       builder: (_) => DateSelectorPopover(
         initialStartDate: _date,

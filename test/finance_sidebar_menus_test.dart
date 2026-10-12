@@ -319,6 +319,9 @@ void main() {
       expect(logged.type, TransactionType.expense);
       expect(logged.amountCents, 1599);
       expect(logged.tags, isEmpty);
+      // Linked to the bill, so deleting it can take the payment back.
+      expect(logged.subscriptionId, 'sub-1');
+      expect(logged.settlesDueDate, paidDue);
 
       final after = (await harness.repo.getSubscription('sub-1'))!;
       // The settled occurrence is recorded and the anchor is untouched, so the

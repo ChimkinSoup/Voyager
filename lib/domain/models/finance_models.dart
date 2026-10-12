@@ -24,6 +24,9 @@ class FinancialTransaction extends SoftDeletable {
     this.note,
     this.tags = const [],
     this.roomEventId,
+    this.subscriptionId,
+    this.settlesDueDate,
+    this.paidThroughBefore,
   });
 
   final TransactionType type;
@@ -57,6 +60,19 @@ class FinancialTransaction extends SoftDeletable {
   /// (BUG-128).
   bool get isOwnTransfer => roomEventId != null;
 
+  /// The bill this row was logged as a payment of, or null for an ordinary
+  /// entry. Only the radar's Log payment sets it.
+  final String? subscriptionId;
+
+  /// The due date of [subscriptionId]'s occurrence this payment settled, so
+  /// deleting the row can unsettle it.
+  final DateTime? settlesDueDate;
+
+  /// The bill's `paidThroughDate` before this payment settled
+  /// [settlesDueDate] — null when none was recorded — so deleting the row
+  /// puts back exactly what was there.
+  final DateTime? paidThroughBefore;
+
   /// The value with its sign applied: negative for expenses, positive for
   /// deposits.
   int get signedCents =>
@@ -70,6 +86,9 @@ class FinancialTransaction extends SoftDeletable {
     bool clearOrigin = false,
     String? note,
     List<String>? tags,
+    String? subscriptionId,
+    DateTime? settlesDueDate,
+    DateTime? paidThroughBefore,
     DateTime? updatedAt,
     DateTime? deletedAt,
     int? version,
@@ -87,6 +106,9 @@ class FinancialTransaction extends SoftDeletable {
       note: note ?? this.note,
       tags: tags ?? this.tags,
       roomEventId: roomEventId,
+      subscriptionId: subscriptionId ?? this.subscriptionId,
+      settlesDueDate: settlesDueDate ?? this.settlesDueDate,
+      paidThroughBefore: paidThroughBefore ?? this.paidThroughBefore,
     );
   }
 }
@@ -156,8 +178,9 @@ class Subscription extends SoftDeletable {
   /// Total cost across a full year at this cadence.
   int get annualCents => annualCentsFor(amountCents, period);
 
-  /// The next due date on or after [from] (defaults to now), skipping the
-  /// occurrence [paidThroughDate] settles.
+  /// The earliest unpaid due date as of [from] (defaults to now): the latest
+  /// past occurrence if it is still unpaid (overdue), else the next one on or
+  /// after [from], skipping the occurrence [paidThroughDate] settles.
   DateTime nextDue([DateTime? from]) => nextDueAfterPaid(
     anchor: anchorDueDate,
     period: period,
@@ -166,7 +189,7 @@ class Subscription extends SoftDeletable {
   );
 
   /// Whole days from [from]'s calendar day until the next due date. 0 = due
-  /// today, negative should never occur (the next due date is always >= today).
+  /// today, negative = overdue by that many days.
   int daysUntilDue([DateTime? from]) {
     final base = from ?? DateTime.now();
     final due = nextDue(base);
@@ -186,6 +209,7 @@ class Subscription extends SoftDeletable {
     BillingPeriod? period,
     DateTime? anchorDueDate,
     DateTime? paidThroughDate,
+    bool clearPaidThrough = false,
     int? colorValue,
     String? note,
     String? store,
@@ -203,10 +227,9 @@ class Subscription extends SoftDeletable {
       amountCents: amountCents ?? this.amountCents,
       period: period ?? this.period,
       anchorDueDate: anchorDueDate ?? this.anchorDueDate,
-      // Like `deletedAt`, this reads `?? this` and so cannot clear a recorded
-      // payment. Clearing one means rebuilding the Subscription — which is
-      // what the editor does when it rewrites the anchor.
-      paidThroughDate: paidThroughDate ?? this.paidThroughDate,
+      paidThroughDate: clearPaidThrough
+          ? null
+          : (paidThroughDate ?? this.paidThroughDate),
       colorValue: colorValue ?? this.colorValue,
       note: note ?? this.note,
       store: store ?? this.store,
@@ -293,8 +316,46 @@ DateTime nextDueDate(DateTime anchor, BillingPeriod period, DateTime from) {
   }
 }
 
-/// The next due date on or after [from], skipping the occurrence
-/// [paidThrough] settles.
+/// The latest occurrence of the series strictly before [before]'s calendar
+/// day, or null when [anchor] is not before it.
+DateTime? previousDueDate(
+  DateTime anchor,
+  BillingPeriod period,
+  DateTime before,
+) {
+  final start = DateTime(anchor.year, anchor.month, anchor.day);
+  final next = nextDueDate(anchor, period, before);
+  if (!start.isBefore(next)) return null;
+  switch (period) {
+    case BillingPeriod.weekly:
+    case BillingPeriod.biweekly:
+      final step = period == BillingPeriod.weekly ? 7 : 14;
+      return DateTime(next.year, next.month, next.day - step);
+    case BillingPeriod.monthly:
+    case BillingPeriod.quarterly:
+    case BillingPeriod.yearly:
+      final stepMonths = period == BillingPeriod.monthly
+          ? 1
+          : period == BillingPeriod.quarterly
+          ? 3
+          : 12;
+      // Stepped back from the anchor rather than from [next]: [next] may be
+      // clamped (Feb 28 for a bill due the 31st), and a month before it is
+      // Jan 28, not Jan 31.
+      final months = (next.year - start.year) * 12 + next.month - start.month;
+      return _addMonths(start, months - stepMonths);
+  }
+}
+
+/// The earliest unpaid due date as of [from]: the latest occurrence before
+/// [from]'s day when it is unpaid (overdue), else the next one on or after
+/// it, skipping the occurrence [paidThrough] settles.
+///
+/// Only a bill with a recorded payment can be overdue: with [paidThrough]
+/// null, payments aren't being logged (autopay, or a bill from before Log
+/// payment existed), so nothing says a cycle went unpaid. And only the latest
+/// past occurrence can be, until the one after it comes due — on that day the
+/// radar shows the new cycle as due today rather than the old one.
 ///
 /// Shared by [Subscription.nextDue] and the editor's preview so the two can't
 /// disagree about what the radar will show.
@@ -311,6 +372,12 @@ DateTime nextDueAfterPaid({
     paidThrough.month,
     paidThrough.day,
   );
+  final missed = previousDueDate(anchor, period, from);
+  if (missed != null &&
+      missed.isAfter(paidDay) &&
+      due != DateTime(from.year, from.month, from.day)) {
+    return missed;
+  }
   if (due.isAfter(paidDay)) return due;
   // Resolved one day past the settled occurrence rather than by adding a
   // period to it: the series still runs off the untouched anchor, so a bill

@@ -841,8 +841,8 @@ class _TrackModalState extends ConsumerState<_TrackModal> {
       // Both are needed: the calendar hangs its grid off an Expanded, so a
       // popover left to size itself gives that grid no height at all and the
       // sheet paints as an empty box.
-      width: 320,
-      height: 380,
+      width: kDateSelectorPopoverSize.width,
+      height: kDateSelectorPopoverSize.height,
       accentColor: Theme.of(context).colorScheme.primary,
       tapThroughContext: context,
       builder: (context) => DateSelectorPopover(

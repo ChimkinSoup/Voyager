@@ -1,11 +1,21 @@
+import 'dart:math' show max, min;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/layout/touch_target.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
+import 'package:voyager/core/utils/calendar_days.dart';
 
-class DateSelectorPopover extends StatefulWidget {
+/// The size to open [DateSelectorPopover] at. Its day grid hangs off an
+/// Expanded, so it needs a fixed height, and this one fits all six week rows
+/// under the quick picks, month header and weekday labels.
+const kDateSelectorPopoverSize = Size(320, 400);
+
+class DateSelectorPopover extends ConsumerStatefulWidget {
   final DateTime initialStartDate;
   final DateTime initialEndDate;
   final bool singleDateMode;
@@ -24,11 +34,25 @@ class DateSelectorPopover extends StatefulWidget {
   });
 
   @override
-  State<DateSelectorPopover> createState() => _DateSelectorPopoverState();
+  ConsumerState<DateSelectorPopover> createState() =>
+      _DateSelectorPopoverState();
 }
 
-class _DateSelectorPopoverState extends State<DateSelectorPopover> {
+class _DateSelectorPopoverState extends ConsumerState<DateSelectorPopover>
+    with SingleTickerProviderStateMixin {
   late DateTime _focusedMonth;
+  // Turning the month scrolls the grid as one strip of weeks: it starts
+  // [_scrollFromWeeks] rows off the new month's grid and eases to it, while
+  // each day's ink fades from its [_inkFrom] to the new month's.
+  late final AnimationController _scroll = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 250),
+    value: 1,
+  );
+  double _scrollFromWeeks = 0;
+  // The ink each month's days had when the fade began, by its first day;
+  // a month left out had the greyed-out ink.
+  Map<DateTime, double> _inkFrom = {};
   late DateTime _hoveredDate; // Used for VIM navigation focus
   DateTime? _firstSelected;
   DateTime? _secondSelected;
@@ -40,6 +64,12 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
   @override
   void initState() {
     super.initState();
+    // Once a scroll settles, drop the weeks it carried out of view.
+    _scroll.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() => _scrollFromWeeks = 0);
+      }
+    });
     _hoveredDate = widget.initialStartDate;
     _focusedMonth = DateTime(_hoveredDate.year, _hoveredDate.month, 1);
 
@@ -59,6 +89,7 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
   @override
   void dispose() {
     _focusNode.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -73,10 +104,8 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
         _firstSelected = widget.initialStartDate;
         if (_focusedMonth.year != _firstSelected!.year ||
             _focusedMonth.month != _firstSelected!.month) {
-          _focusedMonth = DateTime(
-            _firstSelected!.year,
-            _firstSelected!.month,
-            1,
+          _setFocusedMonth(
+            DateTime(_firstSelected!.year, _firstSelected!.month, 1),
           );
         }
       }
@@ -90,15 +119,66 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
     }
   }
 
+  bool get _weekStartsMonday =>
+      ref.read(settingsProvider.settled).valueOrNull?.weekStartsOnMonday ??
+      true;
+
+  double get _scrollT => Curves.easeOutCubic.transform(_scroll.value);
+
+  /// How many rows the grid sits off the focused month's, mid-scroll.
+  double get _scrollWeeks => _scrollFromWeeks * (1 - _scrollT);
+
+  void _setFocusedMonth(DateTime month) {
+    if (month == _focusedMonth) return;
+    final weekStartsMonday = _weekStartsMonday;
+    final weeks =
+        calendarDaysBetween(
+          calendarWeekStart(month, weekStartsMonday),
+          calendarWeekStart(_focusedMonth, weekStartsMonday),
+        ) /
+        7;
+    // Each day's ink picks up from where an unfinished fade has got to. A
+    // month the last fade finished greying is back to the default, so it is
+    // left out rather than compared against 0.3, which the lerp misses.
+    final fade = _scroll.value;
+    _inkFrom = {
+      for (final m in {..._inkFrom.keys, _focusedMonth})
+        if (m == _focusedMonth || fade < 1)
+          m: _lerpInk(_inkFrom[m] ?? 0.3, m == _focusedMonth ? 1.0 : 0.3, fade),
+    };
+    // The scroll picks up from wherever an unfinished one has got to, so quick
+    // turns run on rather than restart. A jump past a grid's height snaps:
+    // there's no strip worth scrolling. For the same reason a run of quick
+    // turns starts at most a grid away, or the strip would build every week
+    // they piled up.
+    final fromWeeks = (_scrollWeeks + weeks).clamp(-6.0, 6.0);
+    _focusedMonth = month;
+    if (weeks.abs() > 6) {
+      _inkFrom = {};
+      _scrollFromWeeks = 0;
+      _scroll.value = 1;
+    } else {
+      _scrollFromWeeks = fromWeeks;
+      _scroll.forward(from: 0);
+    }
+  }
+
+  static double _lerpInk(double from, double to, double t) =>
+      from + (to - from) * t;
+
   void _previousMonth() {
     setState(() {
-      _focusedMonth = DateTime(_focusedMonth.year, _focusedMonth.month - 1, 1);
+      _setFocusedMonth(
+        DateTime(_focusedMonth.year, _focusedMonth.month - 1, 1),
+      );
     });
   }
 
   void _nextMonth() {
     setState(() {
-      _focusedMonth = DateTime(_focusedMonth.year, _focusedMonth.month + 1, 1);
+      _setFocusedMonth(
+        DateTime(_focusedMonth.year, _focusedMonth.month + 1, 1),
+      );
     });
   }
 
@@ -194,7 +274,7 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
         );
         if (_hoveredDate.year != _focusedMonth.year ||
             _hoveredDate.month != _focusedMonth.month) {
-          _focusedMonth = DateTime(_hoveredDate.year, _hoveredDate.month, 1);
+          _setFocusedMonth(DateTime(_hoveredDate.year, _hoveredDate.month, 1));
         }
       });
     }
@@ -240,25 +320,242 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
       },
     ];
 
-    final firstDayOfMonth = _focusedMonth;
-    final firstWeekday = firstDayOfMonth.weekday; // 1 = Monday, 7 = Sunday
-    final startOffset = (firstWeekday == 7) ? 0 : firstWeekday;
-    final startDate = DateTime(
-      firstDayOfMonth.year,
-      firstDayOfMonth.month,
-      firstDayOfMonth.day - startOffset,
-    );
+    final weekStartsMonday =
+        ref.watch(settingsProvider.settled).valueOrNull?.weekStartsOnMonday ??
+        true;
+    // Sunday first, rotated to Monday first when the grid starts there.
+    final weekdayLabels = MaterialLocalizations.of(context).narrowWeekdays;
+    final orderedWeekdayLabels = weekStartsMonday
+        ? [...weekdayLabels.skip(1), weekdayLabels.first]
+        : weekdayLabels;
+    final startDate = calendarWeekStart(_focusedMonth, weekStartsMonday);
 
     DateTime? minDate;
     DateTime? maxDate;
     if (_firstSelected != null) {
-      minDate = _firstSelected;
-      maxDate = _secondSelected ?? _firstSelected;
-      if (maxDate!.isBefore(minDate!)) {
+      // Days only: an event ending at 10:00 on its last day would otherwise
+      // count that day's midnight cell as inside the range, not its end.
+      minDate = DateUtils.dateOnly(_firstSelected!);
+      maxDate = DateUtils.dateOnly(_secondSelected ?? _firstSelected!);
+      if (maxDate.isBefore(minDate)) {
         final temp = minDate;
         minDate = maxDate;
         maxDate = temp;
       }
+    }
+
+    // Days outside the month are greyed. Mid-scroll the month being left
+    // dims to that grey while the one arriving brightens out of it, evenly
+    // rather than on the scroll's ease-out, so the fade trails the motion.
+    // Run off the controller, so a frame of it repaints the day numbers
+    // without rebuilding their cells.
+    Animation<double> ink(DateTime date) {
+      final from = _inkFrom[DateTime(date.year, date.month)] ?? 0.3;
+      final to =
+          date.year == _focusedMonth.year && date.month == _focusedMonth.month
+          ? 1.0
+          : 0.3;
+      return _scroll.drive(Tween(begin: from, end: to));
+    }
+
+    Widget dayCell(DateTime date, int column) {
+      final isToday = _isSameDay(date, today);
+
+      bool isSelected = false;
+      bool isInRange = false;
+      bool isRangeStart = false;
+      bool isRangeEnd = false;
+
+      if (minDate != null && maxDate != null) {
+        if (_isSameDay(date, minDate)) {
+          isSelected = true;
+          isRangeStart = !_isSameDay(minDate, maxDate);
+        }
+        if (_isSameDay(date, maxDate)) {
+          isSelected = true;
+          isRangeEnd = !_isSameDay(minDate, maxDate);
+        }
+        if (date.isAfter(minDate) && date.isBefore(maxDate)) {
+          isInRange = true;
+        }
+      }
+
+      final isHovered = _isSameDay(date, _hoveredDate);
+
+      Color textColor = theme.colorScheme.onSurface;
+      if (isSelected) {
+        textColor = onAccent;
+      }
+
+      final highlightColor = Color.alphaBlend(
+        accent.withValues(alpha: 0.7),
+        theme.colorScheme.surface,
+      );
+
+      final bool isFirstDayOfWeek = column == 0;
+      final bool isLastDayOfWeek = column == 6;
+
+      return Center(
+        child: SizedBox(
+          height: 36,
+          width: double.infinity,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              // 1. Bridging Layer (Row with Expanded)
+              if (isInRange || isRangeStart || isRangeEnd)
+                Positioned.fill(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Left Zone
+                      Expanded(
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            // A range ending in the first column
+                            // has nothing on its row to bridge to.
+                            if ((isInRange ||
+                                    (isRangeEnd && !isFirstDayOfWeek)) &&
+                                !isRangeStart)
+                              Positioned(
+                                top: 0,
+                                bottom: 0,
+                                left:
+                                    0, // NEVER extend left! Prevents painting over previous cell
+                                right: -1, // overlap center slightly
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: highlightColor,
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: Radius.circular(
+                                        isFirstDayOfWeek ? 100 : 0,
+                                      ),
+                                      bottomLeft: Radius.circular(
+                                        isFirstDayOfWeek ? 100 : 0,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      // Right Zone
+                      Expanded(
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            // Nor one starting in the last column.
+                            if ((isInRange ||
+                                    (isRangeStart && !isLastDayOfWeek)) &&
+                                !isRangeEnd)
+                              Positioned(
+                                top: 0,
+                                bottom: 0,
+                                left: -1, // overlap center slightly
+                                right: isLastDayOfWeek
+                                    ? 0
+                                    : -16, // Bridge securely to next cell
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: highlightColor,
+                                    borderRadius: BorderRadius.only(
+                                      topRight: Radius.circular(
+                                        isLastDayOfWeek ? 100 : 0,
+                                      ),
+                                      bottomRight: Radius.circular(
+                                        isLastDayOfWeek ? 100 : 0,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // 2. Uniform Background for Translucent Circle
+              if (isInRange || isRangeStart || isRangeEnd)
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: highlightColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+
+              // 3. The actual day circle (Button & Text)
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: isSelected ? selectedFill : Colors.transparent,
+                  border: (isHovered && _showHoverRing)
+                      ? Border.all(color: theme.colorScheme.onSurface, width: 2)
+                      : null,
+                  shape: BoxShape.circle,
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Material(
+                  color: Colors
+                      .transparent, // Let Container handle the background color securely
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _showHoverRing = false;
+                      });
+                      _handleDateTap(date);
+                    },
+                    onLongPress: () {
+                      setState(() {
+                        _showHoverRing = false;
+                      });
+                      _handleDateTap(date, startsRange: true);
+                    },
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          FadeTransition(
+                            opacity: isSelected
+                                ? kAlwaysCompleteAnimation
+                                : ink(date),
+                            child: Text(
+                              '${date.day}',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: textColor,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                          if (isToday && !isSelected)
+                            Container(
+                              width: 4,
+                              height: 4,
+                              margin: const EdgeInsets.only(top: 1),
+                              decoration: BoxDecoration(
+                                color: accent,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     Widget content = Focus(
@@ -363,219 +660,87 @@ class _DateSelectorPopoverState extends State<DateSelectorPopover> {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                for (final label in orderedWeekdayLabels)
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        label,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: accent,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.only(left: 12, right: 12, bottom: 16),
-              child: GridView.builder(
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 7,
-                  mainAxisSpacing: 0,
-                  crossAxisSpacing: 0,
-                  childAspectRatio: 1.0,
-                ),
-                itemCount: 42, // 7x6 matrix
-                itemBuilder: (context, index) {
-                  final date = DateTime(
-                    startDate.year,
-                    startDate.month,
-                    startDate.day + index,
-                  );
-                  final isCurrentMonth = date.month == _focusedMonth.month;
-                  final isToday = _isSameDay(date, today);
-
-                  bool isSelected = false;
-                  bool isInRange = false;
-                  bool isRangeStart = false;
-                  bool isRangeEnd = false;
-
-                  if (minDate != null && maxDate != null) {
-                    if (_isSameDay(date, minDate)) {
-                      isSelected = true;
-                      isRangeStart = !_isSameDay(minDate, maxDate);
-                    }
-                    if (_isSameDay(date, maxDate)) {
-                      isSelected = true;
-                      isRangeEnd = !_isSameDay(minDate, maxDate);
-                    }
-                    if (date.isAfter(minDate) && date.isBefore(maxDate)) {
-                      isInRange = true;
-                    }
-                  }
-
-                  final isHovered = _isSameDay(date, _hoveredDate);
-
-                  Color textColor = theme.colorScheme.onSurface;
-                  if (!isCurrentMonth) {
-                    textColor = textColor.withValues(alpha: 0.3);
-                  }
-                  if (isSelected) {
-                    textColor = onAccent;
-                  }
-
-                  final highlightColor = Color.alphaBlend(
-                    accent.withValues(alpha: 0.7),
-                    theme.colorScheme.surface,
-                  );
-
-                  final bool isFirstDayOfWeek = index % 7 == 0;
-                  final bool isLastDayOfWeek = index % 7 == 6;
-
-                  return Center(
-                    child: SizedBox(
-                      height: 36,
-                      width: double.infinity,
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        alignment: Alignment.center,
-                        children: [
-                          // 1. Bridging Layer (Row with Expanded)
-                          if (isInRange || isRangeStart || isRangeEnd)
-                            Positioned.fill(
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  // Left Zone
-                                  Expanded(
-                                    child: Stack(
-                                      clipBehavior: Clip.none,
-                                      children: [
-                                        if ((isInRange || isRangeEnd) &&
-                                            !isRangeStart)
-                                          Positioned(
-                                            top: 0,
-                                            bottom: 0,
-                                            left:
-                                                0, // NEVER extend left! Prevents painting over previous cell
-                                            right:
-                                                -1, // overlap center slightly
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                color: highlightColor,
-                                                borderRadius: BorderRadius.only(
-                                                  topLeft: Radius.circular(
-                                                    isFirstDayOfWeek ? 100 : 0,
-                                                  ),
-                                                  bottomLeft: Radius.circular(
-                                                    isFirstDayOfWeek ? 100 : 0,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  // Right Zone
-                                  Expanded(
-                                    child: Stack(
-                                      clipBehavior: Clip.none,
-                                      children: [
-                                        if ((isInRange || isRangeStart) &&
-                                            !isRangeEnd)
-                                          Positioned(
-                                            top: 0,
-                                            bottom: 0,
-                                            left: -1, // overlap center slightly
-                                            right: isLastDayOfWeek
-                                                ? 0
-                                                : -16, // Bridge securely to next cell
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                color: highlightColor,
-                                                borderRadius: BorderRadius.only(
-                                                  topRight: Radius.circular(
-                                                    isLastDayOfWeek ? 100 : 0,
-                                                  ),
-                                                  bottomRight: Radius.circular(
-                                                    isLastDayOfWeek ? 100 : 0,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                          // 2. Uniform Background for Translucent Circle
-                          if (isInRange || isRangeStart || isRangeEnd)
-                            Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: highlightColor,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-
-                          // 3. The actual day circle (Button & Text)
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? selectedFill
-                                  : Colors.transparent,
-                              border: (isHovered && _showHoverRing)
-                                  ? Border.all(
-                                      color: theme.colorScheme.onSurface,
-                                      width: 2,
-                                    )
-                                  : null,
-                              shape: BoxShape.circle,
-                            ),
-                            clipBehavior: Clip.antiAlias,
-                            child: Material(
-                              color: Colors
-                                  .transparent, // Let Container handle the background color securely
-                              child: InkWell(
-                                onTap: () {
-                                  setState(() {
-                                    _showHoverRing = false;
-                                  });
-                                  _handleDateTap(date);
-                                },
-                                onLongPress: () {
-                                  setState(() {
-                                    _showHoverRing = false;
-                                  });
-                                  _handleDateTap(date, startsRange: true);
-                                },
-                                child: Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        '${date.day}',
-                                        style: theme.textTheme.bodyMedium
-                                            ?.copyWith(
-                                              color: textColor,
-                                              fontWeight: isSelected
-                                                  ? FontWeight.bold
-                                                  : FontWeight.normal,
-                                            ),
-                                      ),
-                                      if (isToday && !isSelected)
-                                        Container(
-                                          width: 4,
-                                          height: 4,
-                                          margin: const EdgeInsets.only(top: 1),
-                                          decoration: BoxDecoration(
-                                            color: accent,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+              // Six square week rows, cut from a strip of weeks that slides
+              // up or down as the month turns. The strip spans the whole
+              // scroll and is built once; a frame only moves it.
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final rowHeight = constraints.maxWidth / 7;
+                  final firstRow = min(_scrollFromWeeks.floor(), 0);
+                  final lastRow = max(_scrollFromWeeks.ceil(), 0) + 5;
+                  final strip = Column(
+                    children: [
+                      for (var row = firstRow; row <= lastRow; row++)
+                        SizedBox(
+                          // Keyed by week, so a row keeps its cells when a
+                          // turn rebuilds the strip around it.
+                          key: ValueKey(
+                            DateTime(
+                              startDate.year,
+                              startDate.month,
+                              startDate.day + row * 7,
                             ),
                           ),
-                        ],
+                          height: rowHeight,
+                          child: Row(
+                            children: [
+                              for (var column = 0; column < 7; column++)
+                                Expanded(
+                                  child: dayCell(
+                                    DateTime(
+                                      startDate.year,
+                                      startDate.month,
+                                      startDate.day + row * 7 + column,
+                                    ),
+                                    column,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  );
+                  return Align(
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      height: (rowHeight * 6).clamp(0, constraints.maxHeight),
+                      child: ClipRect(
+                        child: Stack(
+                          children: [
+                            AnimatedBuilder(
+                              animation: _scroll,
+                              child: strip,
+                              builder: (context, strip) => Positioned(
+                                top: (firstRow - _scrollWeeks) * rowHeight,
+                                left: 0,
+                                right: 0,
+                                height: (lastRow - firstRow + 1) * rowHeight,
+                                child: strip!,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   );

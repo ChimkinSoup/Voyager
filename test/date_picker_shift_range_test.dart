@@ -9,6 +9,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 
+import 'date_picker_settings_scope.dart';
+
 enum _Press { tap, shiftTap, hold }
 
 void main() {
@@ -26,29 +28,31 @@ void main() {
     DateTimeRange? result;
     var closed = false;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => TextButton(
-            onPressed: () async {
-              result = await showDialog<DateTimeRange>(
-                context: context,
-                builder: (_) => Dialog(
-                  child: SizedBox(
-                    width: 320,
-                    height: 380,
-                    child: ValueListenableBuilder<DateTime>(
-                      valueListenable: initial,
-                      builder: (_, start, _) => DateSelectorPopover(
-                        initialStartDate: start,
-                        initialEndDate: start.add(const Duration(hours: 1)),
+      datePickerSettingsScope(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                result = await showDialog<DateTimeRange>(
+                  context: context,
+                  builder: (_) => Dialog(
+                    child: SizedBox(
+                      width: 320,
+                      height: 380,
+                      child: ValueListenableBuilder<DateTime>(
+                        valueListenable: initial,
+                        builder: (_, start, _) => DateSelectorPopover(
+                          initialStartDate: start,
+                          initialEndDate: start.add(const Duration(hours: 1)),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              );
-              closed = true;
-            },
-            child: const Text('open'),
+                );
+                closed = true;
+              },
+              child: const Text('open'),
+            ),
           ),
         ),
       ),
@@ -126,16 +130,18 @@ void main() {
   ) async {
     final picked = <DateTime>[];
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 320,
-            height: 380,
-            child: DateSelectorPopover(
-              initialStartDate: DateTime(2026, 10, 3),
-              initialEndDate: DateTime(2026, 10, 3),
-              inlineMode: true,
-              onDateSelected: picked.add,
+      datePickerSettingsScope(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 320,
+              height: 380,
+              child: DateSelectorPopover(
+                initialStartDate: DateTime(2026, 10, 3),
+                initialEndDate: DateTime(2026, 10, 3),
+                inlineMode: true,
+                onDateSelected: picked.add,
+              ),
             ),
           ),
         ),

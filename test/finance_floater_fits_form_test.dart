@@ -67,7 +67,7 @@ void main() {
                 onClose: () {},
                 // Runs after the row is written, so this is the long
                 // "saved, but the step after it failed" message.
-                onSaved: () async => throw Exception('x' * 120),
+                onSaved: (_) async => throw Exception('x' * 120),
                 onSaveErrorHeight: (h) => saveErrorHeight = h,
                 leading: const FloaterAppIcon(
                   PhosphorIconsRegular.wallet,

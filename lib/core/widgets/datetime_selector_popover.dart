@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
-import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/utils/time_format.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
-import 'package:voyager/core/widgets/select_all_on_click.dart';
-import 'package:voyager/core/widgets/field_scroll_padding.dart';
+import 'package:voyager/core/widgets/time_entry_field.dart';
 import 'package:voyager/core/widgets/time_text_input_formatter.dart';
 import 'package:voyager/core/widgets/voyager_time_picker_spinner.dart';
+
+/// The size to open [DateTimeSelectorPopover] at: tall enough for its
+/// calendar half to fit all six week rows above the Done bar.
+const kDateTimeSelectorPopoverSize = Size(500, 440);
 
 class DateTimeSelectorPopover extends StatefulWidget {
   final DateTime initialDateTime;
@@ -151,91 +153,6 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
         _currentDateTime = parsed;
       });
     }
-  }
-
-  Widget _timeField({
-    required ThemeData theme,
-    required Color focusColor,
-    required TextEditingController controller,
-    required FocusNode focusNode,
-    required String hintText,
-    required VoidCallback onTap,
-    required bool Function() selectAllPending,
-    required ValueChanged<String> onSubmitted,
-  }) {
-    final accent = focusColor;
-    final fieldTheme = theme.copyWith(
-      inputDecorationTheme: const InputDecorationTheme(
-        filled: false,
-        isDense: true,
-        border: InputBorder.none,
-        enabledBorder: InputBorder.none,
-        focusedBorder: InputBorder.none,
-        disabledBorder: InputBorder.none,
-        errorBorder: InputBorder.none,
-        focusedErrorBorder: InputBorder.none,
-      ),
-      splashFactory: NoSplash.splashFactory,
-      highlightColor: Colors.transparent,
-    );
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(VoyagerTheme.fieldRadius),
-        border: Border.all(
-          color: focusNode.hasFocus
-              ? accent
-              : theme.colorScheme.onSurface.withValues(alpha: 0.2),
-          width: focusNode.hasFocus ? 2 : 1,
-        ),
-      ),
-      child: Theme(
-        data: fieldTheme,
-        child: Material(
-          type: MaterialType.transparency,
-          child: SelectAllOnClick(
-            controller: controller,
-            focusNode: focusNode,
-            selectAllPending: selectAllPending,
-            child: TextField(
-              contextMenuBuilder: (context, editableTextState) =>
-                  const SizedBox.shrink(),
-              textAlign: TextAlign.center,
-              controller: controller,
-              focusNode: focusNode,
-              scrollPadding: kVoyagerFieldScrollPadding,
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: focusNode.hasFocus
-                    ? accent
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
-              decoration: InputDecoration(
-                hintText: hintText,
-                hintStyle: theme.textTheme.titleMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                ),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                disabledBorder: InputBorder.none,
-                errorBorder: InputBorder.none,
-                focusedErrorBorder: InputBorder.none,
-                isCollapsed: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 8,
-                ),
-              ),
-              onTap: onTap,
-              onSubmitted: onSubmitted,
-              textInputAction: TextInputAction.done,
-              inputFormatters: [TimeTextInputFormatter()],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   void _submit() {
@@ -414,9 +331,9 @@ class _DateTimeSelectorPopoverState extends State<DateTimeSelectorPopover> {
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 32.0,
                                   ),
-                                  child: _timeField(
-                                    theme: theme,
-                                    focusColor: accent,
+                                  child: TimeEntryField(
+                                    active: _timeFocus.hasFocus,
+                                    accent: accent,
                                     controller: _timeController,
                                     focusNode: _timeFocus,
                                     hintText: 'Time',

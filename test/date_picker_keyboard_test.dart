@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/core/widgets/date_selector_popover.dart';
 
+import 'date_picker_settings_scope.dart';
+
 void main() {
   /// Opens a single-date picker on Oct 3 2026, sends [keys], and returns
   /// what it popped with (null while it is still open).
@@ -18,26 +20,28 @@ void main() {
   }) async {
     DateTimeRange? result;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => TextButton(
-            onPressed: () async {
-              result = await showDialog<DateTimeRange>(
-                context: context,
-                builder: (_) => Dialog(
-                  child: SizedBox(
-                    width: 320,
-                    height: 380,
-                    child: DateSelectorPopover(
-                      initialStartDate: DateTime(2026, 10, 3),
-                      initialEndDate: DateTime(2026, 10, 3),
-                      singleDateMode: true,
+      datePickerSettingsScope(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                result = await showDialog<DateTimeRange>(
+                  context: context,
+                  builder: (_) => Dialog(
+                    child: SizedBox(
+                      width: 320,
+                      height: 380,
+                      child: DateSelectorPopover(
+                        initialStartDate: DateTime(2026, 10, 3),
+                        initialEndDate: DateTime(2026, 10, 3),
+                        singleDateMode: true,
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
-            child: const Text('open'),
+                );
+              },
+              child: const Text('open'),
+            ),
           ),
         ),
       ),

@@ -18963,6 +18963,41 @@ class $TransactionsTableTable extends TransactionsTable
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _subscriptionIdMeta = const VerificationMeta(
+    'subscriptionId',
+  );
+  @override
+  late final GeneratedColumn<String> subscriptionId = GeneratedColumn<String>(
+    'subscription_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _settlesDueDateMeta = const VerificationMeta(
+    'settlesDueDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> settlesDueDate =
+      GeneratedColumn<DateTime>(
+        'settles_due_date',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _paidThroughBeforeMeta = const VerificationMeta(
+    'paidThroughBefore',
+  );
+  @override
+  late final GeneratedColumn<DateTime> paidThroughBefore =
+      GeneratedColumn<DateTime>(
+        'paid_through_before',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -19018,6 +19053,9 @@ class $TransactionsTableTable extends TransactionsTable
     tagsJson,
     occurredAt,
     roomEventId,
+    subscriptionId,
+    settlesDueDate,
+    paidThroughBefore,
     createdAt,
     updatedAt,
     version,
@@ -19094,6 +19132,33 @@ class $TransactionsTableTable extends TransactionsTable
         ),
       );
     }
+    if (data.containsKey('subscription_id')) {
+      context.handle(
+        _subscriptionIdMeta,
+        subscriptionId.isAcceptableOrUnknown(
+          data['subscription_id']!,
+          _subscriptionIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('settles_due_date')) {
+      context.handle(
+        _settlesDueDateMeta,
+        settlesDueDate.isAcceptableOrUnknown(
+          data['settles_due_date']!,
+          _settlesDueDateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('paid_through_before')) {
+      context.handle(
+        _paidThroughBeforeMeta,
+        paidThroughBefore.isAcceptableOrUnknown(
+          data['paid_through_before']!,
+          _paidThroughBeforeMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -19163,6 +19228,18 @@ class $TransactionsTableTable extends TransactionsTable
         DriftSqlType.string,
         data['${effectivePrefix}room_event_id'],
       ),
+      subscriptionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}subscription_id'],
+      ),
+      settlesDueDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}settles_due_date'],
+      ),
+      paidThroughBefore: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}paid_through_before'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -19198,6 +19275,9 @@ class TransactionsTableData extends DataClass
   final String tagsJson;
   final DateTime occurredAt;
   final String? roomEventId;
+  final String? subscriptionId;
+  final DateTime? settlesDueDate;
+  final DateTime? paidThroughBefore;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -19211,6 +19291,9 @@ class TransactionsTableData extends DataClass
     required this.tagsJson,
     required this.occurredAt,
     this.roomEventId,
+    this.subscriptionId,
+    this.settlesDueDate,
+    this.paidThroughBefore,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -19232,6 +19315,15 @@ class TransactionsTableData extends DataClass
     map['occurred_at'] = Variable<DateTime>(occurredAt);
     if (!nullToAbsent || roomEventId != null) {
       map['room_event_id'] = Variable<String>(roomEventId);
+    }
+    if (!nullToAbsent || subscriptionId != null) {
+      map['subscription_id'] = Variable<String>(subscriptionId);
+    }
+    if (!nullToAbsent || settlesDueDate != null) {
+      map['settles_due_date'] = Variable<DateTime>(settlesDueDate);
+    }
+    if (!nullToAbsent || paidThroughBefore != null) {
+      map['paid_through_before'] = Variable<DateTime>(paidThroughBefore);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -19256,6 +19348,15 @@ class TransactionsTableData extends DataClass
       roomEventId: roomEventId == null && nullToAbsent
           ? const Value.absent()
           : Value(roomEventId),
+      subscriptionId: subscriptionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(subscriptionId),
+      settlesDueDate: settlesDueDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(settlesDueDate),
+      paidThroughBefore: paidThroughBefore == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paidThroughBefore),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -19279,6 +19380,11 @@ class TransactionsTableData extends DataClass
       tagsJson: serializer.fromJson<String>(json['tagsJson']),
       occurredAt: serializer.fromJson<DateTime>(json['occurredAt']),
       roomEventId: serializer.fromJson<String?>(json['roomEventId']),
+      subscriptionId: serializer.fromJson<String?>(json['subscriptionId']),
+      settlesDueDate: serializer.fromJson<DateTime?>(json['settlesDueDate']),
+      paidThroughBefore: serializer.fromJson<DateTime?>(
+        json['paidThroughBefore'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -19297,6 +19403,9 @@ class TransactionsTableData extends DataClass
       'tagsJson': serializer.toJson<String>(tagsJson),
       'occurredAt': serializer.toJson<DateTime>(occurredAt),
       'roomEventId': serializer.toJson<String?>(roomEventId),
+      'subscriptionId': serializer.toJson<String?>(subscriptionId),
+      'settlesDueDate': serializer.toJson<DateTime?>(settlesDueDate),
+      'paidThroughBefore': serializer.toJson<DateTime?>(paidThroughBefore),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -19313,6 +19422,9 @@ class TransactionsTableData extends DataClass
     String? tagsJson,
     DateTime? occurredAt,
     Value<String?> roomEventId = const Value.absent(),
+    Value<String?> subscriptionId = const Value.absent(),
+    Value<DateTime?> settlesDueDate = const Value.absent(),
+    Value<DateTime?> paidThroughBefore = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -19326,6 +19438,15 @@ class TransactionsTableData extends DataClass
     tagsJson: tagsJson ?? this.tagsJson,
     occurredAt: occurredAt ?? this.occurredAt,
     roomEventId: roomEventId.present ? roomEventId.value : this.roomEventId,
+    subscriptionId: subscriptionId.present
+        ? subscriptionId.value
+        : this.subscriptionId,
+    settlesDueDate: settlesDueDate.present
+        ? settlesDueDate.value
+        : this.settlesDueDate,
+    paidThroughBefore: paidThroughBefore.present
+        ? paidThroughBefore.value
+        : this.paidThroughBefore,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -19347,6 +19468,15 @@ class TransactionsTableData extends DataClass
       roomEventId: data.roomEventId.present
           ? data.roomEventId.value
           : this.roomEventId,
+      subscriptionId: data.subscriptionId.present
+          ? data.subscriptionId.value
+          : this.subscriptionId,
+      settlesDueDate: data.settlesDueDate.present
+          ? data.settlesDueDate.value
+          : this.settlesDueDate,
+      paidThroughBefore: data.paidThroughBefore.present
+          ? data.paidThroughBefore.value
+          : this.paidThroughBefore,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -19365,6 +19495,9 @@ class TransactionsTableData extends DataClass
           ..write('tagsJson: $tagsJson, ')
           ..write('occurredAt: $occurredAt, ')
           ..write('roomEventId: $roomEventId, ')
+          ..write('subscriptionId: $subscriptionId, ')
+          ..write('settlesDueDate: $settlesDueDate, ')
+          ..write('paidThroughBefore: $paidThroughBefore, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -19383,6 +19516,9 @@ class TransactionsTableData extends DataClass
     tagsJson,
     occurredAt,
     roomEventId,
+    subscriptionId,
+    settlesDueDate,
+    paidThroughBefore,
     createdAt,
     updatedAt,
     version,
@@ -19400,6 +19536,9 @@ class TransactionsTableData extends DataClass
           other.tagsJson == this.tagsJson &&
           other.occurredAt == this.occurredAt &&
           other.roomEventId == this.roomEventId &&
+          other.subscriptionId == this.subscriptionId &&
+          other.settlesDueDate == this.settlesDueDate &&
+          other.paidThroughBefore == this.paidThroughBefore &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -19416,6 +19555,9 @@ class TransactionsTableCompanion
   final Value<String> tagsJson;
   final Value<DateTime> occurredAt;
   final Value<String?> roomEventId;
+  final Value<String?> subscriptionId;
+  final Value<DateTime?> settlesDueDate;
+  final Value<DateTime?> paidThroughBefore;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -19430,6 +19572,9 @@ class TransactionsTableCompanion
     this.tagsJson = const Value.absent(),
     this.occurredAt = const Value.absent(),
     this.roomEventId = const Value.absent(),
+    this.subscriptionId = const Value.absent(),
+    this.settlesDueDate = const Value.absent(),
+    this.paidThroughBefore = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -19445,6 +19590,9 @@ class TransactionsTableCompanion
     this.tagsJson = const Value.absent(),
     required DateTime occurredAt,
     this.roomEventId = const Value.absent(),
+    this.subscriptionId = const Value.absent(),
+    this.settlesDueDate = const Value.absent(),
+    this.paidThroughBefore = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -19465,6 +19613,9 @@ class TransactionsTableCompanion
     Expression<String>? tagsJson,
     Expression<DateTime>? occurredAt,
     Expression<String>? roomEventId,
+    Expression<String>? subscriptionId,
+    Expression<DateTime>? settlesDueDate,
+    Expression<DateTime>? paidThroughBefore,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -19480,6 +19631,9 @@ class TransactionsTableCompanion
       if (tagsJson != null) 'tags_json': tagsJson,
       if (occurredAt != null) 'occurred_at': occurredAt,
       if (roomEventId != null) 'room_event_id': roomEventId,
+      if (subscriptionId != null) 'subscription_id': subscriptionId,
+      if (settlesDueDate != null) 'settles_due_date': settlesDueDate,
+      if (paidThroughBefore != null) 'paid_through_before': paidThroughBefore,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -19497,6 +19651,9 @@ class TransactionsTableCompanion
     Value<String>? tagsJson,
     Value<DateTime>? occurredAt,
     Value<String?>? roomEventId,
+    Value<String?>? subscriptionId,
+    Value<DateTime?>? settlesDueDate,
+    Value<DateTime?>? paidThroughBefore,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -19512,6 +19669,9 @@ class TransactionsTableCompanion
       tagsJson: tagsJson ?? this.tagsJson,
       occurredAt: occurredAt ?? this.occurredAt,
       roomEventId: roomEventId ?? this.roomEventId,
+      subscriptionId: subscriptionId ?? this.subscriptionId,
+      settlesDueDate: settlesDueDate ?? this.settlesDueDate,
+      paidThroughBefore: paidThroughBefore ?? this.paidThroughBefore,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -19547,6 +19707,15 @@ class TransactionsTableCompanion
     if (roomEventId.present) {
       map['room_event_id'] = Variable<String>(roomEventId.value);
     }
+    if (subscriptionId.present) {
+      map['subscription_id'] = Variable<String>(subscriptionId.value);
+    }
+    if (settlesDueDate.present) {
+      map['settles_due_date'] = Variable<DateTime>(settlesDueDate.value);
+    }
+    if (paidThroughBefore.present) {
+      map['paid_through_before'] = Variable<DateTime>(paidThroughBefore.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -19576,6 +19745,9 @@ class TransactionsTableCompanion
           ..write('tagsJson: $tagsJson, ')
           ..write('occurredAt: $occurredAt, ')
           ..write('roomEventId: $roomEventId, ')
+          ..write('subscriptionId: $subscriptionId, ')
+          ..write('settlesDueDate: $settlesDueDate, ')
+          ..write('paidThroughBefore: $paidThroughBefore, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -59481,6 +59653,9 @@ typedef $$TransactionsTableTableCreateCompanionBuilder =
       Value<String> tagsJson,
       required DateTime occurredAt,
       Value<String?> roomEventId,
+      Value<String?> subscriptionId,
+      Value<DateTime?> settlesDueDate,
+      Value<DateTime?> paidThroughBefore,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -59497,6 +59672,9 @@ typedef $$TransactionsTableTableUpdateCompanionBuilder =
       Value<String> tagsJson,
       Value<DateTime> occurredAt,
       Value<String?> roomEventId,
+      Value<String?> subscriptionId,
+      Value<DateTime?> settlesDueDate,
+      Value<DateTime?> paidThroughBefore,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -59550,6 +59728,21 @@ class $$TransactionsTableTableFilterComposer
 
   ColumnFilters<String> get roomEventId => $composableBuilder(
     column: $table.roomEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get subscriptionId => $composableBuilder(
+    column: $table.subscriptionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get settlesDueDate => $composableBuilder(
+    column: $table.settlesDueDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get paidThroughBefore => $composableBuilder(
+    column: $table.paidThroughBefore,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -59623,6 +59816,21 @@ class $$TransactionsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get subscriptionId => $composableBuilder(
+    column: $table.subscriptionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get settlesDueDate => $composableBuilder(
+    column: $table.settlesDueDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get paidThroughBefore => $composableBuilder(
+    column: $table.paidThroughBefore,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -59680,6 +59888,21 @@ class $$TransactionsTableTableAnnotationComposer
 
   GeneratedColumn<String> get roomEventId => $composableBuilder(
     column: $table.roomEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get subscriptionId => $composableBuilder(
+    column: $table.subscriptionId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get settlesDueDate => $composableBuilder(
+    column: $table.settlesDueDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get paidThroughBefore => $composableBuilder(
+    column: $table.paidThroughBefore,
     builder: (column) => column,
   );
 
@@ -59744,6 +59967,9 @@ class $$TransactionsTableTableTableManager
                 Value<String> tagsJson = const Value.absent(),
                 Value<DateTime> occurredAt = const Value.absent(),
                 Value<String?> roomEventId = const Value.absent(),
+                Value<String?> subscriptionId = const Value.absent(),
+                Value<DateTime?> settlesDueDate = const Value.absent(),
+                Value<DateTime?> paidThroughBefore = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -59758,6 +59984,9 @@ class $$TransactionsTableTableTableManager
                 tagsJson: tagsJson,
                 occurredAt: occurredAt,
                 roomEventId: roomEventId,
+                subscriptionId: subscriptionId,
+                settlesDueDate: settlesDueDate,
+                paidThroughBefore: paidThroughBefore,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -59774,6 +60003,9 @@ class $$TransactionsTableTableTableManager
                 Value<String> tagsJson = const Value.absent(),
                 required DateTime occurredAt,
                 Value<String?> roomEventId = const Value.absent(),
+                Value<String?> subscriptionId = const Value.absent(),
+                Value<DateTime?> settlesDueDate = const Value.absent(),
+                Value<DateTime?> paidThroughBefore = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -59788,6 +60020,9 @@ class $$TransactionsTableTableTableManager
                 tagsJson: tagsJson,
                 occurredAt: occurredAt,
                 roomEventId: roomEventId,
+                subscriptionId: subscriptionId,
+                settlesDueDate: settlesDueDate,
+                paidThroughBefore: paidThroughBefore,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

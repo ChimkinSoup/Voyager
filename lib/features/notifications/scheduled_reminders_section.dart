@@ -666,7 +666,7 @@ class _ScheduledReminderEditorState
   }
 
   /// The date picker's own size, in the dialog where there is room for it.
-  static const _oncePickerSize = Size(500, 380);
+  static const _oncePickerSize = kDateTimeSelectorPopoverSize;
 
   Future<void> _pickTime(BuildContext buttonContext) async {
     if (_kind == ReminderScheduleKind.once) {

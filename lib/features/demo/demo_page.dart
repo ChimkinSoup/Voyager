@@ -1,86 +1,91 @@
 import 'package:flutter/material.dart';
-import 'package:voyager/features/life_tracker/life_tree_canvas.dart';
-import 'package:voyager/features/life_tracker/life_tree_geometry.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/app/providers.dart';
+import 'package:voyager/features/demo/weeping_cherry_canvas.dart';
+import 'package:voyager/features/life_tracker/life_tracker_stats.dart';
 
-/// Demo page dedicated to showcasing the 1:1 algorithmic Sumi-e Cherry Blossom Tree.
-class DemoPage extends StatefulWidget {
+/// Demo page showcasing a watercolour weeping cherry in a night sky, its
+/// petals one per week of a life and the weeks lived fallen to the ground.
+class DemoPage extends ConsumerStatefulWidget {
   const DemoPage({super.key});
 
   @override
-  State<DemoPage> createState() => _DemoPageState();
+  ConsumerState<DemoPage> createState() => _DemoPageState();
 }
 
-class _DemoPageState extends State<DemoPage> {
-  late final LifeTreeCanvasController _controller;
+class _DemoPageState extends ConsumerState<DemoPage> {
+  static const _inkColor = Color(0xFFE8E2D8);
 
-  static const _paperColor = Color(0xFFF4F2EB);
-  static const _inkColor = Color(0xFF221E1B);
-  static const _grassColor = Color(0xFF869775);
-  static const _accentColor = Color(0xFF7C9EFF);
-
-  static const _leafColors = <Color>[
-    Color(0xFFEB8B9C),
-    Color(0xFFF2A4B2),
-    Color(0xFFE57F91),
-    Color(0xFFDE7285),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = LifeTreeCanvasController();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  int _replayCount = 0;
 
   @override
   Widget build(BuildContext context) {
-    final geometry = generateLifeTreeGeometry();
+    final settings = ref.watch(settingsProvider.settled);
+    // Null until settings load, so the tree doesn't fall for zero weeks and
+    // then again for the real count.
+    final weeks = settings.hasValue
+        ? weeksLivedFor(settings.value!.birthDate, DateTime.now()) ?? 0
+        : null;
 
-    return Container(
-      color: _paperColor,
+    final chrome = BoxDecoration(
+      color: weepingNightColor.withValues(alpha: 0.85),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: _inkColor.withValues(alpha: 0.15)),
+    );
+
+    return SizedBox.expand(
       child: Stack(
         children: [
           Positioned.fill(
-            child: LifeTreeCanvas(
-              geometry: geometry,
-              leafColors: _leafColors,
-              inkColor: _inkColor,
-              paperColor: _paperColor,
-              grassColor: _grassColor,
-              groundedLeafIndices: const {},
-              controller: _controller,
-              accentColor: _accentColor,
+            child: WeepingCherryCanvas(
+              weeksLived: weeks,
+              replayCount: _replayCount,
             ),
           ),
           Positioned(
             left: 24,
             top: 24,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: _paperColor.withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _inkColor.withValues(alpha: 0.15)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                child: Text(
-                  'Demo — 1:1 Sumi-e Cherry Blossom Tree',
-                  style: TextStyle(
-                    color: _inkColor,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
+            child: Row(
+              children: [
+                DecoratedBox(
+                  decoration: chrome,
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    child: Text(
+                      'Demo — Watercolour Weeping Cherry',
+                      style: TextStyle(
+                        color: _inkColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                if ((weeks ?? 0) > 0) ...[
+                  const SizedBox(width: 8),
+                  Tooltip(
+                    message: 'Replay the weeks falling',
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => setState(() => _replayCount++),
+                        child: Ink(
+                          decoration: chrome,
+                          padding: const EdgeInsets.all(9),
+                          child: Icon(
+                            PhosphorIconsRegular.arrowCounterClockwise,
+                            size: 16,
+                            color: _inkColor.withValues(alpha: 0.85),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
