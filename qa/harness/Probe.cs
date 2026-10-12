@@ -1,7 +1,7 @@
 // Win32 driver for the QA harness. Loaded by voy.ps1 via Add-Type.
 // Every input path is guarded: it only fires when the foreground window
-// belongs to a voyager.exe process, so a stray keystroke can never reach
-// another app. Captures are of Voyager's own window only.
+// belongs to a voyager.exe process (the one in TargetPid, when set), so a
+// stray keystroke can never reach another app or another Voyager instance. Captures are of Voyager's own window only.
 using System;
 using System.Diagnostics;
 using System.Drawing;
@@ -56,8 +56,14 @@ public static class Voy
 
     // ---- window discovery ------------------------------------------------
 
+    /// The one voyager.exe to drive, when set (voy.ps1 sets it from the PID
+    /// launch.ps1 recorded). With two instances running, a name check alone
+    /// would let input meant for one land in the other.
+    public static int TargetPid = 0;
+
     static bool IsVoyagerPid(uint pid)
     {
+        if (TargetPid != 0) return pid == (uint)TargetPid;
         try { return Process.GetProcessById((int)pid).ProcessName.Equals("voyager", StringComparison.OrdinalIgnoreCase); }
         catch { return false; }
     }

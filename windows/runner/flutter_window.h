@@ -11,7 +11,8 @@
 #include "win32_window.h"
 
 // Registered-message name a second launch broadcasts to ask the running
-// instance to show its main window.
+// instance to show its main window. Scoped per dev profile (see
+// ProfileScopedName), as is kQuitMessage.
 inline constexpr wchar_t kShowMainWindowMessage[] = L"Voyager.ShowMainWindow";
 
 // Registered-message name scripts/build_release.ps1 broadcasts to quit the

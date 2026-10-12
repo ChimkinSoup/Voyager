@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/platform/dev_profile.dart';
 import 'package:voyager/domain/repositories/media_storage.dart';
 import 'package:voyager/domain/services/media_ingest.dart';
 
@@ -19,8 +20,9 @@ class FirebaseMediaStorage implements MediaStorage {
     FirebaseStorage? storage,
     FirebaseAuth? auth,
     String? Function()? currentUid,
-  }) : _storage = storage ?? FirebaseStorage.instance,
-       _auth = auth ?? FirebaseAuth.instance,
+  }) : _storage =
+           storage ?? FirebaseStorage.instanceFor(app: voyagerFirebaseApp),
+       _auth = auth ?? FirebaseAuth.instanceFor(app: voyagerFirebaseApp),
        _currentUid = currentUid;
 
   final FirebaseStorage _storage;

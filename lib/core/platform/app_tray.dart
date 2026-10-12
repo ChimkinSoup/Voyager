@@ -1,4 +1,5 @@
 import 'package:tray_manager/tray_manager.dart';
+import 'package:voyager/core/platform/dev_profile.dart';
 
 /// The notification-area icon that keeps Voyager reachable while its window
 /// is hidden — which is also what keeps the global hotkeys alive.
@@ -14,7 +15,7 @@ class AppTray with TrayListener {
   Future<void> install() async {
     trayManager.addListener(this);
     await trayManager.setIcon('assets/app_icon.ico');
-    await trayManager.setToolTip('Voyager');
+    await trayManager.setToolTip('Voyager$devProfileSuffix');
     await trayManager.setContextMenu(
       Menu(
         items: [

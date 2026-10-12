@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:vector_map_tiles/vector_map_tiles.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
@@ -50,9 +50,8 @@ class _ForceOfflineAwareTiles extends NetworkVectorTileProvider {
 /// Where downloaded areas are kept: a folder each, holding `area.json` and
 /// its tiles as `z/x/y.pbf`. Tests point it at a temporary folder.
 final rankingOfflineMapsDirectoryProvider = FutureProvider<Directory>(
-  (ref) async => Directory(
-    p.join((await getApplicationSupportDirectory()).path, 'offline_maps'),
-  ),
+  (ref) async =>
+      Directory(p.join((await appSupportRoot()).path, 'offline_maps')),
 );
 
 /// The areas downloaded for offline use, newest first.

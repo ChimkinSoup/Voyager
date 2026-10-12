@@ -23,6 +23,8 @@ Setup session: 2026-09-27 (Phase 0). App build: `main` @ `e3f10f5`, Flutter debu
 | Launch at login | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` value `Voyager` = `"C:\Users\Juno\AppData\Local\Programs\Voyager\voyager.exe" --hidden` (Juno's installed release) | No |
 | Flutter run output (FlutterErrors, `[sync]` lines) | `qa/logs/run-<timestamp>.log` | n/a |
 
+**Dev profile `qa` (QA sessions since 2026-10-12, `DEV_PROFILE_HLD.md`).** A debug Voyager run with `VOYAGER_PROFILE=qa` keeps everything apart from the normal instance above. Data, media, backups and drafts live in `%APPDATA%\Voyager\voyager-profile-qa\`. Logs go to `…\voyager-profile-qa\logs\`, not Documents. The Firestore cache is `%LOCALAPPDATA%\firestore\voyager-qa\voyager-db9de\`. The sign-in is `voyager-db9de.firebase.auth/voyager-qa[0..n]`. The app output is `qa/logs/run-qa-<timestamp>.exe.log`. A profile has its own `deviceId` and registers as `ZephyrusG14 [qa]`. It has no global hotkeys, the "Start with Windows" switch is disabled, and folder backups never run. All verified with profile `b` on 2026-10-12.
+
 **Device-local settings.** These `settings_table` columns are left out of `settingsSyncPayload`: pane widths (journal list, dream split, edit side panel, workout library), `lastSeenNavPage`, `lastViewed{Journal,Todo,Calendar}Id`, `journalShowAllEntries`, `todoShowAllTasks`, `todoCompletedSectionExpanded`, `calendarShowAllCalendars`, LeetCode cheat-sheet tab and collapsed sections, all `dev*` flags (including `devOpenWeatherApiKey`), the weather cache, `deviceId` and `syncBackfillVersion`. Every other setting syncs.
 
 **Local-only data check (done at setup).** Before the first wipe, Juno's local DB had outbox = 0 rows, 0 sync conflicts, and all 32 media assets `uploaded`, so nothing unsynced was lost. The local-only files (auto-backup zips, drafts/prefs JSON, session checkpoints, Documents logs) were copied to **`C:\Users\Juno\VoyagerQA-localonly-backup-2026-09-27\`**, outside the repo. Juno's local data was then wiped, as agreed.
@@ -31,21 +33,23 @@ Setup session: 2026-09-27 (Phase 0). App build: `main` @ `e3f10f5`, Flutter debu
 
 All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by literal path, from the repo root.
 
+**Which instance.** Every script below acts on one Voyager instance. `-Profile <name>` names a dev profile; without it, the script uses `$env:VOYAGER_QA_PROFILE`; with neither, it uses the normal instance. `-Profile default` always means the normal instance, even while the variable is set, so a two-instance test can reach A and B in one call. The shared logic is in `instance.ps1`. PID files hold the PID and the process start time, so a PID Windows reuses after a crash is never taken for the old instance. In a profile session, **start every PowerShell call with `$env:VOYAGER_QA_PROFILE = 'qa'`**. Tool calls don't share shell state, and a bare `stop.ps1` with no profile kills every `voyager.exe`, Juno's installed release included. `voy.ps1` sends input only to the one instance's PID, so with two instances running a click can't land in the other one.
+
 | Script | Does |
 |---|---|
-| `launch.ps1` | `flutter run -d windows --debug` in the background. Log goes to `qa/logs/run-*.log`; waits for the VM service and writes its ws URI to `qa/logs/vm_uri.txt`. ~1 min with a warm build. Passes the Geoapify map key from the git-ignored `<repo>\dart_defines.json`; `-NoMapKey` leaves it out. |
-| `stop.ps1` | Kills every `voyager.exe` (the debug run *and* the installed release) plus the `flutter run` tool process. Leaves the Dart LSP alone. |
-| `reset.ps1` | **Baseline reset**: stop, delete the Firebase sign-in creds (= sign out), delete `%APPDATA%\Voyager\voyager` and the Firestore cache. Verifies each step. |
+| `launch.ps1 [-Profile n] [-Build]` | Normal instance: `flutter run -d windows --debug` in the background. Log goes to `qa/logs/run-*.log`; waits for the VM service and writes its ws URI to `qa/logs/vm_uri.txt` and the app's PID to `pid.txt`. ~1 min with a warm build. Passes the Geoapify map key from the git-ignored `<repo>\dart_defines.json`; `-NoMapKey` leaves it out. Profile: runs the already-built `build\windows\x64\runner\Debug\voyager.exe` directly with `VOYAGER_PROFILE` set and a fixed VM service port, then runs `flutter attach` to it. The exe alone can't evaluate expressions; attach brings the compiler. Writes `vm_uri_<n>.txt` and `pid_<n>.txt`. `-Build` runs `flutter build windows --debug` first. Both the normal launch and `-Build` rebuild the debug exe, so both refuse while any debug `voyager.exe` (a profile included) is running from it. |
+| `stop.ps1 [-Profile n]` | No profile: kills every `voyager.exe` (debug runs, profiles *and* the installed release) plus the `flutter run`/`flutter attach` tool processes. Leaves the Dart LSP alone. With a profile: only that profile and its attach. `-Profile default`: only the normal instance and its `flutter run`. |
+| `reset.ps1 [-Profile n]` | **Baseline reset**: stop, delete the Firebase sign-in creds (= sign out), delete the data dir and the Firestore cache. Verifies each step. Touches only that instance's dir, cache and creds, and stops only that instance. |
 | `sync_gate.ps1 -DataDir …` | Called by `reset.ps1` before it stops the app, signs out or deletes anything; `reset.ps1` also refuses while Voyager is still running. Throws unless the app's `sync_check.json` says nothing is unsynced **and** the database hasn't been written since that check. `reset.ps1 -Force` skips it. |
 | `login.ps1 -Email voyager-qa-NNN@example.com [-SignUp] [-Password …]` | Types into the login page (maximized coordinates), then checks the account over the VM service. Refuses any non-QA e-mail. |
 | `guard.ps1` | Exit 0 only if the running app is signed into `voyager-qa-*@example.com`. **Run before any destructive action.** Exit 3 = signed into another account: STOP. |
-| `session_start.ps1 -Email … [-SignUp]` | reset → launch → login → guard |
-| `session_end.ps1` | Relaunches Voyager if it crashed or was closed (so the account can be read), runs guard, waits (≤120 s) for the outbox to drain, then reset (with `-Force` only if guard confirmed a QA account) → prints `SIGNED-OUT` |
-| `whoami.ps1` | Offline: is *any* Firebase sign-in persisted? (`SIGNED-OUT` / `SIGNED-IN-UNKNOWN-ACCOUNT`) |
+| `session_start.ps1 -Email … [-SignUp] [-Profile n]` | reset → launch (`-Build` in a profile) → login → guard. **Profile `qa` by default**; `-Profile default` uses the normal instance. |
+| `session_end.ps1 [-Profile n]` | Relaunches Voyager if it crashed or was closed (so the account can be read), runs guard, waits (≤120 s) for the outbox to drain, then reset (with `-Force` only if guard confirmed a QA account) → prints `SIGNED-OUT`. Profile `qa` by default. |
+| `whoami.ps1` | Offline: is a Firebase sign-in persisted for this instance? (`SIGNED-OUT` / `SIGNED-IN-UNKNOWN-ACCOUNT`) |
 | `evalc.ps1 -Lib <lib> -Tag <t> -BodyFile <file> [-VmExe …]` | FV session: runs Dart statements in the running app with `c` = its ProviderContainer, to seed data through the app's own repositories and uploads. Reports `SEED-OK`/`SEED-ERR <tag>` in the run log. Example bodies in `qa/steps/fv-seed*.dart.txt`. QA accounts only; guard first. |
 | `fs_snapshot.sh <uid> <out.json>` (Bash) | FV session: read-only REST snapshot of 38 of a QA account's Firestore collections (every document's `_serverWrittenAt`), to diff before/after a re-login. |
 | `voy.ps1` | Input + capture, background by default (below) |
-| `vm.ps1 whoami \| shot <png> \| eval <libSuffix> <expr> \| find [q] \| locate <n> <q> \| field \| scroll x y n` | Dart VM service client (wraps `vm.dart`; compiles it to `qa/logs/vm.exe` on first use, ~0.1 s per call after) |
+| `vm.ps1 [-Profile n] whoami \| pid \| shot <png> \| eval <libSuffix> <expr> \| find [q] \| locate <n> <q> \| field \| scroll x y n` | Dart VM service client (wraps `vm.dart`; compiles it to `qa/logs/vm.exe` on first use, ~0.1 s per call after) |
 | `Bg.cs` | 2026-10-12: background side of `voy.ps1` (posted messages to the FLUTTERVIEW; C# 5 like `Probe.cs`). Its header explains the modifier and mouse-leave workarounds. |
 | `vimcase.ps1 <cases.tsv> [-VmExe …]` | Phase 3 field probe: Esc, set the focused field's text + caret over the VM service, send real keys, read back `selection\|mode\|length\|text` (non-ASCII as `\u{hex}`). Works on any focused text field (Vim ON or OFF). Case format in its header. |
 | `Probe.cs` | Win32 side of `voy.ps1` (compiled by Add-Type; must stay C# 5: no `=>` members, no `$""`). Since Phase 5, `click`/`move`/`wheel`/`drag` also refuse a point outside Voyager's client area or covered by another window. |
@@ -54,9 +58,10 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 ### SESSION START (procedure)
 
 1. `& "C:\Users\Juno\Code\Voyager\qa\harness\session_start.ps1" -Email voyager-qa-NNN@example.com` (add `-SignUp` for a new account; take the next unused number from the account table below and add it there).
-   - This fully quits Voyager (including Juno's installed release), signs out whatever account is persisted (Juno signs the real account back in between sessions), wipes all local app data, launches the debug build and signs the QA account in.
+   - **Since 2026-10-12 this runs in dev profile `qa`** (Storage above). It wipes and signs out only the `qa` profile, rebuilds the debug exe from the working tree, launches it beside whatever Juno is running, and signs the QA account in. Juno's install is never stopped, signed out or wiped, and the sync gate never applies to Juno's data. The rebuild fails while any *debug* `voyager.exe` is running; Juno's installed release doesn't block it. From here on, start every PowerShell call with `$env:VOYAGER_QA_PROFILE = 'qa'` (Harness above).
+   - A profile has no global hotkeys, no "Start with Windows" and no folder backups. For a phase that tests those, run the old way with `-Profile default` (on both `session_start.ps1` and `session_end.ps1`). That fully quits Voyager (including Juno's installed release), signs out whatever account is persisted (Juno signs the real account back in between sessions), wipes all of the normal instance's local data, launches the debug build and signs the QA account in.
    - **Never type Juno's real credentials, never click "Continue with Google", never modify the real account.**
-   - If Juno's real account was used since the last session, the reset refuses until Juno has run Dev page → **Check, then quit (before a wipe)** in Voyager. Only that check proves nothing would be lost; an empty outbox doesn't (the 2026-09-27 wipe). Don't bypass it with `-Force`: tell Juno.
+   - (Normal instance only.) If Juno's real account was used since the last session, the reset refuses until Juno has run Dev page → **Check, then quit (before a wipe)** in Voyager. Only that check proves nothing would be lost; an empty outbox doesn't (the 2026-09-27 wipe). Don't bypass it with `-Force`: tell Juno.
 2. It must end with `GUARD OK: voyager-qa-NNN@example.com`. Anything else: stop.
 3. Reusing an account: its data comes back from its cloud copy through the startup pull. Wait ~10 s, then check the expected rows in SQLite (read-only) before relying on them.
 4. Check the **standard test configuration** (TEST_PLAN.md): Juno's background settings are the app defaults since 2026-09-28, so a fresh account already has them. Check `settings_table.theme_mode='dark'`, `geometric_wave_scatter_mode=1`, `geometric_wave_enabled=0`, `geometric_texture_scale=15.0`. An account created before that date holds the old defaults: reset them in Dev → Geometric texture / wave tuning → Reset to defaults (petals by hand), or use a fresh account.
@@ -65,16 +70,16 @@ All scripts are Windows PowerShell 5.1. Run them with the **PowerShell tool** by
 
 ### SESSION END (procedure). Run it even if the phase stopped early
 
-1. `& "C:\Users\Juno\Code\Voyager\qa\harness\session_end.ps1"`: lets the outbox drain so the QA account's cloud copy is complete, quits Voyager, signs out, wipes local data. It must print `SIGNED-OUT`.
-2. Local data is wiped at the end on purpose. The local DB isn't per-account, so leftover QA rows could merge into Juno's real account when they sign back in on this PC.
-3. Juno signs back in themselves. Don't do it for them.
+1. `& "C:\Users\Juno\Code\Voyager\qa\harness\session_end.ps1"` (add `-Profile default` if the session ran in the normal instance): lets the outbox drain so the QA account's cloud copy is complete, quits the QA instance, signs it out, wipes its local data. It must print `SIGNED-OUT`.
+2. Local data is wiped at the end on purpose. In the normal instance the local DB isn't per-account, so leftover QA rows could merge into Juno's real account when they sign back in on this PC. In profile `qa` the wipe keeps the next session's start clean.
+3. After a normal-instance session, Juno signs back in themselves. Don't do it for them.
 
 ### BASELINE RESET (procedure)
 
 `reset.ps1`, then `launch.ps1`, then `login.ps1`; in one go, that's `session_start.ps1`. Tested at setup (2026-09-27), in order: reset from Juno's live state → launch → sign-up qa-001 → session_end → session_start qa-001 (sign-in path) → guard OK → session_end → `SIGNED-OUT`.
 "Baseline" = a brand-new account (`-SignUp`) on an empty local DB. A reused account is baseline plus whatever that account put in its cloud copy.
 
-**Mid-session reset without changing account** (e.g. "does it survive a restart?"): `stop.ps1`, then `launch.ps1`. The persisted sign-in and local DB survive. For a cold-cache restart of the same account (a full pull from the cloud), run `session_start.ps1 -Email <same>`.
+**Mid-session reset without changing account** (e.g. "does it survive a restart?"): `stop.ps1`, then `launch.ps1` (with `$env:VOYAGER_QA_PROFILE = 'qa'` set in that call, in a profile session). The persisted sign-in and local DB survive. For a cold-cache restart of the same account (a full pull from the cloud), run `session_start.ps1 -Email <same>`.
 
 ### Background mode (default since 2026-10-12): don't take Juno's screen
 

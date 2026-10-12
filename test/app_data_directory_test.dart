@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:voyager/core/platform/app_data_directory.dart';
+import 'package:voyager/core/platform/dev_profile.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -121,5 +122,40 @@ void main() {
     await appDataDirectory();
 
     expect(await appDataMovePending(), false);
+  });
+
+  group('in a dev profile', () {
+    setUp(() => devProfileForTesting = 'b');
+    tearDown(() => devProfileForTesting = null);
+
+    test('uses its own sibling root and moves nothing into it', () async {
+      await write(p.join(documents, 'voyager.sqlite'), 'db');
+      await write(p.join(documents, 'media', 'a.png'), 'a');
+      final legacy = p.join(root.path, 'com.example', 'voyager');
+      await write(p.join(legacy, 'backups', 'backup.zip'), 'zip');
+
+      expect(await appDataMovePending(), false);
+      final dir = await appDataDirectory();
+
+      final profileRoot = p.join(root.path, 'Voyager', 'voyager-profile-b');
+      expect(dir.path, profileRoot);
+      expect((await appSupportRoot()).path, profileRoot);
+      expect(await dir.list().isEmpty, true);
+      // Nothing of the normal instance's legacy data was touched.
+      expect(await File(p.join(documents, 'voyager.sqlite')).exists(), true);
+      expect(await File(p.join(documents, 'media', 'a.png')).exists(), true);
+      expect(await File(p.join(legacy, 'backups', 'backup.zip')).exists(), true);
+      expect(await Directory(support).list().isEmpty, true);
+    });
+
+    test('logs under its root instead of Documents', () async {
+      expect(
+        (await logsDirectory()).path,
+        p.join(root.path, 'Voyager', 'voyager-profile-b', 'logs'),
+      );
+      devProfileForTesting = null;
+      expect((await logsDirectory()).path, documents);
+      expect((await appSupportRoot()).path, support);
+    });
   });
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:voyager/core/platform/dev_profile.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -43,11 +44,11 @@ Future<void> configureDesktopWindow({required bool startHidden}) async {
   try {
     await windowManager.ensureInitialized();
 
-    const windowOptions = WindowOptions(
+    final windowOptions = WindowOptions(
       size: Size(1280, 800),
       minimumSize: kMainWindowMinimumSize,
       center: true,
-      title: 'Voyager',
+      title: 'Voyager$devProfileSuffix',
       titleBarStyle: TitleBarStyle.hidden,
     );
 

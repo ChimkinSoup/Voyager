@@ -12,6 +12,7 @@ import 'package:voyager/core/motion/modal_scrim_observer.dart';
 import 'package:voyager/core/notifications/notification_history.dart';
 import 'package:voyager/core/notifications/recording_scaffold_messenger.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
+import 'package:voyager/core/platform/dev_profile.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/reminders/reminder_engine.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
@@ -88,7 +89,11 @@ class _VoyagerAppState extends ConsumerState<VoyagerApp>
         .referenceAdds
         .listen((image) => unawaited(rankings.markInProgressForImage(image)));
     ref.read(autoBackupServiceProvider).start();
-    if (isWindows) ref.read(folderBackupServiceProvider).start();
+    // Not in a dev profile: it would archive another store into the folder the
+    // normal instance backs up to.
+    if (isWindows && devProfile == null) {
+      ref.read(folderBackupServiceProvider).start();
+    }
     _selectionOnResume.install();
     WindowsKeyboardReconciler.instance.install();
     if (desktopWindowChromeActive) {

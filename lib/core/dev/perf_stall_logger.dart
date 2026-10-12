@@ -8,7 +8,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'package:voyager/core/platform/app_data_directory.dart';
 
 const _logFileName = 'perf_stall.log';
 
@@ -314,7 +314,7 @@ class PerfStallLogger extends ChangeNotifier {
   /// `flutter test`.
   @visibleForTesting
   static Future<String> Function() directory = () async =>
-      (await getApplicationDocumentsDirectory()).path;
+      (await logsDirectory()).path;
 
   static Future<String> _pathFor(String name) async =>
       p.join(await directory(), name);

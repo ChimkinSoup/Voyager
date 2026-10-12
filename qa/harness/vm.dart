@@ -3,6 +3,7 @@
 //   dart run qa/harness/vm.dart eval <libSuffix> <expression>
 //   dart run qa/harness/vm.dart shot <out.png>
 //   dart run qa/harness/vm.dart whoami
+//   dart run qa/harness/vm.dart pid                 the app's process id
 //   dart run qa/harness/vm.dart find [query]        on-screen text / tooltips / ValueKeys
 //   dart run qa/harness/vm.dart locate <n> <query>  "x y" of the n-th clickable exact match
 //   dart run qa/harness/vm.dart field               focused field: selection|vimMode|length|text
@@ -19,7 +20,8 @@
 // on a miss lists similar labels including NOT-CLICKABLE ones (hidden pages
 // the shell keeps alive, text under a dialog, scrolled out of view).
 //
-// The ws URI is read from qa/logs/vm_uri.txt. `eval` runs the expression in
+// The ws URI is read from qa/logs/vm_uri.txt, or vm_uri_<name>.txt when
+// VOYAGER_QA_PROFILE names a dev profile (see instance.ps1). `eval` runs the expression in
 // the first loaded library whose URI ends with <libSuffix>, so it sees only
 // that library's imports. Wrap state changes in `Future(() => ...)` so they
 // don't land mid-build. `shot` renders the Flutter layer tree, so it works
@@ -138,9 +140,12 @@ Future<List<_Hit>> _dump() async {
 String show(Map<String, dynamic> res) => res['valueAsString']?.toString() ?? '${res['kind']} ${res['class']?['name'] ?? ''}';
 
 Future<void> main(List<String> args) async {
-  final uriFile = File('qa/logs/vm_uri.txt');
+  final profile = Platform.environment['VOYAGER_QA_PROFILE'] ?? '';
+  final uriFile = File(
+    profile.isEmpty ? 'qa/logs/vm_uri.txt' : 'qa/logs/vm_uri_$profile.txt',
+  );
   if (!uriFile.existsSync()) {
-    stderr.writeln('qa/logs/vm_uri.txt missing — launch the app with qa/harness/launch.ps1');
+    stderr.writeln('${uriFile.path} missing — launch the app with qa/harness/launch.ps1');
     exit(2);
   }
   _ws = await WebSocket.connect(uriFile.readAsStringSync().trim());
@@ -159,8 +164,10 @@ Future<void> main(List<String> args) async {
     switch (args.first) {
       case 'eval':
         print(show(await evalIn(args[1], args.sublist(2).join(' '))));
+      case 'pid':
+        print(vm['pid']);
       case 'whoami':
-        final r = await evalIn('data/remote/firebase_auth_repository.dart', 'FirebaseAuth.instance.currentUser?.email ?? "SIGNED-OUT"');
+        final r = await evalIn('app/providers.dart', 'FirebaseAuth.instanceFor(app: voyagerFirebaseApp).currentUser?.email ?? "SIGNED-OUT"');
         final email = show(r);
         print(email);
         // 3 = signed into something other than a QA account: stop testing.

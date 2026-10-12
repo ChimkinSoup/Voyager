@@ -4,7 +4,14 @@ A debug-only switch that lets a second (or third) Voyager run beside the normal 
 
 Related: `windows/runner/main.cpp`, `windows/runner/flutter_window.{h,cpp}`, `lib/main.dart`, `lib/core/platform/app_data_directory.dart`, `lib/app/providers.dart`, `lib/app/voyager_app.dart`, `lib/core/platform/launch_at_login.dart`, `lib/core/platform/app_tray.dart`, `lib/core/reminders/device_registration.dart`, `lib/core/sync/local_account_store.dart`, `qa/harness/*`.
 
-Status: **draft, not implemented.** Written 2026-10-10 for implementation later. Open questions in §10.
+Status: **implemented 2026-10-12**, verified per §8 with profile `b` beside the normal instance. §10 is resolved: 1, 2 and 4 as decided below, and 3 yes (QA sessions run in profile `qa` by default). Where the implementation differs from the draft:
+
+- **Debug builds on both sides.** Dart reads the variable under `kDebugMode`, not `!kReleaseMode`. The runner's `#ifdef NDEBUG` also covers profile builds, and the two sides must agree, or a profile-mode build would split its data without splitting its mutex.
+- **Firestore needs its platform instance set** (§5.5). `FirebaseFirestore.instanceFor(app:)` goes through `FirebaseFirestorePlatform.instance`, which is built lazily on `Firebase.app()`, the `[DEFAULT]` app a profile never creates. Every Firestore call then threw `[core/no-app]`. `main()` now sets that instance to a `MethodChannelFirebaseFirestore` for the profile's app. Auth and Storage build theirs with no app and need nothing. `cloud_firestore_platform_interface` became a direct dependency for this.
+- **The quit message is scoped too.** `Voyager.Quit`, which `build_release.ps1` broadcasts, becomes `Voyager.Quit.<name>` like the show message, so replacing the installed copy doesn't close a running profile.
+- **Expression evaluation** (§7). The exe run directly has no expression compiler, so `eval`, `whoami` and `evalc` failed against it. `launch.ps1 -Profile` therefore runs `flutter attach --debug-url` against it and uses the VM service URI that attach prints. The switches `FLUTTER_ENGINE_SWITCH_n` = `vm-service-port=<port>` and `disable-service-auth-codes` work on the pinned Flutter (3.44.6).
+- **The normal instance's PID** comes from the VM service (`vm.ps1 pid`). `launch.ps1` writes it to `pid.txt` beside `pid_<name>.txt`.
+- **On-disk names, as observed:** `%LOCALAPPDATA%\firestore\voyager-b\voyager-db9de` and Credential Manager `voyager-db9de.firebase.auth/voyager-b[0..1]`, matching §5.5.
 
 ---
 

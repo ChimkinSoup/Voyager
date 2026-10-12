@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:voyager/core/platform/dev_profile.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/session_resume/session_checkpoint_controller.dart';
@@ -296,7 +297,7 @@ mixin LeetCodeScratchHost<T extends ConsumerStatefulWidget>
 var _legacyScratchSwept = false;
 
 Future<void> _discardLegacyScratchFile() async {
-  if (_legacyScratchSwept) return;
+  if (_legacyScratchSwept || devProfile != null) return;
   _legacyScratchSwept = true;
   try {
     final dir = await getApplicationDocumentsDirectory();

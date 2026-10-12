@@ -6,6 +6,41 @@
 #include <windows.h>
 
 #include <iostream>
+#include <string>
+
+const std::wstring& DevProfile() {
+  static const std::wstring profile = [] {
+#ifdef NDEBUG
+    return std::wstring();
+#else
+    const DWORD size = ::GetEnvironmentVariableW(L"VOYAGER_PROFILE", nullptr, 0);
+    if (size == 0) {
+      return std::wstring();
+    }
+    std::wstring value(size, L'\0');
+    value.resize(::GetEnvironmentVariableW(L"VOYAGER_PROFILE", value.data(), size));
+    return value;
+#endif
+  }();
+  return profile;
+}
+
+bool IsValidDevProfile(const std::wstring& profile) {
+  if (profile.empty() || profile.size() > 16 || profile == L"default") {
+    return false;
+  }
+  for (const wchar_t c : profile) {
+    if (!((c >= L'a' && c <= L'z') || (c >= L'0' && c <= L'9'))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::wstring ProfileScopedName(const wchar_t* name) {
+  const std::wstring& profile = DevProfile();
+  return profile.empty() ? std::wstring(name) : std::wstring(name) + L"." + profile;
+}
 
 void CreateAndAttachConsole() {
   if (::AllocConsole()) {

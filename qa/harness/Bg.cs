@@ -6,7 +6,10 @@
 // - Modifiers: Flutter reads Ctrl/Shift/Alt from the thread's key state, not
 //   from the posted messages. Chords therefore attach to Voyager's input thread
 //   and set its key state around the posted keys (Voyager's thread only; the
-//   foreground app's state is untouched). The runner's TranslateMessage turns
+//   foreground app's state is untouched). The state is held until Voyager's
+//   thread has pumped through the keys (WM_NULL round trips), not for a fixed
+//   time: with the thread busy, a 120 ms hold dropped Ctrl in 17 of 40 Ctrl+A
+//   presses (2026-10-12). The runner's TranslateMessage turns
 //   the posted WM_KEYDOWNs into WM_CHAR, so Shift also gives capitals/symbols.
 // - Mouse: once Voyager sees a posted move while the real cursor is elsewhere,
 //   Windows soon sends WM_MOUSELEAVE, which cancels a pointer that is still
@@ -38,6 +41,7 @@ public static class Bg
     [DllImport("user32.dll")] static extern bool GetKeyboardState(byte[] s);
     [DllImport("user32.dll")] static extern bool SetKeyboardState(byte[] s);
     [DllImport("kernel32.dll")] static extern uint SetThreadExecutionState(uint flags);
+    [DllImport("user32.dll")] static extern IntPtr SendMessageTimeout(IntPtr h, uint msg, IntPtr w, IntPtr l, uint flags, uint timeoutMs, out IntPtr result);
 
     const uint SWP_NOSIZE = 0x1, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10;
 
@@ -122,6 +126,11 @@ public static class Bg
         var st = new byte[256];
         try
         {
+            // Flutter reads the modifiers when it handles each key, which can be
+            // well after posting when Voyager's thread is busy (a long frame, startup):
+            // a fixed hold let Ctrl+A arrive as a plain "a". So post only once the
+            // thread is pumping, and release only after it has pumped through them.
+            Pump(v);
             GetKeyboardState(st);
             foreach (var m in mods) Hold(st, m, true);
             SetKeyboardState(st);
@@ -129,7 +138,10 @@ public static class Bg
             PostMessage(v, downMsg, (IntPtr)key, KeyL(key, false, alt));
             PostMessage(v, upMsg, (IntPtr)key, KeyL(key, true, alt));
             for (int i = mods.Length - 1; i >= 0; i--) PostMessage(v, upMsg, (IntPtr)mods[i], KeyL(mods[i], true, alt));
-            Thread.Sleep(120); // the state must still be held when Voyager reads the messages
+            // Each round trip returns once the thread has called GetMessage again,
+            // so one per posted message (plus the WM_CHAR TranslateMessage adds).
+            for (int i = 0; i < 2 * mods.Length + 3; i++) Pump(v);
+            Thread.Sleep(30);
         }
         finally
         {
@@ -137,6 +149,14 @@ public static class Bg
             SetKeyboardState(st);
             AttachThreadInput(me, vt, false);
         }
+    }
+
+    /// Returns once Voyager's thread next pumps its message queue (a WM_NULL
+    /// round trip), or after 10 s if it's hung.
+    static void Pump(IntPtr v)
+    {
+        IntPtr r;
+        SendMessageTimeout(v, 0x0000 /* WM_NULL */, IntPtr.Zero, IntPtr.Zero, 0x2 /* SMTO_ABORTIFHUNG */, 10000, out r);
     }
 
     static void Hold(byte[] st, byte vk, bool on)

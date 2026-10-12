@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/constants/build_info.dart';
 import 'package:voyager/core/constants/hotkey_defaults.dart';
+import 'package:voyager/core/platform/dev_profile.dart';
 import 'package:voyager/core/platform/launch_at_login.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/utils/key_binding.dart';
@@ -1489,6 +1490,16 @@ class _LaunchAtLoginTileState extends State<_LaunchAtLoginTile> {
 
   @override
   Widget build(BuildContext context) {
+    // The Run entry is machine-wide: a dev profile would repoint the normal
+    // instance's autostart.
+    if (devProfile != null) {
+      return SwitchListTile(
+        title: const Text('Start with Windows'),
+        subtitle: Text('Not available in dev profile $devProfile'),
+        value: false,
+        onChanged: null,
+      );
+    }
     return SwitchListTile(
       title: const Text('Start with Windows'),
       subtitle: Text(
@@ -2173,10 +2184,11 @@ class _HotkeySubtitle extends StatelessWidget {
         text: '$text\n',
         children: [
           TextSpan(
-            text:
-                'Another app is using this shortcut, so it does nothing in '
-                'Voyager. Close that app and come back to Voyager to pick it '
-                'up.',
+            text: devProfile != null
+                ? 'Hotkeys are off in dev profile $devProfile.'
+                : 'Another app is using this shortcut, so it does nothing in '
+                      'Voyager. Close that app and come back to Voyager to '
+                      'pick it up.',
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ],

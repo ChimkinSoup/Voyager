@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/platform/dev_profile.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/dev/journal_debug_logger.dart';
 import 'package:voyager/core/layout/window_size_class.dart';
@@ -36,7 +37,6 @@ import 'package:voyager/core/widgets/voyager_dialog.dart';
 import 'package:voyager/core/theme/voyager_menu_theme.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:voyager/core/widgets/confirm_dialog.dart';
 import 'package:voyager/core/widgets/voyager_popup_menu_item.dart';
@@ -3938,14 +3938,17 @@ extension on _JournalPageState {
     _remoteCompareOpen = true;
     final scaffoldMsg = ScaffoldMessenger.of(context);
     try {
-      final userId = FirebaseAuth.instance.currentUser?.uid;
+      final userId = FirebaseAuth.instanceFor(
+        app: voyagerFirebaseApp,
+      ).currentUser?.uid;
       if (userId == null) {
         scaffoldMsg.showSnackBar(
           const SnackBar(content: Text('Not signed in')),
         );
         return;
       }
-      final doc = await FirebaseFirestore.instance
+      final doc = await ref
+          .read(firestoreProvider)
           .collection('users/$userId/${FirestoreCollections.journalEntries}')
           .doc(entry.id)
           .get();

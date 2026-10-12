@@ -9,7 +9,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:voyager/app/auth_notifier.dart';
 import 'package:voyager/core/constants/default_color_palette.dart';
 import 'package:voyager/core/dev/cache_status.dart';
@@ -49,6 +48,7 @@ import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/core/platform/app_data_directory.dart';
+import 'package:voyager/core/platform/dev_profile.dart';
 import 'package:voyager/core/platform/platform_info.dart';
 import 'package:voyager/core/widgets/geometric_texture.dart';
 import 'package:voyager/core/widgets/geometric_texture_settings.dart';
@@ -463,9 +463,8 @@ final folderBackupServiceProvider = ChangeNotifierProvider<FolderBackupService>(
   (ref) {
     return FolderBackupService(
       // Device-local, beside Voyager's own backups' state (§10.1).
-      directory: () async => Directory(
-        p.join((await getApplicationSupportDirectory()).path, 'folder_backups'),
-      ),
+      directory: () async =>
+          Directory(p.join((await appSupportRoot()).path, 'folder_backups')),
       freeBytes: (path) => ref.read(mediaFileStoreProvider).freeBytesAt(path),
       notify: (key, title, body) => ref
           .read(reminderOsNotifierProvider)
@@ -482,7 +481,9 @@ final folderBackupServiceProvider = ChangeNotifierProvider<FolderBackupService>(
 );
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  return FirebaseAuthRepository(FirebaseAuth.instance);
+  return FirebaseAuthRepository(
+    FirebaseAuth.instanceFor(app: voyagerFirebaseApp),
+  );
 });
 
 /// Checks a signed-in account against the owner of this device's local data
@@ -507,7 +508,7 @@ final localAccountStoreProvider = Provider<LocalAccountStore>((ref) {
 });
 
 Future<Directory> _backupsRoot() async =>
-    Directory(p.join((await getApplicationSupportDirectory()).path, 'backups'));
+    Directory(p.join((await appSupportRoot()).path, 'backups'));
 
 final deviceIdProvider = StateProvider<String>((ref) => _fallbackDeviceId);
 
@@ -540,7 +541,9 @@ final syncActivityProvider = ChangeNotifierProvider<SyncActivityController>((
 /// leave the app's overflow path as the one unbounded writer.
 final firestoreWriteGateProvider = Provider<FirestoreWriteGate>((ref) {
   final gate = FirestoreWriteGate(
-    waitForPendingWrites: FirebaseFirestore.instance.waitForPendingWrites,
+    waitForPendingWrites: FirebaseFirestore.instanceFor(
+      app: voyagerFirebaseApp,
+    ).waitForPendingWrites,
   );
   ref.onDispose(gate.dispose);
   return gate;
@@ -548,7 +551,7 @@ final firestoreWriteGateProvider = Provider<FirestoreWriteGate>((ref) {
 
 /// Overridable so tests can build a real [FirestoreSyncRepository] on a fake.
 final firestoreProvider = Provider<FirebaseFirestore>(
-  (ref) => FirebaseFirestore.instance,
+  (ref) => FirebaseFirestore.instanceFor(app: voyagerFirebaseApp),
 );
 
 final syncRepositoryProvider = Provider<SyncRepository>((ref) {
@@ -631,7 +634,9 @@ final weatherApiClientProvider = Provider<WeatherApiClient>((ref) {
       ),
     );
   }
-  return CloudFunctionWeatherClient.fromFunctions(FirebaseFunctions.instance);
+  return CloudFunctionWeatherClient.fromFunctions(
+    FirebaseFunctions.instanceFor(app: voyagerFirebaseApp),
+  );
 });
 
 final weatherServiceProvider = Provider<WeatherService>((ref) {

@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'package:voyager/core/platform/app_data_directory.dart';
 
 const _logFileName = 'sync_compare.log';
 const _maxLogBytes = 2 * 1024 * 1024;
@@ -13,7 +13,7 @@ class SyncCompareLogger extends ChangeNotifier {
   Future<void>? _writeChain = Future<void>.value();
 
   Future<String> logFilePath() async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await logsDirectory();
     return p.join(dir.path, _logFileName);
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
+import 'package:voyager/core/platform/dev_profile.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:window_manager/window_manager.dart';
@@ -90,7 +91,7 @@ class _DesktopWindowTitleBarState extends State<DesktopWindowTitleBar>
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Voyager',
+                        'Voyager$devProfileSuffix',
                         style: theme.textTheme.labelLarge?.copyWith(
                           color: onSurface.withValues(alpha: 0.72),
                         ),

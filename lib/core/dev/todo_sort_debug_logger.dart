@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -75,7 +75,7 @@ class TodoSortDebugLogger extends ChangeNotifier {
   }
 
   Future<String> logFilePath() async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await logsDirectory();
     return p.join(dir.path, _logFileName);
   }
 

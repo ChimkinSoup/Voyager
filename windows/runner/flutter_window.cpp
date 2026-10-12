@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "utils.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project,
                              bool start_hidden)
@@ -32,8 +33,10 @@ bool FlutterWindow::OnCreate() {
       std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
           flutter_controller_->engine()->messenger(), "voyager/instance",
           &flutter::StandardMethodCodec::GetInstance());
-  show_main_window_message_ = ::RegisterWindowMessage(kShowMainWindowMessage);
-  quit_message_ = ::RegisterWindowMessage(kQuitMessage);
+  show_main_window_message_ = ::RegisterWindowMessage(
+      ProfileScopedName(kShowMainWindowMessage).c_str());
+  quit_message_ =
+      ::RegisterWindowMessage(ProfileScopedName(kQuitMessage).c_str());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   if (start_hidden_) {

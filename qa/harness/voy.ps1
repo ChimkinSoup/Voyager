@@ -6,6 +6,10 @@
 #   voy.ps1 run <steps.txt>             run a scenario file in ONE process (preferred)
 #   voy.ps1 do "<step>; <step>; ..."    same, inline
 #
+# -Profile <name> (else $env:VOYAGER_QA_PROFILE) drives that dev profile's
+# window; without one, the normal instance's. Input only ever reaches the one
+# voyager.exe picked (by the PID launch.ps1 recorded), never another instance.
+#
 # Two input modes. Each run starts in bg:
 #   bg  Messages posted to Voyager's own window (Bg.cs). No foreground needed, works
 #       covered, parked off-screen or locked, can't reach another app. Clicks/drags
@@ -42,7 +46,7 @@
 #   zorder                     top-to-bottom order of form A, form B and Voyager's main window
 #   tray-menu                  fg: open the real tray context menu (posted right-click; activates Voyager)
 #   other-grab <chord> [id]    register a global hotkey to it (another process owns the combo)
-param([Parameter(Position = 0)][string]$Cmd = 'status', [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]]$Rest)
+param([Parameter(Position = 0)][string]$Cmd = 'status', [Parameter(Position = 1, ValueFromRemainingArguments = $true)][string[]]$Rest, [string]$Profile)
 
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -52,13 +56,19 @@ if (-not ('Bg' -as [type])) {
   Add-Type -Path (Join-Path $here 'Probe.cs'), (Join-Path $here 'OtherApp.cs'), (Join-Path $here 'Bg.cs') -ReferencedAssemblies System.Drawing, System.Windows.Forms
 }
 $vm = Join-Path $here 'vm.ps1'
+. (Join-Path $here 'instance.ps1')
+$inst = Get-QaInstance $Profile
+$procs = @(Get-QaProcess $inst)
+if ($procs.Count -gt 1) { throw "more than one voyager.exe could be $($inst.Label) ($($procs.Id -join ', ')): stop the extras, or relaunch with launch.ps1" }
+# -1 matches no process: with this instance not running, nothing is driven.
+[Voy]::TargetPid = if ($procs.Count -eq 1) { $procs[0].Id } else { -1 }
 $script:mode = 'bg'
 $fgOnly = @('hotkey', 'place', 'maximize', 'restore', 'minimize', 'other-open', 'other-click', 'other-type', 'other-topmost',
   'otherb-open', 'otherb-click', 'zorder', 'other-grab', 'tray-open', 'tray-menu', 'tray-quit')
 
 # Runs vm.ps1 and fails the run on a non-zero exit (stale vm_uri.txt, eval error, capture timeout).
 function Invoke-Vm {
-  $out = @(& $vm @args)
+  $out = @(& $vm -Profile $inst.Arg @args)
   if ($LASTEXITCODE -ne 0) { throw "vm.ps1 $($args[0]): $($out -join "`n")" }
   $out
 }
@@ -93,7 +103,7 @@ function Invoke-Step([string]$line) {
       if ($q -match '\s+right$') { $right = $true; $q = $q -replace '\s+right$', '' }
       if ($q -match '\s+#(\d+)$') { $n = [int]$Matches[1]; $q = $q -replace '\s+#\d+$', '' }
       $q = $q.Trim('"', "'")
-      $out = @(& $vm locate $n $q)
+      $out = @(& $vm -Profile $inst.Arg locate $n $q)
       if ($LASTEXITCODE -ne 0) { throw "tap: $($out -join "`n")" }
       $xy = $out[-1].Split(' ')
       if ($bg) { [Bg]::Click([int]$xy[0], [int]$xy[1], $right, 1) } else { [Voy]::Click([int]$xy[0], [int]$xy[1], $right, 1) }

@@ -26,6 +26,9 @@ dependencies:
   firebase_core: ^4.11.0
   firebase_auth: ^6.5.3
   cloud_firestore: ^6.6.0
+  # Direct only so a dev profile can point FirebaseFirestorePlatform at its
+  # own app (see main.dart). Whatever cloud_firestore resolves to.
+  cloud_firestore_platform_interface: ^8.0.3
   cloud_functions: ^6.3.3
   phosphoricons_flutter: ^1.0.0
   oauth2: ^2.0.5

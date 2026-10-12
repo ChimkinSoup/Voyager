@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore_platform_interface/cloud_firestore_platform_interface.dart';
+// ignore: implementation_imports, not exported; see the dev-profile note in main().
+import 'package:cloud_firestore_platform_interface/src/method_channel/method_channel_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
@@ -11,6 +14,7 @@ import 'package:voyager/app/providers.dart';
 import 'package:voyager/app/voyager_app.dart';
 import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/platform/desktop_window.dart';
+import 'package:voyager/core/platform/dev_profile.dart';
 import 'package:voyager/core/platform/launch_at_login.dart';
 import 'package:voyager/core/platform/windows_keyboard_workaround.dart';
 import 'package:voyager/core/reminders/device_registration.dart';
@@ -27,6 +31,7 @@ import 'package:voyager/features/finance/finance_ui_prefs.dart';
 import 'package:voyager/features/settings/settings_tab_memory.dart';
 import 'package:voyager/features/hotkeys/floaters/floater_controller.dart';
 import 'package:voyager/features/hotkeys/hotkey_service.dart';
+import 'package:voyager/features/hotkeys/quick_capture.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 import 'package:voyager/domain/services/contribution_room_writer.dart';
@@ -48,11 +53,27 @@ Future<void> main([List<String> args = const []]) async {
   await appDataDirectory();
   await NotificationHistory.instance.load();
   await SettingsTabMemory.load();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  try {
-    await hotKeyManager.unregisterAll();
-  } catch (_) {
-    // Ignore if another instance owns global hotkeys.
+  voyagerFirebaseApp = await Firebase.initializeApp(
+    name: devProfile == null ? null : 'voyager-$devProfile',
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  if (devProfile != null) {
+    // FirebaseFirestore.instanceFor reaches every app through this default
+    // platform instance, which is otherwise built lazily on Firebase.app():
+    // the [DEFAULT] app, which a profile never creates. Auth and Storage
+    // build theirs with no app, so need nothing.
+    FirebaseFirestorePlatform.instance = MethodChannelFirebaseFirestore(
+      app: voyagerFirebaseApp,
+    );
+  }
+  // A dev profile registers no hotkeys, and must not drop the normal
+  // instance's.
+  if (devProfile == null) {
+    try {
+      await hotKeyManager.unregisterAll();
+    } catch (_) {
+      // Ignore if another instance owns global hotkeys.
+    }
   }
   // The bootstrap initializes the outbox a frame after launch; an upload that
   // fails before then is held for it rather than forgotten.
@@ -262,7 +283,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     final db = ref.read(databaseProvider);
     OutboxSyncWorker.initialize(
       db,
-      FirebaseFirestore.instance,
+      FirebaseFirestore.instanceFor(app: voyagerFirebaseApp),
       () => ref.read(authNotifierProvider).userId,
       // The same gate the sync repository writes through: the bound is on the
       // one Firestore write stream, not on either caller.
@@ -301,13 +322,17 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     _devFlagsLoaded = true;
     try {
       final floaters = ref.read(floaterControllerProvider);
-      final taken = await _hotkeys.register(
-        journalHotkey: settings.journalHotkey,
-        todoHotkey: settings.todoHotkey,
-        financeHotkey: settings.financeHotkey,
-        reminderHotkey: settings.reminderHotkey,
-        onHotkey: floaters.onHotkey,
-      );
+      // The hotkeys belong to the normal instance: a dev profile registers
+      // none, and Settings shows them all as unavailable.
+      final taken = devProfile != null
+          ? {...QuickCaptureKind.values}
+          : await _hotkeys.register(
+              journalHotkey: settings.journalHotkey,
+              todoHotkey: settings.todoHotkey,
+              financeHotkey: settings.financeHotkey,
+              reminderHotkey: settings.reminderHotkey,
+              onHotkey: floaters.onHotkey,
+            );
       if (mounted) ref.read(unavailableHotkeysProvider.notifier).state = taken;
     } catch (error, stackTrace) {
       FlutterError.reportError(
@@ -604,7 +629,7 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
   void onWindowFocus() => unawaited(_retryTakenHotkeys());
 
   Future<void> _retryTakenHotkeys() async {
-    if (!mounted) return;
+    if (!mounted || devProfile != null) return;
     final unavailable = ref.read(unavailableHotkeysProvider.notifier);
     if (unavailable.state.isEmpty) return;
     final taken = await _hotkeys.retryTaken();

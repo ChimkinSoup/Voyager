@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:voyager/core/dev/error_logger.dart';
+import 'package:voyager/core/platform/dev_profile.dart';
 
 /// Where Voyager keeps its database, media and state files: the app-support
 /// directory (`%APPDATA%\Voyager\voyager` on Windows).
@@ -12,15 +13,43 @@ import 'package:voyager/core/dev/error_logger.dart';
 /// OneDrive, and cloud-syncing a live SQLite file corrupts it. The first call
 /// moves anything still there. Logs stay in Documents, where they're easy to
 /// find.
+///
+/// In a dev profile it's that profile's own root (see [appSupportRoot]), and
+/// nothing is moved: a profile has no legacy data, and must never adopt the
+/// normal instance's.
 Future<Directory> appDataDirectory() => _resolved ??= _resolve();
 Future<Directory>? _resolved;
 
 @visibleForTesting
 void resetAppDataDirectory() => _resolved = null;
 
+/// The app-support directory, or in a dev profile its sibling
+/// `voyager-profile-<name>`. Everything Voyager keeps on disk other than logs
+/// goes under this, so a profile shares nothing writable with the normal
+/// instance.
+Future<Directory> appSupportRoot() async {
+  final support = await getApplicationSupportDirectory();
+  final profile = devProfile;
+  if (profile == null) return support;
+  return Directory(
+    p.join(p.dirname(support.path), 'voyager-profile-$profile'),
+  ).create(recursive: true);
+}
+
+/// Where the dev logs go: Documents for the normal instance, where they're
+/// easy to find, and `<root>\logs` in a dev profile, so two instances never
+/// append to the same file.
+Future<Directory> logsDirectory() async {
+  if (devProfile == null) return getApplicationDocumentsDirectory();
+  return Directory(
+    p.join((await appSupportRoot()).path, 'logs'),
+  ).create(recursive: true);
+}
+
 /// Whether [appDataDirectory] still has something to move, so startup can
 /// show that it's working rather than sit with no window.
 Future<bool> appDataMovePending() async {
+  if (devProfile != null) return false;
   final target = await getApplicationSupportDirectory();
   final documents = await getApplicationDocumentsDirectory();
   if (Platform.isWindows &&
@@ -66,6 +95,7 @@ const _movedEntries = [
 const _errorNotSameDevice = 17;
 
 Future<Directory> _resolve() async {
+  if (devProfile != null) return appSupportRoot();
   final target = await getApplicationSupportDirectory();
   final documents = await getApplicationDocumentsDirectory();
 

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:voyager/core/platform/dev_profile.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -23,8 +24,11 @@ DevicePlatform currentDevicePlatform() {
 }
 
 /// A first guess at the device's name, which the user can rename in Settings.
-/// Android reports no useful hostname, so it gets a plain label.
-String defaultDeviceName() {
+/// Android reports no useful hostname, so it gets a plain label. A dev
+/// profile's name is appended, so it's told apart from the normal instance.
+String defaultDeviceName() => '${_platformDeviceName()}$devProfileSuffix';
+
+String _platformDeviceName() {
   final platform = currentDevicePlatform();
   if (platform == DevicePlatform.android) return 'Android device';
   try {

@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'package:voyager/core/platform/app_data_directory.dart';
 import 'package:voyager/core/constants/build_info.dart';
 
 const _logFileName = 'voyager_errors.log';
@@ -151,7 +151,7 @@ class ErrorLogger {
   /// `flutter test`.
   @visibleForTesting
   static Future<String> Function() directory = () async =>
-      (await getApplicationDocumentsDirectory()).path;
+      (await logsDirectory()).path;
 
   static String _buildMode() =>
       kDebugMode ? 'debug' : (kProfileMode ? 'profile' : 'release');

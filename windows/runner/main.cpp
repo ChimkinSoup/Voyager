@@ -13,10 +13,23 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // second process would fail to register the hotkeys and open the same
   // database. A second launch hands the running instance the foreground and
   // asks it to show its window instead. The handle is held until exit.
-  ::CreateMutex(nullptr, FALSE, L"Local\\Voyager.SingleInstance");
+  // A dev profile (DEV_PROFILE_HLD.md) has its own data, so it's its own
+  // instance, with its own mutex and messages.
+  const std::wstring& profile = DevProfile();
+  if (!profile.empty() && !IsValidDevProfile(profile)) {
+    const std::wstring text =
+        L"VOYAGER_PROFILE must be 1-16 characters of a-z and 0-9, and not "
+        L"\"default\": \"" + profile + L"\"";
+    ::MessageBoxW(nullptr, text.c_str(), L"Voyager", MB_OK | MB_ICONERROR);
+    return EXIT_FAILURE;
+  }
+  ::CreateMutex(nullptr, FALSE,
+                ProfileScopedName(L"Local\\Voyager.SingleInstance").c_str());
   if (::GetLastError() == ERROR_ALREADY_EXISTS) {
     ::AllowSetForegroundWindow(ASFW_ANY);
-    ::PostMessage(HWND_BROADCAST, ::RegisterWindowMessage(kShowMainWindowMessage),
+    ::PostMessage(HWND_BROADCAST,
+                  ::RegisterWindowMessage(
+                      ProfileScopedName(kShowMainWindowMessage).c_str()),
                   0, 0);
     return EXIT_SUCCESS;
   }

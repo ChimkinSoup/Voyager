@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'package:voyager/core/platform/dev_profile.dart';
 
 /// Calls Firebase HTTPS callable functions over HTTP.
 ///
@@ -12,7 +13,7 @@ class HttpCallableClient {
     this.region = 'us-central1',
     FirebaseAuth? auth,
     http.Client? httpClient,
-  }) : _auth = auth ?? FirebaseAuth.instance,
+  }) : _auth = auth ?? FirebaseAuth.instanceFor(app: voyagerFirebaseApp),
        _http = httpClient ?? http.Client();
 
   final String projectId;
