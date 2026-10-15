@@ -356,9 +356,17 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
     );
     if (planned.isEmpty) return false;
 
+    // The same ids on every device, so two devices starting the day before
+    // either hears of the other write one workout between them rather than
+    // two rivals that each log only their own sets (BUG-252). The day's
+    // first only: once it is finished or deleted, a second workout that day
+    // is a session of its own.
+    final sharedId = workoutDaySessionId(plan.id, dayIndex, date);
+    final shared = await _repo.getSession(sharedId) == null;
+
     final now = utcNow();
     final session = WorkoutSession(
-      id: newId(),
+      id: shared ? sharedId : newId(),
       planId: plan.id,
       dayIndex: dayIndex,
       date: workoutStoredDate(date),
@@ -373,6 +381,7 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
           exercise: exercise,
           order: order,
           now: now,
+          sharedIds: shared,
         ),
     ];
 
@@ -918,18 +927,27 @@ Future<List<Exercise>> plannedExercisesForDay(
 /// One set log per set [exercise] prescribes, as placement [order] of
 /// [sessionId], with the planned numbers copied in so the wheels have
 /// something to default to.
+/// The id of the first workout started from day [dayIndex] of [planId] on
+/// [date]'s calendar day: derived rather than random, so every device starting
+/// it names the same session (see [WorkoutSessionController._startNew]).
+String workoutDaySessionId(String planId, int dayIndex, DateTime date) =>
+    '${planId}_${dayIndex}_${workoutStoredDate(date).microsecondsSinceEpoch}';
+
+/// [sharedIds] derives each set's id from the session, the placement and the
+/// set, for a session whose id every device derives alike.
 List<WorkoutSetLog> materialiseSetLogs({
   required String sessionId,
   required Exercise exercise,
   required int order,
   required DateTime now,
+  bool sharedIds = false,
 }) {
   WorkoutSetLog log(int setIndex, SetSegment top, List<SetSegment> drops) {
     // The reps wheel bottoms out at 1, so a 0 here showed a rep that was
     // then logged as none.
     final reps = top.reps.clamp(1, kMaxReps);
     return WorkoutSetLog(
-      id: newId(),
+      id: sharedIds ? '${sessionId}_${order}_$setIndex' : newId(),
       sessionId: sessionId,
       exerciseId: exercise.id,
       exerciseOrder: order,

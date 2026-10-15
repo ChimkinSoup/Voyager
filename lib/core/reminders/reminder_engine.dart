@@ -87,8 +87,10 @@ class ReminderEngine extends ChangeNotifier {
   Map<String, TodoTask>? _tasks;
   Map<String, CalendarEvent>? _events;
 
-  /// Set when this device's registration was removed in Settings.
-  var _removed = false;
+  /// Set when this device's registration was removed in Settings. Null until
+  /// the registration has been read: evaluated before then, a removed device
+  /// took itself for a target and raised the OS alert at launch (BUG-253).
+  bool? _removed;
 
   Map<String, ReminderSourceView> _views = const {};
   List<ReminderSourceView> _due = const [];
@@ -129,7 +131,8 @@ class ReminderEngine extends ChangeNotifier {
 
   /// Feeds the engine. A null argument leaves that input as it was; nothing is
   /// evaluated until every input has arrived once, so a bell is never judged
-  /// against a task list that has not loaded yet.
+  /// against a task list that has not loaded yet, nor anything on a device
+  /// whose registration has not.
   void updateInputs({
     List<ScheduledReminderRule>? rules,
     List<EntityReminder>? bells,
@@ -157,11 +160,13 @@ class ReminderEngine extends ChangeNotifier {
     final states = _states;
     final tasks = _tasks;
     final events = _events;
+    final removed = _removed;
     if (rules == null ||
         bells == null ||
         states == null ||
         tasks == null ||
-        events == null) {
+        events == null ||
+        removed == null) {
       return;
     }
     final now = _clock();
@@ -177,7 +182,7 @@ class ReminderEngine extends ChangeNotifier {
         title: rule.title,
         subtitle: rule.body,
         rule: rule,
-        targetsThisDevice: !_removed && rule.targets(deviceId),
+        targetsThisDevice: !removed && rule.targets(deviceId),
         evaluation: rule.enabled
             ? evaluateReminder(
                 latest: latestRuleOccurrence(rule, now),
@@ -205,7 +210,7 @@ class ReminderEngine extends ChangeNotifier {
                 ? null
                 : 'Due ${reminderWhenLabel(base, now)}',
             task: task,
-            targetsThisDevice: !_removed,
+            targetsThisDevice: !removed,
             evaluation: evaluateReminder(
               latest: latestTodoOccurrence(task, bell, now),
               nextAfter: (after) => nextTodoFire(task, bell, after),
@@ -234,7 +239,7 @@ class ReminderEngine extends ChangeNotifier {
                 ? 'All day'
                 : 'Starts ${reminderWhenLabel(occurrence.fireAt.add(Duration(minutes: bell.offsetMinutes)), now)}',
             event: event,
-            targetsThisDevice: !_removed,
+            targetsThisDevice: !removed,
             evaluation: evaluation,
           );
         case ReminderSourceKind.scheduledRule:
@@ -582,6 +587,8 @@ final reminderEngineProvider = ChangeNotifierProvider<ReminderEngine>((ref) {
     engine.updateInputs(events: next.valueOrNull);
   }, fireImmediately: true);
   ref.listen(thisDeviceRegistrationProvider, (_, next) {
+    // Still loading is not "not removed".
+    if (!next.hasValue && !next.hasError) return;
     final registration = next.valueOrNull;
     engine.updateInputs(removed: registration?.deletedAt != null);
   }, fireImmediately: true);

@@ -1,0 +1,6 @@
+click 2415 789
+wait 300
+type FV44 sub from A
+key enter
+wait 6000
+shot fv44-251-qa-after

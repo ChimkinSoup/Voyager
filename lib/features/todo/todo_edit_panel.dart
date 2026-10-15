@@ -343,10 +343,14 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   }
 
   Future<void> _loadSubtasks() async {
+    final taskId = widget.task.id;
     final subtasks = await ref
         .read(todoRepositoryProvider)
-        .listSubtasks(widget.task.id);
-    if (mounted) setState(() => _subtasks = subtasks);
+        .listSubtasks(taskId);
+    // A reload can be under way as the panel moves to another task.
+    if (mounted && widget.task.id == taskId) {
+      setState(() => _subtasks = subtasks);
+    }
   }
 
   Future<void> _loadSubtaskDraft() async {
@@ -1161,6 +1165,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   @override
   Widget build(BuildContext context) {
     _remoteSync = ref.read(remoteSyncServiceProvider);
+    // The list is otherwise read once per task: subtasks another device adds
+    // never showed here (BUG-251).
+    ref.listen<int>(remoteTodoTasksEpochProvider, (_, _) => _loadSubtasks());
     final theme = Theme.of(context);
     final listColor = _listAccentColor;
     return EnterToSubmitScope(

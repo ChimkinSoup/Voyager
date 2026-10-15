@@ -143,7 +143,7 @@ void main() {
     final live = LiveSyncController(
       remoteSync: sync,
       syncRepository: server,
-      onChanged: () {},
+      onChanged: (_) {},
     )..start();
     addTearDown(live.dispose);
 

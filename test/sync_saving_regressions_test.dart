@@ -1517,7 +1517,11 @@ void main() {
         journal.collection,
         'doc-1',
         journalEntryToFirestore(
-          entry(id: 'doc-1', body: 'hello').copyWith(version: 2),
+          // Stamped when it was saved, before the typing since.
+          entry(id: 'doc-1', body: 'hello').copyWith(
+            version: 2,
+            updatedAt: now.subtract(const Duration(seconds: 5)),
+          ),
         ),
       );
 

@@ -496,6 +496,10 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
           // the pull, and on an empty device kept an empty answer until the
           // app restarted (BUG-010, BUG-043).
           invalidateAllDataProvidersFrom(ref);
+          // What live sync tells an open panel of the subtasks and images it
+          // brings in (BUG-251, BUG-260), for those the pull just did.
+          ref.read(remoteTodoTasksEpochProvider.notifier).state++;
+          ref.read(mediaServiceProvider).notifyChanged();
           // The redirect chose the startup page from the settings before the
           // pull: on an empty device, the defaults (BUG-011). Moved only while
           // the user is still on the page it opened.
@@ -536,7 +540,15 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
     warmupTracker.begin('Weather warmup');
     final stopwatch = Stopwatch()..start();
     try {
-      await weatherService.syncLocationFromRemote();
+      try {
+        await weatherService.syncLocationFromRemote();
+      } on FirebaseException catch (error) {
+        // Offline: the location stays this device's own until the settings
+        // pull brings a newer one. Not an error, and no reason to skip the
+        // rest (BUG-259).
+        if (error.code != 'unavailable') rethrow;
+        debugPrint('[weather] remote location not read: offline');
+      }
       if (!mounted) return;
       await weatherService.refreshIfNeeded();
       if (!mounted) return;

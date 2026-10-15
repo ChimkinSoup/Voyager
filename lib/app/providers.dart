@@ -755,11 +755,21 @@ final liveSyncProvider = Provider<LiveSyncController>((ref) {
   final controller = LiveSyncController(
     remoteSync: ref.watch(remoteSyncServiceProvider),
     syncRepository: ref.watch(syncRepositoryProvider),
-    onChanged: () {
+    onChanged: (collection) {
       invalidateAllDataProviders(ref);
       // An entry another device just wrote may carry a quote this journal
       // should now hold back.
       ref.invalidate(quoteHistoryProvider);
+      switch (collection) {
+        case FirestoreCollections.todoTasks:
+          ref.read(remoteTodoTasksEpochProvider.notifier).state++;
+        // A pull writes the media rows straight to the repository, which
+        // tells no one: an image added, removed or reordered on another
+        // device never reached an entry already open here (BUG-260).
+        case FirestoreCollections.mediaAssets ||
+            FirestoreCollections.mediaReferences:
+          ref.read(mediaServiceProvider).notifyChanged();
+      }
     },
   );
   ref.onDispose(controller.dispose);
@@ -1168,6 +1178,11 @@ final todoTasksProvider = FutureProvider.family<List<TodoTask>, String>((
   ref.keepAlive();
   return ref.watch(todoRepositoryProvider).listTasks(listId);
 });
+
+/// Moves on each time live sync brings in tasks written on another device.
+/// Subtasks have no provider of their own, so the To-Do page's subtask counts
+/// and the edit panel's list re-read them on it (BUG-251).
+final remoteTodoTasksEpochProvider = StateProvider<int>((ref) => 0);
 
 final allTodoTasksProvider = FutureProvider<List<TodoTask>>((ref) async {
   ref.keepAlive();

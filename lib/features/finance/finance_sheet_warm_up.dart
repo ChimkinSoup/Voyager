@@ -39,9 +39,16 @@ Future<void> warmUpFinanceSheet(BuildContext context) async {
   renderView.prepareInitialFrame();
   final focusManager = FocusManager();
   final buildOwner = BuildOwner(focusManager: focusManager);
+  // A scope on the app's own container would register with its scheduler,
+  // which hands every provider refresh to each scope and expects each to
+  // rebuild. This tree never rebuilds once painted, so the refresh after the
+  // next one, landing while the snapshot is awaited, failed Riverpod's "Only
+  // one task can be scheduled at a time" (BUG-259). A child container has a
+  // scheduler of its own and reads everything else through the app's.
+  final scope = ProviderContainer(parent: container);
 
   final sheet = UncontrolledProviderScope(
-    container: container,
+    container: scope,
     child: MediaQuery(
       data: media.copyWith(size: size),
       child: Directionality(
@@ -123,5 +130,6 @@ Future<void> warmUpFinanceSheet(BuildContext context) async {
       ..buildScope(root)
       ..finalizeTree();
     focusManager.dispose();
+    scope.dispose();
   }
 }

@@ -113,4 +113,58 @@ void main() {
 
     await tester.runAsync(() => warmUp);
   });
+
+  // Live sync refreshes providers while the snapshot is awaited. A scope on
+  // the app's container was handed each refresh and never rebuilt to run it,
+  // so the second one failed "Only one task can be scheduled at a time"
+  // (BUG-259).
+  testWidgets('survives provider refreshes while the snapshot is pending', (
+    tester,
+  ) async {
+    final db = AppDatabase.inMemory();
+    addTearDown(db.close);
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        syncRepositoryProvider.overrideWithValue(InMemorySyncRepository()),
+        weatherApiClientProvider.overrideWithValue(FakeWeatherApiClient()),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(settingsProvider.future);
+    await container.read(transactionsProvider.future);
+    final listened = container.listen(transactionsProvider, (_, _) {});
+    addTearDown(listened.close);
+
+    late BuildContext appContext;
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: VoyagerTheme.dark(),
+          home: Builder(
+            builder: (context) {
+              appContext = context;
+              return const Scaffold();
+            },
+          ),
+        ),
+      ),
+    );
+
+    final warmUp = warmUpFinanceSheet(appContext);
+    // From a frame callback, the app's scope runs the refresh within the same
+    // frame; [WidgetTester.pump] would also let the snapshot resolve first.
+    for (var i = 0; i < 2; i++) {
+      tester.binding.scheduleFrameCallback(
+        (_) => container.invalidate(transactionsProvider),
+      );
+      tester.binding
+        ..handleBeginFrame(Duration.zero)
+        ..handleDrawFrame();
+    }
+    expect(tester.takeException(), isNull);
+
+    await tester.runAsync(() => warmUp);
+  });
 }

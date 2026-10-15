@@ -620,6 +620,106 @@ void main() {
     });
   });
 
+  // BUG-258: an entry opened at launch shows the row from before the pull.
+  // Typing there was rebased onto the session, which had the other device's
+  // text, but the editor never showed it and its saves kept it out of the row.
+  group('an editor opened on a row behind the log', () {
+    /// Seeds "Hello" from A, then has B add " there" while A is closed.
+    Future<RemoteSyncService> extendOnB(String id) async {
+      final dbB = AppDatabase.inMemory();
+      addTearDown(dbB.close);
+      final repoB = DriftJournalRepository(dbB);
+      final b = buildService(database: dbB, deviceId: 'device-b');
+      await b.pullJournalEntries();
+      await b.prepareEditingSession(
+        collection: FirestoreCollections.journalEntries,
+        documentId: id,
+        initialText: 'Hello',
+      );
+      b.recordJournalTextChange(
+        entryId: id,
+        before: 'Hello',
+        after: 'Hello there',
+      );
+      await b.saveJournalEntryThenScheduleUpload(
+        entryId: id,
+        saveLocal: () async {
+          final current = await repoB.getEntry(id);
+          await repoB.upsertEntry(current!.copyWith(body: 'Hello there'));
+        },
+      );
+      await b.flushDocument(FirestoreCollections.journalEntries, id);
+      return b;
+    }
+
+    /// An open, focused editor on [service] showing "Hello", as the Journal
+    /// page registers one; the returned list holds what it shows.
+    List<String> openEditor(RemoteSyncService service, String id) {
+      final shown = ['Hello'];
+      service.addPendingTextMergeListener(
+        collection: FirestoreCollections.journalEntries,
+        documentId: id,
+        listener: (event) {
+          final value = event.mergedInto(TextEditingValue(text: shown[0]));
+          if (value == null) return false;
+          shown[0] = value.text;
+          return true;
+        },
+      );
+      service.setDocumentEditing(
+        collection: FirestoreCollections.journalEntries,
+        documentId: id,
+        isEditing: true,
+      );
+      return shown;
+    }
+
+    test("takes the log's text when it opens", () async {
+      final a = buildService();
+      final id = await seedSyncedEntry(a);
+      a.dispose();
+      await extendOnB(id);
+
+      final a2 = buildService();
+      final editor = openEditor(a2, id);
+      await a2.prepareEditingSession(
+        collection: FirestoreCollections.journalEntries,
+        documentId: id,
+        initialText: 'Hello',
+      );
+
+      expect(editor[0], 'Hello there');
+    });
+
+    test('is brought up by a keystroke rebased onto the session', () async {
+      final a = buildService();
+      final id = await seedSyncedEntry(a);
+      a.dispose();
+      final b = await extendOnB(id);
+
+      final a2 = buildService();
+      // Registered after the open, so only the keystroke can reach it.
+      await a2.prepareEditingSession(
+        collection: FirestoreCollections.journalEntries,
+        documentId: id,
+        initialText: 'Hello',
+      );
+      final editor = openEditor(a2, id);
+      editor[0] = 'Hello!';
+      await typeAndSave(a2, id, before: 'Hello', after: 'Hello!');
+      // The page saves what its editor took.
+      await journalRepo.upsertEntry(
+        (await journalRepo.getEntry(id))!.copyWith(body: editor[0]),
+      );
+      await a2.pullJournalEntries();
+
+      expect(editor[0], 'Hello! there');
+      expect((await journalRepo.getEntry(id))!.body, 'Hello! there');
+      await a2.flushDocument(FirestoreCollections.journalEntries, id);
+      await b.pullJournalEntries();
+    });
+  });
+
   group('the settings document', () {
     test(
       "navigating on one device keeps another device's newer profile edit",

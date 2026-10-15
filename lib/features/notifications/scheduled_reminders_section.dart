@@ -342,7 +342,15 @@ class _ScheduledRuleRowState extends ConsumerState<_ScheduledRuleRow> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final rule = widget.rule;
-    final status = scheduledRuleStatus(rule, widget.view, DateTime.now());
+    final devices = ref.watch(deviceRegistrationsProvider.settled).valueOrNull;
+    final status = scheduledRuleStatus(
+      rule,
+      widget.view,
+      DateTime.now(),
+      registeredDeviceIds: devices == null
+          ? null
+          : {for (final device in devices) device.id},
+    );
     final due = widget.view?.isDue ?? false;
     final muted = !rule.enabled || !(widget.view?.targetsThisDevice ?? true);
 
@@ -495,12 +503,14 @@ String _countdown(String lead, DateTime at, DateTime now) {
   return '$lead $distance (${reminderWhenLabel(at, now)})';
 }
 
-/// A rule's standing, for its Inbox row.
+/// A rule's standing, for its Inbox row. [registeredDeviceIds] are the
+/// devices not removed in Settings, when known.
 ({String label, bool emphasized}) scheduledRuleStatus(
   ScheduledReminderRule rule,
   ReminderSourceView? view,
-  DateTime now,
-) {
+  DateTime now, {
+  Set<String>? registeredDeviceIds,
+}) {
   final evaluation = view?.evaluation;
   if (!rule.enabled) {
     final completed =
@@ -511,6 +521,14 @@ String _countdown(String lead, DateTime at, DateTime now) {
           rule.localTimeMinutes,
         ).isAfter(now);
     return (label: completed ? 'Completed' : 'Off', emphasized: false);
+  }
+  // Aimed only at devices removed since, it fires nowhere until one is added
+  // back, which read "Not on this device" like any rule for another device
+  // (BUG-255).
+  if (registeredDeviceIds != null &&
+      rule.targetDeviceIds.isNotEmpty &&
+      !rule.targetDeviceIds.any(registeredDeviceIds.contains)) {
+    return (label: 'Its devices were removed', emphasized: true);
   }
   if (view != null && !view.targetsThisDevice) {
     return (label: 'Not on this device', emphasized: false);
@@ -721,7 +739,12 @@ class _ScheduledReminderEditorState
       setState(() => _error = 'Pick at least one day');
       return;
     }
-    if (!_allDevices && _deviceIds.isEmpty) {
+    // Removed devices have no chip, so ids left from them don't count.
+    final registered = ref.read(deviceRegistrationsProvider).valueOrNull;
+    if (!_allDevices &&
+        (registered == null
+            ? _deviceIds.isEmpty
+            : !registered.any((device) => _deviceIds.contains(device.id)))) {
       setState(() => _error = 'Pick at least one device');
       return;
     }

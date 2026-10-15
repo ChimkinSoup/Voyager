@@ -45,10 +45,8 @@ class BucketListItem {
     DateTime? updatedAt,
     int? version,
 
-    /// Every edit has to advance the version: conflict resolution is
-    /// version-first (see remoteVersionWins), so an item left at the version
-    /// it was created at can only ever be resolved on wall clock — and a
-    /// stale edit at that version out-lives a delete made at version + 1.
+    /// Every edit has to advance the version: it settles saves stamped at the
+    /// same instant (see remoteVersionWins).
     bool bumpVersion = true,
     DateTime? deletedAt,
     bool clearDeletedAt = false,

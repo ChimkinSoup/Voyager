@@ -2161,16 +2161,18 @@ class _TodoPageState extends ConsumerState<TodoPage>
     ref.invalidate(allTodoTasksProvider);
     ref.invalidate(todoListsProvider);
     ref.invalidate(todoListStatsProvider);
-    if (!preserveSubtaskCache) {
-      // Subtask counts may have changed; clear the cached futures so the next
-      // build fetches fresh data.
-      _subtaskStatsCache.clear();
-      _subtaskResultsCache.clear();
-      _subtaskCacheEpoch++;
-      // The search bar's own subtask titles are keyed off the same epoch and
-      // reloaded on the next build that needs them (see [_ensureSubtaskTitles]).
-      if (_listSearchBarOpen) unawaited(_ensureSubtaskTitles());
-    }
+    // Subtask counts may have changed.
+    if (!preserveSubtaskCache) _clearSubtaskCaches();
+  }
+
+  /// Clears the cached subtask futures so the next build fetches fresh data.
+  void _clearSubtaskCaches() {
+    _subtaskStatsCache.clear();
+    _subtaskResultsCache.clear();
+    _subtaskCacheEpoch++;
+    // The search bar's own subtask titles are keyed off the same epoch and
+    // reloaded on the next build that needs them (see [_ensureSubtaskTitles]).
+    if (_listSearchBarOpen) unawaited(_ensureSubtaskTitles());
   }
 
   int? _listColorFor(String listId, List<TodoListModel> lists) {
@@ -2898,6 +2900,11 @@ class _TodoPageState extends ConsumerState<TodoPage>
   Widget build(BuildContext context) {
     ref.listen<bool>(startupPullPendingProvider, (_, pending) {
       if (!pending) _releaseHeldForPull();
+    });
+    // Subtasks from another device: nothing else reaches the subtask cache,
+    // which this page's own writes deliberately leave alone (BUG-251).
+    ref.listen<int>(remoteTodoTasksEpochProvider, (_, _) {
+      setState(_clearSubtaskCaches);
     });
     ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
       if (request?.kind == QuickCaptureKind.todo) {

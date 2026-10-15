@@ -1,0 +1,8 @@
+# MD-10.3 A: types into the top entry Untitled (already open) while B launches and pulls
+click 1843 1008
+key ctrl+end
+type  a103 during4
+wait 3000
+type  a103 again4
+wait 5000
+shot fv44-258-qa-typed

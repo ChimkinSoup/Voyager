@@ -1,0 +1,13 @@
+# MD-10.3 B: right after launch, type into the auto-opened entry (the top entry, Untitled)
+shot fv44-258-qb-launch
+click 1843 1008
+key ctrl+end
+type  b103 early4
+wait 2000
+type  b103 more4
+wait 4000
+click 1843 1008
+key ctrl+end
+type  b103 third4
+wait 6000
+shot fv44-258-qb-typed

@@ -506,15 +506,33 @@ class RemoteSyncService {
     // The editor catching up to text the session already holds — a pull it
     // has absorbed, re-seeded into the field — is not an edit.
     if (current != null && current != before && current == after) return;
+    final rebased = current != null && current != before;
     _charOpRegistry.recordTextChange(
       collection: collection,
       documentId: documentId,
       clientId: deviceId,
       before: current ?? before,
-      after: current == null || current == before
-          ? after
-          : _rebaseEdit(onto: current, before: before, after: after),
+      after: rebased
+          ? _rebaseEdit(onto: current, before: before, after: after)
+          : after,
     );
+    // The editor lacks text the session holds, and its row is saved from what
+    // it shows: another device's text stayed missing on this device for good
+    // while the session, the cloud and the other device kept it (BUG-258).
+    // Shown once the editor has finished taking this edit, so the edit it is
+    // recording isn't diffed against text it hasn't stored yet.
+    if (rebased) {
+      scheduleMicrotask(() {
+        final text = _charOpRegistry.session(collection, documentId)?.text;
+        if (text == null) return;
+        _pendingTextMergeBuffer.catchUpEditor(
+          collection: collection,
+          documentId: documentId,
+          editorText: after,
+          sessionText: text,
+        );
+      });
+    }
   }
 
   /// Replaces what an open editor shows with [text] from SQLite.
@@ -1440,6 +1458,19 @@ class RemoteSyncService {
           loaded
               .opsReplacedBy(initialText)
               .any((op) => op.clientId != deviceId)) {
+        // An editor opened on the row before the pull shows none of that
+        // text, and its saves left it out of the row for good (BUG-258). With
+        // nothing of this device's own missing from the log, the editor takes
+        // the log's text now; otherwise the pull below works out what this
+        // device owes, and the next keystroke brings the editor up.
+        if (_containsInOrder(loaded.text, initialText)) {
+          _pendingTextMergeBuffer.catchUpEditor(
+            collection: collection,
+            documentId: documentId,
+            editorText: initialText,
+            sessionText: loaded.text,
+          );
+        }
         unawaited(
           pullForCollection(
             collection,
@@ -1610,6 +1641,9 @@ class RemoteSyncService {
       tags: extractTags(body),
       richBodyJson: pending.remoteRichBodyJson ?? local.richBodyJson,
       bumpVersion: false,
+      // Not a save of this device's: stamped now, the row outranked any
+      // remote edit made before this moment and not yet pulled (BUG-256).
+      updatedAt: local.updatedAt,
     );
     await _journalRepository.upsertEntry(merged);
     _pendingTextMergeBuffer.recordRemoteText(
@@ -1645,6 +1679,8 @@ class RemoteSyncService {
       body: body,
       tags: extractTags(body),
       bumpVersion: false,
+      // See [applyPendingJournalEntryTextMerge].
+      updatedAt: local.updatedAt,
     );
     await _dreamRepository.upsertEntry(merged);
     _pendingTextMergeBuffer.recordRemoteText(
@@ -1679,6 +1715,8 @@ class RemoteSyncService {
       notes: notes.isEmpty ? null : notes,
       clearNotes: notes.isEmpty,
       bumpVersion: false,
+      // See [applyPendingJournalEntryTextMerge].
+      updatedAt: local.updatedAt,
     );
     await _todoRepository.upsertTask(merged);
     _pendingTextMergeBuffer.recordRemoteText(
@@ -3112,6 +3150,7 @@ class RemoteSyncService {
                   data,
                   version: local.version,
                   updatedAt: local.updatedAt,
+                  deletedAt: local.deletedAt,
                 )
                 ? null
                 : local.body,
@@ -3157,6 +3196,7 @@ class RemoteSyncService {
                     data,
                     version: local.version,
                     updatedAt: local.updatedAt,
+                    deletedAt: local.deletedAt,
                   ),
                   localIsSameRevision: _localIsSameRevision(
                     data,
@@ -3298,6 +3338,7 @@ class RemoteSyncService {
                   data,
                   version: local.version,
                   updatedAt: local.updatedAt,
+                  deletedAt: local.deletedAt,
                 )
                 ? null
                 : local.body,
@@ -3340,6 +3381,7 @@ class RemoteSyncService {
                     data,
                     version: local.version,
                     updatedAt: local.updatedAt,
+                    deletedAt: local.deletedAt,
                   ),
                   localIsSameRevision: _localIsSameRevision(
                     data,
@@ -3389,6 +3431,7 @@ class RemoteSyncService {
                   stored,
                   version: merged.version,
                   updatedAt: merged.updatedAt,
+                  deletedAt: merged.deletedAt,
                 );
           if (!resend) {
             merged = DreamEntry(
@@ -3537,6 +3580,7 @@ class RemoteSyncService {
                     data,
                     version: local.version,
                     updatedAt: local.updatedAt,
+                    deletedAt: local.deletedAt,
                   )
                   ? null
                   : local.notes ?? '',
@@ -3572,6 +3616,7 @@ class RemoteSyncService {
                       data,
                       version: local.version,
                       updatedAt: local.updatedAt,
+                      deletedAt: local.deletedAt,
                     ),
                     localIsSameRevision: _localIsSameRevision(
                       data,
@@ -3899,18 +3944,21 @@ class RemoteSyncService {
     return ids;
   }
 
-  /// Whether the local row outranks the resolved remote snapshot [data] on
-  /// version, then `updatedAt` — the inverse of `remoteVersionWins`.
+  /// Whether the local row outranks the resolved remote snapshot [data] —
+  /// the inverse of `remoteVersionWins`.
   bool _localIsNewer(
     Map<String, dynamic> data, {
     required int version,
     required DateTime updatedAt,
+    required DateTime? deletedAt,
   }) {
     return !remoteVersionWins(
       remoteVersion: parseVersion(data),
       localVersion: version,
       remoteUpdated: parseFirestoreDate(data['updatedAt']),
       localUpdated: updatedAt,
+      remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+      localDeleted: deletedAt != null,
     );
   }
 
@@ -5999,29 +6047,40 @@ class RemoteSyncService {
   }
 
   /// Whether [local] beats the server's [remote] copy of one record: the
-  /// pull's own rule, version then `updatedAt`, with an exact tie going to
-  /// neither.
+  /// pull's own rule ([remoteVersionWins]: an erase, an unedited copy or a
+  /// deletion meeting a live copy by version, then `updatedAt`, then the
+  /// version), with an exact tie going to neither.
   static bool _localCopyOutranks(
     Map<String, dynamic> local,
     Map<String, dynamic> remote,
   ) {
     final localVersion = parseVersion(local);
     final remoteVersion = parseVersion(remote);
-    if (localVersion != remoteVersion) return localVersion > remoteVersion;
+    if ((localVersion - remoteVersion).abs() >= kEraseVersionStep ~/ 2 ||
+        (localVersion == 0) != (remoteVersion == 0)) {
+      return localVersion > remoteVersion;
+    }
     final localDeletedAt = parseFirestoreDate(local['deletedAt']);
     final remoteDeletedAt = parseFirestoreDate(remote['deletedAt']);
-    // The pull just applied the remote copy wherever it won, so a tombstone
-    // still differing from it at the same version is one it lost to.
-    if (localDeletedAt != null &&
-        (remoteDeletedAt == null ||
-            !remoteDeletedAt.isAtSameMomentAs(localDeletedAt))) {
-      return true;
+    // A deletion meeting a live copy: by version first.
+    if ((localDeletedAt == null) != (remoteDeletedAt == null) &&
+        localVersion != remoteVersion) {
+      return localVersion > remoteVersion;
     }
     final localUpdated = parseFirestoreDate(local['updatedAt']);
     final remoteUpdated = parseFirestoreDate(remote['updatedAt']);
-    return localUpdated != null &&
+    if (localUpdated != null &&
         remoteUpdated != null &&
-        localUpdated.isAfter(remoteUpdated);
+        !localUpdated.isAtSameMomentAs(remoteUpdated)) {
+      return localUpdated.isAfter(remoteUpdated);
+    }
+    if (localVersion != remoteVersion) return localVersion > remoteVersion;
+    // The pull just applied the remote copy wherever it won, so a tombstone
+    // still differing from it at the same version and stamp is one it lost
+    // to.
+    return localDeletedAt != null &&
+        (remoteDeletedAt == null ||
+            !remoteDeletedAt.isAtSameMomentAs(localDeletedAt));
   }
 
   /// Uploads records a backup restore just wrote to SQLite.
@@ -7374,14 +7433,16 @@ class LiveSyncController {
   LiveSyncController({
     required RemoteSyncService remoteSync,
     required SyncRepository syncRepository,
-    required VoidCallback onChanged,
+    required void Function(String collection) onChanged,
   }) : _remoteSync = remoteSync,
        _syncRepository = syncRepository,
        _onChanged = onChanged;
 
   final RemoteSyncService _remoteSync;
   final SyncRepository _syncRepository;
-  final VoidCallback _onChanged;
+
+  /// Called with the collection after each pull that changed something.
+  final void Function(String collection) _onChanged;
   final List<StreamSubscription<Map<String, Map<String, dynamic>>>>
   _subscriptions = [];
   var _started = false;
@@ -7560,7 +7621,7 @@ class LiveSyncController {
                   '(${entry.value.length} id(s))',
                 );
               }
-              _onChanged();
+              _onChanged(entry.key);
             } else if (DevFlags.verboseSync) {
               debugPrint(
                 '[sync] live-sync onChanged skipped for ${entry.key} '

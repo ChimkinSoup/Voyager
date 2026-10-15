@@ -532,7 +532,7 @@ void main() {
     final controller = LiveSyncController(
       remoteSync: deviceB,
       syncRepository: syncRepo,
-      onChanged: () => pullCount++,
+      onChanged: (_) => pullCount++,
     );
     controller.start();
 

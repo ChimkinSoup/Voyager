@@ -99,13 +99,48 @@ bool remoteUpdatedAtWins(DateTime? remote, DateTime? local) {
   return !r.isBefore(l);
 }
 
-/// Version-first conflict resolution; [updatedAt] is the tie-breaker.
+/// Time-first conflict resolution: the later save wins, by `updatedAt`, the
+/// version breaking a tie and an exact tie going to the remote.
+///
+/// The version used to decide first, so the device that saved a record more
+/// often won rather than the one that saved it last: an edit made offline lost
+/// to any device that edited the same record twice meanwhile (BUG-256).
+///
+/// An erase still outranks everything but a later erase: it advances the
+/// version by [kEraseVersionStep], which no run of ordinary saves comes near
+/// (half of it, against an edit made beside the erase), and nothing may bring
+/// an erased row back however late its edit.
+///
+/// A copy nobody has edited since it was made (version 0) also loses to any
+/// edited one, whatever the stamps: every edit is of a copy made before it,
+/// while a built-in each device seeds for itself — the default calendar —
+/// is stamped when it is seeded, and took over the other devices' rename of
+/// it (BUG-045).
+///
+/// A deletion meeting a live copy is still settled by version first: an edit
+/// made before the device heard of the delete — typing in an open editor — is
+/// stamped later, and brought the item back (BUG-245). A restore goes a
+/// version above the tombstone.
 bool remoteVersionWins({
   required int remoteVersion,
   required int localVersion,
   required DateTime? remoteUpdated,
   required DateTime? localUpdated,
+  bool remoteDeleted = false,
+  bool localDeleted = false,
 }) {
+  if ((remoteVersion - localVersion).abs() >= kEraseVersionStep ~/ 2 ||
+      (remoteVersion == 0) != (localVersion == 0)) {
+    return remoteVersion > localVersion;
+  }
+  if (remoteDeleted != localDeleted && remoteVersion != localVersion) {
+    return remoteVersion > localVersion;
+  }
+  if (remoteUpdated != null &&
+      localUpdated != null &&
+      !remoteUpdated.isAtSameMomentAs(localUpdated)) {
+    return remoteUpdated.isAfter(localUpdated);
+  }
   if (remoteVersion != localVersion) return remoteVersion > localVersion;
   return remoteUpdatedAtWins(remoteUpdated, localUpdated);
 }
@@ -204,6 +239,8 @@ Journal mergeJournalFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -320,6 +357,8 @@ LeetCodeProblem mergeLeetCodeProblemFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -440,6 +479,8 @@ LeetCodeCheatTab mergeLeetCodeCheatTabFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -494,6 +535,8 @@ LeetCodeCheatSection mergeLeetCodeCheatSectionFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -545,6 +588,8 @@ LeetCodeCheatEntry mergeLeetCodeCheatEntryFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -597,6 +642,8 @@ CustomQuote mergeCustomQuoteFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -634,6 +681,7 @@ SyncedListItem<Snippet>? mergeSnippetFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local;
   }
@@ -662,6 +710,7 @@ SyncedListItem<JobExperienceSnippet>? mergeJobExperienceSnippetFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local;
   }
@@ -715,6 +764,8 @@ StudyFolder mergeStudyFolderFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -762,6 +813,8 @@ StudyDeck mergeStudyDeckFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -809,6 +862,8 @@ StudyDeckLink mergeStudyDeckLinkFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -856,6 +911,8 @@ StudyCard mergeStudyCardFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -914,6 +971,8 @@ MediaAsset mergeMediaAssetFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -973,6 +1032,8 @@ MediaReference mergeMediaReferenceFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -1104,6 +1165,8 @@ Exercise mergeExerciseFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -1176,6 +1239,8 @@ WorkoutPlan mergeWorkoutPlanFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -1232,6 +1297,8 @@ WorkoutPlanEntry mergeWorkoutPlanEntryFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -1278,6 +1345,8 @@ WorkoutSession mergeWorkoutSessionFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -1342,6 +1411,8 @@ WorkoutSetLog mergeWorkoutSetLogFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -1457,6 +1528,8 @@ RankingMergeResult<JobApplication> resolveJobApplicationFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       );
   if (local != null && remoteStamps == null && !remoteWins) {
     return (merged: local, localWon: false);
@@ -1562,6 +1635,8 @@ JobStatusEvent mergeJobStatusEventFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -1610,6 +1685,8 @@ JobStage mergeJobStageFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -1657,6 +1734,8 @@ JobCompany mergeJobCompanyFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -1701,6 +1780,8 @@ JobCategory mergeJobCategoryFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -1744,6 +1825,8 @@ JobSeason mergeJobSeasonFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -1804,6 +1887,8 @@ JournalEntry mergeJournalEntryFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       );
 
   final String body;
@@ -1920,6 +2005,8 @@ TodoListModel mergeTodoListFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -1977,6 +2064,8 @@ TodoTask mergeTodoTaskFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       );
 
   final String? notes;
@@ -2156,6 +2245,8 @@ DreamEntry mergeDreamEntryFromRemote(
               localVersion: local.version,
               remoteUpdated: remoteUpdated,
               localUpdated: local.updatedAt,
+              remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+              localDeleted: local.deletedAt != null,
             ));
 
   final String body;
@@ -2255,12 +2346,13 @@ List<String> _stringListFromRemote(Object? value, List<String> fallback) {
 }
 
 /// Whether the remote document should replace the local record under
-/// version-first conflict resolution. A record we've never seen wins by
+/// [remoteVersionWins]. A record we've never seen wins by
 /// default — there is nothing local for it to lose to.
 bool _remoteRecordWins(
   Map<String, dynamic> data, {
   required int? localVersion,
   required DateTime? localUpdatedAt,
+  required DateTime? localDeletedAt,
 }) {
   if (localVersion == null) return true;
   return remoteVersionWins(
@@ -2268,6 +2360,8 @@ bool _remoteRecordWins(
     localVersion: localVersion,
     remoteUpdated: parseFirestoreDate(data['updatedAt']),
     localUpdated: localUpdatedAt,
+    remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+    localDeleted: localDeletedAt != null,
   );
 }
 
@@ -2291,6 +2385,7 @@ Calendar mergeCalendarFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -2365,6 +2460,7 @@ CalendarEvent mergeCalendarEventFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     if (mapEquals(doneMarks, local!.doneMarks)) return local;
     return CalendarEvent(
@@ -2497,6 +2593,7 @@ StatisticTracker mergeTrackerFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -2573,6 +2670,7 @@ TrackerValue mergeTrackerValueFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -2625,6 +2723,7 @@ CounterAdjustment mergeCounterAdjustmentFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -2677,6 +2776,7 @@ FinancialTransaction mergeTransactionFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -2748,6 +2848,7 @@ Subscription mergeSubscriptionFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -2809,6 +2910,7 @@ Budget mergeBudgetFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -2847,6 +2949,7 @@ FinanceCategory mergeFinanceCategoryFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -2891,6 +2994,7 @@ Asset mergeAssetFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -2936,6 +3040,7 @@ AssetValuation mergeAssetValuationFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -2976,6 +3081,7 @@ ContributionRoom mergeContributionRoomFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -3031,6 +3137,7 @@ AssetRoomEvent mergeAssetRoomEventFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -3087,6 +3194,7 @@ SavingsGoal mergeSavingsGoalFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -3133,6 +3241,7 @@ GoalAllocation mergeGoalAllocationFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -3175,6 +3284,7 @@ PinnedNote mergePinnedNoteFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -3211,6 +3321,7 @@ DismissedNotification mergeDismissedNotificationFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -3250,6 +3361,7 @@ DeviceRegistration mergeDeviceRegistrationFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -3310,6 +3422,7 @@ ScheduledReminderRule mergeScheduledReminderRuleFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -3372,6 +3485,7 @@ EntityReminder mergeEntityReminderFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -3426,6 +3540,7 @@ ReminderDeliveryState mergeReminderDeliveryStateFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: null,
   )) {
     return local!;
   }
@@ -3482,6 +3597,7 @@ ReminderDeliveryLog mergeReminderDeliveryLogFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -3538,6 +3654,7 @@ BucketListItem mergeBucketListItemFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -3576,6 +3693,7 @@ TagColorRecord mergeTagColorFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: null,
   )) {
     return local!;
   }
@@ -3607,6 +3725,7 @@ CustomWord mergeCustomWordFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -3643,6 +3762,7 @@ FlaggedWord mergeFlaggedWordFromRemote(
     data,
     localVersion: local?.version,
     localUpdatedAt: local?.updatedAt,
+    localDeletedAt: local?.deletedAt,
   )) {
     return local!;
   }
@@ -4267,6 +4387,8 @@ RankingCategory mergeRankingCategoryFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return local;
   }
@@ -4621,6 +4743,8 @@ RankingMergeResult<RankingParent> resolveRankingParentFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return (merged: local, localWon: false);
   }
@@ -4806,6 +4930,8 @@ RankingMergeResult<RankingChild> resolveRankingChildFromRemote(
         localVersion: local.version,
         remoteUpdated: remoteUpdated,
         localUpdated: local.updatedAt,
+        remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
+        localDeleted: local.deletedAt != null,
       )) {
     return (merged: local, localWon: false);
   }

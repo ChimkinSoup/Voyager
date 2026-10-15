@@ -340,6 +340,30 @@ void main() {
     expect(engine.due, isEmpty);
   });
 
+  // At launch the rules, bells and states can load before the registration.
+  // Judged then, a removed device raised the OS alert and logged it (BUG-253).
+  test('nothing is delivered before the registration is known', () async {
+    await repository.upsertRule(_rule());
+    final os = _FakeOs();
+    final engine = engineWith(os);
+    engine.updateInputs(
+      rules: await repository.listRules(),
+      bells: await repository.listEntityReminders(),
+      states: await repository.listDeliveryStates(),
+      tasks: const [],
+      events: const [],
+    );
+    await _settle();
+    expect(engine.due, isEmpty);
+
+    engine.updateInputs(removed: true);
+    await _settle();
+
+    expect(engine.due, isEmpty);
+    expect(os.shown, isEmpty);
+    expect(await repository.listLogs(deliveryStateId: 'rule:r1'), isEmpty);
+  });
+
   test('acknowledging a one-shot completes the rule', () async {
     await repository.upsertRule(
       _rule(kind: ReminderScheduleKind.once, onceDate: DateTime(2026, 9, 14)),

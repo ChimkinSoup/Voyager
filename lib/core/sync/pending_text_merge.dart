@@ -215,6 +215,31 @@ class PendingTextMergeBuffer {
     );
   }
 
+  /// Brings an open editor showing [editorText] up to [sessionText], the
+  /// document's character session, which holds characters the editor never
+  /// showed. Saved by the editor like a merge made while editing. One that
+  /// took it holds everything a buffered change would bring, so that is
+  /// dropped rather than merged in a second time at the flush.
+  void catchUpEditor({
+    required String collection,
+    required String documentId,
+    required String editorText,
+    required String sessionText,
+  }) {
+    if (editorText == sessionText) return;
+    final key = documentKey(collection, documentId);
+    final applied = _notify(
+      key,
+      PendingTextMergeEvent(
+        collection: collection,
+        documentId: documentId,
+        previousRemoteText: editorText,
+        remoteText: sessionText,
+      ),
+    );
+    if (applied) _pending.remove(key);
+  }
+
   /// Whether any listener put [event] into its editor.
   bool _notify(String key, PendingTextMergeEvent event) {
     var applied = false;

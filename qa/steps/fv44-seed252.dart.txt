@@ -1,0 +1,4 @@
+final now = DateTime.now().toUtc(); final r = c.read(remoteSyncServiceProvider); final wr = c.read(workoutRepositoryProvider); final day = DateTime.now().weekday % 7;
+for (var i = 1; i <= 2; i++) { final pe = WorkoutPlanEntry(id: 'fv44-pe-$i', createdAt: now, updatedAt: now, version: 1, planId: 'workout_plan_weekly', dayIndex: day, exerciseId: 'md6-lift-$i', sortOrder: i - 1); await wr.upsertPlanEntry(pe); r.pushWorkoutPlanEntry(pe); }
+MARK;
+invalidateAllDataProvidersIn(c);

@@ -230,6 +230,61 @@ void main() {
     await db.close();
   });
 
+  // BUG-252: two devices pressing Start before either heard of the other's
+  // session each made one, and logged sets only into their own.
+  group('starting the same day on two devices', () {
+    test("the day's first workout has ids every device derives", () async {
+      await _seed(repo);
+      final date = DateTime.now();
+      await controller().startFromPlan(plan: _plan, dayIndex: 1, date: date);
+
+      final session = state().session!;
+      expect(session.id, workoutDaySessionId('plan', 1, date));
+      final logs = await repo.listSetLogs(sessionId: session.id);
+      expect(logs.map((l) => l.id).toSet(), {
+        for (final (order, sets) in [(0, 3), (1, 3)])
+          for (var set = 0; set < sets; set++) '${session.id}_${order}_$set',
+      });
+      // The controller's re-read of the active session, before teardown.
+      await pumpEventQueue();
+    });
+
+    test(
+      'one already arrived under that id is joined, not rewritten',
+      () async {
+        await _seed(repo);
+        final date = DateTime.now();
+        final id = workoutDaySessionId('plan', 1, date);
+        await repo.createSessionWithLogs(
+          _session(id, date: date, ended: false).copyWith(planId: 'plan'),
+          [_log('${id}_0_0', id)],
+        );
+
+        await controller().startFromPlan(plan: _plan, dayIndex: 1, date: date);
+
+        expect(state().session!.id, id);
+        expect(await repo.listSetLogs(sessionId: id), hasLength(1));
+        // The controller's re-read of the active session, before teardown.
+        await pumpEventQueue();
+      },
+    );
+
+    test('a second workout that day is a session of its own', () async {
+      await _seed(repo);
+      final date = DateTime.now();
+      await controller().startFromPlan(plan: _plan, dayIndex: 1, date: date);
+      final first = state().session!.id;
+      await controller().finish();
+
+      await controller().startFromPlan(plan: _plan, dayIndex: 1, date: date);
+
+      expect(state().session!.id, isNot(first));
+      expect((await repo.getSession(first))!.endedAt, isNotNull);
+      // The controller's re-read of the active session, before teardown.
+      await pumpEventQueue();
+    });
+  });
+
   group('changing the live session', () {
     test(
       'an added exercise goes last, with its target sets, and is focused',

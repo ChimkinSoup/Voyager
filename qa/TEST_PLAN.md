@@ -1473,6 +1473,22 @@ Keep this table and each phase's **Status** line in sync.
   - [x] BUG-246 (second pass): transaction edit sheet saved after A's delete: the deleted message showed, nothing written.
 - **Not covered:** two devices typing into a purged entry with different texts before either uploads (BUG-247); exact-microsecond ties (BUG-241).
 
+### FV-44 — BUG-251 … BUG-260 (multi-device fixes)
+- **Change (2026-10-15, uncommitted, on `02cbea7`):** BUG-251: live sync passes the changed collection; a todo-task pull moves `remoteTodoTasksEpochProvider`, which clears the To-Do page's subtask caches and reloads the open panel's subtasks. BUG-252: the day's first workout and its sets get derived ids (`workoutDaySessionId`). BUG-253: the reminder engine waits for this device's registration. BUG-254: no change (BUG-241's re-upload). BUG-255: "Its devices were removed" on the Inbox row; the editor counts registered devices only. BUG-256 (Juno's choice): time-first merging (`remoteVersionWins`, `_localCopyOutranks`), version-first kept for an erase, an unedited (v0) copy and a tombstone against a live copy at a different version; pull-side text merges keep the row's stamp. BUG-257: not fixed (Juno's call). BUG-258: `PendingTextMergeBuffer.catchUpEditor` at session load and after a rebased keystroke. BUG-259: the transaction-sheet warm-up uses a child container; an offline weather location read isn't an error. BUG-260: a media pull notifies `MediaService`.
+- **Tests:** new `todo_remote_subtasks_test.dart` (BUG-251), `live_sync_media_notify_test.dart` (BUG-260), `scheduled_reminder_removed_target_test.dart` (BUG-255); cases added to `workout_session_changes_test.dart` (BUG-252), `reminder_engine_test.dart` (BUG-253), `sync_winning_copy_test.dart` (BUG-254 ×2, BUG-256 ×3), `sync_pending_char_ops_durability_test.dart` (BUG-258 ×2), `finance_sheet_warm_up_test.dart` (BUG-259); each fails without its lib change (BUG-254's pass on the current code by design). `sync_saving_regressions_test.dart`'s "our own older snapshot" fixture now carries the older stamp it describes. Full suite on the final code: 4,906 passed, 16 skipped, 0 failed.
+- **Flows (new account qa-087 on `qa` (A) + `qb` (B), seeds `md06-seed`, `md09-seed`, `md11-seed`, `fv44-seed252`; then qa-026 on both for BUG-258/259; new steps `qa/steps/fv44-*`):**
+  - [x] BUG-251: subtasks typed on both at once, then on A alone: B's open panel listed all three, row "0 | 3".
+  - [x] BUG-252: "Start today" together: one session, 6 sets on both; sets done on either device show on both ("3 of 6"); A's finish ended it on both, no island returned.
+  - [x] BUG-253: B removed; rule for all devices fired on A only; B relaunched twice: nothing logged or posted by B.
+  - [x] BUG-254: engine snooze/ack on A and B in the same instant, both orders: the later press on A, B and the cloud.
+  - [x] BUG-255: rule for B only, B removed: "Its devices were removed" on A's row; Save refused with "Pick at least one device".
+  - [x] BUG-256: `md09-98.sh` / `md09-98j.sh`: A's later single edits won on both devices and the cloud (SAME, 60 records), no version drops.
+  - [x] BUG-258: qa-026, B's 8-day-aged pull with typing on both: B's editor showed A's while-closed text during the pull; A, B and the cloud identical (288 chars).
+  - [x] BUG-259: four relaunches of B during A's writes: no assertion, no ERROR lines.
+  - [x] BUG-260: image attached on A appeared in B's open entry without re-selecting it.
+- **Result (2026-10-15):** 9 of 9 checked passed (BUG-257 not fixed). No exceptions in the session's 11 run logs. Both instances ended `SIGNED-OUT`.
+- **Not covered:** the sticky Snooze/Acknowledge buttons raced by real clicks (driven through the engine instead); two devices with different plans for the day starting at once (BUG-252); clock skew between devices under time-first merging (BUG-256).
+
 ## Phase 27 — Final Review
 - **Status:** Done (2026-10-05). No new bugs; one duplicate marked (BUG-043 → BUG-010). Summary at the top of BUGS.md.
 - **Scope:** no new testing except re-checks.

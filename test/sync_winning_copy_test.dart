@@ -4,6 +4,7 @@
 
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/debouncer.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
@@ -16,6 +17,7 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
+import 'package:voyager/domain/models/reminder_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -223,6 +225,181 @@ void main() {
 
       expect(await uploaded(), isNull);
       expect(await db.select(db.pendingUploadsTable).get(), isEmpty);
+    });
+  });
+
+  // BUG-256: an edit made offline once, after another device edited the same
+  // record ten times. The version used to decide first, so the device that
+  // saved more often won over the one that saved last.
+  group('an offline edit after another device\'s many edits (BUG-256)', () {
+    final saved = DateTime.utc(2026, 10, 13, 18);
+    CalendarEvent event(
+      String title,
+      DateTime at,
+      int version, {
+      DateTime? deletedAt,
+    }) => CalendarEvent(
+      id: 'ev',
+      calendarId: 'cal',
+      title: title,
+      start: _created,
+      end: _created,
+      createdAt: _created,
+      updatedAt: at,
+      version: version,
+      deletedAt: deletedAt,
+    );
+
+    Future<Map<String, dynamic>?> uploaded() async =>
+        (await outboxFirestore
+                .doc('users/user-1/${FirestoreCollections.calendarEvents}/ev')
+                .get())
+            .data();
+
+    test(
+      'the reconnect pull keeps it and puts it back on the server',
+      () async {
+        final calendars = DriftCalendarRepository(db);
+        await calendars.upsertEvent(
+          event('A offline', saved.add(const Duration(seconds: 50)), 3),
+        );
+        await remote.upsertDocument(
+          FirestoreCollections.calendarEvents,
+          'ev',
+          calendarEventToFirestore(event('B round 10', saved, 12)),
+        );
+
+        await service.pullCalendarEvents(documentIds: {'ev'});
+        await _settle();
+
+        expect((await calendars.getEvent('ev'))!.title, 'A offline');
+        expect((await uploaded())?['title'], 'A offline');
+      },
+    );
+
+    test('the device with the many edits takes it once it lands', () async {
+      final calendars = DriftCalendarRepository(db);
+      await calendars.upsertEvent(event('B round 10', saved, 12));
+      await remote.upsertDocument(
+        FirestoreCollections.calendarEvents,
+        'ev',
+        calendarEventToFirestore(
+          event('A offline', saved.add(const Duration(seconds: 50)), 3),
+        ),
+      );
+
+      await service.pullCalendarEvents(documentIds: {'ev'});
+      await _settle();
+
+      expect((await calendars.getEvent('ev'))!.title, 'A offline');
+      expect(await uploaded(), isNull);
+    });
+
+    test('an erase still beats an edit saved after it', () async {
+      final calendars = DriftCalendarRepository(db);
+      await calendars.upsertEvent(
+        event('', saved, 3 + kEraseVersionStep, deletedAt: kErasedAt),
+      );
+      await remote.upsertDocument(
+        FirestoreCollections.calendarEvents,
+        'ev',
+        calendarEventToFirestore(
+          event('edited late', saved.add(const Duration(minutes: 5)), 4),
+        ),
+      );
+
+      await service.pullCalendarEvents(documentIds: {'ev'});
+      await _settle();
+
+      expect(isErasedAt((await calendars.getEvent('ev'))!.deletedAt), isTrue);
+      expect(isErasedPayload((await uploaded())!), isTrue);
+    });
+  });
+
+  // BUG-254: an acknowledge and a snooze of one occurrence, pressed within a
+  // second on two devices, both write the next version. The cloud keeps the
+  // upload that lands last; the later press has to win everywhere
+  // (SCHEDULED_REMINDERS_HLD §8: "Ack beats older snooze if both land").
+  group('an acknowledge racing a snooze (BUG-254)', () {
+    final pressed = DateTime.utc(2026, 10, 13, 17, 1, 30);
+    ReminderDeliveryState state(ReminderDeliveryStatus status, DateTime at) =>
+        ReminderDeliveryState(
+          id: 'rule:r1',
+          sourceKind: ReminderSourceKind.scheduledRule,
+          sourceId: 'r1',
+          occurrenceKey: '2026-10-13T17:00',
+          status: status,
+          snoozeUntil: status == ReminderDeliveryStatus.snoozed
+              ? at.add(const Duration(minutes: 10))
+              : null,
+          ackedAt: status == ReminderDeliveryStatus.acked ? at : null,
+          createdAt: _created,
+          updatedAt: at,
+          version: 1,
+        );
+
+    Future<Map<String, dynamic>?> uploaded() async =>
+        (await outboxFirestore
+                .doc(
+                  'users/user-1/${FirestoreCollections.reminderDeliveryStates}/'
+                  'rule:r1',
+                )
+                .get())
+            .data();
+
+    test(
+      'a later ack here goes back up over the snooze that landed last',
+      () async {
+        final reminders = DriftReminderRepository(db);
+        await reminders.upsertDeliveryState(
+          state(
+            ReminderDeliveryStatus.acked,
+            pressed.add(const Duration(milliseconds: 2)),
+          ),
+        );
+        await remote.upsertDocument(
+          FirestoreCollections.reminderDeliveryStates,
+          'rule:r1',
+          reminderDeliveryStateToFirestore(
+            state(ReminderDeliveryStatus.snoozed, pressed),
+          ),
+        );
+
+        await service.pullReminderDeliveryStates(documentIds: {'rule:r1'});
+        await _settle();
+
+        expect(
+          (await reminders.getDeliveryState('rule:r1'))!.status,
+          ReminderDeliveryStatus.acked,
+        );
+        expect((await uploaded())?['status'], 'acked');
+      },
+    );
+
+    test('a later ack from elsewhere replaces the snooze here', () async {
+      final reminders = DriftReminderRepository(db);
+      await reminders.upsertDeliveryState(
+        state(ReminderDeliveryStatus.snoozed, pressed),
+      );
+      await remote.upsertDocument(
+        FirestoreCollections.reminderDeliveryStates,
+        'rule:r1',
+        reminderDeliveryStateToFirestore(
+          state(
+            ReminderDeliveryStatus.acked,
+            pressed.add(const Duration(milliseconds: 2)),
+          ),
+        ),
+      );
+
+      await service.pullReminderDeliveryStates(documentIds: {'rule:r1'});
+      await _settle();
+
+      expect(
+        (await reminders.getDeliveryState('rule:r1'))!.status,
+        ReminderDeliveryStatus.acked,
+      );
+      expect(await uploaded(), isNull);
     });
   });
 

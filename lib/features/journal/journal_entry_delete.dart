@@ -98,9 +98,8 @@ Future<void> restoreJournalEntry(
   final repository = container.read(journalRepositoryProvider);
   // Read at restore time rather than trusting the snapshot's version. The
   // offer stands for eight seconds and more, which is long enough for a pull
-  // to land a newer revision — and conflict resolution is version-first with
-  // no guard on the local write, so a restore written under what is on disk
-  // wins here and loses the next pull, taking the entry away again.
+  // to land a newer revision, and there is no guard on the local write: see
+  // [restoreVersionFrom].
   final current = await repository.getEntry(entry.id);
   abortIfAlreadyRestored(found: current != null, deletedAt: current?.deletedAt);
   final restored = JournalEntry(

@@ -34,11 +34,11 @@ void abortIfAlreadyRestored({
 /// The version a restore has to write to outrank both the tombstone it undoes
 /// and anything a pull landed while the undo offer stood.
 ///
-/// Conflict resolution is version-first, and the local write path applies no
-/// version guard — so the number has to be resolved against what is on disk
-/// *now*, not against the snapshot taken before the delete. An 8-second undo
-/// window is long enough for a sync to land a newer revision, and a restore
-/// written under it loses the next pull and takes the row away again.
+/// A restore is stamped when it is made, which wins the merge on its own; the
+/// version settles a tie in time (see `remoteVersionWins`), and the local
+/// write path applies no version guard — so the number is resolved against
+/// what is on disk *now*, not against the snapshot taken before the delete. An
+/// 8-second undo window is long enough for a sync to land a newer revision.
 ///
 /// [currentVersion] is null when the row is not on disk at all. The pre-delete
 /// version plus one stands in for it: every soft delete in the app bumps the

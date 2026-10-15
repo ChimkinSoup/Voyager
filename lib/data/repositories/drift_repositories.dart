@@ -1314,10 +1314,10 @@ class DriftTodoRepository implements TodoRepository {
   }
 
   // The soft deletes below route through the model rather than writing
-  // deletedAt with a bare UPDATE. A direct write leaves `version` untouched,
-  // and conflict resolution is version-first (see remoteVersionWins): a local
-  // delete stuck at version N loses to any edit made on another device at
-  // N+1, so the next pull restores deletedAt: null and the row comes back.
+  // deletedAt with a bare UPDATE. A direct write leaves `version` and
+  // `updatedAt` untouched, so the delete loses to the edit it was made after
+  // (see remoteVersionWins): the next pull restores deletedAt: null and the
+  // row comes back.
   // Going through copyWith/upsert also records the local sync activity that a
   // direct write skipped entirely.
   @override
@@ -1655,8 +1655,8 @@ class DriftCalendarRepository implements CalendarRepository {
 
   // Soft deletes read-modify-write through the model rather than issuing a
   // bare UPDATE, so the row's version advances with the tombstone. A delete
-  // that left version behind would lose to any concurrent edit from another
-  // device under version-first conflict resolution.
+  // that left version and stamp behind would lose to any edit from another
+  // device (see remoteVersionWins).
   //
   // Every calendar that overlaid this one drops it too, each through its own
   // versioned write so the cleanup syncs. A restore does not bring the links
@@ -4217,9 +4217,9 @@ class DriftMediaRepository implements MediaRepository {
     final live = await listReferencesForOwner(collection, documentId);
     if (live.isEmpty) return const [];
     final now = utcNow();
-    // Version-bumped, not just stamped: the tombstone has to beat the live
+    // Version-bumped as well as stamped: the tombstone has to beat the live
     // row it replaces when the two meet on another device, and
-    // `remoteVersionWins` compares versions before timestamps.
+    // `remoteVersionWins` settles a tie in time by version.
     final tombstones = [
       for (final reference in live)
         reference.copyWith(deletedAt: now, updatedAt: now, bumpVersion: true),
@@ -5811,9 +5811,9 @@ class DriftStudyRepository implements StudyRepository {
   @override
   Future<void> softDeleteFolder(String id, {DateTime? at}) async {
     // Read-bump-upsert rather than a raw column write, matching every sibling
-    // repository. Conflict resolution is version-first, so a tombstone left at
-    // the live row's version loses outright to any device holding a later
-    // revision — and `mergeDeletedAtFromRemote` then adopts that copy's absent
+    // repository. A tombstone left at the live row's version and stamp loses
+    // outright to any device holding a later revision (see remoteVersionWins)
+    // — and `mergeDeletedAtFromRemote` then adopts that copy's absent
     // tombstone and un-deletes the row everywhere.
     final current = await getFolder(id);
     if (current == null || current.deletedAt != null) return;
@@ -6753,11 +6753,11 @@ class DriftWorkoutRepository implements WorkoutRepository {
     _syncActivity?.recordLocalSave(FirestoreCollections.workoutSetLogs);
   }
 
-  /// Tombstones one row and bumps its [version] in the same statement, as
-  /// [DriftJournalRepository.softDeleteJournal] does. Merging is
-  /// version-first, so a tombstone left at the old version lost to any edit
-  /// another device made from the same base — however much later the delete
-  /// happened — and the row came back.
+  /// Tombstones one row, stamps it and bumps its [version] in the same
+  /// statement, as [DriftJournalRepository.softDeleteJournal] does. A
+  /// tombstone left at the old version and stamp lost to any edit another
+  /// device made from the same base — however much later the delete happened
+  /// — and the row came back.
   Future<void> _softDeleteRow(
     TableInfo<Table, dynamic> table,
     String id, {
