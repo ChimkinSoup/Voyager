@@ -29,7 +29,9 @@ class MediaTransferWorker {
     required MediaStorage storage,
     required Future<AppSettings> Function() readSettings,
     this.maxAttempts = 4,
-  }) : _repository = repository,
+    this.retryDelay = const Duration(seconds: 15),
+  }) : _retryDelay = retryDelay,
+       _repository = repository,
        _service = service,
        _storage = storage,
        _readSettings = readSettings;
@@ -55,6 +57,20 @@ class MediaTransferWorker {
   /// blob the bucket will never accept (BUG-223). Ones parked in an earlier
   /// session are covered by that launch's requeue.
   final _parkedByOutage = <String>{};
+
+  /// The first wait before [_scheduleRetry] tries again, and the longest.
+  final Duration retryDelay;
+  static const maxRetryDelay = Duration(minutes: 5);
+  Duration _retryDelay;
+  Timer? _retryTimer;
+
+  /// Rounds [_scheduleRetry] may put one parked asset back in its queue for.
+  /// Past them it waits for a real reconnect or the next launch, so a blob
+  /// that keeps failing transiently doesn't cost [maxAttempts] transfers
+  /// every [maxRetryDelay] for the whole session.
+  static const maxTimerRetries = 2;
+  final _timerRetries = <String, int>{};
+
   bool _uploadDraining = false;
   bool _downloadDraining = false;
 
@@ -68,6 +84,9 @@ class MediaTransferWorker {
   /// more costs one extra query and closes that window.
   bool _uploadWakeupPending = false;
   bool _downloadWakeupPending = false;
+
+  bool _prefetching = false;
+  bool _prefetchWakeupPending = false;
 
   /// True while either queue is moving, for the progress badge.
   bool get isTransferring => _uploadDraining || _downloadDraining;
@@ -147,16 +166,38 @@ class MediaTransferWorker {
   /// prefetch and the downloads settings are on — a prefetch with downloads
   /// off would be queueing work the drain refuses to do.
   Future<void> prefetchMissing() async {
+    // Live sync calls this once per incoming asset, reference or settings
+    // document, and each pass shells out for the disk check and reads every
+    // reference: a burst shares one pass, plus one for what it missed.
+    if (_prefetching) {
+      _prefetchWakeupPending = true;
+      return;
+    }
+    _prefetching = true;
+    var queued = false;
+    try {
+      do {
+        _prefetchWakeupPending = false;
+        if (await _queueMissing()) queued = true;
+      } while (_prefetchWakeupPending);
+    } finally {
+      _prefetching = false;
+    }
+    if (queued) await drainDownloads();
+  }
+
+  /// [prefetchMissing]'s pass: whether it queued anything.
+  Future<bool> _queueMissing() async {
     final settings = await _readSettings();
-    if (!settings.mediaRemoteDownloadsEnabled) return;
-    if (!settings.mediaBackgroundPrefetchEnabled) return;
+    if (!settings.mediaRemoteDownloadsEnabled) return false;
+    if (!settings.mediaBackgroundPrefetchEnabled) return false;
 
     // Prefetch is the one transfer nobody is waiting for, so it is also the
     // one to give up when the disk is nearly full — an on-demand fetch of
     // something on screen still goes through.
     if (await _service.fileStore.isDiskLow()) {
       debugPrint('[media] skipping prefetch: free disk below 5%');
-      return;
+      return false;
     }
 
     final referenced = await _referencedAssetIds();
@@ -164,7 +205,7 @@ class MediaTransferWorker {
       for (final asset in await _repository.listAssetsByDownloadState({
         MediaDownloadState.missing,
       }))
-        if (referenced.contains(asset.id)) asset,
+        if (referenced.contains(asset.id) && !asset.isOnlyElsewhere) asset,
     ];
     for (final asset in missing) {
       await _repository.updateAssetTransferState(
@@ -173,7 +214,7 @@ class MediaTransferWorker {
         clearFailureReason: true,
       );
     }
-    if (missing.isNotEmpty) await drainDownloads();
+    return missing.isNotEmpty;
   }
 
   /// Puts every upload parked as `failed` back in the queue.
@@ -236,7 +277,7 @@ class MediaTransferWorker {
       for (final asset in await _repository.listAssetsByDownloadState({
         MediaDownloadState.failed,
       }))
-        if (referenced.contains(asset.id)) asset,
+        if (referenced.contains(asset.id) && !asset.isOnlyElsewhere) asset,
     ];
     for (final asset in parked) {
       _attempts.remove(asset.id);
@@ -266,10 +307,13 @@ class MediaTransferWorker {
     if (bytes == null) {
       // Nothing to send. This is not a failure — it is an asset another
       // device made whose bytes have not arrived here yet, so the download
-      // queue owns it, not this one.
+      // queue owns it, not this one. Marked as a pulled asset is, not
+      // `localOnly`: without bytes here that reads as "only on another
+      // device", which nothing would ever fetch (see
+      // [MediaAsset.isOnlyElsewhere]).
       await _repository.updateAssetTransferState(
         asset.id,
-        uploadState: MediaUploadState.localOnly,
+        uploadState: MediaUploadState.uploaded,
       );
       return;
     }
@@ -280,14 +324,18 @@ class MediaTransferWorker {
     );
     _service.notifyChanged();
 
+    var uploaded = false;
     try {
       await _storage.upload(asset.remotePath(uid), bytes, asset.mimeType);
       _attempts.remove(asset.id);
+      _timerRetries.remove(asset.id);
+      _retryDelay = retryDelay;
       await _repository.updateAssetTransferState(
         asset.id,
         uploadState: MediaUploadState.uploaded,
         clearFailureReason: true,
       );
+      uploaded = true;
     } catch (error) {
       await _recordFailure(
         asset,
@@ -302,6 +350,15 @@ class MediaTransferWorker {
           uploadState: MediaUploadState.pending,
         ),
       );
+    }
+    // Outside the try: the bytes are in Storage either way, so a failure to
+    // announce it is no failed upload to send again.
+    if (uploaded) {
+      try {
+        await _service.publishUploaded(asset.id);
+      } catch (error) {
+        debugPrint('[media] announcing upload of ${asset.id} failed: $error');
+      }
     }
     _service.notifyChanged();
   }
@@ -335,6 +392,8 @@ class MediaTransferWorker {
       }
       await _service.fileStore.writeBytes(asset.contentHash, format, bytes);
       _attempts.remove(asset.id);
+      _timerRetries.remove(asset.id);
+      _retryDelay = retryDelay;
       await _repository.updateAssetTransferState(
         asset.id,
         downloadState: MediaDownloadState.present,
@@ -379,6 +438,7 @@ class MediaTransferWorker {
     _attempts[asset.id] = attempts;
 
     final permanent = error is MediaStoragePermanentFailure;
+    if (!permanent) _scheduleRetry();
     if (permanent || attempts >= maxAttempts) {
       _attempts.remove(asset.id);
       if (permanent) {
@@ -398,15 +458,44 @@ class MediaTransferWorker {
     await requeue();
   }
 
+  /// Retries what transient failures left behind on the worker's own clock,
+  /// backing off from [retryDelay] to [maxRetryDelay] while they keep failing.
+  ///
+  /// The reconnect edge [resumeAfterReconnect] answers to never comes for an
+  /// outage the connectivity probe missed: it probes only while the window
+  /// is active, and needs two failures a minute apart. A transfer that failed
+  /// in such an outage was left queued, or parked, with nothing to send it
+  /// until the next attach or launch (BUG-264).
+  void _scheduleRetry() {
+    if (_retryTimer?.isActive ?? false) return;
+    final delay = _retryDelay;
+    _retryDelay = delay * 2 > maxRetryDelay ? maxRetryDelay : delay * 2;
+    _retryTimer = Timer(delay, () => unawaited(_resume(byTimer: true)));
+  }
+
+  void dispose() => _retryTimer?.cancel();
+
   /// What the connectivity lifecycle calls on the offline→online edge: puts
   /// back what the outage parked (see [_parkedByOutage]) and drains both
   /// queues, which also sends whatever a transient failure left `pending`.
   /// Downloads are drained even when the uploads throw.
-  Future<void> resumeAfterReconnect() async {
+  Future<void> resumeAfterReconnect() => _resume(byTimer: false);
+
+  /// [resumeAfterReconnect], or with [byTimer] the retry timer's round, which
+  /// skips — and leaves parked for the reconnect — an asset that has had its
+  /// [maxTimerRetries].
+  Future<void> _resume({required bool byTimer}) async {
     final ids = Set.of(_parkedByOutage);
-    _parkedByOutage.clear();
     var requeued = false;
     for (final id in ids) {
+      if (byTimer) {
+        final rounds = (_timerRetries[id] ?? 0) + 1;
+        if (rounds > maxTimerRetries) continue;
+        _timerRetries[id] = rounds;
+      } else {
+        _timerRetries.remove(id);
+      }
+      _parkedByOutage.remove(id);
       final asset = await _repository.getAsset(id);
       if (asset == null) continue;
       final upload = asset.uploadState == MediaUploadState.failed;

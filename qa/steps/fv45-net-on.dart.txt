@@ -1,0 +1,3 @@
+await c.read(firestoreProvider).enableNetwork();
+debugPrint('FV45P network enabled');
+MARK;

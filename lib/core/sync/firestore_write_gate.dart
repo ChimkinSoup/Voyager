@@ -42,6 +42,18 @@ class SyncBackpressureException implements Exception {
   }
 }
 
+/// A write that failed after [FirestoreWriteGate.abandonInFlight]: it was
+/// made for a local store that has since been wiped for another account, so
+/// nothing may queue it again (BUG-269).
+class AbandonedWriteException implements Exception {
+  const AbandonedWriteException(this.cause);
+
+  final Object cause;
+
+  @override
+  String toString() => 'Write abandoned with its account: $cause';
+}
+
 /// Bounds how many writes the app will hand Firestore before hearing back.
 ///
 /// Firestore accepts a write into its own local queue the moment you call
@@ -103,6 +115,14 @@ class FirestoreWriteGate extends ChangeNotifier {
   static const writeTimeout = Duration(seconds: 45);
 
   int _inFlight = 0;
+
+  /// Bumped by [abandonInFlight]. A write admitted under an older one was
+  /// made for a store that is gone.
+  int _generation = 0;
+
+  /// The current store's generation, for a writer to pass back to [run]: one
+  /// made before the store was wiped is refused (BUG-269).
+  int get generation => _generation;
   int _peakInFlight = 0;
   int _refusedWrites = 0;
   int _timedOutWrites = 0;
@@ -184,7 +204,20 @@ class FirestoreWriteGate extends ChangeNotifier {
   /// forty is forty queued writes to Firestore, not one. A batch heavier than
   /// the whole allowance is admitted when nothing else is in flight, so a
   /// chunk larger than the startup limit still goes out on its own.
-  Future<T> run<T>(Future<T> Function() write, {int weight = 1}) async {
+  ///
+  /// [generation], when given, is [FirestoreWriteGate.generation] as the
+  /// writer saw it when it was made; a write from before a wipe is refused
+  /// with [AbandonedWriteException] instead of being issued.
+  Future<T> run<T>(
+    Future<T> Function() write, {
+    int weight = 1,
+    int? generation,
+  }) async {
+    if (generation != null && generation != _generation) {
+      throw AbandonedWriteException(
+        StateError('written for a store wiped since'),
+      );
+    }
     final limit = _currentLimit;
     final admitted = _inFlight == 0 ? limit > 0 : _inFlight + weight <= limit;
     if (!admitted) {
@@ -196,24 +229,44 @@ class FirestoreWriteGate extends ChangeNotifier {
         stalled: _stalled,
       );
     }
+    final admittedIn = _generation;
     _inFlight += weight;
     if (_inFlight > _peakInFlight) _peakInFlight = _inFlight;
     notifyListeners();
     try {
       return await write().timeout(writeTimeout);
-    } on TimeoutException {
-      _timedOutWrites++;
-      // Only the write that opens a stall arms the probe, so a batch timing
-      // out together arms one watcher rather than one each.
-      if (!_stalled) {
-        _stalled = true;
-        _watchQueueDrain();
+    } on Object catch (error) {
+      if (admittedIn != _generation) throw AbandonedWriteException(error);
+      if (error is TimeoutException) {
+        _timedOutWrites++;
+        // Only the write that opens a stall arms the probe, so a batch timing
+        // out together arms one watcher rather than one each.
+        if (!_stalled) {
+          _stalled = true;
+          _watchQueueDrain();
+        }
       }
       rethrow;
     } finally {
-      _inFlight -= weight;
-      notifyListeners();
+      if (admittedIn == _generation) {
+        _inFlight -= weight;
+        notifyListeners();
+      }
     }
+  }
+
+  /// Disowns every write still waiting for the server, for a local store about
+  /// to be wiped for another account (BUG-269).
+  ///
+  /// Their failures — a timeout, mostly, once Firestore's queue for them has
+  /// been cleared — then throw [AbandonedWriteException], which nothing puts
+  /// on the outbox: the outbox by then is the next account's. Their slots are
+  /// freed at once, since they no longer stand for anything that account's
+  /// writes would queue behind.
+  void abandonInFlight() {
+    _generation++;
+    _inFlight = 0;
+    notifyListeners();
   }
 
   /// Watches for Firestore's queue to drain — at launch, and again after a
@@ -271,6 +324,15 @@ class FirestoreWriteGate extends ChangeNotifier {
         },
       ),
     );
+  }
+
+  /// Asks again whether Firestore's queue has drained, for a client that was
+  /// just restarted: a probe the old one was answering never completes once
+  /// it is terminated, which would leave the latches on for good.
+  void watchQueueAgain() {
+    if (_startupBacklogCleared && !_stalled) return;
+    _probeRejections = 0;
+    _watchQueueDrain();
   }
 
   /// Firestore is holding nothing: the inherited backlog is gone and whatever

@@ -944,8 +944,15 @@ StudyCard mergeStudyCardFromRemote(
 /// with the bytes, and syncing them would tell a phone that a file it has
 /// never seen is already `present`. Every device works its own transfer
 /// state out from what it finds on disk.
+///
+/// `inCloud` is the one exception: whether the bytes are in Storage at all,
+/// which a device without them cannot find out for itself (BUG-261). Only a
+/// device holding the bytes knows, so only it writes the field; the others
+/// leave it out, and the merge write keeps what the holder said.
 Map<String, dynamic> mediaAssetToFirestore(MediaAsset asset) => {
   'id': asset.id,
+  if (asset.hasLocalBytes)
+    'inCloud': asset.uploadState == MediaUploadState.uploaded,
   'contentHash': asset.contentHash,
   'byteSize': asset.byteSize,
   'mimeType': asset.mimeType,
@@ -965,6 +972,18 @@ MediaAsset mergeMediaAssetFromRemote(
 }) {
   final remoteUpdated = parseFirestoreDate(data['updatedAt']) ?? utcNow();
   final remoteVersion = parseVersion(data);
+  // Whether the bytes are in Storage is a fact about the cloud rather than a
+  // field won or lost on version, so a device without the bytes takes it
+  // whenever the holder has said (BUG-261). One that holds them keeps its own
+  // upload state: it is the one that knows.
+  final inCloud = data['inCloud'] as bool?;
+  final cloudState = inCloud == null || (local?.hasLocalBytes ?? false)
+      ? null
+      : (inCloud ? MediaUploadState.uploaded : MediaUploadState.localOnly);
+  // A download parked on a missing object is fetched again once the bytes
+  // reach Storage, and one waiting on another device is no failure.
+  final unpark =
+      cloudState != null && local?.downloadState == MediaDownloadState.failed;
   if (local != null &&
       !remoteVersionWins(
         remoteVersion: remoteVersion,
@@ -974,7 +993,13 @@ MediaAsset mergeMediaAssetFromRemote(
         remoteDeleted: parseFirestoreDate(data['deletedAt']) != null,
         localDeleted: local.deletedAt != null,
       )) {
-    return local;
+    if (cloudState == null) return local;
+    return local.copyWith(
+      uploadState: cloudState,
+      downloadState: unpark ? MediaDownloadState.missing : null,
+      clearFailureReason: unpark,
+      updatedAt: local.updatedAt,
+    );
   }
 
   // Transfer state is carried over from the local row rather than read off
@@ -988,9 +1013,11 @@ MediaAsset mergeMediaAssetFromRemote(
     mimeType: data['mimeType'] as String? ?? local?.mimeType ?? 'image/jpeg',
     width: (data['width'] as num?)?.toInt() ?? local?.width ?? 0,
     height: (data['height'] as num?)?.toInt() ?? local?.height ?? 0,
-    uploadState: local?.uploadState ?? MediaUploadState.uploaded,
-    downloadState: local?.downloadState ?? MediaDownloadState.missing,
-    failureReason: local?.failureReason,
+    uploadState: cloudState ?? local?.uploadState ?? MediaUploadState.uploaded,
+    downloadState: unpark
+        ? MediaDownloadState.missing
+        : local?.downloadState ?? MediaDownloadState.missing,
+    failureReason: unpark ? null : local?.failureReason,
     unreferencedAt: parseFirestoreDate(data['unreferencedAt']),
     createdAt:
         parseFirestoreDate(data['createdAt']) ??

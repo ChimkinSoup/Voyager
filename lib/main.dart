@@ -463,6 +463,9 @@ class _VoyagerBootstrapState extends ConsumerState<VoyagerBootstrap>
           unawaited(
             ref.read(mediaTransferWorkerProvider).requeueFailedUploads(),
           );
+          // And images kept local while uploads were off, if they were turned
+          // on since on another device (BUG-262). Checked inside.
+          unawaited(ref.read(mediaServiceProvider).queueLocalOnlyUploads());
           // The pull is where this device learns which images exist
           // elsewhere, so it is also where the ones it has no bytes for
           // become fetchable. Unawaited: nothing on screen is waiting for a

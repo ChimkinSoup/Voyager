@@ -47,9 +47,13 @@ class _CountingGate extends FirestoreWriteGate {
   final weights = <int>[];
 
   @override
-  Future<T> run<T>(Future<T> Function() write, {int weight = 1}) {
+  Future<T> run<T>(
+    Future<T> Function() write, {
+    int weight = 1,
+    int? generation,
+  }) {
     weights.add(weight);
-    return super.run(write, weight: weight);
+    return super.run(write, weight: weight, generation: generation);
   }
 }
 

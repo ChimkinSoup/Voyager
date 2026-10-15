@@ -160,10 +160,25 @@ class MediaService extends ChangeNotifier {
       // Same bytes, so the file on disk is already right. Reviving beats
       // minting a second row: a re-paste of an image the user deleted last
       // week should reuse it, not duplicate it.
+      //
+      // Its upload is trusted only while nothing could have purged it: once
+      // its 30-day clock has started, another device's purge may have
+      // deleted the object, and nothing else would ever send it again
+      // (BUG-265). Nor is a row this device never uploaded from: it now holds
+      // the bytes, so it can. Sending the same bytes twice is harmless.
+      final keepsUpload =
+          existing.uploadState == MediaUploadState.uploaded &&
+          existing.retentionClockStartedAt == null;
+      final uploadsOn = (await _readSettings()).mediaRemoteUploadsEnabled;
       final revived = existing.copyWith(
         clearDeletedAt: true,
         clearUnreferencedAt: true,
         downloadState: MediaDownloadState.present,
+        uploadState: keepsUpload
+            ? null
+            : (uploadsOn
+                  ? MediaUploadState.pending
+                  : MediaUploadState.localOnly),
         bumpVersion: true,
       );
       await _fileStore.writeBytes(
@@ -175,8 +190,12 @@ class MediaService extends ChangeNotifier {
       await _repository.updateAssetTransferState(
         revived.id,
         downloadState: MediaDownloadState.present,
+        uploadState: revived.uploadState,
       );
       _publisher?.publishAsset(revived);
+      if (revived.uploadState == MediaUploadState.pending) {
+        unawaited(_uploadScheduler?.call());
+      }
       notifyListeners();
       return revived;
     }
@@ -641,7 +660,8 @@ class MediaService extends ChangeNotifier {
     final settings = await _readSettings();
     if (!settings.mediaRemoteDownloadsEnabled) return;
     if (asset.downloadState == MediaDownloadState.present ||
-        asset.downloadState == MediaDownloadState.failed) {
+        asset.downloadState == MediaDownloadState.failed ||
+        asset.isOnlyElsewhere) {
       return;
     }
     if (asset.downloadState != MediaDownloadState.pending) {
@@ -664,9 +684,14 @@ class MediaService extends ChangeNotifier {
   Future<int> queueLocalOnlyUploads() async {
     final settings = await _readSettings();
     if (!settings.mediaRemoteUploadsEnabled) return 0;
-    final stranded = await _repository.listAssetsByUploadState({
-      MediaUploadState.localOnly,
-    });
+    // Only the ones whose bytes are here: the rest are another device's to
+    // send.
+    final stranded = [
+      for (final asset in await _repository.listAssetsByUploadState({
+        MediaUploadState.localOnly,
+      }))
+        if (asset.hasLocalBytes) asset,
+    ];
     for (final asset in stranded) {
       await _repository.updateAssetTransferState(
         asset.id,
@@ -679,6 +704,19 @@ class MediaService extends ChangeNotifier {
       unawaited(_uploadScheduler?.call());
     }
     return stranded.length;
+  }
+
+  /// Tells the other devices that [mediaId]'s bytes have reached Storage.
+  ///
+  /// They learn it from the asset document alone (see `mediaAssetToFirestore`),
+  /// which said otherwise while the upload was queued; until this lands they
+  /// show the image as kept on another device rather than fetch it (BUG-261).
+  Future<void> publishUploaded(String mediaId) async {
+    final asset = await _repository.getAsset(mediaId);
+    if (asset == null) return;
+    final published = asset.copyWith(bumpVersion: true);
+    await _repository.upsertAsset(published);
+    _publisher?.publishAsset(published);
   }
 
   Future<MediaStorageUsage> storageUsage() async {

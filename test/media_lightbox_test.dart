@@ -138,6 +138,7 @@ void main() {
       ProviderScope(
         overrides: [
           mediaServiceProvider.overrideWith((ref) => service),
+          databaseProvider.overrideWithValue(db),
           mediaFileStoreProvider.overrideWithValue(fileStore),
         ],
         child: MaterialApp(
@@ -180,6 +181,7 @@ void main() {
       ProviderScope(
         overrides: [
           mediaServiceProvider.overrideWith((ref) => service),
+          databaseProvider.overrideWithValue(db),
           mediaFileStoreProvider.overrideWithValue(fileStore),
         ],
         child: MaterialApp(
@@ -467,6 +469,7 @@ void main() {
       ProviderScope(
         overrides: [
           mediaServiceProvider.overrideWith((ref) => service),
+          databaseProvider.overrideWithValue(db),
           mediaFileStoreProvider.overrideWithValue(fileStore),
         ],
         child: MaterialApp(
@@ -521,6 +524,7 @@ void main() {
       ProviderScope(
         overrides: [
           mediaServiceProvider.overrideWith((ref) => service),
+          databaseProvider.overrideWithValue(db),
           mediaFileStoreProvider.overrideWithValue(fileStore),
         ],
         child: MaterialApp(

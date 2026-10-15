@@ -1,0 +1,3 @@
+final a = c.read(authRepositoryProvider);
+if ('@TAG@' == 'pwnew') { await a.changePassword('qavoyager2026', 'qavoyager2027'); } else { await a.changePassword('qavoyager2027', 'qavoyager2026'); }
+debugPrint('FV46 password @TAG@ done');

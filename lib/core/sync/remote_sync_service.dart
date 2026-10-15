@@ -2915,6 +2915,19 @@ class RemoteSyncService {
         final local = await _mediaRepository.getAsset(id);
         final merged = mergeMediaAssetFromRemote(data, id, local: local);
         await _mediaRepository.upsertAsset(merged, recordLocalActivity: false);
+        // The upsert sets transfer state on insert only, and what the
+        // document says about the cloud copy changes it on a row this device
+        // already has (BUG-261).
+        if (local != null &&
+            (merged.uploadState != local.uploadState ||
+                merged.downloadState != local.downloadState)) {
+          await _mediaRepository.updateAssetTransferState(
+            id,
+            uploadState: merged.uploadState,
+            downloadState: merged.downloadState,
+            clearFailureReason: merged.failureReason == null,
+          );
+        }
       },
     );
   }

@@ -56,7 +56,11 @@ class _SignOutAfterFirstWriteGate extends FirestoreWriteGate {
   var _writes = 0;
 
   @override
-  Future<T> run<T>(Future<T> Function() write, {int weight = 1}) async {
+  Future<T> run<T>(
+    Future<T> Function() write, {
+    int weight = 1,
+    int? generation,
+  }) async {
     if (_writes++ > 0) {
       throw FirebaseException(
         plugin: 'cloud_firestore',

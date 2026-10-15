@@ -304,7 +304,7 @@ final ChangeNotifierProvider<MediaService> mediaServiceProvider =
 
 final Provider<MediaTransferWorker> mediaTransferWorkerProvider =
     Provider<MediaTransferWorker>((ref) {
-      return MediaTransferWorker(
+      final worker = MediaTransferWorker(
         repository: ref.watch(mediaRepositoryProvider),
         // Read, not watched, for two reasons. Watching records an edge from
         // this provider to the service, and the service's schedulers read
@@ -318,6 +318,8 @@ final Provider<MediaTransferWorker> mediaTransferWorkerProvider =
         storage: ref.watch(mediaStorageProvider),
         readSettings: () => ref.read(settingsRepositoryProvider).getSettings(),
       );
+      ref.onDispose(worker.dispose);
+      return worker;
     });
 
 /// The ids of documents in [collection] that have at least one live image.
@@ -769,6 +771,17 @@ final liveSyncProvider = Provider<LiveSyncController>((ref) {
         case FirestoreCollections.mediaAssets ||
             FirestoreCollections.mediaReferences:
           ref.read(mediaServiceProvider).notifyChanged();
+          // Background prefetch means images learned while running too, not
+          // only those the startup pull brought (BUG-263). Settings checked
+          // inside.
+          unawaited(ref.read(mediaTransferWorkerProvider).prefetchMissing());
+        // The image switches sync, so turning uploads (or prefetch) on on
+        // another device has to start what the switch starts there: this
+        // device may hold images kept local while uploads were off (BUG-262).
+        // Both check the settings inside.
+        case FirestoreCollections.settings:
+          unawaited(ref.read(mediaServiceProvider).queueLocalOnlyUploads());
+          unawaited(ref.read(mediaTransferWorkerProvider).prefetchMissing());
       }
     },
   );

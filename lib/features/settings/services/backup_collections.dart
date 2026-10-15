@@ -1176,7 +1176,12 @@ List<BackupCollection> buildBackupCollections({
       name: FirestoreCollections.mediaAssets,
       read: () async => [
         for (final asset in await mediaRepository.getAllAssets())
-          BackupRecord(id: asset.id, data: mediaAssetToFirestore(asset)),
+          BackupRecord(
+            id: asset.id,
+            // Where this device's bytes got to says nothing about the store
+            // a restore lands in.
+            data: mediaAssetToFirestore(asset)..remove('inCloud'),
+          ),
       ],
       restore: (id, data) async {
         final local = await mediaRepository.getAsset(id);

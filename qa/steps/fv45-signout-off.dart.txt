@@ -1,0 +1,4 @@
+await c.read(firestoreProvider).disableNetwork();
+debugPrint('FV45P network disabled');
+await c.read(authRepositoryProvider).signOut();
+MARK;

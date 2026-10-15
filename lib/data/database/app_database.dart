@@ -2016,7 +2016,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 145;
+  int get schemaVersion => 146;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3659,6 +3659,17 @@ class AppDatabase extends _$AppDatabase {
             column,
           );
         }
+      }
+      if (from < 146) {
+        // Older builds marked an asset `localOnly` when an upload found no
+        // bytes here. Without bytes that now reads as "only on another
+        // device", which is never fetched (BUG-261), so they go back to what a
+        // pulled asset is. The startup pull re-marks the ones whose document
+        // says they really are not in Storage.
+        await customStatement(
+          "UPDATE media_assets_table SET upload_state = 'uploaded' "
+          "WHERE upload_state = 'localOnly' AND download_state != 'present'",
+        );
       }
     },
   );

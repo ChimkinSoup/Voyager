@@ -24,6 +24,46 @@ import 'package:voyager/domain/models/finance_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
+/// Counts what admission does to Firestore's own state. The fake's
+/// `clearPersistence` would empty the whole fake cloud, which here stands in
+/// for the server as well as the device's cache.
+class _Firestore extends FakeFirebaseFirestore {
+  var terminated = 0;
+  var cleared = 0;
+
+  /// Calls in order: 'off', 'on', and the auth repository's 'signOut'.
+  final calls = <String>[];
+
+  @override
+  Future<void> disableNetwork() async => calls.add('off');
+
+  @override
+  Future<void> enableNetwork() async => calls.add('on');
+
+  @override
+  Future<void> terminate() async => terminated++;
+
+  @override
+  Future<void> clearPersistence() async => cleared++;
+}
+
+/// Records the sign-out among [calls], then signs out through [_inner].
+class _RecordingAuth implements AuthRepository {
+  _RecordingAuth(this._inner, this.calls);
+
+  final _Auth _inner;
+  final List<String> calls;
+
+  @override
+  Future<void> signOut() {
+    calls.add('signOut');
+    return _inner.signOut();
+  }
+
+  @override
+  noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 /// Signs in by uid, so the uids can be real-looking path components (the
 /// backups folder is named after one).
 class _Auth implements AuthRepository {
@@ -56,7 +96,7 @@ void main() {
   late Directory data;
   late Directory backupsRoot;
   late AppDatabase db;
-  late FakeFirebaseFirestore firestore;
+  late _Firestore firestore;
   late _Auth auth;
   late ProviderContainer container;
   late OutboxSyncWorker worker;
@@ -73,7 +113,7 @@ void main() {
     data = await Directory(p.join(temp.path, 'data')).create();
     backupsRoot = Directory(p.join(temp.path, 'backups'));
     db = AppDatabase.inMemory();
-    firestore = FakeFirebaseFirestore();
+    firestore = _Firestore();
     auth = _Auth();
     asked = [];
     answer = (_) async => true;
@@ -337,6 +377,97 @@ void main() {
     expect(asked, isEmpty);
     expect(notifier().userId, 'accountB');
     expect(await db.select(db.journalsTable).get(), isEmpty);
+  });
+
+  test("discarding the previous account's changes drops Firestore's own "
+      'queue of them too, so they are not sent when it signs in again '
+      '(BUG-268)', () async {
+    await signIn('accountA');
+    await queueTransaction('txn-a');
+    await signOut();
+
+    await signIn('accountB');
+
+    expect(firestore.terminated, 1);
+    expect(firestore.cleared, 1);
+  });
+
+  test(
+    "the same account signing back in leaves Firestore's queue alone",
+    () async {
+      await signIn('accountA');
+      await queueTransaction('txn-a');
+      await signOut();
+
+      await signIn('accountA');
+
+      expect(firestore.terminated, 0);
+      expect(firestore.cleared, 0);
+    },
+  );
+
+  test("signing out takes Firestore's network down first, and the next "
+      'admitted sign-in brings it back (BUG-267)', () async {
+    await signIn('accountA');
+    firestore.calls.clear();
+
+    await signOutPausingSync(firestore, _RecordingAuth(auth, firestore.calls));
+    await Future<void>.delayed(Duration.zero);
+    expect(firestore.calls, ['off', 'signOut']);
+
+    await signIn('accountA');
+    expect(firestore.calls, ['off', 'signOut', 'on']);
+  });
+
+  test(
+    'a write still waiting for the server counts as unsynced, and failing '
+    "after the switch it isn't queued for the new account (BUG-269)",
+    () async {
+      await signIn('accountA');
+      final gate = container.read(firestoreWriteGateProvider);
+      final server = Completer<void>();
+      final write = gate.run(() => server.future);
+      await signOut();
+
+      await signIn('accountB');
+
+      expect(asked, [1]);
+      expect(gate.inFlight, 0);
+      server.completeError(TimeoutException('never acknowledged'));
+      await expectLater(write, throwsA(isA<AbandonedWriteException>()));
+      expect(gate.isStalled, isFalse);
+    },
+  );
+
+  test("a write the previous account's sync still makes after the switch is "
+      'refused, not sent under the new sign-in (BUG-269)', () async {
+    await signIn('accountA');
+    final previous = container.read(syncRepositoryProvider);
+    await signOut();
+    await signIn('accountB');
+
+    await expectLater(
+      previous.upsertDocument(FirestoreCollections.transactions, 'txn-late', {
+        'id': 'txn-late',
+      }),
+      throwsA(isA<AbandonedWriteException>()),
+    );
+    expect(await uploaded('accountA', 'txn-late'), isFalse);
+  });
+
+  test('the new account gets the built-in workout plans and job stages '
+      '(BUG-266)', () async {
+    await signIn('accountA');
+    await container.read(workoutSeedProvider.future);
+    await container.read(jobSeedProvider.future);
+    await signOut();
+
+    await signIn('accountB');
+    await container.read(workoutSeedProvider.future);
+    await container.read(jobSeedProvider.future);
+
+    expect(await db.select(db.workoutPlansTable).get(), isNotEmpty);
+    expect(await db.select(db.jobStagesTable).get(), isNotEmpty);
   });
 
   test('backups belong to the account whose data they hold', () async {

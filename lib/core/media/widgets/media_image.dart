@@ -62,7 +62,8 @@ class _MediaImageState extends ConsumerState<MediaImage> {
   void didUpdateWidget(MediaImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.asset.contentHash != widget.asset.contentHash ||
-        oldWidget.asset.downloadState != widget.asset.downloadState) {
+        oldWidget.asset.downloadState != widget.asset.downloadState ||
+        oldWidget.asset.uploadState != widget.asset.uploadState) {
       _load();
     }
   }
@@ -90,6 +91,16 @@ class _MediaImageState extends ConsumerState<MediaImage> {
     // Watched so a transfer finishing repaints this image without the parent
     // surface having to know a download was in flight.
     ref.watch(mediaServiceProvider);
+    // A "Download disabled" tile fetches once downloads are back on, rather
+    // than until its entry is opened again (BUG-263).
+    ref.listen(
+      settingsProvider.select(
+        (settings) => settings.valueOrNull?.mediaRemoteDownloadsEnabled,
+      ),
+      (previous, enabled) {
+        if (enabled == true && previous == false && _bytes == null) _load();
+      },
+    );
 
     final radius = widget.borderRadius ?? BorderRadius.circular(10);
     final bytes = _bytes;
@@ -251,6 +262,14 @@ class _MediaImagePlaceholder extends StatelessWidget {
         label: 'Retry',
         color: theme.colorScheme.error,
         onTap: onRetry,
+      );
+    } else if (asset.isOnlyElsewhere) {
+      // Kept off the cloud by the device that has it: nothing to retry until
+      // it uploads, which brings the picture here by itself (BUG-261).
+      body = _PlaceholderMessage(
+        icon: PhosphorIconsRegular.devices,
+        label: 'On another device',
+        color: muted,
       );
     } else {
       // Reached when the bytes are absent and downloads are off — the design's

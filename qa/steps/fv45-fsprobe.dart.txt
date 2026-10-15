@@ -1,0 +1,9 @@
+final fs = c.read(firestoreProvider); final uid = c.read(authNotifierProvider).userId;
+final g = c.read(firestoreWriteGateProvider);
+debugPrint('FV45P @TAG@ uid=$uid stalled=${g.isStalled} inFlight=${g.inFlight}');
+try { final d = await fs.doc('users/$uid/journal_entries/md12-je-01').get(const GetOptions(source: Source.server)).timeout(const Duration(seconds: 10)); debugPrint('FV45P @TAG@ read1 ok exists=${d.exists}'); } catch (err) { debugPrint('FV45P @TAG@ read1 failed ' + err.toString()); }
+if ('@TAG@'.startsWith('kick')) {
+  await fs.terminate(); debugPrint('FV45P @TAG@ terminated');
+  try { final d = await fs.doc('users/$uid/journal_entries/md12-je-01').get(const GetOptions(source: Source.server)).timeout(const Duration(seconds: 10)); debugPrint('FV45P @TAG@ read2 ok exists=${d.exists}'); } catch (err) { debugPrint('FV45P @TAG@ read2 failed ' + err.toString()); }
+}
+MARK;

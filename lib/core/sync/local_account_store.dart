@@ -88,6 +88,11 @@ class LocalAccountStore {
               ..addColumns([media])
               ..where(
                 _db.mediaAssetsTable.deletedAt.isNull() &
+                    // Ones this device holds: another device's image that
+                    // never reached Storage is that device's to send.
+                    _db.mediaAssetsTable.downloadState.equals(
+                      MediaDownloadState.present.name,
+                    ) &
                     _db.mediaAssetsTable.uploadState.isIn([
                       MediaUploadState.localOnly.name,
                       MediaUploadState.pending.name,

@@ -84,7 +84,9 @@ void main() {
       isNull,
       reason: 'the upload must not put back the pre-attach retention clock',
     );
-    expect(after.version, attached.version);
+    // One bump past the attach: the finished upload tells the other devices
+    // the bytes are in Storage (BUG-261).
+    expect(after.version, attached.version + 1);
   });
 
   test('the purge keeps an image that is still in use, even with a stale '

@@ -35,7 +35,9 @@ class FirestoreSyncRepository implements SyncRepository {
            FirestoreWriteGate(
              waitForPendingWrites: _firestore.waitForPendingWrites,
            ),
-       _http = httpClient ?? http.Client();
+       _http = httpClient ?? http.Client() {
+    _storeGeneration = this.writeGate.generation;
+  }
 
   final FirebaseFirestore _firestore;
   final String _userId;
@@ -46,6 +48,15 @@ class FirestoreSyncRepository implements SyncRepository {
   /// Bounds how many writes are handed to Firestore before it acknowledges
   /// them — see [FirestoreWriteGate].
   final FirestoreWriteGate writeGate;
+
+  /// The store this repository writes for. A write it still makes once that
+  /// store has been wiped for another account — one held back until after
+  /// the switch — is refused rather than sent under the new account's
+  /// sign-in, or queued on its outbox (BUG-269).
+  late final int _storeGeneration;
+
+  Future<T> _write<T>(Future<T> Function() write, {int weight = 1}) =>
+      writeGate.run(write, weight: weight, generation: _storeGeneration);
 
   @override
   bool get hasUnsentWriteBacklog =>
@@ -113,7 +124,7 @@ class FirestoreSyncRepository implements SyncRepository {
     String id,
     Map<String, dynamic> data,
   ) async {
-    await writeGate.run(
+    await _write(
       () => _doc(collection, id).set(stamped(data), SetOptions(merge: true)),
     );
   }
@@ -204,12 +215,12 @@ class FirestoreSyncRepository implements SyncRepository {
 
   @override
   Future<void> upsertRemoteSettings(Map<String, dynamic> data) async {
-    await writeGate.run(() => _settingsDoc.set(data, SetOptions(merge: true)));
+    await _write(() => _settingsDoc.set(data, SetOptions(merge: true)));
   }
 
   @override
   Future<void> uploadSettings(AppSettings settings) =>
-      writeGate.run(() => writeSettings(_firestore, _settingsDoc, settings));
+      _write(() => writeSettings(_firestore, _settingsDoc, settings));
 
   /// Reads the settings document and writes [settingsUploadPatch] in one
   /// transaction, so a setting changed on another device since this one last
@@ -420,7 +431,7 @@ class FirestoreSyncRepository implements SyncRepository {
 
   @override
   Future<void> upsertCurrentWeather(WeatherSnapshot weather) async {
-    await writeGate.run(
+    await _write(
       () => _firestore
           .doc('users/$_userId/weather/current')
           .set(weather.toJson(), SetOptions(merge: true)),
@@ -455,7 +466,7 @@ class FirestoreSyncRepository implements SyncRepository {
 
   @override
   Future<void> appendOperation(SyncOperation operation) async {
-    await writeGate.run(
+    await _write(
       () =>
           _doc('sync_operations', operation.id).set(_operationData(operation)),
     );
@@ -471,7 +482,7 @@ class FirestoreSyncRepository implements SyncRepository {
           _operationData(operation),
         );
       }
-      await writeGate.run(batch.commit, weight: chunk.length);
+      await _write(batch.commit, weight: chunk.length);
     }
   }
 
@@ -495,7 +506,7 @@ class FirestoreSyncRepository implements SyncRepository {
       final size =
           utf8.encode(operation.payload).length + _operationOverheadBytes;
       if (count > 0 && bytes + size > _maxCommitBytes) {
-        await writeGate.run(batch.commit, weight: count);
+        await _write(batch.commit, weight: count);
         batch = _firestore.batch();
         bytes = 0;
         count = 0;
@@ -507,7 +518,7 @@ class FirestoreSyncRepository implements SyncRepository {
       bytes += size;
       count++;
     }
-    await writeGate.run(batch.commit, weight: count);
+    await _write(batch.commit, weight: count);
   }
 
   /// Under the 10 MiB request limit with room for the per-write envelope.
@@ -531,7 +542,7 @@ class FirestoreSyncRepository implements SyncRepository {
           SetOptions(merge: true),
         );
       }
-      await writeGate.run(batch.commit, weight: chunk.length);
+      await _write(batch.commit, weight: chunk.length);
     }
   }
 
@@ -665,7 +676,7 @@ class FirestoreSyncRepository implements SyncRepository {
 
   @override
   Future<void> deleteDocument(String collection, String id) async {
-    await writeGate.run(() => _doc(collection, id).delete());
+    await _write(() => _doc(collection, id).delete());
   }
 
   /// Forces a server round-trip, so an offline caller is told rather than
@@ -706,7 +717,7 @@ class FirestoreSyncRepository implements SyncRepository {
         deleted++;
         count++;
       }
-      await writeGate.run(batch.commit, weight: count);
+      await _write(batch.commit, weight: count);
     }
     return deleted;
   }
@@ -726,7 +737,7 @@ class FirestoreSyncRepository implements SyncRepository {
         batch.delete(_doc('sync_operations', id));
         deleted++;
       }
-      await writeGate.run(batch.commit, weight: chunk.length);
+      await _write(batch.commit, weight: chunk.length);
     }
     return deleted;
   }

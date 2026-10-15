@@ -544,8 +544,10 @@ void main() {
         expect(storage.uploads, isEmpty);
         expect(
           (await repository.getAsset(asset.id))!.uploadState,
-          MediaUploadState.localOnly,
-          reason: 'the download queue owns this asset, not the upload queue',
+          MediaUploadState.uploaded,
+          reason:
+              'the download queue owns this asset, and must not read it as '
+              'kept on another device',
         );
       },
     );

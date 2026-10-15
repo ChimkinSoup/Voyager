@@ -773,10 +773,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                           'on this device, instead of a spinner that never finishes',
                         ),
                         value: settings.mediaRemoteDownloadsEnabled,
-                        onChanged: (v) => _save(
-                          ref,
-                          settings.copyWith(mediaRemoteDownloadsEnabled: v),
-                        ),
+                        onChanged: (v) async {
+                          await _save(
+                            ref,
+                            settings.copyWith(mediaRemoteDownloadsEnabled: v),
+                          );
+                          // What was learned while it was off (BUG-263).
+                          // Prefetch checked inside.
+                          if (v) {
+                            await ref
+                                .read(mediaTransferWorkerProvider)
+                                .prefetchMissing();
+                          }
+                        },
                       ),
                       SwitchListTile(
                         title: const Text('Download images in the background'),
@@ -790,12 +799,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                         // Prefetch is meaningless while downloads are off, so it is
                         // disabled rather than left on as a setting with no effect.
                         onChanged: settings.mediaRemoteDownloadsEnabled
-                            ? (v) => _save(
-                                ref,
-                                settings.copyWith(
-                                  mediaBackgroundPrefetchEnabled: v,
-                                ),
-                              )
+                            ? (v) async {
+                                await _save(
+                                  ref,
+                                  settings.copyWith(
+                                    mediaBackgroundPrefetchEnabled: v,
+                                  ),
+                                );
+                                if (v) {
+                                  await ref
+                                      .read(mediaTransferWorkerProvider)
+                                      .prefetchMissing();
+                                }
+                              }
                             : null,
                       ),
                       const _MediaStorageTile(),

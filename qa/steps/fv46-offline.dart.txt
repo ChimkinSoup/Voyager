@@ -1,0 +1,5 @@
+final on = '@TAG@' == 'on';
+DevFlags.forceOffline = on; c.read(devForceOfflineProvider.notifier).state = on;
+final fs = c.read(firestoreProvider); await (on ? fs.disableNetwork() : fs.enableNetwork());
+if (!on && OutboxSyncWorker.isInitialized) { unawaited(OutboxSyncWorker.instance.startDraining()); }
+debugPrint('FV46 force offline ' + on.toString());

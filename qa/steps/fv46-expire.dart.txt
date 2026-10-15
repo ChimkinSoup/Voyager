@@ -1,0 +1,2 @@
+MARK;
+try { await FirebaseAuth.instanceFor(app: voyagerFirebaseApp).currentUser!.getIdToken(true); debugPrint('FV46 refresh ok'); } catch (err) { debugPrint('FV46 refresh failed ' + err.toString()); }

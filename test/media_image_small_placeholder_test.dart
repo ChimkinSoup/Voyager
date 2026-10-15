@@ -46,6 +46,8 @@ void main() {
     mimeType: 'image/png',
     width: 8,
     height: 8,
+    // In Storage: one kept on another device reads "On another device".
+    uploadState: MediaUploadState.uploaded,
     downloadState: state,
   );
 
@@ -60,7 +62,11 @@ void main() {
     await tester.runAsync(() async {
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [mediaServiceProvider.overrideWith((ref) => service)],
+          overrides: [
+            mediaServiceProvider.overrideWith((ref) => service),
+            // The image reads the download switch.
+            databaseProvider.overrideWithValue(db),
+          ],
           child: MaterialApp(
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(
@@ -106,4 +112,17 @@ void main() {
       expect(find.text(label), findsOneWidget);
     });
   }
+  testWidgets('an image kept off the cloud by another device says so, with '
+      'no Retry (BUG-261)', (tester) async {
+    await pump(
+      tester,
+      asset(
+        MediaDownloadState.missing,
+      ).copyWith(uploadState: MediaUploadState.localOnly),
+      120,
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.text('On another device'), findsOneWidget);
+    expect(find.text('Retry'), findsNothing);
+  });
 }

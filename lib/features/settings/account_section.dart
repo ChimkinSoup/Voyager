@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
+import 'package:voyager/app/account_admission.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/theme/app_fonts.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
@@ -45,7 +46,7 @@ class AccountSettingsSection extends ConsumerWidget {
         ListTile(
           leading: const Icon(PhosphorIconsRegular.signOut),
           title: const Text('Sign out'),
-          onTap: () => auth.signOut(),
+          onTap: () => signOutPausingSync(ref.read(firestoreProvider), auth),
         ),
       ],
     );

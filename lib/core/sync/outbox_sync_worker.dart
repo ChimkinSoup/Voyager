@@ -828,6 +828,8 @@ class OutboxSyncWorker {
     if (error is SyncBackpressureException || error is TimeoutException) {
       return false;
     }
+    // The row was another store's, wiped since (BUG-269).
+    if (error is AbandonedWriteException) return false;
 
     // Classification defaults to "transient" for anything it doesn't
     // recognise, so without an age cap a misclassified permanent failure would
@@ -1034,6 +1036,9 @@ class OutboxSyncWorker {
     )) {
       return;
     }
+    // Made for a store wiped for another account since: queuing it would put
+    // the old account's change in the new one's outbox (BUG-269).
+    if (error is AbandonedWriteException) return;
     final permanent = classifySyncFailure(error) == SyncFailureKind.permanent;
     if (permanent || !drainableCollections.contains(collection)) {
       await instance.park(

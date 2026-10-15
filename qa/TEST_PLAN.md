@@ -1489,6 +1489,22 @@ Keep this table and each phase's **Status** line in sync.
 - **Result (2026-10-15):** 9 of 9 checked passed (BUG-257 not fixed). No exceptions in the session's 11 run logs. Both instances ended `SIGNED-OUT`.
 - **Not covered:** the sticky Snooze/Acknowledge buttons raced by real clicks (driven through the engine instead); two devices with different plans for the day starting at once (BUG-252); clock skew between devices under time-first merging (BUG-256).
 
+### FV-45 — BUG-261 … BUG-269 (media and account-switch fixes)
+- **Change (2026-10-15, uncommitted, on `41c766c`):** BUG-261: the asset document carries `inCloud` (written only by a device holding the bytes; left out of backups); `localOnly` without bytes shows "On another device" and is never fetched; a finished upload re-publishes the asset. BUG-262: a live settings change and every launch run `queueLocalOnlyUploads` (local bytes only). BUG-263: live media pulls and the download switches run the prefetch; a "Download disabled" tile reloads when downloads come back on. BUG-264: the transfer worker retries transient failures on its own backoff (15 s → 5 min). BUG-265: a revived asset whose 30-day clock had started is uploaded again. BUG-266: admission invalidates the workout and job seeds. BUG-267: Sign out disables Firestore's network first (`signOutPausingSync`), admission turns it back on. BUG-268: the wipe terminates Firestore and clears its persistence, then re-arms the gate's probe. BUG-269: the discard question counts in-flight writes; the switch abandons them, and a sync repository refuses writes once its store has been wiped.
+- **Tests:** new `media_cloud_presence_test.dart` (BUG-261/262/264/265); cases added to `live_sync_media_notify_test.dart` (BUG-263), `media_image_small_placeholder_test.dart` (BUG-261 tile), `account_switch_test.dart` (BUG-266/267/268/269 ×2, and the same account not clearing the queue). Each new case fails without its lib change (checked by stashing the lib file). Adjusted: `media_transfer_stale_snapshot_test.dart` (the upload's re-publish adds one version), the placeholder and lightbox widget tests override the database (the image reads the download switch) and give the "Download disabled" fixture an uploaded asset, two test gates take the new `generation` parameter. Full suite on the final code: 4,921 passed, 16 skipped, 0 failed.
+- **Flows (new accounts qa-088 on `qa` (A) + `qb` (B), qa-089 for the switches; seeds `md11-seed`, `md12-seed`; new steps `qa/steps/fv45-*`):**
+  - [x] BUG-261: uploads off on A, image on entry 03: B `localOnly`/`missing`, "On another device" tile, no Retry.
+  - [x] BUG-262: uploads turned on from B: A uploaded within 12 s, B's open entry showed the picture.
+  - [x] BUG-263: image on A to an entry B wasn't showing: on B within 10 s; "Download disabled" tile became the picture when downloads came back on.
+  - [x] BUG-264: A unfocused, Force offline, image, online after 25 s: uploaded 23 s later, no reconnect seen.
+  - [x] BUG-265: simulated 30-day purge on A, same picture re-attached on B: re-uploaded, A shows it.
+  - [x] BUG-266: qa-088 → qa-089 → qa-088 without a restart: Workout planner and library, Jobs stages and companies.
+  - [x] BUG-267: 12.3's steps with the real Sign out: sign-in pull ran, 200 queued edits all delivered, 0 lost, B → A live in 0.8 s. The unfixed build reproduced it first, and showed `terminate()` itself hangs on the wedged client.
+  - [x] BUG-268: discarded offline edits (`fvnine`) on neither device, in no cloud document or op-log entry; `DBDIFF SAME`.
+  - [x] BUG-269: Sign out ~5 s after offline edits, sign in as qa-089: the question counted 10; after Discard, qa-089's outbox empty, no `permission-denied`.
+- **Result (2026-10-15):** 9 of 9 passed. FV-46 (same day): BUG-267's auth-SDK sign-out (MD-12.5) rerun three ways on qa-088, healthy each time with no further change; see BUG-267's last note. No exceptions in the session's run logs. Both instances ended `SIGNED-OUT`.
+- **Not covered:** BUG-262 with A closed while B turned uploads on (the launch call, not run); Android.
+
 ## Phase 27 — Final Review
 - **Status:** Done (2026-10-05). No new bugs; one duplicate marked (BUG-043 → BUG-010). Summary at the top of BUGS.md.
 - **Scope:** no new testing except re-checks.

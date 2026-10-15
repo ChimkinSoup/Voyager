@@ -114,6 +114,11 @@ class MediaAsset extends SoftDeletable {
   /// Whether the bytes are readable on this device right now.
   bool get hasLocalBytes => downloadState == MediaDownloadState.present;
 
+  /// Whether the bytes are only on another device, which has not put them in
+  /// Storage (BUG-261): nothing here can fetch them until it does.
+  bool get isOnlyElsewhere =>
+      !hasLocalBytes && uploadState == MediaUploadState.localOnly;
+
   /// Whether this asset still counts against the 30-day purge clock, and from
   /// when. Null while it is live and referenced.
   DateTime? get retentionClockStartedAt => deletedAt ?? unreferencedAt;
