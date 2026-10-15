@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
 import 'package:voyager/core/sync/firestore_write_gate.dart';
 import 'package:voyager/domain/models/settings_models.dart';
@@ -133,8 +134,9 @@ class FirestoreSyncRepository implements SyncRepository {
     return _changedSince(collection, changedSince).snapshots().map(
       (snap) => {
         for (final change in snap.docChanges)
-          if (change.type != DocumentChangeType.removed &&
-              change.doc.data() != null &&
+          if (change.type == DocumentChangeType.removed)
+            change.doc.id: const <String, dynamic>{}
+          else if (change.doc.data() != null &&
               !isUnconfirmedStampedWrite(
                 hasPendingWrites: change.doc.metadata.hasPendingWrites,
                 data: change.doc.data()!,
@@ -212,23 +214,30 @@ class FirestoreSyncRepository implements SyncRepository {
   /// Reads the settings document and writes [settingsUploadPatch] in one
   /// transaction, so a setting changed on another device since this one last
   /// pulled is never written over with this device's older value.
+  ///
+  /// Refused under Dev → Force offline, so the change waits in the outbox like
+  /// a record's: the Windows SDK sends a transaction even with its network
+  /// disabled (BUG-242).
   static Future<void> writeSettings(
     FirebaseFirestore firestore,
     DocumentReference<Map<String, dynamic>> doc,
     AppSettings settings,
-  ) => firestore.runTransaction((txn) async {
-    final snap = await txn.get(doc);
-    final patch = settingsUploadPatch(settings, snap.data());
-    if (patch.isEmpty) return;
-    // An update rather than a merging set leaves the weather keys sharing this
-    // document alone just the same, and fake_cloud_firestore's transaction
-    // ignores `SetOptions`.
-    if (snap.exists) {
-      txn.update(doc, patch);
-    } else {
-      txn.set(doc, patch);
-    }
-  });
+  ) async {
+    DevFlags.throwIfForcedOffline();
+    await firestore.runTransaction((txn) async {
+      final snap = await txn.get(doc);
+      final patch = settingsUploadPatch(settings, snap.data());
+      if (patch.isEmpty) return;
+      // An update rather than a merging set leaves the weather keys sharing this
+      // document alone just the same, and fake_cloud_firestore's transaction
+      // ignores `SetOptions`.
+      if (snap.exists) {
+        txn.update(doc, patch);
+      } else {
+        txn.set(doc, patch);
+      }
+    });
+  }
 
   @override
   Future<void> ping() async {

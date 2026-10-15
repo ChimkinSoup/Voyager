@@ -5,6 +5,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:voyager/app/providers.dart';
 import 'package:voyager/core/dev/dev_flags.dart';
+import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/keep_alive_scroll.dart';
 import 'package:voyager/core/widgets/voyager_toast.dart';
@@ -122,6 +123,12 @@ class DevPage extends ConsumerWidget {
             unawaited(
               v ? firestore.disableNetwork() : firestore.enableNetwork(),
             );
+            // What the toggle held back in the outbox — settings above all
+            // (BUG-242) — goes now: a short spell offline never flips the
+            // connectivity badge, whose online edge is the usual trigger.
+            if (!v && OutboxSyncWorker.isInitialized) {
+              unawaited(OutboxSyncWorker.instance.startDraining());
+            }
           },
         ),
         SwitchListTile(

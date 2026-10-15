@@ -2,7 +2,6 @@ import 'dart:convert';
 
 // ignore_for_file: prefer_initializing_formals
 import 'package:voyager/core/sync/firestore_document_mapper.dart';
-import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/domain/models/settings_models.dart';
 import 'package:voyager/domain/models/weather_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
@@ -130,32 +129,12 @@ class WeatherService {
     final remote = await _syncRepository.getRemoteSettings();
     if (remote == null) return;
 
-    final lat = remote['weatherLat'];
-    final lon = remote['weatherLon'];
-    if (lat is! num || lon is! num) return;
-
-    final remoteUpdated = parseFirestoreDate(
-      remote['weatherLocationUpdatedAt'],
-    );
     final local = await _settingsRepository.getSettings();
-    if (remoteUpdated != null &&
-        local.weatherLocationUpdatedAt != null &&
-        !remoteUpdated.isAfter(local.weatherLocationUpdatedAt!)) {
-      return;
-    }
-
-    final locationChanged =
-        local.weatherLat != lat.toDouble() ||
-        local.weatherLon != lon.toDouble();
+    final merged = mergeWeatherLocationFromRemote(remote, local);
+    if (identical(merged, local)) return;
 
     await _settingsRepository.saveSettings(
-      local.copyWith(
-        weatherLocationLabel: remote['weatherLocationLabel'] as String?,
-        weatherLat: lat.toDouble(),
-        weatherLon: lon.toDouble(),
-        weatherLocationUpdatedAt: remoteUpdated ?? utcNow(),
-        clearWeatherForecastJson: locationChanged,
-      ),
+      merged,
       // The location isn't a synced setting, so this save can only look like
       // one when it overwrote a concurrent `pullSettings` with [local]'s stale
       // copy — and pushing that would revert the pull on every device.

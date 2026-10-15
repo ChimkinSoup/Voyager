@@ -2196,6 +2196,30 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     return displayTarget == null;
   }
 
+  /// Moves the editor off the open entry once it has been deleted somewhere
+  /// else — another device, most often — as the page does after its own
+  /// delete. Left open, everything typed into it was saved into the trash with
+  /// no sign of the deletion (BUG-246).
+  ///
+  /// [id] has just left the live list, which a move to another journal also
+  /// does, so the row on disk decides. No blank entry replaces an emptied
+  /// journal: nothing here asked for one.
+  Future<void> _leaveIfDeletedElsewhere(String id) async {
+    final entry = await ref.read(journalRepositoryProvider).getEntry(id);
+    if (!mounted || entry == null || entry.deletedAt == null) return;
+    if (_selectedEntryId != id) return;
+    // Settles the pending debounce now: the coordinator drops a save onto a
+    // deleted row, and left to fire later it would re-read the selection and
+    // write this entry's text into the replacement.
+    await _flushActiveEntryEdits(refreshList: false);
+    if (!mounted || _selectedEntryId != id) return;
+    // The user may be typing: with focus kept, the next keystrokes landed in
+    // the replacement entry instead.
+    FocusManager.instance.primaryFocus?.unfocus();
+    _selectReplacementForRemovedEntry(entry);
+    _invalidateJournalEntryCaches();
+  }
+
   /// Opens a blank entry when a delete has just emptied the journal on screen.
   ///
   /// The alternative is the editor collapsing to nothing, which is a state the
@@ -2528,6 +2552,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       final selectedId = _selectedEntryId;
       if (entries == null || selectedId == null) return;
       if (_pendingEntries.containsKey(selectedId)) return;
+      final wasListed =
+          previous?.valueOrNull?.any((e) => e.id == selectedId) ?? false;
+      if (wasListed && !entries.any((e) => e.id == selectedId)) {
+        unawaited(_leaveIfDeletedElsewhere(selectedId));
+        return;
+      }
       if (_editorKey.currentState?.hasFocus ?? false) return;
       if (_titleFocusNode.hasFocus || _metadataDirty) return;
       if (_entryBodyDrafts.containsKey(selectedId)) return;

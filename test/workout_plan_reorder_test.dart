@@ -124,4 +124,36 @@ void main() {
       expect((await entryFor('a')).version, before.version);
     });
   });
+
+  test('cards tied on order sort the same on every device (BUG-250)', () async {
+    // Two devices each sent a different card to the end of the day before
+    // either's write arrived, so both cards got the same order. Each device
+    // then holds the same rows, written in the opposite order.
+    final now = utcNow();
+    WorkoutPlanEntry card(String id) => WorkoutPlanEntry(
+      id: id,
+      planId: kWeeklyWorkoutPlanId,
+      dayIndex: 2,
+      exerciseId: id,
+      sortOrder: 15,
+      createdAt: now,
+      updatedAt: now,
+    );
+    Future<List<String>> orderOn(List<String> writeOrder) async {
+      final db = AppDatabase.inMemory();
+      addTearDown(db.close);
+      final repo = DriftWorkoutRepository(db);
+      for (final id in writeOrder) {
+        await repo.upsertPlanEntry(card(id));
+      }
+      return [
+        for (final e in await repo.listPlanEntries(kWeeklyWorkoutPlanId)) e.id,
+      ];
+    }
+
+    final a = await orderOn(['lift-2', 'lift-1']);
+    final b = await orderOn(['lift-1', 'lift-2']);
+    expect(a, b);
+    expect(a, ['lift-1', 'lift-2']);
+  });
 }

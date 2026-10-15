@@ -29,6 +29,9 @@ class SearchEntrySaveHelper {
   /// costly to do on every pause in typing. The rewrite is recorded in the
   /// outbox instead, so if the app dies before the dialog closes and
   /// publishes, the next drain publishes it from the row.
+  ///
+  /// Returns null when nothing was written; [onDeleted] says when that is
+  /// because the entry has been deleted.
   Future<JournalEntry?> saveEntry({
     required JournalEntry baseline,
     required String title,
@@ -38,6 +41,7 @@ class SearchEntrySaveHelper {
     required String journalId,
     DateTime? entryDate,
     bool publish = true,
+    VoidCallback? onDeleted,
   }) async {
     JournalEntry? result;
     try {
@@ -64,6 +68,7 @@ class SearchEntrySaveHelper {
         onSuccess: (saved) {
           result = saved;
         },
+        onDeleted: onDeleted,
       );
     } catch (error, stackTrace) {
       // The local write itself failed — a locked database, a missing row
@@ -102,12 +107,24 @@ class SearchEntrySaveHelper {
       }
       return result;
     }
-    return publishEntry(result!);
+    return publishEntry(result!, onDeleted: onDeleted);
   }
 
   /// Publishes [entry], a row already on disk, and returns what was published
-  /// (or [entry] itself if publishing failed).
-  Future<JournalEntry> publishEntry(JournalEntry entry) async {
+  /// (or [entry] itself if publishing failed), or null — after [onDeleted] —
+  /// when the entry has been deleted since.
+  Future<JournalEntry?> publishEntry(
+    JournalEntry entry, {
+    VoidCallback? onDeleted,
+  }) async {
+    // Deleted after an autosave landed, most often on another device:
+    // publishing [entry] would write the dialog's live copy over the
+    // tombstone and upload it, bringing the entry back everywhere.
+    final stored = await journalRepository.getEntry(entry.id);
+    if (stored?.deletedAt != null) {
+      onDeleted?.call();
+      return null;
+    }
     // The search page doesn't maintain a CRDT editing session, so the
     // debounced upload scheduled above would push empty char-ops — creating
     // a gap in the CRDT history that causes corrupted-op-chain conflicts on

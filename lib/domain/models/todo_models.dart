@@ -95,6 +95,7 @@ class TodoTask extends SoftDeletable {
   bool get isSubtask => parentTaskId != null;
 
   TodoTask copyWith({
+    DateTime? updatedAt,
     String? listId,
     String? title,
     String? notes,
@@ -118,7 +119,7 @@ class TodoTask extends SoftDeletable {
     return TodoTask(
       id: id,
       createdAt: createdAt,
-      updatedAt: DateTime.now().toUtc(),
+      updatedAt: updatedAt ?? DateTime.now().toUtc(),
       version: version ?? (bumpVersion ? this.version + 1 : this.version),
       deletedAt: deletedAt ?? this.deletedAt,
       listId: listId ?? this.listId,

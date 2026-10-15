@@ -480,6 +480,14 @@ class WorkoutPlanEntry extends SoftDeletable {
   final String exerciseId;
   final int sortOrder;
 
+  /// Planner order within a day: by [sortOrder], then by id. Two devices
+  /// placing cards at once can hand out the same order, and a tie left to
+  /// row order sorted differently per device and per rebuild (BUG-250).
+  static int byPlace(WorkoutPlanEntry a, WorkoutPlanEntry b) {
+    final byOrder = a.sortOrder.compareTo(b.sortOrder);
+    return byOrder != 0 ? byOrder : a.id.compareTo(b.id);
+  }
+
   WorkoutPlanEntry copyWith({
     String? planId,
     int? dayIndex,

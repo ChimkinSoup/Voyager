@@ -125,6 +125,7 @@ class JournalEntry extends SoftDeletable {
   final String? guidedPrompt;
 
   JournalEntry copyWith({
+    DateTime? updatedAt,
     String? journalId,
     String? title,
     String? body,
@@ -147,7 +148,7 @@ class JournalEntry extends SoftDeletable {
     return JournalEntry(
       id: id,
       createdAt: createdAt,
-      updatedAt: DateTime.now().toUtc(),
+      updatedAt: updatedAt ?? DateTime.now().toUtc(),
       version: version ?? (bumpVersion ? this.version + 1 : this.version),
       deletedAt: deletedAt ?? this.deletedAt,
       journalId: journalId ?? this.journalId,

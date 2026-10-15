@@ -1455,6 +1455,24 @@ Keep this table and each phase's **Status** line in sync.
 - **Result (2026-10-14):** 11 of 12 passed; BUG-239 open. Later the same day, after BUG-239's third pass: 12 of 12. Run logs: no exceptions in any of the 35 run logs. Both instances ended `SIGNED-OUT`, outboxes 0.
 - **Not covered:** the asset, budget, category, allocation and contribution-room sheets in the app (unit-tested only; BUG-233), dream titles (BUG-240), the dream note popup saving its stale text on close (BUG-239 note). The doubled body of a record with no operation log (BUG-235 note) was fixed and checked in the app later that day.
 
+### FV-43 — BUG-241 … BUG-250 (multi-device fixes)
+- **Change (2026-10-15, uncommitted, on `5571bfa`):** BUG-241: after every pull, a local copy that strictly outranks the stored document is re-sent (`_repushWinningCopies`, replacing the tombstone-only repair); the CRDT pulls' editing branch keeps the pulled stamps. BUG-242: settings uploads refused under Force offline; switching it off drains the outbox. BUG-243: `_shortId` in the Verbose-sync prints. BUG-244: `pullSettings` applies a newer weather location (`mergeWeatherLocationFromRemote`). BUG-245: a soft-deleted row is replayed without text recovery. BUG-246 / BUG-248: no save, pending merge or upload writes into a deleted row; the to-do panel closes, the Journal page leaves the entry (focus dropped), a winning deletion is taken whole by an open editor's pull, the transaction sheet refuses. BUG-247: editing sessions re-prepared after the purge here or a removal heard through live sync (`watchCollection` emits removals). BUG-249: the drag's forced order is dropped once its rows land. BUG-250: `WorkoutPlanEntry.byPlace` (ties by id) at every plan-entry sort.
+- **Tests:** new `sync_winning_copy_test.dart` (BUG-241 ×4, BUG-245, BUG-247), `todo_remote_reorder_after_drag_test.dart` (BUG-249); cases added to `trash_sync_test.dart` (BUG-246, BUG-245/248), `secondary_collections_sync_test.dart` (BUG-244; the stampless-location case now expects the location to be taken), `sync_outbox_routing_test.dart` (BUG-242), `workout_plan_reorder_test.dart` (BUG-250); each new case fails with the lib change swapped back. Full suite: 4,884 passed, 16 skipped, 0 failed.
+- **Flows (new account qa-086 on `qa` (A) + `qb` (B), Dark + Scatter; seeds `md04-seed`, `md05-seed` sets a–d, `md06-seed`; MD-4/5/6 scripts with `MD_UID`; new steps `qa/steps/fv43-*`):**
+  - [x] BUG-241: `md04-42.sh c3 qb qa` and `c4 qa qb`: all four records on the later save on A, B and the cloud. Online pairs 0–52 ms apart: 23 of 24 converged (one 15 s window read DIFF before the next round overwrote it; 6 repeats with 40 s all converged).
+  - [x] BUG-242: real Dev switch on B: week start held (outbox 1, cloud and A unchanged), sent within 6 s of switching off.
+  - [x] BUG-243: Verbose sync on, To-Do lists `md4-tt`; no RangeError (`fv43-243-qa-todo`).
+  - [x] BUG-244: Toronto saved on A reached B in 3.8 s, with its weather.
+  - [x] BUG-245: three delete-while-typing races (tasks a1, b1, d1): deleted on A, B and the cloud at one version, no conflicts. Notes inside the tombstone differed; after the second pass (owed text skipped for deleted rows) two more races (e1, f1) had identical notes everywhere.
+  - [x] BUG-246: journal race in All journals (entry d1, final build): B's editor left the entry, unfocused; nothing else written; tombstone equal on A, B and the cloud. The first build sent B's next words into `md5-je-a1`, fixed by the focus drop.
+  - [x] BUG-247: entry c2 purged on A, typed on B then A: one whole text on A, B, the cloud, the log and both editors.
+  - [x] BUG-248: MD-5.4's steps on task a2: the erase stayed blank everywhere after B came back to To-Do.
+  - [x] BUG-249: sequential and concurrent drags: both screens = both databases.
+  - [x] BUG-250: overlapping moves and both-to-end: both screens and databases one order, ties by id.
+- **Result (2026-10-15):** 10 of 10 passed; second pass (BUG-245 trashed notes, transaction sheet) also passed, full suite 4,884 passed, 16 skipped, 0 failed. Run logs: no exceptions (only BUG-242's expected refusals). Both instances ended `SIGNED-OUT`.
+  - [x] BUG-246 (second pass): transaction edit sheet saved after A's delete: the deleted message showed, nothing written.
+- **Not covered:** two devices typing into a purged entry with different texts before either uploads (BUG-247); exact-microsecond ties (BUG-241).
+
 ## Phase 27 — Final Review
 - **Status:** Done (2026-10-05). No new bugs; one duplicate marked (BUG-043 → BUG-010). Summary at the top of BUGS.md.
 - **Scope:** no new testing except re-checks.

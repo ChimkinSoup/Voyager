@@ -18,7 +18,7 @@ class DevFlags {
   static bool showLifeTreeSegmentDebug = false;
   // Cuts the app off from the network without touching the PC's: the Dev page
   // toggle also disables Firestore's network, and the connectivity probe,
-  // media storage, Geoapify search and map tiles fail via
+  // media storage, settings uploads, Geoapify search and map tiles fail via
   // [throwIfForcedOffline]. Weather and sign-in are not cut. Session-only;
   // not persisted.
   static bool forceOffline = false;

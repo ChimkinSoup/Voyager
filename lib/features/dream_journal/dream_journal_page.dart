@@ -109,6 +109,10 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   /// the tombstone arrives.
   final _deletedEntryStamps = <String, DateTime>{};
 
+  /// The selected dream [_leaveIfDeletedElsewhere] is checking, so the builds
+  /// in between don't start the same check again.
+  String? _leavingDeletedEntryId;
+
   /// The "New dream" row, held in memory until it has content.
   ///
   /// Writing it to SQLite on creation left a permanent blank row in the list —
@@ -713,16 +717,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
         _pendingEntryOnDisk = false;
       }
       if (!wasPending) _deletedEntryStamps[entry.id] = utcNow();
-      if (_selectedEntryId == entry.id) {
-        _selectedEntryId = null;
-        _selectedEntry = null;
-        _titleController.clear();
-        _notesController.clear();
-        _lastNotesText = '';
-        _notesBaseText = '';
-        _listTitlePreview.value = '';
-        _listBodyPreview.value = '';
-      }
+      if (_selectedEntryId == entry.id) _clearSelection();
     });
 
     if (wasPending) return;
@@ -967,11 +962,56 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   /// read that row back into the controllers, so the editor kept its pre-pull
   /// text and the next keystroke wrote it over the remote change through
   /// [_persistEntryEdits] — silently reverting it, with nothing surfaced.
+  /// Empties the editor; the next build selects the first dream in its place.
+  void _clearSelection() {
+    _selectedEntryId = null;
+    _selectedEntry = null;
+    _titleController.clear();
+    _notesController.clear();
+    _lastNotesText = '';
+    _notesBaseText = '';
+    _listTitlePreview.value = '';
+    _listBodyPreview.value = '';
+  }
+
+  /// Moves the editor off the open dream once it has been deleted somewhere
+  /// else — another device, most often — as the page does after its own
+  /// delete. Left open, everything typed into it was dropped without a word:
+  /// saves into a deleted row are (BUG-246).
+  ///
+  /// [id] has just left the live list, which a list lagging a fresh save also
+  /// does, so the row on disk decides.
+  Future<void> _leaveIfDeletedElsewhere(String id) async {
+    try {
+      final entry = await _repoOrNull()?.getEntry(id);
+      if (entry == null || entry.deletedAt == null) return;
+      if (!mounted || _selectedEntryId != id) return;
+      // Settled now: left to fire later, a debounce would re-read the
+      // selection and write this dream's text into the next one.
+      await _flushActiveEdits(refreshList: false);
+      await _flushNotes();
+      if (!mounted || _selectedEntryId != id) return;
+      // With focus kept, the next keystrokes landed in the next dream.
+      FocusManager.instance.primaryFocus?.unfocus();
+      setState(_clearSelection);
+    } finally {
+      if (_leavingDeletedEntryId == id) _leavingDeletedEntryId = null;
+    }
+  }
+
   void _reconcileSelectedEntryFromProvider(List<DreamEntry> entries) {
     final id = _selectedEntryId;
     if (id == null) return;
     // A held "New dream" has no row to reconcile against.
     if (_pendingEntry?.id == id) return;
+    // Checked before the focus guard below: the user is most likely typing.
+    if (!entries.any((entry) => entry.id == id)) {
+      if (_leavingDeletedEntryId != id) {
+        _leavingDeletedEntryId = id;
+        unawaited(_leaveIfDeletedElsewhere(id));
+      }
+      return;
+    }
     // Never re-seed a field the user is currently in, and never race a write
     // this page has already started or has queued behind a debounce.
     if (_bodyFocusNode.hasFocus ||

@@ -404,6 +404,20 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       // covers a retry of a new entry, whose first attempt is already on disk.
       final id = existing?.id ?? _newId;
       final base = await financeRepo.getTransaction(id) ?? existing;
+      // Deleted while the sheet was open, most often on another device: the
+      // edit would land in the trashed row with nothing to say so (BUG-246).
+      if (existing != null &&
+          existing.deletedAt == null &&
+          base?.deletedAt != null) {
+        if (mounted) {
+          setState(() {
+            _saving = false;
+            _saveError =
+                'This transaction was deleted, so the edit was not saved.';
+          });
+        }
+        return;
+      }
       // Editing, only the fields changed in this sheet are applied over the
       // row as it is now: one another device changed while the sheet was open
       // keeps that change instead of being reverted to the copy the sheet

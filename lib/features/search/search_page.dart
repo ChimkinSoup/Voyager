@@ -56,6 +56,7 @@ import 'package:voyager/core/sync/pending_flush_registry.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/theme/voyager_theme.dart';
 import 'package:voyager/core/widgets/voyager_scroll_view.dart';
+import 'package:voyager/core/widgets/voyager_toast.dart';
 
 class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
@@ -1140,7 +1141,29 @@ mixin _SearchDialogSaving<T extends StatefulWidget> on State<T> {
   /// Whether an autosave wrote locally and nothing has published since.
   bool _publishOwed = false;
 
+  /// Resolved up front: the save that finds the entry deleted may run after
+  /// the dialog has closed.
+  late final OverlayState _toastOverlay;
+
+  @override
+  void initState() {
+    super.initState();
+    _toastOverlay = Overlay.of(context, rootOverlay: true);
+  }
+
   Future<void> _save({bool publish = true});
+
+  /// Says a save was dropped: the [noun] was deleted while the dialog had it
+  /// open, most often on another device, and saves into a deleted row are
+  /// dropped (BUG-246). Without this, everything typed was lost without a
+  /// word.
+  void _reportDeleted(String noun) {
+    showVoyagerToastIn(
+      _toastOverlay,
+      message: 'This $noun was deleted, so the edit was not saved.',
+      icon: PhosphorIconsRegular.warning,
+    );
+  }
 
   void _scheduleAutosave() {
     _autosaveTimer?.cancel();
@@ -1343,7 +1366,11 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog>
         _enqueueSave(what, () async {
           if (!_publishOwed) return;
           _publishOwed = false;
-          _adopt(await helper.publishEntry(_entry));
+          final published = await helper.publishEntry(
+            _entry,
+            onDeleted: () => _reportDeleted('entry'),
+          );
+          if (published != null) _adopt(published);
         });
       }
       return _saveChain;
@@ -1391,6 +1418,7 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog>
           journalId: snapshot.journalId,
           entryDate: snapshot.entryDate,
           publish: publish,
+          onDeleted: () => _reportDeleted('entry'),
         );
         if (updated == null) {
           // Nothing reached disk. Re-arm so a later close retries instead of
@@ -1806,6 +1834,7 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog>
 
   DreamWriteCoordinator? _coordinator;
   RemoteSyncService? _remoteSync;
+  DreamRepository? _dreamRepository;
 
   bool _isDatePickerOpen = false;
 
@@ -1900,6 +1929,7 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog>
     final helper = SearchDreamSaveHelper(
       coordinator: _coordinator ?? ref.read(dreamWriteCoordinatorProvider),
       remoteSync: _remoteSync ?? ref.read(remoteSyncServiceProvider),
+      dreamRepository: _dreamRepository ?? ref.read(dreamRepositoryProvider),
     );
     final what = 'dream ${_entry.id}';
 
@@ -1908,7 +1938,11 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog>
         _enqueueSave(what, () async {
           if (!_publishOwed) return;
           _publishOwed = false;
-          _adopt(await helper.publishEntry(_entry));
+          final published = await helper.publishEntry(
+            _entry,
+            onDeleted: () => _reportDeleted('dream'),
+          );
+          if (published != null) _adopt(published);
         });
       }
       return _saveChain;
@@ -1940,6 +1974,7 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog>
           notes: snapshot.notes,
           entryDate: snapshot.entryDate,
           publish: publish,
+          onDeleted: () => _reportDeleted('dream'),
         );
         if (updated == null) {
           // Nothing reached disk. Re-arm so a later close retries instead of
@@ -2023,6 +2058,7 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog>
   Widget build(BuildContext context) {
     _coordinator = ref.watch(dreamWriteCoordinatorProvider);
     _remoteSync = ref.watch(remoteSyncServiceProvider);
+    _dreamRepository = ref.watch(dreamRepositoryProvider);
 
     final accent = widget.accentColor;
     final dialogWidth = math.min(920.0, MediaQuery.sizeOf(context).width - 48);

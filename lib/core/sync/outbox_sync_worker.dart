@@ -424,7 +424,7 @@ class OutboxSyncWorker {
   }
 
   /// [_payloadsFor], for a pull checking what it brought against this device's
-  /// rows — see `RemoteSyncService._repushWinningTombstones`.
+  /// rows — see `RemoteSyncService._repushWinningCopies`.
   Future<Map<String, Map<String, dynamic>>> localPayloadsFor(
     String collection,
     Set<String> documentIds,

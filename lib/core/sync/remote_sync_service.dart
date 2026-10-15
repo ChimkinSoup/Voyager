@@ -179,6 +179,12 @@ class RemoteSyncService {
   final Map<String, Future<void>> _remoteSaveChains = {};
   final Map<String, int> _localSaveGenerations = {};
   final Set<String> _activelyEditedDocuments = {};
+
+  /// Documents [permanentlyDeleteFromRemote] is purging. Their removal reaches
+  /// live sync while the operation log is still being deleted, and a re-seed
+  /// started from it then loaded the old log (BUG-247): the purge re-seeds
+  /// them itself once the log is gone.
+  final Set<String> _purgingDocuments = {};
   final PendingTextMergeBuffer _pendingTextMergeBuffer =
       PendingTextMergeBuffer();
 
@@ -822,18 +828,24 @@ class RemoteSyncService {
     await flushDocument(collection, documentId);
 
     final firestoreDocId = firestoreDocumentIdForLocal(collection, documentId);
-    await _syncRepository.deleteDocument(collection, firestoreDocId);
-    // The Firestore id, not the local one: the uploads store operations under
-    // whatever id the document itself lives at, and for a legacy-id journal or
-    // todo list the two differ. Passing the local id there matched nothing, so
-    // the document's entire operation history stayed behind — ready to be
-    // resolved back over any later document that reuses the id.
-    final operationsDeleted = await _syncRepository.deleteOperationsForDocument(
-      firestoreDocId,
-    );
-
-    _charOpRegistry.removeSession(collection, documentId);
-    _pendingTextMergeBuffer.clearDocument(collection, documentId);
+    final key = documentKey(collection, documentId);
+    _purgingDocuments.add(key);
+    final int operationsDeleted;
+    try {
+      await _syncRepository.deleteDocument(collection, firestoreDocId);
+      // The Firestore id, not the local one: the uploads store operations
+      // under whatever id the document itself lives at, and for a legacy-id
+      // journal or todo list the two differ. Passing the local id there
+      // matched nothing, so the document's entire operation history stayed
+      // behind — ready to be resolved back over any later document that
+      // reuses the id.
+      operationsDeleted = await _syncRepository.deleteOperationsForDocument(
+        firestoreDocId,
+      );
+      await _reseedAfterLogLoss(collection, documentId);
+    } finally {
+      _purgingDocuments.remove(key);
+    }
 
     final conflictRepo = _syncConflictRepository;
     if (conflictRepo != null) {
@@ -841,6 +853,65 @@ class RemoteSyncService {
     }
 
     return operationsDeleted;
+  }
+
+  /// Rebuilds an open editing session once the document's operation log is
+  /// gone from the server — purged here, or deleted from Firestore by another
+  /// device ([firestoreDocId] arriving removed through live sync).
+  ///
+  /// The session still holds operations it believes the log has. Left alone,
+  /// it went on uploading only the characters typed next, so the log spelled
+  /// those alone: a device rebuilding the text from it lost everything before
+  /// them, and its own later typing landed among the other device's text at
+  /// positions that no longer existed (BUG-247). Prepared afresh instead, an
+  /// empty log seeds the whole text as pending — under ids every device
+  /// derives alike, so two devices re-seeding the same text don't double it —
+  /// and a log another device has already re-published is loaded and diffed,
+  /// like any document being opened.
+  Future<void> forgetRemovedDocument(
+    String collection,
+    String firestoreDocId,
+  ) async {
+    if (!FirestoreCollections.crdtBacked.contains(collection)) return;
+    final documentId = _localDocumentId(collection, firestoreDocId);
+    if (_purgingDocuments.contains(documentKey(collection, documentId))) {
+      return;
+    }
+    await _reseedAfterLogLoss(collection, documentId);
+  }
+
+  /// Never throws: a purge has already succeeded by the time this runs, and
+  /// live sync fires it unawaited.
+  Future<void> _reseedAfterLogLoss(String collection, String documentId) async {
+    final session = _charOpRegistry.session(collection, documentId);
+    _charOpRegistry.removeSession(collection, documentId);
+    _pendingTextMergeBuffer.clearDocument(collection, documentId);
+    if (session == null) return;
+    try {
+      await prepareEditingSession(
+        collection: collection,
+        documentId: documentId,
+        initialText: session.text,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('[sync] re-seed for $documentId failed: $error');
+      ErrorLogger.instance.record(
+        error,
+        stackTrace,
+        context: 'sync: re-seed after log loss for $collection/$documentId',
+      );
+      // The log couldn't be read, but it is gone or being rebuilt from the
+      // same seed ids, so seeding the text as pending is what an empty read
+      // would have done. Without a session the next keystroke opened one
+      // with no pending seeds, and the log spelled only the new characters.
+      _charOpRegistry.ensureSession(
+        collection: collection,
+        documentId: documentId,
+        clientId: deviceId,
+        initialText: session.text,
+        markSeedsAsPending: true,
+      );
+    }
   }
 
   /// Publishes a wholesale text rewrite of [entry] — the Search popup's save,
@@ -1168,9 +1239,12 @@ class RemoteSyncService {
       saveLocal: saveLocal,
       saveRemote: () async {
         final latest = await _journalRepository.getEntry(entryId);
-        // An erased entry has nothing left to upload: its erase went out on
-        // its own path, and re-sending it here would wipe the log again.
-        if (latest != null && !isErasedAt(latest.deletedAt)) {
+        // A deleted entry has nothing left to upload: its deletion went out on
+        // its own path, the save that scheduled this was dropped (see
+        // [JournalWriteCoordinator.saveEntry]), and re-sending it here would
+        // carry an open editor's keystrokes into its log — or, for an erase,
+        // wipe the log again.
+        if (latest != null && latest.deletedAt == null) {
           await _uploadJournalEntryNow(latest);
         }
       },
@@ -1188,7 +1262,7 @@ class RemoteSyncService {
       saveRemote: () async {
         final latest = await _dreamRepository.getEntry(entryId);
         // See [saveJournalEntryThenScheduleUpload].
-        if (latest != null && !isErasedAt(latest.deletedAt)) {
+        if (latest != null && latest.deletedAt == null) {
           await _uploadDreamEntryNow(latest);
         }
       },
@@ -1200,16 +1274,17 @@ class RemoteSyncService {
       collection: FirestoreCollections.todoTasks,
       documentId: task.id,
       saveLocal: () async {
-        // A save from a panel still open on a task the trash has erased would
-        // write its text back into the emptied row.
+        // A save from a panel still open on a task deleted since — on
+        // another device, or erased from the trash — would write its text
+        // into the trashed or emptied row (BUG-245, BUG-248).
         final current = await _findTodoTask(task.id);
-        if (isErasedAt(current?.deletedAt)) return;
+        if (current?.deletedAt != null) return;
         await _todoRepository.upsertTask(task);
       },
       saveRemote: () async {
         final latest = await _findTodoTask(task.id);
         // See [saveJournalEntryThenScheduleUpload].
-        if (latest != null && !isErasedAt(latest.deletedAt)) {
+        if (latest != null && latest.deletedAt == null) {
           await _uploadTodoTaskNow(latest);
         }
       },
@@ -1526,7 +1601,8 @@ class RemoteSyncService {
     // latest one rather than one a save is about to overwrite.
     await settleLocalWrites(FirestoreCollections.journalEntries, entryId);
     final local = await _journalRepository.getEntry(entryId);
-    if (local == null) return null;
+    // Never into a deleted row: see [JournalWriteCoordinator.saveEntry].
+    if (local == null || local.deletedAt != null) return null;
 
     final merged = local.copyWith(
       body: body,
@@ -1562,7 +1638,8 @@ class RemoteSyncService {
     );
     await settleLocalWrites(FirestoreCollections.dreamEntries, entryId);
     final local = await _dreamRepository.getEntry(entryId);
-    if (local == null) return null;
+    // Never into a deleted row: see [JournalWriteCoordinator.saveEntry].
+    if (local == null || local.deletedAt != null) return null;
 
     final merged = local.copyWith(
       body: body,
@@ -1595,7 +1672,8 @@ class RemoteSyncService {
       newRemoteText: pending.remoteText,
     );
     final local = await _findTodoTask(taskId);
-    if (local == null) return null;
+    // Never into a deleted row: see [JournalWriteCoordinator.saveEntry].
+    if (local == null || local.deletedAt != null) return null;
 
     final merged = local.copyWith(
       notes: notes.isEmpty ? null : notes,
@@ -3014,9 +3092,13 @@ class RemoteSyncService {
           local: local,
           crdtText: fromCrdt ? CrdtTextFields.fromJournalPayload(data) : null,
         );
+        // A deletion that wins is taken whole, text included: the editor
+        // leaves the entry and its saves are dropped (BUG-246), so text kept
+        // here would stay on this device's trashed copy alone.
         final editing =
             local != null &&
-            isDocumentEditing(FirestoreCollections.journalEntries, id);
+            isDocumentEditing(FirestoreCollections.journalEntries, id) &&
+            !(merged.deletedAt != null && local.deletedAt == null);
         if (editing) {
           _pendingTextMergeBuffer.bufferWhileEditing(
             collection: FirestoreCollections.journalEntries,
@@ -3039,11 +3121,14 @@ class RemoteSyncService {
                 : extractTags(absorbed.after),
             mapOffset: absorbed?.mapOffset,
           );
+          // The pulled stamps kept: restamped "now", the row outranked the
+          // copy it came from, and was sent back for nothing.
           merged = merged.copyWith(
             body: local.body,
             richBodyJson: local.richBodyJson,
             tags: local.tags,
             bumpVersion: false,
+            updatedAt: merged.updatedAt,
           );
         } else {
           _pendingTextMergeBuffer.recordRemoteText(
@@ -3051,7 +3136,15 @@ class RemoteSyncService {
             id,
             merged.body,
           );
-          final owed = local == null || !fromCrdt
+          final owed =
+              local == null ||
+                  !fromCrdt ||
+                  // A deleted row owes no text: saves into one are dropped,
+                  // so what it holds is only what it had when the deletion
+                  // met it. Its text is the log's, as on every other device
+                  // (BUG-245, BUG-246).
+                  merged.deletedAt != null ||
+                  local.deletedAt != null
               ? null
               : await _textOwedByThisDevice(
                   FirestoreCollections.journalEntries,
@@ -3189,9 +3282,11 @@ class RemoteSyncService {
           local: local,
           crdtText: fromCrdt ? CrdtTextFields.fromDreamPayload(data) : null,
         );
+        // See the journal entry pull: a winning deletion is taken whole.
         final editing =
             local != null &&
-            isDocumentEditing(FirestoreCollections.dreamEntries, id);
+            isDocumentEditing(FirestoreCollections.dreamEntries, id) &&
+            !(merged.deletedAt != null && local.deletedAt == null);
         if (editing) {
           _pendingTextMergeBuffer.bufferWhileEditing(
             collection: FirestoreCollections.dreamEntries,
@@ -3211,10 +3306,12 @@ class RemoteSyncService {
                 : extractTags(absorbed.after),
             mapOffset: absorbed?.mapOffset,
           );
+          // See the journal entry pull.
           merged = merged.copyWith(
             body: local.body,
             tags: local.tags,
             bumpVersion: false,
+            updatedAt: merged.updatedAt,
           );
         } else {
           _pendingTextMergeBuffer.recordRemoteText(
@@ -3222,7 +3319,15 @@ class RemoteSyncService {
             id,
             merged.body,
           );
-          final owed = local == null || !fromCrdt
+          final owed =
+              local == null ||
+                  !fromCrdt ||
+                  // A deleted row owes no text: saves into one are dropped,
+                  // so what it holds is only what it had when the deletion
+                  // met it. Its text is the log's, as on every other device
+                  // (BUG-245, BUG-246).
+                  merged.deletedAt != null ||
+                  local.deletedAt != null
               ? null
               : await _textOwedByThisDevice(
                   FirestoreCollections.dreamEntries,
@@ -3416,9 +3521,11 @@ class RemoteSyncService {
             local: local,
             crdtText: fromCrdt ? CrdtTextFields.fromTodoPayload(data) : null,
           );
+          // See the journal entry pull: a winning deletion is taken whole.
           final editing =
               local != null &&
-              isDocumentEditing(FirestoreCollections.todoTasks, id);
+              isDocumentEditing(FirestoreCollections.todoTasks, id) &&
+              !(merged.deletedAt != null && local.deletedAt == null);
           if (editing) {
             _pendingTextMergeBuffer.bufferWhileEditing(
               collection: FirestoreCollections.todoTasks,
@@ -3435,14 +3542,24 @@ class RemoteSyncService {
                   : local.notes ?? '',
               mapOffset: absorbed?.mapOffset,
             );
-            merged = merged.copyWith(notes: local.notes, bumpVersion: false);
+            // See the journal entry pull.
+            merged = merged.copyWith(
+              notes: local.notes,
+              bumpVersion: false,
+              updatedAt: merged.updatedAt,
+            );
           } else {
             _pendingTextMergeBuffer.recordRemoteText(
               FirestoreCollections.todoTasks,
               id,
               merged.notes ?? '',
             );
-            final owed = local == null || !fromCrdt
+            final owed =
+                local == null ||
+                    !fromCrdt ||
+                    // See the journal entry pull: a deleted row owes no text.
+                    merged.deletedAt != null ||
+                    local.deletedAt != null
                 ? null
                 : await _textOwedByThisDevice(
                     FirestoreCollections.todoTasks,
@@ -3611,10 +3728,13 @@ class RemoteSyncService {
           _pulledDocumentKey: doc.data,
         },
       );
-      pulled[localDocId] = remote;
+      // What the server holds, not what the operation log resolved to: the
+      // log's metadata is the last upload *sent*, the document the last to
+      // *land*, and it is the document a stale copy has overwritten.
+      pulled[localDocId] = _normalizeRemoteDocument(collection, doc.data);
       progress?.applied();
     }
-    await _repushWinningTombstones(collection, pulled);
+    await _repushWinningCopies(collection, pulled);
     // Only once every document has been applied: a pull that threw partway
     // must be asked for the same documents again.
     if (advance != null) {
@@ -4846,13 +4966,14 @@ class RemoteSyncService {
           await forceOverwriteJournalEntryText(entry, queueOnFailure: false);
           return;
         }
-        if (!await _recoverLostOperations(
-          collection,
-          documentId,
-          text: entry.body,
-          title: entry.title,
-          payload: journalEntryToFirestore(entry),
-        )) {
+        if (entry.deletedAt == null &&
+            !await _recoverLostOperations(
+              collection,
+              documentId,
+              text: entry.body,
+              title: entry.title,
+              payload: journalEntryToFirestore(entry),
+            )) {
           return;
         }
         await _uploadJournalEntryNow(entry);
@@ -4873,13 +4994,14 @@ class RemoteSyncService {
           await forceOverwriteDreamEntryText(entry, queueOnFailure: false);
           return;
         }
-        if (!await _recoverLostOperations(
-          collection,
-          documentId,
-          text: entry.body,
-          title: entry.title,
-          payload: dreamEntryToFirestore(entry),
-        )) {
+        if (entry.deletedAt == null &&
+            !await _recoverLostOperations(
+              collection,
+              documentId,
+              text: entry.body,
+              title: entry.title,
+              payload: dreamEntryToFirestore(entry),
+            )) {
           return;
         }
         await _uploadDreamEntryNow(entry);
@@ -4894,13 +5016,14 @@ class RemoteSyncService {
           );
           return;
         }
-        if (!await _recoverLostOperations(
-          collection,
-          documentId,
-          text: task.notes ?? '',
-          title: task.title,
-          payload: todoTaskToFirestore(task),
-        )) {
+        if (task.deletedAt == null &&
+            !await _recoverLostOperations(
+              collection,
+              documentId,
+              text: task.notes ?? '',
+              title: task.title,
+              payload: todoTaskToFirestore(task),
+            )) {
           return;
         }
         await _uploadTodoTaskNow(task);
@@ -4920,6 +5043,11 @@ class RemoteSyncService {
   /// characters another device wrote. The row and the log have both moved
   /// since this device last uploaded, and deleting text the user never saw is
   /// not a choice to make silently; the conflict keeps both sides.
+  ///
+  /// Not run for a soft-deleted row: what goes back up then is the deletion,
+  /// which another device's text in the log has no quarrel with. Quarantining
+  /// it held the tombstone back while that device's live copy stayed in the
+  /// cloud (BUG-245).
   Future<bool> _recoverLostOperations(
     String collection,
     String documentId, {
@@ -5785,7 +5913,7 @@ class RemoteSyncService {
   /// here, and an open editor's session and buffered text go with it rather
   /// than being run through conflict detection against text that no longer
   /// exists. A copy arriving for a row this device has already erased is not
-  /// applied at all — [_repushWinningTombstones] puts the erase back on the
+  /// applied at all — [_repushWinningCopies] puts the erase back on the
   /// server instead.
   Future<bool> _applyErasure(
     String collection,
@@ -5803,19 +5931,29 @@ class RemoteSyncService {
     return true;
   }
 
-  /// Puts this device's tombstones back on the server where a pull brought a
-  /// copy that lost to them.
+  /// Puts this device's copy back on the server where a pull brought a copy
+  /// that lost to it.
   ///
-  /// Firestore writes are unconditional, so a device that saved an item
-  /// before it heard of the deletion overwrites the tombstone in the cloud with
-  /// a live copy. The devices that still hold the tombstone keep it — the copy
-  /// loses on version — but nothing used to correct the cloud, and a device
-  /// that no longer had the row (a fresh install, or one past its purge)
-  /// adopted the live copy and brought the item back. Queued rather than
-  /// uploaded here: the outbox already knows how to send any collection, and
-  /// for the ones with an operation log its replay is the path that handles
-  /// both a lost text and an erase.
-  Future<void> _repushWinningTombstones(
+  /// Firestore writes are unconditional, so the server keeps whichever upload
+  /// landed last, not the later save: two devices saving one record close
+  /// together, or one of them offline, left the cloud on the earlier save
+  /// whenever its upload arrived second. The device holding the later copy
+  /// kept it — the incoming one loses on version and `updatedAt` — but
+  /// nothing corrected the cloud, so the devices disagreed for good and a
+  /// device signing in later got the older copy (BUG-241). The same goes for a
+  /// tombstone overwritten by a device that saved before it heard of the
+  /// deletion, which a device without the row then brought back.
+  ///
+  /// Only a copy that outranks the server's *strictly* goes back up: on an
+  /// exact tie the pull takes the remote copy (see [remoteUpdatedAtWins]), so
+  /// re-sending ours as well would leave two devices trading copies forever.
+  /// A tombstone also wins a tie with a live copy at its own version. Rows
+  /// held in a quarantined conflict are left to the user's choice.
+  ///
+  /// Queued rather than uploaded here: the outbox already knows how to send
+  /// any collection, and for the ones with an operation log its replay is the
+  /// path that handles both a lost text and an erase.
+  Future<void> _repushWinningCopies(
     String collection,
     Map<String, Map<String, dynamic>> pulled,
   ) async {
@@ -5827,22 +5965,20 @@ class RemoteSyncService {
       );
       var queued = false;
       for (final entry in local.entries) {
-        final localDeletedAt = parseFirestoreDate(entry.value['deletedAt']);
-        if (localDeletedAt == null) continue;
-        final remote = pulled[entry.key]!;
-        final localVersion = parseVersion(entry.value);
-        final remoteVersion = parseVersion(remote);
-        // The pull just applied the remote copy wherever it won, so a local
-        // row that still differs from it is one the remote copy lost to. One
-        // that is *behind* it was kept for another reason — a quarantined
-        // conflict — and is left to that.
-        if (localVersion < remoteVersion) continue;
-        final remoteDeletedAt = parseFirestoreDate(remote['deletedAt']);
-        if (localVersion == remoteVersion &&
-            remoteDeletedAt != null &&
-            remoteDeletedAt.isAtSameMomentAs(localDeletedAt)) {
+        if (!_localCopyOutranks(entry.value, pulled[entry.key]!)) continue;
+        // An editor's own save follows anyway, and its pull keeps the
+        // editor's text over whatever arrives: two devices both editing
+        // would otherwise send copies back and forth for as long as they type.
+        // Not for a tombstone: saves into a deleted row are dropped, so no
+        // save follows it.
+        if (parseFirestoreDate(entry.value['deletedAt']) == null &&
+            isDocumentEditing(collection, entry.key)) {
           continue;
         }
+        final conflict = await _syncConflictRepository?.getConflict(
+          '${collection}_${entry.key}',
+        );
+        if (conflict != null) continue;
         await OutboxSyncWorker.recordOwedUpload(
           collection: collection,
           documentId: entry.key,
@@ -5853,13 +5989,39 @@ class RemoteSyncService {
     } catch (error, stackTrace) {
       // A pull has already applied everything it brought; failing it here
       // would only make it fetch the same documents again.
-      debugPrint('[sync] tombstone check for $collection failed: $error');
+      debugPrint('[sync] winning-copy check for $collection failed: $error');
       ErrorLogger.instance.record(
         error,
         stackTrace,
-        context: 'sync: tombstone check after pulling $collection',
+        context: 'sync: winning-copy check after pulling $collection',
       );
     }
+  }
+
+  /// Whether [local] beats the server's [remote] copy of one record: the
+  /// pull's own rule, version then `updatedAt`, with an exact tie going to
+  /// neither.
+  static bool _localCopyOutranks(
+    Map<String, dynamic> local,
+    Map<String, dynamic> remote,
+  ) {
+    final localVersion = parseVersion(local);
+    final remoteVersion = parseVersion(remote);
+    if (localVersion != remoteVersion) return localVersion > remoteVersion;
+    final localDeletedAt = parseFirestoreDate(local['deletedAt']);
+    final remoteDeletedAt = parseFirestoreDate(remote['deletedAt']);
+    // The pull just applied the remote copy wherever it won, so a tombstone
+    // still differing from it at the same version is one it lost to.
+    if (localDeletedAt != null &&
+        (remoteDeletedAt == null ||
+            !remoteDeletedAt.isAtSameMomentAs(localDeletedAt))) {
+      return true;
+    }
+    final localUpdated = parseFirestoreDate(local['updatedAt']);
+    final remoteUpdated = parseFirestoreDate(remote['updatedAt']);
+    return localUpdated != null &&
+        remoteUpdated != null &&
+        localUpdated.isAfter(remoteUpdated);
   }
 
   /// Uploads records a backup restore just wrote to SQLite.
@@ -6845,7 +7007,12 @@ class RemoteSyncService {
     final adopted = await _adoptLegacySnippets(remote);
 
     final local = await _settingsRepository.getSettings();
-    final merged = mergeSettingsFromRemote(remote, local);
+    // The weather location rides in the same document, so a location saved
+    // on another device reaches a running one here, not only at startup.
+    final merged = mergeWeatherLocationFromRemote(
+      remote,
+      mergeSettingsFromRemote(remote, local),
+    );
     if (identical(merged, local)) return adopted;
 
     await _settingsRepository.saveSettings(merged, recordLocalActivity: false);
@@ -7327,6 +7494,23 @@ class LiveSyncController {
     String collection,
     Map<String, Map<String, dynamic>> changed,
   ) async {
+    // Deleted from the server: nothing to pull, but an open editor's session
+    // was built on the operation log that went with it.
+    final removed = [
+      for (final entry in changed.entries)
+        if (entry.value.isEmpty) entry.key,
+    ];
+    if (removed.isNotEmpty) {
+      for (final id in removed) {
+        // Never throws (see [RemoteSyncService.forgetRemovedDocument]).
+        unawaited(_remoteSync.forgetRemovedDocument(collection, id));
+      }
+      changed = {
+        for (final entry in changed.entries)
+          if (entry.value.isNotEmpty) entry.key: entry.value,
+      };
+      if (changed.isEmpty) return;
+    }
     // Re-read rather than replayed with their old snapshot data, which is
     // what failed.
     for (final entry in _deferredIdsByCollection.entries) {

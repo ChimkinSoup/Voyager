@@ -1285,6 +1285,8 @@ abstract class SyncRepository {
   ///
   /// With [changedSince], only documents the server wrote after it are
   /// watched, so the first snapshot is what changed rather than everything.
+  ///
+  /// A document deleted from the server comes through with an empty map.
   Stream<Map<String, Map<String, dynamic>>> watchCollection(
     String collection, {
     DateTime? changedSince,

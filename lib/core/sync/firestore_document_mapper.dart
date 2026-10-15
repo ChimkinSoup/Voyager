@@ -4137,6 +4137,48 @@ AppSettings mergeSettingsFromRemote(
   );
 }
 
+/// Applies the weather location in a remote settings document to [local]
+/// when the remote one was saved later. The location isn't part of
+/// [settingsSyncPayload]: the weather service writes it to the same document
+/// under its own stamp, `weatherLocationUpdatedAt`.
+///
+/// Returns [local] unchanged when the remote location is no newer or no
+/// different, so a pull that finds nothing costs no write.
+AppSettings mergeWeatherLocationFromRemote(
+  Map<String, dynamic> remote,
+  AppSettings local,
+) {
+  final lat = remote['weatherLat'];
+  final lon = remote['weatherLon'];
+  if (lat is! num || lon is! num) return local;
+
+  final remoteUpdated = parseFirestoreDate(remote['weatherLocationUpdatedAt']);
+  if (remoteUpdated != null &&
+      local.weatherLocationUpdatedAt != null &&
+      !remoteUpdated.isAfter(local.weatherLocationUpdatedAt!)) {
+    return local;
+  }
+
+  final label = remote['weatherLocationLabel'] as String?;
+  final locationChanged =
+      local.weatherLat != lat.toDouble() || local.weatherLon != lon.toDouble();
+  if (!locationChanged && local.weatherLocationLabel == label) return local;
+
+  return local.copyWith(
+    weatherLocationLabel: label,
+    weatherLat: lat.toDouble(),
+    weatherLon: lon.toDouble(),
+    weatherLocationUpdatedAt: remoteUpdated ?? utcNow(),
+    // As `WeatherService.saveLocation` does: the old place's conditions would
+    // otherwise show under the new label until the next scheduled refresh.
+    clearWeatherIcon: locationChanged,
+    clearWeatherFetchedAt: locationChanged,
+    clearWeatherConditionCode: locationChanged,
+    clearWeatherTempC: locationChanged,
+    clearWeatherForecastJson: locationChanged,
+  );
+}
+
 List<String>? _stringListOrNull(Object? value) {
   if (value is! List) return null;
   return [

@@ -911,7 +911,7 @@ Future<List<Exercise>> plannedExercisesForDay(
                 exercisesById.containsKey(e.exerciseId),
           )
           .toList()
-        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+        ..sort(WorkoutPlanEntry.byPlace);
   return [for (final e in dayEntries) exercisesById[e.exerciseId]!];
 }
 

@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/dev/dev_flags.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/firestore_write_gate.dart';
 import 'package:voyager/core/sync/outbox_sync_worker.dart';
@@ -273,6 +274,45 @@ void main() {
     expect(cloud.containsKey('themeMode'), isFalse);
     expect(await allRows(), isEmpty);
   });
+
+  test(
+    'a settings upload waits in the outbox under Force offline (BUG-242)',
+    () async {
+      final firestore = FakeFirebaseFirestore();
+      final doc = firestore.doc(
+        'users/user-1/${FirestoreCollections.settings}/'
+        '${FirestoreCollections.settingsDocumentId}',
+      );
+      final repo = DriftSettingsRepository(db);
+      await repo.saveSettings(
+        (await repo.getSettings()).copyWith(weekStartsOnMonday: false),
+      );
+      final worker = OutboxSyncWorker(
+        db,
+        firestore,
+        () => 'user-1',
+        yieldDelay: Duration.zero,
+      );
+      await worker.enqueue(
+        collection: FirestoreCollections.settings,
+        documentId: FirestoreCollections.settingsDocumentId,
+      );
+
+      DevFlags.forceOffline = true;
+      addTearDown(() => DevFlags.forceOffline = false);
+      await worker.startDraining();
+
+      expect((await doc.get()).exists, isFalse);
+      expect(await allRows(), hasLength(1));
+      expect(await worker.listParked(), isEmpty);
+
+      DevFlags.forceOffline = false;
+      await worker.startDraining();
+
+      expect((await doc.get()).data()!['weekStartsOnMonday'], isFalse);
+      expect(await allRows(), isEmpty);
+    },
+  );
 
   test('a queued row whose entity is gone is just cleared', () async {
     final firestore = FakeFirebaseFirestore();

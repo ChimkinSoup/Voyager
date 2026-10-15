@@ -426,7 +426,7 @@ class _LogPastWorkoutState extends ConsumerState<_LogPastWorkout> {
     final planned = [
       for (final e in [
         ...entries,
-      ]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder)))
+      ]..sort(WorkoutPlanEntry.byPlace))
         if (e.dayIndex == dayIndex && exercises.containsKey(e.exerciseId))
           exercises[e.exerciseId]!.name,
     ];

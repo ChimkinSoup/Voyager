@@ -567,6 +567,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     final stored = await repo.getTask(widget.task.id);
     // A missing row means the task was hard-deleted; writing would resurrect it.
     if (stored == null) return;
+    if (_closeIfDeleted(stored)) return;
 
     final effectiveDue = clearDueDate ? null : (dueDate ?? _dueDate);
     // Against the stored row too: the move put an optimistic copy carrying
@@ -706,6 +707,19 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     if (notifyChanged) widget.onChanged();
   }
 
+  /// Closes the panel when [stored] — the row a save just read — has been
+  /// deleted since it opened, on another device or in the trash. The save is
+  /// dropped either way: written, the panel's title and notes went into the
+  /// trashed row, or back into one erased for good (BUG-245, BUG-248).
+  ///
+  /// Read after an await, [stored] may be a task the panel has since left:
+  /// its save is dropped, but the panel stays open on the task it now shows.
+  bool _closeIfDeleted(TodoTask stored) {
+    if (stored.deletedAt == null) return false;
+    if (mounted && stored.id == widget.task.id) widget.onClose();
+    return true;
+  }
+
   Future<void> _close() async {
     if (mounted) widget.onClose();
     // _save() writes both fields from the live controllers, so the debounced
@@ -766,7 +780,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     // linear-scan its tasks — a query per list plus a scan, every 400ms while
     // the user types, to fetch a single row.
     final baseline = await repo.getTask(widget.task.id);
-    if (baseline == null) return;
+    if (baseline == null || _closeIfDeleted(baseline)) return;
 
     final updated = baseline.copyWith(
       notes: notes.isEmpty ? null : notes,
@@ -790,7 +804,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     final latest = await ref
         .read(todoRepositoryProvider)
         .getTask(widget.task.id);
-    if (latest == null) return;
+    if (latest == null || _closeIfDeleted(latest)) return;
     await ref
         .read(remoteSyncServiceProvider)
         .saveTodoTaskThenScheduleUpload(latest.copyWith(title: title));

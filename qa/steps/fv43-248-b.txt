@@ -1,0 +1,17 @@
+wheel 88 1300 10
+tap To-Do
+wait 1500
+tap MD5 List d
+wait 800
+tap MD5 List a
+wait 1500
+tap MD5 task a2
+wait 1200
+click 2448 475
+key ctrl+end
+type  B OFFLINE notes
+wait 4000
+field
+shot fv43-248-qb-offline-typed
+tap Finance
+wait 1500

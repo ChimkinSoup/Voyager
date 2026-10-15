@@ -1,7 +1,7 @@
 _TodoPageState? st; void w(Element x) { if (st != null) return; if (x is StatefulElement && x.state is _TodoPageState) { st = x.state as _TodoPageState; return; } x.visitChildren(w); } e!.visitChildren(w);
 final active = sortTodoTasks(activeTopLevelTasks(await c.read(todoRepositoryProvider).listTasks('md6-list-r')));
 final ids = active.map((t) => t.id).toList();
-final from = '@W@' == 'qa' ? ids.indexOf('md6-task-r6') : ids.indexOf('md6-task-r6');
+final from = '@W@' == 'qa' ? ids.indexOf('md6-task-r1') : ids.indexOf('md6-task-r5');
 final to = '@W@' == 'qa' ? 5 : 0;
 await st!._reorderActiveTasks(active, from, to);
 MARK;

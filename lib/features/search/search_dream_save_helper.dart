@@ -5,15 +5,22 @@ import 'package:voyager/core/sync/outbox_sync_worker.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/utils/journal_tags.dart';
 import 'package:voyager/domain/models/dream_models.dart';
+import 'package:voyager/domain/repositories/repositories.dart';
 
 /// [SearchEntrySaveHelper] for a dream opened from the Search page's dream
 /// scope.
 class SearchDreamSaveHelper {
-  SearchDreamSaveHelper({required this.coordinator, required this.remoteSync});
+  SearchDreamSaveHelper({
+    required this.coordinator,
+    required this.remoteSync,
+    required this.dreamRepository,
+  });
 
   final DreamWriteCoordinator coordinator;
   final RemoteSyncService remoteSync;
+  final DreamRepository dreamRepository;
 
+  /// As [SearchEntrySaveHelper.saveEntry].
   Future<DreamEntry?> saveEntry({
     required DreamEntry baseline,
     required String title,
@@ -21,6 +28,7 @@ class SearchDreamSaveHelper {
     required String notes,
     DateTime? entryDate,
     bool publish = true,
+    VoidCallback? onDeleted,
   }) async {
     DreamEntry? result;
     try {
@@ -38,6 +46,7 @@ class SearchDreamSaveHelper {
         onSuccess: (saved) {
           result = saved;
         },
+        onDeleted: onDeleted,
       );
     } catch (error, stackTrace) {
       // The local write itself failed — a locked database, or a row that is
@@ -74,12 +83,20 @@ class SearchDreamSaveHelper {
       }
       return result;
     }
-    return publishEntry(result!);
+    return publishEntry(result!, onDeleted: onDeleted);
   }
 
-  /// Publishes [entry], a row already on disk, and returns what was published
-  /// (or [entry] itself if publishing failed).
-  Future<DreamEntry> publishEntry(DreamEntry entry) async {
+  /// As [SearchEntrySaveHelper.publishEntry].
+  Future<DreamEntry?> publishEntry(
+    DreamEntry entry, {
+    VoidCallback? onDeleted,
+  }) async {
+    // See [SearchEntrySaveHelper.publishEntry].
+    final stored = await dreamRepository.getEntry(entry.id);
+    if (stored?.deletedAt != null) {
+      onDeleted?.call();
+      return null;
+    }
     // Same reason as the journal side (see [SearchEntrySaveHelper.saveEntry]):
     // this dialog keeps no CRDT editing session, so the debounced upload
     // scheduled above would push a new body with no character operations

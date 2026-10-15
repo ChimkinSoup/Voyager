@@ -1,0 +1,11 @@
+wheel 88 1300 10
+tap Journal
+wait 1200
+tap MD5 entry c2
+wait 1200
+click 1900 1000
+key ctrl+end
+type  A types next
+wait 5000
+field
+shot fv43-247-qa-after

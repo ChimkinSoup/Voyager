@@ -21,6 +21,7 @@ class DreamEntry extends SoftDeletable {
   final List<String> tags;
 
   DreamEntry copyWith({
+    DateTime? updatedAt,
     String? title,
     String? body,
     String? notes,
@@ -33,7 +34,7 @@ class DreamEntry extends SoftDeletable {
     return DreamEntry(
       id: id,
       createdAt: createdAt,
-      updatedAt: DateTime.now().toUtc(),
+      updatedAt: updatedAt ?? DateTime.now().toUtc(),
       version: version ?? (bumpVersion ? this.version + 1 : this.version),
       deletedAt: deletedAt ?? this.deletedAt,
       title: title ?? this.title,

@@ -409,12 +409,53 @@ void main() {
       });
       final before = await deviceB.settings.getSettings();
 
-      expect(await deviceB.sync.pullSettings(), isFalse);
+      await deviceB.sync.pullSettings();
+      final after = await deviceB.settings.getSettings();
+      expect(after.accentColor, before.accentColor);
+      // The location itself is taken, as at startup.
+      expect(after.weatherLocationLabel, 'Reykjavik');
       expect(
-        (await deviceB.settings.getSettings()).accentColor,
-        before.accentColor,
+        await deviceB.sync.pullSettings(),
+        isFalse,
+        reason: 'once taken, the same location costs no further write',
       );
     });
+
+    test(
+      'a weather location saved on A reaches a running B (BUG-244)',
+      () async {
+        // What WeatherService.saveLocation writes on A.
+        final savedAt = DateTime.now().toUtc();
+        await server.upsertRemoteSettings({
+          'weatherLocationLabel': 'Toronto, Ontario, CA',
+          'weatherLat': 43.65,
+          'weatherLon': -79.38,
+          'weatherLocationUpdatedAt': savedAt.toIso8601String(),
+        });
+
+        expect(await deviceB.sync.pullSettings(), isTrue);
+        final applied = await deviceB.settings.getSettings();
+        expect(applied.weatherLocationLabel, 'Toronto, Ontario, CA');
+        expect(applied.weatherLat, 43.65);
+        expect(applied.weatherLon, -79.38);
+
+        // B then picks a location of its own; A's older one, echoed on the
+        // next tick, must not take it back.
+        await deviceB.settings.saveSettings(
+          applied.copyWith(
+            weatherLocationLabel: 'Chicago',
+            weatherLat: 41.88,
+            weatherLon: -87.63,
+            weatherLocationUpdatedAt: savedAt.add(const Duration(minutes: 1)),
+          ),
+        );
+        expect(await deviceB.sync.pullSettings(), isFalse);
+        expect(
+          (await deviceB.settings.getSettings()).weatherLocationLabel,
+          'Chicago',
+        );
+      },
+    );
 
     test('a fresh install does not overwrite the account settings', () async {
       final localA = await deviceA.settings.getSettings();

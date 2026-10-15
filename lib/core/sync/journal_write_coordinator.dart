@@ -1,4 +1,3 @@
-import 'package:voyager/core/soft_delete/erasure.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/domain/models/dream_models.dart';
@@ -34,12 +33,16 @@ class JournalWriteCoordinator {
   /// visible through any of them anyway; the row on screen follows the edit
   /// live through the page's title/body preview notifiers, and the page
   /// refreshes them properly at its commitment points.
+  ///
+  /// [onDeleted] runs instead of [onSuccess] when the save is dropped because
+  /// the entry has been deleted.
   Future<void> saveEntry({
     required String entryId,
     required JournalEntry Function(JournalEntry baseline) applyDelta,
     bool bumpVersion = false,
     bool refreshCaches = true,
     void Function(JournalEntry saved)? onSuccess,
+    void Function()? onDeleted,
   }) {
     return _remoteSync.saveJournalEntryThenScheduleUpload(
       entryId: entryId,
@@ -48,9 +51,13 @@ class JournalWriteCoordinator {
         if (baseline == null) {
           throw StateError('Journal entry $entryId not found in SQLite');
         }
-        // Erased from the trash while an editor still had it open: applying
-        // the edit would write its text back into the emptied row.
-        if (isErasedAt(baseline.deletedAt)) return;
+        // Deleted — here, from another device, or erased from the trash —
+        // while an editor still had it open: applying the edit would write
+        // its text into the trashed or emptied row (BUG-246, BUG-248).
+        if (baseline.deletedAt != null) {
+          onDeleted?.call();
+          return;
+        }
         final updated = applyDelta(baseline).copyWith(bumpVersion: bumpVersion);
         await _journalRepository.upsertEntry(updated);
         if (refreshCaches) onEntrySaved?.call();
@@ -78,6 +85,7 @@ class DreamWriteCoordinator {
     required DreamEntry Function(DreamEntry baseline) applyDelta,
     bool bumpVersion = false,
     void Function(DreamEntry saved)? onSuccess,
+    void Function()? onDeleted,
   }) {
     return _remoteSync.saveDreamEntryThenScheduleUpload(
       entryId: entryId,
@@ -87,7 +95,10 @@ class DreamWriteCoordinator {
           throw StateError('Dream entry $entryId not found in SQLite');
         }
         // See [JournalWriteCoordinator.saveEntry].
-        if (isErasedAt(baseline.deletedAt)) return;
+        if (baseline.deletedAt != null) {
+          onDeleted?.call();
+          return;
+        }
         final updated = applyDelta(baseline).copyWith(bumpVersion: bumpVersion);
         await _dreamRepository.upsertEntry(updated);
         onEntrySaved?.call();
@@ -123,7 +134,7 @@ class TodoWriteCoordinator {
           throw StateError('Todo task $taskId not found in SQLite');
         }
         // See [JournalWriteCoordinator.saveEntry].
-        if (isErasedAt(baseline.deletedAt)) return;
+        if (baseline.deletedAt != null) return;
         final updated = await applyDelta(baseline);
         if (updated == null) return;
         final toSave = updated.copyWith(bumpVersion: bumpVersion);
@@ -132,7 +143,7 @@ class TodoWriteCoordinator {
       },
       saveRemote: () async {
         final latest = await _findTask(taskId);
-        if (latest != null && !isErasedAt(latest.deletedAt)) {
+        if (latest != null && latest.deletedAt == null) {
           await _remoteSync.pushTodoTaskNow(latest);
         }
       },

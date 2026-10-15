@@ -228,6 +228,9 @@ class _StableViewScrollPosition extends ScrollPositionWithSingleContext {
   }
 }
 
+/// A task id cut to 8 characters for debug logs; short ids are kept whole.
+String _shortId(String id) => id.length <= 8 ? id : id.substring(0, 8);
+
 class TodoPage extends ConsumerStatefulWidget {
   const TodoPage({super.key});
 
@@ -1720,19 +1723,31 @@ class _TodoPageState extends ConsumerState<TodoPage>
   }
 
   void _reconcileTaskOverrides(List<TodoTask> tasks) {
-    if (_taskOverrides.isEmpty) return;
-    final resolvedIds = <String>[
+    final order = _optimisticActiveTaskOrder;
+    if (_taskOverrides.isEmpty && order == null) return;
+    final resolvedIds = <String>{
       for (final task in tasks)
         if (_taskOverrides.containsKey(task.id) &&
             _taskOverrideMatches(task, _taskOverrides[task.id]!))
           task.id,
-    ];
-    if (resolvedIds.isEmpty) return;
+    };
+    // The forced order has done its job once every row it moved is back from
+    // disk: the rows then sort to it by themselves. Kept any longer, it draws
+    // over reorders that later arrive from another device (BUG-249).
+    final orderLanded =
+        order != null &&
+        order.every(
+          (id) => !_taskOverrides.containsKey(id) || resolvedIds.contains(id),
+        );
+    if (resolvedIds.isEmpty && !orderLanded) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() {
         for (final id in resolvedIds) {
           _taskOverrides.remove(id);
+        }
+        if (orderLanded && identical(_optimisticActiveTaskOrder, order)) {
+          _optimisticActiveTaskOrder = null;
         }
       });
     });
@@ -2290,7 +2305,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
     final growsAboveViewport = estimatedOffset < pixels;
     if (DevFlags.verboseSync) {
       debugPrint(
-        '[scroll] uncompleteGrowsAboveViewport task=${task.id.substring(0, 8)} '
+        '[scroll] uncompleteGrowsAboveViewport task=${_shortId(task.id)} '
         'insertIndex=$insertIndex total=${resorted.length} '
         'avgRowHeight=$avgRowHeight estimatedOffset=$estimatedOffset '
         'pixels=$pixels result=$growsAboveViewport',
@@ -3080,7 +3095,7 @@ class _TodoPageState extends ConsumerState<TodoPage>
               final dated = active.where((t) => t.dueDate != null).toList();
               debugPrint(
                 '[sort] dated active order: '
-                '${dated.map((t) => '${t.id.substring(0, 8)}'
+                '${dated.map((t) => '${_shortId(t.id)}'
                     '(due=${t.dueDate!.toIso8601String().substring(0, 10)},'
                     'sort=${t.sortOrder},star=${t.starred})').join(" | ")}',
               );
@@ -3949,7 +3964,7 @@ class _TaskRowState extends State<_TaskRow> with TickerProviderStateMixin {
     super.initState();
     if (DevFlags.verboseSync) {
       debugPrint(
-        '[jank] _TaskRow initState (fresh State) task=${widget.task.id.substring(0, 8)} '
+        '[jank] _TaskRow initState (fresh State) task=${_shortId(widget.task.id)} '
         'hasCachedStats=${_cachedStats != null} '
         'hasInitialData=${widget.subtaskStatsData != null}',
       );

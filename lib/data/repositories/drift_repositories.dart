@@ -6517,7 +6517,7 @@ class DriftWorkoutRepository implements WorkoutRepository {
         .toList();
     entries.sort((a, b) {
       final byDay = a.dayIndex.compareTo(b.dayIndex);
-      return byDay != 0 ? byDay : a.sortOrder.compareTo(b.sortOrder);
+      return byDay != 0 ? byDay : WorkoutPlanEntry.byPlace(a, b);
     });
     return entries;
   }

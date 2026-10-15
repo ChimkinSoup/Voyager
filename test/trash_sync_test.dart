@@ -24,6 +24,7 @@ import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/journal_models.dart';
 import 'package:voyager/domain/models/ranking_models.dart';
 import 'package:voyager/domain/models/settings_models.dart';
+import 'package:voyager/domain/models/todo_models.dart';
 import 'package:voyager/domain/repositories/repositories.dart';
 
 /// A server that can be taken out of reach for the one call that insists on
@@ -562,5 +563,74 @@ void main() {
       await remote.getDocument(FirestoreCollections.journalEntries, 'e'),
       isNull,
     );
+  });
+
+  test('an editor save onto an entry deleted elsewhere writes nothing '
+      '(BUG-246)', () async {
+    final deletedAt = DateTime.utc(2026, 10, 13, 16, 44, 18);
+    await journals.upsertEntry(_entry(version: 4, deletedAt: deletedAt));
+    final coordinator = JournalWriteCoordinator(
+      journalRepository: journals,
+      remoteSync: service,
+    );
+
+    service.recordJournalTextChange(
+      entryId: 'e',
+      before: 'Dear diary',
+      after: 'Dear diary AFTERDELETE',
+    );
+    await coordinator.saveEntry(
+      entryId: 'e',
+      applyDelta: (baseline) =>
+          baseline.copyWith(body: 'Dear diary AFTERDELETE'),
+    );
+    await _settle();
+
+    final stored = (await journals.getEntry('e'))!;
+    expect(stored.body, 'Dear diary');
+    expect(stored.deletedAt, deletedAt);
+    expect(
+      await remote.getDocument(FirestoreCollections.journalEntries, 'e'),
+      isNull,
+      reason: 'nothing typed into the trashed entry is uploaded',
+    );
+  });
+
+  test('a to-do panel save onto a task deleted or erased elsewhere writes '
+      'nothing (BUG-245, BUG-248)', () async {
+    final todos = DriftTodoRepository(db);
+    TodoTask task({DateTime? deletedAt, String title = 'MD5 task a2'}) =>
+        TodoTask(
+          id: 't',
+          listId: 'list',
+          title: title,
+          notes: deletedAt == kErasedAt ? null : 'notes',
+          sortOrder: 0,
+          createdAt: _created,
+          updatedAt: _created,
+          version: deletedAt == kErasedAt ? 1048580 : 4,
+          deletedAt: deletedAt,
+        );
+
+    for (final deletedAt in [DateTime.utc(2026, 10, 13), kErasedAt]) {
+      final stored = task(
+        deletedAt: deletedAt,
+        title: deletedAt == kErasedAt ? '' : 'MD5 task a2',
+      );
+      await todos.upsertTask(stored);
+      await service.saveTodoTaskThenScheduleUpload(
+        task().copyWith(notes: 'B OFFLINE notes', bumpVersion: false),
+      );
+      await _settle();
+
+      final after = (await todos.getTask('t'))!;
+      expect(after.notes, stored.notes, reason: '$deletedAt');
+      expect(after.title, stored.title, reason: '$deletedAt');
+      expect(
+        await remote.getDocument(FirestoreCollections.todoTasks, 't'),
+        isNull,
+        reason: '$deletedAt',
+      );
+    }
   });
 }

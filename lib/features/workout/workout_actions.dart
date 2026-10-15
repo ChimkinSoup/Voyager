@@ -199,7 +199,7 @@ class WorkoutActions {
   static List<WorkoutPlanEntry> _live(List<WorkoutPlanEntry> day) => [
     for (final e in day)
       if (e.deletedAt == null) e,
-  ]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  ]..sort(WorkoutPlanEntry.byPlace);
 
   /// The order after the last entry of [day]. Deleted entries count too, so
   /// undoing a removal can't collide with whatever replaced it.
