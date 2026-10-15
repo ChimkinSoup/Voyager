@@ -1,0 +1,9 @@
+wait 6500
+click 1958 943
+wait 900
+click 1767 950
+wait 1200
+shot fv47-133c-qa-confirm
+click 2460 985
+wait 6000
+shot fv47-133c-qa-done

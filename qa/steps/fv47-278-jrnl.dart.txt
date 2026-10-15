@@ -1,0 +1,7 @@
+final repo = c.read(journalRepositoryProvider);
+final now = DateTime.now().toUtc();
+final j = Journal(id: 'fv47-jrnl', name: 'FV47 Empty', colorValue: 4286357247, createdAt: now, updatedAt: now);
+await repo.upsertJournal(j);
+c.read(remoteSyncServiceProvider).pushJournal(j);
+c.invalidate(journalsProvider);
+MARK;

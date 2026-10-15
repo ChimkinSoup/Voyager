@@ -1505,6 +1505,22 @@ Keep this table and each phase's **Status** line in sync.
 - **Result (2026-10-15):** 9 of 9 passed. FV-46 (same day): BUG-267's auth-SDK sign-out (MD-12.5) rerun three ways on qa-088, healthy each time with no further change; see BUG-267's last note. No exceptions in the session's run logs. Both instances ended `SIGNED-OUT`.
 - **Not covered:** BUG-262 with A closed while B turned uploads on (the launch call, not run); Android.
 
+### FV-47 — BUG-270 … BUG-278 (restore, import, weather lock, conflicts, purge, deleted journals)
+- **Change (2026-10-15, uncommitted, on `cc04057`):** BUG-270/271/272: `pushRestoredRecords` writes restored text onto the live operation log as an edit instead of wiping it, and clears the document's buffered remote merges; a pull no longer keeps a newer row's text when the session already holds the log's text with nothing pending. BUG-273: an imported asset with no row before is marked `localOnly` and `queueLocalOnlyUploads` runs after the restore. BUG-274: the backup list reloads as soon as the restore lands. BUG-275: the forecast fetch takes the weather fetch lock and re-reads the cloud's forecast once it holds it. BUG-276: a pull that finds a newer, cleanly replaying revision clears a `corrupted_op_chain` quarantine. BUG-277: the Dev purge runs the launch's purge. BUG-278: a live entry pulled into a deleted journal restores the journal.
+- **Tests:** new cases in `sync_saving_regressions_test.dart` (BUG-270, 271, 272 ×2), `sync_conflict_stale_snapshot_test.dart` (BUG-276 ×2), `trash_sync_test.dart` (BUG-278 ×2), `weather_service_test.dart` (BUG-275), `import_export_test.dart` (BUG-273, extended). Each fails without its lib change (checked by restoring the file from HEAD). Adjusted: finding #7's restore test no longer expects an empty log. Full suite: 4,931 passed, 16 skipped, 0 failed (before the buffered-merge follow-up; that file 53/53 after it).
+- **Flows (new account qa-090 on `qa` (A) + `qb` (B); seeds `md13-seed`, `md15-seed`; new steps `qa/steps/fv47-*`):**
+  - [x] BUG-270: restore of backup X on A, B typed afterwards: "MD13 body 01 bkeepone" / "MD13 body 02 bkeep" on A, B and cloud; the cloud log rebuilds the full text.
+  - [x] BUG-271: `je-02` open in B's editor took the restored text; B's typing added to it everywhere.
+  - [x] BUG-272: restore during B's typing (twice on the final build): one text, version and stamp everywhere, outboxes 0, B's later typing reached A. A first build put pre-restore typing back through A's buffered merges (fixed, tested). Found BUG-282 (B's editor re-inserts part of the deletion when it lands mid-word).
+  - [x] BUG-273: ZIP import: both images in qa-090's Storage, downloaded on B.
+  - [x] BUG-274: "Before restore" row in the open list 2.5 s after Restore.
+  - [x] BUG-275: both devices relaunched together with stale caches: one `refreshWeather` and one `refreshWeatherForecast` in the Cloud Run log (MD-14 round 2 had two forecast calls).
+  - [x] BUG-276: both quarantined `je-06`; B's merge cleared A's conflict and reached A.
+  - [x] BUG-277: Dev purge removed the dream and transaction tombstones too.
+  - [x] BUG-278: offline entries into a journal B deleted: the journal came back on A, B and cloud with both entries.
+- **Result (2026-10-15):** 9 of 9 passed (BUG-272 after one rebuild). Found BUG-282 (Minor, not fixed). End: `DBDIFF SAME (63 tables, 873 rows)`, outboxes 0; no exception or overflow in the six run logs, error logs only APP START. Both instances ended `SIGNED-OUT`.
+- **Not covered:** BUG-270/271 for dream bodies and task notes (same code path, tests only); BUG-276's "Keep Remote" pressed before the other device's revision arrives (the stale snapshot is still what it resolves from).
+
 ## Phase 27 — Final Review
 - **Status:** Done (2026-10-05). No new bugs; one duplicate marked (BUG-043 → BUG-010). Summary at the top of BUGS.md.
 - **Scope:** no new testing except re-checks.

@@ -979,13 +979,14 @@ void main() {
       addTearDown(target.close);
       final targetStore = MediaFileStore(root: targetMediaDir);
       final targetMedia = DriftMediaRepository(target);
+      final uploader = RecordingUploader();
 
       final summary = await DataImportService(
         db: target,
         collections: collectionsFor(target),
         settingsRepository: DriftSettingsRepository(target),
-        pushRecords: RecordingUploader().pushRecords,
-        pushSettings: RecordingUploader().pushSettings,
+        pushRecords: uploader.pushRecords,
+        pushSettings: uploader.pushSettings,
         mediaRepository: targetMedia,
         mediaFileStore: targetStore,
       ).importFromZip(zip);
@@ -999,6 +1000,14 @@ void main() {
         MediaDownloadState.present,
         reason: 'a restored blob must not sit waiting for a download',
       );
+      // BUG-273: nothing says this store's Storage holds an asset the
+      // restore created, so it is queued for upload, and the other devices
+      // are told so rather than looking for it there.
+      expect(restored.uploadState, MediaUploadState.localOnly);
+      final pushed =
+          uploader.records[FirestoreCollections.mediaAssets]!.single
+              as MediaAsset;
+      expect(mediaAssetToFirestore(pushed)['inCloud'], isFalse);
     });
 
     test('an image that cannot be written is a warning, and the restored '

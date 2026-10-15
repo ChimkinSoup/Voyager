@@ -1,0 +1,1 @@
+final fr = c.read(financeRepositoryProvider); await fr.softDeleteTransaction('md13-tx-12'); await c.read(remoteSyncServiceProvider).pushRecords('transactions', [(await fr.getTransaction('md13-tx-12'))!]); MARK;

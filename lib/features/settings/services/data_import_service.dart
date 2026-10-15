@@ -290,8 +290,24 @@ class DataImportService {
     // old data. An asset left `missing` downloads again if Storage has it.
     final warnings = <String>[];
     var mediaFilesRestored = 0;
+    final updatedAssetIds = <String>{};
     try {
-      mediaFilesRestored = await _restoreMediaBlobs(backupBlobs);
+      mediaFilesRestored = await _restoreMediaBlobs(
+        backupBlobs,
+        newAssetIds: {...?created[FirestoreCollections.mediaAssets]},
+        updatedAssetIds: updatedAssetIds,
+      );
+      // Published as they now stand, so the other devices learn whether the
+      // bytes are in Storage yet rather than look for them there.
+      final assets = restored[FirestoreCollections.mediaAssets];
+      final repository = _mediaRepository;
+      if (assets != null && repository != null) {
+        for (var i = 0; i < assets.length; i++) {
+          final asset = assets[i] as MediaAsset;
+          if (!updatedAssetIds.contains(asset.id)) continue;
+          assets[i] = await repository.getAsset(asset.id) ?? asset;
+        }
+      }
     } catch (error) {
       warnings.add('Some images could not be saved to this device: $error');
     }
@@ -338,7 +354,19 @@ class DataImportService {
   /// nothing about whether *this* device has the bytes, and it is exactly the
   /// devices that have just been restored onto that would otherwise sit
   /// waiting for a download of a file already sitting next to them.
-  Future<int> _restoreMediaBlobs(Map<String, Uint8List> blobs) async {
+  ///
+  /// An asset in [newAssetIds] had no row here before the restore, so nothing
+  /// says its bytes are in this account's Storage: a backup imported from
+  /// another account carries its "uploaded" (BUG-273). It is marked
+  /// `localOnly`, which `MediaService.queueLocalOnlyUploads` sends.
+  ///
+  /// The ids of the rows whose transfer state changed are added to
+  /// [updatedAssetIds].
+  Future<int> _restoreMediaBlobs(
+    Map<String, Uint8List> blobs, {
+    Set<String> newAssetIds = const {},
+    required Set<String> updatedAssetIds,
+  }) async {
     final store = _mediaFileStore;
     final repository = _mediaRepository;
     if (store == null || repository == null || blobs.isEmpty) return 0;
@@ -364,12 +392,19 @@ class DataImportService {
       if (format == null) continue;
       await store.writeBytes(asset.contentHash, format, bytes);
       written++;
-      if (asset.downloadState == MediaDownloadState.present) continue;
+      final strand =
+          newAssetIds.contains(asset.id) &&
+          asset.uploadState == MediaUploadState.uploaded;
+      if (asset.downloadState == MediaDownloadState.present && !strand) {
+        continue;
+      }
       await repository.updateAssetTransferState(
         asset.id,
         downloadState: MediaDownloadState.present,
+        uploadState: strand ? MediaUploadState.localOnly : null,
         clearFailureReason: true,
       );
+      updatedAssetIds.add(asset.id);
     }
     return written;
   }

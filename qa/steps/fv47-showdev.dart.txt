@@ -1,0 +1,1 @@
+final n = c.read(settingsProvider.notifier); final s = await c.read(settingsRepositoryProvider).getSettings(); await n.saveSettings(s.copyWith(hiddenNavPages: const <String>[])); MARK;

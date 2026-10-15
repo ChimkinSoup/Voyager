@@ -335,5 +335,99 @@ void main() {
         expect(await remoteSync.listConflicts(), isEmpty);
       },
     );
+
+    // BUG-276: both devices quarantined the same broken log; the other one
+    // resolved it, which repaired the log and published a newer revision.
+    for (final reason in SyncConflictReason.values) {
+      final settles = reason == SyncConflictReason.corruptedOpChain;
+      test('a newer clean revision ${settles ? 'clears' : 'leaves'} a '
+          '${reason.storageValue} conflict', () async {
+        final now = DateTime.utc(2026, 8, 12);
+        final local = JournalEntry(
+          id: _entryId,
+          journalId: 'journal-1',
+          title: '',
+          body: 'body 06',
+          entryDate: now,
+          createdAt: now,
+          updatedAt: now,
+          version: 1,
+        );
+        await journalRepo.upsertEntry(local, recordLocalActivity: false);
+        await DriftSyncConflictRepository(db).upsertConflict(
+          SyncConflict(
+            id: '${FirestoreCollections.journalEntries}_$_entryId',
+            collection: FirestoreCollections.journalEntries,
+            documentId: _entryId,
+            reason: reason,
+            localPayloadJson: jsonEncode(journalEntryToFirestore(local)),
+            remotePayloadJson: jsonEncode({
+              ...journalEntryToFirestore(local),
+              'body': 'XY',
+            }),
+            remoteText: 'XY',
+            localText: local.body,
+            detectedAt: now,
+          ),
+        );
+
+        final resolved = JournalEntry(
+          id: _entryId,
+          journalId: 'journal-1',
+          title: '',
+          body: 'body 06 mergedb',
+          entryDate: now,
+          createdAt: now,
+          updatedAt: now.add(const Duration(minutes: 1)),
+          version: 3,
+        );
+        // The original text, then the other device's merge on top of it.
+        final original = CharacterOpSession(clientId: 'device-a');
+        original.recordTextChange('', 'body 06');
+        final originalOps = original.takePendingOps();
+        final merging = CharacterOpSession(
+          clientId: 'device-b',
+          initialOperations: originalOps,
+        );
+        merging.recordTextChange('body 06', 'body 06 mergedb');
+        SyncOperation logged(
+          List<CharacterOperation> ops,
+          int sequence, {
+          Map<String, dynamic>? snapshot,
+        }) => SyncOperation(
+          id: 'op-$sequence',
+          documentId: _entryId,
+          sequence: sequence,
+          payload: CharOpsPayload(charOps: ops, snapshot: snapshot).encode(),
+          deviceId: 'device-$sequence',
+          // Typed before this device's last save, merged after it.
+          timestamp: now.add(Duration(seconds: sequence == 0 ? -10 : 30)),
+        );
+        await syncRepo.appendOperation(logged(originalOps, 0));
+        await syncRepo.appendOperation(
+          logged(
+            merging.takePendingOps(),
+            1,
+            snapshot: journalEntryToFirestore(resolved),
+          ),
+        );
+        await syncRepo.upsertDocument(
+          FirestoreCollections.journalEntries,
+          _entryId,
+          journalEntryToFirestore(resolved),
+        );
+
+        await remoteSync.pullJournalEntries();
+
+        expect(
+          await remoteSync.listConflicts(),
+          settles ? isEmpty : hasLength(1),
+        );
+        expect(
+          (await journalRepo.getEntry(_entryId))?.body,
+          settles ? 'body 06 mergedb' : 'body 06',
+        );
+      });
+    }
   });
 }

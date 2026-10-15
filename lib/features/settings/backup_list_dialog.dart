@@ -29,11 +29,18 @@ Future<void> showBackupListDialog(BuildContext context) {
 
 /// Confirms, then restores [file] behind a pre-restore snapshot (§7.2), and
 /// reports the outcome. Shared by the backup list and Import Backup.
+/// [onRestored] runs as soon as the restore has landed, before the data
+/// providers reload (which can take seconds), and after a failed one, which
+/// can still have written its snapshot.
 ///
 /// Works through the container rather than a widget's `ref`: a restore
 /// remounts every shell page, the one that started it included, and a
 /// disposed `ref` can't be used.
-Future<void> confirmAndRestoreBackup(BuildContext context, File file) async {
+Future<void> confirmAndRestoreBackup(
+  BuildContext context,
+  File file, {
+  VoidCallback? onRestored,
+}) async {
   // Resolved before the first await: the restore remounts the page that
   // started it, and the toast has to outlive that.
   final overlay = Overlay.of(context, rootOverlay: true);
@@ -96,6 +103,7 @@ Future<void> confirmAndRestoreBackup(BuildContext context, File file) async {
     }
   } catch (e) {
     done.complete();
+    onRestored?.call();
     // [AutoBackupService.restore] throws only when nothing was changed.
     toast.update(
       message: 'Restore failed, nothing was changed: $e',
@@ -108,6 +116,12 @@ Future<void> confirmAndRestoreBackup(BuildContext context, File file) async {
   // the refresh below: a throw there would leave the barrier swallowing input
   // and the spinner running for good.
   done.complete();
+  onRestored?.call();
+  // Images the backup brought that this account's Storage may not hold yet
+  // (BUG-273): the restore marked them `localOnly`.
+  if (summary.mediaFilesRestored > 0) {
+    unawaited(container.read(mediaServiceProvider).queueLocalOnlyUploads());
+  }
   final restored = summary.restoredTotal;
   toast.update(
     message: [
@@ -239,8 +253,15 @@ class _BackupListDialogState extends ConsumerState<_BackupListDialog> {
   }
 
   Future<void> _restore(BackupFileEntry entry) async {
-    await confirmAndRestoreBackup(context, entry.file);
-    if (mounted) await _reload();
+    // The new "Before restore" row belongs in the list as soon as it exists,
+    // not after the data providers have reloaded.
+    await confirmAndRestoreBackup(
+      context,
+      entry.file,
+      onRestored: () {
+        if (mounted) unawaited(_reload());
+      },
+    );
   }
 
   @override

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/data/database/app_database.dart';
 import 'package:voyager/data/remote/in_memory_sync.dart';
@@ -197,4 +199,68 @@ void main() {
     await Future.wait(List.generate(5, (_) => weather.fetchForecastIfNeeded()));
     expect(weatherClient.forecastCalls, 1);
   });
+  test('stale forecast is not fetched while another device holds the fetch '
+      'lock (BUG-275)', () async {
+    final stale = DateTime.now().toUtc().subtract(const Duration(minutes: 20));
+    await settingsRepo.saveSettings(
+      (await settingsRepo.getSettings()).copyWith(
+        weatherForecastJson:
+            '{"fetchedAt":"${stale.toIso8601String()}","locationLabel":"Chicago, US","periods":[]}',
+      ),
+    );
+    final now = DateTime.now().toUtc();
+    await syncRepo.claimWeatherFetchLock(
+      WeatherFetchLock(
+        deviceId: 'other-device',
+        lockedAt: now,
+        expiresAt: now.add(const Duration(minutes: 2)),
+      ),
+    );
+
+    final result = await service().fetchForecastIfNeeded();
+    expect(weatherClient.forecastCalls, 0);
+    expect(result?.locationLabel, 'Chicago, US');
+
+    await syncRepo.releaseWeatherFetchLock('other-device');
+    await service().fetchForecastIfNeeded();
+    expect(weatherClient.forecastCalls, 1);
+    expect(await syncRepo.getWeatherFetchLock(), isNull);
+  });
+  test('a forecast finishing first keeps the lock while the current '
+      'conditions are still being fetched', () async {
+    final gate = Completer<void>();
+    weatherClient = _GatedWeatherApiClient(gate.future);
+    final weather = service();
+
+    final current = weather.refreshIfNeeded();
+    await pumpEventQueue();
+    await weather.fetchForecastIfNeeded();
+    expect((await syncRepo.getWeatherFetchLock())?.deviceId, 'test-device');
+
+    gate.complete();
+    await current;
+    expect(await syncRepo.getWeatherFetchLock(), isNull);
+  });
+}
+
+class _GatedWeatherApiClient extends FakeWeatherApiClient {
+  _GatedWeatherApiClient(this._gate);
+
+  final Future<void> _gate;
+
+  @override
+  Future<WeatherSnapshot> refreshWeather({
+    required double lat,
+    required double lon,
+    required String deviceId,
+    String? locationLabel,
+  }) async {
+    await _gate;
+    return super.refreshWeather(
+      lat: lat,
+      lon: lon,
+      deviceId: deviceId,
+      locationLabel: locationLabel,
+    );
+  }
 }

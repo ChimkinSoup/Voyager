@@ -66,9 +66,15 @@ class _CountingSyncRepository extends InMemorySyncRepository {
     return super.getDocument(collection, id);
   }
 
+  /// When set, runs once before the next operation-log read answers.
+  Future<void> Function()? beforeNextListOperations;
+
   @override
-  Future<List<SyncOperation>> listOperations(String documentId) {
+  Future<List<SyncOperation>> listOperations(String documentId) async {
     operationQueries++;
+    final before = beforeNextListOperations;
+    beforeNextListOperations = null;
+    await before?.call();
     return super.listOperations(documentId);
   }
 }
@@ -838,7 +844,7 @@ void main() {
   });
 
   group('a restore outranks the old operation log (finding #7)', () {
-    test('pushing restored records clears the document log', () async {
+    test('pushing restored records writes the text onto the log', () async {
       final server = InMemorySyncRepository();
       final device = _Device(server, 'device-a');
       addTearDown(device.close);
@@ -862,12 +868,6 @@ void main() {
         [restored],
       );
 
-      expect(
-        await server.listOperations('entry-1'),
-        isEmpty,
-        reason: 'the log still described the body the restore replaced',
-      );
-
       // The pull that used to undo the recovery.
       await device.sync.pullJournalEntries();
       expect(
@@ -875,6 +875,74 @@ void main() {
         'recovered from backup',
       );
     });
+  });
+
+  test('a restore larger than one batch uploads every record', () async {
+    final server = InMemorySyncRepository();
+    final device = _Device(server, 'device-a');
+    addTearDown(device.close);
+
+    final restored = [
+      for (var i = 0; i < 40; i++) entry(id: 'entry-$i', body: 'body $i'),
+    ];
+    for (final record in restored) {
+      await device.journals.upsertEntry(record, recordLocalActivity: false);
+    }
+    await device.sync.pushRestoredRecords(
+      FirestoreCollections.journalEntries,
+      restored,
+    );
+
+    for (var i = 0; i < 40; i++) {
+      final doc = await server.getDocument(
+        FirestoreCollections.journalEntries,
+        'entry-$i',
+      );
+      expect(doc?['body'], 'body $i');
+      expect(await server.listOperations('entry-$i'), isNotEmpty);
+    }
+  });
+
+  test('a Search save over an open session survives a pull landing while '
+      'the log is fetched', () async {
+    final server = _CountingSyncRepository();
+    final device = _Device(server, 'device-a');
+    addTearDown(device.close);
+
+    // Typed and sent: the session holds the log's text, nothing pending.
+    await device.journals.upsertEntry(entry());
+    device.sync.recordJournalTextChange(
+      entryId: 'entry-1',
+      before: '',
+      after: 'hello',
+    );
+    device.sync.pushJournalEntryNow(entry());
+    await pumpEventQueue();
+
+    // The Search popup saves the row, then publishes it.
+    final edited = entry().copyWith(body: 'edited in search');
+    await device.journals.upsertEntry(edited, recordLocalActivity: false);
+    // A change from elsewhere lands while the log is fetched (not this
+    // device's own echo, which a pull skips).
+    server.beforeNextListOperations = () async {
+      final doc = (await server.getDocument(
+        FirestoreCollections.journalEntries,
+        'entry-1',
+      ))!;
+      await device.sync.pullForCollection(
+        FirestoreCollections.journalEntries,
+        documentIds: {'entry-1'},
+        documentData: {
+          'entry-1': {...doc, 'title': 'Retitled elsewhere'},
+        },
+      );
+    };
+    await device.sync.forceOverwriteJournalEntryText(edited);
+
+    expect(
+      (await device.journals.getEntry('entry-1'))?.body,
+      'edited in search',
+    );
   });
 
   group('permanent delete clears the right operations (finding #16)', () {
@@ -1268,6 +1336,193 @@ void main() {
         ),
         isNull,
         reason: 'applied live, so the final flush must not apply it again',
+      );
+    });
+
+    /// [device] restores doc-1's journal body to [text], as a backup restore
+    /// writes the row and then uploads it.
+    Future<void> restore(_Device device, String text) async {
+      final current = (await device.journals.getEntry('doc-1'))!;
+      final restored = current.copyWith(body: text, bumpVersion: true);
+      await device.journals.upsertEntry(restored, recordLocalActivity: false);
+      await device.sync.pushRestoredRecords(
+        FirestoreCollections.journalEntries,
+        [restored],
+      );
+      await pumpEventQueue();
+    }
+
+    void close(_Device device) => device.sync.setDocumentEditing(
+      collection: journal.collection,
+      documentId: 'doc-1',
+      isEditing: false,
+    );
+
+    Future<String?> body(_Device device) async =>
+        (await device.journals.getEntry('doc-1'))?.body;
+
+    /// Opens doc-1 on [device] over the row it already holds, as the page
+    /// does after a pull: unlike [openEditor], nothing is written first.
+    Future<_Editor> reopen(_Device device) async {
+      final text = (await body(device))!;
+      await device.sync.prepareEditingSession(
+        collection: journal.collection,
+        documentId: 'doc-1',
+        initialText: text,
+      );
+      device.sync.setDocumentEditing(
+        collection: journal.collection,
+        documentId: 'doc-1',
+        isEditing: true,
+      );
+      final editor = _Editor(
+        device,
+        (before, after) => journal.record(device, before, after),
+        text,
+      );
+      device.sync.addPendingTextMergeListener(
+        collection: journal.collection,
+        documentId: 'doc-1',
+        listener: editor.onMerge,
+      );
+      return editor;
+    }
+
+    /// An autosave of [editor] at the row's own version.
+    Future<void> autosave(_Editor editor) async {
+      final row = (await editor.device.journals.getEntry('doc-1'))!;
+      final saved = row.copyWith(body: editor.text, bumpVersion: false);
+      await editor.device.journals.upsertEntry(saved);
+      editor.device.sync.pushJournalEntryNow(saved);
+      await pumpEventQueue();
+    }
+
+    test('a restore is written onto the log, so typing elsewhere afterwards '
+        'keeps the restored text on every device (BUG-270)', () async {
+      await a.journals.upsertEntry(
+        entry(id: 'doc-1', body: 'body 01').copyWith(bumpVersion: true),
+      );
+      final editor = await reopen(a);
+      await autosave(editor);
+      editor.type(' AFTERX');
+      await save(editor, journal);
+      close(a);
+      await deliver(b, journal.collection);
+
+      await restore(a, 'body 01');
+      expect(await server.listOperations('doc-1'), isNotEmpty);
+      await deliver(b, journal.collection);
+      expect(await body(b), 'body 01');
+
+      final other = await reopen(b);
+      other.type(' bkeep');
+      await autosave(other);
+      await deliver(a, journal.collection);
+      expect(await body(a), 'body 01 bkeep');
+
+      // A device that signs in later builds the text from the cloud.
+      final c = _Device(server, 'device-c');
+      addTearDown(c.close);
+      await deliver(c, journal.collection);
+      expect(await body(c), 'body 01 bkeep');
+    });
+
+    test('an editor open on another device takes the restored text, and its '
+        'typing adds to it (BUG-271)', () async {
+      await a.journals.upsertEntry(
+        entry(id: 'doc-1', body: 'body 02').copyWith(bumpVersion: true),
+      );
+      final editor = await reopen(a);
+      await autosave(editor);
+      close(a);
+      await deliver(b, journal.collection);
+      final other = await reopen(b);
+      other.type(' AFTERB');
+      await autosave(other);
+      await deliver(a, journal.collection);
+
+      await restore(a, 'body 02');
+      await deliver(b, journal.collection);
+      expect(other.text, 'body 02');
+
+      other.type(' bkeep');
+      await autosave(other);
+      await deliver(a, journal.collection);
+      expect(await body(a), 'body 02 bkeep');
+      expect(
+        (await server.getDocument(journal.collection, 'doc-1'))?['body'],
+        'body 02 bkeep',
+      );
+    });
+
+    test('typing that meets a restore merges with it, and the devices end '
+        'agreeing (BUG-272)', () async {
+      await a.journals.upsertEntry(
+        entry(id: 'doc-1', body: 'body 01').copyWith(bumpVersion: true),
+      );
+      final editor = await reopen(a);
+      await autosave(editor);
+      close(a);
+      await deliver(b, journal.collection);
+      final other = await reopen(b);
+      other.type(' AFTERX');
+      await autosave(other);
+      await deliver(a, journal.collection);
+
+      // Typed on B before it hears of the restore, and sent after it.
+      other.type(' bconc');
+      await restore(a, 'body 01');
+      final restoredDoc = (await server.getDocument(
+        journal.collection,
+        'doc-1',
+      ))!;
+      await autosave(other);
+      await b.sync.pullForCollection(
+        journal.collection,
+        documentIds: {'doc-1'},
+        documentData: {'doc-1': restoredDoc},
+      );
+      await deliver(a, journal.collection);
+      expect(other.text, 'body 01 bconc');
+      expect(await body(a), 'body 01 bconc');
+
+      // B keeps typing: A follows, and the copies agree.
+      other.type(' bafter');
+      await autosave(other);
+      await deliver(a, journal.collection);
+      expect(await body(a), 'body 01 bconc bafter');
+      final cloud = (await server.getDocument(journal.collection, 'doc-1'))!;
+      expect(cloud['body'], 'body 01 bconc bafter');
+      expect(
+        (await a.journals.getEntry('doc-1'))!.version,
+        (await b.journals.getEntry('doc-1'))!.version,
+      );
+    });
+
+    test('remote typing an editor on the restoring device had not taken yet '
+        'is not merged back over the restore (BUG-272, seen in the app)', () async {
+      await a.journals.upsertEntry(
+        entry(id: 'doc-1', body: 'body 01').copyWith(bumpVersion: true),
+      );
+      final editor = await reopen(a);
+      await autosave(editor);
+      await deliver(b, journal.collection);
+      // A's editor stays open, but is not taking merges as they arrive.
+      editor.takesMerges = false;
+      final other = await reopen(b);
+      other.type(' bkeep');
+      await autosave(other);
+      await deliver(a, journal.collection);
+
+      await restore(a, 'body 01');
+
+      expect(
+        await a.sync.applyPendingJournalEntryTextMerge(
+          entryId: 'doc-1',
+          currentLocalText: 'body 01',
+        ),
+        isNull,
+        reason: 'typing the restore replaced came back through the buffer',
       );
     });
 

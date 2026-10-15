@@ -36,6 +36,12 @@ class WeatherService {
   Future<WeatherSnapshot?>? _refreshInFlight;
   Future<WeatherForecast?>? _forecastInFlight;
 
+  // Fetches on this device holding the shared weather lock. A device can
+  // claim it again while it holds it, so the current conditions and the
+  // forecast both hold it at once; the first to finish released it while the
+  // other was still fetching, and another device could claim it meanwhile.
+  int _lockHolds = 0;
+
   int get _timeZoneOffsetMinutes => DateTime.now().timeZoneOffset.inMinutes;
 
   Future<WeatherSnapshot?> refreshIfNeeded({bool force = false}) {
@@ -83,6 +89,7 @@ class WeatherService {
       return snapshot;
     }
 
+    _lockHolds++;
     try {
       final refreshed = await _weatherApiClient.refreshWeather(
         lat: lat,
@@ -93,7 +100,7 @@ class WeatherService {
       await _persistCache(refreshed);
       return refreshed;
     } finally {
-      await _syncRepository.releaseWeatherFetchLock(_deviceId);
+      await _releaseLockHold();
     }
   }
 
@@ -213,13 +220,55 @@ class WeatherService {
     }
 
     var forecast = _readCachedForecastRaw(settings);
-    final now = DateTime.now().toUtc();
+    var now = DateTime.now().toUtc();
     if (!force &&
         forecast != null &&
         now.difference(forecast.fetchedAt) < refreshInterval) {
       return prunePastForecast(forecast);
     }
+    if (force) {
+      return _fetchForecastFromApi(settings, forecast, now, resetArchive);
+    }
 
+    // The same lock as the current conditions: without it, a device whose
+    // refresh lost the claim went straight on to fetch the forecast while the
+    // winner was still fetching it too.
+    final claimed = await _syncRepository.claimWeatherFetchLock(
+      WeatherFetchLock(
+        deviceId: _deviceId,
+        lockedAt: now,
+        expiresAt: now.add(_lockDuration),
+      ),
+    );
+    if (!claimed) return forecast == null ? null : prunePastForecast(forecast);
+    _lockHolds++;
+    try {
+      // Another device may have fetched it while this one waited for the lock.
+      await syncForecastFromRemote();
+      settings = await _settingsRepository.getSettings();
+      forecast = _readCachedForecastRaw(settings);
+      now = DateTime.now().toUtc();
+      if (forecast != null &&
+          now.difference(forecast.fetchedAt) < refreshInterval) {
+        return prunePastForecast(forecast);
+      }
+      return await _fetchForecastFromApi(settings, forecast, now, resetArchive);
+    } finally {
+      await _releaseLockHold();
+    }
+  }
+
+  Future<void> _releaseLockHold() async {
+    if (--_lockHolds > 0) return;
+    await _syncRepository.releaseWeatherFetchLock(_deviceId);
+  }
+
+  Future<WeatherForecast> _fetchForecastFromApi(
+    AppSettings settings,
+    WeatherForecast? forecast,
+    DateTime now,
+    bool resetArchive,
+  ) async {
     final apiForecast = await _weatherApiClient.refreshForecast(
       lat: settings.weatherLat!,
       lon: settings.weatherLon!,

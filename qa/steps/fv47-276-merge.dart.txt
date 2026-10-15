@@ -1,0 +1,1 @@
+final rs = c.read(remoteSyncServiceProvider); final cf = (await rs.listConflicts()).single; await rs.resolveConflictManualMerge(cf, mergedText: 'MD13 body 06 mergedb'); MARK; invalidateAllDataProvidersIn(c);

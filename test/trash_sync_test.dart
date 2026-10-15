@@ -633,4 +633,70 @@ void main() {
       );
     }
   });
+  group('an entry written into a journal deleted elsewhere (BUG-278)', () {
+    Journal journal({DateTime? deletedAt}) => Journal(
+      id: 'j',
+      name: 'Journal',
+      createdAt: _created,
+      updatedAt: _created,
+      version: 2,
+      deletedAt: deletedAt,
+    );
+
+    test('brings the journal back, here and on the server', () async {
+      await journals.upsertJournal(journal(deletedAt: _created));
+      await remote.upsertDocument(
+        FirestoreCollections.journalEntries,
+        'e',
+        journalEntryToFirestore(_entry()),
+      );
+
+      await service.pullJournalEntries(documentIds: {'e'});
+      await _settle();
+
+      final local = (await journals.getJournal('j'))!;
+      expect(local.deletedAt, isNull);
+      expect(local.version, 3);
+      final doc = await remote.getDocument(FirestoreCollections.journals, 'j');
+      expect(doc?['deletedAt'], isNull);
+      expect(doc?['version'], 3);
+    });
+
+    test('leaves an erased journal erased, and a deleted entry changes '
+        'nothing', () async {
+      await journals.upsertJournal(journal(deletedAt: kErasedAt));
+      await remote.upsertDocument(
+        FirestoreCollections.journalEntries,
+        'e',
+        journalEntryToFirestore(_entry()),
+      );
+      await service.pullJournalEntries(documentIds: {'e'});
+      expect((await journals.getJournal('j'))!.deletedAt, kErasedAt);
+
+      await journals.upsertJournal(journal(deletedAt: _created));
+      await remote.upsertDocument(
+        FirestoreCollections.journalEntries,
+        'e',
+        journalEntryToFirestore(_entry(version: 9, deletedAt: _created)),
+      );
+      await service.pullJournalEntries(documentIds: {'e'});
+      expect((await journals.getJournal('j'))!.deletedAt, _created);
+    });
+
+    test('an entry already here and unchanged leaves the delete alone: its '
+        'own tombstone is still on its way', () async {
+      await journals.upsertJournal(journal(deletedAt: _created));
+      await journals.upsertEntry(_entry(), recordLocalActivity: false);
+      await remote.upsertDocument(
+        FirestoreCollections.journalEntries,
+        'e',
+        journalEntryToFirestore(_entry()),
+      );
+
+      await service.pullJournalEntries(documentIds: {'e'});
+      await _settle();
+
+      expect((await journals.getJournal('j'))!.deletedAt, _created);
+    });
+  });
 }

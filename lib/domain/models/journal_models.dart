@@ -64,6 +64,7 @@ class Journal extends SoftDeletable {
     bool? includeInAllView,
     OnThisDayCadence? onThisDayCadence,
     DateTime? deletedAt,
+    bool clearDeletedAt = false,
     bool bumpVersion = true,
   }) {
     return Journal(
@@ -71,7 +72,7 @@ class Journal extends SoftDeletable {
       createdAt: createdAt,
       updatedAt: DateTime.now().toUtc(),
       version: bumpVersion ? version + 1 : version,
-      deletedAt: deletedAt ?? this.deletedAt,
+      deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
       name: name ?? this.name,
       colorValue: colorValue ?? this.colorValue,
       guidedJournaling: guidedJournaling ?? this.guidedJournaling,

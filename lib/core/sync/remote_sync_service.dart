@@ -963,13 +963,17 @@ class RemoteSyncService {
     // surviving one. Rebasing composes with the live chain instead, which is
     // what conflict resolution does with the same problem, and leaves the
     // session in place for the editor to keep writing into.
+    //
+    // The row is written once the session holds its text, not before: a pull
+    // landing while the log was fetched found a session with nothing owed and
+    // wrote the log's older text over the row.
     if (_charOpRegistry.session(collection, entry.id) != null) {
-      final published = await _persistPublishedRevision(entry);
       await _rebaseCharOpsOnLiveChain(
         collection: collection,
-        documentId: published.id,
-        target: published.body,
+        documentId: entry.id,
+        target: entry.body,
       );
+      final published = await _persistPublishedRevision(entry);
       await _uploadJournalEntryNow(published);
       await OutboxSyncWorker.recordSuccess(
         collection: collection,
@@ -1079,12 +1083,12 @@ class RemoteSyncService {
     if (_heldForCatchUp case final held?) await held;
 
     if (_charOpRegistry.session(collection, entry.id) != null) {
-      final published = await _persistPublishedDreamRevision(entry);
       await _rebaseCharOpsOnLiveChain(
         collection: collection,
-        documentId: published.id,
-        target: published.body,
+        documentId: entry.id,
+        target: entry.body,
       );
+      final published = await _persistPublishedDreamRevision(entry);
       await _uploadDreamEntryNow(published);
       await OutboxSyncWorker.recordSuccess(
         collection: collection,
@@ -3137,6 +3141,11 @@ class RemoteSyncService {
           return;
         }
 
+        await _clearConflictSettledElsewhere(
+          FirestoreCollections.journalEntries,
+          id,
+          data,
+        );
         var merged = mergeJournalEntryFromRemote(
           data,
           id,
@@ -3245,11 +3254,32 @@ class RemoteSyncService {
           merged,
           recordLocalActivity: false,
         );
+        // Only for an entry this pull brought or moved on: one already here
+        // and unchanged predates the journal's delete (its own tombstone is
+        // still on its way), and reviving for it undid the delete.
+        if (merged.deletedAt == null &&
+            (local == null || merged.version > local.version)) {
+          await _reviveJournalOf(merged);
+        }
         if (!editing) {
           _showInOpenEditor(FirestoreCollections.journalEntries, id, absorbed);
         }
       },
     );
+  }
+
+  /// A live entry in a deleted journal was written there by a device that had
+  /// not heard of the delete yet: no page lists it, and the trash showed the
+  /// journal as empty (BUG-278). The journal comes back, as a restore from
+  /// the trash would bring it, the same way on every device that pulls it.
+  /// An erased journal stays erased.
+  Future<void> _reviveJournalOf(JournalEntry entry) async {
+    final journal = await _journalRepository.getJournal(entry.journalId);
+    final deletedAt = journal?.deletedAt;
+    if (journal == null || deletedAt == null || isErasedAt(deletedAt)) return;
+    final revived = journal.copyWith(clearDeletedAt: true);
+    await _journalRepository.upsertJournal(revived);
+    pushJournal(revived);
   }
 
   Future<bool> pullDreamEntries({
@@ -3329,6 +3359,11 @@ class RemoteSyncService {
           return;
         }
 
+        await _clearConflictSettledElsewhere(
+          FirestoreCollections.dreamEntries,
+          id,
+          data,
+        );
         var merged = mergeDreamEntryFromRemote(
           data,
           id,
@@ -3571,6 +3606,11 @@ class RemoteSyncService {
             return;
           }
 
+          await _clearConflictSettledElsewhere(
+            FirestoreCollections.todoTasks,
+            id,
+            data,
+          );
           var merged = mergeTodoTaskFromRemote(
             data,
             id,
@@ -4134,7 +4174,14 @@ class RemoteSyncService {
     if (session != null && session.hasPendingOps && session.text != logText) {
       return session.text;
     }
+    // A session holding the log's text with nothing pending has sent every
+    // character this device wrote, so a newer row differs from the log only by
+    // what another device wrote since: typing that met a restore here, whose
+    // row outranked it, was otherwise held off this device for good (BUG-272).
+    final allSent =
+        session != null && !session.hasPendingOps && session.text == logText;
     if (localText != logText &&
+        !allSent &&
         (localIsNewer ||
             (localIsSameRevision && _containsInOrder(localText, logText)))) {
       if (session == null) {
@@ -5754,6 +5801,42 @@ class RemoteSyncService {
     }
   }
 
+  /// Clears this device's quarantine of a broken operation log that another
+  /// device has since resolved: the log now replays cleanly, and the copy
+  /// pulled is newer than the one the conflict was recorded against. Kept, the
+  /// conflict held the old text here at the cloud's version, and resolving it
+  /// from its stale snapshot reverted the other device's resolution on every
+  /// device, even with "Keep Remote" (BUG-276). Only a broken log: any other
+  /// conflict stands for text of this device's own.
+  Future<void> _clearConflictSettledElsewhere(
+    String collection,
+    String documentId,
+    Map<String, dynamic> data,
+  ) async {
+    final repo = _syncConflictRepository;
+    if (repo == null) return;
+    final conflict = await repo.getConflict('${collection}_$documentId');
+    if (conflict == null ||
+        conflict.reason != SyncConflictReason.corruptedOpChain) {
+      return;
+    }
+    final Map<String, dynamic> snapshot;
+    try {
+      snapshot = jsonDecode(conflict.remotePayloadJson) as Map<String, dynamic>;
+    } catch (_) {
+      return;
+    }
+    // The stored document as well as the log's copy: the log's metadata is
+    // the last upload sent, which can trail the document that landed.
+    final stored =
+        Zone.current[_pulledDocumentKey] as Map<String, dynamic>? ?? data;
+    final settled = parseVersion(snapshot);
+    if (parseVersion(data) <= settled && parseVersion(stored) <= settled) {
+      return;
+    }
+    await repo.deleteConflict(conflict.id);
+  }
+
   Future<void> _quarantineConflict({
     required String collection,
     required String documentId,
@@ -6099,56 +6182,72 @@ class RemoteSyncService {
   /// Uploads records a backup restore just wrote to SQLite.
   ///
   /// Identical to [pushRecords] for plain records. For the collections that
-  /// keep a character-operation log it first clears that log, because a
-  /// restore replaces the document's text wholesale while `sync_operations`
-  /// still describes the text it replaced — and pulls prefer the CRDT-resolved
-  /// payload over the document. Without this, an entry restored to recover a
-  /// body the user accidentally cleared looked right until the next startup
-  /// pull, at which point the log resolved the cleared body straight back over
-  /// it and undid the recovery.
+  /// keep a character-operation log, the restored text is written onto that
+  /// log as an edit, as conflict resolution does with its chosen text: pulls
+  /// prefer the CRDT-resolved payload, so a document whose log still described
+  /// the text it replaced lost the restore on the next pull (SAVING.md §7).
   ///
-  /// Backups deliberately exclude `sync_operations` ("a transport detail"), so
-  /// there is no log to restore in its place: dropping it makes the restored
-  /// document authoritative and the next editing session seeds a fresh chain
-  /// from it, exactly as [forceOverwriteJournalEntryText] does.
+  /// The log used to be wiped instead, and left empty. The next device to
+  /// type then logged only its new characters, so every device that rebuilt
+  /// the text from the log was left with just those (BUG-270); an editor open
+  /// elsewhere never heard its text had been replaced and its next keystroke
+  /// put the old text back (BUG-271); and typing that met the restore left
+  /// the devices disagreeing for good (BUG-272). Written onto the log, the
+  /// restore reaches every device as a remote edit does, open editors
+  /// included, and merges with typing it meets.
   Future<void> pushRestoredRecords(
     String collection,
     List<Object> records,
   ) async {
-    if (FirestoreCollections.crdtBacked.contains(collection)) {
-      for (final record in records) {
-        final document = _recordDocument(collection, record);
-        if (document == null) continue;
-        try {
-          await _syncRepository.deleteOperationsForDocument(
-            _firestoreDocumentId(collection, document.id),
-          );
-        } catch (error, stackTrace) {
-          // The wipe now insists on a server round-trip and throws offline
-          // rather than reporting a cache-answered zero. Report it and keep
-          // restoring: the records still reach SQLite and the mirror, and one
-          // unreachable document must not abandon the rest of the import
-          // after its transaction has already committed. What survives is the
-          // old log, which can still resolve this document's text away on a
-          // later pull — the same outcome the silent zero produced, now
-          // visible.
-          FlutterError.reportError(
-            FlutterErrorDetails(
-              exception: error,
-              stack: stackTrace,
-              library: 'RemoteSyncService',
-              context: ErrorDescription(
-                'while clearing the operation log of restored '
-                '$collection/${document.id}',
-              ),
-            ),
-          );
-        }
-        _charOpRegistry.removeSession(collection, document.id);
-        _pendingTextMergeBuffer.clearDocument(collection, document.id);
-      }
+    if (!FirestoreCollections.crdtBacked.contains(collection)) {
+      await pushRecords(collection, records);
+      return;
     }
-    await pushRecords(collection, records);
+    final plain = <Object>[];
+    final saves = <Future<void>>[];
+    for (final record in records) {
+      final document = _recordDocument(collection, record);
+      if (document == null) continue;
+      final payload = document.payload;
+      // Deleted text is the log's on every device (BUG-245), and an erased
+      // row goes out through the path that clears its log.
+      if (payload['deletedAt'] != null) {
+        plain.add(record);
+        continue;
+      }
+      final target =
+          payload[FirestoreCollections.crdtTextField(collection)] as String? ??
+          '';
+      // Remote text an open editor here had not taken in yet predates the
+      // restore: merged in afterwards, it put the text the restore replaced
+      // straight back.
+      _pendingTextMergeBuffer
+        ..clearDocument(collection, document.id)
+        ..recordRemoteText(collection, document.id, target);
+      // Several at a time: one by one, each waiting on its own log fetch and
+      // upload, a large restore held the restore barrier up for minutes. A
+      // document's chain still keeps its own uploads in order.
+      if (saves.length == _operationLogConcurrency) {
+        await Future.wait(saves);
+        saves.clear();
+      }
+      saves.add(
+        _runRemoteSave(collection, document.id, () async {
+          await _rebaseCharOpsOnLiveChain(
+            collection: collection,
+            documentId: document.id,
+            target: target,
+          );
+          await _uploadCrdtDocumentNow(
+            collection: collection,
+            documentId: document.id,
+            payload: payload,
+          );
+        }),
+      );
+    }
+    await Future.wait(saves);
+    if (plain.isNotEmpty) await pushRecords(collection, plain);
   }
 
   /// The Firestore id and payload for one record, or null if [collection]

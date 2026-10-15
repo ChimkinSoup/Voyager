@@ -347,11 +347,10 @@ class DevPage extends ConsumerWidget {
           ),
           trailing: const Icon(PhosphorIconsRegular.broom),
           onTap: () async {
-            final now = DateTime.now().toUtc();
-            await ref.read(journalRepositoryProvider).purgeExpiredDeleted(now);
-            await ref.read(todoRepositoryProvider).purgeExpiredDeleted(now);
-            await ref.read(calendarRepositoryProvider).purgeExpiredDeleted(now);
-            await ref.read(trackerRepositoryProvider).purgeExpiredDeleted(now);
+            // The same set the launch purge covers, not a hand-picked subset.
+            await ref
+                .read(backgroundSyncOrchestratorProvider)
+                .purgeExpiredDeleted();
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Soft-deleted items purged')),
