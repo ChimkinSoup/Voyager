@@ -818,6 +818,30 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
     // The panel was handed an occurrence view, so its start/end are expressed
     // at [occurrenceDay], not at the series anchor. The scope decides whether
     // they stay there or get mapped back.
+    CalendarEvent? atOccurrence(CalendarEvent? e) => e == null
+        ? null
+        : occurrenceDay == null
+        ? e
+        : occurrenceView(e, occurrenceDay);
+    // Only the fields changed in the panel are applied, over the row as it is
+    // now: one another device changed while the panel was open keeps that
+    // change instead of being reverted to the copy the panel opened with
+    // (BUG-233).
+    final base = atOccurrence(opened);
+    final current = atOccurrence(event);
+    T pick<T>(T mine, T Function(CalendarEvent e) field) =>
+        base == null || current == null || !_sameValue(mine, field(base))
+        ? mine
+        : field(current);
+    // Start, end and all-day move together: picked one by one, an end changed
+    // here over a start another device moved could land before it.
+    final timeFrom =
+        base != null &&
+            _sameValue(result['start'], base.start) &&
+            _sameValue(result['end'], base.end) &&
+            _sameValue(result['isFullDay'], base.isFullDay)
+        ? current
+        : null;
     // An existing row is rebuilt with copyWith, never with the constructor: it
     // is the only thing that bumps [version], and the constructor would reset
     // it to 0 — losing every later conflict adjudication for this event — as
@@ -846,16 +870,23 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
             event,
             occurrenceDay ?? event.start,
             event.copyWith(
-              calendarId: result['calendarId'] as String?,
-              title: result['title'] as String,
-              start: result['start'] as DateTime,
-              end: result['end'] as DateTime,
-              isFullDay: result['isFullDay'] as bool,
-              colorValue: result['colorValue'] as int,
-              notes: result['notes'] as String,
-              recurrence:
-                  result['recurrence'] as RecurrenceRule? ??
-                  RecurrenceRule.none,
+              calendarId: pick(
+                result['calendarId'] as String? ?? event.calendarId,
+                (e) => e.calendarId,
+              ),
+              title: pick(result['title'] as String, (e) => e.title),
+              start: timeFrom?.start ?? result['start'] as DateTime,
+              end: timeFrom?.end ?? result['end'] as DateTime,
+              isFullDay: timeFrom?.isFullDay ?? result['isFullDay'] as bool,
+              colorValue: pick(
+                result['colorValue'] as int,
+                (e) => e.colorValue,
+              ),
+              notes: pick(result['notes'] as String, (e) => e.notes),
+              recurrence: pick(
+                result['recurrence'] as RecurrenceRule? ?? RecurrenceRule.none,
+                (e) => e.recurrence,
+              ),
             ),
           );
 
@@ -951,11 +982,16 @@ class _CalendarPageState extends ConsumerState<CalendarPage>
   /// Deliberately ignores [CalendarEvent.updatedAt] and [version]: [edited] is
   /// freshly minted on every save, so comparing those would report a change for
   /// an event nobody touched.
+  // Instants, not `==`: a pulled event's times are UTC and the panel's local
+  // (BUG-234), and `==` on DateTime also compares the zone flag.
+  static bool _sameValue(Object? a, Object? b) =>
+      a is DateTime && b is DateTime ? a.isAtSameMomentAs(b) : a == b;
+
   bool _eventContentChanged(CalendarEvent before, CalendarEvent after) =>
       before.title != after.title ||
       before.notes != after.notes ||
-      before.start != after.start ||
-      before.end != after.end ||
+      !_sameValue(before.start, after.start) ||
+      !_sameValue(before.end, after.end) ||
       before.isFullDay != after.isFullDay ||
       before.colorValue != after.colorValue ||
       before.calendarId != after.calendarId ||

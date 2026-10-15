@@ -1,0 +1,8 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final j0 = (await jr.getJournal('md2-j-@W@@N@'))!;
+final j = j0.copyWith(name: 'MD2 Renamed @W@@N@', colorValue: 0xFFE91E63);
+await jr.upsertJournal(j);
+MARK;
+r.pushJournal(j);

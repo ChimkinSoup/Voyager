@@ -1,0 +1,7 @@
+final repo = c.read(settingsRepositoryProvider);
+await repo.setTagColor('md4clashtag', '@W@' == 'qa' ? 0xFFE91E63 : 0xFF2196F3);
+await repo.addCustomWord('mdclashword');
+await repo.flagWord('mdclashflag', replacement: '@W@' == 'qa' ? 'mdfixqa' : 'mdfixqb');
+final s = c.read(settingsProvider).value!;
+await c.read(settingsProvider.notifier).saveSnippets(s.snippets, [...s.snippets, Snippet(id: 'md4-snip-@W@', trigger: 'mdclash', replacement: 'MD4 clash snippet by @W@')]);
+MARK;

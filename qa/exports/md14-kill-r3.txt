@@ -1,0 +1,3 @@
+23:40:26.087 lock seen 57ff7ea1-f643-4c32-9f25-c8b04a23c1d7 updateTime 2026-10-14T03:40:25.811835Z -> stopping qa
+23:40:27.418 stopped profile qa 
+KILLED qa

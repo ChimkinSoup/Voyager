@@ -1,0 +1,4 @@
+final res = await c.read(remoteSyncServiceProvider).purgeJournalEntryEverywhere('@TAG@');
+MARK;
+invalidateAllDataProvidersIn(c);
+debugPrint('MD5PURGE everywhere ops=' + res.remoteOperationsDeleted.toString() + ' local=' + res.localDeleted.toString());

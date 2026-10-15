@@ -1,0 +1,1 @@
+final now = DateTime.now().toUtc(); final en = JournalEntry(id: 'fx-je-62', createdAt: now, updatedAt: now, version: 1, journalId: 'fx-j-def', title: 'FX 62', body: '', entryDate: DateTime.now()); await c.read(journalRepositoryProvider).upsertEntry(en); c.read(remoteSyncServiceProvider).pushJournalEntryNow(en); invalidateAllDataProvidersIn(c);

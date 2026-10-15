@@ -1,0 +1,6 @@
+final repo = c.read(jobRepositoryProvider);
+final st = (await repo.listStages()).firstWhere((x) => x.id == 'seed-stage-interview');
+final ok = await JobsActions.detached(c).renameStage(st, 'Interview @TAG@ @W@');
+MARK;
+final after = (await repo.listStages()).firstWhere((x) => x.id == 'seed-stage-interview');
+debugPrint('MD16STAGE @W@ ok=$ok name=${after.name} v=${after.version}');

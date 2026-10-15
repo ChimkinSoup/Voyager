@@ -1,0 +1,21 @@
+click 2448 475
+key ctrl+end
+type  B notes one
+wait 1000
+type  two
+wait 1000
+type  three
+wait 1000
+type  four
+wait 1000
+type  five
+wait 1000
+type  six
+wait 1500
+shot md05-52-qb-tt-mid
+type  seven
+wait 1000
+type  eight
+wait 4000
+shot md05-52-qb-tt-end
+field

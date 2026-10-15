@@ -1,0 +1,9 @@
+
+final now = DateTime.now().toUtc();
+final repo = c.read(reminderRepositoryProvider);
+final old = await repo.getRule('md8-rule-r8b');
+final rule = ScheduledReminderRule(id: 'md8-rule-r8b', createdAt: old?.createdAt ?? now, updatedAt: now, version: (old?.version ?? 0) + 1, deletedAt: null, title: 'MD8 to removed', body: null, enabled: true, scheduleKind: ReminderScheduleKind.once, localTimeMinutes: 1051, onceLocalDate: DateTime(2026, 10, 13), targetDeviceIds: <String>['b29a9a3a-e31b-4fc8-bfef-757ac0d002e5'], armedAt: old?.armedAt ?? now);
+await repo.upsertRule(rule);
+MARK;
+c.invalidate(scheduledReminderRulesProvider);
+await c.read(remoteSyncServiceProvider).pushRecords('scheduled_reminder_rules', [rule]);

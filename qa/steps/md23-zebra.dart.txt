@@ -1,0 +1,7 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final r = c.read(remoteSyncServiceProvider);
+final d = DreamEntry(id: 'md23-dream', createdAt: now, updatedAt: now, version: 1, title: 'MD23 zebra dream', body: 'a zebra crossed the river', entryDate: t0);
+await c.read(dreamRepositoryProvider).upsertEntry(d);
+final en = JournalEntry(id: 'md23-je', createdAt: now, updatedAt: now, version: 1, journalId: 'md21-j', title: 'MD23 zebra journal', body: 'saw a zebra today', entryDate: t0);
+await c.read(journalRepositoryProvider).upsertEntry(en);
+MARK;
+r.pushDreamEntryNow(d); r.pushJournalEntryNow(en);

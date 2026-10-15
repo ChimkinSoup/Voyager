@@ -1,0 +1,15 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final r = c.read(remoteSyncServiceProvider);
+final fr = c.read(financeRepositoryProvider);
+final tx = FinancialTransaction(id: 'md21-tx-new@N@', createdAt: now, updatedAt: now, version: 1, type: TransactionType.expense, amountCents: 777, occurredAt: t0, tags: const ['md21'], note: 'MD21 NEW tx @N@');
+await fr.upsertTransaction(tx);
+final rr = c.read(rankingRepositoryProvider);
+final rp = RankingParent(id: 'md21-rp-new@N@', createdAt: now, updatedAt: now, version: 1, categoryId: 'md21-rc', title: 'MD21 NEW rank @N@', overallScore: 9.5);
+await rr.upsertParent(rp);
+final jbr = c.read(jobRepositoryProvider);
+final ja = JobApplication(id: 'md21-job-new@N@', createdAt: now, updatedAt: now, version: 1, company: 'MD21 NEW Co @N@', title: 'Eng', status: 'Applied', dateApplied: DateTime(t0.year, t0.month, t0.day));
+await jbr.upsertApplication(ja);
+final sr = c.read(studyRepositoryProvider);
+final dk = StudyDeck(id: 'md21-deck-new@N@', createdAt: now, updatedAt: now, version: 1, name: 'MD21 A NEW deck @N@');
+await sr.upsertDeck(dk);
+MARK;
+await r.pushRecords('transactions', [tx]); r.pushRankingParent(rp); r.pushJobApplication(ja); r.pushStudyDeck(dk);

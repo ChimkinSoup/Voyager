@@ -1,0 +1,6 @@
+final lr = c.read(leetCodeRepositoryProvider);
+final t = (await lr.getProblem('md4-lc'))!;
+final n = '@W@' == 'qa' ? t.copyWith(difficulty: t.difficulty == LeetCodeDifficulty.hard ? LeetCodeDifficulty.medium : LeetCodeDifficulty.hard) : t.copyWith(description: 'MD4 desc @TAG@ by qb');
+await lr.upsertProblem(n);
+MARK;
+c.read(remoteSyncServiceProvider).pushLeetCodeProblem(n);

@@ -166,6 +166,10 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
   /// interleave with the other.
   bool _closing = false;
 
+  /// Sets written here and not yet sorted into the state. A re-read can land
+  /// between the two, and must not take them for sets from elsewhere.
+  final _adding = <String>{};
+
   WorkoutRepository get _repo => _ref.read(workoutRepositoryProvider);
 
   /// Brings the live view in line with the active session on disk each time
@@ -188,17 +192,7 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
     }
 
     if (active?.id == live.id) {
-      if (active!.version <= live.version) return;
-      await _flushPending();
-      final (:logs, :exercisesById) = await _readSession(live.id);
-      if (!mounted || state.session?.id != live.id) return;
-      final kept = logs.indexWhere((l) => l.id == state.currentSet?.id);
-      state = state.copyWith(
-        session: active,
-        logs: logs,
-        exercisesById: exercisesById,
-        cursor: kept == -1 ? _firstIncompleteIndex(logs) : kept,
-      );
+      await _refreshLive(active!);
       return;
     }
 
@@ -215,6 +209,70 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
     _pendingLogs.clear();
     state = const ActiveWorkoutState();
     if (active != null) await _onActiveSessionRead(active);
+  }
+
+  /// Brings the open session's sets and movements in line with disk on every
+  /// re-read, not only when the session's own version rises: its sets change
+  /// without it — sets that arrive after the session row, sets logged on
+  /// another device, a movement that is only on disk later (BUG-230,
+  /// BUG-231).
+  ///
+  /// Merged against the state as it is once the read is back, set by set: one
+  /// held here at a version at least as new as the disk's is a local change
+  /// still on its way to the row, and is kept. So is a set added or removed
+  /// here while the read was out: the read may predate it, and taken as it
+  /// stood it dropped the new set or brought the removed one back.
+  Future<void> _refreshLive(WorkoutSession active) async {
+    await _flushPending();
+    final readFrom = {for (final l in state.logs) l.id};
+    final (:logs, :exercisesById) = await _readSession(active.id);
+    if (!mounted || _starting || _closing) return;
+    final live = state.session;
+    if (live == null || live.id != active.id) return;
+
+    final held = {for (final l in state.logs) l.id: l};
+    final onDisk = {for (final l in logs) l.id};
+    final merged = [
+      for (final l in logs)
+        if (held.containsKey(l.id) || !readFrom.contains(l.id))
+          if (held[l.id] case final mine? when mine.version >= l.version)
+            mine
+          else
+            l,
+      for (final l in state.logs)
+        if (!readFrom.contains(l.id) && !onDisk.contains(l.id)) l,
+    ]..sort(_bySessionPosition);
+    final session = active.version > live.version ? active : live;
+    final exercisesChanged = exercisesById.entries.any(
+      (e) => state.exercisesById[e.key]?.updatedAt != e.value.updatedAt,
+    );
+    if (identical(session, live) &&
+        !exercisesChanged &&
+        merged.length == state.logs.length &&
+        merged.indexed.every((p) => identical(p.$2, state.logs[p.$1]))) {
+      return;
+    }
+
+    // A set done on the other device moves the wheels on, as one done here
+    // does; parked on it, Complete set would do nothing (BUG-201). Sets this
+    // view didn't have yet do too: the wheels were placed without them, on
+    // the first set to arrive rather than the first set to do.
+    final current = state.currentSet;
+    var kept = merged.indexWhere((l) => l.id == current?.id);
+    if (kept != -1 &&
+        ((merged[kept].completed && !current!.completed) ||
+            merged.any(
+              (l) => !held.containsKey(l.id) && !_adding.contains(l.id),
+            ))) {
+      kept = -1;
+    }
+    state = state.copyWith(
+      session: session,
+      logs: merged,
+      exercisesById: {...state.exercisesById, ...exercisesById},
+      cursor: kept == -1 ? _firstIncompleteIndex(merged) : kept,
+      segmentIndex: kept == -1 ? 0 : state.segmentIndex,
+    );
   }
 
   Future<void> _loadSession(
@@ -237,8 +295,19 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
   /// rendered as "every set is done" with the Complete button gone.
   Future<({List<WorkoutSetLog> logs, Map<String, Exercise> exercisesById})>
   _readSession(String sessionId) async {
-    final logs = await _repo.listSetLogs(sessionId: sessionId);
-    final exercises = await _repo.listExercises(includeDeleted: true);
+    // Read once: this now runs on every refresh, and one still in flight as
+    // the container goes away must not reach back into it.
+    final repo = _repo;
+    final logs = await repo.listSetLogs(sessionId: sessionId);
+    var exercises = await repo.listExercises(includeDeleted: true);
+    // Starters are seeded on each device when the workout page first loads,
+    // and the cloud never holds an untouched one, so a session pulled from
+    // another device can name one this device hasn't seeded yet (BUG-230).
+    final known = {for (final e in exercises) e.id};
+    if (mounted && logs.any((l) => !known.contains(l.exerciseId))) {
+      await _ref.read(workoutSeedProvider.future);
+      exercises = await repo.listExercises(includeDeleted: true);
+    }
     return (logs: logs, exercisesById: {for (final e in exercises) e.id: e});
   }
 
@@ -513,6 +582,7 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
             updatedAt: now,
           ),
       ];
+      _adding.addAll(added.map((l) => l.id));
       await _repo.upsertSetLogsBatch(added);
       _pushSetLogs(added);
       _sortIntoLogs(added);
@@ -572,6 +642,7 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
       now: utcNow(),
     );
     if (added.isEmpty) return;
+    _adding.addAll(added.map((l) => l.id));
     await _repo.upsertSetLogsBatch(added);
     _pushSetLogs(added);
     _sortIntoLogs(added);
@@ -769,7 +840,15 @@ class WorkoutSessionController extends StateNotifier<ActiveWorkoutState> {
   }
 
   void _sortIntoLogs(List<WorkoutSetLog> added) {
-    final logs = [...state.logs, ...added]..sort(_bySessionPosition);
+    // A re-read between their write and this can have brought them in
+    // already (see [_refreshLive]).
+    final addedIds = {for (final l in added) l.id};
+    _adding.removeAll(addedIds);
+    final logs = [
+      for (final l in state.logs)
+        if (!addedIds.contains(l.id)) l,
+      ...added,
+    ]..sort(_bySessionPosition);
     state = state.copyWith(logs: logs);
   }
 

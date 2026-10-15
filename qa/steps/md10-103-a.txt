@@ -1,0 +1,8 @@
+# MD-10.3 A: types into P26 entry 006 (already open) while B launches and pulls
+click 1843 1008
+key ctrl+end
+type  A103 during
+wait 3000
+type  A103 again
+wait 5000
+shot md10-103-qa-typed

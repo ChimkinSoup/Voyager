@@ -1,0 +1,5 @@
+final tr = c.read(todoRepositoryProvider); final r = c.read(remoteSyncServiceProvider);
+final t = (await tr.getTask('md2-tp-@W@@N@'))!.copyWith(listId: 'md2-tlb-@W@@N@');
+await tr.upsertTask(t);
+MARK;
+r.pushTodoTaskInBackground(t);

@@ -1,0 +1,7 @@
+final fr = c.read(financeRepositoryProvider);
+final g = (await fr.listSavingsGoals()).firstWhere((x) => x.id == 'fv42-goal');
+final n = g.copyWith(targetCents: 55555, note: 'Goal changed on qa', updatedAt: DateTime.now().toUtc(), version: g.version + 1);
+await fr.upsertSavingsGoal(n);
+await c.read(remoteSyncServiceProvider).pushRecords('savings_goals', [n]);
+invalidateAllDataProvidersIn(c);
+debugPrint('FV42 goal edited');

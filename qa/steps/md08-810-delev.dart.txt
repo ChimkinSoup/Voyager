@@ -1,0 +1,5 @@
+Element? cx; void w(Element x) { if (cx != null) return; if (x is WidgetRef && Navigator.maybeOf(x) != null) { cx = x; return; } x.visitChildren(w); } e!.visitChildren(w); final ctx = cx!;
+final ev = (await c.read(calendarRepositoryProvider).listEvents()).firstWhere((x) => x.id == 'md8-ev-bell1');
+await deleteCalendarEventInteractive(context: ctx, container: c, overlay: Overlay.of(ctx), event: ev, occurrenceDay: DateTime.now());
+MARK;
+debugPrint('MD8DEL event done');

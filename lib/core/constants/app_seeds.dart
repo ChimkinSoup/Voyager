@@ -1,3 +1,4 @@
+import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
 
@@ -8,8 +9,9 @@ String seedSlug(String name) =>
     name.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
 
 /// Whether [id] in [collection] is a row the app seeds for itself, under a
-/// fixed id, on every device: the built-in Weekly / Split plans, and every
-/// `seed-` id (job stages and companies, starter exercises).
+/// fixed id, on every device: the built-in Weekly / Split plans, the built-in
+/// "Calendar" (BUG-232), and every `seed-` id (job stages and companies,
+/// starter exercises).
 ///
 /// An untouched one (version 0) is never uploaded, so the full sync check
 /// doesn't count it missing from the cloud, and a restore never counts one
@@ -18,5 +20,6 @@ String seedSlug(String name) =>
 bool isAppSeed(String collection, String id) => switch (collection) {
   FirestoreCollections.workoutPlans =>
     id == kWeeklyWorkoutPlanId || id == kCycleWorkoutPlanId,
+  FirestoreCollections.calendars => id == legacyCalendarId,
   _ => id.startsWith('seed-'),
 };

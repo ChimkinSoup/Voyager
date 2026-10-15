@@ -1,0 +1,182 @@
+MD2	11:21:32	j-create#k1018	qa->qb	OK	db_ms=921	ui=NOT-SHOWN ui_ms=None	row=('MD2 entry qak1018',)	MD17 journals+entry create
+MD2	11:22:02	j-rename#k1018	qa->qb	OK	db_ms=179	ui=NOT-SHOWN ui_ms=None	row=('MD2 Renamed qak1018',)	MD17 journal rename+recolor
+MD2	11:22:33	je-edit#k1018	qa->qb	OK	db_ms=428	ui=NOT-SHOWN ui_ms=None	row=('MD2 retitled qak1018',)	MD17 entry title+mood+weather+date
+MD2	11:22:34	je-move#k1018	qa->qb	OK	db_ms=420	ui=- ui_ms=None	row=('md2-jo-qak1018',)	MD17 entry moved to other journal
+MD2	11:22:34	je-delete#k1018	qa->qb	OK	db_ms=424	ui=gone ui_ms=586	row=('2026-10-14T15:22:34.182116Z',)	MD17 entry soft delete
+MD2	11:22:35	j-delete#k1018	qa->qb	OK	db_ms=170	ui=gone ui_ms=398	row=('2026-10-14T15:22:34.927206Z',)	MD17 journal soft delete
+MD2	11:23:21	j-create#k1019	qb->qa	OK	db_ms=430	ui=NOT-SHOWN ui_ms=None	row=('MD2 entry qbk1019',)	MD17 journals+entry create
+MD2	11:23:52	j-rename#k1019	qb->qa	OK	db_ms=683	ui=NOT-SHOWN ui_ms=None	row=('MD2 Renamed qbk1019',)	MD17 journal rename+recolor
+MD2	11:24:23	je-edit#k1019	qb->qa	OK	db_ms=419	ui=NOT-SHOWN ui_ms=None	row=('MD2 retitled qbk1019',)	MD17 entry title+mood+weather+date
+MD2	11:24:24	je-move#k1019	qb->qa	OK	db_ms=434	ui=- ui_ms=None	row=('md2-jo-qbk1019',)	MD17 entry moved to other journal
+MD2	11:24:25	je-delete#k1019	qb->qa	OK	db_ms=655	ui=gone ui_ms=893	row=('2026-10-14T15:24:24.350813Z',)	MD17 entry soft delete
+MD2	11:24:25	j-delete#k1019	qb->qa	OK	db_ms=180	ui=gone ui_ms=433	row=('2026-10-14T15:24:25.387438Z',)	MD17 journal soft delete
+MD2	11:32:10	dreams-create#k36	qa->qb	OK	db_ms=422	ui=shown ui_ms=1016	row=(1,)	MD17 1 records
+MD2	11:32:11	dreams-edit#k36	qa->qb	OK	db_ms=414	ui=shown ui_ms=540	row=(1,)	MD17 1 records
+MD2	11:32:11	dreams-delete#k36	qa->qb	OK	db_ms=426	ui=gone ui_ms=597	row=(1,)	MD17 1 records
+MD2	11:32:58	dreams-create#k37	qb->qa	OK	db_ms=430	ui=shown ui_ms=1029	row=(1,)	MD17 1 records
+MD2	11:32:59	dreams-edit#k37	qb->qa	OK	db_ms=426	ui=shown ui_ms=1075	row=(1,)	MD17 1 records
+MD2	11:33:00	dreams-delete#k37	qb->qa	OK	db_ms=422	ui=gone ui_ms=668	row=(1,)	MD17 1 records
+MD2	11:33:47	todo-create#k38	qa->qb	OK	db_ms=926	ui=shown ui_ms=1083	row=(3,)	MD17 3 records
+MD2	11:33:48	todo-edit#k38	qa->qb	OK	db_ms=666	ui=shown ui_ms=796	row=(3,)	MD17 3 records
+MD2	11:33:49	todo-delete#k38	qa->qb	OK	db_ms=677	ui=gone ui_ms=779	row=(3,)	MD17 3 records
+MD2	11:34:35	todo-create#k39	qb->qa	OK	db_ms=675	ui=shown ui_ms=783	row=(3,)	MD17 3 records
+MD2	11:34:36	todo-edit#k39	qb->qa	OK	db_ms=674	ui=shown ui_ms=770	row=(3,)	MD17 3 records
+MD2	11:34:37	todo-delete#k39	qb->qa	OK	db_ms=666	ui=gone ui_ms=770	row=(3,)	MD17 3 records
+MD2	11:35:24	calendar-create#k40	qa->qb	OK	db_ms=420	ui=shown ui_ms=976	row=(3,)	MD17 3 records
+MD2	11:35:25	calendar-edit#k40	qa->qb	OK	db_ms=412	ui=shown ui_ms=947	row=(3,)	MD17 3 records
+MD2	11:35:26	calendar-delete#k40	qa->qb	OK	db_ms=668	ui=gone ui_ms=965	row=(3,)	MD17 3 records
+MD2	11:36:13	calendar-create#k41	qb->qa	OK	db_ms=416	ui=shown ui_ms=940	row=(3,)	MD17 3 records
+MD2	11:36:15	calendar-edit#k41	qb->qa	OK	db_ms=427	ui=shown ui_ms=1580	row=(3,)	MD17 3 records
+MD2	11:36:16	calendar-delete#k41	qb->qa	OK	db_ms=388	ui=gone ui_ms=947	row=(3,)	MD17 3 records
+MD2	11:37:03	trackers-create#k42	qa->qb	OK	db_ms=911	ui=shown ui_ms=1181	row=(4,)	MD17 4 records
+MD2	11:37:04	trackers-edit#k42	qa->qb	OK	db_ms=917	ui=shown ui_ms=1045	row=(4,)	MD17 4 records
+MD2	11:37:05	trackers-delete#k42	qa->qb	OK	db_ms=649	ui=gone ui_ms=951	row=(4,)	MD17 4 records
+MD2	11:37:52	trackers-create#k43	qb->qa	OK	db_ms=918	ui=shown ui_ms=1210	row=(4,)	MD17 4 records
+MD2	11:37:54	trackers-edit#k43	qb->qa	OK	db_ms=910	ui=shown ui_ms=1594	row=(4,)	MD17 4 records
+MD2	11:37:55	trackers-delete#k43	qb->qa	OK	db_ms=914	ui=gone ui_ms=1049	row=(4,)	MD17 4 records
+MD2	11:38:42	finance-create#k44	qa->qb	OK	db_ms=883	ui=shown ui_ms=1992	row=(10,)	MD17 10 records
+MD2	11:38:44	finance-edit#k44	qa->qb	OK	db_ms=897	ui=shown ui_ms=1774	row=(10,)	MD17 10 records
+MD2	11:38:47	finance-delete#k44	qa->qb	OK	db_ms=1132	ui=gone ui_ms=1962	row=(10,)	MD17 10 records
+MD2	11:39:34	finance-create#k45	qb->qa	OK	db_ms=1154	ui=shown ui_ms=1816	row=(10,)	MD17 10 records
+MD2	11:39:36	finance-edit#k45	qb->qa	OK	db_ms=1126	ui=shown ui_ms=1759	row=(10,)	MD17 10 records
+MD2	11:39:38	finance-delete#k45	qb->qa	OK	db_ms=880	ui=gone ui_ms=1746	row=(10,)	MD17 10 records
+MD2	11:40:25	j-create#k46	qa->qb	OK	db_ms=1181	ui=shown ui_ms=1333	row=('MD2 entry qak46',)	MD17 journals+entry create
+MD2	11:40:55	j-rename#k46	qa->qb	OK	db_ms=159	ui=NOT-SHOWN ui_ms=None	row=('MD2 Renamed qak46',)	MD17 journal rename+recolor
+MD2	11:41:26	je-edit#k46	qa->qb	OK	db_ms=679	ui=NOT-SHOWN ui_ms=None	row=('MD2 retitled qak46',)	MD17 entry title+mood+weather+date
+MD2	11:41:27	je-move#k46	qa->qb	OK	db_ms=675	ui=- ui_ms=None	row=('md2-jo-qak46',)	MD17 entry moved to other journal
+MD2	11:41:28	je-delete#k46	qa->qb	OK	db_ms=680	ui=gone ui_ms=964	row=('2026-10-14T15:41:27.712039Z',)	MD17 entry soft delete
+MD2	11:41:29	j-delete#k46	qa->qb	OK	db_ms=168	ui=gone ui_ms=533	row=('2026-10-14T15:41:28.831664Z',)	MD17 journal soft delete
+MD2	11:43:10	j-create#k47	qb->qa	OK	db_ms=1165	ui=shown ui_ms=1310	row=('MD2 entry qbk47',)	MD17 journals+entry create
+MD2	11:43:42	j-rename#k47	qb->qa	OK	db_ms=933	ui=NOT-SHOWN ui_ms=None	row=('MD2 Renamed qbk47',)	MD17 journal rename+recolor
+MD2	11:44:13	je-edit#k47	qb->qa	OK	db_ms=675	ui=NOT-SHOWN ui_ms=None	row=('MD2 retitled qbk47',)	MD17 entry title+mood+weather+date
+MD2	11:44:13	je-move#k47	qb->qa	OK	db_ms=682	ui=- ui_ms=None	row=('md2-jo-qbk47',)	MD17 entry moved to other journal
+MD2	11:44:15	je-delete#k47	qb->qa	OK	db_ms=683	ui=gone ui_ms=988	row=('2026-10-14T15:44:14.053654Z',)	MD17 entry soft delete
+MD2	11:44:15	j-delete#k47	qb->qa	OK	db_ms=178	ui=gone ui_ms=441	row=('2026-10-14T15:44:15.181862Z',)	MD17 journal soft delete
+MD2	11:46:15	leetcode-create#k48	qa->qb	OK	db_ms=635	ui=shown ui_ms=780	row=(5,)	MD17 5 records
+MD2	11:46:16	leetcode-edit#k48	qa->qb	OK	db_ms=416	ui=shown ui_ms=528	row=(5,)	MD17 5 records
+MD2	11:46:16	leetcode-delete#k48	qa->qb	OK	db_ms=412	ui=gone ui_ms=523	row=(5,)	MD17 5 records
+MD2	11:47:03	leetcode-create#k49	qb->qa	OK	db_ms=664	ui=shown ui_ms=778	row=(5,)	MD17 5 records
+MD2	11:47:04	leetcode-edit#k49	qb->qa	OK	db_ms=673	ui=shown ui_ms=777	row=(5,)	MD17 5 records
+MD2	11:47:05	leetcode-delete#k49	qb->qa	OK	db_ms=632	ui=gone ui_ms=748	row=(5,)	MD17 5 records
+MD2	11:47:52	rankings-create#k50	qa->qb	OK	db_ms=1167	ui=shown ui_ms=1301	row=(4,)	MD17 4 records
+MD2	11:47:53	rankings-edit#k50	qa->qb	OK	db_ms=1160	ui=shown ui_ms=1272	row=(4,)	MD17 4 records
+MD2	11:47:55	rankings-delete#k50	qa->qb	OK	db_ms=1155	ui=gone ui_ms=1280	row=(4,)	MD17 4 records
+MD2	11:48:42	rankings-create#k51	qb->qa	OK	db_ms=1172	ui=shown ui_ms=1304	row=(4,)	MD17 4 records
+MD2	11:48:43	rankings-edit#k51	qb->qa	OK	db_ms=1162	ui=shown ui_ms=1281	row=(4,)	MD17 4 records
+MD2	11:48:45	rankings-delete#k51	qb->qa	OK	db_ms=1401	ui=gone ui_ms=1558	row=(4,)	MD17 4 records
+MD2	11:49:32	jobs-create#k52	qa->qb	OK	db_ms=911	ui=shown ui_ms=1059	row=(6,)	MD17 6 records
+MD2	11:49:33	jobs-edit#k52	qa->qb	OK	db_ms=656	ui=shown ui_ms=785	row=(6,)	MD17 6 records
+MD2	11:49:34	jobs-delete#k52	qa->qb	OK	db_ms=656	ui=gone ui_ms=770	row=(6,)	MD17 6 records
+MD2	11:50:20	jobs-create#k53	qb->qa	OK	db_ms=659	ui=shown ui_ms=831	row=(6,)	MD17 6 records
+MD2	11:50:21	jobs-edit#k53	qb->qa	OK	db_ms=640	ui=shown ui_ms=759	row=(6,)	MD17 6 records
+MD2	11:50:22	jobs-delete#k53	qb->qa	OK	db_ms=647	ui=gone ui_ms=815	row=(6,)	MD17 6 records
+MD2	11:51:11	study-create#k54	qa->qb	OK	db_ms=638	ui=shown ui_ms=767	row=(6,)	MD17 6 records
+MD2	11:51:12	study-edit#k54	qa->qb	OK	db_ms=647	ui=shown ui_ms=791	row=(6,)	MD17 6 records
+MD2	11:51:13	study-delete#k54	qa->qb	OK	db_ms=905	ui=gone ui_ms=1064	row=(6,)	MD17 6 records
+MD2	11:52:04	study-create#k55	qb->qa	OK	db_ms=920	ui=shown ui_ms=1036	row=(6,)	MD17 6 records
+MD2	11:52:05	study-edit#k55	qb->qa	OK	db_ms=679	ui=shown ui_ms=795	row=(6,)	MD17 6 records
+MD2	11:52:05	study-delete#k55	qb->qa	OK	db_ms=403	ui=gone ui_ms=517	row=(6,)	MD17 6 records
+MD2	11:58:07	workout-create#k56	qa->qb	OK	db_ms=392	ui=shown ui_ms=544	row=(4,)	MD17 4 records
+MD2	11:58:08	workout-edit#k56	qa->qb	OK	db_ms=408	ui=shown ui_ms=545	row=(4,)	MD17 4 records
+MD2	11:58:09	workout-delete#k56	qa->qb	OK	db_ms=911	ui=gone ui_ms=1070	row=(4,)	MD17 4 records
+MD2	11:59:00	workout-create#k57	qb->qa	OK	db_ms=666	ui=shown ui_ms=795	row=(4,)	MD17 4 records
+MD2	11:59:01	workout-edit#k57	qb->qa	OK	db_ms=630	ui=shown ui_ms=824	row=(4,)	MD17 4 records
+MD2	11:59:02	workout-delete#k57	qb->qa	OK	db_ms=669	ui=gone ui_ms=786	row=(4,)	MD17 4 records
+MD2	11:59:51	tx-setup#k58	qa->qb	OK	db_ms=925	ui=shown ui_ms=1088	row=(2,)	MD17 2 lists + plain + daily task
+MD2	11:59:52	tx-complete#k58	qa->qb	OK	db_ms=663	ui=- ui_ms=None	row=(1,)	MD17 complete plain task (completeTodoTask)
+MD2	11:59:53	tx-uncomplete#k58	qa->qb	OK	db_ms=433	ui=- ui_ms=None	row=(1,)	MD17 uncomplete (completion tombstoned)
+MD2	11:59:54	tx-recur#k58	qa->qb	OK	db_ms=394	ui=- ui_ms=None	row=('2026-10-15T04:00:00.000Z',)	MD17 recurring completion rolls forward
+MD2	11:59:54	tx-move#k58	qa->qb	OK	db_ms=429	ui=- ui_ms=None	row=(1,)	MD17 move task to other list
+MD2	12:01:36	tx-setup#k59	qb->qa	OK	db_ms=1666	ui=shown ui_ms=1805	row=(2,)	MD17 2 lists + plain + daily task
+MD2	12:01:36	tx-complete#k59	qb->qa	OK	db_ms=421	ui=- ui_ms=None	row=(1,)	MD17 complete plain task (completeTodoTask)
+MD2	12:01:37	tx-uncomplete#k59	qb->qa	OK	db_ms=418	ui=- ui_ms=None	row=(1,)	MD17 uncomplete (completion tombstoned)
+MD2	12:01:38	tx-recur#k59	qb->qa	OK	db_ms=428	ui=- ui_ms=None	row=('2026-10-15T04:00:00.000Z',)	MD17 recurring completion rolls forward
+MD2	12:01:39	tx-move#k59	qb->qa	OK	db_ms=668	ui=- ui_ms=None	row=(1,)	MD17 move task to other list
+MD2	12:02:25	life-create#k60	qa->qb	OK	db_ms=424	ui=- ui_ms=None	row=(1,)	MD17 1 records
+MD2	12:02:26	life-edit#k60	qa->qb	OK	db_ms=423	ui=- ui_ms=None	row=(1,)	MD17 1 records
+MD2	12:02:27	life-delete#k60	qa->qb	OK	db_ms=178	ui=- ui_ms=None	row=(1,)	MD17 1 records
+MD2	12:04:29	life-create#k61	qb->qa	OK	db_ms=433	ui=- ui_ms=None	row=(1,)	MD17 1 records
+MD2	12:04:30	life-edit#k61	qb->qa	OK	db_ms=162	ui=- ui_ms=None	row=(1,)	MD17 1 records
+MD2	12:04:30	life-delete#k61	qb->qa	OK	db_ms=420	ui=- ui_ms=None	row=(1,)	MD17 1 records
+MD2	12:05:10	inbox-create#k62	qa->qb	OK	db_ms=422	ui=- ui_ms=None	row=(1,)	MD17 1 records
+MD2	12:05:12	inbox-edit#k62	qa->qb	OK	db_ms=923	ui=- ui_ms=None	row=(1,)	MD17 1 records
+MD2	12:05:13	inbox-delete#k62	qa->qb	OK	db_ms=679	ui=- ui_ms=None	row=(1,)	MD17 1 records
+MD2	12:05:23	inbox-create#k63	qb->qa	OK	db_ms=428	ui=- ui_ms=None	row=(1,)	MD17 1 records
+MD2	12:05:24	inbox-edit#k63	qb->qa	OK	db_ms=165	ui=- ui_ms=None	row=(1,)	MD17 1 records
+MD2	12:05:25	inbox-delete#k63	qb->qa	OK	db_ms=183	ui=- ui_ms=None	row=(1,)	MD17 1 records
+MD2	12:05:35	reminders-create#k64	qa->qb	OK	db_ms=411	ui=- ui_ms=None	row=(2,)	MD17 2 records
+MD2	12:05:36	reminders-edit#k64	qa->qb	OK	db_ms=354	ui=- ui_ms=None	row=(2,)	MD17 2 records
+MD2	12:05:38	reminders-delete#k64	qa->qb	OK	db_ms=665	ui=- ui_ms=None	row=(2,)	MD17 2 records
+MD2	12:05:48	reminders-create#k65	qb->qa	OK	db_ms=425	ui=- ui_ms=None	row=(2,)	MD17 2 records
+MD2	12:05:49	reminders-edit#k65	qb->qa	OK	db_ms=363	ui=- ui_ms=None	row=(2,)	MD17 2 records
+MD2	12:05:50	reminders-delete#k65	qb->qa	OK	db_ms=436	ui=- ui_ms=None	row=(2,)	MD17 2 records
+MD2	12:07:49	tt-create#k68	qa->qb	OK	db_ms=None	ui=- ui_ms=None	row=None	MD17 custom word, flagged word, tag colour, quote, snippet
+MD2	12:09:28	tt-create#k69	qb->qa	OK	db_ms=None	ui=- ui_ms=None	row=None	MD17 custom word, flagged word, tag colour, quote, snippet
+MD2	12:09:45	jx-create#k70	qa->qb	OK	db_ms=177	ui=shown ui_ms=344	row=(1,)	MD17 createApplication (app action)
+MD2	12:09:46	jx-status#k70	qa->qb	OK	db_ms=428	ui=- ui_ms=None	row=('Online Assessment',)	MD17 saveApplication status + notes
+MD2	12:10:16	jx-stage#k70	qa->qb	OK	db_ms=424	ui=NOT-SHOWN ui_ms=None	row=(1,)	MD17 renameStage (last stage)
+MD2	12:10:17	jx-delete#k70	qa->qb	OK	db_ms=289	ui=gone ui_ms=434	row=(1,)	MD17 deleteApplication (hard delete, ADR 002)
+MD2	12:11:03	jx-create#k71	qb->qa	OK	db_ms=168	ui=shown ui_ms=348	row=(1,)	MD17 createApplication (app action)
+MD2	12:11:04	jx-status#k71	qb->qa	OK	db_ms=415	ui=- ui_ms=None	row=('Online Assessment',)	MD17 saveApplication status + notes
+MD2	12:11:35	jx-stage#k71	qb->qa	OK	db_ms=419	ui=NOT-SHOWN ui_ms=None	row=(1,)	MD17 renameStage (last stage)
+MD2	12:11:35	jx-delete#k71	qb->qa	OK	db_ms=284	ui=gone ui_ms=426	row=(1,)	MD17 deleteApplication (hard delete, ADR 002)
+MD2	12:12:22	dreams-create#k72	qa->qb	OK	db_ms=687	ui=shown ui_ms=841	row=(1,)	MD17 1 records
+MD2	12:12:23	dreams-edit#k72	qa->qb	OK	db_ms=936	ui=shown ui_ms=1101	row=(1,)	MD17 1 records
+MD2	12:12:24	dreams-delete#k72	qa->qb	OK	db_ms=435	ui=gone ui_ms=594	row=(1,)	MD17 1 records
+MD2	12:18:22	dreams-create#k73	qb->qa	OK	db_ms=428	ui=shown ui_ms=1035	row=(1,)	MD17 1 records
+MD2	12:18:22	dreams-edit#k73	qb->qa	OK	db_ms=431	ui=shown ui_ms=548	row=(1,)	MD17 1 records
+MD2	12:18:23	dreams-delete#k73	qb->qa	OK	db_ms=421	ui=gone ui_ms=562	row=(1,)	MD17 1 records
+MD2	12:19:10	todo-create#k74	qa->qb	OK	db_ms=928	ui=shown ui_ms=1056	row=(3,)	MD17 3 records
+MD2	12:19:11	todo-edit#k74	qa->qb	OK	db_ms=936	ui=shown ui_ms=1097	row=(3,)	MD17 3 records
+MD2	12:19:12	todo-delete#k74	qa->qb	OK	db_ms=677	ui=gone ui_ms=807	row=(3,)	MD17 3 records
+MD2	12:19:59	todo-create#k75	qb->qa	OK	db_ms=928	ui=shown ui_ms=1050	row=(3,)	MD17 3 records
+MD2	12:20:01	todo-edit#k75	qb->qa	OK	db_ms=678	ui=shown ui_ms=1304	row=(3,)	MD17 3 records
+MD2	12:20:02	todo-delete#k75	qb->qa	OK	db_ms=662	ui=gone ui_ms=817	row=(3,)	MD17 3 records
+MD2	12:20:49	calendar-create#k76	qa->qb	OK	db_ms=677	ui=shown ui_ms=1202	row=(3,)	MD17 3 records
+MD2	12:20:50	calendar-edit#k76	qa->qb	OK	db_ms=414	ui=shown ui_ms=951	row=(3,)	MD17 3 records
+MD2	12:20:51	calendar-delete#k76	qa->qb	OK	db_ms=655	ui=gone ui_ms=985	row=(3,)	MD17 3 records
+MD2	12:21:38	calendar-create#k77	qb->qa	OK	db_ms=421	ui=shown ui_ms=954	row=(3,)	MD17 3 records
+MD2	12:21:39	calendar-edit#k77	qb->qa	OK	db_ms=414	ui=shown ui_ms=964	row=(3,)	MD17 3 records
+MD2	12:21:40	calendar-delete#k77	qb->qa	OK	db_ms=668	ui=gone ui_ms=939	row=(3,)	MD17 3 records
+MD2	12:22:27	trackers-create#k78	qa->qb	OK	db_ms=904	ui=shown ui_ms=1030	row=(4,)	MD17 4 records
+MD2	12:22:29	trackers-edit#k78	qa->qb	OK	db_ms=1148	ui=shown ui_ms=1322	row=(4,)	MD17 4 records
+MD2	12:22:30	trackers-delete#k78	qa->qb	OK	db_ms=908	ui=gone ui_ms=1179	row=(4,)	MD17 4 records
+MD2	12:24:31	trackers-create#k79	qb->qa	OK	db_ms=927	ui=shown ui_ms=1243	row=(4,)	MD17 4 records
+MD2	12:24:33	trackers-edit#k79	qb->qa	OK	db_ms=910	ui=shown ui_ms=1234	row=(4,)	MD17 4 records
+MD2	12:24:34	trackers-delete#k79	qb->qa	OK	db_ms=906	ui=gone ui_ms=1241	row=(4,)	MD17 4 records
+MD2	12:25:22	finance-create#k80	qa->qb	OK	db_ms=1127	ui=shown ui_ms=2198	row=(10,)	MD17 10 records
+MD2	12:25:25	finance-edit#k80	qa->qb	OK	db_ms=1116	ui=shown ui_ms=2000	row=(10,)	MD17 10 records
+MD2	12:25:27	finance-delete#k80	qa->qb	OK	db_ms=1358	ui=gone ui_ms=2583	row=(10,)	MD17 10 records
+MD2	12:26:15	finance-create#k81	qb->qa	OK	db_ms=1143	ui=shown ui_ms=2201	row=(10,)	MD17 10 records
+MD2	12:26:18	finance-edit#k81	qb->qa	OK	db_ms=1378	ui=shown ui_ms=2203	row=(10,)	MD17 10 records
+MD2	12:26:20	finance-delete#k81	qb->qa	OK	db_ms=1384	ui=gone ui_ms=2179	row=(10,)	MD17 10 records
+MD2	12:26:38	j-create#k82	qa->qb	OK	db_ms=1171	ui=shown ui_ms=1543	row=('MD2 entry qak82',)	MD17 journals+entry create
+MD2	12:27:08	j-rename#k82	qa->qb	OK	db_ms=180	ui=NOT-SHOWN ui_ms=None	row=('MD2 Renamed qak82',)	MD17 journal rename+recolor
+MD2	12:27:39	je-edit#k82	qa->qb	OK	db_ms=671	ui=NOT-SHOWN ui_ms=None	row=('MD2 retitled qak82',)	MD17 entry title+mood+weather+date
+MD2	12:27:40	je-move#k82	qa->qb	OK	db_ms=679	ui=- ui_ms=None	row=('md2-jo-qak82',)	MD17 entry moved to other journal
+MD2	12:27:41	je-delete#k82	qa->qb	OK	db_ms=665	ui=gone ui_ms=1087	row=('2026-10-14T16:27:40.619114Z',)	MD17 entry soft delete
+MD2	12:27:42	j-delete#k82	qa->qb	OK	db_ms=420	ui=gone ui_ms=803	row=('2026-10-14T16:27:41.858596Z',)	MD17 journal soft delete
+MD2	12:28:00	j-create#k83	qb->qa	OK	db_ms=925	ui=shown ui_ms=1704	row=('MD2 entry qbk83',)	MD17 journals+entry create
+MD2	12:28:31	j-rename#k83	qb->qa	OK	db_ms=424	ui=NOT-SHOWN ui_ms=None	row=('MD2 Renamed qbk83',)	MD17 journal rename+recolor
+MD2	12:29:02	je-edit#k83	qb->qa	OK	db_ms=922	ui=NOT-SHOWN ui_ms=None	row=('MD2 retitled qbk83',)	MD17 entry title+mood+weather+date
+MD2	12:29:03	je-move#k83	qb->qa	OK	db_ms=918	ui=- ui_ms=None	row=('md2-jo-qbk83',)	MD17 entry moved to other journal
+MD2	12:29:05	je-delete#k83	qb->qa	OK	db_ms=923	ui=gone ui_ms=1333	row=('2026-10-14T16:29:04.130210Z',)	MD17 entry soft delete
+MD2	12:29:06	j-delete#k83	qb->qa	OK	db_ms=435	ui=gone ui_ms=779	row=('2026-10-14T16:29:05.608400Z',)	MD17 journal soft delete
+MD2	12:29:23	leetcode-create#k84	qa->qb	OK	db_ms=662	ui=shown ui_ms=849	row=(5,)	MD17 5 records
+MD2	12:29:24	leetcode-edit#k84	qa->qb	OK	db_ms=666	ui=shown ui_ms=779	row=(5,)	MD17 5 records
+MD2	12:29:25	leetcode-delete#k84	qa->qb	OK	db_ms=658	ui=gone ui_ms=822	row=(5,)	MD17 5 records
+MD2	12:30:11	leetcode-create#k85	qb->qa	OK	db_ms=665	ui=shown ui_ms=815	row=(5,)	MD17 5 records
+MD2	12:30:12	leetcode-edit#k85	qb->qa	OK	db_ms=672	ui=shown ui_ms=833	row=(5,)	MD17 5 records
+MD2	12:30:14	leetcode-delete#k85	qb->qa	OK	db_ms=908	ui=gone ui_ms=1083	row=(5,)	MD17 5 records
+MD2	12:31:01	rankings-create#k86	qa->qb	OK	db_ms=1162	ui=shown ui_ms=1297	row=(4,)	MD17 4 records
+MD2	12:31:02	rankings-edit#k86	qa->qb	OK	db_ms=1155	ui=shown ui_ms=1276	row=(4,)	MD17 4 records
+MD2	12:31:04	rankings-delete#k86	qa->qb	OK	db_ms=1397	ui=gone ui_ms=1544	row=(4,)	MD17 4 records
+MD2	12:31:51	rankings-create#k87	qb->qa	OK	db_ms=1174	ui=shown ui_ms=1304	row=(4,)	MD17 4 records
+MD2	12:31:53	rankings-edit#k87	qb->qa	OK	db_ms=1406	ui=shown ui_ms=1562	row=(4,)	MD17 4 records
+MD2	12:31:55	rankings-delete#k87	qb->qa	OK	db_ms=1397	ui=gone ui_ms=1541	row=(4,)	MD17 4 records
+MD2	12:33:40	tt-create#soakxa	qa->qb	OK	db_ms=788	ui=- ui_ms=None	row=(5,)	custom word, flagged word, tag colour, quote, snippet
+MD2	12:35:10	tt-edit#soakxa	qa->qb	OK	db_ms=None	ui=- ui_ms=None	row=None	rename word, replacement, tag recolour, quote, snippet edits
+MD2	12:35:11	tt-delete#soakxa	qa->qb	OK	db_ms=603	ui=- ui_ms=None	row=(4,)	remove word, unflag, quote delete, snippet removed
+MD2	12:35:13	tt-create#soakxb	qb->qa	OK	db_ms=873	ui=- ui_ms=None	row=(5,)	custom word, flagged word, tag colour, quote, snippet
+MD2	12:36:43	tt-edit#soakxb	qb->qa	OK	db_ms=None	ui=- ui_ms=None	row=None	rename word, replacement, tag recolour, quote, snippet edits
+MD2	12:36:44	tt-delete#soakxb	qb->qa	OK	db_ms=792	ui=- ui_ms=None	row=(4,)	remove word, unflag, quote delete, snippet removed

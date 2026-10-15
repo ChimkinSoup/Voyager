@@ -1,0 +1,3 @@
+final a = (await c.read(jobRepositoryProvider).getApplication('md5-job-y'))!;
+await JobsActions.detached(c).deleteApplication(a);
+MARK;

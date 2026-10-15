@@ -1,0 +1,4 @@
+final items = await c.read(trashServiceProvider).list();
+debugPrint('MD16TRASH ' + items.map((x) => x.id + '(' + x.members.length.toString() + ')').join(', '));
+final all = await c.read(journalRepositoryProvider).listJournals();
+debugPrint('MD16LIVE ' + all.map((j) => j.id).join(','));

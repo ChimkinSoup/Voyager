@@ -1,0 +1,6 @@
+lib	features/todo/todo_edit_panel.dart
+tx-setup	md02-tx1-setup.dart.txt	select count(*) n from todo_tasks_table where id in ('md2-tp-@W@@N@','md2-tr-@W@@N@') having n=2	MD2 plain @W@@N@	0	2 lists + plain + daily task
+tx-complete	md02-tx2-complete.dart.txt	select 1 from todo_tasks_table t join todo_task_completions_table c on c.task_id=t.id where t.id='md2-tp-@W@@N@' and t.completed=1 and c.deleted_at is null	-	0	complete plain task (completeTodoTask)
+tx-uncomplete	md02-tx3-uncomplete.dart.txt	select 1 from todo_tasks_table t join todo_task_completions_table c on c.task_id=t.id where t.id='md2-tp-@W@@N@' and t.completed=0 and c.deleted_at is not null	-	0	uncomplete (completion tombstoned)
+tx-recur	md02-tx4-recur.dart.txt	select t.due_date from todo_tasks_table t join todo_task_completions_table c on c.task_id=t.id where t.id='md2-tr-@W@@N@' and t.completed=0 and c.deleted_at is null	-	0	recurring completion rolls forward
+tx-move	md02-tx5-move.dart.txt	select 1 from todo_tasks_table where id='md2-tp-@W@@N@' and list_id='md2-tlb-@W@@N@'	-	0	move task to other list

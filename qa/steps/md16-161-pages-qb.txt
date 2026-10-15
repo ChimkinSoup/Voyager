@@ -1,0 +1,19 @@
+wheel 88 1300 -10
+wait 400
+tap Workout
+wait 2500
+shot md16-161-qb-workout
+tap Jobs
+wait 2500
+shot md16-161-qb-jobs
+wheel 88 900 10
+wait 400
+tap Calendar
+wait 2000
+shot md16-161-qb-calendar
+tap To-Do
+wait 2000
+shot md16-161-qb-todo
+tap Journal
+wait 2500
+shot md16-161-qb-journal

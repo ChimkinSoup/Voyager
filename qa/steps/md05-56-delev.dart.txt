@@ -1,0 +1,4 @@
+Element? cx; void w(Element x) { if (cx != null) return; if (x is WidgetRef && Navigator.maybeOf(x) != null) { cx = x; return; } x.visitChildren(w); } e!.visitChildren(w); final ctx = cx!;
+final ev = await c.read(calendarRepositoryProvider).getEvent('md5-ev-a1');
+await deleteCalendarEventInteractive(context: ctx, container: c, overlay: Overlay.of(ctx, rootOverlay: true), event: ev!, occurrenceDay: DateTime.now());
+MARK;

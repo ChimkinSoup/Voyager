@@ -1,0 +1,32 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 13, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider); final tr = c.read(todoRepositoryProvider); final fr = c.read(financeRepositoryProvider); final cr = c.read(calendarRepositoryProvider); final sr = c.read(studyRepositoryProvider);
+final tg = '@TAG@'; final lab = tg.split('_')[0]; final spec = tg.split('_')[1]; final txAll = await fr.listTransactions();
+for (var p = 0; p + 3 <= spec.length; p += 3) {
+  final n = spec.substring(p, p + 2); final op = spec[p + 2]; final s = 'MD9 $n $lab';
+  if (op == 'n') {
+    final je = JournalEntry(id: 'md9-je-$lab$n', createdAt: now, updatedAt: now, version: 1, journalId: 'md9-jrnl', title: s, body: 'MD9 new body $lab$n', entryDate: t0);
+    await jr.upsertEntry(je); r.pushJournalEntryNow(je);
+    final tk = TodoTask(id: 'md9-task-$lab$n', createdAt: now, updatedAt: now, version: 1, listId: 'md9-list', title: s);
+    await tr.upsertTask(tk); r.pushTodoTaskInBackground(tk);
+    final tx = FinancialTransaction(id: 'md9-tx-$lab$n', createdAt: now, updatedAt: now, version: 1, type: TransactionType.expense, amountCents: 2000, occurredAt: day.add(const Duration(hours: 10)), tags: const ['md9food'], note: s);
+    await fr.upsertTransaction(tx); r.pushRecords('transactions', [tx]).ignore();
+    final ev = CalendarEvent(id: 'md9-ev-$lab$n', createdAt: now, updatedAt: now, version: 1, calendarId: 'md9-cal', title: s, start: day.add(const Duration(days: 2, hours: 9)), end: day.add(const Duration(days: 2, hours: 10)), isFullDay: false);
+    await cr.upsertEvent(ev); r.pushRecords('calendar_events', [ev]).ignore();
+    final cd = StudyCard(id: 'md9-card-$lab$n', createdAt: now, updatedAt: now, version: 1, deckId: 'md9-deck', frontText: s, backText: 'MD9 back new', dueAt: c0);
+    await sr.upsertCard(cd); r.pushStudyCard(cd);
+    continue;
+  }
+  final del = op == 'd' ? now : null;
+  final je0 = (await jr.getEntry('md9-je-$n'))!; final je = op == 'd' ? je0.copyWith(deletedAt: now) : je0.copyWith(title: s);
+  await jr.upsertEntry(je); r.pushJournalEntryNow(je);
+  final tk0 = (await tr.getTask('md9-task-$n'))!; final tk = op == 'd' ? tk0.copyWith(deletedAt: now) : tk0.copyWith(title: s);
+  await tr.upsertTask(tk); r.pushTodoTaskInBackground(tk);
+  final tx0 = txAll.firstWhere((x) => x.id == 'md9-tx-$n'); final tx = tx0.copyWith(note: op == 'd' ? null : s, deletedAt: del, version: tx0.version + 1, updatedAt: now);
+  await fr.upsertTransaction(tx); r.pushRecords('transactions', [tx]).ignore();
+  final ev0 = (await cr.getEvent('md9-ev-$n'))!; final ev = op == 'd' ? ev0.copyWith(deletedAt: now) : ev0.copyWith(title: s);
+  await cr.upsertEvent(ev); r.pushRecords('calendar_events', [ev]).ignore();
+  final cd0 = (await sr.getCard('md9-card-$n'))!; final cd = op == 'd' ? cd0.copyWith(deletedAt: now) : cd0.copyWith(frontText: s);
+  await sr.upsertCard(cd); r.pushStudyCard(cd);
+}
+MARK;
+invalidateAllDataProvidersIn(c);

@@ -1,0 +1,12 @@
+click 2000 1300
+wait 300
+key ctrl+home
+key right
+key right
+key right
+key right
+key right
+key right
+type alphaword
+wait 8000
+field

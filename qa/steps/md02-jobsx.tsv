@@ -1,0 +1,5 @@
+lib	features/jobs/jobs_page.dart
+jx-create	md02-jx1.dart.txt	select 1 from job_applications_table where company='MD2 Act @W@@N@' and deleted_at is null	MD2 Act @W@@N@	0	createApplication (app action)
+jx-status	md02-jx2.dart.txt	select status from job_applications_table where company='MD2 Act @W@@N@' and notes='MD2 status note'	-	0	saveApplication status + notes
+jx-stage	md02-jx3.dart.txt	select 1 from job_stages_table where name='MD2 Stage @W@@N@'	MD2 Stage @W@@N@	0	renameStage (last stage)
+jx-delete	md02-jx4.dart.txt	select 1 where not exists (select 1 from job_applications_table where company='MD2 Act @W@@N@' and deleted_at is null)	MD2 Act @W@@N@	1	deleteApplication (hard delete, ADR 002)

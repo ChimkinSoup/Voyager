@@ -1,0 +1,4 @@
+final repo = c.read(jobRepositoryProvider);
+final a = (await repo.listApplications()).firstWhere((x) => x.company == 'MD2 Act @W@@N@');
+await JobsActions.detached(c).deleteApplication(a);
+MARK;

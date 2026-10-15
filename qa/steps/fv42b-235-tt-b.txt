@@ -1,0 +1,6 @@
+click 2448 475
+wait 300
+key ctrl+home
+type B says:
+wait 9000
+field

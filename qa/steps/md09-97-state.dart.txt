@@ -1,0 +1,3 @@
+final g = c.read(firestoreWriteGateProvider); final db = c.read(databaseProvider);
+final q = (await db.select(db.pendingUploadsTable).get()).length;
+debugPrint('MD97 @W@ online=${c.read(connectivityStatusProvider).isOnline} gate=${g.inFlight}/${g.limit} paused=${g.isPaused} stalled=${g.isStalled} refused=${g.refusedWrites} timedOut=${g.timedOutWrites} outbox=$q');

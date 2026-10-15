@@ -150,10 +150,16 @@ class _StudyCardEditorModalState extends ConsumerState<_StudyCardEditorModal> {
               dueAt: now,
             )
           // copyWith bumps version off the row as it stands now, and leaves
-          // interval/ease/dueAt/reviewCount alone.
+          // interval/ease/dueAt/reviewCount alone. A face not edited here
+          // keeps the row's, which another device may have changed while the
+          // sheet was open (BUG-233).
           : current.copyWith(
-              frontText: _front.text.trim(),
-              backText: _back.text.trim(),
+              frontText: _front.text.trim() == widget.existing!.frontText
+                  ? current.frontText
+                  : _front.text.trim(),
+              backText: _back.text.trim() == widget.existing!.backText
+                  ? current.backText
+                  : _back.text.trim(),
             );
       await repo.upsertCard(card);
       // Only true once the row the image references hang off actually exists —

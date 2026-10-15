@@ -1,0 +1,22 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day);
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final j = Journal(id: 'md21-j', createdAt: now, updatedAt: now, version: 1, name: 'MD21 Journal');
+await jr.upsertJournal(j); r.pushJournal(j);
+for (var i = 0; i < 40; i++) { final en = JournalEntry(id: 'md21-je-$i', createdAt: now, updatedAt: now, version: 1, journalId: 'md21-j', title: 'MD21 entry ${i.toString().padLeft(2, '0')}', body: 'MD21 body $i', entryDate: t0.subtract(Duration(days: i + 1))); await jr.upsertEntry(en); r.pushJournalEntryNow(en); }
+final tr = c.read(todoRepositoryProvider);
+final l = TodoListModel(id: 'md21-l', createdAt: now, updatedAt: now, version: 1, name: 'MD21 List');
+await tr.upsertList(l); r.pushTodoList(l);
+for (var i = 0; i < 40; i++) { final t = TodoTask(id: 'md21-t-$i', createdAt: now, updatedAt: now, version: 1, listId: 'md21-l', title: 'MD21 task ${i.toString().padLeft(2, '0')}', sortOrder: i); await tr.upsertTask(t); r.pushTodoTaskInBackground(t); }
+final fr = c.read(financeRepositoryProvider);
+for (var i = 0; i < 40; i++) { final tx = FinancialTransaction(id: 'md21-tx-$i', createdAt: now, updatedAt: now, version: 1, type: TransactionType.expense, amountCents: 100 + i, occurredAt: t0.subtract(Duration(days: i + 1)), tags: const ['md21'], note: 'MD21 tx ${i.toString().padLeft(2, '0')}'); await fr.upsertTransaction(tx); await r.pushRecords('transactions', [tx]); }
+final rr = c.read(rankingRepositoryProvider);
+final rc = RankingCategory(id: 'md21-rc', createdAt: now, updatedAt: now, version: 1, name: 'MD21 Ranks', colorValue: 0xFF3366CC);
+await rr.upsertCategory(rc); r.pushRankingCategory(rc);
+for (var i = 0; i < 40; i++) { final p = RankingParent(id: 'md21-rp-$i', createdAt: now, updatedAt: now, version: 1, categoryId: 'md21-rc', title: 'MD21 rank ${i.toString().padLeft(2, '0')}', overallScore: 5.0); await rr.upsertParent(p); r.pushRankingParent(p); }
+final jbr = c.read(jobRepositoryProvider);
+for (var i = 0; i < 40; i++) { final a = JobApplication(id: 'md21-job-$i', createdAt: now, updatedAt: now, version: 1, company: 'MD21 Co ${i.toString().padLeft(2, '0')}', title: 'Eng', status: 'Applied', dateApplied: day.subtract(Duration(days: i))); await jbr.upsertApplication(a); r.pushJobApplication(a); }
+final sr = c.read(studyRepositoryProvider);
+for (var i = 0; i < 40; i++) { final d = StudyDeck(id: 'md21-deck-$i', createdAt: now, updatedAt: now, version: 1, name: 'MD21 deck ${i.toString().padLeft(2, '0')}'); await sr.upsertDeck(d); r.pushStudyDeck(d); }
+MARK;
+invalidateAllDataProvidersIn(c);

@@ -1,0 +1,5 @@
+final r = c.read(remoteSyncServiceProvider); final tr = c.read(todoRepositoryProvider); final fr = c.read(financeRepositoryProvider);
+final t0 = (await tr.getTask('md9-task-10'))!; final tk = t0.copyWith(title: 'MD9 10 parked probe'); await tr.upsertTask(tk); r.pushTodoTaskInBackground(tk);
+final x0 = (await fr.listTransactions()).firstWhere((x) => x.id == 'md9-tx-10'); final tx = x0.copyWith(note: 'MD9 10 parked probe', version: x0.version + 1, updatedAt: DateTime.now().toUtc()); await fr.upsertTransaction(tx); r.pushRecords('transactions', [tx]).ignore();
+MARK;
+invalidateAllDataProvidersIn(c);

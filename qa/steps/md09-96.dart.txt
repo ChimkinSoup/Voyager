@@ -1,0 +1,8 @@
+final r = c.read(remoteSyncServiceProvider); final tr = c.read(todoRepositoryProvider);
+for (var i = 1; i <= 300; i++) {
+  final n = i.toString().padLeft(3, '0');
+  final t0 = (await tr.getTask('md9b-task-$n'))!; final tk = t0.copyWith(title: 'MD9 k96 $n');
+  await tr.upsertTask(tk); r.pushTodoTaskInBackground(tk);
+}
+MARK;
+invalidateAllDataProvidersIn(c);

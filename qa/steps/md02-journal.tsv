@@ -1,0 +1,7 @@
+lib	features/journal/journal_page.dart
+j-create	md02-j1-create.dart.txt	select title from journal_entries_table where id='md2-je-@W@@N@'	MD2 entry @W@@N@	0	journals+entry create
+j-rename	md02-j2-rename.dart.txt	select name from journals_table where id='md2-j-@W@@N@' and name like 'MD2 Renamed%'	MD2 Renamed @W@@N@	0	journal rename+recolor
+je-edit	md02-j3-title.dart.txt	select title from journal_entries_table where id='md2-je-@W@@N@' and title like 'MD2 retitled%'	MD2 retitled @W@@N@	0	entry title+mood+weather+date
+je-move	md02-j6-move.dart.txt	select journal_id from journal_entries_table where id='md2-je-@W@@N@' and journal_id like 'md2-jo-%'	-	0	entry moved to other journal
+je-delete	md02-j4-delentry.dart.txt	select deleted_at from journal_entries_table where id='md2-je-@W@@N@' and deleted_at is not null	MD2 retitled @W@@N@	1	entry soft delete
+j-delete	md02-j5-deljournal.dart.txt	select deleted_at from journals_table where id='md2-j-@W@@N@' and deleted_at is not null	MD2 Renamed @W@@N@	1	journal soft delete

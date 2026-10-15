@@ -1,0 +1,10 @@
+final repo = c.read(jobRepositoryProvider);
+final a = (await repo.getApplication('md5-job-x'))!;
+await JobsActions.detached(c).saveApplication(a.copyWith(notes: 'MD5 job notes OFFLINE SECRET by B'), previous: a);
+final rr = c.read(rankingRepositoryProvider);
+final p = (await rr.getParent('md5-rpar-b'))!;
+final n = p.copyWith(title: 'MD5 rank b OFFLINE SECRET by B', bumpVersion: true);
+await rr.upsertParent(n);
+c.read(remoteSyncServiceProvider).pushRankingParent(n);
+MARK;
+invalidateAllDataProvidersIn(c);

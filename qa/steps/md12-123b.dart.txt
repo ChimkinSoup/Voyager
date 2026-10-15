@@ -1,0 +1,8 @@
+final r = c.read(remoteSyncServiceProvider); final jr = c.read(journalRepositoryProvider);
+for (var i = 1; i <= 200; i++) {
+  final n = i.toString().padLeft(3, '0');
+  final je0 = (await jr.getEntry('md12d-je-$n'))!; final je = je0.copyWith(title: 'MD12 @TAG@ $n');
+  await jr.upsertEntry(je); r.pushJournalEntryNow(je);
+}
+MARK;
+invalidateAllDataProvidersIn(c);

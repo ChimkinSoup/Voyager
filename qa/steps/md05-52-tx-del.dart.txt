@@ -1,0 +1,3 @@
+await c.read(financeRepositoryProvider).softDeleteTransaction('@TAG@');
+c.invalidate(transactionsProvider);
+MARK;

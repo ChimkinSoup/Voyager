@@ -1,0 +1,3 @@
+final s = c.read(settingsProvider).value!;
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(defaultTodoListId: 'md4-tl3', defaultJournalId: 'md4-j3'));
+MARK;

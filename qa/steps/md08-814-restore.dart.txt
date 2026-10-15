@@ -1,0 +1,6 @@
+final hidden = await c.read(hiddenNotificationFeedProvider.future);
+final repo = c.read(notificationRepositoryProvider);
+for (final item in hidden) { await repo.undismiss(item.dismissalKey); }
+c.invalidate(notificationDismissalsProvider);
+MARK;
+debugPrint('MD8 restored ${hidden.length}');

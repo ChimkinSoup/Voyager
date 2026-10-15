@@ -1,0 +1,5 @@
+final rr = c.read(rankingRepositoryProvider); final r = c.read(remoteSyncServiceProvider);
+final cats = await rr.listCategories(); final rc = cats.firstWhere((x) => x.id == 'md7-rcat-1');
+final up = rc.copyWith(parentCountEnabled: true);
+await rr.upsertCategory(up); r.pushRankingCategory(up);
+invalidateAllDataProvidersIn(c);

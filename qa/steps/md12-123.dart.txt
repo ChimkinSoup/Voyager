@@ -1,0 +1,8 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final r = c.read(remoteSyncServiceProvider); final jr = c.read(journalRepositoryProvider);
+for (var i = 1; i <= 200; i++) {
+  final n = i.toString().padLeft(3, '0');
+  final je = JournalEntry(id: 'md12d-je-$n', createdAt: now, updatedAt: now, version: 1, journalId: 'md12-jrnl', title: 'MD12 drain $n', body: 'MD12 drain body $n', entryDate: t0.subtract(Duration(hours: 1, minutes: i)));
+  await jr.upsertEntry(je); r.pushJournalEntryNow(je);
+}
+MARK;
+invalidateAllDataProvidersIn(c);

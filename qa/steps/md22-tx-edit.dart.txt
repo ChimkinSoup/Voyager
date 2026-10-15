@@ -1,0 +1,6 @@
+final fr = c.read(financeRepositoryProvider);
+final t = (await fr.listTransactions()).firstWhere((x) => x.id == '@TAG@');
+final n = FinancialTransaction(id: t.id, createdAt: t.createdAt, updatedAt: DateTime.now().toUtc(), version: t.version + 1, type: t.type, amountCents: 5555, occurredAt: t.occurredAt, tags: t.tags, note: 'MD22 changed on @W@');
+await fr.upsertTransaction(n);
+MARK;
+await c.read(remoteSyncServiceProvider).pushRecords('transactions', [n]);

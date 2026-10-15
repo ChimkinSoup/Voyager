@@ -1,0 +1,6 @@
+Element? cx; void w(Element x) { if (cx != null) return; if (x is WidgetRef && Navigator.maybeOf(x) != null) { cx = x; return; } x.visitChildren(w); } e!.visitChildren(w); final ctx = cx!;
+final fr = c.read(financeRepositoryProvider);
+final a = (await fr.listAssets()).firstWhere((x) => x.id == 'md5-asset-@TAG@');
+final ok = await deleteAssetWithUndo(overlay: Overlay.of(ctx, rootOverlay: true), container: c, repo: fr, asset: a);
+MARK;
+debugPrint('MD5DEL53 asset ' + ok.toString());

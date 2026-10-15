@@ -1,0 +1,14 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 12, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final rc = RankingCategory(id: 'md2-rcat-@W@@N@', createdAt: c0, updatedAt: now, version: 3, deletedAt: now, name: 'MD2 RCat @W@@N@ ed', colorValue: 0xFF3366CC);
+await c.read(rankingRepositoryProvider).upsertCategory(rc);
+final rp = RankingParent(id: 'md2-rpar-@W@@N@', createdAt: c0, updatedAt: now, version: 3, deletedAt: now, categoryId: 'md2-rcat-@W@@N@', title: 'MD2 rank @W@@N@ ed', overallScore: 2.5 * 3);
+await c.read(rankingRepositoryProvider).upsertParent(rp);
+final rch = RankingChild(id: 'md2-rch-@W@@N@', createdAt: c0, updatedAt: now, version: 3, deletedAt: now, parentId: 'md2-rpar-@W@@N@', name: 'MD2 child ed', overallScore: 1.5 * 3);
+await c.read(rankingRepositoryProvider).upsertChild(rch);
+final rn = RankingCount(id: 'md2-rcnt-@W@@N@', createdAt: c0, updatedAt: now, version: 3, deletedAt: now, entryId: 'md2-rpar-@W@@N@', deviceId: 'md2-@W@', delta: 3);
+await c.read(rankingRepositoryProvider).upsertCount(rn);
+MARK;
+r.pushRankingCategory(rc);
+r.pushRankingParent(rp);
+r.pushRankingChild(rch);
+r.pushRankingCounts([rn]);

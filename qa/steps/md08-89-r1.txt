@@ -1,0 +1,7 @@
+mode fg
+other-open 60 1250 900 450
+hotkey ctrl+alt+r
+wait 2000
+ostatus
+shot md08-89-r-open
+find

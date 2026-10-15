@@ -1,0 +1,7 @@
+final sr = c.read(studyRepositoryProvider);
+final k = (await sr.getCard('fv42-card'))!;
+final n = k.copyWith(backText: 'Back changed on qa');
+await sr.upsertCard(n);
+c.read(remoteSyncServiceProvider).pushStudyCard(n);
+invalidateAllDataProvidersIn(c);
+debugPrint('FV42 card edited');

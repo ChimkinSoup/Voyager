@@ -1,0 +1,5 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 13, 12); final r = c.read(remoteSyncServiceProvider);
+final dl = Calendar(id: '__legacy_calendar__', createdAt: c0, updatedAt: now, version: 1, name: 'MD5 Default', colorValue: 0xFF2196F3);
+await c.read(calendarRepositoryProvider).upsertCalendar(dl);
+await r.pushRecords('calendars', [dl]);
+MARK;

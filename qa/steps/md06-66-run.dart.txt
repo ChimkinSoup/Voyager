@@ -1,0 +1,5 @@
+final repo = c.read(studyRepositoryProvider);
+await repo.moveCards(['md6-card-mv'], '@W@' == 'qa' ? 'md6-deck-z' : 'md6-deck-x');
+final cd = (await repo.getCard('md6-card-mv'))!;
+await c.read(remoteSyncServiceProvider).pushStudyCardsBatch([cd]);
+MARK;

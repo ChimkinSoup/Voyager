@@ -1,0 +1,9 @@
+final r = c.read(remoteSyncServiceProvider); final tr = c.read(todoRepositoryProvider);
+for (var k = 1; k <= 10; k++) {
+  for (final n in ['04', '05', '06', '07', '08']) {
+    final t0 = (await tr.getTask('md9-task-$n'))!; final tk = t0.copyWith(title: 'MD9 r8 $n round $k'); await tr.upsertTask(tk); r.pushTodoTaskInBackground(tk);
+  }
+  await Future.delayed(const Duration(milliseconds: 300));
+}
+MARK;
+invalidateAllDataProvidersIn(c);

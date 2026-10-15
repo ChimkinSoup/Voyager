@@ -1,0 +1,8 @@
+final now = DateTime.now().toUtc(); final r = c.read(remoteSyncServiceProvider); final jr = c.read(journalRepositoryProvider);
+final old = await jr.getEntry('md3-je-10');
+final en = old!.copyWith(body: 'Seeded snapshot text.');
+await jr.upsertEntry(en); r.pushJournalEntryNow(en);
+final dr = c.read(dreamRepositoryProvider); final od = await dr.getEntry('md3-dr-10');
+final d = od!.copyWith(body: 'Seeded snapshot text.');
+await dr.upsertEntry(d); r.pushDreamEntryNow(d);
+invalidateAllDataProvidersIn(c);

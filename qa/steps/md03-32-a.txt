@@ -1,0 +1,25 @@
+click 1840 1500
+wait 300
+key ctrl+home
+type a01 a02 a03 
+wait 2200
+type a11 a12 a13 
+wait 2200
+type a21 a22 a23 
+wait 2200
+type a31 a32 a33 
+wait 2200
+type a41 a42 a43 
+wait 2200
+type a51 a52 a53 
+wait 2200
+type a61 a62 a63 
+wait 2200
+type a71 a72 a73 
+wait 2200
+type a81 a82 a83 
+wait 2200
+type a91 a92 a93 
+wait 2200
+wait 5000
+field

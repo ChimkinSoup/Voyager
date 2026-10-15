@@ -1,0 +1,13 @@
+click 1945 1364
+wait 800
+click 475 1322
+wait 1500
+shot md13-133-qa-list
+click 1958 815
+wait 800
+click 1765 821
+wait 1200
+shot md13-133-qa-confirm
+click 2460 985
+wait 6000
+shot md13-133-qa-done

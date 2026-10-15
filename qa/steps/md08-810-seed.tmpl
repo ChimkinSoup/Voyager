@@ -1,0 +1,11 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 13, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider); final rr = c.read(reminderRepositoryProvider);
+final tk = TodoTask(id: 'md8-task-bell1', createdAt: c0, updatedAt: now, version: 1, listId: 'md8-list-1', title: 'MD8 bell task', sortOrder: 500, dueDate: day.add(const Duration(hours: @TH@, minutes: @TM@)).toUtc());
+await c.read(todoRepositoryProvider).upsertTask(tk); await r.pushTodoTaskNow(tk);
+final ev = CalendarEvent(id: 'md8-ev-bell1', createdAt: c0, updatedAt: now, version: 1, calendarId: '__legacy_calendar__', title: 'MD8 bell event', start: day.add(const Duration(hours: @EH@, minutes: @EM@)), end: day.add(const Duration(hours: @EH@, minutes: @EM@ + 30)), isFullDay: false);
+await c.read(calendarRepositoryProvider).upsertEvent(ev); await r.pushRecords('calendar_events', [ev]);
+await setEntityReminder(rr, kind: ReminderSourceKind.todo, entityId: 'md8-task-bell1', offsetMinutes: 0);
+await setEntityReminder(rr, kind: ReminderSourceKind.calendarEvent, entityId: 'md8-ev-bell1', offsetMinutes: 0);
+final ers = (await rr.listEntityReminders()).where((x) => x.entityId.startsWith('md8-')).toList();
+await r.pushRecords('entity_reminders', ers);
+c.invalidate(entityRemindersProvider); c.invalidate(allTodoTasksProvider); c.invalidate(todoListsProvider); c.invalidate(calendarEventsProvider);
+debugPrint('MD8 bells ' + ers.length.toString());

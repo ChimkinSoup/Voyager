@@ -1,0 +1,17 @@
+final sr = c.read(syncRepositoryProvider); final did = c.read(deviceIdProvider);
+final parts = '@TAG@'.split('_'); final mode = parts[0]; final id = parts[1]; final q = String.fromCharCode(34);
+final ops = await sr.listOperations(id);
+var mx = 0; for (final o in ops) { if (o.sequence > mx) mx = o.sequence; }
+final now = DateTime.now().toUtc();
+if (mode == 'gap') {
+  await sr.appendOperation(SyncOperation(id: 'md15-gap-' + id, documentId: id, sequence: mx + 10, payload: '{' + q + 'format' + q + ':' + q + 'char_ops' + q + ',' + q + 'charOps' + q + ':[]}', deviceId: did, timestamp: now));
+} else {
+  final op1 = '{' + q + 'id' + q + ':' + q + 'md15dup-a-' + id + q + ',' + q + 'clientId' + q + ':' + q + 'md15-planter' + q + ',' + q + 'logicalClock' + q + ':1,' + q + 'position' + q + ':' + q + 'zz' + q + ',' + q + 'character' + q + ':' + q + 'X' + q + ',' + q + 'deleted' + q + ':false}';
+  final op2 = op1.replaceAll('md15dup-a-', 'md15dup-b-').replaceAll(q + 'X' + q, q + 'Y' + q);
+  await sr.appendOperation(SyncOperation(id: 'md15-dup-' + id, documentId: id, sequence: mx + 1, payload: '{' + q + 'format' + q + ':' + q + 'char_ops' + q + ',' + q + 'charOps' + q + ':[' + op1 + ',' + op2 + ']}', deviceId: did, timestamp: now));
+}
+final doc = await sr.getDocument('journal_entries', id);
+final m = Map<String, dynamic>.from(doc!); m.remove('_serverWrittenAt');
+await sr.upsertDocument('journal_entries', id, m);
+MARK;
+debugPrint('MD15PLANT ' + mode + ' ' + id + ' ops=' + ops.length.toString() + ' maxseq=' + mx.toString());

@@ -1,0 +1,8 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 12, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final j1 = JobApplication(id: 'md4-job', createdAt: c0, updatedAt: now, version: 1, company: 'MD4 Co', title: 'MD4 Engineer', status: 'Applied', dateApplied: day, notes: 'MD4 notes base');
+await c.read(jobRepositoryProvider).upsertApplication(j1);
+r.pushJobApplication(j1);
+final j2 = JobApplication(id: 'md4-job2', createdAt: c0, updatedAt: now, version: 1, company: 'MD4 Co Two', title: 'MD4 Analyst', status: 'Interview', dateApplied: day, notes: 'MD4 job2');
+await c.read(jobRepositoryProvider).upsertApplication(j2);
+r.pushJobApplication(j2);
+invalidateAllDataProvidersIn(c);

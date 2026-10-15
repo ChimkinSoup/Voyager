@@ -25,6 +25,14 @@ const std::wstring& DevProfile() {
   return profile;
 }
 
+bool StartParked() {
+#ifdef NDEBUG
+  return false;
+#else
+  return ::GetEnvironmentVariableW(L"VOYAGER_QA_PARKED", nullptr, 0) != 0;
+#endif
+}
+
 bool IsValidDevProfile(const std::wstring& profile) {
   if (profile.empty() || profile.size() > 16 || profile == L"default") {
     return false;

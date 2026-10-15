@@ -1,0 +1,4 @@
+lib	features/notifications/notification_inbox_popover.dart
+inbox-create	md02-inbox-create.dart.txt	select count(*) n from (select 1 from pinned_notes_table where id='md2-pin-@W@@N@' and version>=1) having n=1	MD2 pinned @W@@N@	0	1 records
+inbox-edit	md02-inbox-edit.dart.txt	select count(*) n from (select 1 from pinned_notes_table where id='md2-pin-@W@@N@' and version>=2) having n=1	MD2 pinned @W@@N@ ed	0	1 records
+inbox-delete	md02-inbox-delete.dart.txt	select count(*) n from (select 1 from pinned_notes_table where id='md2-pin-@W@@N@' and version>=3 and deleted_at is not null) having n=1	MD2 pinned @W@@N@ ed	1	1 records

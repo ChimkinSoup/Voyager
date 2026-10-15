@@ -1,0 +1,5 @@
+final fr = c.read(financeRepositoryProvider);
+final tx = (await fr.listTransactions(includeDeleted: true)).firstWhere((x) => x.id == 'md5-tx-a1');
+await fr.upsertTransaction(tx.copyWith(note: 'MD5 tx a1 OFFLINE EDIT by B', version: tx.version + 1, updatedAt: DateTime.now().toUtc()));
+MARK;
+c.invalidate(transactionsProvider);

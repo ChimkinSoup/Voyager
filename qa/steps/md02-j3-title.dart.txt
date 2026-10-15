@@ -1,0 +1,7 @@
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final e0 = (await jr.getEntry('md2-je-@W@@N@'))!;
+final en = e0.copyWith(title: 'MD2 retitled @W@@N@', mood: 8, weatherIcon: 'rain', entryDate: e0.entryDate.subtract(const Duration(days: 1)));
+await jr.upsertEntry(en);
+MARK;
+r.pushJournalEntryNow(en);

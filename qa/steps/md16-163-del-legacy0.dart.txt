@@ -1,0 +1,6 @@
+Element? cx; void w(Element x) { if (cx != null) return; if (x is WidgetRef && Navigator.maybeOf(x) != null) { cx = x; return; } x.visitChildren(w); } e!.visitChildren(w); final ctx = cx!; final ref = cx as WidgetRef;
+final js = await c.read(journalRepositoryProvider).listJournals();
+final j = js.firstWhere((x) => x.id == '__legacy__');
+final ok = await deleteJournalList(ctx, ref, journal: j, allJournals: js, entryCount: 0);
+MARK;
+debugPrint('MD16DEL journal ' + ok.toString());

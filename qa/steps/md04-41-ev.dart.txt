@@ -1,0 +1,6 @@
+final cr = c.read(calendarRepositoryProvider);
+final t = (await cr.getEvent('md4-ev'))!;
+final n = '@W@' == 'qa' ? t.copyWith(start: t.start.add(const Duration(hours: 1)), end: t.end.add(const Duration(hours: 1))) : t.copyWith(title: 'MD4 event @TAG@ by qb');
+await cr.upsertEvent(n);
+MARK;
+await c.read(remoteSyncServiceProvider).pushRecords('calendar_events', [n]);

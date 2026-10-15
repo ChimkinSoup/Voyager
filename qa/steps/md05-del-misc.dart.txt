@@ -1,0 +1,9 @@
+final r = c.read(remoteSyncServiceProvider);
+final dr = c.read(dreamRepositoryProvider);
+await dr.softDeleteEntry('md5-dream-@TAG@');
+final dt = await dr.getEntry('md5-dream-@TAG@');
+r.pushDreamEntryNow(dt!);
+await c.read(trackerRepositoryProvider).softDeleteTracker('md5-trk-@TAG@');
+await c.read(bucketListRepositoryProvider).deleteItem('md5-bucket-@TAG@');
+MARK;
+invalidateAllDataProvidersIn(c);

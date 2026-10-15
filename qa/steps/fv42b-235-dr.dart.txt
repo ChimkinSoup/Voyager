@@ -1,0 +1,1 @@
+final now = DateTime.now().toUtc(); final d = DreamEntry(id: 'fx-dr-125', createdAt: now, updatedAt: now, version: 1, title: 'FX dream 125', body: 'hello world', entryDate: DateTime.now(), notes: '', tags: const []); await c.read(dreamRepositoryProvider).upsertEntry(d); c.read(remoteSyncServiceProvider).pushDreamEntryNow(d); invalidateAllDataProvidersIn(c);

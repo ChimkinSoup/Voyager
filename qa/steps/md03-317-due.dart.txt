@@ -1,0 +1,4 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final t = TodoTask(id: 'md3-tt-18', createdAt: now, updatedAt: now, version: 2, listId: 'md3-tl', title: 'MD3 task 18', notes: '', dueDate: day.add(Duration(days: 1, hours: 9)));
+await c.read(todoRepositoryProvider).upsertTask(t); r.pushTodoTaskInBackground(t);
+invalidateAllDataProvidersIn(c);

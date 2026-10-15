@@ -1,0 +1,3 @@
+final nowUtc = DateTime.now().toUtc();
+final ok = await c.read(syncRepositoryProvider).claimWeatherFetchLock(WeatherFetchLock(deviceId: '57ff7ea1-f643-4c32-9f25-c8b04a23c1d7', lockedAt: nowUtc, expiresAt: nowUtc.add(const Duration(minutes: 2))));
+debugPrint('MD14 dangling lock for A claimed=' + ok.toString() + ' at ' + nowUtc.toIso8601String());

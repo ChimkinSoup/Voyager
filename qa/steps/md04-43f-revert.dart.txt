@@ -1,0 +1,3 @@
+final s = c.read(settingsProvider).value!;
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(geometricTextureScale: 15.0, hiddenNavPages: const ['/dev'], vimModeEnabled: false, snippetsEnabled: true, autocorrectEnabled: true, capsLockIndicatorEnabled: true, showQuotes: true, startupPageMode: StartupPageMode.first, leetCodeHideTags: false, mediaRemoteDownloadsEnabled: true));
+MARK;

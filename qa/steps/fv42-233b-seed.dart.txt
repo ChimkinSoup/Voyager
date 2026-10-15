@@ -1,0 +1,17 @@
+final now = DateTime.now().toUtc();
+final fr = c.read(financeRepositoryProvider);
+final g = SavingsGoal(id: 'fv42-goal', createdAt: now, updatedAt: now, version: 1, name: 'FV42 Goal', targetCents: 10000, note: 'Goal note');
+await fr.upsertSavingsGoal(g);
+await c.read(remoteSyncServiceProvider).pushRecords('savings_goals', [g]);
+final s = Subscription(id: 'fv42-sub', createdAt: now, updatedAt: now, version: 1, name: 'FV42 Sub', amountCents: 1500, period: BillingPeriod.monthly, anchorDueDate: DateTime(2026, 10, 20), store: 'Old store', note: 'Sub note');
+await fr.upsertSubscription(s);
+await c.read(remoteSyncServiceProvider).pushRecords('subscriptions', [s]);
+final sr = c.read(studyRepositoryProvider);
+final d = StudyDeck(id: 'fv42-deck', name: 'FV42 Deck', createdAt: now, updatedAt: now);
+await sr.upsertDeck(d);
+c.read(remoteSyncServiceProvider).pushStudyDeck(d);
+final k = StudyCard(id: 'fv42-card', deckId: 'fv42-deck', frontText: 'FV42 front', backText: 'FV42 back', dueAt: now, createdAt: now, updatedAt: now, version: 1);
+await sr.upsertCard(k);
+c.read(remoteSyncServiceProvider).pushStudyCard(k);
+invalidateAllDataProvidersIn(c);
+debugPrint('FV42 233b seeded');

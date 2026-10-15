@@ -1,0 +1,7 @@
+final n = c.read(settingsProvider.notifier);
+await n.saveSettings(c.read(settingsProvider).value!.copyWith(accentColor: 0xFF9C27B0));
+await n.saveSettings(c.read(settingsProvider).value!.copyWith(showQuotes: !c.read(settingsProvider).value!.showQuotes));
+await n.saveSettings(c.read(settingsProvider).value!.copyWith(weightUnit: WeightUnit.kg));
+await n.saveSettings(c.read(settingsProvider).value!.copyWith(geometricTextureScale: 18.0));
+await n.saveSettings(c.read(settingsProvider).value!.copyWith(snippetsEnabled: !c.read(settingsProvider).value!.snippetsEnabled));
+MARK;

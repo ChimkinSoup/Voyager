@@ -1,0 +1,3 @@
+MARK;
+final d = await softDeleteJournalEntry(c, '@TAG@');
+debugPrint('MD5DEL52 ' + (d != null).toString());

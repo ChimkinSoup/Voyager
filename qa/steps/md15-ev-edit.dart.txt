@@ -1,0 +1,6 @@
+final r = c.read(remoteSyncServiceProvider); final cr = c.read(calendarRepositoryProvider);
+final ev = (await cr.getEvent('md15-ev-@TAG@'))!;
+final ed = ev.copyWith(title: 'MD15 event @TAG@ edited by @W@');
+await cr.upsertEvent(ed); await r.pushRecords('calendar_events', [ed]);
+MARK;
+invalidateAllDataProvidersIn(c);

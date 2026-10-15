@@ -1,0 +1,26 @@
+wheel 88 1300 10
+tap Journal
+wait 1000
+tap MD5 entry b1
+wait 1000
+click 1900 1000
+key ctrl+end
+type  B typing one
+wait 1000
+type  two
+wait 1000
+type  three
+wait 1000
+type  four
+wait 1000
+type  five
+wait 1000
+type  six
+wait 1500
+shot md05-52-qb-je-mid
+type  seven
+wait 1000
+type  eight
+wait 4000
+shot md05-52-qb-je-end
+field

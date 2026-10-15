@@ -142,7 +142,20 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
         if (mounted) setState(() => _saving = false);
         return;
       }
-      final target = widget.existing;
+      final existing = widget.existing;
+      // Re-read rather than trusting [existing] — see the goal sheet — and
+      // apply only the fields changed in this sheet over the row as it is
+      // now, so another device's change to the other one survives (BUG-233).
+      final onDisk = existing == null
+          ? null
+          : (await repo.listBudgets(
+              includeDeleted: true,
+            )).where((b) => b.id == existing.id).firstOrNull;
+      final target = onDisk ?? existing;
+      T pick<T>(T mine, T Function(Budget b) field) =>
+          existing == null || onDisk == null || mine != field(existing)
+          ? mine
+          : field(onDisk);
 
       await repo.upsertBudget(
         Budget(
@@ -150,8 +163,10 @@ class _BudgetModalState extends ConsumerState<_BudgetModal> {
           createdAt: target?.createdAt ?? now,
           updatedAt: now,
           version: target == null ? 0 : target.version + 1,
-          tag: tag,
-          limitCents: limit,
+          // Deleted while the sheet was open stays deleted.
+          deletedAt: target?.deletedAt,
+          tag: pick(tag, (b) => b.tag),
+          limitCents: pick(limit, (b) => b.limitCents),
         ),
       );
 

@@ -1,0 +1,5 @@
+await c.read(financeRepositoryProvider).softDeleteTransaction('md5-tx-a1');
+final t = await c.read(todoRepositoryProvider).getTask('md5-task-a2');
+await softDeleteTaskWithSubtasks(c, t!);
+MARK;
+invalidateAllDataProvidersIn(c);

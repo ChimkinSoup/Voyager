@@ -22,6 +22,11 @@ std::vector<std::string> GetCommandLineArguments();
 // else runs.
 const std::wstring& DevProfile();
 
+// Whether VOYAGER_QA_PARKED is set, in a debug build: the QA harness's launch,
+// whose window starts off-screen and never activates, so it doesn't cover
+// Juno's windows. The harness parks it before acting either way.
+bool StartParked();
+
 // Whether |profile| is a usable dev profile name: [a-z0-9]{1,16}, not
 // "default".
 bool IsValidDevProfile(const std::wstring& profile);

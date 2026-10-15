@@ -1,0 +1,13 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final r = c.read(remoteSyncServiceProvider); final tg = '@TAG@';
+final j = Journal(id: 'md10-jrnl-$tg', createdAt: now, updatedAt: now, version: 1, name: 'MD10 Journal $tg');
+await c.read(journalRepositoryProvider).upsertJournal(j); r.pushJournal(j);
+final l = TodoListModel(id: 'md10-list-$tg', createdAt: now, updatedAt: now, version: 1, name: 'MD10 List $tg');
+await c.read(todoRepositoryProvider).upsertList(l); r.pushTodoList(l);
+final k = Calendar(id: 'md10-cal-$tg', createdAt: now, updatedAt: now, version: 1, name: 'MD10 Cal $tg', colorValue: 0xFF2196F3);
+await c.read(calendarRepositoryProvider).upsertCalendar(k); r.pushRecords('calendars', [k]).ignore();
+final dk = StudyDeck(id: 'md10-deck-$tg', createdAt: now, updatedAt: now, version: 1, name: 'MD10 deck $tg');
+await c.read(studyRepositoryProvider).upsertDeck(dk); r.pushStudyDeck(dk);
+final d = DreamEntry(id: 'md10-dream-$tg', createdAt: now, updatedAt: now, version: 1, title: 'MD10 dream $tg', body: 'MD10 dream body $tg', entryDate: t0);
+await c.read(dreamRepositoryProvider).upsertEntry(d); r.pushDreamEntryNow(d);
+MARK;
+invalidateAllDataProvidersIn(c);

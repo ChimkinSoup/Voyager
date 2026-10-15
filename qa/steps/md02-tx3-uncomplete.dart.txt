@@ -1,0 +1,7 @@
+final tr = c.read(todoRepositoryProvider); final r = c.read(remoteSyncServiceProvider);
+final before = (await tr.getTask('md2-tp-@W@@N@'))!;
+final after = before.copyWith(completed: false);
+await tr.upsertTask(after);
+MARK;
+r.pushTodoTaskInBackground(after);
+await recordTodoCompletionChange(repo: tr, sync: r, before: before, after: after);

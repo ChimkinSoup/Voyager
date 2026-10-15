@@ -1,0 +1,6 @@
+final r = c.read(remoteSyncServiceProvider); final jr = c.read(journalRepositoryProvider);
+final j = (await jr.listJournals()).firstWhere((x) => x.id == 'md15-jrnl');
+final ed = Journal(id: j.id, createdAt: j.createdAt, updatedAt: DateTime.now().toUtc(), version: j.version + 1, name: 'MD15 Journal @TAG@');
+await jr.upsertJournal(ed); r.pushJournal(ed);
+MARK;
+invalidateAllDataProvidersIn(c);

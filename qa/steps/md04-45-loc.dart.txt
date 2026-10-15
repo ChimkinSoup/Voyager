@@ -1,0 +1,2 @@
+if ('@W@' == 'qa') { await c.read(weatherServiceProvider).saveLocation('Toronto'); } else { final s = c.read(settingsProvider).value!; await c.read(settingsProvider.notifier).saveSettings(s.copyWith(accentColor: 0xFF3F51B5)); }
+MARK;

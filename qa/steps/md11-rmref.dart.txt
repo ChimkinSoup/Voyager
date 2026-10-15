@@ -1,0 +1,4 @@
+final m = c.read(mediaServiceProvider); final rs = await m.referencesFor('journal_entries', '@TAG@');
+await m.removeReference(rs.first.id);
+MARK;
+debugPrint('MD11RM ' + rs.first.id);

@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:voyager/core/platform/dev_profile.dart';
@@ -28,6 +30,13 @@ Future<void> Function()? quitApp;
 
 final _windowReady = Completer<void>();
 
+/// The QA harness's launch (VOYAGER_QA_PARKED, debug only): the runner has
+/// already shown the window off-screen without activating it, and this leaves
+/// it there. Every window_manager call that would move, raise or focus it is
+/// skipped; the harness parks it before acting either way.
+final _startParked =
+    kDebugMode && Platform.environment.containsKey('VOYAGER_QA_PARKED');
+
 /// Completes once [configureDesktopWindow] has applied the window's options.
 /// They are set a call at a time after startup, and would resize and recenter
 /// a floater shown before they finish.
@@ -45,9 +54,9 @@ Future<void> configureDesktopWindow({required bool startHidden}) async {
     await windowManager.ensureInitialized();
 
     final windowOptions = WindowOptions(
-      size: Size(1280, 800),
+      size: _startParked ? null : Size(1280, 800),
       minimumSize: kMainWindowMinimumSize,
-      center: true,
+      center: !_startParked,
       title: 'Voyager$devProfileSuffix',
       titleBarStyle: TitleBarStyle.hidden,
     );
@@ -57,7 +66,7 @@ Future<void> configureDesktopWindow({required bool startHidden}) async {
       maximizeOnFirstShow = true;
     }
     windowManager.waitUntilReadyToShow(windowOptions, () async {
-      if (!startHidden) {
+      if (!startHidden && !_startParked) {
         await windowManager.show();
         await windowManager.maximize();
         await windowManager.focus();

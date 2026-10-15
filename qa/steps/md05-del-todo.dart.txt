@@ -1,0 +1,6 @@
+Element? cx; void w(Element x) { if (cx != null) return; if (x is WidgetRef && Navigator.maybeOf(x) != null) { cx = x; return; } x.visitChildren(w); } e!.visitChildren(w); final ctx = cx!; final ref = cx as WidgetRef;
+final ls = await c.read(todoRepositoryProvider).listLists();
+final l = ls.firstWhere((x) => x.id == 'md5-list-@TAG@');
+final ok = await deleteTodoList(ctx, ref, list: l, allLists: ls);
+MARK;
+debugPrint('MD5DEL todo ' + ok.toString());

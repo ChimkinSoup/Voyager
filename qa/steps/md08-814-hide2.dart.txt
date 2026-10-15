@@ -1,0 +1,6 @@
+final visible = await c.read(visibleNotificationFeedProvider.future);
+final item = visible.firstWhere((i) => (i.task?.title ?? '').contains('MD8 feed two'));
+await c.read(notificationRepositoryProvider).dismiss(item.dismissalKey);
+c.invalidate(notificationDismissalsProvider);
+MARK;
+debugPrint('MD8 hid ${item.dismissalKey} (${item.task?.title})');

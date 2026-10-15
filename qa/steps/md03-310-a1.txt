@@ -1,0 +1,8 @@
+click 1840 1500
+wait 300
+key ctrl+home
+key ctrl+right
+key ctrl+shift+right
+key ctrl+v
+wait 8000
+field

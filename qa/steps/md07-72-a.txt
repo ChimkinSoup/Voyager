@@ -1,0 +1,5 @@
+click 2324 688
+wait 200
+click 2324 688
+wait 3000
+shot md07-72-qa-plus

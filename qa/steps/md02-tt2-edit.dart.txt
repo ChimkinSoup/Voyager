@@ -1,0 +1,11 @@
+final repo = c.read(settingsRepositoryProvider);
+await repo.renameCustomWord('mdword@W@@N@', 'mdwordx@W@@N@');
+await repo.setFlaggedReplacement('mdflag@W@@N@', 'mdfix2');
+await repo.setTagColor('mdtag@W@@N@', 0xFF4CAF50);
+final q0 = (await repo.getCustomQuote('md2-tq-@W@@N@'))!;
+final q = CustomQuote(id: q0.id, text: 'MD2 tquote @W@@N@ ed', createdAt: q0.createdAt, updatedAt: DateTime.now().toUtc(), version: q0.version + 1);
+await repo.upsertCustomQuote(q);
+final s = c.read(settingsProvider).value!;
+await c.read(settingsProvider.notifier).saveSnippets(s.snippets, [for (final x in s.snippets) x.id == 'md2-snip-@W@@N@' ? const Snippet(id: 'md2-snip-@W@@N@', trigger: 'mdsn@W@@N@', replacement: 'MD2 snippet edited') : x]);
+MARK;
+c.read(remoteSyncServiceProvider).pushCustomQuote(q);

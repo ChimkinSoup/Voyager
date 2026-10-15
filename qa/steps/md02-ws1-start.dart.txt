@@ -1,0 +1,10 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day);
+final r = c.read(remoteSyncServiceProvider); final wr = c.read(workoutRepositoryProvider);
+final ex = Exercise(id: 'md2-wex-@W@@N@', createdAt: now, updatedAt: now, version: 1, name: 'MD2 live lift @W@@N@');
+await wr.upsertExercise(ex); r.pushExercise(ex);
+final pe = WorkoutPlanEntry(id: 'md2-wpe-@W@@N@', createdAt: now, updatedAt: now, version: 1, planId: 'workout_plan_weekly', dayIndex: 0, exerciseId: 'md2-wex-@W@@N@', sortOrder: 0);
+await wr.upsertPlanEntry(pe); r.pushWorkoutPlanEntry(pe);
+final plan = (await wr.listPlans()).firstWhere((p) => p.id == 'workout_plan_weekly');
+final ok = await c.read(workoutSessionControllerProvider.notifier).startFromPlan(plan: plan, dayIndex: 0, date: day);
+MARK;
+debugPrint('MD2 workout started $ok');

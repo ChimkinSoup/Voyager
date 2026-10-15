@@ -1,0 +1,19 @@
+tap Dev
+wait 2000
+wheel 1500 900 -50
+wait 800
+tap Check every collection against the cloud
+wait 15000
+shot md15-151-@P@-fullcheck
+tap Close
+wait 800
+tap Compare all journal entries
+wait 12000
+shot md15-151-@P@-journal
+tap Close
+wait 800
+tap Compare all todo lists
+wait 12000
+shot md15-151-@P@-todo
+tap Close
+wait 800

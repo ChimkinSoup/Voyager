@@ -1,0 +1,12 @@
+final now = DateTime.now().toUtc(); final fr = c.read(financeRepositoryProvider); final r = c.read(remoteSyncServiceProvider);
+final t0 = DateTime.now(); final eve = DateTime(t0.year, t0.month, t0.day - 1, 21, 30);
+if ('@TAG@' == 'add') {
+  final tx = FinancialTransaction(id: 'md13-eve', createdAt: now, updatedAt: now, version: 1, type: TransactionType.expense, amountCents: 700, occurredAt: eve, tags: const ['md13eve'], note: 'MD13 EveStore');
+  await fr.upsertTransaction(tx); await r.pushRecords('transactions', [tx]);
+} else {
+  final tx0 = (await fr.listTransactions()).firstWhere((x) => x.id == 'md13-eve');
+  final tx = tx0.copyWith(deletedAt: now, version: tx0.version + 1, updatedAt: now);
+  await fr.upsertTransaction(tx); await r.pushRecords('transactions', [tx]);
+}
+MARK;
+invalidateAllDataProvidersIn(c);

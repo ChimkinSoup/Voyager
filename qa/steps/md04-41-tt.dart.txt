@@ -1,0 +1,6 @@
+final tr = c.read(todoRepositoryProvider);
+final t = (await tr.getTask('md4-tt'))!;
+final n = '@W@' == 'qa' ? t.copyWith(title: 'MD4 task @TAG@ by qa') : t.copyWith(dueDate: t.dueDate!.add(const Duration(days: 1)));
+await tr.upsertTask(n);
+MARK;
+c.read(remoteSyncServiceProvider).pushTodoTaskInBackground(n);

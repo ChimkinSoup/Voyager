@@ -1,0 +1,10 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day);
+final r = c.read(remoteSyncServiceProvider); final tr = c.read(todoRepositoryProvider);
+final la = TodoListModel(id: 'md2-tla-@W@@N@', createdAt: now, updatedAt: now, version: 1, name: 'MD2 ListA @W@@N@');
+final lb = TodoListModel(id: 'md2-tlb-@W@@N@', createdAt: now, updatedAt: now, version: 1, name: 'MD2 ListB @W@@N@');
+await tr.upsertList(la); await tr.upsertList(lb);
+final p = TodoTask(id: 'md2-tp-@W@@N@', createdAt: now, updatedAt: now, version: 1, listId: 'md2-tla-@W@@N@', title: 'MD2 plain @W@@N@');
+final d = TodoTask(id: 'md2-tr-@W@@N@', createdAt: now, updatedAt: now, version: 1, listId: 'md2-tla-@W@@N@', title: 'MD2 daily @W@@N@', dueDate: day, recurrence: RecurrenceRule(frequency: EventRecurrence.daily), recurrenceAnchor: day);
+await tr.upsertTask(p); await tr.upsertTask(d);
+MARK;
+r.pushTodoList(la); r.pushTodoList(lb); r.pushTodoTaskInBackground(p); r.pushTodoTaskInBackground(d);

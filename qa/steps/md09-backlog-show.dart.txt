@@ -1,0 +1,3 @@
+Element? bk; void w(Element x) { if (bk != null) return; if (x.widget is DevSyncBacklogSection) { bk = x; } else { x.visitChildren(w); } } WidgetsBinding.instance.rootElement!.visitChildren(w);
+await Scrollable.ensureVisible(bk!, alignment: 0.1);
+debugPrint('MD9 backlog shown');

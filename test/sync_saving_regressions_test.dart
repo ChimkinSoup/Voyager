@@ -911,6 +911,203 @@ void main() {
     });
   });
 
+  // BUG-239: the cloud keeps whichever upload lands last, whatever its
+  // stamps. A device whose later note lost that race kept it locally and never
+  // sent it again, so it and the cloud disagreed for good.
+  test('a dream note that outranks the cloud copy is sent again', () async {
+    final server = InMemorySyncRepository();
+    final a = _Device(server, 'device-a');
+    addTearDown(a.close);
+    final earlier = DateTime.utc(2026, 8, 14, 12, 0, 1);
+    final later = DateTime.utc(2026, 8, 14, 12, 0, 2);
+    final mine = dream(
+      'Dream body stays.',
+    ).copyWith(notes: 'note by A', version: 1, bumpVersion: false);
+    await a.dreams.upsertEntry(
+      DreamEntry(
+        id: mine.id,
+        title: mine.title,
+        body: mine.body,
+        notes: mine.notes,
+        entryDate: mine.entryDate,
+        createdAt: mine.createdAt,
+        updatedAt: later,
+        version: 1,
+      ),
+    );
+    // B's earlier note, uploaded after A's.
+    final theirs = DreamEntry(
+      id: mine.id,
+      title: mine.title,
+      body: mine.body,
+      notes: 'note by B',
+      entryDate: mine.entryDate,
+      createdAt: mine.createdAt,
+      updatedAt: earlier,
+      version: 1,
+    );
+    await server.upsertDocument(
+      FirestoreCollections.dreamEntries,
+      'doc-1',
+      dreamEntryToFirestore(theirs),
+    );
+
+    await a.sync.pullForCollection(
+      FirestoreCollections.dreamEntries,
+      documentIds: {'doc-1'},
+      documentData: {
+        'doc-1': (await server.getDocument(
+          FirestoreCollections.dreamEntries,
+          'doc-1',
+        ))!,
+      },
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    expect((await a.dreams.getEntry('doc-1'))?.notes, 'note by A');
+    final cloud = await server.getDocument(
+      FirestoreCollections.dreamEntries,
+      'doc-1',
+    );
+    expect(cloud?['notes'], 'note by A');
+  });
+
+  // BUG-239: both devices' saves landed on the same clock tick, so every copy
+  // carried the same version and `updatedAt`. The remote copy won such a tie,
+  // so each device took the other's note and they never agreed.
+  for (final lastUpload in ['A', 'B']) {
+    test('dream notes saved at the same stamps converge '
+        '($lastUpload uploaded last)', () async {
+      final server = InMemorySyncRepository();
+      final a = _Device(server, 'device-a');
+      final b = _Device(server, 'device-b');
+      addTearDown(a.close);
+      addTearDown(b.close);
+      final stamp = DateTime.utc(2026, 8, 14, 12, 0, 1);
+      DreamEntry copy(String notes) => DreamEntry(
+        id: 'doc-1',
+        title: 'Dream',
+        body: 'Dream body stays.',
+        notes: notes,
+        entryDate: stamp,
+        createdAt: stamp,
+        updatedAt: stamp,
+        version: 1,
+      );
+      final first = lastUpload == 'A' ? b : a;
+      final last = lastUpload == 'A' ? a : b;
+      final firstNote = lastUpload == 'A' ? 'note by B' : 'note by A';
+      await a.dreams.upsertEntry(copy('note by A'));
+      await b.dreams.upsertEntry(copy('note by B'));
+
+      Future<void> pull(_Device device) async {
+        await device.sync.pullForCollection(
+          FirestoreCollections.dreamEntries,
+          documentIds: {'doc-1'},
+          documentData: {
+            'doc-1': (await server.getDocument(
+              FirestoreCollections.dreamEntries,
+              'doc-1',
+            ))!,
+          },
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+
+      // The first upload lands and the other device takes it in; then that
+      // device's own upload, sent with its own note, lands over it. Each then
+      // sees whatever the cloud holds, until nothing moves.
+      first.sync.pushDreamEntryNow(copy(firstNote));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await pull(last);
+      last.sync.pushDreamEntryNow(copy('note by $lastUpload'));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await pull(first);
+      await pull(last);
+      await pull(first);
+
+      final cloud = await server.getDocument(
+        FirestoreCollections.dreamEntries,
+        'doc-1',
+      );
+      final notesA = (await a.dreams.getEntry('doc-1'))?.notes;
+      final notesB = (await b.dreams.getEntry('doc-1'))?.notes;
+      expect(notesA, notesB);
+      expect(cloud?['notes'], notesA);
+    });
+  }
+
+  // BUG-239, seen in the app: one device's operation was sent last, so the log
+  // resolves to its copy, but the other's document write landed last, so the
+  // cloud document holds the other copy. The device whose write landed last
+  // never hears of the other's (its own pending write hid it), and a pull that
+  // read only the log found nothing to do.
+  for (final landedLast in ['A', 'B']) {
+    test('a dream note the operation log and the document disagree on '
+        'converges ($landedLast landed last)', () async {
+      final server = InMemorySyncRepository();
+      final a = _Device(server, 'device-a');
+      final b = _Device(server, 'device-b');
+      addTearDown(a.close);
+      addTearDown(b.close);
+      final stamp = DateTime.utc(2026, 8, 14, 12, 0, 1);
+      DreamEntry copy(String notes) => DreamEntry(
+        id: 'doc-1',
+        title: 'Dream',
+        body: 'Dream body stays.',
+        notes: notes,
+        entryDate: stamp,
+        createdAt: stamp,
+        updatedAt: stamp,
+        version: 1,
+      );
+      await a.dreams.upsertEntry(copy('note by A'));
+      await b.dreams.upsertEntry(copy('note by B'));
+      final sentFirst = landedLast == 'A' ? a : b;
+      final sentLast = landedLast == 'A' ? b : a;
+      sentFirst.sync.pushDreamEntryNow(copy('note by $landedLast'));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      sentLast.sync.pushDreamEntryNow(
+        copy(landedLast == 'A' ? 'note by B' : 'note by A'),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      // The first device's document write lands after the other's.
+      await server.upsertDocument(
+        FirestoreCollections.dreamEntries,
+        'doc-1',
+        dreamEntryToFirestore(copy('note by $landedLast')),
+      );
+
+      Future<void> pull(_Device device) async {
+        await device.sync.pullForCollection(
+          FirestoreCollections.dreamEntries,
+          documentIds: {'doc-1'},
+          documentData: {
+            'doc-1': (await server.getDocument(
+              FirestoreCollections.dreamEntries,
+              'doc-1',
+            ))!,
+          },
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+
+      // Only the device whose write landed first hears of the other's.
+      await pull(sentLast);
+      await pull(sentFirst);
+      await pull(sentLast);
+
+      final cloud = await server.getDocument(
+        FirestoreCollections.dreamEntries,
+        'doc-1',
+      );
+      final notesA = (await a.dreams.getEntry('doc-1'))?.notes;
+      final notesB = (await b.dreams.getEntry('doc-1'))?.notes;
+      expect(notesA, notesB);
+      expect(cloud?['notes'], notesA);
+    });
+  }
+
   group('an open editor merges remote text through its session', () {
     late _CountingSyncRepository server;
     late _Device a;
@@ -1328,6 +1525,31 @@ void main() {
 
       expect(editor.text, 'hello X');
     });
+
+    for (final kind in kinds) {
+      test(
+        'BUG-235: ${kind.name} with no operation log, opened and typed in '
+        'on both devices before either log arrived, is not doubled',
+        () async {
+          // Each device seeds the stored text when the log is empty. Seeds
+          // minted under each device's own id were two copies of every
+          // character, and the merge kept both.
+          await kind.saveLocally(a, 'hello');
+          await kind.saveLocally(b, 'hello');
+          final onA = await openEditor(a, kind, 'hello');
+          final onB = await openEditor(b, kind, 'hello');
+          onA.type(' a', at: 5);
+          onB.type('b ', at: 0);
+          await save(onA, kind);
+          await deliver(b, kind.collection);
+          await save(onB, kind);
+          await deliver(a, kind.collection);
+
+          expect(onA.text, 'b hello a');
+          expect(onB.text, 'b hello a');
+        },
+      );
+    }
 
     test('with no session yet, the text diff still merges', () async {
       // Opened, but the operation log has not loaded: there is no session to

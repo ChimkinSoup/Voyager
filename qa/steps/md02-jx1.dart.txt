@@ -1,0 +1,2 @@
+final a = await JobsActions.detached(c).createApplication(company: 'MD2 Act @W@@N@', title: 'MD2 QA role');
+MARK;

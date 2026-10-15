@@ -1,0 +1,7 @@
+final r = c.read(remoteSyncServiceProvider); final jr = c.read(journalRepositoryProvider);
+final o = (await jr.getEntry('md15-je-@TAG@'))!;
+final x = JournalEntry(id: o.id, createdAt: o.createdAt, updatedAt: o.updatedAt, version: o.version, journalId: o.journalId, title: 'MD15 entry @TAG@ collide @W@', body: o.body, entryDate: o.entryDate);
+await jr.upsertEntry(x); r.pushJournalEntryNow(x);
+MARK;
+debugPrint('MD15COLLIDE v=' + x.version.toString() + ' u=' + x.updatedAt.toIso8601String());
+invalidateAllDataProvidersIn(c);

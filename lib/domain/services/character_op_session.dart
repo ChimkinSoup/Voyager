@@ -15,7 +15,7 @@ class CharacterOpSession {
     /// a brand-new document that has no remote ops yet.
     ///
     /// Keep this false (the default) when creating a session purely to
-    /// reconstruct local state — e.g. from a race path where the user typed
+    /// reconstruct local state â€” e.g. from a race path where the user typed
     /// before [prepareEditingSession] finished loading the real remote chain.
     /// In that case only the actual edit delta should be uploaded, not a fresh
     /// copy of every existing character, which would collide with the positions
@@ -25,12 +25,37 @@ class CharacterOpSession {
     if (initialOperations != null) {
       _loadFromOperations(initialOperations);
     } else if (initialText != null) {
-      _seedFromText(initialText, markAsPending: seedAsPending);
+      _seedFromText(
+        initialText,
+        markAsPending: seedAsPending,
+        sharedIds: seedAsPending,
+      );
     }
   }
 
   final String clientId;
   int _logicalClock;
+
+  /// The run of characters this session is typing: the key its first
+  /// character took, the suffix the last one added to it, and that last
+  /// character's id. See [_positionFor].
+  String? _runRoot;
+  String? _runSuffix;
+  String? _runLastId;
+
+  /// The document order, the one [CharacterSequenceCrdtMerger.applyMergedText]
+  /// spells text in: position, then logical clock, then client. Sorting by
+  /// position alone left characters two devices had put at the same position
+  /// in map order here, so this device saved and uploaded an order the other
+  /// device's resolver never produced (BUG-235).
+  static int compareOps(CharacterOperation a, CharacterOperation b) {
+    final pos = a.position.compareTo(b.position);
+    if (pos != 0) return pos;
+    final clock = a.logicalClock.compareTo(b.logicalClock);
+    if (clock != 0) return clock;
+    return a.clientId.compareTo(b.clientId);
+  }
+
   final Map<String, CharacterOperation> _opsById = {};
   final List<String> _pendingOpIds = [];
 
@@ -43,7 +68,7 @@ class CharacterOpSession {
   ///
   /// Cached because [recordTextChange] runs on every keystroke, and rebuilding
   /// the order means sorting every character by a position string that grows
-  /// with the document — 15ms a keystroke at 8k characters, 200ms at 20k.
+  /// with the document â€” 15ms a keystroke at 8k characters, 200ms at 20k.
   /// [recordTextChange] keeps both up to date itself; everything else that
   /// changes [_opsById] wholesale clears them.
   List<CharacterOperation>? _live;
@@ -53,6 +78,7 @@ class CharacterOpSession {
     _opsById.clear();
     _pendingOpIds.clear();
     _logicalClock = 0;
+    _runLastId = null;
     _seedFromText(text, markAsPending: true);
     _editedSinceSeed = false;
   }
@@ -127,27 +153,32 @@ class CharacterOpSession {
 
       var cursorBefore = posBefore;
       final inserted = <CharacterOperation>[];
+      final continuesRun = i > 0 && i - 1 < live.length
+          ? live[i - 1].id == _runLastId
+          : false;
       for (var k = 0; k < insertSegment.length; k++) {
         final char = insertSegment[k];
-        final pos = FractionalIndex.between(
+        final pos = _positionFor(
           before: cursorBefore,
           after: posAfter,
+          continuesRun: continuesRun || k > 0,
         );
-        inserted.add(_insertOp(char: char, position: pos));
+        final op = _insertOp(char: char, position: pos);
+        inserted.add(op);
+        _runLastId = op.id;
         cursorBefore = pos;
       }
 
       // Spliced in at the diff index, which is where a sort would put them as
       // long as they sort strictly between their new neighbours. When they
-      // don't — equal positions skipped above, or a desynced index — the
+      // don't â€” equal positions skipped above, or a desynced index â€” the
       // cached order is dropped and the next read sorts from scratch.
       if (i <= live.length) {
         live.insertAll(i, inserted);
         final next = i + inserted.length;
-        if ((i > 0 &&
-                live[i - 1].position.compareTo(inserted.first.position) >= 0) ||
+        if ((i > 0 && compareOps(live[i - 1], inserted.first) >= 0) ||
             (next < live.length &&
-                inserted.last.position.compareTo(live[next].position) >= 0)) {
+                compareOps(inserted.last, live[next]) >= 0)) {
           _live = null;
         }
       } else {
@@ -162,6 +193,55 @@ class CharacterOpSession {
       resetFromText(after);
     }
   }
+
+  /// The key for a character typed between [before] and [after].
+  ///
+  /// Two devices typing at the same place see the same neighbours, and keys
+  /// minted from the neighbours alone came out the same on both, character for
+  /// character: the two words then sorted letter by letter into each other
+  /// (BUG-235). So a run of typing starts at a key carrying this client's own
+  /// digits, and each character typed straight after the last one extends that
+  /// key rather than stepping past it: every key of the run sorts before any
+  /// key another device's run at the same place can take, or after all of
+  /// them, and the run stays whole.
+  String _positionFor({
+    String? before,
+    String? after,
+    required bool continuesRun,
+  }) {
+    final root = _runRoot;
+    if (continuesRun && root != null) {
+      final suffix = _runSuffix == null
+          ? FractionalIndex.first()
+          : FractionalIndex.after(_runSuffix!);
+      final key = '$root$suffix';
+      if (after == null || key.compareTo(after) < 0) {
+        _runSuffix = suffix;
+        return key;
+      }
+    }
+    final base = FractionalIndex.between(before: before, after: after);
+    var start = '$base$_clientDigits';
+    // [base] can be a prefix of [after], and its extension then past it.
+    if (after != null && start.compareTo(after) >= 0) {
+      start = FractionalIndex.between(before: base, after: after);
+    }
+    _runRoot = start;
+    _runSuffix = null;
+    return start;
+  }
+
+  /// Two digits from [clientId], never '0' (a key may not end in one), that
+  /// set this client's runs apart from another's at the same place.
+  late final String _clientDigits = () {
+    var hash = 0x811c9dc5;
+    for (final unit in clientId.codeUnits) {
+      hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+    }
+    const digits =
+        '123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+    return '${digits[hash % 61]}${digits[(hash ~/ 61) % 61]}';
+  }();
 
   List<CharacterOperation> takePendingOps() {
     final pending = _pendingOpIds
@@ -183,7 +263,7 @@ class CharacterOpSession {
   ///
   /// Restored at the front, because the user may have kept typing while the
   /// upload was in flight and those newer operations must still follow these.
-  /// Ids already pending are left alone rather than duplicated — an operation
+  /// Ids already pending are left alone rather than duplicated â€” an operation
   /// tombstoned after it was taken is back in the list under its own id.
   void restorePendingOps(List<CharacterOperation> operations) {
     if (operations.isEmpty) return;
@@ -203,8 +283,8 @@ class CharacterOpSession {
   ///
   /// A session is loaded once, when its document opens, and nothing used to
   /// tell it about operations another device wrote after that. Text from those
-  /// operations still reached the editor — a pull re-seeding an idle editor, a
-  /// buffered merge injected into a focused one — and was then diffed against a
+  /// operations still reached the editor â€” a pull re-seeding an idle editor, a
+  /// buffered merge injected into a focused one â€” and was then diffed against a
   /// session that had never seen it, so it went back up as this device's own
   /// characters at the very fractional positions the other device had already
   /// used: every character twice on the next merge.
@@ -284,14 +364,29 @@ class CharacterOpSession {
     return live.sublist(i, oldEnd < live.length ? oldEnd : live.length);
   }
 
-  void _seedFromText(String text, {bool markAsPending = false}) {
+  /// With [sharedIds], each character's id comes from the text and its
+  /// position, not this client: the seed that starts a document's log.
+  /// Two devices that open the same text before either's log arrives both
+  /// seed it, and ids of their own made two copies of every character that
+  /// the merge kept side by side (BUG-235). The same text now gives the same
+  /// ids, so the copies are one. Never for [resetFromText]: there the log
+  /// already exists, and an id it once tombstoned would delete the text.
+  void _seedFromText(
+    String text, {
+    bool markAsPending = false,
+    bool sharedIds = false,
+  }) {
     _live = null;
     _liveText = null;
+    _runLastId = null;
     final positions = FractionalIndex.spread(text.length);
+    final prefix = sharedIds ? 'seed_${_textHash(text)}' : null;
     for (var i = 0; i < text.length; i++) {
       final char = text[i];
       final pos = positions[i];
-      final id = '${clientId}_${_logicalClock}_$pos';
+      final id = prefix != null
+          ? '${prefix}_$pos'
+          : '${clientId}_${_logicalClock}_$pos';
       _opsById[id] = CharacterOperation(
         id: id,
         clientId: clientId,
@@ -301,6 +396,17 @@ class CharacterOpSession {
       );
       if (markAsPending) _pendingOpIds.add(id);
     }
+  }
+
+  /// FNV-1a over the text's UTF-16 units: the same on every device. Seeds of
+  /// different texts get different ids, so neither overwrites the other's
+  /// characters one by one.
+  static String _textHash(String text) {
+    var hash = 0x811c9dc5;
+    for (final unit in text.codeUnits) {
+      hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+    }
+    return hash.toRadixString(36);
   }
 
   void _loadFromOperations(List<CharacterOperation> operations) {
@@ -343,7 +449,7 @@ class CharacterOpSession {
 
   List<CharacterOperation> _liveOrderedOps() {
     return _live ??= (_opsById.values.where((op) => !op.deleted).toList()
-      ..sort((a, b) => a.position.compareTo(b.position)));
+      ..sort(compareOps));
   }
 
   String _reconstructText() {
@@ -418,7 +524,7 @@ class CharacterOpRegistry {
     return _sessions[key(collection, documentId)]?.takePendingOps() ?? const [];
   }
 
-  /// Returns operations to the pending set after their upload failed — see
+  /// Returns operations to the pending set after their upload failed â€” see
   /// [CharacterOpSession.restorePendingOps].
   void restorePendingOps(
     String collection,

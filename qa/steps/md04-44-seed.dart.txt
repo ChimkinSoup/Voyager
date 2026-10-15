@@ -1,0 +1,8 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 12, 12); final r = c.read(remoteSyncServiceProvider);
+final tr = c.read(todoRepositoryProvider);
+for (final n in [2, 3]) { final l = TodoListModel(id: 'md4-tl$n', createdAt: c0, updatedAt: now, version: 1, name: 'MD4 List $n'); await tr.upsertList(l); r.pushTodoList(l); final t = TodoTask(id: 'md4-task-in-list-$n', createdAt: c0, updatedAt: now, version: 1, listId: 'md4-tl$n', title: 'MD4 task in list $n'); await tr.upsertTask(t); await r.pushTodoTaskNow(t); }
+final jr = c.read(journalRepositoryProvider);
+for (final n in [1, 2, 3]) { final j = Journal(id: 'md4-j$n', createdAt: c0.add(Duration(minutes: n)), updatedAt: now, version: 1, name: 'MD4 Journal $n'); await jr.upsertJournal(j); r.pushJournal(j); }
+final s = c.read(settingsProvider).value!;
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(defaultTodoListId: 'md4-tl', defaultJournalId: 'md4-j1'));
+invalidateAllDataProvidersIn(c);

@@ -1,0 +1,6 @@
+final sr = c.read(studyRepositoryProvider);
+final t = (await sr.getCard('md4-card'))!;
+final n = '@W@' == 'qa' ? t.copyWith(frontText: 'MD4 front @TAG@ by qa') : t.copyWith(backText: 'MD4 back @TAG@ by qb');
+await sr.upsertCard(n);
+MARK;
+c.read(remoteSyncServiceProvider).pushStudyCard(n);

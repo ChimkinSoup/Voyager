@@ -1,0 +1,8 @@
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider); final tr = c.read(todoRepositoryProvider); final cr = c.read(calendarRepositoryProvider); final dr = c.read(dreamRepositoryProvider);
+await jr.softDeleteEntry('md15-je-12'); r.pushJournalEntryNow((await jr.getEntry('md15-je-12'))!);
+await tr.softDeleteTask('md15-task-12'); await r.pushTodoTaskNow((await tr.getTask('md15-task-12'))!);
+await cr.softDeleteEvent('md15-ev-12'); await r.pushRecords('calendar_events', [(await cr.getEvent('md15-ev-12'))!]);
+await dr.softDeleteEntry('md15-dream-04'); r.pushDreamEntryNow((await dr.getEntry('md15-dream-04'))!);
+MARK;
+invalidateAllDataProvidersIn(c);

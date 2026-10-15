@@ -2113,6 +2113,31 @@ Map<String, dynamic> dreamEntryToFirestore(DreamEntry entry) => {
   'deletedAt': _dateToFirestore(entry.deletedAt),
 };
 
+/// Whether the remote dream snapshot [data] wins over [local] when both carry
+/// the same version and `updatedAt`.
+///
+/// Two devices saving a note on the same clock tick both end at the same
+/// stamps. Letting the remote copy win there made each device take the
+/// other's note, so they swapped and never agreed (BUG-239). The fields the
+/// winner carries decide instead — the note, then the date, the tags and the
+/// body — the same way on every device. A differing title at equal stamps
+/// never gets here: the conflict detector holds it for the user.
+bool dreamRemoteWinsTie(Map<String, dynamic> data, DreamEntry local) {
+  final remoteDate = parseFirestoreDate(data['entryDate']);
+  final remoteTags = data['tags'] as List?;
+  final order = [
+    ((data['notes'] as String?) ?? '').compareTo(local.notes ?? ''),
+    if (remoteDate != null)
+      remoteDate.microsecondsSinceEpoch.compareTo(
+        local.entryDate.microsecondsSinceEpoch,
+      ),
+    if (remoteTags != null)
+      remoteTags.join('\n').compareTo(local.tags.join('\n')),
+    ((data['body'] as String?) ?? local.body).compareTo(local.body),
+  ].firstWhere((c) => c != 0, orElse: () => 0);
+  return order >= 0;
+}
+
 DreamEntry mergeDreamEntryFromRemote(
   Map<String, dynamic> data,
   String id, {
@@ -2123,12 +2148,15 @@ DreamEntry mergeDreamEntryFromRemote(
   final remoteVersion = parseVersion(data);
   final metadataRemoteWins =
       local == null ||
-      remoteVersionWins(
-        remoteVersion: remoteVersion,
-        localVersion: local.version,
-        remoteUpdated: remoteUpdated,
-        localUpdated: local.updatedAt,
-      );
+      (remoteVersion == local.version &&
+              remoteUpdated.isAtSameMomentAs(local.updatedAt)
+          ? dreamRemoteWinsTie(data, local)
+          : remoteVersionWins(
+              remoteVersion: remoteVersion,
+              localVersion: local.version,
+              remoteUpdated: remoteUpdated,
+              localUpdated: local.updatedAt,
+            ));
 
   final String body;
   final List<String> tags;

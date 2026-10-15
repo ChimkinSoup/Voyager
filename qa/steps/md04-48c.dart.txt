@@ -1,0 +1,4 @@
+final now = DateTime.now().toUtc();
+await c.read(financeRepositoryProvider).upsertCategory(FinanceCategory(id: newId(), createdAt: now, updatedAt: now, version: 0, name: 'MD4 Clash Cat', colorValue: 0xFF9C27B0, tags: const ['md4clash@W@']));
+c.invalidate(financeCategoriesProvider);
+MARK;

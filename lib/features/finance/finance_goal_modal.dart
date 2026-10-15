@@ -165,6 +165,14 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
               includeDeleted: true,
             )).where((g) => g.id == existing.id).firstOrNull;
       final base = onDisk ?? existing;
+      // Editing, only the fields changed in this sheet are applied over the
+      // row as it is now: one another device changed while the sheet was open
+      // keeps that change instead of being reverted to the copy the sheet
+      // opened with (BUG-233).
+      T pick<T>(T mine, T Function(SavingsGoal g) field) =>
+          existing == null || onDisk == null || mine != field(existing)
+          ? mine
+          : field(onDisk);
       await repo.upsertSavingsGoal(
         SavingsGoal(
           id: existing?.id ?? newId(),
@@ -173,13 +181,16 @@ class _GoalModalState extends ConsumerState<_GoalModal> {
           version: base == null ? 0 : base.version + 1,
           // Deleted while the sheet was open stays deleted.
           deletedAt: base?.deletedAt,
-          name: _nameController.text.trim(),
-          targetCents: target,
-          colorValue: _colorValue,
-          note: _noteController.text.trim().isEmpty
-              ? null
-              : _noteController.text.trim(),
-          targetDate: _targetDate,
+          name: pick(_nameController.text.trim(), (g) => g.name),
+          targetCents: pick(target, (g) => g.targetCents),
+          colorValue: pick(_colorValue, (g) => g.colorValue),
+          note: pick(
+            _noteController.text.trim().isEmpty
+                ? null
+                : _noteController.text.trim(),
+            (g) => g.note,
+          ),
+          targetDate: pick(_targetDate, (g) => g.targetDate),
         ),
       );
       // Through the container, not `ref`: the invalidate has to land even

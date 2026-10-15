@@ -1,0 +1,8 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 12, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final ru = ScheduledReminderRule(id: 'md2-rule-@W@@N@', createdAt: c0, updatedAt: now, version: 1, title: 'MD2 rule @W@@N@', enabled: 1 != 2, scheduleKind: ReminderScheduleKind.daily, localTimeMinutes: 23 * 60 + 50, armedAt: c0);
+await c.read(reminderRepositoryProvider).upsertRule(ru);
+final er = EntityReminder(id: 'md2-erem-@W@@N@', createdAt: c0, updatedAt: now, version: 1, sourceKind: ReminderSourceKind.todo, entityId: 'md2-none-@W@@N@', enabled: true, offsetMinutes: 10 * 1, armedAt: c0);
+await c.read(reminderRepositoryProvider).upsertEntityReminder(er);
+MARK;
+await r.pushRecords('scheduled_reminder_rules', [ru]);
+await r.pushRecords('entity_reminders', [er]);

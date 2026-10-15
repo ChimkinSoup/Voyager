@@ -1,0 +1,15 @@
+click 1843 1008
+wait 300
+type mdsixteen first b
+wait 4000
+tap To-Do
+wait 1500
+click 1469 842
+wait 300
+type mdsixteen task b
+key enter
+wait 3000
+shot md16-164-qb-todo
+tap Journal
+wait 1500
+shot md16-164-qb-journal

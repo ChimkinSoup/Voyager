@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:intl/intl.dart';
+import 'package:voyager/core/text/merge_aware_undo.dart';
 import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/core/widgets/contextual_popover.dart';
 import 'package:voyager/core/widgets/datetime_selector_popover.dart';
@@ -155,6 +156,12 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   var _metadataDirty = false;
   var _suppressAutoSelect = false;
   var _appliedSavedPreferences = false;
+  // The default journal the saved view was last opened into. On a cold
+  // sign-in the page opens before the pull brings the account's default in,
+  // so a later change is followed too, until the user picks a view of their
+  // own in this session (BUG-229; To-Do does the same for BUG-228).
+  String? _appliedDefaultJournalId;
+  var _userChoseView = false;
 
   /// The entry being created for an edit made with nothing selected; see
   /// [_fileUnfiledEdit].
@@ -239,6 +246,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
 
   Future<void> _selectJournal(String journalId) async {
     _logJournal('SELECT_JOURNAL', details: 'journalId=$journalId');
+    _userChoseView = true;
     final entries = await ref.read(
       journalListEntriesProvider(journalId).future,
     );
@@ -306,6 +314,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   /// view are filed under.
   Future<void> _selectAllJournals() async {
     _logJournal('SELECT_ALL_JOURNALS');
+    _userChoseView = true;
     if (_viewAllJournals) return;
     await ref.read(journalListEntriesProvider(allJournalEntriesScope).future);
     if (!mounted) return;
@@ -364,6 +373,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         (savedId != null && journals.any((journal) => journal.id == savedId)
             ? savedId
             : null);
+    _appliedDefaultJournalId = defaultJournalId;
 
     if (!isAll &&
         restoredJournalId == null &&
@@ -395,6 +405,41 @@ class _JournalPageState extends ConsumerState<JournalPage> {
           _journalFilter = restoredJournalId;
         }
         _entryListWidth ??= settings.journalEntryListWidth;
+      });
+    });
+  }
+
+  /// Opens into a default journal that arrived after the saved view was
+  /// applied — the pull of a cold sign-in, or another device setting one —
+  /// as long as the user hasn't chosen a view here since (BUG-229).
+  void _followChangedDefaultJournal(
+    AppSettings? settings,
+    List<Journal> journals,
+  ) {
+    final defaultId = settings?.defaultJournalId;
+    if (!_appliedSavedPreferences ||
+        _userChoseView ||
+        defaultId == null ||
+        defaultId == _appliedDefaultJournalId) {
+      return;
+    }
+    // The pull can write the setting before the journal itself; wait for a
+    // later build that has it.
+    if (!journals.any((journal) => journal.id == defaultId)) return;
+    // Switching now would carry the user away from an entry they are writing.
+    if (_titleFocusNode.hasFocus || _bodyFocusNode.hasFocus || _metadataDirty) {
+      _userChoseView = true;
+      return;
+    }
+    _appliedDefaultJournalId = defaultId;
+    // Published for this build, as in [_applySavedPreferencesIfReady].
+    _pendingRestoreJournalId = defaultId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _pendingRestoreJournalId = null;
+        _viewAllJournals = false;
+        _journalFilter = defaultId;
       });
     });
   }
@@ -1314,6 +1359,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   /// old behaviour — the editor is already on screen beside the list — and on
   /// a phone it also brings the editor forward over it.
   Future<void> _openEntry(String id) async {
+    _userChoseView = true;
     _revealCompactEditor();
     await _loadEntryById(id);
   }
@@ -1337,6 +1383,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     bool fromNotepad = false,
     bool focus = true,
   }) async {
+    _userChoseView = true;
     final entry = await resolveQuickJournalEntry(
       ProviderScope.containerOf(context, listen: false),
     );
@@ -1501,11 +1548,38 @@ class _JournalPageState extends ConsumerState<JournalPage> {
   /// and a `setState` here rebuilt the whole page anyway, a 100ms+ frame in a
   /// debug build after every save while typing. The fields below can still
   /// differ when the saved row merged in a remote edit.
+  /// [mine] when it was changed here since [loaded] was read into the editor,
+  /// otherwise [row], the stored value — which can be another device's newer
+  /// one. While the body is being typed in, a remote title, mood or weather
+  /// isn't shown here, and every body save used to write the editor's stale
+  /// copy of them back (BUG-240).
+  static T _editedOr<T>(T mine, T loaded, T row) => mine != loaded ? mine : row;
+
   void _adoptSavedEntry(JournalEntry updated) {
     final previous = _selectedEntry;
+    // The fields not changed here follow the row just saved, which may carry
+    // another device's values (see [_editedOr]); left on the old ones, the
+    // next save would read them as edits made here.
+    var metadataChanged = false;
+    if (previous != null) {
+      if (_titleController.text == previous.title &&
+          updated.title != previous.title) {
+        _titleController.text = updated.title;
+      }
+      if (_mood == previous.mood && updated.mood != previous.mood) {
+        _mood = updated.mood;
+        metadataChanged = true;
+      }
+      if (_weatherIcon == previous.weatherIcon &&
+          updated.weatherIcon != previous.weatherIcon) {
+        _weatherIcon = updated.weatherIcon;
+        metadataChanged = true;
+      }
+    }
     _selectedEntry = updated;
     _metadataDirty = false;
     if (previous == null ||
+        metadataChanged ||
         previous.entryDate != updated.entryDate ||
         previous.journalId != updated.journalId ||
         previous.customQuote != updated.customQuote) {
@@ -1593,10 +1667,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final stored = await repo.getEntry(entry.id);
     final baseline = stored ?? entry;
 
-    if (baseline.title == title &&
+    if (_editedOr(title, entry.title, baseline.title) == baseline.title &&
         baseline.body == body &&
-        baseline.mood == mood &&
-        baseline.weatherIcon == weatherIcon &&
+        _editedOr(mood, entry.mood, baseline.mood) == baseline.mood &&
+        _editedOr(weatherIcon, entry.weatherIcon, baseline.weatherIcon) ==
+            baseline.weatherIcon &&
         _sameTags(baseline.tags, tags)) {
       // Dropped here as well as on a successful save — the whole point of this
       // branch is that the draft and disk now agree, and a draft left behind
@@ -1622,11 +1697,15 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         // edit: nothing but the row's own text can change here.
         refreshCaches: false,
         applyDelta: (base) => base.copyWith(
-          title: title,
+          title: _editedOr(title, entry.title, base.title),
           body: body,
           tags: tags,
-          mood: mood,
-          weatherIcon: weatherIcon,
+          mood: _editedOr(mood, entry.mood, base.mood),
+          weatherIcon: _editedOr(
+            weatherIcon,
+            entry.weatherIcon,
+            base.weatherIcon,
+          ),
           bumpVersion: false,
         ),
         onSuccess: (updated) {
@@ -1698,9 +1777,10 @@ class _JournalPageState extends ConsumerState<JournalPage> {
     final stored = await repo.getEntry(entryId);
     final baseline = stored ?? entry;
 
-    if (baseline.title == title &&
-        baseline.mood == mood &&
-        baseline.weatherIcon == weatherIcon) {
+    if (_editedOr(title, entry.title, baseline.title) == baseline.title &&
+        _editedOr(mood, entry.mood, baseline.mood) == baseline.mood &&
+        _editedOr(weatherIcon, entry.weatherIcon, baseline.weatherIcon) ==
+            baseline.weatherIcon) {
       _logJournal(
         'METADATA_PERSIST_SKIPPED',
         entry: baseline,
@@ -1724,9 +1804,13 @@ class _JournalPageState extends ConsumerState<JournalPage> {
         // `base.body` is carried through untouched, which is what makes this
         // writer commutative with the body autosave.
         applyDelta: (base) => base.copyWith(
-          title: title,
-          mood: mood,
-          weatherIcon: weatherIcon,
+          title: _editedOr(title, entry.title, base.title),
+          mood: _editedOr(mood, entry.mood, base.mood),
+          weatherIcon: _editedOr(
+            weatherIcon,
+            entry.weatherIcon,
+            base.weatherIcon,
+          ),
           bumpVersion: false,
         ),
         onSuccess: (updated) {
@@ -2476,6 +2560,7 @@ class _JournalPageState extends ConsumerState<JournalPage> {
       skipLoadingOnReload: true,
       data: (journals) {
         _applySavedPreferencesIfReady(settings, journals);
+        _followChangedDefaultJournal(settings, journals);
         if (entriesAsync.hasError && entriesAsync.valueOrNull == null) {
           return Center(child: Text('${entriesAsync.error}'));
         }
@@ -3455,6 +3540,9 @@ class _EntryQuote extends StatelessWidget {
 
 class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   late final TextEditingController _controller;
+
+  /// Undo that leaves another device's merged-in text alone (BUG-237).
+  late final MergeAwareUndoController _undo;
   Timer? _tagTimer;
   var _tags = const <String>[];
   var _lastText = '';
@@ -3501,7 +3589,12 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   /// came off the remote chain and are already in the registry.
   void setBodyText(String body, {bool recordAsEdit = false}) {
     final before = _controller.text;
-    _controller.text = body;
+    // This entry's text from elsewhere, not an edit made here to undo.
+    _undo.applyRemote(
+      TextEditingValue(text: body),
+      previousRemoteText: before,
+      remoteText: body,
+    );
     // [_bodyEntryId], not `widget.entry?.id`: the text replaced here is the
     // controller's, whichever entry that is. And re-anchored from the
     // session's own text rather than diffed from [before] — a pull has already
@@ -3523,6 +3616,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.entry?.body ?? '');
+    _undo = MergeAwareUndoController(_controller);
     widget.focusNode.addListener(_handleFocusChanged);
     // _handleBodyKey is installed by TagHighlightedTextField (see its
     // onKeyEvent param) rather than assigned here: the tag completion popup
@@ -3604,7 +3698,11 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
           'previousRemoteLen=${event.previousRemoteText.length} '
           'remoteLen=${event.remoteText.length}',
     );
-    _controller.value = value;
+    _undo.applyRemote(
+      value,
+      previousRemoteText: event.previousRemoteText,
+      remoteText: event.remoteText,
+    );
     final merged = value.text;
     _lastText = merged;
     _tags = event.remoteTags.isNotEmpty
@@ -3644,6 +3742,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     // would drop whatever was typed since, and the caret with it.
     if (_bodyEntryId == null || _bodyEntryId != widget.entry?.id) {
       _controller.text = widget.entry?.body ?? '';
+      _undo.reset();
     }
     _lastText = _controller.text;
     // Unconditional, unlike [_attachedEntryId] below: the controller holds this
@@ -3693,6 +3792,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
     // during a switch already names the incoming entry.
     _detachEntry(_attachedEntryId);
     widget.focusNode.removeListener(_handleFocusChanged);
+    _undo.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -3846,6 +3946,7 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
         onPointerDown: (_) => _handlePointerDown(),
         child: TagHighlightedTextField(
           controller: _controller,
+          undoController: _undo,
           focusNode: widget.focusNode,
           tagScope: TagScope.journal,
           onKeyEvent: _handleBodyKey,

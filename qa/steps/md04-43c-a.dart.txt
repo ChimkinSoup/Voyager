@@ -1,0 +1,3 @@
+final s = c.read(settingsProvider).value!;
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(accentColor: 0xFF9C27B0));
+MARK;

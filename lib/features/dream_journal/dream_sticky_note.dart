@@ -82,6 +82,10 @@ class _DreamStickyNoteState extends State<DreamStickyNote>
     if (_expanded) {
       _controller.forward();
     } else {
+      // The field goes once the card has shrunk, but its node kept the focus,
+      // so the page went on treating the note as being typed in and never
+      // showed it a note from another device (BUG-239).
+      if (widget.focusNode?.hasFocus ?? false) widget.focusNode!.unfocus();
       _controller.reverse();
     }
   }

@@ -1,0 +1,6 @@
+final kr = c.read(trackerRepositoryProvider);
+final t = (await kr.listTrackers()).firstWhere((x) => x.id == 'md4-trk');
+final n = '@W@' == 'qa' ? t.copyWith(name: 'MD4 trk @TAG@ by qa') : t.copyWith(starred: !t.starred);
+await kr.upsertTracker(n);
+MARK;
+await c.read(remoteSyncServiceProvider).pushRecords('trackers', [n]);

@@ -1,0 +1,4 @@
+final s = c.read(settingsProvider).value!;
+final h = [...s.hiddenNavPages, '@W@' == 'qa' ? '/leetcode' : '/rankings'];
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(hiddenNavPages: h));
+MARK;

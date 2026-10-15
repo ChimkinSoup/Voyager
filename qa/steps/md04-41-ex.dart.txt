@@ -1,0 +1,6 @@
+final wr = c.read(workoutRepositoryProvider);
+final t = (await wr.getExercise('md4-ex'))!;
+final n = '@W@' == 'qa' ? t.copyWith(name: 'MD4 lift @TAG@ by qa') : t.copyWith(formCues: 'MD4 cues @TAG@ by qb');
+await wr.upsertExercise(n);
+MARK;
+c.read(remoteSyncServiceProvider).pushExercise(n);

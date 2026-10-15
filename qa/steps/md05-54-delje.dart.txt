@@ -1,0 +1,2 @@
+await softDeleteJournalEntry(c, 'md5-je-a2');
+MARK;

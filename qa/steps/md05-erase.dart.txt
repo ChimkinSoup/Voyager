@@ -1,0 +1,8 @@
+final s = c.read(trashServiceProvider);
+final ids = '@TAG@'.split('+');
+final items = (await s.list()).where((x) => ids.contains(x.id)).toList();
+await s.erase(items);
+await s.uploads;
+MARK;
+invalidateAllDataProvidersIn(c);
+debugPrint('MD5ERASE ' + items.map((x) => x.id).join(','));

@@ -1,0 +1,5 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 12, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final q = CustomQuote(id: 'md2-quote-@W@@N@', text: 'MD2 quote @W@@N@', createdAt: c0, updatedAt: now, version: 1);
+await c.read(settingsRepositoryProvider).upsertCustomQuote(q);
+MARK;
+r.pushCustomQuote(q);

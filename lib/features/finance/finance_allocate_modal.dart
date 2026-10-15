@@ -220,6 +220,13 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
               includeDeleted: true,
             )).where((a) => a.id == existing.id).firstOrNull;
       final base = onDisk ?? existing;
+      // Editing, only the fields changed in this sheet are applied over the
+      // row as it is now, as the goal sheet does (BUG-233).
+      T pick<T>(bool edited, T mine, T Function(GoalAllocation a) disk) =>
+          existing == null || onDisk == null || edited ? mine : disk(onDisk);
+      final amountCents = _withdrawing ? -cents : cents;
+      final openedAt = existing?.allocatedAt;
+      final note = _noteController.text.trim();
       await repo.upsertGoalAllocation(
         GoalAllocation(
           id: existing?.id ?? newId(),
@@ -231,11 +238,22 @@ class _AllocateModalState extends ConsumerState<_AllocateModal> {
           goalId: widget.goal.id,
           // Withdrawals are stored as negative allocations so the goal's
           // total is a simple sum over its history.
-          amountCents: _withdrawing ? -cents : cents,
-          allocatedAt: _date,
-          note: _noteController.text.trim().isEmpty
-              ? null
-              : _noteController.text.trim(),
+          amountCents: pick(
+            amountCents != existing?.amountCents,
+            amountCents,
+            (a) => a.amountCents,
+          ),
+          allocatedAt: pick(
+            openedAt == null ||
+                _date != DateTime(openedAt.year, openedAt.month, openedAt.day),
+            _date,
+            (a) => a.allocatedAt,
+          ),
+          note: pick(
+            note != (existing?.note ?? ''),
+            note.isEmpty ? null : note,
+            (a) => a.note,
+          ),
         ),
       );
       // Through the container, not `ref`: the invalidate has to land even

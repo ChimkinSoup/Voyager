@@ -1,0 +1,8 @@
+22:53:08.208 sync_locks/weather_fetch MISSING
+22:53:08.469 weather/current MISSING
+22:53:08.733 weather/forecast MISSING
+22:53:18.562 sync_locks/weather_fetch 2026-10-14T02:53:17.944441Z {"deviceId": "57ff7ea1-f643-4c32-9f25-c8b04a23c1d7", "expiresAt": "2026-10-14T02:55:17.835240Z", "lockedAt": "2026-10-14T02:53:17.835240Z"}
+22:53:21.226 sync_locks/weather_fetch MISSING
+22:53:21.337 weather/current 2026-10-14T02:53:20.527456Z {"fetchedAt": "2026-10-14T02:53:20.489Z", "tempC": 22.01, "updatedByDeviceId": "57ff7ea1-f643-4c32-9f25-c8b04a23c1d7"}
+22:53:24.790 weather/forecast 2026-10-14T02:53:24.028503Z {"fetchedAt": "2026-10-14T02:53:23.952Z"}
+FS_WATCH END sync_locks/weather_fetch=2 weather/current=1 weather/forecast=1

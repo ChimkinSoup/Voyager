@@ -1,0 +1,25 @@
+click 1840 1500
+wait 300
+key ctrl+end
+type  b01 b02 b03
+wait 2200
+type  b11 b12 b13
+wait 2200
+type  b21 b22 b23
+wait 2200
+type  b31 b32 b33
+wait 2200
+type  b41 b42 b43
+wait 2200
+type  b51 b52 b53
+wait 2200
+type  b61 b62 b63
+wait 2200
+type  b71 b72 b73
+wait 2200
+type  b81 b82 b83
+wait 2200
+type  b91 b92 b93
+wait 2200
+wait 5000
+field

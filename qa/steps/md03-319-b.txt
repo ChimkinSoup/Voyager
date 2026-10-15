@@ -1,0 +1,10 @@
+click 1840 1500
+wait 300
+key ctrl+end
+type  B body one
+wait 1500
+type  two
+wait 1500
+type  three
+wait 6000
+shot md03-319-qb-after

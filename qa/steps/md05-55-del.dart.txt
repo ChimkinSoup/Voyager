@@ -1,0 +1,8 @@
+final dr = c.read(dreamRepositoryProvider);
+await dr.softDeleteEntry('md5-dream-a');
+final dt = await dr.getEntry('md5-dream-a');
+c.read(remoteSyncServiceProvider).pushDreamEntryNow(dt!);
+final t = await c.read(todoRepositoryProvider).getTask('md5-task-a1');
+await softDeleteTaskWithSubtasks(c, t!);
+MARK;
+invalidateAllDataProvidersIn(c);

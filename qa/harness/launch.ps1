@@ -6,6 +6,8 @@
 # The Geoapify map key is read from <repo>\dart_defines.json (git-ignored,
 # outside qa/) and passed as a --dart-define; it is never written to qa/.
 # -NoMapKey launches without it (Phase 19B "no key" checks).
+# Sets VOYAGER_QA_PARKED: the window starts off-screen and never activates, so
+# it doesn't cover Juno's windows; voy.ps1's `park` sizes it before any input.
 #
 # -Profile <name> (else $env:VOYAGER_QA_PROFILE) launches a dev profile beside
 # the normal instance (DEV_PROFILE_HLD.md): the already-built debug exe, run
@@ -47,8 +49,13 @@ if (-not $inst.Profile -or $Build) {
 if (-not $inst.Profile) {
   $run = "flutter run -d windows --debug$defines"
   if ($defines) { 'map key: passed' } else { 'map key: NOT passed' }
-  Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', $run `
-    -WorkingDirectory $repo -WindowStyle Hidden -RedirectStandardOutput $log -RedirectStandardError $err | Out-Null
+  # The app inherits it through flutter run (see the profile launch below).
+  $savedParked = $env:VOYAGER_QA_PARKED
+  $env:VOYAGER_QA_PARKED = '1'
+  try {
+    Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', $run `
+      -WorkingDirectory $repo -WindowStyle Hidden -RedirectStandardOutput $log -RedirectStandardError $err | Out-Null
+  } finally { $env:VOYAGER_QA_PARKED = $savedParked }
   $deadline = (Get-Date).AddSeconds($TimeoutSec)
   while ((Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 2
@@ -91,6 +98,8 @@ $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
 $listener.Start(); $port = $listener.LocalEndpoint.Port; $listener.Stop()
 $vars = @{
   VOYAGER_PROFILE         = $inst.Profile
+  # Window starts off-screen and never activates (windows/runner/utils.h).
+  VOYAGER_QA_PARKED       = '1'
   FLUTTER_ENGINE_SWITCHES = '2'
   FLUTTER_ENGINE_SWITCH_1 = "vm-service-port=$port"
   FLUTTER_ENGINE_SWITCH_2 = 'disable-service-auth-codes'

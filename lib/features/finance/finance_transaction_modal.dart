@@ -175,6 +175,18 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
   final _noteFocusNode = FocusNode();
   final _tagsFocusNode = FocusNode();
   late DateTime _date;
+
+  /// What the form held when it opened, so a save can tell the fields edited
+  /// here from the ones left alone (see [_save]).
+  late final ({
+    TransactionType type,
+    String amount,
+    String origin,
+    String note,
+    String tags,
+    DateTime date,
+  })
+  _opened;
   bool _datePopoverOpen = false;
   bool _saving = false;
 
@@ -207,6 +219,14 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
     );
     final base = existing?.occurredAt ?? draft?.occurredAt ?? DateTime.now();
     _date = DateTime(base.year, base.month, base.day);
+    _opened = (
+      type: _type,
+      amount: _amountController.text,
+      origin: _originController.text,
+      note: _noteController.text,
+      tags: _tagsController.text,
+      date: _date,
+    );
     _newId = newId();
   }
 
@@ -384,18 +404,40 @@ class _TransactionModalState extends ConsumerState<_TransactionModal> {
       // covers a retry of a new entry, whose first attempt is already on disk.
       final id = existing?.id ?? _newId;
       final base = await financeRepo.getTransaction(id) ?? existing;
+      // Editing, only the fields changed in this sheet are applied over the
+      // row as it is now: one another device changed while the sheet was open
+      // keeps that change instead of being reverted to the copy the sheet
+      // opened with (BUG-233).
+      T pick<T>(bool edited, T mine, T Function(FinancialTransaction) disk) =>
+          existing == null || base == null || edited ? mine : disk(base);
       final transaction = FinancialTransaction(
         id: id,
         createdAt: base?.createdAt ?? now,
         updatedAt: now,
         version: base == null ? 0 : base.version + 1,
         deletedAt: base?.deletedAt,
-        type: _type,
-        amountCents: cents,
-        occurredAt: occurredAt,
-        origin: trimToNull(_originController.text),
-        note: trimToNull(_noteController.text),
-        tags: tags,
+        type: pick(_type != _opened.type, _type, (t) => t.type),
+        amountCents: pick(
+          _amountController.text != _opened.amount,
+          cents,
+          (t) => t.amountCents,
+        ),
+        occurredAt: pick(
+          _date != _opened.date,
+          occurredAt,
+          (t) => t.occurredAt,
+        ),
+        origin: pick(
+          _originController.text != _opened.origin,
+          trimToNull(_originController.text),
+          (t) => t.origin,
+        ),
+        note: pick(
+          _noteController.text != _opened.note,
+          trimToNull(_noteController.text),
+          (t) => t.note,
+        ),
+        tags: pick(_tagsController.text != _opened.tags, tags, (t) => t.tags),
         // A room event attached or detached while the sheet was open.
         roomEventId: base?.roomEventId,
         // A bill payment [widget.onSaved] linked on an earlier attempt.

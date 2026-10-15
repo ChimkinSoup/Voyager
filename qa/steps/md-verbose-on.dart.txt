@@ -1,0 +1,2 @@
+DevFlags.verboseSync = true;
+c.read(devVerboseSyncProvider.notifier).state = true;

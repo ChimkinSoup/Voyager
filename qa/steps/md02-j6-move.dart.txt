@@ -1,0 +1,7 @@
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final e0 = (await jr.getEntry('md2-je-@W@@N@'))!;
+final en = e0.copyWith(journalId: 'md2-jo-@W@@N@');
+await jr.upsertEntry(en);
+MARK;
+r.pushJournalEntryNow(en);

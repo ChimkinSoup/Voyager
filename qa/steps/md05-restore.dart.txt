@@ -1,0 +1,9 @@
+final s = c.read(trashServiceProvider);
+final items = await s.list();
+final mine = items.where((x) => x.id.startsWith('md5-') && (x.id.endsWith('-@TAG@') || x.id.endsWith('-@TAG@1'))).toList();
+var names = '';
+for (final it in mine) { await s.restore(it); names = names + it.id + '(' + it.members.length.toString() + ') '; }
+await s.uploads;
+MARK;
+invalidateAllDataProvidersIn(c);
+debugPrint('MD5RESTORE ' + mine.length.toString() + ' ' + names);

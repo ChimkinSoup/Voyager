@@ -1,0 +1,1 @@
+final now = DateTime.now().toUtc(); final t = TodoTask(id: 'fx-tt-80', createdAt: now, updatedAt: now, version: 1, listId: 'fx-tl', title: 'FX task 80', notes: 'hello world', sortOrder: -1); await c.read(todoRepositoryProvider).upsertTask(t); c.read(remoteSyncServiceProvider).pushTodoTaskInBackground(t); invalidateAllDataProvidersIn(c);

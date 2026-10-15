@@ -1,0 +1,13 @@
+click 1900 1000
+key ctrl+end
+type  akeep
+wait 3000
+field
+click 488 1034
+wait 1200
+click 1900 1000
+key ctrl+end
+type  akeepthree
+wait 3000
+field
+shot md13-131r-qa-keep

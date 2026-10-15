@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/text/merge_aware_undo.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
 import 'package:voyager/core/text/newline_normalization.dart';
@@ -44,6 +45,7 @@ class TagHighlightedTextField extends StatefulWidget {
     this.readOnly = false,
     this.tagScope,
     this.onKeyEvent,
+    this.undoController,
   }) : assert(
          onKeyEvent == null || tagScope != null,
          'onKeyEvent is only installed by the completion popup, which is '
@@ -83,6 +85,10 @@ class TagHighlightedTextField extends StatefulWidget {
   /// completion popup owns that slot so it can claim the arrow keys before
   /// they reach the caret.
   final FocusOnKeyEventCallback? onKeyEvent;
+
+  /// An undo history that knows about another device's text arriving in this
+  /// field, for the fields that merge it in; null for the field's own.
+  final MergeAwareUndoController? undoController;
 
   @override
   State<TagHighlightedTextField> createState() =>
@@ -139,6 +145,14 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     _hasText = widget.controller.text.isNotEmpty;
     widget.controller.addListener(_handleControllerChanged);
     _syncProseController();
+    widget.undoController?.applyAsEdit = _applyAsEdit;
+  }
+
+  /// A restored undo step, applied the way typing is: the caller's
+  /// `onChanged` records and saves it.
+  void _applyAsEdit(TextEditingValue value) {
+    widget.controller.value = value;
+    widget.onChanged?.call(value.text);
   }
 
   /// Emphasis rides on the same multiline predicate as spellcheck: v1 leaves
@@ -156,6 +170,9 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
   @override
   void didUpdateWidget(covariant TagHighlightedTextField oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.undoController != widget.undoController) {
+      widget.undoController?.applyAsEdit = _applyAsEdit;
+    }
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.removeListener(_handleControllerChanged);
       widget.controller.addListener(_handleControllerChanged);
@@ -228,9 +245,18 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
       multiline: _spellcheckOn,
       proseEmphasis: _prose != null,
       accentColor: widget.accentColor ?? widget.cursorColor,
+      undoController: widget.undoController,
       builder: _buildField,
     );
   }
+
+  /// The nearest undo override above the field — see [MergeAwareUndoScope].
+  static Widget _withMergeAwareUndo(
+    MergeAwareUndoController? controller,
+    Widget field,
+  ) => controller == null
+      ? field
+      : MergeAwareUndoScope(controller: controller, child: field);
 
   Widget _buildField(BuildContext context, VimFieldBinding vim) {
     final theme = Theme.of(context);
@@ -330,49 +356,53 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     // highlight, or it would come back transparent.
     final selectionColor = resolveSelectionColor(context);
 
+    final undoController = widget.undoController;
     final textField = ListEditingUndoGuard(
-      child: TextField(
-        key: _fieldKey,
-        // Right-click gets a menu on any field a new snippet could be
-        // written from, single-line ones included.
-        contextMenuBuilder: voyagerTextContextMenuBuilder(
-          context,
-          snippetsAllowed: vim.snippetsAllowed,
-          spellcheckAllowed: spellcheckOn,
-          autocorrectSession: vim.autocorrectSession,
+      child: _withMergeAwareUndo(
+        undoController,
+        TextField(
+          key: _fieldKey,
+          // Right-click gets a menu on any field a new snippet could be
+          // written from, single-line ones included.
+          contextMenuBuilder: voyagerTextContextMenuBuilder(
+            context,
+            snippetsAllowed: vim.snippetsAllowed,
+            spellcheckAllowed: spellcheckOn,
+            autocorrectSession: vim.autocorrectSession,
+          ),
+          // Always disabled: the squiggles are [SpellCheckSquiggleLayer]'s, and
+          // giving EditableText results of its own would make it build the
+          // paragraph itself rather than through the controller — see
+          // [misspellingAtCursor].
+          spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
+          controller: _controller,
+          focusNode: widget.focusNode,
+          readOnly: widget.readOnly,
+          scrollController: _scrollController,
+          expands: widget.expands,
+          maxLines: widget.expands ? null : widget.maxLines,
+          minLines: widget.expands ? null : widget.minLines,
+          // A pasted `\r\n` would otherwise leave an invisible `\r` behind.
+          inputFormatters: [
+            newlineFormatterFor(widget.expands ? null : widget.maxLines),
+          ],
+          keyboardType: widget.keyboardType,
+          textAlignVertical: TextAlignVertical.top,
+          strutStyle: strutStyle,
+          style: baseStyle,
+          // Held back for [VimTextOverlay] below — see [overlayCaretColor].
+          cursorColor: vim.overlayCaretColor(accent),
+          cursorWidth: vim.overlayCaretWidth,
+          undoController: vim.undoController,
+          scrollPadding: kVoyagerFieldScrollPadding,
+          scrollPhysics: const VoyagerFieldScrollPhysics(),
+          // Multi-line text paints on past its viewport, through the vertical
+          // padding, so a scrolled body reads up to the border; the stack below
+          // clips it there instead.
+          clipBehavior: spellcheckOn ? Clip.none : Clip.hardEdge,
+          onChanged: widget.onChanged,
+          decoration: decoration,
         ),
-        // Always disabled: the squiggles are [SpellCheckSquiggleLayer]'s, and
-        // giving EditableText results of its own would make it build the
-        // paragraph itself rather than through the controller — see
-        // [misspellingAtCursor].
-        spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
-        controller: _controller,
-        focusNode: widget.focusNode,
-        readOnly: widget.readOnly,
-        scrollController: _scrollController,
-        expands: widget.expands,
-        maxLines: widget.expands ? null : widget.maxLines,
-        minLines: widget.expands ? null : widget.minLines,
-        // A pasted `\r\n` would otherwise leave an invisible `\r` behind.
-        inputFormatters: [
-          newlineFormatterFor(widget.expands ? null : widget.maxLines),
-        ],
-        keyboardType: widget.keyboardType,
-        textAlignVertical: TextAlignVertical.top,
-        strutStyle: strutStyle,
-        style: baseStyle,
-        // Held back for [VimTextOverlay] below — see [overlayCaretColor].
-        cursorColor: vim.overlayCaretColor(accent),
-        cursorWidth: vim.overlayCaretWidth,
-        undoController: vim.undoController,
-        scrollPadding: kVoyagerFieldScrollPadding,
-        scrollPhysics: const VoyagerFieldScrollPhysics(),
-        // Multi-line text paints on past its viewport, through the vertical
-        // padding, so a scrolled body reads up to the border; the stack below
-        // clips it there instead.
-        clipBehavior: spellcheckOn ? Clip.none : Clip.hardEdge,
-        onChanged: widget.onChanged,
-        decoration: decoration,
       ),
     );
 

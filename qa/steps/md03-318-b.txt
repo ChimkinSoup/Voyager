@@ -1,0 +1,5 @@
+click 2559 1570
+wait 300
+type note by B
+wait 9000
+field

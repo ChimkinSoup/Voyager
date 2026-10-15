@@ -1,0 +1,5 @@
+Element? cx; void w(Element x) { if (cx != null) return; if (x is WidgetRef && Navigator.maybeOf(x) != null) { cx = x; return; } x.visitChildren(w); } e!.visitChildren(w); final ctx = cx!; final ref = cx as WidgetRef;
+final p = await c.read(leetCodeRepositoryProvider).getProblem('md5-lcp-@TAG@');
+final ok = await deleteLeetCodeProblem(ctx, ref, p!);
+MARK;
+debugPrint('MD5DEL lc ' + ok.toString());

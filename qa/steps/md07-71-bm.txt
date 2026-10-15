@@ -1,0 +1,5 @@
+click 2534 372
+wait 150
+click 2534 372
+wait 3000
+shot md07-71-qb-minus

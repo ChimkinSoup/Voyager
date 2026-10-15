@@ -1,0 +1,10 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 13, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final tr = c.read(todoRepositoryProvider);
+final l = TodoListModel(id: 'md8-list-1', createdAt: c0, updatedAt: now, version: 1, name: 'MD8 List');
+await tr.upsertList(l); r.pushTodoList(l);
+final due = day.add(const Duration(hours: 21)).toUtc();
+final f1 = TodoTask(id: 'md8-task-feed1', createdAt: c0, updatedAt: now, version: 1, listId: 'md8-list-1', title: 'MD8 feed one', sortOrder: 1000, dueDate: due);
+final f2 = TodoTask(id: 'md8-task-feed2', createdAt: c0, updatedAt: now, version: 1, listId: 'md8-list-1', title: 'MD8 feed two', sortOrder: 2000, dueDate: due);
+await tr.upsertTask(f1); await tr.upsertTask(f2);
+await r.pushTodoTaskNow(f1); await r.pushTodoTaskNow(f2);
+c.invalidate(todoListsProvider); c.invalidate(allTodoTasksProvider); c.invalidate(todoListStatsProvider);

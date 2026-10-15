@@ -1,0 +1,14 @@
+final rr = c.read(rankingRepositoryProvider); final r = c.read(remoteSyncServiceProvider);
+final base = (await rr.getParent('md4-rp'))!;
+RankingLocation ren(RankingLocation l, String label) => RankingLocation(id: l.id, latitude: l.latitude, longitude: l.longitude, address: l.address, label: label, sortOrder: l.sortOrder);
+final cs = '@TAG@'; final w = '@W@'; var locs = base.locations;
+if (cs.startsWith('rk1')) { locs = w == 'qa' ? [...locs, RankingLocation(id: 'md4-loc-x', latitude: 43.6426, longitude: -79.3871, address: 'King St W, Toronto', label: 'Branch X', sortOrder: 3)] : locs.where((l) => l.id != 'md4-loc-y').toList(); }
+if (cs.startsWith('rk2')) { locs = w == 'qa' ? [for (final l in locs) l.id == 'md4-loc-x' ? ren(l, 'X renamed by qa') : l] : locs.where((l) => l.id != 'md4-loc-x').toList(); }
+if (cs.startsWith('rk3')) { locs = w == 'qa' ? [for (final l in locs) l.id == 'md4-loc-z' ? ren(l, 'Z renamed by qa') : l] : locs.where((l) => l.id != 'md4-loc-z').toList(); }
+if (cs.startsWith('rk4')) { locs = [for (final l in locs) l.id == 'md4-loc-a' ? ren(l, 'A renamed by ' + w) : l]; }
+final n = base.copyWith(locations: locs, bumpVersion: true);
+await rr.upsertParent(n);
+MARK;
+r.pushRankingParent(n);
+invalidateAllDataProvidersIn(c);
+debugPrint('MD4RK @TAG@ @W@ ' + n.locations.map((l) => l.label).join('|'));

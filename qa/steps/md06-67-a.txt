@@ -1,0 +1,6 @@
+click 2415 789
+wait 300
+type MD6 sub from A
+key enter
+wait 6000
+shot md06-67-qa-after

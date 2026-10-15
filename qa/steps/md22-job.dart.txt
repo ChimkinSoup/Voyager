@@ -1,0 +1,4 @@
+final repo = c.read(jobRepositoryProvider);
+final a = (await repo.getApplication('md21-job-5'))!;
+await JobsActions.detached(c).saveApplication(a.copyWith(status: 'Interview'), previous: a);
+MARK;

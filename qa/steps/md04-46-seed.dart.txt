@@ -1,0 +1,12 @@
+final rr = c.read(rankingRepositoryProvider); final r = c.read(remoteSyncServiceProvider);
+final now = DateTime.now().toUtc();
+final cat = RankingCategory(id: 'md4-rcat', createdAt: now, updatedAt: now, version: 1, name: 'MD4 Places', colorValue: 0xFF4CAF50, locationEnabled: true);
+await rr.upsertCategory(cat);
+r.pushRankingCategory(cat);
+final la = RankingLocation(id: 'md4-loc-a', latitude: 43.6487, longitude: -79.3963, address: 'Queen St W, Toronto', label: 'Branch A', sortOrder: 0);
+final ly = RankingLocation(id: 'md4-loc-y', latitude: 43.6777, longitude: -79.6248, address: 'Pearson Airport', label: 'Branch Y', sortOrder: 1);
+final lz = RankingLocation(id: 'md4-loc-z', latitude: 43.6532, longitude: -79.3832, address: 'City Hall, Toronto', label: 'Branch Z', sortOrder: 2);
+final p = RankingParent(id: 'md4-rp', createdAt: now, updatedAt: now, version: 1, categoryId: 'md4-rcat', title: 'MD4 Branch Place', overallScore: 4.0, locations: [la, ly, lz]);
+await rr.upsertParent(p);
+r.pushRankingParent(p);
+invalidateAllDataProvidersIn(c);

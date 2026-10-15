@@ -1,0 +1,5 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 12, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final d = DreamEntry(id: 'md2-dr-@W@@N@', createdAt: c0, updatedAt: now, version: 3, deletedAt: now, title: 'MD2 dream @W@@N@ ed', body: 'MD2 dream body ed', entryDate: t0, notes: 'MD2 sticky ed', tags: const ['md2tag']);
+await c.read(dreamRepositoryProvider).upsertEntry(d);
+MARK;
+r.pushDreamEntryNow(d);

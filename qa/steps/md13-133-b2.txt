@@ -1,0 +1,5 @@
+click 1900 1000
+key ctrl+end
+type  bafter
+wait 4000
+field

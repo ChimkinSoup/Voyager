@@ -1,0 +1,206 @@
+MD2	20:16:57	j-create	qa->qb	OK
+	db_ms=682	ui=shown ui_ms=1281	row=('MD2 entry qa',)	journal+entry create
+MD2	20:18:44	j-rename	qa->qb	None	db_ms=None	ui=- ui_ms=None	row=None	journal rename+recolor
+MD2	20:20:14	je-title	qa->qb	None	db_ms=None	ui=- ui_ms=None	row=None	entry title+mood
+MD2	20:20:15	je-delete	qa->qb	OK
+	db_ms=671	ui=gone ui_ms=770	row=('2026-10-13T00:20:14.716367Z',)	entry soft delete
+MD2	20:20:16	j-delete	qa->qb	OK
+	db_ms=422	ui=gone ui_ms=524	row=('2026-10-13T00:20:15.644406Z',)	journal soft delete
+MD2	20:21:22	j-create#2	qa->qb	OK
+	db_ms=677	ui=shown ui_ms=800	row=('MD2 entry qa2',)	journals+entry create
+MD2	20:21:23	j-rename#2	qa->qb	OK
+	db_ms=184	ui=shown ui_ms=301	row=('MD2 Renamed qa2',)	journal rename+recolor
+MD2	20:21:23	je-edit#2	qa->qb	OK
+	db_ms=435	ui=shown ui_ms=544	row=('MD2 retitled qa2',)	entry title+mood+weather+date
+MD2	20:21:24	je-move#2	qa->qb	OK
+	db_ms=427	ui=- ui_ms=None	row=('md2-jo-qa2',)	entry moved to other journal
+MD2	20:21:24	je-delete#2	qa->qb	OK
+	db_ms=435	ui=gone ui_ms=535	row=('2026-10-13T00:21:24.378762Z',)	entry soft delete
+MD2	20:21:25	j-delete#2	qa->qb	OK
+	db_ms=179	ui=gone ui_ms=298	row=('2026-10-13T00:21:25.058576Z',)	journal soft delete
+MD2	20:22:29	j-create#3	qb->qa	OK	db_ms=684	ui=NOT-SHOWN ui_ms=None	row=('MD2 entry qb3',)	journals+entry create
+MD2	20:22:59	j-rename#3	qb->qa	OK	db_ms=175	ui=NOT-SHOWN ui_ms=None	row=('MD2 Renamed qb3',)	journal rename+recolor
+MD2	20:23:30	je-edit#3	qb->qa	OK	db_ms=431	ui=NOT-SHOWN ui_ms=None	row=('MD2 retitled qb3',)	entry title+mood+weather+date
+MD2	20:23:31	je-move#3	qb->qa	OK	db_ms=428	ui=- ui_ms=None	row=('md2-jo-qb3',)	entry moved to other journal
+MD2	20:23:32	je-delete#3	qb->qa	OK	db_ms=430	ui=gone ui_ms=566	row=('2026-10-13T00:23:31.442777Z',)	entry soft delete
+MD2	20:23:32	j-delete#3	qb->qa	OK	db_ms=178	ui=gone ui_ms=309	row=('2026-10-13T00:23:32.144476Z',)	journal soft delete
+MD2	20:24:05	j-create#4	qa->qb	OK	db_ms=674	ui=shown ui_ms=766	row=('MD2 entry qa4',)	journals+entry create
+MD2	20:24:36	j-rename#4	qa->qb	OK	db_ms=186	ui=NOT-SHOWN ui_ms=None	row=('MD2 Renamed qa4',)	journal rename+recolor
+MD2	20:24:36	je-edit#4	qa->qb	OK	db_ms=433	ui=shown ui_ms=526	row=('MD2 retitled qa4',)	entry title+mood+weather+date
+MD2	20:24:37	je-move#4	qa->qb	OK	db_ms=422	ui=- ui_ms=None	row=('md2-jo-qa4',)	entry moved to other journal
+MD2	20:24:37	je-delete#4	qa->qb	OK	db_ms=430	ui=gone ui_ms=515	row=('2026-10-13T00:24:37.452688Z',)	entry soft delete
+MD2	20:24:38	j-delete#4	qa->qb	OK	db_ms=182	ui=gone ui_ms=497	row=('2026-10-13T00:24:38.101777Z',)	journal soft delete
+MD2	20:24:40	j-create#5	qb->qa	OK	db_ms=676	ui=shown ui_ms=1262	row=('MD2 entry qb5',)	journals+entry create
+MD2	20:25:10	j-rename#5	qb->qa	OK	db_ms=173	ui=NOT-SHOWN ui_ms=None	row=('MD2 Renamed qb5',)	journal rename+recolor
+MD2	20:25:11	je-edit#5	qb->qa	OK	db_ms=431	ui=shown ui_ms=1025	row=('MD2 retitled qb5',)	entry title+mood+weather+date
+MD2	20:25:12	je-move#5	qb->qa	OK	db_ms=429	ui=- ui_ms=None	row=('md2-jo-qb5',)	entry moved to other journal
+MD2	20:25:13	je-delete#5	qb->qa	OK	db_ms=434	ui=gone ui_ms=562	row=('2026-10-13T00:25:12.594687Z',)	entry soft delete
+MD2	20:25:13	j-delete#5	qb->qa	OK	db_ms=172	ui=gone ui_ms=318	row=('2026-10-13T00:25:13.303885Z',)	journal soft delete
+MD2	20:28:37	dreams-create#1	qa->qb	OK	db_ms=692	ui=shown ui_ms=824	row=(1,)	1 records
+MD2	20:28:38	dreams-edit#1	qa->qb	OK	db_ms=675	ui=shown ui_ms=778	row=(1,)	1 records
+MD2	20:28:39	dreams-delete#1	qa->qb	OK	db_ms=433	ui=gone ui_ms=519	row=(1,)	1 records
+MD2	20:28:40	dreams-create#2	qb->qa	OK	db_ms=431	ui=shown ui_ms=1052	row=(1,)	1 records
+MD2	20:28:40	dreams-edit#2	qb->qa	OK	db_ms=426	ui=shown ui_ms=565	row=(1,)	1 records
+MD2	20:28:41	dreams-delete#2	qb->qa	OK	db_ms=440	ui=gone ui_ms=541	row=(1,)	1 records
+MD2	20:28:55	todo-create#1	qa->qb	OK	db_ms=682	ui=shown ui_ms=786	row=(3,)	3 records
+MD2	20:28:56	todo-edit#1	qa->qb	OK	db_ms=675	ui=shown ui_ms=774	row=(3,)	3 records
+MD2	20:28:56	todo-delete#1	qa->qb	OK	db_ms=688	ui=gone ui_ms=776	row=(3,)	3 records
+MD2	20:30:03	tx-setup#1	qa->qb	OK	db_ms=683	ui=shown ui_ms=801	row=(2,)	2 lists + plain + daily task
+MD2	20:30:04	tx-complete#1	qa->qb	OK	db_ms=670	ui=- ui_ms=None	row=(1,)	complete plain task (completeTodoTask)
+MD2	20:30:05	tx-uncomplete#1	qa->qb	OK	db_ms=439	ui=- ui_ms=None	row=(1,)	uncomplete (completion tombstoned)
+MD2	20:30:05	tx-recur#1	qa->qb	OK	db_ms=234	ui=- ui_ms=None	row=('2026-10-13T04:00:00.000Z',)	recurring completion rolls forward
+MD2	20:30:06	tx-move#1	qa->qb	OK	db_ms=404	ui=- ui_ms=None	row=(1,)	move task to other list
+MD2	20:30:49	todo-create#2	qb->qa	OK	db_ms=683	ui=NOT-SHOWN ui_ms=None	row=(3,)	3 records
+MD2	20:31:20	todo-edit#2	qb->qa	OK	db_ms=683	ui=NOT-SHOWN ui_ms=None	row=(3,)	3 records
+MD2	20:31:21	todo-delete#2	qb->qa	OK	db_ms=678	ui=gone ui_ms=778	row=(3,)	3 records
+MD2	20:31:51	tx-setup#2	qb->qa	OK	db_ms=672	ui=NOT-SHOWN ui_ms=None	row=(2,)	2 lists + plain + daily task
+MD2	20:31:52	tx-complete#2	qb->qa	OK	db_ms=687	ui=- ui_ms=None	row=(1,)	complete plain task (completeTodoTask)
+MD2	20:31:53	tx-uncomplete#2	qb->qa	OK	db_ms=690	ui=- ui_ms=None	row=(1,)	uncomplete (completion tombstoned)
+MD2	20:31:54	tx-recur#2	qb->qa	OK	db_ms=279	ui=- ui_ms=None	row=('2026-10-13T04:00:00.000Z',)	recurring completion rolls forward
+MD2	20:31:55	tx-move#2	qb->qa	OK	db_ms=432	ui=- ui_ms=None	row=(1,)	move task to other list
+MD2	20:32:15	todo-create#3	qb->qa	OK	db_ms=679	ui=shown ui_ms=769	row=(3,)	3 records
+MD2	20:32:15	todo-edit#3	qb->qa	OK	db_ms=448	ui=shown ui_ms=539	row=(3,)	3 records
+MD2	20:32:16	todo-delete#3	qb->qa	OK	db_ms=683	ui=gone ui_ms=777	row=(3,)	3 records
+MD2	20:32:17	tx-setup#3	qb->qa	OK	db_ms=687	ui=shown ui_ms=774	row=(2,)	2 lists + plain + daily task
+MD2	20:32:18	tx-complete#3	qb->qa	OK	db_ms=430	ui=- ui_ms=None	row=(1,)	complete plain task (completeTodoTask)
+MD2	20:32:18	tx-uncomplete#3	qb->qa	OK	db_ms=443	ui=- ui_ms=None	row=(1,)	uncomplete (completion tombstoned)
+MD2	20:32:19	tx-recur#3	qb->qa	OK	db_ms=258	ui=- ui_ms=None	row=('2026-10-13T04:00:00.000Z',)	recurring completion rolls forward
+MD2	20:32:19	tx-move#3	qb->qa	OK	db_ms=430	ui=- ui_ms=None	row=(1,)	move task to other list
+MD2	20:33:21	calendar-create#1	qa->qb	OK	db_ms=384	ui=NOT-SHOWN ui_ms=None	row=(3,)	3 records
+MD2	20:33:52	calendar-edit#1	qa->qb	OK	db_ms=403	ui=NOT-SHOWN ui_ms=None	row=(3,)	3 records
+MD2	20:33:53	calendar-delete#1	qa->qb	OK	db_ms=411	ui=gone ui_ms=716	row=(3,)	3 records
+MD2	20:34:24	calendar-create#2	qb->qa	OK	db_ms=428	ui=NOT-SHOWN ui_ms=None	row=(3,)	3 records
+MD2	20:34:55	calendar-edit#2	qb->qa	OK	db_ms=431	ui=NOT-SHOWN ui_ms=None	row=(3,)	3 records
+MD2	20:34:56	calendar-delete#2	qb->qa	OK	db_ms=427	ui=gone ui_ms=735	row=(3,)	3 records
+MD2	20:35:04	calprobe#9	qa->qb	OK	db_ms=422	ui=- ui_ms=None	row=(1,)	
+MD2	20:35:38	calendar-create#3	qa->qb	OK	db_ms=425	ui=shown ui_ms=921	row=(3,)	3 records
+MD2	20:35:39	calendar-edit#3	qa->qb	OK	db_ms=419	ui=shown ui_ms=714	row=(3,)	3 records
+MD2	20:35:40	calendar-delete#3	qa->qb	OK	db_ms=426	ui=gone ui_ms=733	row=(3,)	3 records
+MD2	20:35:41	calendar-create#4	qb->qa	OK	db_ms=432	ui=shown ui_ms=734	row=(3,)	3 records
+MD2	20:35:42	calendar-edit#4	qb->qa	OK	db_ms=419	ui=shown ui_ms=721	row=(3,)	3 records
+MD2	20:35:43	calendar-delete#4	qb->qa	OK	db_ms=673	ui=gone ui_ms=958	row=(3,)	3 records
+MD2	20:36:24	trackers-create#1	qa->qb	OK	db_ms=674	ui=NOT-SHOWN ui_ms=None	row=(4,)	4 records
+MD2	20:36:55	trackers-edit#1	qa->qb	OK	db_ms=675	ui=NOT-SHOWN ui_ms=None	row=(4,)	4 records
+MD2	20:36:56	trackers-delete#1	qa->qb	OK	db_ms=669	ui=gone ui_ms=916	row=(4,)	4 records
+MD2	20:37:28	trackers-create#2	qb->qa	OK	db_ms=922	ui=NOT-SHOWN ui_ms=None	row=(4,)	4 records
+MD2	20:37:59	trackers-edit#2	qb->qa	OK	db_ms=670	ui=NOT-SHOWN ui_ms=None	row=(4,)	4 records
+MD2	20:38:00	trackers-delete#2	qb->qa	OK	db_ms=680	ui=gone ui_ms=947	row=(4,)	4 records
+MD2	20:38:08	trkprobe#9	qa->qb	OK	db_ms=410	ui=- ui_ms=None	row=(1,)	
+MD2	20:38:37	trackers-create#3	qa->qb	OK	db_ms=669	ui=shown ui_ms=937	row=(4,)	4 records
+MD2	20:38:38	trackers-edit#3	qa->qb	OK	db_ms=656	ui=shown ui_ms=909	row=(4,)	4 records
+MD2	20:39:09	trackers-delete#3	qa->qb	OK	db_ms=662	ui=STILL-THERE ui_ms=None	row=(4,)	4 records
+MD2	20:39:10	trackers-create#4	qb->qa	OK	db_ms=934	ui=shown ui_ms=1050	row=(4,)	4 records
+MD2	20:39:11	trackers-edit#4	qb->qa	OK	db_ms=654	ui=shown ui_ms=969	row=(4,)	4 records
+MD2	20:39:43	trackers-delete#4	qb->qa	OK	db_ms=685	ui=STILL-THERE ui_ms=None	row=(4,)	4 records
+MD2	20:40:15	trackers-create#5	qa->qb	OK	db_ms=915	ui=shown ui_ms=1044	row=(4,)	4 records
+MD2	20:40:16	trackers-edit#5	qa->qb	OK	db_ms=669	ui=shown ui_ms=940	row=(4,)	4 records
+MD2	20:40:17	trackers-delete#5	qa->qb	OK	db_ms=647	ui=gone ui_ms=940	row=(4,)	4 records
+MD2	20:40:18	trackers-create#6	qb->qa	OK	db_ms=832	ui=shown ui_ms=1049	row=(4,)	4 records
+MD2	20:40:20	trackers-edit#6	qb->qa	OK	db_ms=672	ui=shown ui_ms=962	row=(4,)	4 records
+MD2	20:40:21	trackers-delete#6	qb->qa	OK	db_ms=934	ui=gone ui_ms=1071	row=(4,)	4 records
+MD2	20:41:01	finance-create#1	qa->qb	OK	db_ms=831	ui=shown ui_ms=1689	row=(10,)	10 records
+MD2	20:41:03	finance-edit#1	qa->qb	OK	db_ms=644	ui=shown ui_ms=1523	row=(10,)	10 records
+MD2	20:41:05	finance-delete#1	qa->qb	OK	db_ms=633	ui=gone ui_ms=1511	row=(10,)	10 records
+MD2	20:41:15	finance-create#2	qb->qa	OK	db_ms=897	ui=shown ui_ms=1546	row=(10,)	10 records
+MD2	20:41:16	finance-edit#2	qb->qa	OK	db_ms=902	ui=shown ui_ms=1568	row=(10,)	10 records
+MD2	20:41:18	finance-delete#2	qb->qa	OK	db_ms=900	ui=gone ui_ms=1786	row=(10,)	10 records
+MD2	20:41:20	finprobe#9	qa->qb	OK	db_ms=601	ui=- ui_ms=None	row=(1,)	
+MD2	20:42:39	life-create#1	qa->qb	OK	db_ms=162	ui=NOT-SHOWN ui_ms=None	row=(1,)	1 records
+MD2	20:43:10	life-edit#1	qa->qb	OK	db_ms=173	ui=NOT-SHOWN ui_ms=None	row=(1,)	1 records
+MD2	20:43:11	life-delete#1	qa->qb	OK	db_ms=431	ui=gone ui_ms=728	row=(1,)	1 records
+MD2	20:43:42	life-create#2	qb->qa	OK	db_ms=409	ui=NOT-SHOWN ui_ms=None	row=(1,)	1 records
+MD2	20:44:13	life-edit#2	qb->qa	OK	db_ms=182	ui=NOT-SHOWN ui_ms=None	row=(1,)	1 records
+MD2	20:44:14	life-delete#2	qb->qa	OK	db_ms=181	ui=gone ui_ms=561	row=(1,)	1 records
+MD2	20:44:41	leetcode-create#1	qa->qb	OK	db_ms=409	ui=shown ui_ms=531	row=(5,)	5 records
+MD2	20:44:41	leetcode-edit#1	qa->qb	OK	db_ms=399	ui=shown ui_ms=510	row=(5,)	5 records
+MD2	20:44:42	leetcode-delete#1	qa->qb	OK	db_ms=424	ui=gone ui_ms=554	row=(5,)	5 records
+MD2	20:44:43	leetcode-create#2	qb->qa	OK	db_ms=417	ui=shown ui_ms=564	row=(5,)	5 records
+MD2	20:44:43	leetcode-edit#2	qb->qa	OK	db_ms=423	ui=shown ui_ms=593	row=(5,)	5 records
+MD2	20:44:44	leetcode-delete#2	qb->qa	OK	db_ms=421	ui=gone ui_ms=534	row=(5,)	5 records
+MD2	20:44:50	rankings-create#1	qa->qb	OK	db_ms=1160	ui=shown ui_ms=1260	row=(4,)	4 records
+MD2	20:44:52	rankings-edit#1	qa->qb	OK	db_ms=1179	ui=shown ui_ms=1281	row=(4,)	4 records
+MD2	20:44:53	rankings-delete#1	qa->qb	OK	db_ms=1169	ui=gone ui_ms=1275	row=(4,)	4 records
+MD2	20:44:55	rankings-create#2	qb->qa	OK	db_ms=1198	ui=shown ui_ms=1356	row=(4,)	4 records
+MD2	20:44:56	rankings-edit#2	qb->qa	OK	db_ms=1183	ui=shown ui_ms=1307	row=(4,)	4 records
+MD2	20:44:58	rankings-delete#2	qb->qa	OK	db_ms=1182	ui=gone ui_ms=1357	row=(4,)	4 records
+MD2	20:45:03	jobs-create#1	qa->qb	OK	db_ms=402	ui=shown ui_ms=1018	row=(6,)	6 records
+MD2	20:45:04	jobs-edit#1	qa->qb	OK	db_ms=658	ui=shown ui_ms=766	row=(6,)	6 records
+MD2	20:45:05	jobs-delete#1	qa->qb	OK	db_ms=655	ui=gone ui_ms=751	row=(6,)	6 records
+MD2	20:45:06	jobs-create#2	qb->qa	OK	db_ms=430	ui=shown ui_ms=1035	row=(6,)	6 records
+MD2	20:45:07	jobs-edit#2	qb->qa	OK	db_ms=411	ui=shown ui_ms=522	row=(6,)	6 records
+MD2	20:45:08	jobs-delete#2	qb->qa	OK	db_ms=674	ui=gone ui_ms=787	row=(6,)	6 records
+MD2	20:45:46	jx-create#1	qa->qb	OK	db_ms=414	ui=shown ui_ms=533	row=(1,)	createApplication (app action)
+MD2	20:45:46	jx-status#1	qa->qb	OK	db_ms=181	ui=- ui_ms=None	row=('Online Assessment',)	saveApplication status + notes
+MD2	20:46:17	jx-stage#1	qa->qb	OK	db_ms=426	ui=NOT-SHOWN ui_ms=None	row=(1,)	renameStage (last stage)
+MD2	20:46:17	jx-delete#1	qa->qb	OK	db_ms=48	ui=gone ui_ms=390	row=(1,)	deleteApplication (hard delete, ADR 002)
+MD2	20:46:18	jx-create#2	qb->qa	OK	db_ms=429	ui=shown ui_ms=583	row=(1,)	createApplication (app action)
+MD2	20:46:19	jx-status#2	qb->qa	OK	db_ms=425	ui=- ui_ms=None	row=('Online Assessment',)	saveApplication status + notes
+MD2	20:46:49	jx-stage#2	qb->qa	OK	db_ms=173	ui=NOT-SHOWN ui_ms=None	row=(1,)	renameStage (last stage)
+MD2	20:46:50	jx-delete#2	qb->qa	OK	db_ms=31	ui=gone ui_ms=401	row=(1,)	deleteApplication (hard delete, ADR 002)
+MD2	20:47:15	study-create#1	qa->qb	OK	db_ms=643	ui=shown ui_ms=781	row=(6,)	6 records
+MD2	20:47:15	study-edit#1	qa->qb	OK	db_ms=660	ui=shown ui_ms=792	row=(6,)	6 records
+MD2	20:47:16	study-delete#1	qa->qb	OK	db_ms=657	ui=gone ui_ms=789	row=(6,)	6 records
+MD2	20:47:18	study-create#2	qb->qa	OK	db_ms=928	ui=shown ui_ms=1064	row=(6,)	6 records
+MD2	20:47:19	study-edit#2	qb->qa	OK	db_ms=645	ui=shown ui_ms=761	row=(6,)	6 records
+MD2	20:47:20	study-delete#2	qb->qa	OK	db_ms=651	ui=gone ui_ms=800	row=(6,)	6 records
+MD2	20:47:30	workout-create#1	qa->qb	OK	db_ms=669	ui=shown ui_ms=783	row=(4,)	4 records
+MD2	20:47:31	workout-edit#1	qa->qb	OK	db_ms=415	ui=shown ui_ms=576	row=(4,)	4 records
+MD2	20:47:32	workout-delete#1	qa->qb	OK	db_ms=675	ui=gone ui_ms=813	row=(4,)	4 records
+MD2	20:47:33	workout-create#2	qb->qa	OK	db_ms=675	ui=shown ui_ms=853	row=(4,)	4 records
+MD2	20:47:34	workout-edit#2	qb->qa	OK	db_ms=666	ui=shown ui_ms=797	row=(4,)	4 records
+MD2	20:47:35	workout-delete#2	qb->qa	OK	db_ms=689	ui=gone ui_ms=835	row=(4,)	4 records
+MD2	20:48:30	ws-start#1	qa->qb	OK	db_ms=649	ui=- ui_ms=None	row=('1b0e968e-91f9-4426-8d8f-3f3eba2d123c',)	startFromPlan
+MD2	20:48:34	ws-set#1	qa->qb	OK	db_ms=397	ui=- ui_ms=None	row=(42.5,)	completeCurrentSet
+MD2	20:50:25	ws-finish#1	qa->qb	OK	db_ms=400	ui=gone ui_ms=516	row=('2026-10-13T00:50:24.741108Z',)	finish on A; island on B
+MD2	20:51:06	ws-start#2	qb->qa	OK	db_ms=620	ui=NOT-SHOWN ui_ms=None	row=('e285fb6c-82f4-415f-a8e9-3d655e437c99',)	startFromPlan on B; island on A
+MD2	20:51:29	ws-discard#2	qb->qa	OK	db_ms=133	ui=gone ui_ms=509	row=(1,)	discard on B; A's live view closes
+MD2	20:52:30	inbox-create#1	qa->qb	OK	db_ms=180	ui=shown ui_ms=750	row=(1,)	1 records
+MD2	20:52:30	inbox-edit#1	qa->qb	OK	db_ms=425	ui=shown ui_ms=607	row=(1,)	1 records
+MD2	20:52:31	inbox-delete#1	qa->qb	OK	db_ms=177	ui=gone ui_ms=529	row=(1,)	1 records
+MD2	20:52:32	inbox-create#2	qb->qa	OK	db_ms=162	ui=shown ui_ms=740	row=(1,)	1 records
+MD2	20:52:33	inbox-edit#2	qb->qa	OK	db_ms=183	ui=shown ui_ms=589	row=(1,)	1 records
+MD2	20:52:33	inbox-delete#2	qb->qa	OK	db_ms=180	ui=gone ui_ms=562	row=(1,)	1 records
+MD2	20:52:34	reminders-create#1	qa->qb	OK	db_ms=407	ui=shown ui_ms=773	row=(2,)	2 records
+MD2	20:52:35	reminders-edit#1	qa->qb	OK	db_ms=412	ui=shown ui_ms=716	row=(2,)	2 records
+MD2	20:52:36	reminders-delete#1	qa->qb	OK	db_ms=418	ui=gone ui_ms=718	row=(2,)	2 records
+MD2	20:52:37	reminders-create#2	qb->qa	OK	db_ms=170	ui=shown ui_ms=773	row=(2,)	2 records
+MD2	20:52:38	reminders-edit#2	qb->qa	OK	db_ms=154	ui=shown ui_ms=713	row=(2,)	2 records
+MD2	20:52:39	reminders-delete#2	qb->qa	OK	db_ms=421	ui=gone ui_ms=724	row=(2,)	2 records
+MD2	20:54:45	dis-hide#1	qa->qb	ERR NoSuchMethodError: Class 'NotificationFeedItem' has no instance getter 'title'.	db_ms=None	ui=- ui_ms=None	row=None	hide an Inbox item (repo.dismiss, the row menu's path)
+MD2	20:54:45	dis-restore#1	qa->qb	OK	db_ms=-71	ui=- ui_ms=None	row=(1,)	Restore all hidden (repo.undismiss)
+MD2	20:55:16	dis-hide#1	qa->qb	OK	db_ms=434	ui=- ui_ms=None	row=('md2-tr-qa1|semi',)	hide an Inbox item (repo.dismiss, the row menu's path)
+MD2	20:55:16	dis-restore#1	qa->qb	OK	db_ms=184	ui=- ui_ms=None	row=(1,)	Restore all hidden (repo.undismiss)
+MD2	20:55:55	dis-hide#2	qb->qa	OK	db_ms=426	ui=NOT-SHOWN ui_ms=None	row=('md2-tr-qa1|semi',)	hide on B; A's popover shows Hidden
+MD2	20:55:58	dis-restore#2	qb->qa	OK	db_ms=180	ui=gone ui_ms=324	row=(1,)	restore on B
+MD2	20:58:50	tt-create#1	qa->qb	OK	db_ms=None	ui=- ui_ms=None	row=None	custom word, flagged word, tag colour, quote, snippet
+MD2	21:00:20	tt-edit#1	qa->qb	OK	db_ms=None	ui=- ui_ms=None	row=None	rename word, replacement, tag recolour, quote, snippet edits
+MD2	21:01:51	tt-delete#1	qa->qb	OK	db_ms=None	ui=- ui_ms=None	row=None	remove word, unflag, quote delete, snippet removed
+MD2	21:02:18	tt-create#one	qa->qb	OK	db_ms=821	ui=- ui_ms=None	row=(5,)	custom word, flagged word, tag colour, quote, snippet
+MD2	21:03:48	tt-edit#one	qa->qb	OK	db_ms=None	ui=- ui_ms=None	row=None	rename word, replacement, tag recolour, quote, snippet edits
+MD2	21:03:49	tt-delete#one	qa->qb	OK	db_ms=607	ui=- ui_ms=None	row=(4,)	remove word, unflag, quote delete, snippet removed
+MD2	21:03:50	tt-create#two	qb->qa	OK	db_ms=312	ui=- ui_ms=None	row=(5,)	custom word, flagged word, tag colour, quote, snippet
+MD2	21:05:20	tt-edit#two	qb->qa	OK	db_ms=None	ui=- ui_ms=None	row=None	rename word, replacement, tag recolour, quote, snippet edits
+MD2	21:05:21	tt-delete#two	qb->qa	OK	db_ms=785	ui=- ui_ms=None	row=(4,)	remove word, unflag, quote delete, snippet removed
+MD2	21:05:43	tt-flagrep#1	qa->qb	OK	db_ms=169	ui=- ui_ms=None	row=('mdfixb', 1)	flag word then change replacement
+MD2	21:05:46	tt-flagrep#1	qb->qa	OK	db_ms=401	ui=- ui_ms=None	row=('mdfixb', 1)	flag word then change replacement
+MD2	21:06:06	tt-create#three	qa->qb	OK	db_ms=432	ui=- ui_ms=None	row=(1,)	for quote pool check
+MD2	21:06:33	9c208900-61b2-448f-a523-9a9cbab22e49#1	qa->qb	OK	db_ms=161	ui=- ui_ms=None	row=('MD2 renamed by qa1',)	A renames B's device (devices_section path)
+MD2	21:06:33	d4eeceff-64eb-4dbe-943d-43bd2ac8040c#2	qb->qa	OK	db_ms=159	ui=- ui_ms=None	row=('MD2 renamed by qb2',)	B renames A's device
+MD2	21:09:46	md21-seed#1	qa->qb	OK	db_ms=14249	ui=- ui_ms=None	row=(40,)	MD-2.1 seed 240 rows
+MD2	21:10:24	md21-j#1	qa->qb	OK	db_ms=922	ui=shown ui_ms=1748	row=(1,)	2.1 journal list
+MD2	21:11:03	md21-t#1	qa->qb	OK	db_ms=1166	ui=- ui_ms=None	row=(1,)	2.1 todo list + open panel
+MD2	21:12:21	md21-x#1	qa->qb	OK	db_ms=1160	ui=- ui_ms=None	row=(1,)	2.1 ledger with sheet open
+MD2	21:12:47	md21-tx-5#1	qa->qb	OK	db_ms=444	ui=- ui_ms=None	row=(5555, 'MD22 changed on qa')	2.2 A edits tx open in B's sheet
+MD2	21:13:33	md21-t-16#1	qa->qb	OK	db_ms=656	ui=- ui_ms=None	row=('MD22 task title from qa',)	2.2 A edits task open in B's panel
+MD2	21:16:10	md22-ev1#1	qa->qb	OK	db_ms=179	ui=- ui_ms=None	row=(1,)	2.2 event setup
+MD2	21:17:46	md22-ev2#1	qa->qb	OK	db_ms=428	ui=- ui_ms=None	row=(1,)	2.2 A moves event open in B's panel
+MD2	21:18:47	md22-ev3#1	qa->qb	OK	db_ms=418	ui=- ui_ms=None	row=(1,)	2.2 A moves event, B will Cancel
+MD2	21:19:11	md22-ev4#1	qa->qb	OK	db_ms=188	ui=- ui_ms=None	row=(1,)	2.2 A moves event to 6 PM, B will click outside
+MD2	21:20:22	md22-job#1	qa->qb	OK	db_ms=437	ui=- ui_ms=None	row=('Interview',)	2.2 A changes status of job open in B's panel
+MD2	21:20:52	md23#1	qa->qb	OK	db_ms=684	ui=- ui_ms=None	row=(1,)	2.3 while B on Jobs
+MD2	21:21:27	md25-del#1	qa->qb	OK	db_ms=422	ui=gone ui_ms=532	row=(1,)	2.5 search result disappears on B
+MD2	21:22:07	md24a#1	qa->qb	OK	db_ms=692	ui=- ui_ms=None	row=(1,)	2.4 old entry create
+MD2	21:22:14	md24b#1	qa->qb	OK	db_ms=687	ui=shown ui_ms=1281	row=(1,)	2.4 old entry retitled while B scrolled to it
+MD2	21:22:55	md26je#1	qa->qb	OK	db_ms=686	ui=- ui_ms=None	row=(1,)	2.6 entries
+MD2	21:22:56	md26done#1	qa->qb	OK	db_ms=916	ui=- ui_ms=None	row=(1,)	2.6 tasks
+MD2	21:23:23	md26done2#1	qa->qb	OK	db_ms=1181	ui=- ui_ms=None	row=(1,)	2.6 life tasks

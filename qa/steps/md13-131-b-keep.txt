@@ -1,0 +1,13 @@
+click 1900 1000
+key ctrl+end
+type  bkeep
+wait 3000
+field
+tap MD13 entry 01
+wait 1200
+click 1900 1000
+key ctrl+end
+type  bkeepone
+wait 3000
+field
+shot md13-131-qb-keep

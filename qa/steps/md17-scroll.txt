@@ -1,0 +1,121 @@
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 -6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+wheel 488 900 6
+wait 500
+shot md17-173-qb-scroll

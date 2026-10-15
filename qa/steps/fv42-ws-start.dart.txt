@@ -1,0 +1,11 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day);
+final r = c.read(remoteSyncServiceProvider); final wr = c.read(workoutRepositoryProvider);
+final ctl = c.read(workoutSessionControllerProvider.notifier);
+await ctl.finish();
+final ex = Exercise(id: 'fv42-wex', createdAt: now, updatedAt: now, version: 1, name: 'FV42 lift', targetSets: 3, targetReps: 8, targetWeightKg: 40);
+await wr.upsertExercise(ex); r.pushExercise(ex);
+final pe = WorkoutPlanEntry(id: 'fv42-wpe', createdAt: now, updatedAt: now, version: 1, planId: 'workout_plan_weekly', dayIndex: 0, exerciseId: 'fv42-wex', sortOrder: 0);
+await wr.upsertPlanEntry(pe); r.pushWorkoutPlanEntry(pe);
+final plan = (await wr.listPlans()).firstWhere((p) => p.id == 'workout_plan_weekly');
+final ok = await ctl.startFromPlan(plan: plan, dayIndex: 0, date: day);
+debugPrint('FV42 workout started $ok ' + DateTime.now().millisecondsSinceEpoch.toString());

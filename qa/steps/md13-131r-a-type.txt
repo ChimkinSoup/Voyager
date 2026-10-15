@@ -1,0 +1,19 @@
+wheel 88 900 10
+wait 400
+click 88 327
+wait 1200
+click 488 1034
+wait 1200
+click 1900 1000
+key ctrl+end
+type  AFTERZ four by A
+wait 3000
+field
+click 488 865
+wait 1200
+click 1900 1000
+key ctrl+end
+type  AFTERZ three by A
+wait 3000
+field
+shot md13-131r-qa-typed

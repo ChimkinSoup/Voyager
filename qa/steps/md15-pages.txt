@@ -1,0 +1,10 @@
+tap Jobs
+wait 2500
+wheel 88 1300 -10
+wait 500
+tap Workout
+wait 3000
+wheel 88 900 10
+wait 500
+tap Journal
+wait 1500

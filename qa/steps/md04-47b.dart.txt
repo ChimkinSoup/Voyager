@@ -1,0 +1,5 @@
+final repo = c.read(jobRepositoryProvider);
+final st = (await repo.listStages()).firstWhere((x) => x.id == 'seed-stage-interview');
+final ok = await JobsActions.detached(c).renameStage(st, 'Onsite @TAG@ @W@');
+MARK;
+debugPrint('MD4STAGE @W@ ok=$ok');

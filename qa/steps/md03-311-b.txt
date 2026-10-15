@@ -1,0 +1,6 @@
+click 1840 1500
+wait 300
+key ctrl+home
+type B typed during the big paste.
+wait 15000
+field

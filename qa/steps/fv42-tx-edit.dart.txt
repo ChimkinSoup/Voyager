@@ -1,0 +1,7 @@
+final fr = c.read(financeRepositoryProvider);
+final t = (await fr.listTransactions()).firstWhere((x) => x.id == 'fx-tx');
+final n = FinancialTransaction(id: t.id, createdAt: t.createdAt, updatedAt: DateTime.now().toUtc(), version: t.version + 1, type: t.type, amountCents: 5555, occurredAt: t.occurredAt, tags: t.tags, origin: t.origin, note: 'FV42 changed on qa');
+await fr.upsertTransaction(n);
+await c.read(remoteSyncServiceProvider).pushRecords('transactions', [n]);
+invalidateAllDataProvidersIn(c);
+debugPrint('FV42 tx edited');

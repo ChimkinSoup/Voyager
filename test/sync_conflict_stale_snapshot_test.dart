@@ -134,7 +134,9 @@ void main() {
     final authoring = CharacterOpSession(clientId: 'device-a');
     authoring.recordTextChange('', 'Hello');
     final firstOps = authoring.takePendingOps();
-    authoring.recordTextChange('Hello', 'Hello!!');
+    // At the start, not after its own last character: a run typed straight
+    // on extends its own keys, which a stale session can't regenerate.
+    authoring.recordTextChange('Hello', '!!Hello');
     final laterOps = authoring.takePendingOps();
 
     // What every resolveConflict* path used to do: seed from the operations
@@ -143,7 +145,7 @@ void main() {
       clientId: 'device-a',
       initialOperations: firstOps,
     );
-    stale.recordTextChange('Hello', 'Hello!!?');
+    stale.recordTextChange('Hello', '!!?Hello');
 
     final positions = [
       for (final op in [...firstOps, ...laterOps, ...stale.takePendingOps()])

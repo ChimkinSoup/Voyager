@@ -217,6 +217,7 @@ class VimTextScope extends StatefulWidget {
     this.smartIndent = false,
     this.onIdleEscape,
     this.holdsEscape = false,
+    this.undoController,
   });
 
   /// Whether this field gets Vim at all. False for password boxes, numeric
@@ -274,6 +275,10 @@ class VimTextScope extends StatefulWidget {
   /// [enabled] is false — a structured input such as an amount; see
   /// `vimHoldsEscapeIn` and [_VimTextScopeState._holdsEscape].
   final bool holdsEscape;
+
+  /// The field's undo history, when its owner keeps one of its own — see
+  /// `MergeAwareUndoController`. Null for the usual history owned here.
+  final UndoHistoryController? undoController;
 
   final Color? accentColor;
 
@@ -391,7 +396,10 @@ class _VimTextScopeState extends State<VimTextScope> {
   /// Vim switched off. Handed to the field through [VimFieldBinding], so `u`,
   /// `<C-r>` and a snippet undo all drive the same history the field records
   /// into.
-  final UndoHistoryController _undoController = UndoHistoryController();
+  final UndoHistoryController _ownUndoController = UndoHistoryController();
+
+  UndoHistoryController get _undoController =>
+      widget.undoController ?? _ownUndoController;
 
   bool get _active => widget.enabled && widget.controller != null;
 
@@ -502,7 +510,7 @@ class _VimTextScopeState extends State<VimTextScope> {
     _scopeNode.dispose();
     _disposeSession();
     _insertOnly.dispose();
-    _undoController.dispose();
+    _ownUndoController.dispose();
     super.dispose();
   }
 

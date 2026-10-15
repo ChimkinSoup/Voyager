@@ -1,0 +1,11 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 12, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final l = TodoListModel(id: 'md2-tl-@W@@N@', createdAt: c0, updatedAt: now, version: 1, name: 'MD2 List @W@@N@');
+await c.read(todoRepositoryProvider).upsertList(l);
+final t = TodoTask(id: 'md2-tt-@W@@N@', createdAt: c0, updatedAt: now, version: 1, listId: 'md2-tl-@W@@N@', title: 'MD2 task @W@@N@', notes: 'MD2 notes', dueDate: day.add(Duration(days: 1)), starred: 1 == 2);
+await c.read(todoRepositoryProvider).upsertTask(t);
+final s = TodoTask(id: 'md2-ts-@W@@N@', createdAt: c0, updatedAt: now, version: 1, listId: 'md2-tl-@W@@N@', parentTaskId: 'md2-tt-@W@@N@', title: 'MD2 sub @W@@N@');
+await c.read(todoRepositoryProvider).upsertTask(s);
+MARK;
+r.pushTodoList(l);
+r.pushTodoTaskInBackground(t);
+r.pushTodoTaskInBackground(s);

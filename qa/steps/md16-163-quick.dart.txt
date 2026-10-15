@@ -1,0 +1,5 @@
+_JournalPageState? st; void w(Element x) { if (st != null) return; if (x is StatefulElement && x.state is _JournalPageState) { st = x.state as _JournalPageState; return; } x.visitChildren(w); } e!.visitChildren(w);
+await st!._openQuickJournalEntry();
+MARK;
+final js = await c.read(journalRepositoryProvider).listJournals(includeDeleted: true);
+debugPrint('MD16QJE journals ' + js.map((j) => j.id + ':v' + j.version.toString() + ':' + (j.deletedAt == null ? 'live' : 'del')).join(','));

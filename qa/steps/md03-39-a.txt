@@ -1,0 +1,6 @@
+click 1840 1500
+wait 300
+key ctrl+home
+type AAA-first-
+wait 14000
+field

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
+import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/core/sync/remote_sync_service.dart';
 import 'package:voyager/core/utils/ids.dart';
 import 'package:voyager/data/database/app_database.dart';
@@ -237,6 +238,100 @@ void main() {
       expect(state().session?.id, 'remote');
       expect(state().expanded, isFalse);
     });
+
+    WorkoutSetLog remoteLog(int setIndex, {String exerciseId = 'bench'}) {
+      final now = utcNow();
+      return WorkoutSetLog(
+        id: 'remote-$exerciseId-$setIndex',
+        sessionId: 'remote',
+        exerciseId: exerciseId,
+        exerciseOrder: 0,
+        setIndex: setIndex,
+        weightKg: 60,
+        reps: 8,
+        plannedWeightKg: 60,
+        plannedReps: 8,
+        createdAt: now,
+        updatedAt: now,
+      );
+    }
+
+    Future<void> arriveRemote() async {
+      container.invalidate(activeWorkoutSessionProvider);
+      await pumpEventQueue();
+    }
+
+    Future<void> remoteSession(List<WorkoutSetLog> logs) async {
+      final now = utcNow();
+      await repo.createSessionWithLogs(
+        WorkoutSession(
+          id: 'remote',
+          date: workoutStoredDate(now),
+          startedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        ),
+        logs,
+      );
+      await arriveRemote();
+    }
+
+    // BUG-231: the session row lands before all of its sets, and sets logged
+    // on the other device never move the session's own version.
+    test('sets that arrive after their session reach the live view', () async {
+      await _seed(repo);
+      await remoteSession([remoteLog(2)]);
+      expect(state().logs, hasLength(1));
+
+      await repo.upsertSetLogsBatch([remoteLog(0), remoteLog(1)]);
+      await arriveRemote();
+
+      expect(state().logs.map((l) => l.setIndex), [0, 1, 2]);
+      expect(state().currentSet!.setIndex, 0);
+    });
+
+    test('a set completed on another device shows here and moves the wheels '
+        'on', () async {
+      await _seed(repo);
+      await remoteSession([remoteLog(0), remoteLog(1), remoteLog(2)]);
+      expect(state().currentSet!.setIndex, 0);
+
+      await repo.upsertSetLog(
+        remoteLog(0).copyWith(completed: true, completedAt: utcNow()),
+      );
+      await arriveRemote();
+
+      expect(state().completedCount, 1);
+      expect(state().currentSet!.setIndex, 1);
+    });
+
+    test('a set completed here survives the next re-read', () async {
+      await _seed(repo);
+      await start();
+      await controller().completeCurrentSet();
+      final done = state().logs.first;
+
+      await arriveRemote();
+
+      expect(state().logs.first.completed, isTrue);
+      expect(state().logs.first.version, done.version);
+      expect(state().currentSet!.id, isNot(done.id));
+      expect(state().logs, hasLength(6));
+    });
+
+    // BUG-230: the cloud never holds an untouched starter, so a session from
+    // another device can name one this device hasn't seeded yet.
+    test(
+      'a starter named by a pulled session is seeded for the live view',
+      () async {
+        final plank = starterExerciseId('Plank');
+        expect(await repo.getExercise(plank), isNull);
+
+        await remoteSession([remoteLog(0, exerciseId: plank)]);
+
+        expect(state().currentExercise?.name, 'Plank');
+      },
+    );
   });
 
   group('soft deletes', () {

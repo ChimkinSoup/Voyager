@@ -20,6 +20,7 @@ import 'package:voyager/core/layout/window_size_class.dart';
 import 'package:voyager/core/motion/motion.dart';
 import 'package:voyager/core/tags/tag_suggestions.dart';
 import 'package:voyager/core/text/list_text_editing.dart';
+import 'package:voyager/core/text/merge_aware_undo.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
 import 'package:voyager/core/theme/voyager_list_item_surface.dart';
 import 'package:voyager/core/theme/voyager_spacing.dart';
@@ -131,6 +132,12 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   final _notesController = TextEditingController();
   final _notesFocusNode = FocusNode();
   var _lastNotesText = '';
+
+  /// The note text the field was last seeded with or saved. A save writes the
+  /// field only once it differs from this: a remote note can reach the row
+  /// while the field still shows the old one, and writing that back put the
+  /// stale note over it (BUG-239).
+  var _notesBaseText = '';
   final _listTitlePreview = ValueNotifier<String>('');
   final _listBodyPreview = ValueNotifier<String>('');
   Timer? _saveTimer;
@@ -168,6 +175,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     _titleFocusNode.addListener(_handleTitleFocusChanged);
     _bodyFocusNode.addListener(_handleBodyFocusChanged);
     _notesFocusNode.onKeyEvent = _handleNotesKey;
+    _notesFocusNode.addListener(_handleNotesFocusChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(ref.read(allDreamEntriesProvider.future));
     });
@@ -206,12 +214,21 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     }
   }
 
+  /// A remote note that arrived while the note was being typed in was held
+  /// back from the field (see [_reconcileSelectedEntryFromProvider]); leaving
+  /// the note rebuilds so the field picks it up, rather than keeping the old
+  /// text until something else changes.
+  void _handleNotesFocusChanged() {
+    if (!_notesFocusNode.hasFocus && mounted) setState(() {});
+  }
+
   @override
   void dispose() {
     PendingFlushRegistry.instance.unregister(_lifecycleFlushCallback);
     _removeBackInterceptor?.call();
     _titleFocusNode.removeListener(_handleTitleFocusChanged);
     _bodyFocusNode.removeListener(_handleBodyFocusChanged);
+    _notesFocusNode.removeListener(_handleNotesFocusChanged);
     _saveTimer?.cancel();
     _notesSaveTimer?.cancel();
     _titleController.dispose();
@@ -553,6 +570,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     if (target == null || coordinator == null || repo == null) return;
 
     final notesText = _notesController.text;
+    if (notesText == _notesBaseText) return;
     final stored = await repo.getEntry(target.id);
     final baseline = stored ?? target;
     if ((baseline.notes ?? '') == notesText) return;
@@ -577,6 +595,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
             base.copyWith(notes: notesText, bumpVersion: false),
         onSuccess: (updated) {
           if (!mounted || _selectedEntryId != target.id) return;
+          _notesBaseText = notesText;
           setState(() => _selectedEntry = updated);
         },
       );
@@ -626,6 +645,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
       _titleController.text = entry.title;
       _notesController.text = entry.notes ?? '';
       _lastNotesText = _notesController.text;
+      _notesBaseText = _notesController.text;
       _listTitlePreview.value = entry.title;
       _listBodyPreview.value = entry.body;
     });
@@ -659,6 +679,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
       _titleController.text = '';
       _notesController.text = '';
       _lastNotesText = '';
+      _notesBaseText = '';
       _listTitlePreview.value = '';
       _listBodyPreview.value = '';
     });
@@ -698,6 +719,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
         _titleController.clear();
         _notesController.clear();
         _lastNotesText = '';
+        _notesBaseText = '';
         _listTitlePreview.value = '';
         _listBodyPreview.value = '';
       }
@@ -970,10 +992,16 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
     final current = _selectedEntry;
     if (fresh == null || current == null) return;
 
-    // Older, or equal-but-not-newer, revisions are ignored.
+    // Older, or equal-but-not-newer, revisions are ignored — except a note
+    // the sync's tie-break chose at the very same stamps (BUG-239).
     if (fresh.version < current.version) return;
     if (fresh.version == current.version &&
-        !fresh.updatedAt.isAfter(current.updatedAt)) {
+        fresh.updatedAt.isBefore(current.updatedAt)) {
+      return;
+    }
+    if (fresh.version == current.version &&
+        fresh.updatedAt.isAtSameMomentAs(current.updatedAt) &&
+        (fresh.notes ?? '') == (current.notes ?? '')) {
       return;
     }
     if (fresh.title == current.title &&
@@ -995,6 +1023,7 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
         _titleController.text = fresh.title;
         _notesController.text = fresh.notes ?? '';
         _lastNotesText = _notesController.text;
+        _notesBaseText = _notesController.text;
         _listTitlePreview.value = fresh.title;
         _listBodyPreview.value = fresh.body;
       });
@@ -1564,6 +1593,9 @@ class _DreamBodyEditor extends ConsumerStatefulWidget {
 
 class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
   late final TextEditingController _controller;
+
+  /// Undo that leaves another device's merged-in text alone (BUG-237).
+  late final MergeAwareUndoController _undo;
   var _lastText = '';
   RemoteSyncService? _remoteSync;
   PendingTextMergeListener? _pendingTextMergeListener;
@@ -1617,15 +1649,20 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
     // caret at all. This runs mid-focus from the date picker and the
     // statistics dialog, where the next keystroke would land at offset 0.
     final baseOffset = _controller.selection.baseOffset;
-    _controller.value = TextEditingValue(
-      text: body,
-      selection: TextSelection.collapsed(
-        offset: TextDeltaInjector.adjustedSelection(
-          selection: baseOffset,
-          before: before,
-          after: body,
+    // This dream's text from elsewhere, not an edit made here to undo.
+    _undo.applyRemote(
+      TextEditingValue(
+        text: body,
+        selection: TextSelection.collapsed(
+          offset: TextDeltaInjector.adjustedSelection(
+            selection: baseOffset,
+            before: before,
+            after: body,
+          ),
         ),
       ),
+      previousRemoteText: before,
+      remoteText: body,
     );
     if (recordAsEdit) {
       // [_bodyEntryId], not `widget.entry.id`: this replaces the controller's
@@ -1645,6 +1682,7 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.entry.body);
+    _undo = MergeAwareUndoController(_controller);
     _lastText = _controller.text;
     _bodyEntryId = widget.entry.id;
     widget.focusNode.addListener(_handleFocusChanged);
@@ -1699,7 +1737,11 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
     final value = event.mergedInto(_controller.value);
     if (value == null) return false;
 
-    _controller.value = value;
+    _undo.applyRemote(
+      value,
+      previousRemoteText: event.previousRemoteText,
+      remoteText: event.remoteText,
+    );
     _lastText = value.text;
     if (!event.alreadySaved) widget.onScheduleBodySave();
     if (mounted) setState(() {});
@@ -1728,6 +1770,7 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
     }
 
     _controller.text = widget.entry.body;
+    _undo.reset();
     _lastText = _controller.text;
     _bodyEntryId = widget.entry.id;
 
@@ -1785,6 +1828,7 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
       );
     }
     widget.focusNode.removeListener(_handleFocusChanged);
+    _undo.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -1850,6 +1894,7 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
   Widget build(BuildContext context) {
     return TagHighlightedTextField(
       controller: _controller,
+      undoController: _undo,
       focusNode: widget.focusNode,
       tagScope: TagScope.dream,
       onKeyEvent: _handleKey,

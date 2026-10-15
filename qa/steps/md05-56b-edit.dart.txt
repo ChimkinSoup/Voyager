@@ -1,0 +1,13 @@
+final now = DateTime.now().toUtc();
+final cr = c.read(calendarRepositoryProvider);
+final ev = await cr.getEvent('md5-ev-a2');
+final ev2 = ev!.copyWith(title: 'MD5 event a2 OFFLINE by B');
+await cr.upsertEvent(ev2);
+await c.read(remoteSyncServiceProvider).pushRecords('calendar_events', [ev2]);
+final sr = c.read(studyRepositoryProvider);
+final cd = await sr.getCard('md5-card-b2');
+final cd2 = cd!.copyWith(frontText: 'MD5 front b2 OFFLINE by B');
+await sr.upsertCard(cd2);
+c.read(remoteSyncServiceProvider).pushStudyCard(cd2);
+MARK;
+invalidateAllDataProvidersIn(c);

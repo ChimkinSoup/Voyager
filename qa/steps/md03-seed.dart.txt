@@ -1,0 +1,12 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final j = Journal(id: 'md3-j', createdAt: now, updatedAt: now, version: 1, name: 'MD3 Journal');
+await jr.upsertJournal(j); r.pushJournal(j);
+for (var i = 1; i <= 19; i++) { final n = i.toString().padLeft(2, '0'); final en = JournalEntry(id: 'md3-je-' + n, createdAt: now, updatedAt: now, version: 1, journalId: 'md3-j', title: 'MD3 entry ' + n, body: '', entryDate: t0.subtract(Duration(minutes: i))); await jr.upsertEntry(en); r.pushJournalEntryNow(en); }
+for (var i = 1; i <= 19; i++) { final n = i.toString().padLeft(2, '0'); final d = DreamEntry(id: 'md3-dr-' + n, createdAt: now, updatedAt: now, version: 1, title: 'MD3 dream ' + n, body: '', entryDate: t0.subtract(Duration(minutes: i)), notes: '', tags: const []); await c.read(dreamRepositoryProvider).upsertEntry(d); r.pushDreamEntryNow(d); }
+final l = TodoListModel(id: 'md3-tl', createdAt: now, updatedAt: now, version: 1, name: 'MD3 List');
+await c.read(todoRepositoryProvider).upsertList(l); r.pushTodoList(l);
+for (var i = 1; i <= 19; i++) { final n = i.toString().padLeft(2, '0'); final t = TodoTask(id: 'md3-tt-' + n, createdAt: now, updatedAt: now, version: 1, listId: 'md3-tl', title: 'MD3 task ' + n, notes: ''); await c.read(todoRepositoryProvider).upsertTask(t); r.pushTodoTaskInBackground(t); }
+invalidateAllDataProvidersIn(c);
+final k = Calendar(id: '__legacy_calendar__', createdAt: now, updatedAt: now, version: 1, name: 'MD3 Default', colorValue: 0xFF4CAF50);
+await c.read(calendarRepositoryProvider).upsertCalendar(k); await r.pushRecords('calendars', [k]);

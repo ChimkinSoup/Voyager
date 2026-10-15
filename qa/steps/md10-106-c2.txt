@@ -1,0 +1,24 @@
+# MD-10.6 A: types into P26 entry 005's body in bursts for ~35 s during B's weekly full pull
+tap Journal
+wait 800
+tap P26 entry 005
+wait 800
+click 1843 1008
+key ctrl+end
+type  yk1
+wait 4000
+type  yk2
+wait 4000
+type  yk3
+wait 4000
+type  yk4
+wait 4000
+type  yk5
+wait 4000
+type  yk6
+wait 4000
+type  yk7
+wait 4000
+type  yk8
+wait 5000
+shot md10-106-qa-ctl2

@@ -1,0 +1,8 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day);
+final cr = c.read(calendarRepositoryProvider); final r = c.read(remoteSyncServiceProvider);
+final old = (await cr.getEvent('fx-ev'))!;
+final ev = old.copyWith(start: day.add(const Duration(hours: 18)), end: day.add(const Duration(hours: 19)));
+await cr.upsertEvent(ev);
+await r.pushRecords('calendar_events', [ev]);
+invalidateAllDataProvidersIn(c);
+debugPrint('FV42 event moved v=${ev.version}');

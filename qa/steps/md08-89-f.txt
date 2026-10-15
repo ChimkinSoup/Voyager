@@ -1,0 +1,13 @@
+mode fg
+other-open 60 1250 900 450
+hotkey ctrl+alt+f
+wait 1800
+type 12.34
+key tab
+type MD8 Floater Store
+wait 300
+shot md08-89-f-filled
+click 632 916
+wait 1800
+shot md08-89-f-after
+ostatus

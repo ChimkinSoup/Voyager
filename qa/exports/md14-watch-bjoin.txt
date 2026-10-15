@@ -1,0 +1,32 @@
+22:54:18.812 sync_locks/weather_fetch MISSING
+22:54:18.898 weather/current 2026-10-14T02:53:20.527456Z {"fetchedAt": "2026-10-14T02:53:20.489Z", "tempC": 22.01, "updatedByDeviceId": "57ff7ea1-f643-4c32-9f25-c8b04a23c1d7"}
+22:54:19.143 weather/forecast 2026-10-14T02:53:24.028503Z {"fetchedAt": "2026-10-14T02:53:23.952Z"}
+Traceback (most recent call last):
+  File "C:\Users\Juno\Code\Voyager\qa\harness\fs_watch.py", line 53, in <module>
+    s = read(d)
+        ^^^^^^^
+  File "C:\Users\Juno\Code\Voyager\qa\harness\fs_watch.py", line 40, in read
+    j = json.load(urllib.request.urlopen(req, timeout=10))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Juno\AppData\Local\Programs\Python\Python311\Lib\json\__init__.py", line 293, in load
+    return loads(fp.read(),
+                 ^^^^^^^^^
+  File "C:\Users\Juno\AppData\Local\Programs\Python\Python311\Lib\http\client.py", line 467, in read
+    return self._read_chunked(amt)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Juno\AppData\Local\Programs\Python\Python311\Lib\http\client.py", line 599, in _read_chunked
+    value.append(self._safe_read(chunk_left))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Juno\AppData\Local\Programs\Python\Python311\Lib\http\client.py", line 638, in _safe_read
+    data = self.fp.read(amt)
+           ^^^^^^^^^^^^^^^^^
+  File "C:\Users\Juno\AppData\Local\Programs\Python\Python311\Lib\socket.py", line 706, in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Juno\AppData\Local\Programs\Python\Python311\Lib\ssl.py", line 1314, in recv_into
+    return self.read(nbytes, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Juno\AppData\Local\Programs\Python\Python311\Lib\ssl.py", line 1166, in read
+    return self._sslobj.read(len, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TimeoutError: The read operation timed out

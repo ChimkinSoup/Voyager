@@ -1,0 +1,6 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 13, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day);
+final ja = JobApplication(id: 'md5-job-y', createdAt: c0, updatedAt: now, version: 1, company: 'MD5 Co Y', title: 'MD5 Engineer', status: 'Applied', dateApplied: day, notes: 'MD5 job notes base');
+await c.read(jobRepositoryProvider).upsertApplication(ja);
+c.read(remoteSyncServiceProvider).pushJobApplication(ja);
+MARK;
+invalidateAllDataProvidersIn(c);

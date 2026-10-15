@@ -1,0 +1,8 @@
+final r = c.read(remoteSyncServiceProvider); final jr = c.read(journalRepositoryProvider); final fr = c.read(financeRepositoryProvider);
+for (var k = 1; k <= 10; k++) {
+  final e0 = (await jr.getEntry('md9-je-06'))!; final en = e0.copyWith(title: 'MD9 r8 je06 round $k'); await jr.upsertEntry(en); r.pushJournalEntryNow(en);
+  final t0 = (await fr.listTransactions()).firstWhere((x) => x.id == 'md9-tx-06'); final tx = t0.copyWith(note: 'MD9 r8 tx06 round $k', version: t0.version + 1, updatedAt: DateTime.now().toUtc()); await fr.upsertTransaction(tx); r.pushRecords('transactions', [tx]).ignore();
+  await Future.delayed(const Duration(milliseconds: 300));
+}
+MARK;
+invalidateAllDataProvidersIn(c);

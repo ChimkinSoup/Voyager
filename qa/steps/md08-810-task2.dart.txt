@@ -1,0 +1,6 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 13, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider); final rr = c.read(reminderRepositoryProvider);
+final tk = TodoTask(id: 'md8-task-bell2', createdAt: c0, updatedAt: now, version: 1, listId: 'md8-list-1', title: 'MD8 bell moved', sortOrder: 500, dueDate: day.add(const Duration(hours: 17, minutes: 40)).toUtc());
+await c.read(todoRepositoryProvider).upsertTask(tk); await r.pushTodoTaskNow(tk);
+await setEntityReminder(rr, kind: ReminderSourceKind.todo, entityId: 'md8-task-bell2', offsetMinutes: 0);
+final ers = (await rr.listEntityReminders()).where((x) => x.entityId == 'md8-task-bell2').toList(); await r.pushRecords('entity_reminders', ers);
+c.invalidate(entityRemindersProvider); c.invalidate(allTodoTasksProvider); c.invalidate(todoListsProvider);

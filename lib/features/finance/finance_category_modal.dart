@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
@@ -166,6 +167,10 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
               includeDeleted: true,
             )).where((c) => c.id == existing.id).firstOrNull;
       final base = onDisk ?? existing;
+      // Editing, only the fields changed in this sheet are applied over the
+      // row as it is now, as the goal sheet does (BUG-233).
+      T pick<T>(bool edited, T mine, T Function(FinanceCategory c) disk) =>
+          existing == null || onDisk == null || edited ? mine : disk(onDisk);
       await repo.upsertCategory(
         FinanceCategory(
           id: existing?.id ?? newId(),
@@ -173,9 +178,21 @@ class _CategoryModalState extends ConsumerState<_CategoryModal> {
           updatedAt: now,
           version: base == null ? 0 : base.version + 1,
           deletedAt: base?.deletedAt,
-          name: _nameController.text.trim(),
-          colorValue: _colorValue,
-          tags: _selectedTags.toList()..sort(),
+          name: pick(
+            _nameController.text.trim() != existing?.name,
+            _nameController.text.trim(),
+            (c) => c.name,
+          ),
+          colorValue: pick(
+            _colorValue != existing?.colorValue,
+            _colorValue,
+            (c) => c.colorValue,
+          ),
+          tags: pick(
+            !setEquals(_selectedTags, {...?existing?.tags}),
+            _selectedTags.toList()..sort(),
+            (c) => c.tags,
+          ),
         ),
       );
       // Through the container, not `ref`: the invalidate has to land even

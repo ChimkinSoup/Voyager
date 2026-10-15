@@ -1,0 +1,4 @@
+final repo = c.read(jobRepositoryProvider);
+final st = await repo.listStages();
+await JobsActions.detached(c).renameStage(st.last, 'MD2 Stage @W@@N@');
+MARK;

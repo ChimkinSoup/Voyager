@@ -53,6 +53,7 @@ void main() {
   RemoteSyncService buildService({
     AppDatabase? database,
     String deviceId = 'device-a',
+    Duration uploadDebounceDelay = Duration.zero,
   }) {
     final db0 = database ?? db;
     final engine = SyncEngine(
@@ -84,7 +85,7 @@ void main() {
       syncEngine: engine,
       syncConflictRepository: DriftSyncConflictRepository(db0),
       deviceId: deviceId,
-      uploadDebounceDelay: Duration.zero,
+      uploadDebounceDelay: uploadDebounceDelay,
     );
   }
 
@@ -200,6 +201,183 @@ void main() {
       await service.pullJournalEntries();
 
       expect((await journalRepo.getEntry(id))!.body, 'Hello world');
+    });
+  });
+
+  // BUG-238: typed and saved here, killed before the upload, and the other
+  // device edits the entry before this one restarts. The startup pull found
+  // the cloud newer and took its text over the row.
+  group('characters saved but never sent, then moved on elsewhere', () {
+    Future<(RemoteSyncService, DriftJournalRepository)> deviceB(
+      String id,
+    ) async {
+      final dbB = AppDatabase.inMemory();
+      addTearDown(dbB.close);
+      final repoB = DriftJournalRepository(dbB);
+      final b = buildService(database: dbB, deviceId: 'device-b');
+      await b.pullJournalEntries();
+      return (b, repoB);
+    }
+
+    Future<void> appendOnB(
+      RemoteSyncService b,
+      DriftJournalRepository repoB,
+      String id,
+      String after,
+    ) async {
+      final before = (await repoB.getEntry(id))!.body;
+      await b.prepareEditingSession(
+        collection: FirestoreCollections.journalEntries,
+        documentId: id,
+        initialText: before,
+      );
+      b.recordJournalTextChange(entryId: id, before: before, after: after);
+      await b.saveJournalEntryThenScheduleUpload(
+        entryId: id,
+        saveLocal: () async {
+          final current = await repoB.getEntry(id);
+          await repoB.upsertEntry(current!.copyWith(body: after));
+        },
+      );
+      await b.flushDocument(FirestoreCollections.journalEntries, id);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+
+    test('are kept and sent after the restart', () async {
+      final a = buildService();
+      final id = await seedSyncedEntry(a);
+      final (b, repoB) = await deviceB(id);
+
+      // A's autosave lands; the upload never does.
+      final row = (await journalRepo.getEntry(id))!;
+      await journalRepo.upsertEntry(
+        row.copyWith(body: 'Hello world', bumpVersion: false),
+      );
+      a.dispose();
+
+      await appendOnB(b, repoB, id, 'Hello. B more');
+
+      final restarted = buildService();
+      await restarted.pullJournalEntries();
+      expect((await journalRepo.getEntry(id))!.body, 'Hello world. B more');
+
+      // Sent by the pull itself, with nothing else saved or drained.
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await b.pullJournalEntries();
+      expect((await repoB.getEntry(id))!.body, 'Hello world. B more');
+    });
+
+    // In the app the journal page reopens the entry at launch, and its
+    // editor loads the log before the pull: a session with nothing pending.
+    test('are kept and sent when the editor reopened the entry first', () async {
+      final a = buildService();
+      final id = await seedSyncedEntry(a);
+      final (b, repoB) = await deviceB(id);
+
+      final row = (await journalRepo.getEntry(id))!;
+      await journalRepo.upsertEntry(
+        row.copyWith(body: 'Hello world', bumpVersion: false),
+      );
+      a.dispose();
+
+      await appendOnB(b, repoB, id, 'Hello. B more');
+
+      final restarted = buildService();
+      await restarted.prepareEditingSession(
+        collection: FirestoreCollections.journalEntries,
+        documentId: id,
+        initialText: 'Hello world',
+      );
+      await restarted.pullJournalEntries();
+      expect((await journalRepo.getEntry(id))!.body, 'Hello world. B more');
+
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await b.pullJournalEntries();
+      expect((await repoB.getEntry(id))!.body, 'Hello world. B more');
+    });
+
+    // The other shape seen in the app: the reopened editor re-anchors its
+    // session as a seed of the row's text, which then shows in the resolved
+    // text too. Uploading that seed would double the entry (BUG-220).
+    test('are kept and sent, once, when the editor holds a seed of the row', () async {
+      final a = buildService();
+      final id = await seedSyncedEntry(a);
+      final (b, repoB) = await deviceB(id);
+
+      final row = (await journalRepo.getEntry(id))!;
+      await journalRepo.upsertEntry(
+        row.copyWith(body: 'Hello world', bumpVersion: false),
+      );
+      a.dispose();
+
+      await appendOnB(b, repoB, id, 'Hello. B more');
+
+      final restarted = buildService();
+      restarted.charOpRegistry.ensureSession(
+        collection: FirestoreCollections.journalEntries,
+        documentId: id,
+        clientId: 'device-a',
+        initialText: 'Hello world',
+        markSeedsAsPending: true,
+      );
+      await restarted.pullJournalEntries();
+      expect((await journalRepo.getEntry(id))!.body, 'Hello world. B more');
+
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await b.pullJournalEntries();
+      expect((await repoB.getEntry(id))!.body, 'Hello world. B more');
+    });
+
+    // A save already queued is left to run: each pull replaced it, restarting
+    // its debounce for as long as the other device kept editing.
+    test('a queued upload is not put off by pulls while the other device '
+        'keeps editing', () async {
+      final a = buildService(uploadDebounceDelay: const Duration(seconds: 1));
+      final id = await seedSyncedEntry(a);
+      final (b, repoB) = await deviceB(id);
+
+      final clock = Stopwatch()..start();
+      Future<void> until(int ms) =>
+          Future<void>.delayed(Duration(milliseconds: ms) - clock.elapsed);
+      a.recordJournalTextChange(
+        entryId: id,
+        before: 'Hello',
+        after: 'Hello world',
+      );
+      await a.saveJournalEntryThenScheduleUpload(
+        entryId: id,
+        saveLocal: () async {
+          final current = await journalRepo.getEntry(id);
+          await journalRepo.upsertEntry(current!.copyWith(body: 'Hello world'));
+        },
+      );
+
+      await appendOnB(b, repoB, id, 'Hello. B');
+      await until(300);
+      await a.pullJournalEntries();
+      await appendOnB(b, repoB, id, 'Hello. B more');
+      await until(700);
+      await a.pullJournalEntries();
+      expect(clock.elapsed, lessThan(const Duration(seconds: 1)));
+
+      // Due at 1s from the save; a debounce restarted at 700ms isn't.
+      await until(1400);
+      await b.pullJournalEntries();
+      expect((await repoB.getEntry(id))!.body, contains('world'));
+    });
+
+    test('text the other device deleted is not brought back', () async {
+      final a = buildService();
+      final id = await seedSyncedEntry(a);
+      final (b, repoB) = await deviceB(id);
+      a.dispose();
+
+      // A never changed anything; B deletes "llo".
+      await appendOnB(b, repoB, id, 'He');
+
+      final restarted = buildService();
+      await restarted.pullJournalEntries();
+      expect((await journalRepo.getEntry(id))!.body, 'He');
     });
   });
 

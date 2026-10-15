@@ -33,6 +33,7 @@
 #   move <x> <y> | wheel <x> <y> <notches> (+up/-down) | drag <x1> <y1> <x2> <y2>
 #   hotkey <chord>             fg: global hotkey (only sent if registered), e.g. hotkey ctrl+alt+t
 #   wait <ms>                  sleep
+#   at <unix-ms>               sleep until that instant (together.ps1 releases two runs at once)
 #   shot <name>                client-area PNG (bg: VM-service frame grab; fg: PrintWindow)
 #   status                     print window state
 #   place <x> <y> <w> <h>      fg: restore + move/resize outer window (physical px)
@@ -116,6 +117,12 @@ function Invoke-Step([string]$line) {
     'drag' { if ($bg) { [Bg]::Drag([int]$a[0], [int]$a[1], [int]$a[2], [int]$a[3], 20) } else { [Voy]::Drag([int]$a[0], [int]$a[1], [int]$a[2], [int]$a[3], 20) } }
     'hotkey' { [Voy]::GlobalHotkey($arg.Trim()) }
     'wait' { Start-Sleep -Milliseconds ([int]$a[0]) }
+    'at' {
+      # MD-3: sleep until a wall-clock instant (Unix ms), so two runs (together.ps1) start together.
+      $ms = [int64]$a[0] - [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+      if ($ms -gt 0) { Start-Sleep -Milliseconds $ms }
+      Write-Output "at: released $([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+    }
     'shot' {
       $p = Join-Path $shots ($a[0] + '.png')
       if ($bg) { Invoke-Vm shot $p }

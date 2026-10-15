@@ -1,0 +1,13 @@
+# MD-10.3 B: right after launch, type into the auto-opened entry (P26 entry 006)
+shot md10-103-qb-launch
+click 1843 1008
+key ctrl+end
+type  B103 early
+wait 2000
+type  B103 more
+wait 4000
+click 1843 1008
+key ctrl+end
+type  B103 third
+wait 6000
+shot md10-103-qb-typed

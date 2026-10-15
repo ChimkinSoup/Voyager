@@ -1,0 +1,11 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 12, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final k = Calendar(id: 'md2-cal-@W@@N@', createdAt: c0, updatedAt: now, version: 1, name: 'MD2 Cal @W@@N@', colorValue: 1 == 2 ? 0xFFE91E63 : 0xFF4CAF50);
+await c.read(calendarRepositoryProvider).upsertCalendar(k);
+final ev = CalendarEvent(id: 'md2-ev-@W@@N@', createdAt: c0, updatedAt: now, version: 1, calendarId: 'md2-cal-@W@@N@', title: 'MD2 event @W@@N@', start: day.add(Duration(hours: 9 + 1)), end: day.add(Duration(hours: 10 + 1)), isFullDay: false);
+await c.read(calendarRepositoryProvider).upsertEvent(ev);
+final ad = CalendarEvent(id: 'md2-evd-@W@@N@', createdAt: c0, updatedAt: now, version: 1, calendarId: 'md2-cal-@W@@N@', title: 'MD2 allday @W@@N@', start: day, end: day, isFullDay: true, recurrence: 1 == 2 ? const RecurrenceRule(frequency: EventRecurrence.daily) : RecurrenceRule.none);
+await c.read(calendarRepositoryProvider).upsertEvent(ad);
+MARK;
+await r.pushRecords('calendars', [k]);
+await r.pushRecords('calendar_events', [ev]);
+await r.pushRecords('calendar_events', [ad]);

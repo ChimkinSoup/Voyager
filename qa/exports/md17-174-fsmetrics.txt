@@ -1,0 +1,17 @@
+== document/read_count (sum) 11:31-12:32: module=__unknown__,type=LOOKUP,version=__unknown__: 7, module=__unknown__,type=NOT_FOUND,version=__unknown__: 0, module=__unknown__,type=QUERY,version=__unknown__: 3751
+== document/write_count (sum) 11:31-12:32: module=__unknown__,op=CREATE,version=__unknown__: 597, module=__unknown__,op=UPDATE,version=__unknown__: 914
+== document/delete_count (sum) 11:31-12:32: no data
+== network/active_connections (max) 11:31-12:32: module=,version=: 2, module=__unknown__,version=__unknown__: 2
+== network/snapshot_listeners (max) 11:31-12:32: module=,version=: 127, module=__unknown__,version=__unknown__: 127
+
+== document/read_count (sum) 12:50-13:01: module=__unknown__,type=LOOKUP,version=__unknown__: 0, module=__unknown__,type=NOT_FOUND,version=__unknown__: 0, module=__unknown__,type=QUERY,version=__unknown__: 1992
+== document/write_count (sum) 12:50-13:01: module=__unknown__,op=CREATE,version=__unknown__: 1033, module=__unknown__,op=UPDATE,version=__unknown__: 0
+== document/delete_count (sum) 12:50-13:01: no data
+== network/active_connections (max) 12:50-13:01: module=,version=: 2, module=__unknown__,version=__unknown__: 2
+== network/snapshot_listeners (max) 12:50-13:01: module=,version=: 126, module=__unknown__,version=__unknown__: 126
+
+== document/read_count (sum) 12:47-12:50: module=__unknown__,type=LOOKUP,version=__unknown__: 0, module=__unknown__,type=NOT_FOUND,version=__unknown__: 0, module=__unknown__,type=QUERY,version=__unknown__: 11
+== document/write_count (sum) 12:47-12:50: module=__unknown__,op=CREATE,version=__unknown__: 0, module=__unknown__,op=UPDATE,version=__unknown__: 0
+== document/delete_count (sum) 12:47-12:50: no data
+== network/active_connections (max) 12:47-12:50: module=,version=: 2, module=__unknown__,version=__unknown__: 2
+== network/snapshot_listeners (max) 12:47-12:50: module=,version=: 126, module=__unknown__,version=__unknown__: 126

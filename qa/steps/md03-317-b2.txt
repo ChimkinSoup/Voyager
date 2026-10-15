@@ -1,0 +1,8 @@
+click 2448 547
+wait 300
+key ctrl+end
+type  B four
+wait 1500
+type  five
+wait 6000
+field

@@ -1,0 +1,17 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 14, 12); final t0 = DateTime.now(); final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider); final tr = c.read(todoRepositoryProvider); final cr = c.read(calendarRepositoryProvider);
+final j = Journal(id: 'md17-jrnl', createdAt: c0, updatedAt: now, version: 1, name: 'MD17 Journal');
+await jr.upsertJournal(j); r.pushJournal(j);
+final l = TodoListModel(id: 'md17-list', createdAt: c0, updatedAt: now, version: 1, name: 'MD17 List');
+await tr.upsertList(l); r.pushTodoList(l);
+final k = Calendar(id: 'md17-cal', createdAt: c0, updatedAt: now, version: 1, name: 'MD17 Cal', colorValue: 0xFF4CAF50);
+await cr.upsertCalendar(k); await r.pushRecords('calendars', [k]);
+final tk = TodoTask(id: 'md17-task-01', createdAt: c0, updatedAt: now, version: 1, listId: 'md17-list', title: 'MD17 task one');
+await tr.upsertTask(tk); await r.pushTodoTaskNow(tk);
+for (var i = 1; i <= 200; i++) {
+  final n = i.toString().padLeft(3, '0');
+  final je = JournalEntry(id: 'md17-je-$n', createdAt: c0, updatedAt: now, version: 1, journalId: 'md17-jrnl', title: 'MD17 long list $n', body: 'MD17 body $n', entryDate: t0.subtract(Duration(hours: 6 * i)));
+  await jr.upsertEntry(je); r.pushJournalEntryNow(je);
+}
+MARK;
+invalidateAllDataProvidersIn(c);

@@ -1,0 +1,3 @@
+final s = c.read(settingsProvider).value!;
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(journalEntryListWidth: 444.0, editSidePanelWidth: 555.0, dreamSplitWidth: 0.42, workoutLibraryWidth: 333.0, lastViewedJournalId: 'md4-lv-j', lastViewedTodoListId: 'md4-tl', lastViewedCalendarId: 'md4-cal', lastViewedRankingCategoryId: 'md4-lv-r', journalShowAllEntries: true, todoShowAllTasks: true, calendarShowAllCalendars: true, todoCompletedSectionExpanded: false, leetCodeCheatLastTabId: 'md4-lv-tab', rankingsMapHiddenCategories: const ['md4-hidden-cat'], devShowFpsCounter: true, devForceConflictUi: true, devShowSyncUploads: true, devTodoSortDebugLog: true));
+MARK;

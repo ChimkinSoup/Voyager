@@ -1,0 +1,22 @@
+wheel 88 1300 10
+tap Journal
+wait 1200
+tap MD5 entry a2
+wait 1200
+click 1900 1000
+key ctrl+end
+type  B OFFLINE journal text
+wait 4000
+field
+tap To-Do
+wait 1200
+tap MD5 task a2
+wait 1200
+click 2448 475
+key ctrl+end
+type  B OFFLINE notes
+wait 4000
+field
+shot md05-54-qb-offline-typed
+tap Finance
+wait 1500

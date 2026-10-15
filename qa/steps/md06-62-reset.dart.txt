@@ -1,0 +1,5 @@
+final wr = c.read(workoutRepositoryProvider); final r = c.read(remoteSyncServiceProvider);
+final all = await wr.listPlanEntries('workout_plan_weekly');
+for (var i = 1; i <= 4; i++) { final pe = all.firstWhere((x) => x.id == 'md6-pe-$i'); final n = pe.copyWith(sortOrder: 10 + i); await wr.upsertPlanEntry(n); r.pushWorkoutPlanEntry(n); }
+invalidateWorkoutProvidersIn(c);
+MARK;

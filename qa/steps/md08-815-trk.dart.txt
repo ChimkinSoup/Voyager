@@ -1,0 +1,5 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 13, 12); final r = c.read(remoteSyncServiceProvider);
+final k = StatisticTracker(id: 'md8-trk-1', createdAt: c0, updatedAt: now, version: 1, name: 'MD8 Steps', type: TrackerType.integer, cadence: TrackerCadence.daily);
+await c.read(trackerRepositoryProvider).upsertTracker(k);
+await r.pushRecords('trackers', [k]);
+c.invalidate(trackersProvider);

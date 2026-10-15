@@ -1,0 +1,5 @@
+final tr = c.read(todoRepositoryProvider);
+final t = (await tr.getTask('md4-tt'))!; final n = t.copyWith(clearDueDate: true, clearDueDateSetAt: true);
+await tr.upsertTask(n);
+await c.read(remoteSyncServiceProvider).pushTodoTaskNow(n);
+invalidateAllDataProvidersIn(c);

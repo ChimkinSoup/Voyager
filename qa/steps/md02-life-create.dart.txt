@@ -1,0 +1,5 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 12, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final b = BucketListItem(id: 'md2-bucket-@W@@N@', createdAt: c0, updatedAt: now, version: 1, title: 'MD2 bucket @W@@N@', completed: 1 == 2, completedAt: 1 == 2 ? now : null);
+await c.read(bucketListRepositoryProvider).upsertItem(b);
+MARK;
+await r.pushRecords('bucket_list_items', [b]);

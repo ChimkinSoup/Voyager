@@ -1,0 +1,26 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day);
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+for (final j in [Journal(id: 'fx-j-old', createdAt: now.subtract(const Duration(hours: 1)), updatedAt: now, version: 1, name: 'FX Older'), Journal(id: 'fx-j-def', createdAt: now.add(const Duration(seconds: 2)), updatedAt: now, version: 1, name: 'FX Default')]) { await jr.upsertJournal(j); r.pushJournal(j); }
+for (final (id, jid, title, body, mins) in [('fx-e-old', 'fx-j-old', 'FX older entry', 'body of the older entry', 1), ('fx-je-35', 'fx-j-def', 'FX 35', 'START END', 2), ('fx-je-37', 'fx-j-def', 'FX 37', '', 3), ('fx-je-38', 'fx-j-def', 'FX 38', '', 4), ('fx-je-40', 'fx-j-def', 'FX 40', '', 5), ('fx-je-41', 'fx-j-def', 'FX 41', '', 6)]) { final en = JournalEntry(id: id, createdAt: now, updatedAt: now, version: 1, journalId: jid, title: title, body: body, entryDate: t0.subtract(Duration(minutes: mins))); await jr.upsertEntry(en); r.pushJournalEntryNow(en); }
+final dr = c.read(dreamRepositoryProvider);
+for (final (id, title, body, mins) in [('fx-dr-39', 'FX dream 39', 'Dream body stays.', 1), ('fx-dr-37', 'FX dream 37', '', 2)]) { final d = DreamEntry(id: id, createdAt: now, updatedAt: now, version: 1, title: title, body: body, entryDate: t0.subtract(Duration(minutes: mins)), notes: '', tags: const []); await dr.upsertEntry(d); r.pushDreamEntryNow(d); }
+final tr = c.read(todoRepositoryProvider);
+final l = TodoListModel(id: 'fx-tl', createdAt: now, updatedAt: now, version: 1, name: 'FX List');
+await tr.upsertList(l); r.pushTodoList(l);
+for (final (id, title, i) in [('fx-tt-13', 'FX task 13', 0), ('fx-tt-14', 'FX task 14', 1)]) { final t = TodoTask(id: id, createdAt: now, updatedAt: now, version: 1, listId: 'fx-tl', title: title, notes: '', sortOrder: i); await tr.upsertTask(t); r.pushTodoTaskInBackground(t); }
+final fr = c.read(financeRepositoryProvider);
+final tx = FinancialTransaction(id: 'fx-tx', createdAt: now, updatedAt: now, version: 1, type: TransactionType.expense, amountCents: 105, occurredAt: t0.subtract(const Duration(days: 1)), tags: const ['fx'], note: 'FX tx note');
+await fr.upsertTransaction(tx); await r.pushRecords('transactions', [tx]);
+final cr = c.read(calendarRepositoryProvider);
+final ev = CalendarEvent(id: 'fx-ev', createdAt: now, updatedAt: now, version: 1, calendarId: '__legacy_calendar__', title: 'FX event', start: day.add(const Duration(hours: 15)), end: day.add(const Duration(hours: 16)), isFullDay: false);
+await cr.upsertEvent(ev); await r.pushRecords('calendar_events', [ev]);
+final wr = c.read(workoutRepositoryProvider);
+await wr.ensureSeeded();
+final ses = WorkoutSession(id: 'fx-ws', createdAt: now, updatedAt: now, version: 1, date: day, startedAt: t0);
+await wr.upsertSession(ses); r.pushWorkoutSession(ses);
+final sl = WorkoutSetLog(id: 'fx-set-1', createdAt: now, updatedAt: now, version: 1, sessionId: 'fx-ws', exerciseId: 'seed-exercise-plank', exerciseOrder: 0, setIndex: 0, weightKg: 40.0, reps: 10, plannedWeightKg: 40.0, plannedReps: 10);
+await wr.upsertSetLog(sl); r.pushWorkoutSetLog(sl);
+final s = await c.read(settingsRepositoryProvider).getSettings();
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(defaultJournalId: 'fx-j-def'));
+invalidateAllDataProvidersIn(c);

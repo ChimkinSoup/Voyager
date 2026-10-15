@@ -1,0 +1,7 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day);
+final cr = c.read(calendarRepositoryProvider); final r = c.read(remoteSyncServiceProvider);
+final old = await cr.getEvent('md22-ev');
+final ev = CalendarEvent(id: 'md22-ev', createdAt: old?.createdAt ?? now, updatedAt: now, version: (old?.version ?? 0) + 1, calendarId: '__legacy_calendar__', title: old?.title ?? 'MD22 event', start: day.add(Duration(hours: old == null ? 15 : 18)), end: day.add(Duration(hours: old == null ? 16 : 19)), isFullDay: false);
+await cr.upsertEvent(ev);
+MARK;
+await r.pushRecords('calendar_events', [ev]);

@@ -1,0 +1,13 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 14, 12); final r = c.read(remoteSyncServiceProvider); final lr = c.read(leetCodeRepositoryProvider);
+final kk = '@TAG@'.split('_')[0]; final vv = int.parse('@TAG@'.split('_')[1]);
+final sfx = vv == 1 ? '' : ' v' + vv.toString();
+final ct = LeetCodeCheatTab(id: 'md17-ctab-' + kk, createdAt: c0, updatedAt: now, version: vv, name: 'MD17 tab' + sfx, position: 0);
+await lr.upsertCheatTab(ct);
+final cs = LeetCodeCheatSection(id: 'md17-csec-' + kk, createdAt: c0, updatedAt: now, version: vv, tabId: 'md17-ctab-' + kk, name: 'MD17 section' + sfx, position: 0);
+await lr.upsertCheatSection(cs);
+final ce = LeetCodeCheatEntry(id: 'md17-cent-' + kk, createdAt: c0, updatedAt: now, version: vv, sectionId: 'md17-csec-' + kk, command: 'mdcmd' + sfx, description: 'MD17 entry' + sfx, position: 0);
+await lr.upsertCheatEntry(ce);
+final p = LeetCodeProblem(id: 'md17-lc-' + kk, createdAt: c0, updatedAt: now, version: vv, title: 'MD17 LC' + sfx, difficulty: LeetCodeDifficulty.easy, solvedAt: c0, description: 'MD17 desc' + sfx);
+await lr.upsertProblem(p);
+MARK;
+r.pushLeetCodeCheatTab(ct); r.pushLeetCodeCheatSection(cs); r.pushLeetCodeCheatEntry(ce); r.pushLeetCodeProblem(p);

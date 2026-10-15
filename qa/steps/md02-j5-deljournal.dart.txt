@@ -1,0 +1,5 @@
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+await jr.softDeleteJournal('md2-j-@W@@N@');
+MARK;
+r.pushJournal((await jr.getJournal('md2-j-@W@@N@'))!);

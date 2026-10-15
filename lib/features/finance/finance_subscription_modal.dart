@@ -200,22 +200,50 @@ class _SubscriptionModalState extends ConsumerState<_SubscriptionModal> {
           existing != null &&
           _dueDate == _initialDueDate &&
           _period == _initialPeriod;
+      // Editing, only the fields changed in this sheet are applied over the
+      // row as it is now, as the goal sheet does (BUG-233).
+      T pick<T>(bool edited, T mine, T Function(Subscription s) disk) =>
+          existing == null || onDisk == null || edited ? mine : disk(onDisk);
       final subscription = Subscription(
         id: existing?.id ?? newId(),
         createdAt: base?.createdAt ?? now,
         updatedAt: now,
         version: base == null ? 0 : base.version + 1,
         deletedAt: base?.deletedAt,
-        name: _nameController.text.trim(),
-        amountCents: cents,
-        period: _period,
-        anchorDueDate: _dueDate,
+        name: pick(
+          _nameController.text.trim() != existing?.name,
+          _nameController.text.trim(),
+          (s) => s.name,
+        ),
+        amountCents: pick(
+          cents != existing?.amountCents,
+          cents,
+          (s) => s.amountCents,
+        ),
+        period: pick(_period != _initialPeriod, _period, (s) => s.period),
+        anchorDueDate: pick(
+          _dueDate != _initialDueDate,
+          _dueDate,
+          (s) => s.anchorDueDate,
+        ),
         paidThroughDate: seriesUnchanged ? base?.paidThroughDate : null,
-        colorValue: _colorValue,
-        note: _noteController.text.trim().isEmpty
-            ? null
-            : _noteController.text.trim(),
-        store: trimToNull(_storeController.text),
+        colorValue: pick(
+          _colorValue != existing?.colorValue,
+          _colorValue,
+          (s) => s.colorValue,
+        ),
+        note: pick(
+          _noteController.text.trim() != (existing?.note ?? ''),
+          _noteController.text.trim().isEmpty
+              ? null
+              : _noteController.text.trim(),
+          (s) => s.note,
+        ),
+        store: pick(
+          _storeController.text.trim() != (existing?.store ?? ''),
+          trimToNull(_storeController.text),
+          (s) => s.store,
+        ),
       );
       await repo.upsertSubscription(subscription);
       // Through the container, not `ref`: the invalidate has to land even

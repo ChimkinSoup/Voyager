@@ -1,0 +1,4 @@
+final ctl = c.read(workoutSessionControllerProvider.notifier);
+ctl.updateCurrentSet(weightKg: 42.5, reps: 7);
+await ctl.completeCurrentSet();
+debugPrint('FV42 set completed ' + DateTime.now().millisecondsSinceEpoch.toString());

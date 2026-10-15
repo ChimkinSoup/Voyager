@@ -1,0 +1,6 @@
+final fr = c.read(financeRepositoryProvider);
+final t = (await fr.listBudgets()).firstWhere((x) => x.id == 'md4-bud');
+final n = '@W@' == 'qa' ? t.copyWith(limitCents: t.limitCents + 1000, version: t.version + 1, updatedAt: DateTime.now().toUtc()) : t.copyWith(tag: 'md4food@TAG@', version: t.version + 1, updatedAt: DateTime.now().toUtc());
+await fr.upsertBudget(n);
+MARK;
+await c.read(remoteSyncServiceProvider).pushRecords('budgets', [n]);

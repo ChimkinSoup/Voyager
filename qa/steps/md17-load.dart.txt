@@ -1,0 +1,10 @@
+final r = c.read(remoteSyncServiceProvider); final jr = c.read(journalRepositoryProvider);
+debugPrint('MD17LOAD start ' + DateTime.now().toIso8601String());
+for (var i = 1; i <= 600; i++) {
+  final now = DateTime.now().toUtc(); final n = i.toString().padLeft(3, '0');
+  final je = JournalEntry(id: 'md17-ld-$n', createdAt: now, updatedAt: now, version: 1, journalId: 'md17-jrnl', title: 'MD17 load $n', body: 'MD17 load body $n', entryDate: DateTime.now());
+  await jr.upsertEntry(je); r.pushJournalEntryNow(je);
+  if (i % 60 == 0) debugPrint('MD17LOAD ' + n + ' ' + DateTime.now().toIso8601String());
+  await Future.delayed(const Duration(seconds: 1));
+}
+debugPrint('MD17LOAD end ' + DateTime.now().toIso8601String());

@@ -1,0 +1,9 @@
+final repo = c.read(settingsRepositoryProvider);
+await repo.removeCustomWord('mdwordx@W@@N@');
+await repo.unflagWord('mdflag@W@@N@');
+await repo.softDeleteCustomQuote('md2-tq-@W@@N@');
+final s = c.read(settingsProvider).value!;
+await c.read(settingsProvider.notifier).saveSnippets(s.snippets, [for (final x in s.snippets) if (x.id != 'md2-snip-@W@@N@') x]);
+MARK;
+final q = (await repo.getCustomQuote('md2-tq-@W@@N@'))!;
+c.read(remoteSyncServiceProvider).pushCustomQuote(q);

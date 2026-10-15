@@ -1,0 +1,6 @@
+final fr = c.read(financeRepositoryProvider);
+final g = (await fr.listSavingsGoals(includeDeleted: true)).firstWhere((x) => x.id == 'md5-goal-@TAG@');
+await fr.upsertSavingsGoal(g.copyWith(name: 'MD5 goal @TAG@ renamed by @W@', version: g.version + 1, updatedAt: DateTime.now().toUtc()));
+MARK;
+c.invalidate(savingsGoalsProvider);
+debugPrint('MD5EDIT53 deletedAt=' + g.deletedAt.toString());

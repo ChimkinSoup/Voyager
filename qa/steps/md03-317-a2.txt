@@ -1,0 +1,8 @@
+key esc
+wait 1200
+click 2552 354
+wait 800
+click 2498 528
+wait 2000
+shot md03-317-qa-bell2
+wait 5000

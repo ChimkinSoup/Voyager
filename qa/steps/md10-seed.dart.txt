@@ -1,0 +1,31 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 13, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider); final tr = c.read(todoRepositoryProvider); final fr = c.read(financeRepositoryProvider); final cr = c.read(calendarRepositoryProvider); final sr = c.read(studyRepositoryProvider);
+final j = Journal(id: 'md10-jrnl', createdAt: c0, updatedAt: now, version: 1, name: 'MD10 Journal');
+await jr.upsertJournal(j); r.pushJournal(j);
+final l = TodoListModel(id: 'md10-list', createdAt: c0, updatedAt: now, version: 1, name: 'MD10 List');
+await tr.upsertList(l); r.pushTodoList(l);
+final k = Calendar(id: 'md10-cal', createdAt: c0, updatedAt: now, version: 1, name: 'MD10 Cal', colorValue: 0xFF4CAF50);
+await cr.upsertCalendar(k);
+final legacy = (await cr.listCalendars()).firstWhere((x) => x.id == '__legacy_calendar__');
+final ren = Calendar(id: legacy.id, createdAt: legacy.createdAt, updatedAt: now, version: legacy.version + 1, name: 'MD10 Default', colorValue: 0xFFE91E63);
+await cr.upsertCalendar(ren);
+await r.pushRecords('calendars', [k, ren]);
+final dk = StudyDeck(id: 'md10-deck', createdAt: c0, updatedAt: now, version: 1, name: 'MD10 deck');
+await sr.upsertDeck(dk); r.pushStudyDeck(dk);
+final evs = <CalendarEvent>[]; final txs = <FinancialTransaction>[];
+for (var i = 1; i <= 12; i++) {
+  final n = i.toString().padLeft(2, '0');
+  final je = JournalEntry(id: 'md10-je-$n', createdAt: c0, updatedAt: now, version: 1, journalId: 'md10-jrnl', title: 'MD10 entry $n', body: 'MD10 body $n', entryDate: t0.subtract(Duration(minutes: i)));
+  await jr.upsertEntry(je); r.pushJournalEntryNow(je);
+  final tk = TodoTask(id: 'md10-task-$n', createdAt: c0, updatedAt: now, version: 1, listId: 'md10-list', title: 'MD10 task $n');
+  await tr.upsertTask(tk); await r.pushTodoTaskNow(tk);
+  final tx = FinancialTransaction(id: 'md10-tx-$n', createdAt: c0, updatedAt: now, version: 1, type: TransactionType.expense, amountCents: 1000 + i, occurredAt: day.add(Duration(hours: 9, minutes: i)), tags: const ['md10food'], note: 'MD10 tx $n');
+  await fr.upsertTransaction(tx); txs.add(tx);
+  final ev = CalendarEvent(id: 'md10-ev-$n', createdAt: c0, updatedAt: now, version: 1, calendarId: 'md10-cal', title: 'MD10 event $n', start: day.add(Duration(days: 1, hours: 8 + (i % 10))), end: day.add(Duration(days: 1, hours: 9 + (i % 10))), isFullDay: false);
+  await cr.upsertEvent(ev); evs.add(ev);
+  final cd = StudyCard(id: 'md10-card-$n', createdAt: c0, updatedAt: now, version: 1, deckId: 'md10-deck', frontText: 'MD10 front $n', backText: 'MD10 back $n', dueAt: c0);
+  await sr.upsertCard(cd); r.pushStudyCard(cd);
+}
+await r.pushRecords('transactions', txs); await r.pushRecords('calendar_events', evs);
+MARK;
+invalidateAllDataProvidersIn(c);

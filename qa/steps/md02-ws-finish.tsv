@@ -1,0 +1,4 @@
+lib	features/workout/workout_history.dart
+ws-start	md02-ws1-start.dart.txt	select s.id from workout_sessions_table s join workout_set_logs_table l on l.session_id=s.id where l.exercise_id='md2-wex-@W@@N@' and s.ended_at is null and s.deleted_at is null	-	0	startFromPlan (live session)
+ws-set	md02-ws2-set.dart.txt	select l.weight_kg from workout_set_logs_table l where l.exercise_id='md2-wex-@W@@N@' and l.completed=1 and l.reps=7	-	0	completeCurrentSet 42.5x7
+ws-finish	md02-ws3-finish.dart.txt	select s.ended_at from workout_sessions_table s join workout_set_logs_table l on l.session_id=s.id where l.exercise_id='md2-wex-@W@@N@' and s.ended_at is not null	-	0	finish

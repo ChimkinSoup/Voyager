@@ -1,0 +1,14 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 12, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final ex = Exercise(id: 'md2-ex-@W@@N@', createdAt: c0, updatedAt: now, version: 3, deletedAt: now, name: 'MD2 lift @W@@N@ ed');
+await c.read(workoutRepositoryProvider).upsertExercise(ex);
+final pe = WorkoutPlanEntry(id: 'md2-pe-@W@@N@', createdAt: c0, updatedAt: now, version: 3, deletedAt: now, planId: 'workout_plan_weekly', dayIndex: 3, exerciseId: 'md2-ex-@W@@N@', sortOrder: 5);
+await c.read(workoutRepositoryProvider).upsertPlanEntry(pe);
+final ws = WorkoutSession(id: 'md2-ws-@W@@N@', createdAt: c0, updatedAt: now, version: 3, deletedAt: now, date: day.subtract(const Duration(days: 1)), startedAt: t0.subtract(const Duration(days: 1)), endedAt: t0.subtract(const Duration(days: 1)).add(Duration(minutes: 30 * 3)));
+await c.read(workoutRepositoryProvider).upsertSession(ws);
+final sl = WorkoutSetLog(id: 'md2-sl-@W@@N@', createdAt: c0, updatedAt: now, version: 3, deletedAt: now, sessionId: 'md2-ws-@W@@N@', exerciseId: 'md2-ex-@W@@N@', exerciseOrder: 0, setIndex: 0, weightKg: 20.0 * 3, reps: 5 + 3, plannedWeightKg: 20.0, plannedReps: 5, completed: true, completedAt: t0.subtract(const Duration(days: 1)));
+await c.read(workoutRepositoryProvider).upsertSetLog(sl);
+MARK;
+r.pushExercise(ex);
+r.pushWorkoutPlanEntry(pe);
+r.pushWorkoutSession(ws);
+r.pushWorkoutSetLog(sl);

@@ -39,7 +39,10 @@ void main() {
         id: 'dream-0',
         title: 'A dream',
         body: 'I flew over the sea.',
-        entryDate: now,
+        // Fixed, with a one-digit hour: the test font draws every glyph a
+        // full em wide, so a two-digit hour alone pushed the date row past
+        // the editor's minimum width, and the test failed from 10:00 to 12:59.
+        entryDate: DateTime(2026, 10, 14, 9, 1).toUtc(),
         createdAt: now,
         updatedAt: now,
       ),

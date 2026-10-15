@@ -1,0 +1,10 @@
+final r = c.read(remoteSyncServiceProvider); final jr = c.read(journalRepositoryProvider); final tr = c.read(todoRepositoryProvider); final tg = '@TAG@';
+for (var i = 20; i < 45; i++) {
+  final n = i.toString().padLeft(3, '0'); final s = 'MD10 $tg $n';
+  final je = (await jr.getEntry('p26-je-$n'))!.copyWith(title: s); await jr.upsertEntry(je); r.pushJournalEntryNow(je);
+  final tk = (await tr.getTask('p26-task-$n'))!.copyWith(title: s); await tr.upsertTask(tk); r.pushTodoTaskInBackground(tk);
+  debugPrint('MD106 $n ' + DateTime.now().toIso8601String());
+  await Future.delayed(const Duration(milliseconds: 1200));
+}
+MARK;
+invalidateAllDataProvidersIn(c);

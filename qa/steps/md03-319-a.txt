@@ -1,0 +1,8 @@
+click 1843 239
+wait 300
+key end
+type  T2
+wait 1500
+click 1958 353
+wait 8000
+shot md03-319-qa-after

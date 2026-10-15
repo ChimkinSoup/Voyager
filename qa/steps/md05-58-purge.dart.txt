@@ -1,0 +1,3 @@
+final n = await c.read(remoteSyncServiceProvider).permanentlyDeleteFromRemote(collection: FirestoreCollections.journalEntries, documentId: '@TAG@');
+MARK;
+debugPrint('MD5PURGE remote ops=' + n.toString());

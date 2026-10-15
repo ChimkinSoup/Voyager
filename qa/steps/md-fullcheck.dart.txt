@@ -1,0 +1,4 @@
+final counter = await FullSyncCheck.currentDatabaseChangeCounter();
+final report = await c.read(fullSyncCheckProvider).run();
+await FullSyncCheck.writeReport(report, dbChangeCounter: counter);
+debugPrint('FULLCHECK safe=${report.safeToWipe} gaps=${report.gaps.length} unreadable=${report.unreadable.keys.toList()} ${report.gaps.take(10).map((g) => '${g.collection}/${g.id} (${g.reason})').join('; ')}');

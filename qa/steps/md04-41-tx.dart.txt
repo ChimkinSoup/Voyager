@@ -1,0 +1,6 @@
+final fr = c.read(financeRepositoryProvider);
+final t = (await fr.listTransactions()).firstWhere((x) => x.id == 'md4-tx');
+final n = '@W@' == 'qa' ? t.copyWith(amountCents: t.amountCents + 1111, version: t.version + 1, updatedAt: DateTime.now().toUtc()) : t.copyWith(note: 'MD4 note @TAG@ by qb', version: t.version + 1, updatedAt: DateTime.now().toUtc());
+await fr.upsertTransaction(n);
+MARK;
+await c.read(remoteSyncServiceProvider).pushRecords('transactions', [n]);

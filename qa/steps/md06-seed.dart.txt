@@ -1,0 +1,29 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 13, 12); final r = c.read(remoteSyncServiceProvider);
+final dl = Calendar(id: '__legacy_calendar__', createdAt: c0, updatedAt: now, version: 1, name: 'MD6 Default', colorValue: 0xFF2196F3);
+await c.read(calendarRepositoryProvider).upsertCalendar(dl); await r.pushRecords('calendars', [dl]);
+final tr = c.read(todoRepositoryProvider);
+final lr = TodoListModel(id: 'md6-list-r', createdAt: c0, updatedAt: now, version: 1, name: 'MD6 Reorder');
+final lm1 = TodoListModel(id: 'md6-list-m1', createdAt: c0, updatedAt: now, version: 1, name: 'MD6 Move 1');
+final lm2 = TodoListModel(id: 'md6-list-m2', createdAt: c0, updatedAt: now, version: 1, name: 'MD6 Move 2');
+final lm3 = TodoListModel(id: 'md6-list-m3', createdAt: c0, updatedAt: now, version: 1, name: 'MD6 Move 3');
+for (final l in [lr, lm1, lm2, lm3]) { await tr.upsertList(l); r.pushTodoList(l); }
+final ts = <TodoTask>[];
+for (var i = 1; i <= 6; i++) { ts.add(TodoTask(id: 'md6-task-r$i', createdAt: c0.add(Duration(minutes: i)), updatedAt: now, version: 1, listId: 'md6-list-r', title: 'MD6 task $i', sortOrder: i - 1)); }
+ts.add(TodoTask(id: 'md6-task-mv', createdAt: c0, updatedAt: now, version: 1, listId: 'md6-list-m1', title: 'MD6 moving task'));
+ts.add(TodoTask(id: 'md6-task-sb', createdAt: c0, updatedAt: now, version: 1, listId: 'md6-list-m1', title: 'MD6 subtask parent', sortOrder: 1));
+for (final t in ts) { await tr.upsertTask(t); await r.pushTodoTaskNow(t); }
+final jr = c.read(journalRepositoryProvider);
+for (var i = 1; i <= 3; i++) { final j = Journal(id: 'md6-jrnl-$i', createdAt: c0.add(Duration(minutes: i)), updatedAt: now, version: 1, name: 'MD6 Journal $i'); await jr.upsertJournal(j); r.pushJournal(j); }
+final je = JournalEntry(id: 'md6-je-mv', createdAt: c0, updatedAt: now, version: 1, journalId: 'md6-jrnl-1', title: 'MD6 moving entry', body: 'MD6 entry body', entryDate: DateTime.now());
+await jr.upsertEntry(je); r.pushJournalEntryNow(je);
+final sr = c.read(studyRepositoryProvider);
+final fo = StudyFolder(id: 'md6-sfold', createdAt: c0, updatedAt: now, version: 1, name: 'MD6 folder');
+await sr.upsertFolder(fo); r.pushStudyFolder(fo);
+for (final n in ['x', 'y', 'z', 'p', 'q']) { final dk = StudyDeck(id: 'md6-deck-$n', createdAt: c0, updatedAt: now, version: 1, name: 'MD6 deck $n', parentFolderId: 'md6-sfold'); await sr.upsertDeck(dk); r.pushStudyDeck(dk); }
+final cd = StudyCard(id: 'md6-card-mv', createdAt: c0, updatedAt: now, version: 1, deckId: 'md6-deck-x', frontText: 'MD6 moving card', backText: 'MD6 back', dueAt: c0);
+await sr.upsertCard(cd); r.pushStudyCard(cd);
+final wr = c.read(workoutRepositoryProvider);
+await wr.ensureSeeded();
+for (var i = 1; i <= 4; i++) { final ex = Exercise(id: 'md6-lift-$i', createdAt: c0, updatedAt: now, version: 1, name: 'MD6 lift $i', sortOrder: 100 + i); await wr.upsertExercise(ex); r.pushExercise(ex); }
+for (var i = 1; i <= 4; i++) { final pe = WorkoutPlanEntry(id: 'md6-pe-$i', createdAt: now, updatedAt: now, version: 1, planId: 'workout_plan_weekly', dayIndex: 2, exerciseId: 'md6-lift-$i', sortOrder: i - 1); await wr.upsertPlanEntry(pe); r.pushWorkoutPlanEntry(pe); }
+MARK;

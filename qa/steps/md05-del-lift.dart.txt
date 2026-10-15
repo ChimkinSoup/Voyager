@@ -1,0 +1,2 @@
+await softDeleteExercise(c, 'md5-lift-@TAG@');
+MARK;

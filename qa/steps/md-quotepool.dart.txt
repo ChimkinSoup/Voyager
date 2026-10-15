@@ -1,0 +1,2 @@
+final pool = await c.read(quotePoolProvider.future);
+debugPrint('QUOTEPOOL size=${pool.length} custom=${pool.where((q) => q.text.contains('FV custom')).length}');

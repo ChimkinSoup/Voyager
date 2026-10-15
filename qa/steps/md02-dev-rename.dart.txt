@@ -1,0 +1,5 @@
+final repo = c.read(reminderRepositoryProvider);
+final d = (await repo.getDevice('@TAG@'))!;
+await repo.upsertDevice(d.copyWith(displayName: 'MD2 renamed by @W@@N@', updatedAt: DateTime.now().toUtc(), version: d.version + 1));
+c.invalidate(deviceRegistrationsProvider);
+MARK;

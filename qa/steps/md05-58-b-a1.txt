@@ -1,0 +1,11 @@
+wheel 88 1300 10
+tap Journal
+wait 1200
+tap MD5 entry a1
+wait 1200
+click 1900 1000
+key ctrl+end
+type  B typed after purge
+wait 5000
+field
+shot md05-58-qb-MD5 entry a1

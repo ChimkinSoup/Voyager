@@ -1,0 +1,11 @@
+Element? cx; void w(Element x) { if (cx != null) return; if (x is WidgetRef && Navigator.maybeOf(x) != null) { cx = x; return; } x.visitChildren(w); } e!.visitChildren(w); final ctx = cx!;
+final ov = Overlay.of(ctx, rootOverlay: true);
+final fr = c.read(financeRepositoryProvider);
+final g = (await fr.listSavingsGoals()).firstWhere((x) => x.id == 'md5-goal-@TAG@');
+final a = (await fr.listAssets()).firstWhere((x) => x.id == 'md5-asset-@TAG@');
+final ok1 = await deleteGoalWithUndo(overlay: ov, container: c, repo: fr, goal: g);
+final ok2 = await deleteAssetWithUndo(overlay: ov, container: c, repo: fr, asset: a);
+await fr.softDeleteTransaction('md5-tx-@TAG@1');
+c.invalidate(transactionsProvider);
+MARK;
+debugPrint('MD5DEL fin ' + ok1.toString() + ok2.toString());

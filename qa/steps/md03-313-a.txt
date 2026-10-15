@@ -1,0 +1,21 @@
+click 1840 1500
+wait 300
+key ctrl+home
+key right
+key right
+key right
+key right
+key right
+type **
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+key right
+type **
+wait 8000
+field

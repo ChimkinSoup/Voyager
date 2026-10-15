@@ -1,0 +1,15 @@
+# MD-8.9: to-do floater (Ctrl+Alt+T) from the normal instance
+mode fg
+other-open 60 1250 900 450
+hotkey ctrl+alt+t
+wait 2000
+ostatus
+shot md08-89-t-open
+find
+type MD8 floater task
+key enter
+wait 1500
+shot md08-89-t-saved
+other-click
+wait 1200
+ostatus

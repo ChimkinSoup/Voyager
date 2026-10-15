@@ -1,0 +1,7 @@
+wait 500
+wait 10
+wait 1500
+click 2483 354
+wait 1500
+shot md03-317-qb-after
+wait 5000

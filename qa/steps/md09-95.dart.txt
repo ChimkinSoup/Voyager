@@ -1,0 +1,11 @@
+final now = DateTime.now().toUtc(); final r = c.read(remoteSyncServiceProvider); final tr = c.read(todoRepositoryProvider);
+final l = TodoListModel(id: 'md9b-list', createdAt: now, updatedAt: now, version: 1, name: 'MD9 Bulk');
+await tr.upsertList(l); r.pushTodoList(l);
+for (var i = 1; i <= @TAG@; i++) {
+  final n = i.toString().padLeft(3, '0');
+  final tk = TodoTask(id: 'md9b-task-$n', createdAt: now, updatedAt: DateTime.now().toUtc(), version: 1, listId: 'md9b-list', title: 'MD9 bulk $n');
+  await tr.upsertTask(tk); r.pushTodoTaskInBackground(tk);
+}
+MARK;
+debugPrint('MD95 gate inFlight=${c.read(firestoreWriteGateProvider).inFlight} refused=${c.read(firestoreWriteGateProvider).refusedWrites} paused=${c.read(firestoreWriteGateProvider).isPaused}');
+invalidateAllDataProvidersIn(c);

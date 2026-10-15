@@ -1,0 +1,8 @@
+MD17FT 12:48:18 frames=602 fps=59.9 build p50=0.3 p90=0.8 max=1.5 raster p50=1.3 p90=2.1 max=3.1 total>16.7ms=0
+MD17FT 12:48:28 frames=606 fps=59.9 build p50=0.3 p90=0.7 max=1.3 raster p50=1.3 p90=2.0 max=3.0 total>16.7ms=0
+MD17FT 12:48:38 frames=600 fps=59.8 build p50=0.3 p90=0.7 max=1.5 raster p50=1.3 p90=2.0 max=2.9 total>16.7ms=0
+MD17FT 12:48:48 frames=602 fps=59.9 build p50=0.3 p90=0.7 max=1.2 raster p50=1.3 p90=2.1 max=3.0 total>16.7ms=0
+MD17FT 12:48:58 frames=607 fps=60.0 build p50=0.3 p90=0.4 max=1.4 raster p50=1.1 p90=1.4 max=3.0 total>16.7ms=0
+MD17FT 12:49:08 frames=621 fps=62.0 build p50=0.3 p90=0.6 max=4.1 raster p50=1.1 p90=1.8 max=3.2 total>16.7ms=0
+MD17FT 12:49:18 frames=599 fps=59.9 build p50=0.3 p90=0.6 max=1.2 raster p50=1.2 p90=1.9 max=2.9 total>16.7ms=0
+MD17FT 12:49:28 frames=602 fps=59.9 build p50=0.3 p90=0.5 max=1.1 raster p50=1.2 p90=1.8 max=3.3 total>16.7ms=0

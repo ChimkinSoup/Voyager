@@ -1,0 +1,2 @@
+await JobsActions.detached(c).createApplication(company: 'Acme', title: 'MD4 clash job @W@');
+MARK;

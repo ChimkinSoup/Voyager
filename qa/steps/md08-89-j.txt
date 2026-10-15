@@ -1,0 +1,13 @@
+# MD-8.9: journal quick entry from the normal instance's Ctrl+Alt+J floater, another app in front
+mode fg
+other-open 60 1250 900 450
+hotkey ctrl+alt+j
+wait 2000
+ostatus
+shot md08-89-j-open
+type MD8 floater journal line
+wait 3500
+shot md08-89-j-typed
+other-click
+wait 1500
+ostatus

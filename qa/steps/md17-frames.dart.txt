@@ -1,0 +1,14 @@
+final t0 = DateTime.now(); final bs = <int>[]; final rs = <int>[]; final ts2 = <int>[]; var last = DateTime.now();
+int pq(List<int> x, double q) { x.sort(); return x[((x.length - 1) * q).round()]; }
+String ms(int us) => (us / 1000).toStringAsFixed(1);
+WidgetsBinding.instance.addTimingsCallback((ts) {
+  if (DateTime.now().difference(t0).inMinutes >= 30) return;
+  for (final t in ts) { bs.add(t.buildDuration.inMicroseconds); rs.add(t.rasterDuration.inMicroseconds); ts2.add(t.totalSpan.inMicroseconds); }
+  final secs = DateTime.now().difference(last).inMilliseconds / 1000;
+  if (secs >= 10 && bs.isNotEmpty) {
+    final slow = ts2.where((x) => x > 16667).length; final n = bs.length;
+    debugPrint('MD17FT ' + DateTime.now().toIso8601String().substring(11, 19) + ' frames=' + n.toString() + ' fps=' + (n / secs).toStringAsFixed(1) + ' build p50=' + ms(pq(bs, 0.5)) + ' p90=' + ms(pq(bs, 0.9)) + ' max=' + ms(pq(bs, 1)) + ' raster p50=' + ms(pq(rs, 0.5)) + ' p90=' + ms(pq(rs, 0.9)) + ' max=' + ms(pq(rs, 1)) + ' total>16.7ms=' + slow.toString());
+    bs.clear(); rs.clear(); ts2.clear(); last = DateTime.now();
+  }
+});
+MARK;

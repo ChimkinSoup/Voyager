@@ -1,0 +1,21 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 13, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider); final tr = c.read(todoRepositoryProvider); final fr = c.read(financeRepositoryProvider); final cr = c.read(calendarRepositoryProvider); final sr = c.read(studyRepositoryProvider);
+final x = '@TAG@';
+var je = JournalEntry(id: 'md9-je-$x', createdAt: now, updatedAt: now, version: 1, journalId: 'md9-jrnl', title: 'MD9 X $x', body: 'MD9 X body', entryDate: t0);
+var tk = TodoTask(id: 'md9-task-$x', createdAt: now, updatedAt: now, version: 1, listId: 'md9-list', title: 'MD9 X $x');
+var tx = FinancialTransaction(id: 'md9-tx-$x', createdAt: now, updatedAt: now, version: 1, type: TransactionType.expense, amountCents: 3000, occurredAt: day.add(const Duration(hours: 11)), tags: const ['md9food'], note: 'MD9 X $x');
+var ev = CalendarEvent(id: 'md9-ev-$x', createdAt: now, updatedAt: now, version: 1, calendarId: 'md9-cal', title: 'MD9 X $x', start: day.add(const Duration(days: 3, hours: 9)), end: day.add(const Duration(days: 3, hours: 10)), isFullDay: false);
+var cd = StudyCard(id: 'md9-card-$x', createdAt: now, updatedAt: now, version: 1, deckId: 'md9-deck', frontText: 'MD9 X $x', backText: 'MD9 back X', dueAt: c0);
+for (var step = 0; step < 3; step++) {
+  if (step == 1) { final n = DateTime.now().toUtc(); je = je.copyWith(title: 'MD9 X $x edited'); tk = tk.copyWith(title: 'MD9 X $x edited'); tx = tx.copyWith(note: 'MD9 X $x edited', version: tx.version + 1, updatedAt: n); ev = ev.copyWith(title: 'MD9 X $x edited'); cd = cd.copyWith(frontText: 'MD9 X $x edited'); }
+  if (step == 2) { final n = DateTime.now().toUtc(); je = je.copyWith(deletedAt: n); tk = tk.copyWith(deletedAt: n); tx = tx.copyWith(deletedAt: n, version: tx.version + 1, updatedAt: n); ev = ev.copyWith(deletedAt: n); cd = cd.copyWith(deletedAt: n); }
+  await jr.upsertEntry(je); r.pushJournalEntryNow(je);
+  await tr.upsertTask(tk); r.pushTodoTaskInBackground(tk);
+  await fr.upsertTransaction(tx); r.pushRecords('transactions', [tx]).ignore();
+  await cr.upsertEvent(ev); r.pushRecords('calendar_events', [ev]).ignore();
+  await sr.upsertCard(cd); r.pushStudyCard(cd);
+  debugPrint('MD93 step $step ${DateTime.now().toIso8601String()}');
+  await Future.delayed(const Duration(seconds: 3));
+}
+MARK;
+invalidateAllDataProvidersIn(c);

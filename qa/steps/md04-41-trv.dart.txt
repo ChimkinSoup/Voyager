@@ -1,0 +1,6 @@
+final kr = c.read(trackerRepositoryProvider);
+final t = (await kr.getValue('md4-trv'))!;
+final n = t.copyWith(intValue: '@W@' == 'qa' ? 11 : 22);
+await kr.upsertValue(n);
+MARK;
+await c.read(remoteSyncServiceProvider).pushRecords('tracker_values', [n]);

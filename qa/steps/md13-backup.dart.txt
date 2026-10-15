@@ -1,0 +1,3 @@
+await c.read(autoBackupServiceProvider).setSimulateFailure(false);
+MARK;
+debugPrint('MD13BK ' + (await c.read(autoBackupServiceProvider).listBackups()).map((x) => x.file.uri.pathSegments.last).join(','));

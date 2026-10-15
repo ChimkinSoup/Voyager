@@ -1,0 +1,9 @@
+final r = c.read(remoteSyncServiceProvider); final tr = c.read(todoRepositoryProvider); final fr = c.read(financeRepositoryProvider);
+for (var i = 1; i <= 40; i++) {
+  final s = 'MD9 storm $i'; final n = DateTime.now().toUtc();
+  final tk0 = (await tr.getTask('md9-task-04'))!; final tk = tk0.copyWith(title: s); await tr.upsertTask(tk); r.pushTodoTaskInBackground(tk);
+  final tx0 = (await fr.listTransactions()).firstWhere((x) => x.id == 'md9-tx-04'); final tx = tx0.copyWith(note: s, version: tx0.version + 1, updatedAt: n); await fr.upsertTransaction(tx); r.pushRecords('transactions', [tx]).ignore();
+  await Future.delayed(const Duration(milliseconds: 1000));
+}
+MARK;
+invalidateAllDataProvidersIn(c);

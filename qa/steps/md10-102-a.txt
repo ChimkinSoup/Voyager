@@ -1,0 +1,65 @@
+# MD-10.2: A types into a journal body, task notes and a dream body, three passes
+# (~45 s), while B's cold sign-in pull runs. qa-026: entry "P26 entry 004", task
+# "fx221 pull task" (built-in To-do list), dream "P26 offline dream".
+wait 3000
+tap Journal
+wait 800
+tap P26 entry 004
+wait 800
+click 1843 1008
+key ctrl+end
+type  MD102 j1
+wait 2500
+tap To-Do
+wait 800
+tap fx221 pull task
+wait 800
+click 2460 454
+key ctrl+end
+type  MD102 n1
+wait 2500
+tap Dreams
+wait 800
+tap P26 offline dream
+wait 800
+click 2016 1008
+key ctrl+end
+type  MD102 d1
+wait 2500
+tap Journal
+wait 800
+click 1843 1008
+key ctrl+end
+type  j2
+wait 2500
+tap To-Do
+wait 800
+click 2460 454
+key ctrl+end
+type  n2
+wait 2500
+tap Dreams
+wait 800
+click 2016 1008
+key ctrl+end
+type  d2
+wait 2500
+tap Journal
+wait 800
+click 1843 1008
+key ctrl+end
+type  j3
+wait 2500
+tap To-Do
+wait 800
+click 2460 454
+key ctrl+end
+type  n3
+wait 2500
+tap Dreams
+wait 800
+click 2016 1008
+key ctrl+end
+type  d3
+wait 4000
+shot md10-102-qa-end

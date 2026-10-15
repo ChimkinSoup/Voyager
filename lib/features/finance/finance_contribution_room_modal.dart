@@ -221,7 +221,9 @@ class _ContributionRoomModalState
           seeded;
       await repo.upsertContributionRoom(
         current.copyWith(
-          name: name,
+          // Renamed elsewhere while the sheet was open keeps that name unless
+          // it was retyped here (BUG-233).
+          name: name == seeded.name ? null : name,
           // A changed limit applies from this year on; years that have
           // already rolled keep the limit they rolled with.
           annualLimits: limit == _seededLimit

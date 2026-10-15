@@ -1,0 +1,10 @@
+final now = DateTime.now().toUtc();
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+final j = Journal(id: 'md2-j-@W@@N@', createdAt: now, updatedAt: now, version: 1, name: 'MD2 Journal @W@@N@');
+final j2 = Journal(id: 'md2-jo-@W@@N@', createdAt: now, updatedAt: now, version: 1, name: 'MD2 Other @W@@N@');
+await jr.upsertJournal(j); await jr.upsertJournal(j2);
+final en = JournalEntry(id: 'md2-je-@W@@N@', createdAt: now, updatedAt: now, version: 1, journalId: 'md2-j-@W@@N@', title: 'MD2 entry @W@@N@', body: 'MD2 body from @W@@N@', entryDate: DateTime.now());
+await jr.upsertEntry(en);
+MARK;
+r.pushJournal(j); r.pushJournal(j2); r.pushJournalEntryNow(en);

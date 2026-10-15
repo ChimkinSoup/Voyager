@@ -1,0 +1,5 @@
+final n = c.read(settingsProvider.notifier); final s = c.read(settingsProvider).value!;
+await n.saveSettings(s.copyWith(mediaRemoteUploadsEnabled: true));
+final q = await c.read(mediaServiceProvider).queueLocalOnlyUploads();
+debugPrint('MD11 queued ' + q.toString());
+MARK;

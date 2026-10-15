@@ -1,0 +1,17 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 12, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final p = LeetCodeProblem(id: 'md2-lc-@W@@N@', createdAt: c0, updatedAt: now, version: 2, title: 'MD2 LC @W@@N@ ed', difficulty: 2 == 2 ? LeetCodeDifficulty.medium : LeetCodeDifficulty.easy, solvedAt: c0, description: 'MD2 desc ed');
+await c.read(leetCodeRepositoryProvider).upsertProblem(p);
+final g = LeetCodeReviewLog(id: 'md2-lcrev-@W@@N@', problemId: 'md2-lc-@W@@N@', grade: StudyGrade.values[2], reviewedAt: c0, version: 2);
+await c.read(leetCodeRepositoryProvider).logReview(g);
+final ct = LeetCodeCheatTab(id: 'md2-ctab-@W@@N@', createdAt: c0, updatedAt: now, version: 2, name: 'MD2 tab @W@@N@ ed', position: 0);
+await c.read(leetCodeRepositoryProvider).upsertCheatTab(ct);
+final cs = LeetCodeCheatSection(id: 'md2-csec-@W@@N@', createdAt: c0, updatedAt: now, version: 2, tabId: 'md2-ctab-@W@@N@', name: 'MD2 section ed', position: 0);
+await c.read(leetCodeRepositoryProvider).upsertCheatSection(cs);
+final ce = LeetCodeCheatEntry(id: 'md2-cent-@W@@N@', createdAt: c0, updatedAt: now, version: 2, sectionId: 'md2-csec-@W@@N@', command: 'md2cmd ed', description: 'MD2 entry ed', position: 0);
+await c.read(leetCodeRepositoryProvider).upsertCheatEntry(ce);
+MARK;
+r.pushLeetCodeProblem(p);
+r.pushLeetCodeReviewLog(g);
+r.pushLeetCodeCheatTab(ct);
+r.pushLeetCodeCheatSection(cs);
+r.pushLeetCodeCheatEntry(ce);

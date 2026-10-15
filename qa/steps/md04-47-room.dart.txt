@@ -1,0 +1,17 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 12, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider); final fr = c.read(financeRepositoryProvider);
+final ro = ContributionRoom(id: 'md4-room', createdAt: c0, updatedAt: now, version: 1, name: 'MD4 TFSA', baselineRemainingCents: 700000, baselineAsOf: day);
+await fr.upsertContributionRoom(ro);
+final as = Asset(id: 'md4-asset', createdAt: c0, updatedAt: now, version: 1, name: 'MD4 TFSA asset', contributionRoomId: 'md4-room');
+await fr.upsertAsset(as);
+final av = AssetValuation(id: 'md4-aval', createdAt: c0, updatedAt: now, version: 1, assetId: 'md4-asset', valueCents: 500000, asOf: day);
+await fr.upsertAssetValuation(av);
+final re = AssetRoomEvent(id: 'md4-rev', createdAt: c0, updatedAt: now, version: 1, assetId: 'md4-asset', roomId: 'md4-room', kind: RoomEventKind.contribution, amountCents: 25000, occurredAt: day.add(const Duration(hours: 10)), transactionId: 'md4-rtx', note: 'MD4 old-style contribution');
+await fr.upsertAssetRoomEvent(re);
+final tx = FinancialTransaction(id: 'md4-rtx', createdAt: c0, updatedAt: now, version: 1, type: TransactionType.deposit, amountCents: 25000, occurredAt: day.add(const Duration(hours: 10)), tags: const [], note: 'MD4 contribution (old type)', roomEventId: 'md4-rev');
+await fr.upsertTransaction(tx);
+await r.pushRecords('contribution_rooms', [ro]);
+await r.pushRecords('assets', [as]);
+await r.pushRecords('asset_valuations', [av]);
+await r.pushRecords('asset_room_events', [re]);
+await r.pushRecords('transactions', [tx]);
+invalidateAllDataProvidersIn(c);

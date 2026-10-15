@@ -1,0 +1,17 @@
+wheel 88 1300 -10
+wait 500
+tap Dev
+wait 2000
+wheel 1500 900 -50
+wait 800
+tap Compare all journal entries
+wait 12000
+shot md15-153-qa-compare
+tap Close
+wait 800
+wheel 1500 900 -20
+wait 800
+shot md15-153-qa-purgetile
+tap Delete out-of-sync entries everywhere
+wait 8000
+shot md15-153-qa-confirm

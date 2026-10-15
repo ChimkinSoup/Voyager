@@ -1,0 +1,10 @@
+click 2448 547
+wait 300
+key ctrl+end
+type  A typing one
+wait 1500
+type  two
+wait 1500
+type  three
+wait 6000
+field

@@ -1,0 +1,5 @@
+final tr = c.read(todoRepositoryProvider);
+final t = (await tr.getTask('@TAG@'))!.copyWith(title: 'MD22 task title from @W@', notes: 'MD22 notes from @W@');
+await tr.upsertTask(t);
+MARK;
+c.read(remoteSyncServiceProvider).pushTodoTaskInBackground(t);

@@ -1,0 +1,27 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 13, 12); final t0 = DateTime.now(); final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider); final tr = c.read(todoRepositoryProvider); final sr = c.read(studyRepositoryProvider); final dr = c.read(dreamRepositoryProvider); final rr = c.read(rankingRepositoryProvider);
+final j = Journal(id: 'md11-jrnl', createdAt: c0, updatedAt: now, version: 1, name: 'MD11 Journal');
+await jr.upsertJournal(j); r.pushJournal(j);
+final l = TodoListModel(id: 'md11-list', createdAt: c0, updatedAt: now, version: 1, name: 'MD11 List');
+await tr.upsertList(l); r.pushTodoList(l);
+final dk = StudyDeck(id: 'md11-deck', createdAt: c0, updatedAt: now, version: 1, name: 'MD11 deck');
+await sr.upsertDeck(dk); r.pushStudyDeck(dk);
+final rc = RankingCategory(id: 'md11-rcat', createdAt: c0, updatedAt: now, version: 1, name: 'MD11 Ranks', colorValue: 0xFF3366CC);
+await rr.upsertCategory(rc); r.pushRankingCategory(rc);
+for (var i = 1; i <= 12; i++) {
+  final n = i.toString().padLeft(2, '0');
+  final je = JournalEntry(id: 'md11-je-$n', createdAt: c0, updatedAt: now, version: 1, journalId: 'md11-jrnl', title: 'MD11 entry $n', body: 'MD11 body $n', entryDate: t0.subtract(Duration(minutes: i)));
+  await jr.upsertEntry(je); r.pushJournalEntryNow(je);
+  if (i <= 4) {
+    final tk = TodoTask(id: 'md11-task-$n', createdAt: c0, updatedAt: now, version: 1, listId: 'md11-list', title: 'MD11 task $n');
+    await tr.upsertTask(tk); await r.pushTodoTaskNow(tk);
+    final cd = StudyCard(id: 'md11-card-$n', createdAt: c0, updatedAt: now, version: 1, deckId: 'md11-deck', frontText: 'MD11 front $n', backText: 'MD11 back $n', dueAt: c0);
+    await sr.upsertCard(cd); r.pushStudyCard(cd);
+    final d = DreamEntry(id: 'md11-dream-$n', createdAt: c0, updatedAt: now, version: 1, title: 'MD11 dream $n', body: 'MD11 dream body $n', entryDate: t0.subtract(Duration(minutes: i)));
+    await dr.upsertEntry(d); r.pushDreamEntryNow(d);
+    final rp = RankingParent(id: 'md11-rpar-$n', createdAt: c0, updatedAt: now, version: 1, categoryId: 'md11-rcat', title: 'MD11 rank $n', overallScore: 3.5);
+    await rr.upsertParent(rp); r.pushRankingParent(rp);
+  }
+}
+MARK;
+invalidateAllDataProvidersIn(c);

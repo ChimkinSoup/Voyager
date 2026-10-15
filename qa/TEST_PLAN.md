@@ -1434,6 +1434,27 @@ Keep this table and each phase's **Status** line in sync.
 - **Result (2026-10-10):** passed. `voyager_errors.log` gained only app-start lines; the run logs had no errors. Session ended `SIGNED-OUT`. BUGS.md summary updated: 202 fixed + verified, 2 fixed but not verifiable in the app (BUG-035, BUG-225), 5 closed without a code change, 19 skipped, 0 open.
 - **Not covered:** follow-ups whose trigger the harness can't produce (BUG-006/082 Android, 102, 118, 157 Cram, 170, 179, 204, 206 cheat/problem fields, 220, 222), as listed in the BUGS.md caveats.
 
+### FV-42 — BUG-229 … BUG-240 (multi-device fixes)
+- **Change (2026-10-14, uncommitted, on `58d4948`):** BUG-229: Journal follows a default journal that arrives after it opened. BUG-230/231: the workout controller seeds starters a session names and re-reads the live session's sets on every refresh, merged by version. BUG-232: the built-in calendar is an app seed. BUG-233: the event panel and transaction sheet apply only fields changed in them. BUG-234: the event panel shows local time. BUG-235: the editing session sorts like the resolver and mints per-client runs. BUG-236: a notes merge applies only to its own task. BUG-237: `MergeAwareUndoController` for the journal / dream bodies and task notes. BUG-238: the pull recovers and uploads text saved but never sent (`unsent_text.dart`). BUG-239: a dream copy that outranks the cloud's is sent again. BUG-240: journal saves write title / mood / weather only when changed here.
+- **Tests:** new `journal_default_late_pull_test.dart`, `calendar_panel_stale_save_test.dart`, `finance_transaction_stale_save_test.dart`, `merge_aware_undo_test.dart`, `journal_remote_title_test.dart`, `crdt_concurrent_runs_test.dart`; cases added to `workout_audit_test.dart`, `full_sync_check_test.dart`, `todo_notes_remote_merge_test.dart`, `sync_pending_char_ops_durability_test.dart`, `sync_saving_regressions_test.dart`; each new case fails with the lib change swapped back to HEAD. Full suite: 4,857 passed, 16 skipped, 0 failed (after the BUG-233 second pass).
+- **Flows (new account qa-085 on `qa` (A) + `qb` (B), Dark + Scatter; seed `qa/steps/fv42-seed.dart.txt`, evals `fv42-*.dart.txt`, scripts `fv42-238.ps1`, `fv42-239-loop.ps1`, steps `fv42-240-a.txt` + MD-3's `md03-33-*`, `md03-318-*`, `md03-319-b.txt`, `md03-34switch.ps1`):**
+  - [x] BUG-229: B's cold sign-in → Journal opened on "FX Default" (`fv42-229-qb-journal`).
+  - [x] BUG-230: B's island "Plank • 88.2 lb • 10|1" right after the pull (`fv42-230-qb-island`).
+  - [x] BUG-231: A's 3-set workout → B 3 sets; sets completed on each reached the other (2 done, set 3 on both).
+  - [x] BUG-232: full check `safe=true gaps=0` on both with the built-in calendar at v0.
+  - [x] BUG-233: event panel dismissed after A's move → A's 6 PM kept; transaction sheet saved after A's edit → A's amount and note plus B's store.
+  - [x] BUG-233 (second pass): goal, subscription and study card edited on B over A's changes to their other fields: both sides' changes on A, B and the cloud at v3.
+  - [x] BUG-234: pulled 3–4 PM event's panel reads 3:00 PM → 4:00 PM (`fv42-234-qb-panel`).
+  - [x] BUG-235: "START alphawordbetawordEND" on A, B, the cloud and both editors.
+  - [x] BUG-235 (doubled seed, 2026-10-14): a journal body, dream body and task notes holding "hello world" with no operation log, opened on both and typed in together: one copy on A, B, the cloud and both editors in all three (`fx-je-80`, `fx-dr-125`, `fx-tt-80`, `qa/shots/fv42b-235-*`).
+  - [x] BUG-236: task 14's Notes empty after the switch; "SECOND." everywhere, task 13 intact.
+  - [x] BUG-237: Ctrl+Z twice / redo twice on A moved only A's edits; B's "Bedit-" kept everywhere.
+  - [x] BUG-238: 7 of 7 kill-inside-debounce rounds on the final code: A's tail and B's sentences on A, B and the cloud.
+  - [x] BUG-239: 5 of 7 concurrent-note rounds converged; dreams 37 and 39 ended diverged at equal stamps. Not verified fixed. *Re-run 2026-10-14 after the third pass (tie by the note, the note settled against the stored document rather than the operation log, the note field's stale save / focus): 25 of 25 rounds converged on A, B and the cloud (`fx-dr-100..124`, `qa/exports/fv42b-239-rounds.txt`); B's note field showed the winning note after Close and reopen (`fv42b-qb-note-after`). Dreams split by older builds stay split (BUGS.md).*
+  - [x] BUG-240: A's " T2" and mood with B's body on all three; B's Title field followed.
+- **Result (2026-10-14):** 11 of 12 passed; BUG-239 open. Later the same day, after BUG-239's third pass: 12 of 12. Run logs: no exceptions in any of the 35 run logs. Both instances ended `SIGNED-OUT`, outboxes 0.
+- **Not covered:** the asset, budget, category, allocation and contribution-room sheets in the app (unit-tested only; BUG-233), dream titles (BUG-240), the dream note popup saving its stale text on close (BUG-239 note). The doubled body of a record with no operation log (BUG-235 note) was fixed and checked in the app later that day.
+
 ## Phase 27 — Final Review
 - **Status:** Done (2026-10-05). No new bugs; one duplicate marked (BUG-043 → BUG-010). Summary at the top of BUGS.md.
 - **Scope:** no new testing except re-checks.

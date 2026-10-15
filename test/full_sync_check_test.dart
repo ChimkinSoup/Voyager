@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:voyager/core/constants/calendar_constants.dart';
 import 'package:voyager/core/constants/workout_constants.dart';
 import 'package:voyager/core/dev/full_sync_check.dart';
 import 'package:voyager/core/sync/firestore_collections.dart';
@@ -15,6 +16,7 @@ import 'package:voyager/data/remote/in_memory_sync.dart';
 import 'package:voyager/data/repositories/drift_repositories.dart';
 import 'package:voyager/domain/jobs/job_queries.dart';
 import 'package:voyager/domain/models/analytics_models.dart';
+import 'package:voyager/domain/models/calendar_models.dart';
 import 'package:voyager/domain/models/enums.dart';
 import 'package:voyager/features/settings/services/backup_collections.dart';
 
@@ -202,6 +204,31 @@ void main() {
 
     expect(report.gaps.single.id, kCycleWorkoutPlanId);
   });
+
+  // BUG-232: every device creates the built-in "Calendar" for itself the
+  // first time Calendar opens, and doesn't upload it until it is edited.
+  test(
+    'an untouched built-in calendar is not a gap, an edited one is',
+    () async {
+      final calendars = DriftCalendarRepository(db);
+      final builtIn = Calendar(
+        id: legacyCalendarId,
+        name: 'Calendar',
+        colorValue: 0xFF3366FF,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await calendars.upsertCalendar(builtIn, recordLocalActivity: false);
+
+      expect((await check.run()).safeToWipe, isTrue);
+
+      await calendars.upsertCalendar(builtIn.copyWith(name: 'Home'));
+
+      final report = await check.run();
+
+      expect(report.gaps.single.id, legacyCalendarId);
+    },
+  );
 
   test('a collection answered from the cache is not vouched for', () async {
     server.cachedCollections.add(FirestoreCollections.trackers);

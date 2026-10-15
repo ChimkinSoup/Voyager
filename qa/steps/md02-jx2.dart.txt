@@ -1,0 +1,6 @@
+final repo = c.read(jobRepositoryProvider);
+final a = (await repo.listApplications()).firstWhere((x) => x.company == 'MD2 Act @W@@N@');
+final st = await repo.listStages();
+await JobsActions.detached(c).saveApplication(a.copyWith(status: st[1].name, notes: 'MD2 status note'), previous: a);
+MARK;
+debugPrint('MD2 status now ${st[1].name}');

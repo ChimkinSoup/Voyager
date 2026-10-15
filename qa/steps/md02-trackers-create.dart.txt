@@ -1,0 +1,14 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 12, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final k = StatisticTracker(id: 'md2-trk-@W@@N@', createdAt: c0, updatedAt: now, version: 1, name: 'MD2 trk @W@@N@', type: 1 == 2 ? TrackerType.boolean : TrackerType.integer, cadence: TrackerCadence.daily);
+await c.read(trackerRepositoryProvider).upsertTracker(k);
+final tv = TrackerValue(id: 'md2-trv-@W@@N@', createdAt: c0, updatedAt: now, version: 1, trackerId: 'md2-trk-@W@@N@', periodStart: day, intValue: 10 * 1, boolValue: 1 == 2);
+await c.read(trackerRepositoryProvider).upsertValue(tv);
+final cn = StatisticTracker(id: 'md2-cnt-@W@@N@', createdAt: c0, updatedAt: now, version: 1, name: 'MD2 counter @W@@N@', type: TrackerType.counter, cadence: TrackerCadence.daily);
+await c.read(trackerRepositoryProvider).upsertTracker(cn);
+final ca = CounterAdjustment(id: 'md2-cadj-@W@@N@', createdAt: c0, updatedAt: now, version: 1, trackerId: 'md2-cnt-@W@@N@', day: day, deviceId: 'md2-@W@', delta: 1 + 2);
+await c.read(trackerRepositoryProvider).upsertAdjustment(ca);
+MARK;
+await r.pushRecords('trackers', [k]);
+await r.pushRecords('tracker_values', [tv]);
+await r.pushRecords('trackers', [cn]);
+await r.pushRecords('counter_adjustments', [ca]);

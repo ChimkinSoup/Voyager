@@ -174,17 +174,26 @@ class _AssetModalState extends ConsumerState<_AssetModal> {
           ? null
           : (await repo.listAssets()).where((a) => a.id == assetId).firstOrNull;
       final base = onDisk ?? existing;
+      // Only the fields changed in this sheet are applied over the row as it
+      // is now, as the goal sheet does (BUG-233).
+      T pick<T>(T mine, T Function(Asset a) field) =>
+          existing == null || onDisk == null || mine != field(existing)
+          ? mine
+          : field(onDisk);
       await repo.upsertAsset(
         Asset(
           id: assetId,
           createdAt: base?.createdAt ?? now,
           updatedAt: now,
           version: base == null ? 0 : base.version + 1,
-          name: _nameController.text.trim(),
-          colorValue: _colorValue,
-          note: _noteController.text.trim().isEmpty
-              ? null
-              : _noteController.text.trim(),
+          name: pick(_nameController.text.trim(), (a) => a.name),
+          colorValue: pick(_colorValue, (a) => a.colorValue),
+          note: pick(
+            _noteController.text.trim().isEmpty
+                ? null
+                : _noteController.text.trim(),
+            (a) => a.note,
+          ),
           contributionRoomId: base?.contributionRoomId,
         ),
       );

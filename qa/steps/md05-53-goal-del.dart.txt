@@ -1,0 +1,5 @@
+Element? cx; void w(Element x) { if (cx != null) return; if (x is WidgetRef && Navigator.maybeOf(x) != null) { cx = x; return; } x.visitChildren(w); } e!.visitChildren(w); final ctx = cx!;
+final fr = c.read(financeRepositoryProvider);
+final g = (await fr.listSavingsGoals()).firstWhere((x) => x.id == 'md5-goal-@TAG@');
+final ok = await deleteGoalWithUndo(overlay: Overlay.of(ctx, rootOverlay: true), container: c, repo: fr, goal: g);
+MARK;

@@ -201,7 +201,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
     };
     _isFullDay = e?.isFullDay ?? widget.initialIsFullDay;
     _start =
-        e?.start ??
+        e?.start.toLocal() ??
         DateTime(
           widget.initialDate.year,
           widget.initialDate.month,
@@ -209,7 +209,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
           widget.initialDate.hour,
           widget.initialDate.minute,
         );
-    _end = e?.end ?? _start.add(const Duration(hours: 1));
+    _end = e?.end.toLocal() ?? _start.add(const Duration(hours: 1));
     _calendarId = e?.calendarId ?? widget.initialCalendarId;
     _colorValue = e?.colorValue ?? _defaultEventColor(_calendarId);
     _recurrence = e?.recurrence ?? RecurrenceRule.none;
@@ -272,7 +272,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
       _lastNotesText = _notesController.text;
       _isFullDay = e?.isFullDay ?? widget.initialIsFullDay;
       _start =
-          e?.start ??
+          e?.start.toLocal() ??
           DateTime(
             widget.initialDate.year,
             widget.initialDate.month,
@@ -280,7 +280,7 @@ class _CalendarEventPanelState extends ConsumerState<CalendarEventPanel> {
             widget.initialDate.hour,
             widget.initialDate.minute,
           );
-      _end = e?.end ?? _start.add(const Duration(hours: 1));
+      _end = e?.end.toLocal() ?? _start.add(const Duration(hours: 1));
       _calendarId = e?.calendarId ?? widget.initialCalendarId;
       _colorValue = e?.colorValue ?? _defaultEventColor(_calendarId);
       _recurrence = e?.recurrence ?? RecurrenceRule.none;

@@ -1,0 +1,3 @@
+_JournalPageState? st; void w(Element x) { if (st != null) return; if (x is StatefulElement && x.state is _JournalPageState) { st = x.state as _JournalPageState; return; } x.visitChildren(w); } e!.visitChildren(w);
+await st!._selectJournal('@TAG@');
+MARK;

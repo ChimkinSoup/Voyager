@@ -1,0 +1,2 @@
+final s = c.read(settingsProvider).value!;
+debugPrint('LIVESET vim=${s.vimModeEnabled} snip=${s.snippetsEnabled} auto=${s.autocorrectEnabled} caps=${s.capsLockIndicatorEnabled} srs=${s.srsFailKey} calL=${s.calendarNavigateLeftKey} wu=${s.weightUnit} quotes=${s.showQuotes} start=${s.startupPageMode}/${s.customStartupPage} lcTags=${s.leetCodeHideTags} dl=${s.mediaRemoteDownloadsEnabled} hk=${s.journalHotkey}');

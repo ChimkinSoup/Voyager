@@ -1,0 +1,7 @@
+final fr = c.read(financeRepositoryProvider);
+final s = (await fr.getSubscription('fv42-sub'))!;
+final n = s.copyWith(name: 'FV42 Sub HD', amountCents: 1999, updatedAt: DateTime.now().toUtc(), version: s.version + 1);
+await fr.upsertSubscription(n);
+await c.read(remoteSyncServiceProvider).pushRecords('subscriptions', [n]);
+invalidateAllDataProvidersIn(c);
+debugPrint('FV42 sub edited');

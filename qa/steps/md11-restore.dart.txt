@@ -1,0 +1,8 @@
+final s = c.read(trashServiceProvider);
+final items = await s.list();
+final mine = items.where((x) => x.id == '@TAG@').toList();
+for (final it in mine) { await s.restore(it); }
+await s.uploads;
+MARK;
+invalidateAllDataProvidersIn(c);
+debugPrint('MD11RESTORE ' + mine.length.toString() + ' members=' + (mine.isEmpty ? '0' : mine.first.members.length.toString()));

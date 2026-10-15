@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:voyager/core/text/merge_aware_undo.dart';
 import 'package:voyager/core/vim/vim_enabled_scope.dart';
 import 'package:voyager/core/vim/vim_text_overlay.dart';
 import 'package:voyager/core/vim/vim_text_scope.dart';
@@ -88,6 +89,9 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
 
   late final TextEditingController _titleController;
   late final TextEditingController _notesController;
+
+  /// Undo that leaves another device's merged-in notes alone (BUG-237).
+  late final MergeAwareUndoController _notesUndo;
   late final TextEditingController _subtaskController;
   late final FocusNode _titleFocusNode;
   late final FocusNode _notesFocusNode;
@@ -126,6 +130,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     _lastNonEmptyTitle = widget.task.title;
     _titleController = TextEditingController(text: widget.task.title);
     _notesController = TextEditingController(text: widget.task.notes ?? '');
+    _notesUndo = MergeAwareUndoController(_notesController);
     _lastNotesText = _notesController.text;
     _titleFocusNode = FocusNode();
     _titleFocusNode.onKeyEvent = _handleTitleKey;
@@ -177,6 +182,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       _lastNonEmptyTitle = widget.task.title;
       _titleController.text = widget.task.title;
       _notesController.text = widget.task.notes ?? '';
+      _notesUndo.reset();
       _lastNotesText = _notesController.text;
       _dueDate = widget.task.dueDate;
       _recurrence = widget.task.recurrence;
@@ -300,7 +306,11 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
     final value = event.mergedInto(_notesController.value);
     if (value == null) return false;
 
-    _notesController.value = value;
+    _notesUndo.applyRemote(
+      value,
+      previousRemoteText: event.previousRemoteText,
+      remoteText: event.remoteText,
+    );
     // The next keystroke is diffed from [_lastNotesText]. Left at the
     // pre-merge text, that diff carried the remote change back up as this
     // device's own edit.
@@ -312,12 +322,22 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
   Future<void> _applyPendingNotesMerge() async {
     final remoteSync = _remoteSync;
     if (remoteSync == null) return;
+    final taskId = widget.task.id;
     final merged = await remoteSync.applyPendingTodoTaskNotesMerge(
-      taskId: widget.task.id,
+      taskId: taskId,
       currentLocalNotes: _notesController.text,
     );
-    if (merged != null && mounted) {
-      _notesController.text = merged.notes ?? '';
+    // Selecting another task blurs the notes, which starts this, and points
+    // the panel at that task before it completes: the merged text belongs to
+    // the task it was started for, never to the field now (BUG-236).
+    if (merged != null && mounted && widget.task.id == taskId) {
+      final before = _notesController.text;
+      final text = merged.notes ?? '';
+      _notesUndo.applyRemote(
+        TextEditingValue(text: text),
+        previousRemoteText: before,
+        remoteText: text,
+      );
       _lastNotesText = _notesController.text;
     }
   }
@@ -390,6 +410,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
       );
     }
     _titleController.dispose();
+    _notesUndo.dispose();
     _notesController.dispose();
     _titleFocusNode.dispose();
     _notesFocusNode.dispose();
@@ -1445,6 +1466,7 @@ class _TodoEditPanelState extends ConsumerState<TodoEditPanel> {
             child: TagHighlightedTextField(
               label: 'Notes',
               controller: _notesController,
+              undoController: _notesUndo,
               focusNode: _notesFocusNode,
               expands: true,
               maxLines: null,

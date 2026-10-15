@@ -1,0 +1,5 @@
+final repo = c.read(settingsRepositoryProvider);
+await repo.flagWord('mdflagrep@W@', replacement: 'mdfix');
+await Future.delayed(const Duration(seconds: 2));
+await repo.setFlaggedReplacement('mdflagrep@W@', 'mdfixb');
+MARK;

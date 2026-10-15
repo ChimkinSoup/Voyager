@@ -1,0 +1,8 @@
+click 1843 137
+wait 300
+key end
+type  T2
+wait 1500
+click 1833 252
+wait 8000
+shot fv42-240-qa-after

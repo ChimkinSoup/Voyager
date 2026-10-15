@@ -1,0 +1,16 @@
+final now = DateTime.now().toUtc(); final r = c.read(remoteSyncServiceProvider); final w = '@W@'; final tg = '@TAG@';
+final n = w == 'qa' ? '011' : '010'; final s = 'MD10 $tg $w';
+final jr = c.read(journalRepositoryProvider); final tr = c.read(todoRepositoryProvider); final fr = c.read(financeRepositoryProvider); final cr = c.read(calendarRepositoryProvider);
+final je = (await jr.getEntry('p26-je-$n'))!.copyWith(title: s); await jr.upsertEntry(je); r.pushJournalEntryNow(je);
+final tk = (await tr.getTask('p26-task-$n'))!.copyWith(title: s); await tr.upsertTask(tk); r.pushTodoTaskInBackground(tk);
+final tx0 = (await fr.listTransactions()).firstWhere((x) => x.id == 'p26-tx-$n'); final tx = tx0.copyWith(note: s, version: tx0.version + 1, updatedAt: now); await fr.upsertTransaction(tx); r.pushRecords('transactions', [tx]).ignore();
+if (w == 'qb') {
+  final lg = (await cr.listCalendars()).firstWhere((x) => x.id == '__legacy_calendar__');
+  final k = Calendar(id: lg.id, createdAt: lg.createdAt, updatedAt: now, version: lg.version + 1, name: s, colorValue: lg.colorValue);
+  await cr.upsertCalendar(k); r.pushRecords('calendars', [k]).ignore();
+} else {
+  final k = Calendar(id: 'md10-cal-a', createdAt: now, updatedAt: now, version: 1, name: s, colorValue: 0xFF2196F3);
+  await cr.upsertCalendar(k); r.pushRecords('calendars', [k]).ignore();
+}
+MARK;
+invalidateAllDataProvidersIn(c);

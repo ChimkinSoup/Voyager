@@ -1,0 +1,14 @@
+tap Journal
+wait 1000
+tap MD13 entry 02
+wait 1200
+click 1900 1000
+key ctrl+end
+type  AFTERX by B
+wait 800
+type  bravo
+wait 800
+type  charlie
+wait 3000
+shot md13-131-qb-typed
+field

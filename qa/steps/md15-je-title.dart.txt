@@ -1,0 +1,6 @@
+final r = c.read(remoteSyncServiceProvider); final jr = c.read(journalRepositoryProvider);
+final o = (await jr.getEntry('md15-je-@TAG@'))!;
+final x = o.copyWith(title: 'MD15 entry @TAG@ by @W@');
+await jr.upsertEntry(x); r.pushJournalEntryNow(x);
+MARK;
+invalidateAllDataProvidersIn(c);

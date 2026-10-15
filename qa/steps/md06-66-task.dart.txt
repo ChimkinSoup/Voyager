@@ -1,0 +1,4 @@
+_TodoPageState? st; void w(Element x) { if (st != null) return; if (x is StatefulElement && x.state is _TodoPageState) { st = x.state as _TodoPageState; return; } x.visitChildren(w); } e!.visitChildren(w);
+final t = (await c.read(todoRepositoryProvider).getTask('md6-task-mv'))!;
+await st!._moveTaskToList(t, '@W@' == 'qa' ? '@ATO@' : '@BTO@');
+MARK;

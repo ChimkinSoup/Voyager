@@ -4,6 +4,7 @@
 #include <flutter_windows.h>
 
 #include "resource.h"
+#include "utils.h"
 
 namespace {
 
@@ -150,6 +151,11 @@ bool Win32Window::Create(const std::wstring& title,
 }
 
 bool Win32Window::Show() {
+  if (StartParked()) {
+    SetWindowPos(window_handle_, nullptr, -6000, 0, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    return ShowWindow(window_handle_, SW_SHOWNOACTIVATE);
+  }
   return ShowWindow(window_handle_, SW_SHOWNORMAL);
 }
 

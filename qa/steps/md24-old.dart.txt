@@ -1,0 +1,8 @@
+final now = DateTime.now().toUtc(); final r = c.read(remoteSyncServiceProvider); final jr = c.read(journalRepositoryProvider);
+final old = await jr.getEntry('md24-old');
+final en = old == null
+  ? JournalEntry(id: 'md24-old', createdAt: now, updatedAt: now, version: 1, journalId: 'md21-j', title: 'MD24 old entry', body: 'from 2024', entryDate: DateTime(2024, 1, 15, 10))
+  : old.copyWith(title: 'MD24 old entry retitled');
+await jr.upsertEntry(en);
+MARK;
+r.pushJournalEntryNow(en);

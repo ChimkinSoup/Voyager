@@ -1,0 +1,2 @@
+await RankingsActions.detached(c).deleteParent('md5-rpar-@TAG@');
+MARK;

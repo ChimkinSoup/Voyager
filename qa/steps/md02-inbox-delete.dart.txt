@@ -1,0 +1,5 @@
+final now = DateTime.now().toUtc(); final c0 = DateTime.utc(2026, 10, 12, 12); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final pn = PinnedNote(id: 'md2-pin-@W@@N@', text: 'MD2 pinned @W@@N@ ed', createdAt: c0, updatedAt: now, version: 3, deletedAt: now);
+await c.read(notificationRepositoryProvider).upsertPinnedNote(pn);
+MARK;
+await r.pushRecords('pinned_notes', [pn]);

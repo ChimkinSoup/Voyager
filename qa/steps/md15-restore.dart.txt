@@ -1,0 +1,10 @@
+final s = c.read(trashServiceProvider);
+final items = await s.list();
+final want = '@TAG@'.split('+');
+final mine = items.where((x) => want.contains(x.id)).toList();
+var names = '';
+for (final it in mine) { await s.restore(it); names = names + it.id + '(' + it.members.length.toString() + ') '; }
+await s.uploads;
+MARK;
+invalidateAllDataProvidersIn(c);
+debugPrint('MD15RESTORE ' + mine.length.toString() + ' ' + names);

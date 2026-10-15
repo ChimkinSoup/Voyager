@@ -1,0 +1,42 @@
+feature	dir	n	db_med	db_max	ui_n	ui_med	ui_max	ui outcomes
+calendar	qa->qb	6	537.5	677	6	970.5	1202	{'shown': 4, 'gone': 2}
+calendar	qb->qa	6	418.5	668	6	950.5	1580	{'shown': 4, 'gone': 2}
+dreams	qa->qb	6	430.5	936	6	719.0	1101	{'shown': 4, 'gone': 2}
+dreams	qb->qa	6	427.0	431	6	848.5	1075	{'shown': 4, 'gone': 2}
+finance	qa->qb	6	1121.5	1358	6	1996.0	2583	{'shown': 4, 'gone': 2}
+finance	qb->qa	6	1148.5	1384	6	1997.5	2203	{'shown': 4, 'gone': 2}
+inbox	qa->qb	3	679	923	0	-	-	{'-': 3}
+inbox	qb->qa	3	183	428	0	-	-	{'-': 3}
+j	qa->qb	6	300.0	1181	4	1068.0	1543	{'shown': 2, 'NOT-SHOWN': 2, 'gone': 2}
+j	qb->qa	6	680.0	1165	4	1044.5	1704	{'shown': 2, 'NOT-SHOWN': 2, 'gone': 2}
+je	qa->qb	6	677.0	680	2	1025.5	1087	{'NOT-SHOWN': 2, '-': 2, 'gone': 2}
+je	qb->qa	6	800.5	923	2	1160.5	1333	{'NOT-SHOWN': 2, '-': 2, 'gone': 2}
+jobs	qa->qb	3	656	911	3	785	1059	{'shown': 2, 'gone': 1}
+jobs	qb->qa	3	647	659	3	815	831	{'shown': 2, 'gone': 1}
+jx	qa->qb	4	356.5	428	2	389.0	434	{'shown': 1, '-': 1, 'NOT-SHOWN': 1, 'gone': 1}
+jx	qb->qa	4	349.5	419	2	387.0	426	{'shown': 1, '-': 1, 'NOT-SHOWN': 1, 'gone': 1}
+leetcode	qa->qb	6	646.5	666	6	779.5	849	{'shown': 4, 'gone': 2}
+leetcode	qb->qa	6	668.5	908	6	796.5	1083	{'shown': 4, 'gone': 2}
+life	qa->qb	3	423	424	0	-	-	{'-': 3}
+life	qb->qa	3	420	433	0	-	-	{'-': 3}
+rankings	qa->qb	6	1161.0	1397	6	1288.5	1544	{'shown': 4, 'gone': 2}
+rankings	qb->qa	6	1285.5	1406	6	1422.5	1562	{'shown': 4, 'gone': 2}
+reminders	qa->qb	3	411	665	0	-	-	{'-': 3}
+reminders	qb->qa	3	425	436	0	-	-	{'-': 3}
+study	qa->qb	3	647	905	3	791	1064	{'shown': 2, 'gone': 1}
+study	qb->qa	3	679	920	3	795	1036	{'shown': 2, 'gone': 1}
+todo	qa->qb	6	801.5	936	6	931.5	1097	{'shown': 4, 'gone': 2}
+todo	qb->qa	6	674.5	928	6	800.0	1304	{'shown': 4, 'gone': 2}
+trackers	qa->qb	6	909.5	1148	6	1112.0	1322	{'shown': 4, 'gone': 2}
+trackers	qb->qa	6	912.0	927	6	1237.5	1594	{'shown': 4, 'gone': 2}
+tt	qa->qb	2	695.5	788	0	-	-	{'-': 4}
+tt	qb->qa	2	832.5	873	0	-	-	{'-': 4}
+tx	qa->qb	5	433	925	1	1088	1088	{'shown': 1, '-': 4}
+tx	qb->qa	5	428	1666	1	1805	1805	{'shown': 1, '-': 4}
+typed	qa->qb	26	250.0	510	9	2230	2380	{'shown': 9, 'NOT-SHOWN': 17}
+typed	qb->qa	24	260.0	510	8	2390.0	2510	{'NOT-SHOWN': 16, 'own=NO': 2, 'shown': 8}
+workout	qa->qb	3	408	911	3	545	1070	{'shown': 2, 'gone': 1}
+workout	qb->qa	3	666	669	3	795	824	{'shown': 2, 'gone': 1}
+ALL qa->qb	db n=109 med=603 max=1397	ui n=69 med=1059 max=2583
+ALL qb->qa	db n=107 med=510 max=1666	ui n=68 med=1049.5 max=2510
+over 5 s: none

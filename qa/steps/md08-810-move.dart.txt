@@ -1,0 +1,6 @@
+final now = DateTime.now().toUtc(); final t0 = DateTime.now(); final day = DateTime(t0.year, t0.month, t0.day); final r = c.read(remoteSyncServiceProvider);
+final old = (await c.read(todoRepositoryProvider).getTask('md8-task-bell2'))!;
+final tk = old.copyWith(dueDate: day.add(const Duration(hours: 17, minutes: 15)).toUtc());
+await c.read(todoRepositoryProvider).upsertTask(tk); await r.pushTodoTaskNow(tk);
+MARK;
+c.invalidate(allTodoTasksProvider); c.invalidate(todoListsProvider);

@@ -2,6 +2,8 @@
 // "last time" numbers beside a set, and finished sessions deleted to the trash
 // and brought back.
 
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voyager/app/providers.dart';
@@ -34,6 +36,43 @@ class _RecordingSync implements RemoteSyncService {
 
   @override
   noSuchMethod(Invocation invocation) => null;
+}
+
+/// Holds the next read of a session's sets once its rows are taken, so a
+/// write can land while the read is out and the read still predate it.
+class _HeldReadRepository extends DriftWorkoutRepository {
+  _HeldReadRepository(super.db);
+
+  var _armed = false;
+  final _release = Completer<void>();
+  final _reached = Completer<void>();
+
+  /// Arms the hold; the returned future completes once a read is held.
+  Future<void> holdNextRead() {
+    _armed = true;
+    return _reached.future;
+  }
+
+  void release() => _release.complete();
+
+  @override
+  Future<List<WorkoutSetLog>> listSetLogs({
+    String? sessionId,
+    String? exerciseId,
+    bool includeDeleted = false,
+  }) async {
+    final logs = await super.listSetLogs(
+      sessionId: sessionId,
+      exerciseId: exerciseId,
+      includeDeleted: includeDeleted,
+    );
+    if (_armed && sessionId != null) {
+      _armed = false;
+      _reached.complete();
+      await _release.future;
+    }
+    return logs;
+  }
 }
 
 class _StubSettingsRepository implements SettingsRepository {
@@ -132,7 +171,7 @@ WorkoutSetLog _log(
 
 void main() {
   late AppDatabase db;
-  late DriftWorkoutRepository repo;
+  late _HeldReadRepository repo;
   late _RecordingSync sync;
   late ProviderContainer container;
 
@@ -149,7 +188,7 @@ void main() {
 
   setUp(() async {
     db = AppDatabase.inMemory();
-    repo = DriftWorkoutRepository(db);
+    repo = _HeldReadRepository(db);
     sync = _RecordingSync();
     container = ProviderContainer(
       overrides: [
@@ -271,6 +310,38 @@ void main() {
         {for (final l in stored) l.exerciseId: l.exerciseOrder},
         {'row': 0, 'squat': 1, 'bench': 2},
       );
+    });
+
+    test('a set added while a re-read is out stays in the live view', () async {
+      await _seed(repo);
+      await start();
+      final held = repo.holdNextRead();
+      container.invalidate(activeWorkoutSessionProvider);
+      await held;
+
+      await controller().addExercise((await repo.getExercise('row'))!);
+      repo.release();
+      await pumpEventQueue();
+
+      expect(state().logs.where((l) => l.exerciseId == 'row'), hasLength(2));
+      expect(state().currentSet!.exerciseId, 'row');
+    });
+
+    test('a set removed while a re-read is out stays removed', () async {
+      await _seed(repo);
+      await start();
+      await controller().completeCurrentSet();
+      final current = state().currentSet!;
+      final held = repo.holdNextRead();
+      container.invalidate(activeWorkoutSessionProvider);
+      await held;
+
+      await controller().skipExercise(1);
+      repo.release();
+      await pumpEventQueue();
+
+      expect(state().logs.where((l) => l.exerciseId == 'squat'), isEmpty);
+      expect(state().currentSet!.id, current.id);
     });
 
     test('a discarded workout is ended as well as deleted', () async {

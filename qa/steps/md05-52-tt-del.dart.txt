@@ -1,0 +1,4 @@
+final t = await c.read(todoRepositoryProvider).getTask('@TAG@');
+MARK;
+final d = await softDeleteTaskWithSubtasks(c, t!);
+debugPrint('MD5DEL52 task done');

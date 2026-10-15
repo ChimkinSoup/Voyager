@@ -1,0 +1,4 @@
+final repo = c.read(jobRepositoryProvider);
+final a = (await repo.getApplication('md4-job'))!;
+await JobsActions.detached(c).saveApplication('@W@' == 'qa' ? a.copyWith(status: a.status == 'Applied' ? 'Online Assessment' : 'Applied') : a.copyWith(notes: 'MD4 notes @TAG@ by qb'), previous: a);
+MARK;

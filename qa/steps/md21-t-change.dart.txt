@@ -1,0 +1,7 @@
+final now = DateTime.now().toUtc(); final r = c.read(remoteSyncServiceProvider); final tr = c.read(todoRepositoryProvider);
+final t = TodoTask(id: 'md21-t-new', createdAt: now, updatedAt: now, version: 1, listId: 'md21-l', title: 'MD21 NEW task from A', sortOrder: -1);
+await tr.upsertTask(t);
+final t5 = (await tr.getTask('md21-t-5'))!.copyWith(title: 'MD21 task 05 changed');
+await tr.upsertTask(t5);
+MARK;
+r.pushTodoTaskInBackground(t); r.pushTodoTaskInBackground(t5);

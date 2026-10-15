@@ -1,0 +1,4 @@
+_JournalPageState? st; void w(Element x) { if (st != null) return; if (x is StatefulElement && x.state is _JournalPageState) { st = x.state as _JournalPageState; return; } x.visitChildren(w); } e!.visitChildren(w);
+final en = (await c.read(journalRepositoryProvider).getEntry('md6-je-mv'))!;
+await st!._moveEntryItemToJournal(en, '@W@' == 'qa' ? '@ATO@' : '@BTO@');
+MARK;

@@ -1,0 +1,2 @@
+final st = c.read(workoutSessionControllerProvider);
+debugPrint('FV42 WS session=${st.session?.id} logs=${st.logs.length} done=${st.completedCount} cursor=${st.cursor} set=${st.currentSet?.setIndex} ex=${st.currentExercise?.name}');

@@ -1,0 +1,34 @@
+final now = DateTime.now().toUtc();
+final t0 = DateTime.now();
+final day = DateTime(t0.year, t0.month, t0.day);
+final r = c.read(remoteSyncServiceProvider);
+final jr = c.read(journalRepositoryProvider);
+for (final j in [Journal(id: 'md01-journal-a', createdAt: now.subtract(const Duration(hours: 1)), updatedAt: now, version: 1, name: 'MD Older'), Journal(id: 'md01-journal-b', createdAt: now.add(const Duration(seconds: 2)), updatedAt: now, version: 1, name: 'MD Newer Default')]) { await jr.upsertJournal(j); r.pushJournal(j); }
+for (final (id, jid, title) in [('md01-ea', 'md01-journal-a', 'MD older entry'), ('md01-eb', 'md01-journal-b', 'MD default entry')]) { final en = JournalEntry(id: id, createdAt: now, updatedAt: now, version: 1, journalId: jid, title: title, body: 'body of $title', entryDate: t0); await jr.upsertEntry(en); r.pushJournalEntryNow(en); }
+final crepo = c.read(calendarRepositoryProvider);
+final cals = await crepo.listCalendars();
+final legacy = cals.firstWhere((x) => x.id == '__legacy_calendar__');
+final renamed = Calendar(id: legacy.id, createdAt: legacy.createdAt, updatedAt: now, version: legacy.version + 1, name: 'MD Renamed Default', colorValue: 0xFFE91E63);
+await crepo.upsertCalendar(renamed); await r.pushRecords('calendars', [renamed]);
+final wr = c.read(workoutRepositoryProvider);
+await wr.ensureSeeded();
+final exs = await wr.listExercises();
+final starter = exs.firstWhere((e) => e.id.startsWith('seed-exercise-'));
+final starter2 = exs.lastWhere((e) => e.id.startsWith('seed-exercise-'));
+final plans = await wr.listPlans();
+final plan = plans.firstWhere((p) => p.id == 'workout_plan_weekly');
+final pe = WorkoutPlanEntry(id: 'md01-plan-entry', createdAt: now, updatedAt: now, version: 1, planId: plan.id, dayIndex: 0, exerciseId: starter.id, sortOrder: 0);
+await wr.upsertPlanEntry(pe); r.pushWorkoutPlanEntry(pe);
+final ses = WorkoutSession(id: 'md01-session', createdAt: now, updatedAt: now, version: 1, date: day, startedAt: t0);
+await wr.upsertSession(ses); r.pushWorkoutSession(ses);
+final sl = WorkoutSetLog(id: 'md01-set-1', createdAt: now, updatedAt: now, version: 1, sessionId: 'md01-session', exerciseId: starter2.id, exerciseOrder: 0, setIndex: 0, weightKg: 40.0, reps: 10, plannedWeightKg: 40.0, plannedReps: 10);
+await wr.upsertSetLog(sl); r.pushWorkoutSetLog(sl);
+final jobs = c.read(jobRepositoryProvider);
+await jobs.ensureSeeded();
+final stage = (await jobs.listStages()).firstWhere((s) => s.id.startsWith('seed-stage-') && s.name == 'Interview');
+final written = await jobs.renameStage(stage, 'MD Interviewing');
+r.pushJobStage(written.stage); await r.pushJobApplicationsBatch(written.applications);
+final s = await c.read(settingsRepositoryProvider).getSettings();
+await c.read(settingsProvider.notifier).saveSettings(s.copyWith(accentColor: 0xFF00BCD4, themeMode: AppThemeMode.light, weekStartsOnMonday: !s.weekStartsOnMonday, navPageOrder: ['/jobs', '/journal', '/dream-journal', '/todo', '/calendar', '/search', '/analytics', '/finance', '/life-tracker', '/leetcode', '/rankings', '/study', '/workout', '/dev', '/settings'], hiddenNavPages: ['/life-tracker'], defaultJournalId: 'md01-journal-b', defaultTodoListId: 'fv-list', startupPageMode: StartupPageMode.custom, customStartupPage: '/finance'));
+debugPrint('MD01 starter planned ${starter.id} lifted ${starter2.id} stage ${stage.id} weekStartsMonday was ${s.weekStartsOnMonday}');
+invalidateAllDataProvidersIn(c);

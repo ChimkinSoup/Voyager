@@ -1,0 +1,16 @@
+click 2000 1000
+key ctrl+end
+type  B secret dream words
+wait 4000
+field
+tap To-Do
+wait 1200
+tap MD5 task a1
+wait 1200
+click 2448 475
+key ctrl+end
+type  B secret task words
+wait 4000
+field
+tap Finance
+wait 1500
