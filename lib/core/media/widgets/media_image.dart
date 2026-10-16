@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
@@ -45,12 +47,14 @@ class MediaImage extends ConsumerStatefulWidget {
 }
 
 class _MediaImageState extends ConsumerState<MediaImage> {
-  Uint8List? _bytes;
+  /// Carries the hash it was made for, so a strip that reorders or replaces
+  /// an image does not keep painting the previous one against the new row.
+  MediaAssetImage? _image;
   bool _loading = true;
 
-  /// Which asset [_bytes] belongs to, so a strip that reorders or replaces an
-  /// image does not keep painting the previous one against the new row.
-  String? _loadedForContentHash;
+  /// The hash whose picture has already failed once and been read again, so
+  /// a file that cannot be decoded is not re-read on every frame.
+  String? _reloadedAfterError;
 
   @override
   void initState() {
@@ -70,18 +74,40 @@ class _MediaImageState extends ConsumerState<MediaImage> {
 
   Future<void> _load() async {
     final asset = widget.asset;
-    if (_loadedForContentHash == asset.contentHash && _bytes != null) return;
-    setState(() => _loading = true);
+    if (_image?.contentHash == asset.contentHash) return;
 
     final service = ref.read(mediaServiceProvider);
+    // Already decoded at the size it will be painted at — the lightbox page
+    // swiped back to, or warmed ahead of the swipe: paint that on the first
+    // frame instead of reading the file again only to look the decode up.
+    // Finished decodes only: a pending one can still fail, and this state
+    // would then hold a picture that never arrives in place of the
+    // placeholder that says why.
+    if (widget.decodeFullResolution) {
+      final cached = MediaAssetImage(
+        asset.contentHash,
+        () => service.bytesFor(asset),
+      );
+      final status = PaintingBinding.instance.imageCache.statusForKey(cached);
+      if (status.tracked && !status.pending) {
+        setState(() {
+          _image = cached;
+          _loading = false;
+        });
+        return;
+      }
+    }
+
+    setState(() => _loading = true);
     // Reads local bytes first and only then considers a download, so an image
     // already on disk costs one file read and never touches the settings or
     // the network.
     final bytes = await service.bytesFor(asset);
     if (!mounted) return;
     setState(() {
-      _bytes = bytes;
-      _loadedForContentHash = bytes == null ? null : asset.contentHash;
+      _image = bytes == null
+          ? null
+          : MediaAssetImage(asset.contentHash, () async => bytes);
       _loading = false;
     });
   }
@@ -98,15 +124,15 @@ class _MediaImageState extends ConsumerState<MediaImage> {
         (settings) => settings.valueOrNull?.mediaRemoteDownloadsEnabled,
       ),
       (previous, enabled) {
-        if (enabled == true && previous == false && _bytes == null) _load();
+        if (enabled == true && previous == false && _image == null) _load();
       },
     );
 
     final radius = widget.borderRadius ?? BorderRadius.circular(10);
-    final bytes = _bytes;
+    final image = _image;
 
     final Widget content;
-    if (bytes != null) {
+    if (image != null) {
       content = LayoutBuilder(
         builder: (context, constraints) {
           // The box this image will actually be painted into: an explicit size
@@ -129,17 +155,36 @@ class _MediaImageState extends ConsumerState<MediaImage> {
                   devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
                   fit: widget.fit,
                 );
-          return Image.memory(
-            bytes,
+          return Image(
+            // Providers compare by hash, so the one a reload brings equals the
+            // one that failed and [Image] would keep showing the failure.
+            key: ObjectKey(image),
+            image: ResizeImage.resizeIfNeeded(
+              decode?.width,
+              decode?.height,
+              image,
+            ),
             width: widget.width,
             height: widget.height,
             fit: widget.fit,
-            cacheWidth: decode?.width,
-            cacheHeight: decode?.height,
             // The bytes are re-decoded whenever the decode size changes, so a
             // strip of ten images only pays for it once per layout size — not
             // once per scroll frame.
             gaplessPlayback: true,
+            errorBuilder: (context, error, stackTrace) {
+              // Joining a lightbox precache still in flight can inherit its
+              // failure — the bytes were not here when it started, and are
+              // now. Read them again, once; a second failure is the file.
+              if (_reloadedAfterError != image.contentHash) {
+                _reloadedAfterError = image.contentHash;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted || _image != image) return;
+                  _image = null;
+                  _load();
+                });
+              }
+              return SizedBox(width: widget.width, height: widget.height);
+            },
           );
         },
       );
@@ -160,12 +205,65 @@ class _MediaImageState extends ConsumerState<MediaImage> {
   }
 }
 
+/// An asset's picture, cached under its content hash.
+///
+/// [Image.memory] keys the image cache on the identity of its byte list, and
+/// every read off disk is a fresh list — so a lightbox page swiped away and
+/// back was read and decoded again each time. Keyed by hash, the decode
+/// outlives the widget that asked for it and can be warmed before one exists.
+class MediaAssetImage extends ImageProvider<MediaAssetImage> {
+  const MediaAssetImage(this.contentHash, this.loadBytes);
+
+  final String contentHash;
+
+  /// Where the bytes come from on a cache miss. Not part of the key: two
+  /// providers for the same hash are the same picture however they get it.
+  final Future<Uint8List?> Function() loadBytes;
+
+  @override
+  Future<MediaAssetImage> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture(this);
+
+  @override
+  ImageStreamCompleter loadImage(
+    MediaAssetImage key,
+    ImageDecoderCallback decode,
+  ) => MultiFrameImageStreamCompleter(
+    codec: _loadCodec(key, decode),
+    scale: 1.0,
+    debugLabel: 'MediaAssetImage($contentHash)',
+  );
+
+  Future<ui.Codec> _loadCodec(
+    MediaAssetImage key,
+    ImageDecoderCallback decode,
+  ) async {
+    try {
+      final bytes = await loadBytes();
+      if (bytes == null) throw StateError('No bytes for $contentHash');
+      return await decode(await ui.ImmutableBuffer.fromUint8List(bytes));
+    } catch (_) {
+      // The cache keeps a failed load as pending for good, so the picture
+      // would stay blank even after its download lands.
+      scheduleMicrotask(() => PaintingBinding.instance.imageCache.evict(key));
+      rethrow;
+    }
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is MediaAssetImage && other.contentHash == contentHash;
+
+  @override
+  int get hashCode => contentHash.hashCode;
+}
+
 /// The size a `sourceWidth` x `sourceHeight` image should be decoded at to be
 /// painted into a box of `boxWidth` x `boxHeight` logical pixels under [fit],
 /// or null to decode at full size.
 ///
 /// Both returned dimensions come from a single scale factor, so the aspect
-/// ratio survives even though [Image.memory] resizes with
+/// ratio survives even though [ResizeImage.resizeIfNeeded] resizes with
 /// `ResizeImagePolicy.exact`, which would otherwise stretch the picture to
 /// whatever pair of numbers it is handed.
 @visibleForTesting

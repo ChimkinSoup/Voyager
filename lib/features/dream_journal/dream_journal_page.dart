@@ -1296,8 +1296,13 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   ) {
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        // Same 16 + 40 + 8 band as the Journal page's scope header, so the
+        // two lists start at the same height when switching sections. The
+        // left inset is that header's 12 plus its scope switcher's own 8, so
+        // "Dreams" lines up with the journal name.
+        Container(
+          height: 64,
+          padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(

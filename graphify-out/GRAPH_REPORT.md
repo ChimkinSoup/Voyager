@@ -1,7 +1,7 @@
 # Graph Report - Voyager  (2026-10-15)
 
 ## Corpus Check
-- 872 files · ~367,579,691 words
+- 872 files · ~367,581,255 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `a3f36f9d`
+- Built from commit: `0320b3f4`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -2900,7 +2900,7 @@ Cohesion: 0.67
 Nodes (3): allTodoTasksProvider, _deleteTodoTask, _openTodoSidebar
 
 ## Knowledge Gaps
-- **19052 isolated node(s):** `LifeTrackerCachedStats`, `_fallbackDeviceId`, `kUnresolvedDeviceId`, `_useCloudFunctions`, `_openWeatherApiKey` (+19047 more)
+- **19052 isolated node(s):** `Counts by severity`, `Counts by phase (severity × phase)`, `All Blockers`, `Skipped bugs`, `BUG-001 [Phase 1] Signing in after a signed-out launch leaves sync signed out until restart` (+19047 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **141 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -2911,7 +2911,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.005) - this node is a cross-community bridge._
 - **Why does `build` connect `voyager_app.dart` to `backup_list_dialog.dart`, `_LogPastWorkoutState`, `settings_page.dart`, `notification_inbox_popover.dart`?**
   _High betweenness centrality (0.005) - this node is a cross-community bridge._
-- **What connects `LifeTrackerCachedStats`, `_fallbackDeviceId`, `kUnresolvedDeviceId` to the rest of the system?**
+- **What connects `Counts by severity`, `Counts by phase (severity × phase)`, `All Blockers` to the rest of the system?**
   _19104 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `app_database.dart` be split into smaller, more focused modules?**
   _Cohesion score 0.0044742729306487695 - nodes in this community are weakly interconnected._

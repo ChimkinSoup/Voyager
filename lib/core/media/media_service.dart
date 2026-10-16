@@ -651,6 +651,11 @@ class MediaService extends ChangeNotifier {
     return _fileStore.readBytes(await _repository.getAsset(asset.id) ?? asset);
   }
 
+  /// Reads an asset's bytes only if they are already on this device, for
+  /// reads ahead of the user that should not start a download.
+  Future<Uint8List?> localBytesFor(MediaAsset asset) =>
+      _fileStore.readBytes(asset);
+
   /// Marks an asset as wanted and wakes the download queue.
   ///
   /// A parked (`failed`) download stays parked: this runs on every render of

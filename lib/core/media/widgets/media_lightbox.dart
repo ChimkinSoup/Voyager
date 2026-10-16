@@ -161,6 +161,34 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
       initialPage: _index,
       viewportFraction: widget.viewportFraction,
     );
+    // Needs the inherited widgets [precacheImage] reads, which initState
+    // cannot depend on yet.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _precacheNeighbours();
+    });
+  }
+
+  /// Decodes the images two pages either side of this one into the cache.
+  ///
+  /// [PageView.allowImplicitScrolling] only builds one page ahead, so a quick
+  /// run of swipes outpaced it and landed on pages still reading and decoding
+  /// their picture. The decodes are keyed by hash, so the page that mounts
+  /// later picks them straight up — see [MediaAssetImage].
+  void _precacheNeighbours() {
+    final service = ref.read(mediaServiceProvider);
+    for (var i = _index - 2; i <= _index + 2; i++) {
+      if (i == _index || i < 0 || i >= _assets.length) continue;
+      final asset = _assets[i];
+      precacheImage(
+        // Local bytes only: images the user may never swipe to are not worth
+        // a download, and each queued one notifies every listening surface.
+        MediaAssetImage(asset.contentHash, () => service.localBytesFor(asset)),
+        context,
+        // Not on this device: the page fetches it, and shows that state
+        // itself, when it is reached.
+        onError: (_, _) {},
+      );
+    }
   }
 
   @override
@@ -402,6 +430,7 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
     // keeps showing the page at the old index, which is now a different
     // image than [_index] names.
     _pageController.jumpToPage(_index);
+    _precacheNeighbours();
   }
 
   /// Takes up the owner's images afresh, staying on the one being looked at.
@@ -439,6 +468,7 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
     // Same reason as in [_remove]: the PageView reads the controller, not
     // [_index].
     if (moved && _pageController.hasClients) _pageController.jumpToPage(index);
+    _precacheNeighbours();
   }
 
   @override
@@ -470,7 +500,10 @@ class _MediaLightboxState extends ConsumerState<_MediaLightbox> {
                 // has finished — the picture appearing in an empty frame
                 // rather than sliding in.
                 allowImplicitScrolling: true,
-                onPageChanged: (index) => setState(() => _index = index),
+                onPageChanged: (index) {
+                  setState(() => _index = index);
+                  _precacheNeighbours();
+                },
                 itemBuilder: (context, index) {
                   final caption = _captions?[index];
                   // The dismiss target lives *inside* the viewer rather than

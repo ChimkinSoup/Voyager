@@ -109,7 +109,12 @@ class JournalPage extends ConsumerStatefulWidget {
 class _JournalPageState extends ConsumerState<JournalPage> {
   static const _localSaveDebounce = Duration(milliseconds: 400);
   static const _entryListHeaderPadding = 12.0;
-  static const _entryListHeaderHeight = 72.0;
+  static const _entryListHeaderTopPadding = 16.0;
+  static const _entryListHeaderBottomPadding = 8.0;
+  // Top padding + the header row (the compact gear button, 40px, is its
+  // tallest child) + bottom padding.
+  static const _entryListHeaderHeight =
+      _entryListHeaderTopPadding + 40 + _entryListHeaderBottomPadding;
   static const _entryListFooterHeight = 72.0;
 
   String _journalFilter = legacyJournalId;
@@ -2914,8 +2919,11 @@ class _JournalPageState extends ConsumerState<JournalPage> {
                             right: 0,
                             child: _JournalBarBackdrop(
                               child: Padding(
-                                padding: const EdgeInsets.all(
+                                padding: const EdgeInsets.fromLTRB(
                                   _entryListHeaderPadding,
+                                  _entryListHeaderTopPadding,
+                                  _entryListHeaderPadding,
+                                  _entryListHeaderBottomPadding,
                                 ),
                                 child: _JournalScopeHeader(
                                   journals: displayJournals,
