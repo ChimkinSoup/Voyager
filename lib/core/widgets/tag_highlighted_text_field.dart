@@ -46,6 +46,7 @@ class TagHighlightedTextField extends StatefulWidget {
     this.tagScope,
     this.onKeyEvent,
     this.undoController,
+    this.scrollPastEnd = 0,
   }) : assert(
          onKeyEvent == null || tagScope != null,
          'onKeyEvent is only installed by the completion popup, which is '
@@ -90,6 +91,10 @@ class TagHighlightedTextField extends StatefulWidget {
   /// field, for the fields that merge it in; null for the field's own.
   final MergeAwareUndoController? undoController;
 
+  /// How far the text can scroll beyond its last line, for a field with
+  /// something floating over its bottom corner. See [PastEndScrollController].
+  final double scrollPastEnd;
+
   @override
   State<TagHighlightedTextField> createState() =>
       _TagHighlightedTextFieldState();
@@ -101,7 +106,7 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     applyHeightToLastDescent: false,
   );
 
-  late final ScrollController _scrollController;
+  late final PastEndScrollController _scrollController;
   final GlobalKey<State<TextField>> _fieldKey = GlobalKey();
   bool _hasText = false;
   bool _bringCursorScheduled = false;
@@ -141,7 +146,11 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController();
+    _scrollController = PastEndScrollController(
+      fieldKey: _fieldKey,
+      pastEnd: () => widget.scrollPastEnd,
+      text: widget.controller.text,
+    );
     _hasText = widget.controller.text.isNotEmpty;
     widget.controller.addListener(_handleControllerChanged);
     _syncProseController();
@@ -207,6 +216,7 @@ class _TagHighlightedTextFieldState extends State<TagHighlightedTextField> {
     if (hasText != _hasText) {
       setState(() => _hasText = hasText);
     }
+    _scrollController.handleFieldChanged(widget.controller.text);
     if (widget.focusNode.hasFocus) _scheduleBringCursorIntoView();
   }
 

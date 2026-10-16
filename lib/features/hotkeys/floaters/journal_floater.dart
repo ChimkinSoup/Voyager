@@ -40,6 +40,10 @@ class JournalFloater extends ConsumerStatefulWidget {
 }
 
 class _JournalFloaterState extends ConsumerState<JournalFloater> {
+  /// Whether the corner fan is showing images, so the body needs room to
+  /// scroll its last line out from under it.
+  bool _fanHasImages = false;
+
   final _controller = TextEditingController();
   final _focus = FocusNode();
   late final FloaterController _floaters;
@@ -374,6 +378,10 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
                                 accentColor: accent,
                                 maxLines: null,
                                 expands: true,
+                                // Lifts the last line clear of the image fan.
+                                scrollPastEnd: _fanHasImages
+                                    ? MediaFanStack.tallest + 8
+                                    : 0,
                                 keyboardType: TextInputType.multiline,
                                 decoration: const InputDecoration(
                                   hintText: 'Write something…',
@@ -389,6 +397,11 @@ class _JournalFloaterState extends ConsumerState<JournalFloater> {
                               collection: FirestoreCollections.journalEntries,
                               documentId: entryId,
                               accentColor: accent,
+                              onHasImages: (has) {
+                                if (has != _fanHasImages) {
+                                  setState(() => _fanHasImages = has);
+                                }
+                              },
                             ),
                           ),
                         ],

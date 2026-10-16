@@ -3577,6 +3577,10 @@ class _EntryQuote extends StatelessWidget {
 }
 
 class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
+  /// Whether the corner fan is showing images, so the body needs room to
+  /// scroll its last line out from under it.
+  bool _fanHasImages = false;
+
   late final TextEditingController _controller;
 
   /// Undo that leaves another device's merged-in text alone (BUG-237).
@@ -3990,6 +3994,10 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
           onKeyEvent: _handleBodyKey,
           readOnly: false,
           expands: true,
+          // Lifts the last line clear of the image fan in the corner.
+          scrollPastEnd: _fanHasImages && widget.entry?.id != null
+              ? MediaFanStack.tallest + 8
+              : 0,
           keyboardType: TextInputType.multiline,
           cursorColor: widget.accentColor,
           onChanged: _handleChanged,
@@ -4047,6 +4055,11 @@ class _PlainJournalEditorState extends ConsumerState<_PlainJournalEditor> {
                   collection: FirestoreCollections.journalEntries,
                   documentId: entryId,
                   accentColor: widget.accentColor,
+                  onHasImages: (has) {
+                    if (has != _fanHasImages) {
+                      setState(() => _fanHasImages = has);
+                    }
+                  },
                 ),
               ),
           ],

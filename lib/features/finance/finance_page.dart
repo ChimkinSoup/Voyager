@@ -45,10 +45,9 @@ class FinancePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // The finance hotkey's in-app path: the new-transaction sheet, holding
-    // the same session draft as the floater.
-    ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
-      if (request?.kind != QuickCaptureKind.finance) return;
+    // The new-transaction sheet, holding the same session draft as the
+    // floater.
+    void openNewTransaction() {
       final container = ProviderScope.containerOf(context, listen: false);
       showFinanceTransactionModal(
         context,
@@ -56,6 +55,12 @@ class FinancePage extends ConsumerWidget {
         draft: ref.read(financeCaptureDraftProvider),
         onDraft: (draft) => storeFinanceCaptureDraft(container, draft),
       );
+    }
+
+    // The finance hotkey's in-app path.
+    ref.listen<QuickCaptureRequest?>(quickCaptureRequestProvider, (_, request) {
+      if (request?.kind != QuickCaptureKind.finance) return;
+      openNewTransaction();
     });
     final transactionsAsync = ref.watch(transactionsProvider.settled);
     final tagColorsAsync = ref.watch(tagColorsProvider.settled);
@@ -65,7 +70,7 @@ class FinancePage extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       floatingActionButton: GlassButton(
         tooltip: 'Log transaction',
-        onPressed: () => showFinanceTransactionModal(context, ref),
+        onPressed: openNewTransaction,
         icon: const Icon(PhosphorIconsRegular.plus),
         width: 56,
         height: 56,

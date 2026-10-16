@@ -1213,6 +1213,10 @@ class _SearchEntryDialog extends ConsumerStatefulWidget {
 
 class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog>
     with _SearchDialogSaving<_SearchEntryDialog> {
+  /// Whether the corner fan is showing images, so the body needs room to
+  /// scroll its last line out from under it.
+  bool _fanHasImages = false;
+
   late final TextEditingController _titleController;
   late final TextEditingController _bodyController;
   late final FocusNode _titleFocusNode;
@@ -1698,6 +1702,10 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog>
                         onChanged: _body.onChanged,
                         cursorColor: _accentColor,
                         expands: true,
+                        // Lifts the last line clear of the image fan.
+                        scrollPastEnd: _fanHasImages
+                            ? MediaFanStack.tallest + 8
+                            : 0,
                         hintText: 'Start writing...',
                         decoration: const InputDecoration(
                           filled: false,
@@ -1765,6 +1773,11 @@ class _SearchEntryDialogState extends ConsumerState<_SearchEntryDialog>
                 collection: FirestoreCollections.journalEntries,
                 documentId: _entry.id,
                 accentColor: _accentColor,
+                onHasImages: (has) {
+                  if (has != _fanHasImages) {
+                    setState(() => _fanHasImages = has);
+                  }
+                },
               ),
             ),
           ],
@@ -1818,6 +1831,10 @@ class _SearchDreamDialog extends ConsumerStatefulWidget {
 
 class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog>
     with _SearchDialogSaving<_SearchDreamDialog> {
+  /// Whether the corner fan is showing images, so the body needs room to
+  /// scroll its last line out from under it.
+  bool _fanHasImages = false;
+
   late final TextEditingController _titleController;
   late final TextEditingController _bodyController;
   late final TextEditingController _notesController;
@@ -2145,6 +2162,12 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog>
                                 onChanged: _body.onChanged,
                                 cursorColor: accent,
                                 expands: true,
+                                // Lifts the last line clear of the image fan
+                                // and the sticky note.
+                                scrollPastEnd: _fanHasImages
+                                    ? MediaFanStack.tallest +
+                                          DreamStickyNote.edgeInset
+                                    : DreamStickyNote.collapsedReach,
                                 hintText: 'Describe your dream...',
                                 decoration: const InputDecoration(
                                   filled: false,
@@ -2163,6 +2186,11 @@ class _SearchDreamDialogState extends ConsumerState<_SearchDreamDialog>
                             collection: FirestoreCollections.dreamEntries,
                             documentId: _entry.id,
                             accentColor: accent,
+                            onHasImages: (has) {
+                              if (has != _fanHasImages) {
+                                setState(() => _fanHasImages = has);
+                              }
+                            },
                           ),
                         ),
                         DreamStickyNote(

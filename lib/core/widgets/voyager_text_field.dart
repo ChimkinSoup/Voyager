@@ -50,6 +50,7 @@ class VoyagerTextField extends StatefulWidget {
     this.onKeyEvent,
     this.snippetsAllowed = true,
     this.autocorrectAllowed = true,
+    this.scrollPastEnd = 0,
   }) : assert(
          tagScope == null || controller != null,
          'Tag completion reads and rewrites the field text, so it needs a '
@@ -103,6 +104,10 @@ class VoyagerTextField extends StatefulWidget {
   /// a snippet trigger, a dictionary word (AUTOCORRECT.md §4.1).
   final bool autocorrectAllowed;
 
+  /// How far the text can scroll beyond its last line, for a field with
+  /// something floating over its bottom corner. See [PastEndScrollController].
+  final double scrollPastEnd;
+
   @override
   State<VoyagerTextField> createState() => _VoyagerTextFieldState();
 }
@@ -113,7 +118,12 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
   FocusNode get _focusNode => widget.focusNode ?? _ownedFocusNode!;
 
   final GlobalKey<State<TextField>> _fieldKey = GlobalKey();
-  late final ScrollController _scrollController = ScrollController();
+  late final PastEndScrollController _scrollController =
+      PastEndScrollController(
+        fieldKey: _fieldKey,
+        pastEnd: () => widget.scrollPastEnd,
+        text: widget.controller?.text ?? '',
+      );
 
   bool _hasText = false;
 
@@ -193,6 +203,7 @@ class _VoyagerTextFieldState extends State<VoyagerTextField> {
     if (hasText != _hasText) {
       setState(() => _hasText = hasText);
     }
+    _scrollController.handleFieldChanged(widget.controller?.text ?? '');
   }
 
   @override

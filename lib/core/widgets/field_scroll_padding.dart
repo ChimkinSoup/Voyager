@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:voyager/core/widgets/spell_check_field_support.dart';
 
 /// Caret reveal inset for Voyager [TextField]s.
 ///
@@ -46,6 +49,120 @@ class VoyagerFieldScrollPhysics extends ScrollPhysics {
     return adjusted.clamp(
       newPosition.minScrollExtent,
       newPosition.maxScrollExtent,
+    );
+  }
+}
+
+/// Scroll controller for a multi-line field that can scroll [pastEnd] pixels
+/// beyond its last line, so lines under something floating in the field's
+/// bottom corner — an image fan — can be brought out from beneath it.
+///
+/// [RenderEditable] ends the range at the last line; the position adds the
+/// extra as the field reports it. The editable is only as tall as its text
+/// until the text fills the field, so the room the text has is read off the
+/// editable's constraints behind [fieldKey]: short text the corner does not
+/// reach stays unscrollable.
+///
+/// The field passes every change to its text controller to
+/// [handleFieldChanged], which keeps the caret clear of the corner while
+/// typing.
+class PastEndScrollController extends ScrollController {
+  PastEndScrollController({
+    required this.fieldKey,
+    required this.pastEnd,
+    String text = '',
+  }) : _lastText = text;
+
+  final GlobalKey<State<TextField>> fieldKey;
+  final double Function() pastEnd;
+
+  String _lastText;
+  bool _liftScheduled = false;
+
+  /// After an edit, once the frame is laid out, lifts the caret above the
+  /// bottom [pastEnd] pixels as far as the range allows. [EditableText]
+  /// reveals the caret only as far as the field's bottom edge, which leaves
+  /// the line being typed at the end of a long entry under the corner. A
+  /// selection change alone does nothing, so a click or a drag near the
+  /// bottom does not scroll.
+  void handleFieldChanged(String text) {
+    final edited = text != _lastText;
+    _lastText = text;
+    if (!edited || _liftScheduled || pastEnd() <= 0) return;
+    _liftScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _liftScheduled = false;
+      _liftCaret();
+    });
+  }
+
+  void _liftCaret() {
+    if (!hasClients) return;
+    final editable = editableTextStateOf(fieldKey);
+    if (editable == null || !editable.widget.focusNode.hasFocus) return;
+    final selection = editable.textEditingValue.selection;
+    if (!selection.isValid) return;
+    final render = editable.renderEditable;
+    final caret = render.getLocalRectForCaret(selection.extent);
+    final overlap = caret.bottom - (render.size.height - pastEnd());
+    final target = math.min(
+      position.pixels + overlap,
+      position.maxScrollExtent,
+    );
+    if (target > position.pixels) jumpTo(target);
+  }
+
+  @override
+  ScrollPosition createScrollPosition(
+    ScrollPhysics physics,
+    ScrollContext context,
+    ScrollPosition? oldPosition,
+  ) => _PastEndScrollPosition(
+    this,
+    physics: physics,
+    context: context,
+    initialPixels: initialScrollOffset,
+    keepScrollOffset: keepScrollOffset,
+    oldPosition: oldPosition,
+    debugLabel: debugLabel,
+  );
+
+  /// The tallest the field's text area can be, or null when there is no
+  /// field or it can grow without bound.
+  double? _roomForText() {
+    final editable = editableTextStateOf(fieldKey);
+    if (editable == null) return null;
+    final maxHeight = editable.renderEditable.constraints.maxHeight;
+    return maxHeight.isFinite ? maxHeight : null;
+  }
+}
+
+class _PastEndScrollPosition extends ScrollPositionWithSingleContext {
+  _PastEndScrollPosition(
+    this._owner, {
+    required super.physics,
+    required super.context,
+    super.initialPixels,
+    super.keepScrollOffset,
+    super.oldPosition,
+    super.debugLabel,
+  });
+
+  final PastEndScrollController _owner;
+
+  @override
+  bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
+    final pastEnd = _owner.pastEnd();
+    final room = pastEnd > 0 && hasViewportDimension
+        ? _owner._roomForText()
+        : null;
+    if (room == null) {
+      return super.applyContentDimensions(minScrollExtent, maxScrollExtent);
+    }
+    final textHeight = maxScrollExtent + viewportDimension;
+    return super.applyContentDimensions(
+      minScrollExtent,
+      math.max(maxScrollExtent, textHeight + pastEnd - room),
     );
   }
 }

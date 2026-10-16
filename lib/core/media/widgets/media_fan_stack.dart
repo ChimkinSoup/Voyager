@@ -27,10 +27,23 @@ class MediaFanStack extends ConsumerStatefulWidget {
     required this.documentId,
     this.facet = MediaFacet.gallery,
     this.accentColor,
-    this.thumbnailSize = 56,
-    this.maxVisible = 3,
+    this.thumbnailSize = _defaultThumbnailSize,
+    this.maxVisible = _defaultMaxVisible,
     this.onTap,
+    this.onHasImages,
   });
+
+  static const _defaultThumbnailSize = 56.0;
+  static const _defaultMaxVisible = 3;
+
+  /// The tallest the fan gets at its default size, every card drawn. A field
+  /// the fan floats over lets its text scroll this far past the last line,
+  /// plus the inset the fan sits at, so that line can be brought out from
+  /// beneath it.
+  static const tallest =
+      _defaultThumbnailSize +
+      _MediaFanStackState._stepY * (_defaultMaxVisible - 1) +
+      _MediaFanStackState._slop * 2;
 
   final String collection;
   final String documentId;
@@ -47,6 +60,10 @@ class MediaFanStack extends ConsumerStatefulWidget {
   /// which is what a surface with a handful of pictures wants; rankings passes
   /// its own so a large gallery gets a grid to choose from first (§7.5).
   final VoidCallback? onTap;
+
+  /// Told after every load whether the owner has any images: the fan shows
+  /// nothing without them, so a field it floats over needs no room for it.
+  final ValueChanged<bool>? onHasImages;
 
   @override
   ConsumerState<MediaFanStack> createState() => _MediaFanStackState();
@@ -102,6 +119,7 @@ class _MediaFanStackState extends ConsumerState<MediaFanStack> {
     }
     if (!mounted) return;
     setState(() => _images = images);
+    widget.onHasImages?.call(images.isNotEmpty);
   }
 
   void _open() {

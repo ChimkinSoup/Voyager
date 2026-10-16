@@ -133,6 +133,10 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
   final _titleFocusNode = FocusNode();
   final _bodyFocusNode = FocusNode();
   final _bodyEditorKey = GlobalKey<_DreamBodyEditorState>();
+
+  /// Whether the corner fan is showing images, so the body needs room to
+  /// scroll its last line out from under it.
+  bool _fanHasImages = false;
   final _notesController = TextEditingController();
   final _notesFocusNode = FocusNode();
   var _lastNotesText = '';
@@ -1469,6 +1473,9 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
                   focusNode: _bodyFocusNode,
                   accentColor: accent,
                   onScheduleBodySave: _scheduleBodySave,
+                  scrollPastEnd: _fanHasImages
+                      ? MediaFanStack.tallest + DreamStickyNote.edgeInset
+                      : DreamStickyNote.collapsedReach,
                 ),
               ),
             ),
@@ -1488,6 +1495,9 @@ class _DreamJournalPageState extends ConsumerState<DreamJournalPage> {
             collection: FirestoreCollections.dreamEntries,
             documentId: entry.id,
             accentColor: accent,
+            onHasImages: (has) {
+              if (has != _fanHasImages) setState(() => _fanHasImages = has);
+            },
           ),
         ),
         DreamStickyNote(
@@ -1625,12 +1635,17 @@ class _DreamBodyEditor extends ConsumerStatefulWidget {
     required this.focusNode,
     required this.accentColor,
     required this.onScheduleBodySave,
+    required this.scrollPastEnd,
   });
 
   final DreamEntry entry;
   final FocusNode focusNode;
   final Color accentColor;
   final VoidCallback onScheduleBodySave;
+
+  /// Room past the last line for the image fan, or for the collapsed
+  /// sticky note while the fan is empty.
+  final double scrollPastEnd;
 
   @override
   ConsumerState<_DreamBodyEditor> createState() => _DreamBodyEditorState();
@@ -1944,6 +1959,8 @@ class _DreamBodyEditorState extends ConsumerState<_DreamBodyEditor> {
       tagScope: TagScope.dream,
       onKeyEvent: _handleKey,
       expands: true,
+      // Lifts the last line clear of the image fan and the sticky note.
+      scrollPastEnd: widget.scrollPastEnd,
       keyboardType: TextInputType.multiline,
       cursorColor: widget.accentColor,
       onChanged: _handleChanged,

@@ -15,7 +15,7 @@ void main() {
   setUpAll(() => driftRuntimeOptions.dontWarnAboutMultipleDatabases = true);
 
   for (final showAll in [true, false]) {
-    testWidgets('Open scrolls the list to the memory '
+    testWidgets('Opening scrolls the list to the memory '
         '(${showAll ? 'All journals' : 'one journal'})', (tester) async {
       tester.view.physicalSize = const Size(1400, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -58,7 +58,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 60));
       }
 
-      await tester.tap(find.text('Open'));
+      await tester.tap(find.text('From a year ago'));
       for (var i = 0; i < 30; i++) {
         await tester.pump(const Duration(milliseconds: 60));
       }

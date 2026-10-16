@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:voyager/core/motion/motion.dart';
-import 'package:voyager/core/widgets/glass_button.dart';
 import 'package:voyager/core/widgets/voyager_prose_text.dart';
 import 'package:voyager/core/widgets/weather_icon.dart';
 import 'package:voyager/features/journal/on_this_day.dart';
@@ -408,29 +407,47 @@ class _OnThisDayCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.only(right: 10),
-            child: Text(
-              entry.title.trim().isEmpty ? 'Untitled' : entry.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleSmall,
-            ),
-          ),
-          const SizedBox(height: 4),
+          // The memory itself is what opens it.
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(right: 10),
-              child: body.isEmpty
-                  ? const SizedBox.shrink()
-                  : VoyagerProseText(
-                      body,
-                      maxLines: 7,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurface.withValues(alpha: 0.78),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onOpen,
+                child: Column(
+                  // Full width, so the space beside short text opens it too.
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 10),
+                      child: Text(
+                        entry.title.trim().isEmpty ? 'Untitled' : entry.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall,
                       ),
                     ),
+                    const SizedBox(height: 4),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: body.isEmpty
+                            ? const SizedBox.shrink()
+                            : VoyagerProseText(
+                                body,
+                                maxLines: 7,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: scheme.onSurface.withValues(
+                                    alpha: 0.78,
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
           if (showMood || showWeather)
@@ -461,9 +478,9 @@ class _OnThisDayCard extends StatelessWidget {
                 ],
               ),
             ),
-          Row(
-            children: [
-              if (pageCount > 1) ...[
+          if (pageCount > 1)
+            Row(
+              children: [
                 IconButton(
                   tooltip: 'Newer',
                   iconSize: 14,
@@ -493,17 +510,7 @@ class _OnThisDayCard extends StatelessWidget {
                   icon: const Icon(PhosphorIconsRegular.caretRight),
                 ),
               ],
-              const Spacer(),
-              Padding(
-                padding: const EdgeInsets.only(left: 4, right: 6),
-                child: GlassButton(
-                  onPressed: onOpen,
-                  label: 'Open',
-                  dense: true,
-                ),
-              ),
-            ],
-          ),
+            ),
         ],
       ),
     );

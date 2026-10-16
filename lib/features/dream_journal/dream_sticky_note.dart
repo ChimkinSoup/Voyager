@@ -46,6 +46,10 @@ class DreamStickyNote extends StatefulWidget {
   static const edgeInset = 20.0;
   static const besideInset = edgeInset + _DreamStickyNoteState._peekSize + 8;
 
+  /// How far up from the bottom the collapsed note reaches, so a body it
+  /// floats over can scroll its last line out from beneath it.
+  static const collapsedReach = edgeInset + _DreamStickyNoteState._peekSize;
+
   @override
   State<DreamStickyNote> createState() => _DreamStickyNoteState();
 }

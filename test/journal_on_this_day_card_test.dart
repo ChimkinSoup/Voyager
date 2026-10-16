@@ -269,18 +269,26 @@ void main() {
     expect(find.text('A day later'), findsOneWidget);
   });
 
-  testWidgets('Open hands the entry to the page and collapses the card', (
-    tester,
-  ) async {
+  testWidgets('tapping the memory hands the entry to the page and collapses '
+      'the card', (tester) async {
     final h = await _setUp(tester);
     await _waitForEntrance(tester);
 
-    await tester.tap(find.text('Open'));
+    // Beside the text too: the whole memory area is the target.
+    await tester.tapAt(tester.getCenter(find.text('Body 1')).translate(80, 0));
     await tester.pumpAndSettle();
 
     expect(h.opened, ['memory-1']);
     expect(_isOut(tester), isFalse);
     expect(_card, findsOneWidget);
+    expect(find.text('Open'), findsNothing);
+  });
+
+  testWidgets('tapping the tucked card only brings it out', (tester) async {
+    final h = await _setUp(tester);
+    await _tapEdge(tester);
+    expect(_isOut(tester), isTrue);
+    expect(h.opened, isEmpty);
   });
 
   testWidgets('pages through matches, newest first', (tester) async {
